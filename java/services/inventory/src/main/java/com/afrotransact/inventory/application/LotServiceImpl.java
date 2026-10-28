@@ -202,8 +202,8 @@ class LotServiceImpl implements LotService {
             to = existing.get().add(cmd.qty());
         } else {
             to = new Lot(UUID.randomUUID(), from.sku(), from.lotNo(), target.id(), from.ownerOrg(), upper(cmd.toBin()),
-                    cmd.qty(), 0, from.mfgDate(), from.expDate(), from.receivedAt(), from.unitLandedCostMinor(),
-                    from.currency(), LotStatus.SELLABLE, "Transferred from " + from.nodeId(), from.markdownFlag(),
+                    cmd.qty(), 0, from.mfgDate(), from.expDate(), from.receivedAt(), from.cost(),
+                    LotStatus.SELLABLE, "Transferred from " + from.nodeId(), from.markdownFlag(),
                     reference, 0);
             changes.newLot(to);
         }

@@ -93,6 +93,14 @@ export function OrdersView() {
               </Button>
             );
           }
+          // Handing a pickup order over asks for the buyer's code, which the order sheet does.
+          if (next === 'DELIVERED') {
+            return (
+              <Button size="sm" variant="neutral" onClick={() => setOpen(r.orderNumber)}>
+                {ACTION_LABEL[next]}
+              </Button>
+            );
+          }
           return next ? (
             <Button size="sm" variant="neutral" disabled={advance.isPending} onClick={() => advance.mutate({ row: r, to: next })}>
               {ACTION_LABEL[next].replace(' order', '').replace(' to ship', '')}
@@ -112,9 +120,14 @@ export function OrdersView() {
         description={copy.description}
         actions={
           isProvider ? null : (
-            <Link href="/orders/ship-from" className={buttonClassName({ variant: 'neutral' })}>
-              {t('sc.shipFrom.link')}
-            </Link>
+            <>
+              <Link href="/orders/run-pickups" className={buttonClassName({ variant: 'neutral' })}>
+                {t('sc.runPickups.link')}
+              </Link>
+              <Link href="/orders/ship-from" className={buttonClassName({ variant: 'neutral' })}>
+                {t('sc.shipFrom.link')}
+              </Link>
+            </>
           )
         }
       />

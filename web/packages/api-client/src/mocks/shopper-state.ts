@@ -16,11 +16,16 @@ import { atinOf, PRODUCTS } from './fixtures/catalog';
 export interface MockOrder extends OrderDetail {
   /** Lines that are food / perishables (report a problem only, within the window). */
   perishable: Set<string>;
+  /** The part of the total paid with credit (S320). */
+  creditMinor?: number;
+  /** The card part of refunds comes back as credit (S320, the shopper's one-way choice). */
+  cardRefundsAsCredit?: boolean;
 }
 
 export interface PendingCheckout {
   orderNumber: string;
-  clientSecret: string;
+  /** Null when credit paid the whole order (no card). */
+  clientSecret: string | null;
   totalMinor: number;
   status: 'awaiting_payment' | 'placed';
   order: MockOrder;

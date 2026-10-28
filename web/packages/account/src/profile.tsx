@@ -1,7 +1,7 @@
 'use client';
 
 import { type AccountMembership, type AccountProfile, settingsKeys, settingsQueries } from '@afrotransact/api-client';
-import { Button, TextField, useToast } from '@afrotransact/ui';
+import { Button, PhoneNumberField, TextField, useToast } from '@afrotransact/ui';
 import { Buildings, CheckCircle, IdentificationBadge, LockSimple, WarningCircle } from '@phosphor-icons/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
@@ -88,7 +88,7 @@ function DetailsCard({ profile }: { profile: AccountProfile }) {
         </div>
         <div className={styles.grid2}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--at-space-2)' }}>
-            <TextField label={t('profile.phone')} type="tel" autoComplete="tel" value={phone} maxLength={32} onChange={(e) => setPhone(e.target.value)} error={errors.phone} help={t('profile.phoneHelp')} />
+            <PhoneNumberField label={t('profile.phone')} value={phone} onChange={setPhone} error={errors.phone} help={t('profile.phoneHelp')} />
             {profile.phone && phone.trim() === profile.phone ? (
               <span className={styles.actions}>
                 {profile.phoneVerified ? (

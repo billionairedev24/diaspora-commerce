@@ -1,0 +1,110 @@
+package app
+
+import (
+	"context"
+	"strings"
+
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
+)
+
+// SellerCouponsService lists and manages seller-funded coupons (offers-service).
+type SellerCouponsService interface {
+	List(ctx context.Context, c *domain.Caller) ([]domain.SellerCoupon, error)
+	Create(ctx context.Context, c *domain.Caller, in domain.CreateSellerCoupon) (domain.SellerCoupon, error)
+	SetStatus(ctx context.Context, c *domain.Caller, id, status string) (domain.SellerCoupon, error)
+	Delete(ctx context.Context, c *domain.Caller, id string) error
+}
+
+type sellerCouponsImpl struct{ r *orgResolver }
+
+var _ SellerCouponsService = (*sellerCouponsImpl)(nil)
+
+// NewSellerCouponsService returns SellerCouponsService.
+func NewSellerCouponsService(d SellerDeps) SellerCouponsService {
+	return &sellerCouponsImpl{r: newResolver(d)}
+}
+
+func sellerCouponOf(c port.SellerCouponUp, editable bool) domain.SellerCoupon {
+	return domain.SellerCoupon{
+		ID: c.ID, Code: c.Code, Description: c.Description, Type: strings.ToUpper(c.Type), Value: c.Value,
+		Currency: strings.ToUpper(c.Currency), Scope: strings.ToUpper(c.Scope), ScopeRef: c.ScopeRef,
+		MinSpendMinor: c.MinSpendMinor, Status: strings.ToUpper(c.Status), Funding: strings.ToUpper(c.Funding),
+		Editable: editable, Version: c.Version,
+	}
+}
+
+func (s *sellerCouponsImpl) List(ctx context.Context, c *domain.Caller) ([]domain.SellerCoupon, error) {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelView, domain.CapCoupons); err != nil {
+		return nil, err
+	}
+	if s.r.d.Offers == nil {
+		return nil, domain.UpstreamUnavailable("offers")
+	}
+	raw, err := s.r.d.Offers.ListCoupons(ctx, c.BearerToken)
+	if err != nil {
+		return nil, mapErr("offers", err)
+	}
+	out := make([]domain.SellerCoupon, 0, len(raw))
+	for _, row := range raw {
+		// When expired, it can be deleted or hidden
+		if strings.EqualFold(row.Status, "EXPIRED") {
+			continue
+		}
+		out = append(out, sellerCouponOf(row, strings.EqualFold(row.Funding, "SELLER")))
+	}
+	return out, nil
+}
+
+func (s *sellerCouponsImpl) Create(ctx context.Context, c *domain.Caller, in domain.CreateSellerCoupon) (domain.SellerCoupon, error) {
+	sc, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelEdit, domain.CapCoupons)
+	if err != nil {
+		return domain.SellerCoupon{}, err
+	}
+	if s.r.d.Offers == nil {
+		return domain.SellerCoupon{}, domain.UpstreamUnavailable("offers")
+	}
+	scopeRef := in.ScopeRef
+	if (strings.EqualFold(in.Scope, "SELLER") || in.Scope == "") && scopeRef == "" {
+		scopeRef = sc.org.ID
+	}
+	body := map[string]any{
+		"code": in.Code, "description": in.Description, "type": in.Type, "value": in.Value, "currency": firstNonEmpty(in.Currency, domain.Currency),
+		"scope": in.Scope, "scopeRef": scopeRef, "minSpendMinor": in.MinSpendMinor, "totalLimit": in.TotalLimit,
+		"perCustomerLimit": in.PerCustomerLimit, "clipRequired": false, "funding": "SELLER",
+	}
+	row, err := s.r.d.Offers.CreateCoupon(ctx, c.BearerToken, body)
+	if err != nil {
+		return domain.SellerCoupon{}, mapErr("offers", err)
+	}
+	return sellerCouponOf(row, true), nil
+}
+
+func (s *sellerCouponsImpl) SetStatus(ctx context.Context, c *domain.Caller, id, status string) (domain.SellerCoupon, error) {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelEdit, domain.CapCoupons); err != nil {
+		return domain.SellerCoupon{}, err
+	}
+	if s.r.d.Offers == nil {
+		return domain.SellerCoupon{}, domain.UpstreamUnavailable("offers")
+	}
+	row, err := s.r.d.Offers.SetCouponStatus(ctx, c.BearerToken, id, strings.ToUpper(status))
+	if err != nil {
+		return domain.SellerCoupon{}, mapErr("offers", err)
+	}
+	return sellerCouponOf(row, true), nil
+}
+
+func (s *sellerCouponsImpl) Delete(ctx context.Context, c *domain.Caller, id string) error {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelEdit, domain.CapCoupons); err != nil {
+		return err
+	}
+	if s.r.d.Offers == nil {
+		return domain.UpstreamUnavailable("offers")
+	}
+	// Expire the coupon in offers upstream so it can never be used again.
+	_, err := s.r.d.Offers.SetCouponStatus(ctx, c.BearerToken, id, "EXPIRED")
+	if err != nil {
+		return mapErr("offers", err)
+	}
+	return nil
+}

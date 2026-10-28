@@ -11,7 +11,15 @@ import com.afrotransact.seller.domain.RequirementsSnapshot;
  */
 public record StripeEvent(String id, String type, long created, String accountId, RequirementsSnapshot account,
                           Capability capability, Person person, ExternalAccount externalAccount, Payout payout,
-                          InvoiceSnapshot invoice, SubscriptionSnapshot subscription) {
+                          PaymentIntentResult paymentIntent) {
+
+    /**
+     * payment_intent.succeeded / payment_intent.payment_failed of a plan fee ({@code metadata.purpose = plan_fee}):
+     * how a bank debit that was still processing ended.
+     */
+    public record PaymentIntentResult(String id, String invoiceId, boolean succeeded, String failureCode,
+                                      String failureMessage) {
+    }
 
     /** capability.updated */
     public record Capability(String id, String status) {

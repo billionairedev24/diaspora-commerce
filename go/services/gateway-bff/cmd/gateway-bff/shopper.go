@@ -18,6 +18,7 @@ type shopperClients struct {
 	identityAPI                port.IdentityClient
 	offers                     port.StorefrontOffersClient
 	serviceTokens              port.ServiceTokens
+	proofLinks                 port.ProofLinks
 	media                      port.MediaClient
 	receipts                   port.ReceiptStore
 }
@@ -29,14 +30,16 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 	ai := client("ai-gateway", up.AIGateway)
 	d := app.ShopperDeps{
 		Wallet: upstreams.NewWallet(sc.payments), Orders: upstreams.NewCustomerOrders(sc.orders),
-		Payments: upstreams.NewOrderPayments(sc.payments),
+		Returns: upstreams.NewReturns(client("tax-returns", up.TaxReturns), sc.serviceTokens), Payments: upstreams.NewOrderPayments(sc.payments),
 		Security: upstreams.NewSecurity(sc.identity), Bookings: upstreams.NewCustomerBookings(client("bookings", up.Bookings)),
-		Pages: upstreams.NewPublishedPages(client("storefront", up.Storefront)),
-		Lola:  upstreams.NewLola(ai, upstreams.LolaOptions{BaseURL: up.AIGateway.URL}),
+		Lola: upstreams.NewLola(ai, upstreams.LolaOptions{BaseURL: up.AIGateway.URL}),
 		Delivery: upstreams.NewDeliveryFacts(client("promise", up.Promise), client("carrier-gateway", up.Carrier), client("geo", up.Geo),
 			sc.serviceTokens),
 		LocalDelivery: upstreams.NewLocalDelivery(client("seller", up.Seller), client("geo", up.Geo), sc.payments, sc.serviceTokens),
 		Offers:        sc.offers,
+		ProofLinks:    sc.proofLinks,
+		Coupons:       upstreams.NewCheckoutCoupons(client("offers", up.Offers)),
+		Credit:        upstreams.NewCredit(sc.payments),
 		Identity:      sc.identityAPI, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
 		PublishableKey: cfg.Stripe.PublishableKey, IdentityPublicURL: cfg.OIDC.PublicURL, Log: log,
 	}
@@ -45,8 +48,11 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 	help := app.NewHelpRequestsService(app.HelpRequestsDeps{Orders: d.Orders, Claims: upstreams.NewHelpRequests(client("trust-ops", up.TrustOps)),
 		Media: sc.media, Receipts: sc.receipts})
 	return httpapi.ShopperServices{HelpRequests: help, Wallet: app.NewWalletService(d), Orders: app.NewCustomerOrdersService(d),
-		Checkout: app.NewCheckoutPaymentService(d), Security: app.NewSecurityService(d), Settings: settings,
+		Checkout: app.NewCheckoutPaymentService(d, s.Site), Security: app.NewSecurityService(d), Settings: settings,
 		Services: app.NewServicesService(d), Lola: app.NewLolaService(d),
-		SearchClicks: app.NewSearchClickService(upstreams.NewSearchClicks(client("search", up.Search)), cfg.Market),
-		PayLinks:     app.NewPayLinkService(upstreams.NewPayLinks(sc.orders, sc.serviceTokens), cfg.Stripe.PublishableKey)}
+		SearchClicks:  app.NewSearchClickService(upstreams.NewSearchClicks(client("search", up.Search)), cfg.Market),
+		PayLinks:      app.NewPayLinkService(upstreams.NewPayLinks(sc.orders, sc.serviceTokens), cfg.Stripe.PublishableKey),
+		BusinessPages: app.NewBusinessPageService(upstreams.NewBusinessPages(client("seller", up.Seller)), d.Bookings, s.Search),
+		Credit:        app.NewCreditService(d.Credit, d.Orders, cfg.Stripe.PublishableKey),
+		Referral:      app.NewReferralService(upstreams.NewReferral(sc.payments), cfg.Web.PublicOrigin)}
 }

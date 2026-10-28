@@ -4,6 +4,10 @@
 their fixed ports ([infra/local/PORTS.md](../../infra/local/PORTS.md)) and the three web apps, then prints every link.
 `make dev-status`, `make dev-logs SERVICE=x`, `make dev-restart SERVICE=x` and `make down` manage what it started.
 
+**Load testing.** Read-only perf scripts (k6, Apache Bench, hey, wrk) live in [`tools/perf/README.md`](../../tools/perf/README.md).
+Quick check with the stack up: `make perf-k6-smoke` or `make perf-ab`. Override URLs and concurrency via `tools/perf/env.sh`
+or `.local/perf.env`.
+
 **Provider keys.** Your own Stripe test, Twilio, Resend, OpenRouter, … credentials go in `.local/secrets.env`
 (gitignored; template `infra/local/secrets.env.example`). `make up`, `restart` and `mobile` load it, `make secrets-check`
 shows what is set, missing or malformed (values masked), and each provider switches from its local fallback (Mailpit,
@@ -46,8 +50,8 @@ access token) or `SEED_CLIENT_ID` / `SEED_CLIENT_SECRET` (client credentials at 
 Known local limits: the catalogue owner of every seeded product is AfroTransact Retail (local security off means the
 catalog sees a staff caller; sellers sell them through their offers, which is what cards, buy boxes and PDPs show,
 but the search facet "Sold by" counts the catalogue owner); Stripe Connect accounts are not created (payouts need a
-Stripe test key and onboarding in Seller Center; on the local test payments `ops` registers a test account for Mama Put
-Pantry only); products have no ratings (there is no product-review service yet); carrier labels and tracking need
+Stripe test key and onboarding in Seller Center; on the local test payments `ops` registers test Connect account ids for
+every seeded seller org, and seller-service registers the mapping when Stripe onboarding creates an account); products have no ratings (there is no product-review service yet); carrier labels and tracking need
 carrier-gateway with carrier sandbox credentials, so drop-off returns wait for their label and carrier parcels are moved
 by staff (Orders › Update shipment status).
 
@@ -105,6 +109,41 @@ export on for every service (`TELEMETRY=0` turns it off while keeping Grafana).
 use http://localhost:3200, or add data sources Prometheus `http://localhost:9090`, Loki `http://localhost:3300` and Tempo
 `http://localhost:3201` to it and import the dashboards from `infra/observability/grafana/dashboards`.
 
+### Request correlation id (`X-Correlation-Id`)
+
+Every browser and mobile BFF call carries one **`X-Correlation-Id`** (UUID) for the whole HTTP chain, so support and
+engineering can follow a single user action across logs without guessing from timestamps.
+
+| Hop | What happens |
+|---|---|
+| Web / customer app | `@afrotransact/api-client` sets the header on each BFF request (JSON, downloads, Lola SSE). |
+| Next.js `/api/bff` | Forwards `x-correlation-id` to gateway-bff; mints one if the caller did not send it. Returns the gateway's id on the response. |
+| gateway-bff | Reuses the incoming id (or generates one), logs `correlation_id`, forwards the same header to Java and Go upstreams. |
+| Java services | `CorrelationIdFilter` puts `correlationId` in the MDC; JSON logs include it. Outbound `RestClient` calls (via `platform-web`) forward the same value. |
+
+**Find it in logs (Loki):** pick the id from the browser network tab (response header `X-Correlation-Id`) or from a
+gateway line, then search across services, for example:
+
+```logql
+{service_name=~"gateway-bff|orders|payments|identity"} |= "550e8400-e29b-41d4-a716-446655440000"
+```
+
+On Java services the structured field is **`correlationId`**; gateway-bff access logs use **`correlation_id`**.
+
+**Manual calls:** send the header yourself and the same id appears in every service that handles the request:
+
+```bash
+CID="$(uuidgen)"
+curl -sS -H "X-Correlation-Id: $CID" -H "Cookie: …" "http://localhost:8080/v1/site-config" -D -
+# then grep $CID in .local/logs/gateway-bff.log, orders.log, …
+```
+
+**Not the same as distributed tracing:** OpenTelemetry still uses W3C `traceparent` for Tempo spans. Correlation id is
+the business key in application logs; trace id links spans in Grafana Explore. Both can appear on one request.
+
+Gaps to remember: signed **direct-to-storage uploads** (PUT to MinIO) are outside the BFF chain; **background jobs** and
+Kafka consumers only share an id if the producer copied it into the message or job payload.
+
 ## Test users
 
 Identity's **local profile** creates ready-made accounts for every persona at start-up (`TestPersonas.java`, S276), so
@@ -148,6 +187,15 @@ soon as `make seed` creates their organisation (identity mirrors `seller.org.app
 AfroTransact Retail exists from identity's migrations. The seeder's `users` step then signs every account in through the
 first-party API to prove it (`make seed ARGS="--only users"`). The `ops` step then places their orders.
 
+**An approved seller that identity does not show approved.** Identity's copy of an organisation (its status, and the
+owners' memberships that put the `org` claim in their tokens) normally follows `seller.org.approved` /
+`seller.org.updated` from Kafka. If identity missed or got one late (it was down or restarting, a record failed), it
+repairs itself: a reconcile job reads the seller service's organisations 30 s after identity starts and every 5 minutes
+(`at.identity.seller-sync.*`), and Seller Center asks identity to sync the organisation the moment it sees the seller
+service approve something identity does not (`POST /v1/orgs/{id}/sync`), then rotates the session's tokens, so the
+person lands on the dashboard without signing in again. `make repair-orgs` (`tools/dev/local.sh repair-orgs`) runs the
+reconcile at once against the running stack and prints how many organisations it checked and repaired.
+
 **Who a call acts as locally.** Services run with security off, so a call without a token (the seeder, curl) acts as the
 local super admin. A call that carries the token of a customer, a driver or a seller / provider member acts as that
 person and organisation, with the token's own permissions (platform-security `LocalActorResolver`, go/pkg/auth
@@ -170,8 +218,8 @@ refused), and dev codes always go through the notifications service. `IDENTITY_T
 
 ## Payments: Stripe test mode and Stripe Elements
 
-Checkout pays with **Stripe Elements** (S282): the Express Checkout Element (Apple Pay, Google Pay, Link) at the top of
-the payment step, the shopper's saved methods, and "Use a new payment method" with the **Payment Element inline**. It
+Checkout pays with **Stripe Elements** (S282): the shopper's saved methods and, always visible below them, the
+**Payment Element** (cards, Link, Apple Pay / Google Pay, Klarna, Cash App Pay, Amazon Pay inside it). It
 uses Stripe's deferred-intent flow: the Elements are created from the cart total (`mode: 'payment'`, currency,
 `captureMethod: 'manual'`, `setupFutureUsage: 'off_session'` when "Save for future purchases" is ticked, the pre-order
 windows' `paymentMethodTypes` when they restrict methods) and updated as delivery choices change. **Place order** runs
@@ -181,7 +229,7 @@ Card 3-D Secure opens in Stripe's modal; redirect methods (Cash App Pay, Affirm,
 `/checkout/complete?order=…`, which asks the BFF to confirm the order's payment (orders reads the PaymentIntent from
 payments, refreshed from Stripe) before showing the order. Your Payments and booking deposits use the same Payment
 Element and Appearance on a SetupIntent. The Appearance is read from the design tokens at runtime (gold primary,
-Figtree, radius, colours).
+the platform font, radius, colours).
 
 **Without a key (local only).** When `STRIPE_SECRET_KEY` is not set, the local profile's payments use a stand-in for
 Stripe (`at.payments.stripe.mode=auto`, `LocalTestStripeGateway`): every PaymentIntent is authorised like test card
@@ -210,8 +258,44 @@ make up                                                        # or restart paym
 
 Then check out as `customer.houston@afrotransact.test` / `Test1234!Local` with Stripe's test cards: `4242 4242 4242 4242`
 (authorised), `4000 0027 6000 3184` (3-D Secure), `4000 0000 0000 9995` (declined); Cash App Pay and Affirm show
-Stripe's test redirect pages. Orders are authorised (manual capture) and captured per shipment, so the dashboard shows
-"Uncaptured" until a shipment ships. `stripe trigger payment_intent.succeeded` exercises the webhook path.
+Stripe's test redirect pages. Orders are authorised (manual capture) and captured once, when the first shipment ships
+(per shipment only with `STRIPE_MULTICAPTURE=true` on an account with flexible payments), so the dashboard shows
+"Uncaptured" until then. `stripe trigger payment_intent.succeeded` exercises the webhook path.
+
+### Test the whole money flow with your Stripe test account
+
+1. **Stripe Dashboard, test mode:** API keys → `.local/secrets.env` (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`);
+   **Connect → Get started** (enables connected accounts; no platform profile is needed: sellers' accounts are
+   Stripe-liable, see `payments-idempotency.md` → Seller accounts and liability).
+2. `make stripe-setup`: checks the keys, Connect and the seller account settings. It creates no plan Prices: the seller service owns the plan catalogue and syncs a Product per plan and a Price per plan version and cadence to Stripe when it starts or a plan is published (staff console › Plans & billing › Sync with Stripe); Prices an older `make stripe-setup` made are adopted.
+3. Webhooks, three terminals (each prints a `whsec_…`; on one machine it is usually the same secret for all three):
+   ```bash
+   stripe listen --forward-to localhost:8105/v1/webhooks/stripe                   # STRIPE_WEBHOOK_SECRET
+   stripe listen --forward-connect-to localhost:8106/v1/webhooks/stripe-connect   # STRIPE_CONNECT_WEBHOOK_SECRET
+   stripe listen --events customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.created,invoice.finalized,invoice.paid,invoice.payment_failed,invoice.voided,invoice.deleted,credit_note.created \
+     --forward-to localhost:8106/v1/webhooks/stripe-billing                       # STRIPE_BILLING_WEBHOOK_SECRET
+   ```
+   Put them in `.local/secrets.env`; `make secrets-check`; then `make up` (or `tools/dev/local.sh restart payments seller gateway-bff`).
+   For a quick run add `SETTLEMENT_HOLD=2m` to `.local/secrets.env` so sellers' money is transferred minutes after
+   delivery instead of 7 days.
+4. **Seller onboarding** (Sell on AfroTransact → Seller Center wizard → Stripe verification → Start verification). In
+   Stripe's embedded form use its test values: phone `000 000 0000` and SMS code `000000`, date of birth
+   `01/01/1901` (verifies), SSN last 4 / full SSN `0000` / `000-00-0000`, address line 1 `address_full_match`,
+   EIN `000000000`, website any `https://…`; bank: routing `110000000`, account `000123456789`. Then Plan (a card
+   below), Review & submit, and approve the application in the staff console (Applications; two staff members).
+   The Dashboard shows the account under **Connect → Connected accounts** with charges and payouts enabled.
+5. **Buy something** from that seller as `customer.houston@afrotransact.test` / `Test1234!Local`. Use card
+   `4000 0000 0000 0077` (or `4000 0000 0000 0010`): its funds are **available immediately** in test mode, so the
+   platform balance can pay the seller's transfer. With `4242…` the money stays *pending* for days and the transfer
+   waits with "insufficient available balance".
+6. **Ship and deliver** the order (Seller Center → Orders → buy a label / mark shipped; staff console → Delivery
+   dispatch or the shipment's status). Shipping captures the payment (Dashboard → Payments: Succeeded). Delivery starts
+   the hold; when it ends the job (every 15 min, `SETTLEMENT_CRON`) creates the transfer: Dashboard → Connect → the
+   account → Transfers, `transfer_group` = the order id.
+7. **Payout:** in Seller Center → Payouts, request a payout (at least $25); payments sends it from the connected
+   account to the test bank. Disputes: pay with `4000 0000 0000 0259` (disputed as fraudulent after capture) and
+   watch the dispute arrive in the staff console and the seller's notifications.
+
 
 **Without keys** (the local default) the storefront shows a labelled stand-in, *"Stripe test mode is not configured: set
 STRIPE_PUBLISHABLE_KEY and STRIPE_SECRET_KEY"*, above its own card form; payments still cannot create PaymentIntents, so

@@ -2,45 +2,42 @@
 
 import {
   type Address,
-  cartKeys,
+type Cart,  cartKeys,
   checkoutKeys,
   type CheckoutPackage,
+  creditSplit,
   definitiveFailure,
   type DeliverySelection,
   isApiError,
   type OrderConfirmation,
-  orderKeys,
-  type PaymentMethod
-} from '@afrotransact/api-client';
-import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, CardBrandRow, CheckCircle, Circle, CircleNotch, LockSimple, Plus, PoweredByStripe, ShieldCheck, Skeleton, useToast } from '@afrotransact/ui';
+  orderKeys, randomUuid } from '@afrotransact/api-client';
+import { Button, buttonClassName, LockSimple, Plus, Skeleton, useToast } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AddressDialog } from '@/components/account/AddressDialog';
-import { PaymentChip } from '@/components/payments/PaymentChip';
-import { type PaymentElementChange, PaymentElementField, type PaymentElementHandle, REDIRECTED } from '@/components/payments/PaymentElementField';
+import { type PaymentElementChange, type PaymentElementHandle, REDIRECTED } from '@/components/payments/PaymentElementField';
 import { useCartPreorderCopy } from '@/components/preorder/CartPreorder';
-import { type MessageKey, type Translator, useT } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 import { type ConfirmResult, confirmWithSavedMethod, stripePaymentMethodTypes } from '@/lib/payments/stripe';
 import { readAttribution } from '@/lib/preorder/attribution';
 
 import styles from './Checkout.module.css';
+import { CheckoutOrderPanel } from './CheckoutOrderPanel';
 import { type Choice, feeOf, initialChoice, PackageCard } from './PackageCard';
+import { newMethodName, PaymentStep } from './PaymentStep';
 
-/** How the order is paid: a saved method, or a new method in the Payment Element. */
-type PaySpec = { paymentMethodId: string } | { newPaymentMethod: true; savePaymentMethod: boolean };
+/** How the order is paid: saved card or new details via the Payment Element. */
+type PaySpec = { paymentMethodId: string } | { newPaymentMethod: true; savePaymentMethod: boolean } | Record<string, never>;
 
 /** Where Stripe sends the shopper back after a redirect (3-D Secure page, Cash App, Affirm, bank): checks the payment. */
 export const checkoutReturnUrl = (orderNumber: string) => `${window.location.origin}/checkout/complete?order=${encodeURIComponent(orderNumber)}`;
 
 const addressLine = (a: Address) => `${a.line1}${a.line2 ? ` ${a.line2}` : ''}, ${a.city}, ${a.state} ${a.zip}`;
-const pmSub = (t: Translator<MessageKey>, pm: PaymentMethod) => (pm.expires ? t('pay.expires', { date: pm.expires }) : pm.type === 'us_bank_account' ? t('pay.bankAccount') : t('pay.wallet'));
-
 /** A checkout section: numbered heading, optional action, body. */
 function Section({ n, id, title, action, children }: { n: number; id: string; title: string; action?: ReactNode; children: ReactNode }) {
   return (
@@ -59,14 +56,10 @@ function Section({ n, id, title, action, children }: { n: number; id: string; ti
   );
 }
 
-const STEPS = ['co.placing.payment', 'co.placing.confirm', 'co.placing.stock', 'co.placing.split'] as const;
-
 /**
- * Checkout (S047, S048, S282): one page, nothing folded away. The main column holds 1 the delivery address, 2 every
- * seller group with Delivery or Pickup (pickup points per group: AfroTransact counters for platform-fulfilled items,
- * the seller's own locations for theirs) and every item, 3 payment: the shopper's saved methods and Stripe's Payment
- * Element (compact accordion: card, wallets, Link, Klarna, Amazon Pay… as enabled in Stripe), always visible. The
- * right column is a sticky order summary with Place your order.
+ * Checkout (S047, S048, S282): two columns from 1000px. The main column is address and delivery or pickup per seller
+ * group; the sticky right rail holds line items, totals, payment (Stripe Payment Element) and an optional
+ * checkout_cross_sell placement from content. Below 1000px the rail follows delivery choices.
  *
  * Payment is Stripe Elements on the deferred-intent flow: the Payment Element is created from the order total and
  * updated as delivery choices change; Place order runs elements.submit(), places the order (orders creates the
@@ -79,31 +72,35 @@ const STEPS = ['co.placing.payment', 'co.placing.confirm', 'co.placing.stock', '
  * replays the same order and PaymentIntent. A ref (not state) makes Place order single-flight.
  */
 export function CheckoutView() {
-  const fmt = useFormatters();
   const t = useT();
   const api = browserApi();
   const qc = useQueryClient();
   const toast = useToast();
   const router = useRouter();
   const [addressId, setAddressId] = useState<string | null>(null);
-  const summary = useQuery(shopperQueries.checkoutSummary(api, addressId));
-  const s = summary.data;
+  const [choices, setChoices] = useState<Record<string, Choice>>({});
   const [addressOpen, setAddressOpen] = useState(false);
   const [pmId, setPmId] = useState<string | null>(null);
   const [payWith, setPayWith] = useState<'saved' | 'new' | null>(null);
   const [save, setSave] = useState(false);
   const [newMethod, setNewMethod] = useState<PaymentElementChange>({ complete: false, empty: true, type: null });
   const payEl = useRef<PaymentElementHandle>(null);
-  const [choices, setChoices] = useState<Record<string, Choice>>({});
+  /** Pay with AfroTransact credit first (S320); off until the shopper chooses it, so credit is never spent by surprise. */
+  const [useCredit, setUseCredit] = useState(false);
+  const [couponDraft, setCouponDraft] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState('');
+  /** Sent to the BFF so shipping, tax and coupons match the selected delivery option per package. */
+  const [packageDeliveryKey, setPackageDeliveryKey] = useState<string | undefined>();
+  const summary = useQuery(shopperQueries.checkoutSummary(api, addressId, packageDeliveryKey, appliedCoupon || undefined));
+  const s = summary.data;
   const [addrDialog, setAddrDialog] = useState<{ open: boolean; address: Address | null }>({ open: false, address: null });
   const [placing, setPlacing] = useState(-1);
   const [error, setError] = useState<string | null>(null);
-  const keyRef = useRef<string>(crypto.randomUUID());
+  const keyRef = useRef<string>(randomUuid());
   /** Single-flight guard, set synchronously before any await (state updates are too late for a double click). */
   const busyRef = useRef(false);
   /** The order the current key created, once orders answered (checked after an error before a new key is made). */
   const orderRef = useRef<string | null>(null);
-
   // Saved addresses and payment methods load by default (the default one preselected).
   useEffect(() => {
     if (!s) return;
@@ -113,7 +110,8 @@ export function CheckoutView() {
       else setAddressOpen(true);
     }
     if (!pmId || !s.paymentMethods.some((p) => p.id === pmId)) setPmId((s.paymentMethods.find((p) => p.isDefault) ?? s.paymentMethods[0])?.id ?? null);
-    setPayWith((w) => w ?? (s.paymentMethods.length ? 'saved' : 'new'));
+    // Saved methods are listed (another method is entered in the modal); the inline form is only for a first method.
+    setPayWith((w) => (!s.paymentMethods.length ? 'new' : w === 'new' ? 'new' : 'saved'));
     setChoices((c) => {
       const next = { ...c };
       for (const p of s.packages) {
@@ -125,11 +123,36 @@ export function CheckoutView() {
     });
   }, [s, addressId, pmId]);
 
+  const deliveryKeyOf = (pkgs: CheckoutPackage[], ch: Record<string, Choice>) =>
+    pkgs.map((p) => `${p.packageId}:${(ch[p.packageId] ?? initialChoice(p)).option}`).join(',');
+
+  useEffect(() => {
+    if (!s?.packages.length) return;
+    const key = deliveryKeyOf(s.packages, choices);
+    setPackageDeliveryKey((prev) => (prev === key ? prev : key));
+  }, [s, choices]);
+
+  const setPackageChoice = (packageId: string, choice: Choice) => {
+    setChoices((prev) => {
+      const next = { ...prev, [packageId]: choice };
+      if (s?.packages.length) setPackageDeliveryKey(deliveryKeyOf(s.packages, next));
+      return next;
+    });
+  };
+
   const address = s?.addresses.find((a) => a.id === addressId) ?? null;
   const pm = s?.paymentMethods.find((p) => p.id === pmId) ?? null;
-  const shipping = useMemo(() => (s ? s.packages.reduce((sum, p) => sum + feeOf(p, choices[p.packageId]), 0) : 0), [s, choices]);
+  const selectedShipping = useMemo(() => (s ? s.packages.reduce((sum, p) => sum + feeOf(p, choices[p.packageId]), 0) : 0), [s, choices]);
   const pickups = s ? s.packages.filter((p) => choices[p.packageId]?.option === 'pickup').length : 0;
-  const total = (s?.subtotalMinor ?? 0) + shipping + (s?.taxMinor ?? 0);
+  /** Optimistic total: shipping follows UI choices immediately; tax and coupon discounts follow the BFF summary. */
+  const total = useMemo(() => {
+    if (!s) return 0;
+    const ship = Math.max(0, selectedShipping - (s.shippingDiscountMinor ?? 0));
+    return s.subtotalMinor - (s.discountMinor ?? 0) + ship + s.taxMinor;
+  }, [s, selectedShipping]);
+  // Credit first, never more than the balance, at least 0.50 left for the card (the rule payments applies).
+  const split = useMemo(() => (s?.credit && useCredit ? creditSplit(s.credit.availableMinor, total) : { appliedMinor: 0, cardDueMinor: total }), [s, useCredit, total]);
+  const creditPaysAll = split.appliedMinor > 0 && split.cardDueMinor === 0;
   const itemCount = s?.packages.reduce((n, p) => n + p.itemCount, 0) ?? 0;
   const busy = placing >= 0;
   // A pre-order package whose window is not open (upcoming or closed) blocks the order (S273, 422 orders.preorder-not-open).
@@ -139,7 +162,7 @@ export function CheckoutView() {
   // Pre-order windows may restrict payment methods; the PaymentIntent and the Elements must use the same list.
   const allowedByWindow = (s?.packages ?? []).flatMap((p) => (p.preorder ? [p.preorder.allowedMethods.join(',')] : [])).join('|');
   const methodTypes = useMemo(() => (allowedByWindow ? stripePaymentMethodTypes(allowedByWindow.split('|').map((w) => w.split(','))) : undefined), [allowedByWindow]);
-  const paymentChosen = payWith === 'new' || (payWith === 'saved' && !!pm);
+  const paymentChosen = creditPaysAll || payWith === 'new' || (payWith === 'saved' && !!pm);
   // AfroTransact Delivery the chosen address can't be served by blocks the order until removed or picked up instead (S255).
   const undeliverable = (s?.packages ?? []).some((p) => p.localDelivery?.available === false && (choices[p.packageId]?.option ?? initialChoice(p).option) !== 'pickup');
   const blocked = undeliverable || preLocked;
@@ -189,6 +212,19 @@ export function CheckoutView() {
 
   const placed = async (status: OrderConfirmation) => {
     setPlacing(3);
+    qc.setQueryData(cartKeys.current(), (old: Cart | undefined) =>
+      old
+        ? {
+            ...old,
+            packages: [],
+            itemCount: 0,
+            selectedCount: 0,
+            subtotalMinor: 0,
+            allSelected: false,
+            sellerCount: 0
+          }
+        : old
+    );
     await Promise.all([qc.invalidateQueries({ queryKey: cartKeys.all }), qc.invalidateQueries({ queryKey: orderKeys.all })]);
     router.push(`/orders?placed=${encodeURIComponent(status.orderNumber)}`);
   };
@@ -210,11 +246,17 @@ export function CheckoutView() {
       }
     }
     if (over) {
-      keyRef.current = crypto.randomUUID();
+      keyRef.current = randomUuid();
       orderRef.current = null;
     }
     end();
-    setError(isApiError(e) ? (Object.values(e.fieldErrors)[0] ?? e.message) : e instanceof Error ? e.message : t('auth.genericError'));
+    setError(
+      isApiError(e)
+        ? (e.fieldErrors.couponCode ?? Object.values(e.fieldErrors)[0] ?? e.message)
+        : e instanceof Error
+          ? e.message
+          : t('auth.genericError')
+    );
     void qc.invalidateQueries({ queryKey: checkoutKeys.all });
   };
 
@@ -224,7 +266,11 @@ export function CheckoutView() {
     try {
       // Last-touch channel (?src=&cr=&po= or the pre-order placement clicked) is stored on the order.
       const attribution = readAttribution() ?? undefined;
-      const conf = await api.placeOrder({ addressId: address.id, ...pay, deliverySelections: selections(), attribution }, keyRef.current);
+      const couponCode = s?.coupon?.applicable ? s.coupon.code : undefined;
+      const conf = await api.placeOrder(
+        { addressId: address.id, ...pay, useCredit: split.appliedMinor > 0 ? true : undefined, deliverySelections: selections(), attribution, couponCode },
+        keyRef.current
+      );
       orderRef.current = conf.orderNumber;
       return conf;
     } catch (e) {
@@ -247,6 +293,14 @@ export function CheckoutView() {
     } catch (e) {
       await fail(e);
     }
+  };
+
+  /** Credit pays the whole order: no payment method, no Stripe confirmation. */
+  const placeWithCredit = async () => {
+    if (!begin()) return;
+    const conf = await place({});
+    if (!conf) return;
+    await finish(conf, { ok: true });
   };
 
   const placeWithSaved = async () => {
@@ -284,7 +338,6 @@ export function CheckoutView() {
   /** Typing into the Payment Element means paying with a new method instead of a saved one. */
   const onNewMethod = (c: PaymentElementChange) => {
     setNewMethod(c);
-    if (!c.empty) setPayWith('new');
   };
 
   if (summary.isPending) return <Skeleton height={420} />;
@@ -304,49 +357,77 @@ export function CheckoutView() {
 
   const addressList = addressOpen || !address;
   // The BFF sends a rate ('8.25% TX') or, before an address is known, its own sentence: never repeat it.
-  const taxNote = s.taxMinor ? null : /\d\s*%/.test(s.taxRateLabel) ? t('co.taxNoteRate', { rate: s.taxRateLabel }) : s.taxRateLabel || t('co.taxNote');
+  const taxNote = s.taxMinor
+    ? /\d\s*%/.test(s.taxRateLabel)
+      ? t('co.taxExplainRate', { rate: s.taxRateLabel })
+      : t('co.taxExplain')
+    : /\d\s*%/.test(s.taxRateLabel)
+      ? t('co.taxNoteRate', { rate: s.taxRateLabel })
+      : s.taxRateLabel || t('co.taxNote');
 
   return (
     <div className={styles.layout}>
-      <div className={styles.main}>
-        <div className={styles.head}>
-          <h1 className={styles.title}>{t('co.title')}</h1>
-          <span className={styles.headMeta}>
-            <LockSimple weight="fill" aria-hidden /> {t('co.items', { n: itemCount })}
-          </span>
-        </div>
+      <header className={styles.head}>
+        <h1 className={styles.title}>{t('co.title')}</h1>
+        <span className={styles.headMeta}>
+          <LockSimple weight="fill" aria-hidden /> {t('co.items', { n: itemCount })}
+        </span>
+      </header>
 
+      <div className={styles.mainCol}>
         <Section
           n={1}
           id="co-address"
           title={t('co.step.address')}
-          action={
-            !addressList && (
-              <button type="button" className="link-button" onClick={() => setAddressOpen(true)} aria-label={t('co.changeAria', { step: t('co.step.address') })}>
-                {t('co.change')}
-              </button>
-            )
-          }
         >
-          {!addressList && address ? (
-            <p className={styles.addressLine} data-testid="checkout-address">
-              <strong>{address.name}</strong>
-              <span>{addressLine(address)}</span>
-              <span className={styles.muted}>{address.phone}</span>
-            </p>
+          {!addressOpen && address ? (
+            <div data-testid="checkout-address" className={styles.choiceCompact}>
+              <div className={styles.choiceText}>
+                <strong className={styles.name}>{address.name}</strong>
+                <span>{addressLine(address)}</span>
+                <span className={styles.meta}>{address.phone}</span>
+                {address.isDefault && <span className={styles.tag}>{t('pay.default')}</span>}
+              </div>
+              <div className={styles.currentActions}>
+                <button
+                  type="button"
+                  className="link-button"
+                  onClick={() => setAddrDialog({ open: true, address })}
+                >
+                  {t('common.edit')}
+                </button>
+                <button
+                  type="button"
+                  className="link-button"
+                  aria-label="Change Delivery address"
+                  onClick={() => setAddressOpen(true)}
+                >
+                  {t('co.change')}
+                </button>
+              </div>
+            </div>
           ) : (
-            <div className={styles.choices}>
+            <div className={styles.choices} data-testid="checkout-address">
               {s.addresses.length === 0 && <p className={styles.muted}>{t('co.noAddresses')}</p>}
               {s.addresses.map((a) => (
-                <label key={a.id} className={styles.choice} data-testid="checkout-address">
-                  <input type="radio" name="shipaddr" checked={a.id === addressId} onChange={() => setAddressId(a.id)} />
+                <label key={a.id} className={styles.choice} data-testid="checkout-address-option">
+                  <input
+                    type="radio"
+                    name="shipaddr"
+                    checked={a.id === addressId}
+                    onChange={() => setAddressId(a.id)}
+                    aria-label={`${a.name} ${addressLine(a)}`}
+                  />
                   <span className={styles.choiceText}>
-                    <strong>{a.name}</strong> {addressLine(a)}
-                    <br />
-                    <span className={styles.muted}>{a.phone}</span>
+                    <strong className={styles.name}>{a.name}</strong> <span>{addressLine(a)}</span>
+                    <span className={styles.meta}>{a.phone}</span>
                   </span>
                   {a.isDefault && <span className={styles.tag}>{t('pay.default')}</span>}
-                  <button type="button" className="link-button" onClick={() => setAddrDialog({ open: true, address: a })}>
+                  <button
+                    type="button"
+                    className="link-button"
+                    onClick={() => setAddrDialog({ open: true, address: a })}
+                  >
                     {t('common.edit')}
                   </button>
                 </label>
@@ -355,23 +436,37 @@ export function CheckoutView() {
                 <button type="button" className={styles.addRow} onClick={() => setAddrDialog({ open: true, address: null })}>
                   <Plus aria-hidden /> {t('co.addAddress')}
                 </button>
-                {address && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setError(null);
-                      setAddressOpen(false);
-                    }}
-                  >
-                    {t('co.useAddress')}
-                  </Button>
-                )}
+                <Button onClick={() => { setError(null); setAddressOpen(false); }} disabled={!address}>
+                  {t('co.useAddress')}
+                </Button>
               </div>
             </div>
           )}
         </Section>
 
-        <Section n={2} id="co-items" title={t('co.step.items')} action={<span className={styles.muted}>{t('co.sellers', { n: s.sellerCount })}</span>}>
+        <Section n={2} id="co-payment-title" title={t('co.step.payment')}>
+          <PaymentStep
+            s={s}
+            total={total}
+            pmId={pmId}
+            setPmId={(id) => {
+              setPmId(id);
+              setPayWith('saved');
+              setError(null);
+            }}
+            payWith={payWith}
+            setPayWith={setPayWith}
+            newMethod={newMethod}
+            save={save}
+            setSave={setSave}
+            onNewMethod={onNewMethod}
+            payEl={payEl}
+            methodTypes={methodTypes}
+            credit={s.credit && s.credit.availableMinor > 0 ? { ...s.credit, ...split, use: useCredit, setUse: setUseCredit } : null}
+          />
+        </Section>
+
+        <Section n={3} id="co-delivery" title={t('co.step.delivery')} action={<span className={styles.muted}>{t('co.sellers', { n: s.sellerCount })}</span>}>
           <div className={styles.packages}>
             {s.packages.map((p, i) => (
               <PackageCard
@@ -380,7 +475,7 @@ export function CheckoutView() {
                 n={i + 1}
                 total={s.packages.length}
                 choice={choices[p.packageId] ?? initialChoice(p)}
-                onChoice={(c) => setChoices((x) => ({ ...x, [p.packageId]: c }))}
+                onChoice={(c) => setPackageChoice(p.packageId, c)}
                 onRemove={() => void removePackage(p)}
                 onChangeAddress={changeAddress}
                 removing={removing === p.packageId}
@@ -388,120 +483,42 @@ export function CheckoutView() {
             ))}
           </div>
         </Section>
-
-        <Section n={3} id="co-payment" title={t('co.step.payment')} action={<CardBrandRow height={18} className={styles.brands} />}>
-          <div className={styles.payment}>
-            {s.paymentMethods.length > 0 && (
-              <fieldset className={styles.saved}>
-                <legend className={styles.legend}>{t('co.savedMethods')}</legend>
-                {s.paymentMethods.map((p) => (
-                  <label key={p.id} className={styles.choice} data-testid="checkout-payment">
-                    <input
-                      type="radio"
-                      name="paym"
-                      checked={payWith === 'saved' && p.id === pmId}
-                      onChange={() => {
-                        setPayWith('saved');
-                        setPmId(p.id);
-                      }}
-                    />
-                    <PaymentChip method={p} />
-                    <span className={styles.choiceText}>
-                      <strong>{p.label}</strong> <span className={styles.muted}>{pmSub(t, p)}</span>
-                    </span>
-                    {p.isDefault && <span className={styles.tag}>{t('pay.default')}</span>}
-                  </label>
-                ))}
-              </fieldset>
-            )}
-            <div className={payWith === 'new' ? styles.newMethodOn : styles.newMethod} data-testid="checkout-new-method">
-              <span className={styles.legend}>{s.paymentMethods.length > 0 ? t('co.orNew') : t('co.payWith')}</span>
-              <PaymentElementField ref={payEl} publishableKey={s.publishableKey ?? ''} amountMinor={total} currency={s.currency} save={save} paymentMethodTypes={methodTypes} onChange={onNewMethod} />
-              <label className={styles.save}>
-                <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
-                <span>
-                  {t('co.saveForLater')}
-                  <small>{t('co.saveForLaterHint')}</small>
-                </span>
-              </label>
-            </div>
-            <div className={styles.secure}>
-              <PoweredByStripe height={24} />
-              <span className={styles.secureText}>
-                <ShieldCheck aria-hidden /> {t('pay.storedByStripe')}
-              </span>
-            </div>
-          </div>
-        </Section>
       </div>
 
-      <aside className={styles.aside} aria-label={t('co.orderSummary')}>
-        <div className={styles.summaryCard}>
-          <h2 className={styles.summaryTitle}>{t('co.orderSummary')}</h2>
-          <dl className={styles.totals} data-testid="order-summary">
-            <div className={styles.row}>
-              <dt>{t('co.itemsTotal', { n: itemCount })}</dt>
-              <dd>{fmt.money(s.subtotalMinor)}</dd>
-            </div>
-            <div className={styles.row}>
-              <dt>{t('co.shippingShort')}</dt>
-              <dd>{shipping === 0 ? t('co.free') : fmt.money(shipping)}</dd>
-              {pickups > 0 && <dd className={styles.rowNote}>{t('co.pickupNote', { n: pickups })}</dd>}
-            </div>
-            <div className={styles.row}>
-              <dt>{t('co.taxShort')}</dt>
-              <dd>{s.taxMinor ? fmt.money(s.taxMinor) : '—'}</dd>
-              {taxNote && <dd className={styles.rowNote}>{taxNote}</dd>}
-            </div>
-            <div className={styles.grandRow}>
-              <dt>{t('co.total')}</dt>
-              <dd>{fmt.money(total)}</dd>
-            </div>
-          </dl>
-          <Button
-            size="lg"
-            block
-            onClick={() => void (payWith === 'new' || !pm ? placeWithElement() : placeWithSaved())}
-            loading={busy}
-            disabled={!paymentChosen || !address || addressList || blocked}
-            data-place-order="1"
-          >
-            {busy ? t('co.placing') : preLocked ? t('preorder.locked.button') : t('co.place')}
-          </Button>
-          {error && (
-            <p className={styles.error} role="alert">
-              {error}
-            </p>
-          )}
-          {preLocked && preCopy?.copy.lockedText && (
-            <p className={styles.fine} role="note" data-testid="preorder-checkout-locked">
-              {preCopy.copy.lockedText}
-            </p>
-          )}
-          {undeliverable && !preLocked && (
-            <p className={styles.fine} data-testid="local-delivery-blocked">
-              {t('ld.blocked')}
-            </p>
-          )}
-          {addressList && address && <p className={styles.fine}>{t('co.confirmAddress')}</p>}
-          {busy && (
-            <ol className={styles.steps} aria-live="polite">
-              {STEPS.map((k, i) => (
-                <li key={k}>
-                  {i < placing ? <CheckCircle weight="fill" aria-hidden /> : i === placing ? <CircleNotch className={styles.spin} aria-hidden /> : <Circle aria-hidden />} {t(k)}
-                </li>
-              ))}
-            </ol>
-          )}
-          <p className={styles.fine}>
-            {t('co.agreePrefix')} <Link href="/legal/conditions-of-use">{t('co.conditions')}</Link> {t('co.and')} <Link href="/legal/privacy">{t('co.privacy')}</Link>.
-          </p>
-          <div className={styles.stripeLine}>
-            <PoweredByStripe height={24} />
-            <span>{t('co.chargeNote')}</span>
-          </div>
-        </div>
-      </aside>
+      <CheckoutOrderPanel
+        s={s}
+        packages={s.packages}
+        pickups={pickups}
+        shippingMinor={selectedShipping}
+        total={total}
+        itemCount={itemCount}
+        taxNote={taxNote}
+        paymentChosen={paymentChosen}
+        creditMinor={split.appliedMinor}
+        pmLabel={payWith === 'saved' ? pm?.label : newMethodName(newMethod.type)}
+        addressOk={!!address}
+        blocked={blocked}
+        preLocked={preLocked}
+        preLockedText={preCopy?.copy.lockedText}
+        preRun={preBlock?.kind === 'RUN' ? preBlock : null}
+        undeliverable={undeliverable}
+        addressList={addressList}
+        busy={busy}
+        placing={placing}
+        error={error}
+        onPlace={() => void (creditPaysAll ? placeWithCredit() : payWith === 'new' || !pm ? placeWithElement() : placeWithSaved())}
+        couponDraft={couponDraft}
+        setCouponDraft={setCouponDraft}
+        onApplyCoupon={() => {
+          setError(null);
+          setAppliedCoupon(couponDraft.trim().toUpperCase());
+        }}
+        onRemoveCoupon={() => {
+          setError(null);
+          setAppliedCoupon('');
+          setCouponDraft('');
+        }}
+      />
 
       <AddressDialog open={addrDialog.open} onOpenChange={(o) => setAddrDialog((d) => ({ ...d, open: o }))} address={addrDialog.address} onSaved={(a) => setAddressId(a.id)} />
       <span hidden data-testid="checkout-pay-with">

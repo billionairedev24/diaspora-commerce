@@ -43,6 +43,7 @@ export default tseslint.config(
       '**/.next/**',
       '**/.next-e2e/**',
       '**/.next-prod/**',
+      '**/.next-*/**',
       '**/.open-next/**',
       '**/.wrangler/**',
       '**/dist/**',
@@ -93,6 +94,28 @@ export default tseslint.config(
     rules: {
       ...jsxA11y.flatConfigs.recommended.rules,
       'at/no-raw-hex': 'error'
+    }
+  },
+  {
+    // Phone numbers go through the standard PhoneNumberField (country code dropdown, E.164 out): no raw tel inputs in
+    // the apps. The ui package's own PhoneInput is the one place that renders the input.
+    files: ['web/apps/*/src/**/*.tsx', 'web/packages/account/src/**/*.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "ImportDeclaration[source.value=/^(\\.|@\\/|@afrotransact\\/)/] > ImportNamespaceSpecifier",
+          message: 'No namespace imports of app code — import the named members you use.'
+        },
+        {
+          selector: "JSXAttribute[name.name='type'][value.value='tel']",
+          message: 'Use PhoneNumberField from @afrotransact/ui for phone numbers (country code dropdown, E.164 value).'
+        },
+        {
+          selector: "JSXAttribute[name.name='autoComplete'][value.value='tel']",
+          message: 'Use PhoneNumberField from @afrotransact/ui for phone numbers (country code dropdown, E.164 value).'
+        }
+      ]
     }
   },
   {

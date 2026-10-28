@@ -21,11 +21,13 @@ import com.afrotransact.payments.domain.PayoutRequest;
 import com.afrotransact.payments.domain.PayoutStatus;
 import com.afrotransact.payments.domain.Requester;
 import com.afrotransact.payments.domain.Settlement;
+import com.afrotransact.payments.domain.ShipmentSettlement;
 import com.afrotransact.payments.port.ConnectedAccountRepository;
 import com.afrotransact.payments.port.IdempotencyStore;
 import com.afrotransact.payments.port.LedgerRepository;
 import com.afrotransact.payments.port.PayoutHoldRepository;
 import com.afrotransact.payments.port.PayoutRepository;
+import com.afrotransact.payments.port.PlanFeeWithholdingRepository;
 import com.afrotransact.payments.port.ProviderFeeRepository;
 import com.afrotransact.payments.port.SettlementRepository;
 import com.afrotransact.payments.port.StripeGateway;
@@ -55,13 +57,15 @@ class PayoutServiceImpl implements PayoutService {
     private final PaymentsAccess access;
     private final DomainEventPublisher events;
     private final PaymentsSettings settings;
+    private final PlanFeeWithholdingRepository planFees;
     private final Clock clock;
 
     PayoutServiceImpl(PayoutRepository payouts, SettlementRepository settlements, LedgerRepository ledger,
                       ConnectedAccountRepository accounts, PayoutHoldRepository holds,
                       ProviderFeeRepository providerFees, StripeGateway stripe, PayoutPolicy policy,
                       IdempotencyStore idempotency, MoneyTransactions tx, PaymentsAccess access,
-                      DomainEventPublisher events, PaymentsSettings settings, Clock clock) {
+                      DomainEventPublisher events, PaymentsSettings settings, PlanFeeWithholdingRepository planFees,
+                      Clock clock) {
         this.payouts = payouts;
         this.settlements = settlements;
         this.ledger = ledger;
@@ -75,6 +79,7 @@ class PayoutServiceImpl implements PayoutService {
         this.access = access;
         this.events = events;
         this.settings = settings;
+        this.planFees = planFees;
         this.clock = clock;
     }
 
@@ -85,13 +90,26 @@ class PayoutServiceImpl implements PayoutService {
         return tx.serializable(() -> compute(org, currency(currency)));
     }
 
+    /**
+     * When the whole order is delivered, the order-level settlement holds the release date; until then multi-shipment
+     * orders use per-shipment holds (earliest release shown on the payout balance line).
+     */
+    private Instant holdReleaseAt(String orderId) {
+        Optional<Settlement> order = settlements.find(orderId);
+        if (order.isPresent()) {
+            return order.get().releaseAt();
+        }
+        return settlements.shipments(orderId).stream().map(ShipmentSettlement::releaseAt)
+                .min(Comparator.naturalOrder()).orElse(null);
+    }
+
     private PayoutBalance compute(String org, String currency) {
         Money zero = Money.zero(currency);
         if (isRetail(org)) {
             // AfroTransact Retail is the merchant of record: its sales are AfroTransact revenue (4400), nothing is
             // held, transferred or paid out, and compliance holds do not apply.
-            return new PayoutBalance(org, currency, zero, List.of(), zero, zero, zero, zero, zero, zero,
-                    policy.minimum(currency), false, false, null);
+            return new PayoutBalance(org, currency, zero, List.of(), zero, zero, zero, zero, zero, zero, zero,
+                    policy.minimum(currency), false, false, null, true);
         }
         Money transferred = settlements.transferredTo(org, currency);
         Map<PayoutStatus, Long> totals = payouts.totals(org, currency);
@@ -106,28 +124,33 @@ class PayoutServiceImpl implements PayoutService {
         // Label charges not yet recovered from a transfer (S256) are owed out of what was already transferred, so they
         // reserve it and may take available below zero; payouts never exceed available. Credits from voided labels
         // (negative) are paid with the next transfer, not from the connected account.
-        Money labelCharges = Money.of(-ledger.unattributedPayable(org, currency), currency);
-        Money available = transferred.minus(Money.of(consumed, currency)).minus(fees).max(zero)
-                .minus(labelCharges.max(zero));
+        // Plan fees withheld from earnings (S298) sit on the same unattributed payable; they were taken from earnings
+        // still on hold, so they reserve available only for the part the amounts on hold no longer cover.
+        long planOutstanding = planFees.outstanding(org, currency);
+        Money labelCharges = Money.of(-(ledger.unattributedPayable(org, currency) + planOutstanding), currency);
         List<HeldOrder> held = new ArrayList<>();
         Money heldTotal = zero;
         for (Map.Entry<String, Long> e : ledger.payableByOrder(org, currency).entrySet()) {
             if (e.getValue() <= 0) {
                 continue;
             }
-            Instant release = settlements.find(e.getKey()).map(Settlement::releaseAt).orElse(null);
+            Instant release = holdReleaseAt(e.getKey());
             Money amount = Money.of(e.getValue(), currency);
             held.add(new HeldOrder(e.getKey(), amount, release));
             heldTotal = heldTotal.plus(amount);
         }
         held.sort(Comparator.comparing(HeldOrder::releaseAt, Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparing(HeldOrder::orderId));
+        Money planFeesOwed = Money.of(planOutstanding, currency);
+        Money available = transferred.minus(Money.of(consumed, currency)).minus(fees).max(zero)
+                .minus(labelCharges.max(zero)).minus(planFeesOwed.minus(heldTotal).max(zero));
         List<PayoutRequest> today = payouts.requestsOn(org, today());
         Optional<PayoutHold> hold = holds.find(org).filter(PayoutHold::paused);
         return new PayoutBalance(org, currency, available, held, heldTotal, Money.of(inFlight, currency),
-                Money.of(totals.getOrDefault(PayoutStatus.PAID, 0L), currency), fees, labelCharges,
+                Money.of(totals.getOrDefault(PayoutStatus.PAID, 0L), currency), fees, labelCharges, planFeesOwed,
                 Money.of(ledger.deliveryFeesPaid(org, currency), currency), policy.minimum(currency),
-                policy.canRequestToday(today), hold.isPresent(), hold.map(PayoutHold::reason).orElse(null));
+                policy.canRequestToday(today), hold.isPresent(), hold.map(PayoutHold::reason).orElse(null),
+                accounts.find(org).isPresent());
     }
 
     @Override
@@ -218,6 +241,37 @@ class PayoutServiceImpl implements PayoutService {
             PayoutRequest r = payouts.lock(id).orElseThrow(() -> notFound(id));
             access.payoutApprover(r.id(), r.orgId());
             return payouts.update(r.release(actor.subject(), Instant.now(clock)));
+        });
+    }
+
+    @Override
+    public PayoutRequest syncWithStripe(UUID id) {
+        access.approver();
+        return tx.serializable(() -> {
+            PayoutRequest r = payouts.lock(id).orElseThrow(() -> notFound(id));
+            access.payoutApprover(r.id(), r.orgId());
+            if (r.status() != PayoutStatus.IN_TRANSIT || r.stripePayoutId() == null) {
+                return r;
+            }
+            Optional<StripeGateway.ObjectSnapshot> found = stripe.lookup(r.stripePayoutId(),
+                    accounts.find(r.orgId()).orElse(null));
+            if (found.isEmpty()) {
+                return r;
+            }
+            String status = found.get().status() == null ? "" : found.get().status();
+            PayoutRequest after = switch (status) {
+                case "paid" -> r.paid();
+                case "failed", "canceled" -> r.failed(Optional.ofNullable(found.get().failure()).orElse(status));
+                default -> r;
+            };
+            if (after.status() == r.status()) {
+                return r;
+            }
+            PayoutRequest stored = payouts.update(after);
+            events.publish(after.status() == PayoutStatus.PAID ? PaymentsEvents.PAYOUT_PAID
+                            : PaymentsEvents.PAYOUT_FAILED, PaymentsEvents.AGGREGATE_PAYOUT, stored.orgId(),
+                    PaymentsEventPayloads.PayoutPayload.of(stored));
+            return stored;
         });
     }
 

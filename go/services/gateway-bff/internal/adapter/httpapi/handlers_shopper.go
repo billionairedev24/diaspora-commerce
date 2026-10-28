@@ -30,6 +30,12 @@ type ShopperServices struct {
 	SearchClicks app.SearchClickService
 	// PayLinks serves the pay-now page of late pre-order adds (optional; public, the link's token is the credential).
 	PayLinks app.PayLinkService
+	// BusinessPages serves a business's plain public page (optional; public, read-only).
+	BusinessPages app.BusinessPageService
+	// Credit is AfroTransact credit and gift cards (S320, S321; optional).
+	Credit app.CreditService
+	// Referral is "Refer a friend" (S322; optional).
+	Referral app.ReferralService
 }
 
 func (s ShopperServices) enabled() bool { return s.Wallet != nil }
@@ -56,6 +62,15 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 		route("POST /v1/me/help-requests", h.createHelpRequest)
 		route("GET /v1/me/help-requests", h.helpRequests)
 		route("GET /v1/me/help-requests/{id}", h.helpRequest)
+	}
+	if h.s.Shopper.BusinessPages != nil {
+		route("GET /v1/business-pages/{slug}", h.businessPage)
+	}
+	if h.s.Shopper.Credit != nil {
+		h.registerCredit(route)
+	}
+	if h.s.Shopper.Referral != nil {
+		h.registerReferral(route)
 	}
 	// Pay-now page of late pre-order adds (no session: the signed token is the credential; rate-limited per IP)
 	if h.s.Shopper.PayLinks != nil {
@@ -192,6 +207,11 @@ func (h *handlersImpl) helpRequest(w http.ResponseWriter, r *http.Request) {
 
 type payLinkBody struct {
 	Token string `json:"token"`
+}
+
+func (h *handlersImpl) businessPage(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Shopper.BusinessPages.Page(r.Context(), r.PathValue("slug"))
+	h.ok(w, r, v, err)
 }
 
 func (h *handlersImpl) payLinkLookup(w http.ResponseWriter, r *http.Request) {
@@ -387,7 +407,7 @@ func (h *handlersImpl) searchServices(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlersImpl) providerPage(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.Shopper.Services.Provider(r.Context(), r.PathValue("orgId"), r.URL.Query().Get("slug"))
+	v, err := h.s.Shopper.Services.Provider(r.Context(), r.PathValue("orgId"))
 	h.ok(w, r, v, err)
 }
 

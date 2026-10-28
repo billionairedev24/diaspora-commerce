@@ -9,7 +9,6 @@ import com.afrotransact.seller.application.ComplianceService;
 import com.afrotransact.seller.application.SellerEvents;
 import com.afrotransact.seller.application.SellerPermissions;
 import com.afrotransact.seller.domain.Cadence;
-import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -118,6 +117,23 @@ class ComplianceWebhookIT extends SellerIntegrationTest {
                         + "\"status\":\"errored\"}");
         webhook(CONNECT, bank, sign(bank, CONNECT_SECRET));
         assertThat(column(acct, "external_account_status")).isEqualTo("errored");
+        assertThat(lastEvent(SellerEvents.COMPLIANCE_CHANGED, org).path("trigger").asString())
+                .isEqualTo("external_account.errored");
+        // Account health shows the payout account Stripe holds (bank name, last 4, status; never the numbers).
+        TestActors.as(TestActors.member(unique("fin"), org, "seller.finance"));
+        Response health = get("/v1/orgs/" + org + "/account-health");
+        assertThat(health.text("/payoutBank/last4")).isEqualTo("6789");
+        assertThat(health.text("/payoutBank/status")).isEqualTo("errored");
+        TestActors.reset();
+        String replaced = StripeEvents.event(unique("evt"), "account.external_account.created", t, acct,
+                "{\"id\":\"ba_2\",\"object\":\"bank_account\",\"account\":\"" + acct + "\","
+                        + "\"bank_name\":\"Wells Fargo\",\"last4\":\"4321\",\"status\":\"new\"}");
+        assertThat(webhook(CONNECT, replaced, sign(replaced, CONNECT_SECRET)).text("/outcome")).isEqualTo("applied");
+        assertThat(column(acct, "external_account_status")).isEqualTo("new");
+        String card = StripeEvents.event(unique("evt"), "account.external_account.created", t, acct,
+                "{\"id\":\"card_1\",\"object\":\"card\",\"account\":\"" + acct + "\",\"last4\":\"4242\"}");
+        assertThat(webhook(CONNECT, card, sign(card, CONNECT_SECRET)).text("/outcome"))
+                .isEqualTo("ignored-not-a-bank-account");
         String unknown = StripeEvents.event(unique("evt"), "account.updated", t, "acct_unknown",
                 StripeEvents.account("acct_unknown", List.of(), List.of(), List.of(), null, null, true));
         assertThat(webhook(CONNECT, unknown, sign(unknown, CONNECT_SECRET)).text("/outcome"))
@@ -133,7 +149,7 @@ class ComplianceWebhookIT extends SellerIntegrationTest {
     }
 
     @Test
-    void accountHealthRemindersAndAnswersForwardedToStripe() {
+    void accountHealthIsReadOnlyAndStripesComponentsCollectEveryAnswer() {
         String owner = unique("ah");
         String org = approvedSeller(owner, "seller_essentials", Cadence.MONTHLY);
         String acct = accountOf(org);
@@ -165,43 +181,27 @@ class ComplianceWebhookIT extends SellerIntegrationTest {
         JsonNode url = health.body().path("requirements").valueStream()
                 .filter(r -> r.path("requirement").asString().equals("business_profile.url")).findFirst().orElseThrow();
         assertThat(url.at("/form/kind").asString()).isEqualTo("BUSINESS_URL");
-        assertThat(url.at("/form/fields/0/name").asString()).isEqualTo("url");
         assertThat(url.path("bucket").asString()).isEqualTo("CURRENTLY_DUE");
 
-        String base = "/v1/orgs/" + org + "/account-health/requirements/";
-        assertThat(post(base + "business_profile.url", Map.of("values", Map.of("url", "not a url"))).text("/code"))
-                .isEqualTo("seller.invalid-answer");
-        assertThat(post(base + "individual.id_number", Map.of("values", Map.of())).status()).isEqualTo(404);
-
-        Response answered = post(base + "business_profile.url", Map.of("values",
-                Map.of("url", "https://store.example.com")));
-        assertThat(answered.status()).isEqualTo(200);
-        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/accounts/" + acct)).anySatisfy(b -> assertThat(b)
-                .contains("business_profile[url]=https://store.example.com"));
-        assertThat(answered.body().path("requirements").valueStream()
-                .filter(r -> r.path("requirement").asString().equals("business_profile.url"))
-                .map(r -> r.path("bucket").asString())).containsExactly("PENDING_VERIFICATION");
-
-        post(base + "company.verification.document", Map.of("values", Map.of("documentType",
-                "Articles of organization", "frontAssetId", "0b6f3a5e-1111-2222-3333-444455556666")));
-        LoggedRequest upload = StripeStub.requests(STRIPE, "POST", "/v1/files").stream()
-                .filter(r -> acct.equals(r.getHeader("Stripe-Account"))).findFirst().orElseThrow();
-        assertThat(upload.getBodyAsString()).contains("account_requirement", "%PDF-1.4 test document");
-        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/accounts/" + acct)).anySatisfy(b -> assertThat(b)
-                .contains("company[verification][document][front]=file_"));
-
-        post(base + "company.tax_id", Map.of("values", Map.of("ein", "12-3456789")));
-        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/accounts/" + acct)).anySatisfy(b -> assertThat(b)
-                .contains("company[tax_id]=123456789"));
-        post(base + "tos_acceptance", Map.of("values", Map.of("accept", "true")));
-        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/accounts/" + acct)).anySatisfy(b -> assertThat(b)
-                .contains("tos_acceptance[date]=", "tos_acceptance[ip]="));
-        Response dob = post(base + "representative.dob.day", Map.of("values", Map.of("dateOfBirth", "1981-05-17")));
-        assertThat(dob.status()).isEqualTo(200);
-        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/accounts/" + acct + "/persons/person_Rep1"))
-                .anySatisfy(b -> assertThat(b).contains("dob[day]=17", "dob[month]=5", "dob[year]=1981"));
-        assertThat(dob.text("/status")).isEqualTo("VERIFYING");
-        assertThat(dob.body().path("openItems").asInt()).isZero();
+        // Stripe-collected account: nothing is answered through AfroTransact. Each item names the embedded component
+        // that collects it, and owner / finance members open an Account Session for those components.
+        assertThat(url.at("/form/component").asString()).isEqualTo("account_onboarding");
+        assertThat(post("/v1/orgs/" + org + "/account-health/requirements/business_profile.url",
+                Map.of("values", Map.of("url", "https://store.example.com"))).status()).isIn(404, 405);
+        Response session = post("/v1/orgs/" + org + "/stripe/account-session", Map.of());
+        assertThat(session.status()).isEqualTo(200);
+        assertThat(session.text("/accountId")).isEqualTo(acct);
+        assertThat(session.text("/clientSecret")).isEqualTo("accs_secret_test");
+        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/account_sessions")).anySatisfy(b -> assertThat(b)
+                .contains("account=" + acct, "components[account_management][enabled]=true",
+                        "components[notification_banner][enabled]=true").doesNotContain("external_account_collection"));
+        TestActors.as(TestActors.member(unique("cat"), org, "seller.catalog"));
+        assertThat(post("/v1/orgs/" + org + "/stripe/account-session", Map.of()).status()).isEqualTo(403);
+        TestActors.as(TestActors.staff(unique("ops"), SellerPermissions.COMPLIANCE_HOLD));
+        assertThat(post("/v1/orgs/" + org + "/stripe/account-session", Map.of()).status())
+                .as("staff can't open the seller's own Stripe account").isEqualTo(403);
+        assertThat(StripeStub.requests(STRIPE, "POST", "/v1/accounts/" + acct)).isEmpty();
+        assertThat(StripeStub.requests(STRIPE, "POST", "/v1/files")).isEmpty();
     }
 
     @Test

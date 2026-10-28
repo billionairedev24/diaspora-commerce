@@ -15,12 +15,16 @@ type UpPaymentLine struct {
 
 // UpOrderPayment is an order's payment (payments PaymentResponse).
 type UpOrderPayment struct {
-	Status        string          `json:"status"`
-	AmountMinor   int64           `json:"amountMinor"`
-	CapturedMinor int64           `json:"capturedMinor"`
-	RefundedMinor int64           `json:"refundedMinor"`
-	Currency      string          `json:"currency"`
-	Lines         []UpPaymentLine `json:"lines"`
+	Status        string `json:"status"`
+	AmountMinor   int64  `json:"amountMinor"`
+	CapturedMinor int64  `json:"capturedMinor"`
+	RefundedMinor int64  `json:"refundedMinor"`
+	Currency      string `json:"currency"`
+	// CreditMinor is the part of the order paid with AfroTransact credit (S320); the card paid the rest.
+	CreditMinor int64 `json:"creditMinor"`
+	// CardRefundsAsCredit: the shopper chose credit for the card part of this order's refunds (one way).
+	CardRefundsAsCredit bool            `json:"cardRefundsAsCredit"`
+	Lines               []UpPaymentLine `json:"lines"`
 }
 
 // OrderPaymentsClient reads an order's payment (GET /v1/payments?orderId=). Callers must have checked that the

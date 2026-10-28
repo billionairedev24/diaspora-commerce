@@ -2,14 +2,16 @@
 
 /* Stripe.js without an npm dependency: the official script from js.stripe.com (what @stripe/stripe-js loads) plus the
    small typed surface the storefront uses (S282, Stripe's recommended deferred-intent integration):
-   - checkout: the Payment Element inline, created from the cart (mode 'payment', amount, currency, manual capture,
+   - checkout: the Payment Element inline, created from the cart (mode 'payment', amount, currency, capture per method,
      setupFutureUsage when the shopper saves the method) before any PaymentIntent exists; Place order runs
      elements.submit() → orders creates the PaymentIntent → stripe.confirmPayment({ elements, clientSecret });
-   - the Express Checkout Element (Apple Pay, Google Pay, Link) on the same deferred options;
+   - Pay Now only: Express Checkout Element (Apple Pay, Google Pay, Link) on the same deferred options;
    - the Payment Element on a SetupIntent for saving methods (Your Payments, booking deposits);
    - PaymentIntent confirmation with a saved method.
    Mock mode (publishable key pk_test_mock…, or none: the local BFF without STRIPE_PUBLISHABLE_KEY) renders the
    storefront's own labelled test form instead; gateway-bff refuses to start without a real key outside local. */
+
+import { fonts } from '@afrotransact/tokens';
 
 export interface StripeError {
   type?: string;
@@ -46,12 +48,17 @@ export interface DeferredIntentOptions {
   amount: number;
   /** Lower-case ISO currency. */
   currency: string;
-  /** Must match the PaymentIntent: payments always creates order intents with manual capture (captured per shipment). */
-  captureMethod: 'manual';
+  /** Must match the PaymentIntent: payments creates order intents with capture_method automatic_async and manual capture
+      per method (cards, Klarna, Affirm, Afterpay, Amazon Pay, Cash App, Link are captured per shipment; US bank accounts,
+      which cannot hold funds, are charged on confirmation). A top-level 'manual' would hide ACH from the element. */
+  captureMethod: 'automatic_async';
   /** Must match the PaymentIntent: 'off_session' when the shopper saves the method (savePaymentMethod). */
   setupFutureUsage?: 'off_session' | null;
+  /** The shopper's Stripe Customer (cus_...); required to show saved methods in the Payment Element. */
+  customer?: string;
   /** Only when the intent is restricted (pre-order windows); otherwise automatic payment methods (Dashboard settings). */
   paymentMethodTypes?: string[];
+  automaticPaymentMethods?: { enabled: boolean };
   appearance: StripeAppearance;
   fonts: { cssSrc: string }[];
 }
@@ -90,8 +97,8 @@ declare global {
 
 export const STRIPE_JS = 'https://js.stripe.com/v3/';
 
-/** Figtree inside Stripe's iframes (they cannot use the page's self-hosted font files). */
-export const STRIPE_FONTS = [{ cssSrc: 'https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap' }];
+/** The platform fonts inside Stripe's iframes (they cannot use the page's self-hosted font files). */
+export const STRIPE_FONTS = [{ cssSrc: fonts.googleFontsUrl }];
 
 /** True for the mock BFF's key or no key at all (local without STRIPE_PUBLISHABLE_KEY): the labelled test form. */
 export const isMockKey = (publishableKey: string | null | undefined): boolean => !publishableKey || publishableKey.startsWith('pk_test_mock');
@@ -155,7 +162,7 @@ function tokenReader(): (name: string) => string {
   return (name: string) => css?.getPropertyValue(name).trim() ?? '';
 }
 
-/** Payment / Express Checkout Element appearance: gold primary, Figtree, our radius and colours (Shop design). */
+/** Payment / Express Checkout Element appearance: gold primary, the platform font, our radius and colours (Shop design). */
 export function stripeAppearance(): StripeAppearance {
   const v = tokenReader();
   const variables: Record<string, string> = { fontWeightNormal: '400', fontWeightMedium: '600', fontWeightBold: '700', spacingUnit: '3px', gridRowSpacing: '12px' };
@@ -201,18 +208,22 @@ export function stripePaymentMethodTypes(windows: readonly (readonly string[])[]
   const types: string[] = [];
   if (allowed.has('CARD') || allowed.has('WALLET')) types.push('card');
   if (allowed.has('WALLET')) types.push('link');
+  if (allowed.has('ACH')) types.push('us_bank_account');
   return types.length ? types : undefined;
 }
 
 /** Elements options for an order's PaymentIntent before it exists (deferred intent). */
-export function deferredIntentOptions(o: { amountMinor: number; currency: string; save?: boolean; paymentMethodTypes?: string[] }): DeferredIntentOptions {
+export function deferredIntentOptions(o: { amountMinor: number; currency: string; save?: boolean; customer?: string; paymentMethodTypes?: string[] }): DeferredIntentOptions {
   return {
     mode: 'payment',
     amount: Math.max(o.amountMinor, 0),
     currency: o.currency.toLowerCase(),
-    captureMethod: 'manual',
+    captureMethod: 'automatic_async',
     ...(o.save ? { setupFutureUsage: 'off_session' as const } : {}),
-    ...(o.paymentMethodTypes?.length ? { paymentMethodTypes: o.paymentMethodTypes } : {}),
+    ...(o.customer ? { customer: o.customer } : {}),
+    ...(o.paymentMethodTypes?.length
+      ? { paymentMethodTypes: o.paymentMethodTypes }
+      : { automaticPaymentMethods: { enabled: true } }),
     appearance: stripeAppearance(),
     fonts: STRIPE_FONTS
   };

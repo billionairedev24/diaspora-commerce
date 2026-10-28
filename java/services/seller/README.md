@@ -17,7 +17,8 @@ Architecture: §7 (Sellers, payments and subscriptions) and §17d (Stripe Connec
 | `document_access_log` | every reviewer view of a document and of unmasked PII |
 | `review_reason_code` | seeded: `ALL_CHECKS_PASSED`, `PERMIT_MISSING`, `LICENCE_EXPIRED`, `IDENTITY_MISMATCH`, `TIN_MISMATCH`, `DOCUMENT_UNREADABLE`, `INSURANCE_MISSING`, `PROHIBITED_CATEGORY`, `REPUTATION_RISK`, `SANCTIONS_HIT`, `DUPLICATE_ACCOUNT`, `OTHER` |
 | `launch_list` | (country, email) for markets that are not live, with the shopping-updates opt-in |
-| `plan`, `plan_price` | seeded catalogue (Seller Essentials / Growth / Pro, Provider Solo / Studio / Business) and the Stripe Price `lookup_key` per cadence (`seller_growth_quarterly`) |
+| `plan`, `plan_version`, `plan_version_price`, `plan_invite`, `plan_migration` | the plan catalogue AfroTransact owns (S292): metadata (visibility, status, limits) per plan, immutable versions (price per cadence, default trial) with their Stripe Price ids, invite lists and staff migrations. Seeded with Seller Essentials / Growth / Pro and Provider Solo / Studio / Business as version 1 |
+| `trial_campaign`, `reward_rule`, `billing_grant`, `billing_reason_code`, `seller_metric_daily`, `seller_listing_state`, `earnings_collection` | trials (S295), reward rules and their metrics (S296), the grants log of rewards and staff adjustments with Stripe object ids, and collections of plan fees from earnings (S297, flag off) |
 | `connect_account` | Stripe requirements (`currently_due`, `eventually_due`, `past_due`, `pending_verification`, `errors`, `current_deadline`, `disabled_reason`), `charges_enabled`, `payouts_enabled`, capabilities, persons, derived status, `requirements_version`, payout hold, listings hidden |
 | `connect_account_history` | full change history (Stripe events, seller answers, staff actions) with the snapshot |
 | `org_suspension` | Trust and Safety suspension holds (V3): reason code, note, actor, previous org status, reinstated at / by / note; at most one active per organisation |
@@ -45,8 +46,8 @@ steps shown (no `owners` for sole proprietors); `POST /v1/applications/me/submit
 | `business` | offering products / services / both (sellers must include products, providers services), entity type, country — non-live countries → `422 seller.country-not-live` (live list: `SELLER_LIVE_COUNTRIES`, default `US`), store name, email, phone (libphonenumber, mobile, stored E.164) |
 | `business-details` | sole proprietor: legal first/last name, SSN/ITIN, DOB 18+, address. LLCs, corporation, partnership: legal name, EIN, state + date of formation, address, formation document asset id. Nonprofit: + IRS determination letter |
 | `owners` | everyone ≥ 25 % (below 25 % only with significant control), total ≤ 100 %, ≥ 1 significant-control person, multi-member LLC and partnership ≥ 2 people |
-| `stripe-verification` | `POST /v1/applications/me/stripe/account-session` creates the connected account on first use (controller: Stripe-collected requirements, fees and losses on the platform, no Stripe dashboard, manual payouts) and returns the Account Session `client_secret` for the embedded account-onboarding / account-management components; `POST …/stripe/refresh` re-reads verification results. Submission needs `details_submitted` |
-| `payouts` | ABA routing checksum, account number entered twice, last 4 + bank name stored, `externalAccountToken` attached to the connected account |
+| `stripe-verification` | `POST /v1/applications/me/stripe/account-session` creates the connected account on first use (controller: Stripe-collected requirements, Stripe-liable losses, the account pays its own fees, no Stripe dashboard, manual payouts) and returns the Account Session `client_secret` for the embedded account-onboarding / account-management / notification-banner components (no feature overrides: Stripe collects the payout bank account, and `external_account_collection` can only be false when the platform collects requirements); `POST …/stripe/refresh` re-reads verification results and the payout bank. Complete when details are submitted, nothing is currently due and the account isn't rejected |
+| `payouts` | read-only: the payout bank account Stripe holds (bank name, last 4, Stripe's status), mirrored from the account's `external_accounts` and `account.external_account.*` webhooks. Saving the step answers `422 seller.step-managed-by-stripe`: Stripe's onboarding collects the bank and its account management changes it. Complete when Stripe holds a usable (not failed) bank, `external_account` isn't due and payouts are enabled or only waiting for Stripe's checks |
 | `plan` | plan of the org's kind + cadence + payment method (`CARD` brand/last 4/expiry, or `US_BANK_ACCOUNT` = payout bank by ACH); response carries the first-charge sentence |
 | `catalog-compliance` | groceries/perishables/prepared food → food permit (number, expiry, document); beauty → labelling confirmation; regulated services → licence number, issuing state, expiry (expired rejected), licence document + insurance; agreements and W-9 certification |
 
@@ -102,7 +103,8 @@ admin and fulfilment members change; staff `seller:ship-from`). Up to 20 per org
 `com.stripe.net.Webhook.constructEvent`, de-duplicated by event id in `stripe_webhook_event` (same transaction as the
 change), `account.updated` snapshots applied only when `event.created ≥ requirements_version` (older ones are
 recorded as `stale`). Handles `account.updated`, `capability.updated`, `person.created/updated`,
-`account.external_account.updated`, `payout.failed`, `account.application.deauthorized`.
+`account.external_account.created/updated/deleted` (bank accounts only: the payout bank mirrored onto the account and
+the open application), `payout.failed`, `account.application.deauthorized`.
 
 Status: past due or disabled → `RESTRICTED`; currently due with ≤ 3 days to the deadline → `RESTRICTED_SOON`, else
 `ACTION_NEEDED`; only pending verification → `VERIFYING`; else `COMPLIANT`. Enforcement: past due → payouts paused
@@ -112,8 +114,8 @@ Status: past due or disabled → `RESTRICTED`; currently due with ≤ 3 days to 
 
 | Endpoint | Who |
 |---|---|
-| `GET /v1/orgs/{orgId}/account-health` | org owner / finance; staff and service tokens (principal type `SERVICE`) with `compliance:remind`, `compliance:hold` or `sellers:enforce`: status, flags, each requirement with a typed form (tax ID, ID number token, verification document, ownership declaration, representative DOB / title, ToS acceptance, bank account token, business URL) |
-| `POST /v1/orgs/{orgId}/account-health/requirements/{requirement} {values}` | org owner / finance: validated, documents fetched from media-service (`GET /v1/assets/{id}` → signed URL) and uploaded to Stripe Files (`account_requirement`, on the connected account), then Accounts / Persons update; the item moves to pending verification |
+| `GET /v1/orgs/{orgId}/account-health` | org owner / finance; staff and service tokens (principal type `SERVICE`) with `compliance:remind`, `compliance:hold` or `sellers:enforce`: status, flags, the payout bank Stripe holds and each requirement with its label and the embedded component that collects it (`account_management` for the payout bank, `account_onboarding` for everything else). Read-only |
+| `POST /v1/orgs/{orgId}/stripe/account-session` | org owner / finance (not staff): Account Session for Stripe's embedded components. Seller accounts are Stripe-collected, so the platform can't update identity, tax, person or bank details through the API once onboarding started; sellers answer Stripe in its components |
 | `GET /v1/compliance/accounts?status=&openOnly=` · `GET /v1/compliance/accounts/{id}` | `compliance:remind` or `compliance:hold` |
 | `POST /v1/compliance/accounts/{id}/reminders` | `compliance:remind` |
 | `POST /v1/compliance/accounts/{id}/payouts/pause` | `compliance:remind` or `compliance:hold` |
@@ -160,15 +162,46 @@ subscription; failures are retried by a job). Billing page (owner / finance read
 
 `POST /v1/webhooks/stripe-billing` (secret `STRIPE_BILLING_WEBHOOK_SECRET`): `invoice.paid`,
 `invoice.payment_failed` (dunning `RETRYING` / `FINAL_ATTEMPT_FAILED`, status `PAST_DUE`),
-`customer.subscription.updated` / `deleted`.
+`customer.subscription.updated` / `deleted`; `invoice.created`, `invoice.voided`, `invoice.deleted` and
+`credit_note.created` for plans paid from sales (S298: 503 while collecting an invoice failed for a transient reason,
+so Stripe redelivers and keeps the draft).
+
+**How the plan is paid (S298).** `GET/PUT /v1/orgs/{orgId}/billing/plan-fee-collection` (owner / finance):
+`EARNINGS_FIRST` ("Pay your plan from your sales": payments withholds each renewal invoice from earnings, the card
+pays the rest) or `CARD` ("Charge my card"); applies from the next invoice. Staff: `PUT …/plan-fee-collection/override`
+(billing:adjust, reason code), `GET/PUT /v1/billing/settings` (the default for new sellers, plans:manage). Kill switch
+`COLLECT_PLAN_FEES_FROM_EARNINGS`. Design, timing and keys: docs/engineering/plans-and-billing.md.
 
 **S103 acceptance criteria.** Upgrades prorate immediately (`always_invoice`, previewable), downgrades and cadence
 changes apply at renewal (pending change + `Pending plan changes` job, `proration_behavior=none`); trials come from the
 plan (`trial_period_days`, no proration during a trial); dunning follows Stripe Smart Retries (`invoice.payment_failed`
 → `PAST_DUE` / `RETRYING` → `FINAL_ATTEMPT_FAILED`; `invoice.paid` clears it; Stripe's own retry / cancel settings end
 it with `customer.subscription.updated|deleted`); cancellation and resume at period end; invoices listed with PDF
-download; metered usage below (S206). Stripe products, prices (`<plan>_<cadence>` lookup keys) and the three metered
-prices / meters must exist in each Stripe account (S245; the platform team's setup).
+download; metered usage below (S206). Plan Products and Prices are created by the seller service from its own catalogue (see
+below); only the three metered prices / meters must exist in each Stripe account (S245; the platform team's setup).
+
+## Plan catalogue, trials, credits and rewards (S292–S297)
+
+AfroTransact owns plans, trials, credits and rewards; Stripe Billing only executes the charges (automatic collection,
+Smart Retries, invoices, card updates, 3DS). Nobody edits plans in the Stripe Dashboard. The design, the Stripe
+mapping of free days, credits and discounts, and the idempotency keys are in
+[docs/engineering/plans-and-billing.md](https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/engineering/plans-and-billing.md).
+
+| Endpoint (staff) | |
+|---|---|
+| `GET/POST /v1/billing/plans`, `GET/PUT /v1/billing/plans/{code}` | catalogue (plans:manage writes; plans:manage, seller:billing or billing:adjust read); metadata edits use `expectedVersion` |
+| `PUT /v1/billing/plans/{code}/draft` | prices per cadence + default trial; creates the next version when they differ |
+| `POST …/{code}/publish` · `POST …/{code}/retire` · `PUT …/{code}/invites` | publish syncs Stripe; retired plans keep subscribers |
+| `GET/POST …/{code}/migration` | preview and move subscribers on older versions to the current one (next renewal, no proration) |
+| `GET/POST /v1/billing/stripe-sync` | drift report / "Sync with Stripe" (`IN_SYNC`, `ADOPTABLE`, `MISSING`, `DRIFT`, `FREE`) |
+| `GET/POST /v1/billing/trial-campaigns`, `PUT …/{id}`, `POST …/{id}/status` | promo codes and sign-up windows |
+| `GET/POST /v1/billing/reward-rules`, `PUT …/{id}`, `POST …/{id}/status`, `POST …/preview` | rules and "who qualifies now" |
+| `GET /v1/billing/grants`, `GET /v1/billing/reason-codes` | grants log, adjustment reasons |
+| `GET /v1/orgs/{orgId}/billing/panel` | per-seller billing panel |
+| `POST /v1/orgs/{orgId}/billing/{credits,free-days,trial}`, `POST …/invoices/{id}/waive`, `PUT …/earnings-collection` | billing:adjust, reason code, `Idempotency-Key` |
+
+Sellers: `GET /v1/orgs/{orgId}/billing/plans` (plans they may choose) and `GET …/billing/rewards` (rewards they can
+earn with progress, and what they received).
 
 ## Metered usage (S206)
 
@@ -242,6 +275,7 @@ knows the organisation.
 | Compliance reminders | hourly `0 15 * * * *` | 7 / 3 / 1 day(s) before `current_deadline`; one per threshold (unique index) |
 | Pending plan changes | hourly `0 5 * * * *` | downgrades and cadence changes whose renewal has come |
 | Subscription activation retry | every 10 min | approvals whose Stripe subscription could not be created |
+| Plan fees from sales (S298) | every 1 min (`EARNINGS_COLLECTION_INTERVAL`) | renewal invoices still to withhold and credit (back-off, 12 attempts), and releases still to send |
 
 ## Configuration
 
@@ -250,7 +284,9 @@ knows the organisation.
 `STRIPE_BILLING_WEBHOOK_SECRET`, `FIELD_ENCRYPTION_KEY` (base64 32 bytes; `FIELD_ENCRYPTION_KEY_ID`, default `k1`).
 Other: `AUTH_ISSUER_URL`, `SELLER_LIVE_COUNTRIES` (`US`), `MEDIA_BASE_URL`, `MEDIA_SERVICE_TOKEN`, `GEO_URL`, `GEO_TIMEOUT`,
 `PICKUP_MAX_RADIUS_MILES` (25),
-`SELLER_JOBS_ENABLED`, `REMINDER_CRON`, `PLAN_CHANGE_CRON`, `ACTIVATION_RETRY_INTERVAL`. `at.seller.stripe.api-base` /
+`SELLER_JOBS_ENABLED`, `REMINDER_CRON`, `PLAN_CHANGE_CRON`, `ACTIVATION_RETRY_INTERVAL`,
+`COLLECT_PLAN_FEES_FROM_EARNINGS` (kill switch; on in the local and dev profiles), `PAYMENTS_URL`, `PAYMENTS_TIMEOUT`,
+`EARNINGS_COLLECTION_INTERVAL`. `at.seller.stripe.api-base` /
 `files-base` point stripe-java at another host (the ITs use WireMock). The local profile ships a well-known dev
 encryption key; every other environment must provide its own.
 

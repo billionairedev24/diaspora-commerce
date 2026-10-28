@@ -15,12 +15,17 @@ import {
   type StaffForm
 } from '../../schemas/staff';
 import { type MockRecord, type Scalar } from './db';
+import { exchangeRatesDef } from './exchange-rates';
+import { IDENTITY_RESOURCES } from './identity';
+import { MOCK_DRIVERS } from './lookups';
 
 export interface ActionCtx {
   actor: string;
   actorId: string;
   now: Date;
   refundLimit: number | null;
+  /** Puts a secret in the answer of the current action or creation, and nowhere else (a new OAuth client secret). */
+  showOnce?: (label: string, value: string, note: string) => void;
 }
 
 export interface MockAction {
@@ -33,7 +38,14 @@ export interface MockAction {
   form?: (r: MockRecord) => StaffForm;
   /** null when the action is possible in the record's state, otherwise the reason it is not. */
   when: (r: MockRecord, ctx: ActionCtx) => string | null;
+  /**
+   * The record already went past this action (like the BFF's settled actions): the caller's own repeat answers 200,
+   * anyone else gets 409 ALREADY_DONE with the message (who and when).
+   */
+  already?: (r: MockRecord, ctx: ActionCtx) => { mine: boolean; message: string } | null;
   apply: (r: MockRecord, values: Record<string, FieldValue>, ctx: ActionCtx) => void;
+  /** When true, the handler drops the record and returns a removed detail (advert:delete). */
+  removes?: boolean;
 }
 
 export interface MockResource {
@@ -49,12 +61,18 @@ export interface MockResource {
   exportable: boolean;
   titleOf: (r: MockRecord) => string;
   subtitleOf: (r: MockRecord) => string;
+  /**
+   * Fields that hold an internal id of a person or organisation, with the label of the person or thing ("customerId" →
+   * "Customer"). The table shows the name instead, search still finds the id, and the sheet lists the id apart under
+   * "IDs" (the BFF's nameRef).
+   */
+  ids?: Record<string, string>;
   sections?: [string, string[]][];
   linesTitle?: string;
   lineColumns?: ResourceColumn[];
   links?: (r: MockRecord) => RecordLink[];
   actions: MockAction[];
-  edit?: { permission: string; form: (r: MockRecord) => StaffForm; apply: (r: MockRecord, values: Record<string, FieldValue>) => void };
+  edit?: { permission: string; form: (r: MockRecord) => StaffForm; apply: (r: MockRecord, values: Record<string, FieldValue>, ctx?: ActionCtx) => void };
   create?: { permission: string; form: StaffForm; build: (values: Record<string, FieldValue>, id: string, ctx: ActionCtx) => MockRecord };
 }
 
@@ -62,13 +80,27 @@ const MARKET_ORDER: Record<string, number> = { LIVE: 0, COMING_SOON: 1, PAUSED: 
 const col = (key: string, label: string, kind: ColumnKind, width: number): ResourceColumn => ({ key, label, kind, width });
 const facets = (...values: string[]): ResourceFacet[] => values.map((v) => ({ value: v, label: humanize(v) }));
 const field = (key: string, label: string, type: FormField['type'], required: boolean, extra: Partial<FormField> = {}): FormField => ({ key, label, type, required, ...extra });
-const form = (title: string, submitLabel: string, fields: FormField[]): StaffForm => ({ title, submitLabel, fields });
+const form = (title: string, submitLabel: string, fields: FormField[], intro?: string, changeKeys?: string[]): StaffForm => ({ title, submitLabel, fields, ...(intro ? { intro } : {}), ...(changeKeys ? { changeKeys } : {}) });
 const options = (...values: string[]) => values.map((v) => ({ value: v, label: humanize(v) }));
 const str = (v: FieldValue | Scalar | undefined): string => (v === null || v === undefined ? '' : String(v));
 const num = (v: FieldValue | Scalar | undefined): number => (typeof v === 'number' ? v : Number(v ?? 0));
 const is = (r: MockRecord, ...statuses: string[]) => statuses.includes(str(r.fields.status));
 const stateReason = (r: MockRecord, ...ok: string[]) => (is(r, ...ok) ? null : `Not possible while ${humanize(str(r.fields.status)).toLowerCase()}.`);
 const log = (r: MockRecord, ctx: ActionCtx, text: string) => r.activity.unshift({ at: ctx.now.toISOString(), actor: ctx.actor, text } satisfies ActivityEntry);
+const WHEN = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC' });
+/** Seller's "already decided" answer: what the application's latest decision was, by whom and when. */
+const decidedIn =
+  (...statuses: string[]) =>
+  (r: MockRecord, ctx: ActionCtx): { mine: boolean; message: string } | null => {
+    if (!is(r, ...statuses)) return null;
+    const last = r.activity[0];
+    const mine = last?.actor === ctx.actor;
+    const status = humanize(str(r.fields.status)).toLowerCase();
+    const by = last ? ` (by ${mine ? 'you' : last.actor}, ${WHEN.format(new Date(last.at)).replace(' at ', ', ')} UTC)` : '';
+    return { mine, message: `This application is already ${status}${by}` };
+  };
+const finalStep = (r: MockRecord, ctx: ActionCtx) =>
+  stateReason(r, 'AWAITING_FINAL_APPROVAL', 'FLAGGED') ?? (r.fields.reviewerId === ctx.actorId ? 'You reviewed step 1 — a different approver must decide step 2.' : null);
 const setStatus = (status: string, text: string) => (r: MockRecord, _v: Record<string, FieldValue>, ctx: ActionCtx) => {
   r.fields.status = status;
   log(r, ctx, text);
@@ -174,21 +206,19 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     exportable: true,
     titleOf: (r) => str(r.fields.displayName),
     subtitleOf: (r) => `${str(r.fields.reference)} · ${humanize(str(r.fields.kind))}`,
+    ids: { reviewerId: 'Reviewer' },
     sections: [
       ['Business', ['displayName', 'legalName', 'kind', 'entityType', 'state', 'planCode', 'contactEmail']],
-      ['Review', ['status', 'reviewStep', 'reviewerId', 'failedChecks', 'taxIdMasked', 'submittedAt']]
+      ['Review', ['status', 'reviewStep', 'reviewerName', 'failedChecks', 'taxIdMasked', 'submittedAt']]
     ],
     actions: [
-      { key: 'review-approve', label: 'Approve (step 1)', tone: 'primary', permission: 'applications:review', level: 'APPROVE', form: noteForm('Approve for final review', 'Approve', false), when: (r) => stateReason(r, 'PENDING_REVIEW', 'FLAGGED'), apply: (r, v, ctx) => { r.fields.status = 'AWAITING_FINAL_APPROVAL'; r.fields.reviewerId = ctx.actorId; r.fields.reviewStep = 2; log(r, ctx, `Step 1 approved${v.note ? ` — ${str(v.note)}` : ''}`); } },
-      { key: 'review-flag', label: 'Flag', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Flag the application', 'Flag', [field('failedChecks', 'Failed checks', 'multiselect', true, { options: options('TIN_MISMATCH', 'DOCUMENT_UNREADABLE', 'PROHIBITED_CATEGORY', 'ADDRESS_UNVERIFIED') }), field('note', 'Note', 'textarea', false)]), when: (r) => stateReason(r, 'PENDING_REVIEW'), apply: (r, v, ctx) => { r.fields.status = 'FLAGGED'; r.fields.failedChecks = (Array.isArray(v.failedChecks) ? v.failedChecks : []).join(', '); log(r, ctx, 'Flagged'); } },
-      { key: 'review-request-info', label: 'Request info', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Ask the applicant for more', 'Send request', [field('requestedItems', 'What is missing', 'textarea', true, { help: 'One item per line' })]), when: (r) => stateReason(r, 'PENDING_REVIEW', 'FLAGGED'), apply: setStatus('INFO_REQUESTED', 'Requested more information') },
-      {
-        key: 'final-approve', label: 'Final approval', tone: 'primary', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Give final approval', 'Approve', false),
-        when: (r, ctx) => stateReason(r, 'AWAITING_FINAL_APPROVAL') ?? (r.fields.reviewerId === ctx.actorId ? 'You reviewed step 1 — a different approver must give final approval.' : null),
-        apply: setStatus('APPROVED', 'Final approval — organisation approved')
-      },
-      { key: 'send-back', label: 'Send back', tone: 'neutral', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Send back to the reviewer', 'Send back'), when: (r) => stateReason(r, 'AWAITING_FINAL_APPROVAL'), apply: setStatus('PENDING_REVIEW', 'Sent back to step 1') },
-      { key: 'reject', label: 'Reject', tone: 'danger', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Reject the application', 'Reject'), when: (r) => stateReason(r, 'AWAITING_FINAL_APPROVAL', 'FLAGGED'), apply: setStatus('REJECTED', 'Rejected') }
+      { key: 'review-approve', label: 'Approve (step 1)', tone: 'primary', permission: 'applications:review', level: 'APPROVE', form: noteForm('Approve for final review', 'Approve', false), when: (r) => stateReason(r, 'PENDING_REVIEW'), already: decidedIn('APPROVED', 'REJECTED'), apply: (r, v, ctx) => { r.fields.status = 'AWAITING_FINAL_APPROVAL'; r.fields.reviewerId = ctx.actorId; r.fields.reviewerName = ctx.actor; r.fields.reviewStep = 2; log(r, ctx, `Step 1 approved${v.note ? ` — ${str(v.note)}` : ''}`); } },
+      { key: 'review-flag', label: 'Flag for senior review', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Flag for senior review', 'Flag', [field('failedChecks', 'Failed checks', 'multiselect', true, { options: options('TIN_MISMATCH', 'DOCUMENT_UNREADABLE', 'PROHIBITED_CATEGORY', 'ADDRESS_UNVERIFIED') }), field('note', 'Note', 'textarea', false)]), when: (r) => stateReason(r, 'PENDING_REVIEW'), already: decidedIn('APPROVED', 'REJECTED'), apply: (r, v, ctx) => { r.fields.status = 'FLAGGED'; r.fields.reviewerId = ctx.actorId; r.fields.reviewerName = ctx.actor; r.fields.failedChecks = (Array.isArray(v.failedChecks) ? v.failedChecks : []).join(', '); log(r, ctx, 'Flagged'); } },
+      { key: 'review-request-info', label: 'Return to applicant', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Return to the applicant', 'Return to applicant', [field('requestedItems', 'What is missing', 'textarea', true, { help: 'One item per line' }), field('note', 'Message to the applicant', 'textarea', true)]), when: (r) => stateReason(r, 'PENDING_REVIEW', 'FLAGGED'), already: decidedIn('APPROVED', 'REJECTED'), apply: setStatus('INFO_REQUESTED', 'Returned to the applicant') },
+      { key: 'final-request-info', label: 'Return to applicant (step 2)', tone: 'neutral', permission: 'applications:approve', level: 'APPROVE', form: () => form('Return to the applicant', 'Return to applicant', [field('requestedItems', 'What is missing', 'textarea', true, { help: 'One item per line' }), field('note', 'Message to the applicant', 'textarea', true)]), when: finalStep, already: decidedIn('APPROVED', 'REJECTED'), apply: setStatus('INFO_REQUESTED', 'Returned to the applicant') },
+      { key: 'final-approve', label: 'Final approval', tone: 'primary', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Give final approval', 'Approve', false), when: finalStep, already: decidedIn('APPROVED', 'REJECTED'), apply: setStatus('APPROVED', 'Final approval — organisation approved') },
+      { key: 'send-back', label: 'Send back', tone: 'neutral', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Send back to the reviewer', 'Send back'), when: finalStep, already: decidedIn('APPROVED', 'REJECTED'), apply: setStatus('PENDING_REVIEW', 'Sent back to step 1') },
+      { key: 'reject', label: 'Reject', tone: 'danger', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Reject the application', 'Reject'), when: finalStep, already: decidedIn('APPROVED', 'REJECTED'), apply: setStatus('REJECTED', 'Rejected') }
     ]
   },
   orders: {
@@ -200,6 +230,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     searchPlaceholder: 'Order number (AT-…)',
     cursor: true,
     exportable: true,
+    ids: { customerId: 'Customer' },
     titleOf: (r) => `Order ${r.id}`,
     subtitleOf: (r) => `${str(r.fields.customer)} · ${str(r.fields.shipTo)}`,
     sections: [
@@ -211,19 +242,25 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     links: (r) => [{ label: 'Open in customer support', href: `/support?customer=${encodeURIComponent(str(r.fields.customerId))}` }],
     actions: [
       {
-        key: 'shipment-status', label: 'Update shipment status', tone: 'primary', permission: 'orders:manage', when: (r) => stateReason(r, 'OPEN'),
-        form: (r) => form('Move a shipment to another status', 'Update', [
-          field('shipmentId', 'Shipment', 'select', true, { options: (r.lines ?? []).map((l) => ({ value: str(l.id), label: `${str(l.label)} · ${humanize(str(l.status))}` })) }),
-          field('to', 'New status', 'select', true, { options: options('OUT_FOR_DELIVERY', 'DELIVERED', 'DELIVERY_FAILED', 'RETURNED', 'CANCELLED') }),
-          field('reason', 'Reason', 'text', false, { maxLength: 500 })
-        ]),
+        key: 'shipment-status', label: 'Update a shipment', tone: 'primary', permission: 'orders:manage', when: (r) => stateReason(r, 'OPEN'),
+        form: (r) => {
+          const lines = r.lines ?? [];
+          const verbs: [string, string][] = [['OUT_FOR_DELIVERY', 'Mark out for delivery'], ['DELIVERED', 'Mark delivered'], ['DELIVERY_FAILED', 'Record a failed delivery'], ['RETURNED', 'Mark returned'], ['CANCELLED', 'Cancel the shipment']];
+          return form('What happened to the shipment?', 'Save', [
+            field('step', 'Next step', 'select', true, {
+              options: lines.flatMap((l) => verbs.map(([to, verb]) => ({ value: `${str(l.id)}|${to}`, label: lines.length > 1 ? `${str(l.label)} · ${verb}` : verb })))
+            }),
+            field('reason', 'Reason or note', 'text', false, { maxLength: 500 })
+          ]);
+        },
         apply: (r, v, ctx) => {
-          const line = (r.lines ?? []).find((l) => l.id === v.shipmentId);
-          if (line) line.status = str(v.to);
-          r.fields.shipmentStatus = str(v.to);
-          if (v.to === 'DELIVERED') r.fields.status = 'COMPLETED';
-          if (v.to === 'CANCELLED') r.fields.status = 'CANCELLED';
-          log(r, ctx, `Shipment moved to ${humanize(str(v.to)).toLowerCase()}`);
+          const [shipmentId, to = ''] = str(v.step).split('|');
+          const line = (r.lines ?? []).find((l) => l.id === shipmentId);
+          if (line) line.status = to;
+          r.fields.shipmentStatus = to;
+          if (to === 'DELIVERED') r.fields.status = 'COMPLETED';
+          if (to === 'CANCELLED') r.fields.status = 'CANCELLED';
+          log(r, ctx, `Shipment moved to ${humanize(to).toLowerCase()}`);
         }
       }
     ]
@@ -266,6 +303,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     statusKey: 'status',
     facets: facets('AWAITING_SELLER', 'UNDER_REVIEW', 'ESCALATED', 'RESOLVED_REFUND', 'RESOLVED_DENIED'),
     exportable: true,
+    ids: { customerId: 'Customer' },
     titleOf: (r) => `Claim ${str(r.fields.reference)}`,
     subtitleOf: (r) => `${humanize(str(r.fields.type))} · order ${str(r.fields.orderNumber)}`,
     links: (r) => [{ label: `Order ${str(r.fields.orderNumber)}`, href: `/orders?open=${encodeURIComponent(str(r.fields.orderNumber))}` }, { label: 'Customer 360', href: `/support?customer=${encodeURIComponent(str(r.fields.customerId))}` }],
@@ -286,6 +324,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     facets: facets('REQUESTED', 'APPROVED', 'IN_TRANSIT', 'RECEIVED', 'REFUNDED', 'REJECTED'),
     cursor: true,
     exportable: true,
+    ids: { customerId: 'Customer' },
     titleOf: (r) => `Return ${str(r.fields.number)}`,
     subtitleOf: (r) => `Order ${str(r.fields.orderNumber)}`,
     links: (r) => [{ label: 'Customer 360', href: `/support?customer=${encodeURIComponent(str(r.fields.customerId))}` }],
@@ -297,13 +336,13 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   payouts: {
     title: 'Payout requests',
-    columns: [col('id', 'Request', 'mono', 14), col('org', 'Organisation', 'strong', 26), col('amountMinor', 'Amount', 'money', 14), col('requestedAt', 'Requested', 'date', 14), col('holdReason', 'Hold reason', 'text', 18), col('status', 'Status', 'status', 14)],
+    columns: [col('org', 'Organisation', 'strong', 22), col('requestedBy', 'Requested by', 'text', 16), col('amountMinor', 'Amount', 'money', 14), col('requestedAt', 'Requested', 'date', 14), col('holdReason', 'Hold reason', 'text', 18), col('status', 'Status', 'status', 14)],
     statusKey: 'status',
     facets: facets('REQUESTED', 'ON_HOLD', 'APPROVED', 'PAID', 'FAILED'),
     cursor: true,
     exportable: true,
     titleOf: (r) => `Payout to ${str(r.fields.org)}`,
-    subtitleOf: (r) => r.id,
+    subtitleOf: (r) => `Requested by ${str(r.fields.requestedBy)}`,
     actions: [
       { key: 'approve', label: 'Approve & pay', tone: 'primary', permission: 'payouts:approve', level: 'APPROVE', confirm: 'Create the Stripe payout now?', when: (r) => stateReason(r, 'REQUESTED'), apply: setStatus('APPROVED', 'Approved — Stripe payout created') },
       { key: 'hold', label: 'Hold', tone: 'danger', permission: 'payouts:approve', level: 'APPROVE', form: reasonForm('Put the payout on hold', 'Hold'), when: (r) => stateReason(r, 'REQUESTED'), apply: (r, v, ctx) => { r.fields.status = 'ON_HOLD'; r.fields.holdReason = str(v.reason); log(r, ctx, `Held — ${str(v.reason)}`); } },
@@ -312,7 +351,8 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   inventory: {
     title: 'Lots',
-    columns: [col('sku', 'SKU', 'mono', 14), col('lotNo', 'Lot', 'mono', 16), col('node', 'Centre', 'text', 13), col('qtyOnHand', 'On hand', 'number', 10), col('qtyReserved', 'Reserved', 'number', 10), col('qtyAvailable', 'Available', 'number', 10), col('expDate', 'Expires', 'date', 13), col('status', 'Status', 'status', 14)],
+    columns: [col('sku', 'SKU', 'mono', 12), col('lotNo', 'Lot', 'mono', 13), col('node', 'Centre', 'text', 10), col('qtyOnHand', 'On hand', 'number', 8), col('qtyReserved', 'Reserved', 'number', 8), col('qtyAvailable', 'Available', 'number', 8),
+      col('costPaid', 'Unit cost paid', 'text', 13), col('unitCostUsdMinor', 'Unit cost (USD)', 'money', 10), col('expDate', 'Expires', 'date', 10), col('status', 'Status', 'status', 8)],
     statusKey: 'status',
     facets: facets('SELLABLE', 'QUARANTINED', 'DAMAGED', 'EXPIRED'),
     search: ['sku', 'lotNo'],
@@ -361,8 +401,8 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     actions: [
       {
         key: 'assign', label: 'Assign driver', tone: 'primary', permission: 'delivery:dispatch', when: (r) => stateReason(r, 'PLANNED', 'ASSIGNED'),
-        form: () => form('Assign a driver', 'Assign', [field('driverId', 'Driver', 'select', true, { options: [{ value: 'drv-1', label: 'Tunde Adeyemi' }, { value: 'drv-2', label: 'Chinedu Okafor' }] }), field('vehicleId', 'Vehicle', 'text', false, { maxLength: 40 })]),
-        apply: (r, v, ctx) => { r.fields.driver = v.driverId === 'drv-1' ? 'Tunde Adeyemi' : 'Chinedu Okafor'; r.fields.vehicle = str(v.vehicleId) || null; r.fields.status = 'ASSIGNED'; log(r, ctx, `Assigned ${str(r.fields.driver)}`); }
+        form: () => form('Assign a driver', 'Assign', [field('driverId', 'Driver', 'text', true, { maxLength: 64, lookup: 'drivers' }), field('vehicleId', 'Vehicle', 'text', false, { maxLength: 40 })]),
+        apply: (r, v, ctx) => { r.fields.driver = MOCK_DRIVERS.find((d) => d.id === v.driverId)?.name ?? 'Driver'; r.fields.vehicle = str(v.vehicleId) || null; r.fields.status = 'ASSIGNED'; log(r, ctx, `Assigned ${str(r.fields.driver)}`); }
       },
       { key: 'cancel', label: 'Cancel route', tone: 'danger', permission: 'delivery:dispatch', form: reasonForm('Cancel the route', 'Cancel route'), when: (r) => stateReason(r, 'PLANNED', 'ASSIGNED'), apply: setStatus('CANCELLED', 'Cancelled — shipments back to the pool') }
     ],
@@ -397,40 +437,43 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   'sos-alerts': {
     title: 'SOS alerts',
-    columns: [col('kind', 'Emergency', 'strong', 14), col('driverId', 'Driver', 'mono', 16), col('routeId', 'Route', 'mono', 16), col('where', 'Where (GPS)', 'mono', 18), col('note', 'Note', 'text', 22), col('raisedAt', 'Raised', 'datetime', 14), col('status', 'Status', 'status', 10)],
+    columns: [col('kind', 'Emergency', 'strong', 14), col('driverName', 'Driver', 'text', 16), col('routeName', 'Route', 'text', 16), col('where', 'Where (GPS)', 'mono', 18), col('note', 'Note', 'text', 22), col('raisedAt', 'Raised', 'datetime', 14), col('status', 'Status', 'status', 10)],
     statusKey: 'status',
     facets: [],
     cursor: true,
     exportable: true,
     titleOf: (r) => `SOS: ${str(r.fields.kind)}`,
-    subtitleOf: (r) => `Driver ${str(r.fields.driverId)} · route ${str(r.fields.routeId)}`,
+    ids: { driverId: 'Driver', routeId: 'Route' },
+    subtitleOf: (r) => `Driver ${str(r.fields.driverName)} · route ${str(r.fields.routeName)}`,
     actions: [
       { key: 'acknowledge', label: 'Acknowledge', tone: 'primary', permission: 'delivery:dispatch', confirm: 'Acknowledge this SOS? The driver sees that dispatch is on it.', when: (r) => stateReason(r, 'ALERT'), apply: setStatus('ACKNOWLEDGED', 'SOS acknowledged') }
     ]
   },
   'vehicle-defects': {
     title: 'Vehicle defects',
-    columns: [col('vehicleId', 'Vehicle', 'mono', 12), col('driverId', 'Driver', 'mono', 14), col('routeId', 'Route', 'mono', 14), col('failed', 'Failed checks', 'text', 20), col('note', 'Note', 'text', 20), col('reportedAt', 'Reported', 'datetime', 12), col('status', 'Status', 'status', 10)],
+    columns: [col('vehicleId', 'Vehicle', 'mono', 12), col('driverName', 'Driver', 'text', 14), col('routeName', 'Route', 'text', 14), col('failed', 'Failed checks', 'text', 20), col('note', 'Note', 'text', 20), col('reportedAt', 'Reported', 'datetime', 12), col('status', 'Status', 'status', 10)],
     statusKey: 'status',
     facets: [],
     cursor: true,
     exportable: true,
     titleOf: (r) => `Defect on ${str(r.fields.vehicleId)}`,
-    subtitleOf: (r) => `Route ${str(r.fields.routeId)} · driver ${str(r.fields.driverId)}`,
+    ids: { driverId: 'Driver', routeId: 'Route' },
+    subtitleOf: (r) => `Route ${str(r.fields.routeName)} · driver ${str(r.fields.driverName)}`,
     actions: [
       { key: 'resolve', label: 'Resolve and unblock the route', tone: 'primary', permission: 'delivery:dispatch', form: noteForm('Resolve the defect (the driver re-inspects before starting)', 'Resolve', false), when: (r) => stateReason(r, 'OPEN', 'BLOCKED'), apply: setStatus('RESOLVED', 'Defect resolved, route unblocked') }
     ]
   },
   'driver-events': {
     title: 'Driver events',
-    columns: [col('capturedAt', 'When', 'datetime', 14), col('type', 'Event', 'strong', 18), col('driverId', 'Driver', 'mono', 14), col('routeId', 'Route', 'mono', 14), col('stopId', 'Stop', 'mono', 12), col('message', 'Detail', 'text', 18), col('outcome', 'Outcome', 'status', 10)],
+    columns: [col('capturedAt', 'When', 'datetime', 14), col('type', 'Event', 'strong', 18), col('driverName', 'Driver', 'text', 14), col('routeName', 'Route', 'text', 14), col('stopName', 'Stop', 'text', 14), col('message', 'Detail', 'text', 18), col('outcome', 'Outcome', 'status', 10)],
     statusKey: 'outcome',
     facets: facets('APPLIED', 'DUPLICATE', 'REJECTED'),
-    search: ['type', 'driverId', 'routeId'],
+    search: ['type'],
     cursor: true,
     exportable: true,
     titleOf: (r) => str(r.fields.type),
-    subtitleOf: (r) => `Driver ${str(r.fields.driverId)} · ${str(r.fields.capturedAt)}`,
+    ids: { driverId: 'Driver', routeId: 'Route', stopId: 'Stop' },
+    subtitleOf: (r) => `Driver ${str(r.fields.driverName)} · ${str(r.fields.capturedAt)}`,
     actions: []
   },
   'support-cases': {
@@ -439,6 +482,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     statusKey: 'status',
     facets: facets('OPEN', 'IN_PROGRESS', 'RESOLVED'),
     exportable: true,
+    ids: { customerId: 'Customer' },
     titleOf: (r) => `${str(r.fields.reference)} · ${str(r.fields.reason)}`,
     subtitleOf: (r) => str(r.fields.customer),
     sections: [['Case', ['reference', 'source', 'status', 'assignee', 'slaState', 'openedAt']], ['Lola hand-off', ['customer', 'orderNumber', 'reason', 'summary']]],
@@ -611,9 +655,514 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       }
     }
   },
+  'tax-codes': {
+    title: 'Tax codes',
+    columns: [col('code', 'Code', 'mono', 18), col('label', 'What it is', 'strong', 30), col('category', 'Rate column', 'text', 16), col('providerCode', 'Provider code', 'mono', 18), col('taxableLabel', 'Taxable', 'text', 12), col('exemptStates', 'Exempt in', 'mono', 14), col('state', 'State', 'status', 10)],
+    statusKey: 'state',
+    facets: facets('ACTIVE', 'INACTIVE'),
+    exportable: true,
+    titleOf: (r) => str(r.fields.label),
+    subtitleOf: (r) => str(r.fields.code),
+    actions: []
+  },
+  reconciliation: {
+    title: 'Differences',
+    columns: [col('stripeRef', 'Stripe object', 'mono', 20), col('windowStart', 'Day', 'date', 11), col('ledgerMinor', 'Ledger', 'money', 12), col('stripeMinor', 'Stripe', 'money', 12), col('differenceMinor', 'Difference', 'money', 12), col('note', 'Why', 'text', 21), col('status', 'Status', 'status', 12)],
+    statusKey: 'status',
+    facets: facets('OPEN', 'EXPLAINED', 'ADJUSTED', 'SUPERSEDED'),
+    exportable: true,
+    titleOf: (r) => `Difference on ${str(r.fields.stripeRef)}`,
+    subtitleOf: (r) => str(r.fields.status),
+    sections: [
+      ['The difference', ['stripeRef', 'windowStart', 'ledgerMinor', 'stripeMinor', 'differenceMinor', 'meaning']],
+      ['Review', ['status', 'note', 'resolvedByName', 'resolvedAt']]
+    ],
+    actions: [
+      {
+        key: 'explain', label: 'Mark as explained', tone: 'neutral', permission: 'ledger:adjust', when: (r) => stateReason(r, 'OPEN'),
+        form: () => form('Why is this not an error?', 'Mark explained', [field('note', 'Explanation (at least 10 characters)', 'textarea', true, { maxLength: 2000 })], 'Use this when the difference is expected (a fee that settles the next day, a timing gap). Nothing is posted to the ledger.'),
+        apply: (r, v, ctx) => { r.fields.status = 'EXPLAINED'; r.fields.note = str(v.note); r.fields.resolvedByName = ctx.actor; r.fields.resolvedAt = ctx.now.toISOString(); log(r, ctx, `Explained — ${str(v.note)}`); }
+      },
+      {
+        key: 'propose-correction', label: 'Propose a correction', tone: 'primary', permission: 'ledger:adjust', when: (r) => stateReason(r, 'OPEN', 'EXPLAINED'),
+        form: () => form('Propose a correction', 'Propose', [
+          field('account', 'Book the other side against', 'select', true, { options: [{ value: '5000', label: '5000 · Stripe processing fees' }, { value: '2000', label: '2000 · Seller payable (needs the organisation id)' }, { value: '4000', label: '4000 · Commission revenue' }], value: '5000' }),
+          field('key', 'Organisation id or jurisdiction (only for 2000 and 2100)', 'text', false, { maxLength: 80 }),
+          field('reason', 'Why the ledger is wrong (at least 15 characters)', 'textarea', true, { maxLength: 1000 })
+        ], 'Nothing reaches the ledger until a different person approves it under Ledger adjustments.'),
+        apply: (r, _v, ctx) => { log(r, ctx, 'Correction proposed — waiting for approval'); }
+      }
+    ]
+  },
+  'reconciliation-runs': {
+    title: 'Daily runs',
+    columns: [col('windowStart', 'Day', 'date', 14), col('ledgerNetMinor', 'Ledger net', 'money', 16), col('stripeNetMinor', 'Stripe net', 'money', 16), col('driftMinor', 'Total difference', 'money', 16), col('differences', 'Objects that differ', 'number', 16), col('state', 'Result', 'status', 14), col('createdAt', 'Run at', 'datetime', 8)],
+    statusKey: 'state',
+    facets: facets('RECONCILED', 'DIFFERENCES'),
+    exportable: true,
+    titleOf: (r) => `Reconciliation of ${str(r.fields.windowStart).slice(0, 10)}`,
+    subtitleOf: (r) => str(r.fields.state),
+    sections: [['Result', ['windowStart', 'ledgerNetMinor', 'stripeNetMinor', 'driftMinor', 'createdAt']]],
+    actions: [],
+    create: {
+      permission: 'payments:configure',
+      form: form('Reconcile a day', 'Run', [field('date', 'Day', 'date', true, {})], 'Compares what the ledger booked on 1000 Stripe clearing with Stripe\'s balance transactions for that day.'),
+      build: (v, id, ctx) => ({ id, fields: { windowStart: str(v.date), ledgerNetMinor: 0, stripeNetMinor: 0, driftMinor: 0, differences: 0, state: 'RECONCILED', createdAt: ctx.now.toISOString() }, activity: [] })
+    }
+  },
+  'ledger-adjustments': {
+    title: 'Ledger adjustments',
+    columns: [col('reason', 'Why', 'text', 34), col('amountMinor', 'Amount', 'money', 12), col('stripeRef', 'Stripe object', 'mono', 16), col('proposedByName', 'Proposed by', 'text', 14), col('decidedByName', 'Decided by', 'text', 14), col('status', 'Status', 'status', 10)],
+    statusKey: 'status',
+    facets: facets('PROPOSED', 'POSTED', 'REJECTED'),
+    exportable: true,
+    titleOf: (r) => `Adjustment of $${(num(r.fields.amountMinor) / 100).toFixed(2)}`,
+    subtitleOf: (r) => str(r.fields.reason),
+    sections: [
+      ['The correction', ['reason', 'amountMinor', 'stripeRef', 'status', 'journalId']],
+      ['Who decided', ['proposedByName', 'proposedAt', 'decidedByName', 'decidedAt', 'decisionNote']]
+    ],
+    actions: [
+      {
+        key: 'approve', label: 'Approve and post', tone: 'primary', permission: 'ledger:approve', confirm: 'Post this correction to the ledger now? It cannot be edited afterwards.',
+        when: (r, ctx) => stateReason(r, 'PROPOSED') ?? (str(r.fields.proposedByName) === ctx.actor ? 'You proposed this, so a different person must approve it.' : null),
+        apply: (r, _v, ctx) => { r.fields.status = 'POSTED'; r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); r.fields.journalId = 'jrnl-' + r.id; log(r, ctx, 'Approved and posted'); }
+      },
+      {
+        key: 'reject', label: 'Reject', tone: 'danger', permission: 'ledger:approve', when: (r) => stateReason(r, 'PROPOSED'),
+        form: () => form('Why is it rejected?', 'Reject', [field('note', 'Explanation (at least 10 characters)', 'textarea', true, { maxLength: 2000 })]),
+        apply: (r, v, ctx) => { r.fields.status = 'REJECTED'; r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); r.fields.decisionNote = str(v.note); log(r, ctx, `Rejected — ${str(v.note)}`); }
+      }
+    ],
+    create: {
+      permission: 'ledger:adjust',
+      form: form('Propose an adjustment', 'Propose', [
+        field('debitAccount', 'Debit', 'select', true, { options: [{ value: '5000', label: '5000 · Stripe processing fees' }, { value: '1000', label: '1000 · Stripe clearing' }] }),
+        field('creditAccount', 'Credit', 'select', true, { options: [{ value: '5000', label: '5000 · Stripe processing fees' }, { value: '1000', label: '1000 · Stripe clearing' }] }),
+        field('amount', 'Amount in dollars', 'number', true, { min: 0, max: 10_000_000 }),
+        field('stripeRef', 'Stripe object it corrects (needed when 1000 is used)', 'text', false, { maxLength: 120 }),
+        field('reason', 'Why the ledger is wrong (at least 15 characters)', 'textarea', true, { maxLength: 1000 })
+      ], 'Nothing reaches the ledger until a different person approves it.'),
+      build: (v, id, ctx) => ({ id, fields: { reason: str(v.reason), amountMinor: Math.round(num(v.amount) * 100), stripeRef: str(v.stripeRef) || null, proposedByName: ctx.actor, decidedByName: null, status: 'PROPOSED', proposedAt: ctx.now.toISOString(), decidedAt: null, decisionNote: null, journalId: null }, activity: [] })
+    }
+  },
+  'credit-adjustments': {
+    title: 'Credit adjustments',
+    columns: [col('customerName', 'Customer', 'strong', 18), col('reason', 'Why', 'text', 30), col('amountMinor', 'Amount', 'money', 11), col('source', 'Kind', 'text', 12), col('proposedByName', 'Proposed by', 'text', 13), col('decidedByName', 'Decided by', 'text', 13), col('status', 'Status', 'status', 10)],
+    statusKey: 'status',
+    facets: facets('PROPOSED', 'POSTED', 'REJECTED'),
+    exportable: true,
+    ids: { customerId: 'Customer' },
+    titleOf: (r) => `${num(r.fields.amountMinor) < 0 ? 'Credit taken back from' : 'Credit added for'} ${str(r.fields.customerName)}`,
+    subtitleOf: (r) => str(r.fields.reason),
+    sections: [
+      ['The change', ['customerName', 'amountMinor', 'source', 'reason', 'status', 'balanceMinor']],
+      ['Who decided', ['proposedByName', 'proposedAt', 'decidedByName', 'decidedAt', 'decisionNote']]
+    ],
+    actions: [
+      {
+        key: 'approve', label: 'Approve and post', tone: 'primary', permission: 'ledger:approve', confirm: "Post this change to the customer's credit now? It cannot be edited afterwards.",
+        when: (r, ctx) => stateReason(r, 'PROPOSED') ?? (str(r.fields.proposedByName) === ctx.actor ? 'You proposed this, so a different person must approve it.' : null),
+        apply: (r, _v, ctx) => { r.fields.status = 'POSTED'; r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); r.fields.balanceMinor = Math.max(0, num(r.fields.balanceMinor) + num(r.fields.amountMinor)); log(r, ctx, 'Approved and posted'); }
+      },
+      {
+        key: 'reject', label: 'Reject', tone: 'danger', permission: 'ledger:approve', when: (r) => stateReason(r, 'PROPOSED'),
+        form: () => form('Why is it rejected?', 'Reject', [field('note', 'Explanation (at least 10 characters)', 'textarea', true, { maxLength: 2000 })], 'The proposer sees this reason. The customer\'s credit does not change.'),
+        apply: (r, v, ctx) => { r.fields.status = 'REJECTED'; r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); r.fields.decisionNote = str(v.note); log(r, ctx, `Rejected — ${str(v.note)}`); }
+      }
+    ],
+    create: {
+      permission: 'ledger:adjust',
+      form: form('Adjust a customer\'s credit', 'Continue', [
+        field('customerEmail', "Customer's email address", 'email', true, { maxLength: 254 }),
+        field('change', 'What to do', 'select', true, { options: [{ value: 'ADD', label: 'Add credit' }, { value: 'TAKE_BACK', label: 'Take credit back' }], value: 'ADD' }),
+        field('amount', 'Amount in dollars', 'number', true, { min: 0, max: 100_000 }),
+        field('source', 'Kind', 'select', true, { options: [{ value: 'STAFF', label: 'Goodwill or correction' }, { value: 'PROMO', label: 'Promotion' }], value: 'STAFF' }),
+        field('reason', 'Why (at least 15 characters; the customer is not shown it)', 'textarea', true, { maxLength: 500 })
+      ], 'Adds to a customer\'s AfroTransact credit, or takes some back after a mistake (never below zero). Credit only buys products and services: it cannot be paid out or refunded to a card. Up to $100.00 is posted at once; more needs a different person to approve it.'),
+      build: (v, id, ctx) => {
+        const cents = Math.round(num(v.amount) * 100) * (str(v.change) === 'TAKE_BACK' ? -1 : 1);
+        const local = str(v.customerEmail).split('@')[0] ?? 'customer';
+        const posted = Math.abs(cents) <= 10_000;
+        return {
+          id,
+          fields: { customerId: `cus-${local}`, customerName: local.charAt(0).toUpperCase() + local.slice(1), amountMinor: cents, source: str(v.source) || 'STAFF', reason: str(v.reason), proposedByName: ctx.actor, decidedByName: posted ? ctx.actor : null, status: posted ? 'POSTED' : 'PROPOSED', proposedAt: ctx.now.toISOString(), decidedAt: posted ? ctx.now.toISOString() : null, decisionNote: null, balanceMinor: Math.max(0, cents) },
+          activity: []
+        };
+      }
+    }
+  },
+  'gift-cards': {
+    title: 'Gift cards',
+    columns: [col('code', 'Code', 'mono', 10), col('amountMinor', 'Amount', 'money', 10), col('recipient', 'Recipient', 'text', 20), col('origin', 'Origin', 'text', 10), col('purchaserName', 'Bought by', 'text', 16), col('sendAt', 'Emailed on', 'date', 11), col('createdAt', 'Created', 'datetime', 12), col('status', 'Status', 'status', 11)],
+    statusKey: 'status',
+    facets: facets('ACTIVE', 'REDEEMED', 'VOID', 'PENDING_PAYMENT', 'PAYMENT_FAILED'),
+    search: ['codeLast4', 'recipientEmail', 'recipientName', 'senderName', 'purchaserName'],
+    searchPlaceholder: "Last four of the code, recipient, sender or buyer's email",
+    exportable: true,
+    ids: { purchaserId: 'Buyer' },
+    titleOf: (r) => `Gift card ${str(r.fields.code)}`,
+    subtitleOf: (r) => `$${(num(r.fields.amountMinor) / 100).toFixed(2)} · ${humanize(str(r.fields.status))}`,
+    sections: [
+      ['The card', ['amountMinor', 'status', 'codeLast4', 'origin', 'createdAt']],
+      ['Recipient and delivery', ['recipientName', 'recipientEmail', 'senderName', 'message', 'locale', 'sendAt', 'deliveryStatus', 'deliveryCount', 'sentAt']],
+      ['Who did what', ['purchaserName', 'issuedByName', 'issueReason', 'redeemedByName', 'redeemedAt', 'voidedByName', 'voidedAt', 'voidReason', 'refundedToCard']]
+    ],
+    actions: [
+      {
+        key: 'void', label: 'Void this gift card', tone: 'danger', permission: 'ledger:adjust', when: (r) => stateReason(r, 'ACTIVE', 'PENDING_PAYMENT', 'PAYMENT_FAILED'),
+        confirm: 'Void this gift card? Its code stops working. A card a customer bought is refunded to their card; one staff issued just ends. A redeemed card is credit and cannot be voided.',
+        form: () => form('Why is it voided?', 'Void', [field('reason', 'Reason (at least 15 characters)', 'textarea', true, { maxLength: 500 })], 'The reason is kept on the card and in the audit log.'),
+        apply: (r, v, ctx) => { r.fields.status = 'VOID'; r.fields.voidedByName = ctx.actor; r.fields.voidedAt = ctx.now.toISOString(); r.fields.voidReason = str(v.reason); r.fields.refundedToCard = str(r.fields.origin) === 'PURCHASE' ? 'Yes' : 'No'; log(r, ctx, `Voided — ${str(v.reason)}`); }
+      },
+      {
+        key: 'resend', label: 'Email it again with a new code', tone: 'neutral', permission: 'ledger:adjust', when: (r) => stateReason(r, 'ACTIVE'),
+        form: () => form('Why is it sent again?', 'Send again', [field('reason', 'Reason (at least 15 characters)', 'textarea', true, { maxLength: 500 })], 'The old code stops working and the recipient gets a new one by email.'),
+        apply: (r, v, ctx) => { r.fields.deliveryCount = num(r.fields.deliveryCount) + 1; r.fields.deliveryStatus = 'SENT'; r.fields.sentAt = ctx.now.toISOString(); log(r, ctx, `Sent again — ${str(v.reason)}`); }
+      }
+    ],
+    create: {
+      permission: 'ledger:adjust',
+      form: form('Issue a gift card', 'Issue', [
+        field('amount', 'Amount in dollars', 'number', true, { min: 0, max: 100_000 }),
+        field('recipientEmail', "Recipient's email address", 'email', true, { maxLength: 254 }),
+        field('recipientName', "Recipient's name", 'text', false, { maxLength: 120 }),
+        field('message', 'Message', 'textarea', false, { maxLength: 500 }),
+        field('sendAt', 'Email it on (empty = now)', 'date', false),
+        field('locale', 'Language of the email', 'select', true, { options: [{ value: 'en', label: 'English' }, { value: 'fr', label: 'French' }, { value: 'es', label: 'Spanish' }, { value: 'ar', label: 'Arabic' }, { value: 'yo', label: 'Yoruba' }], value: 'en' }),
+        field('reason', 'Why it is issued (at least 15 characters)', 'textarea', true, { maxLength: 500 })
+      ], 'Goodwill or a promotion. The card is a liability from the moment it is issued and is emailed to the recipient on the day you choose. Amounts from $10.00 to $500.00 (Settings, Money).'),
+      build: (v, id, ctx) => ({
+        id,
+        fields: { code: `•••• ${id.slice(-4).toUpperCase()}`, codeLast4: id.slice(-4).toUpperCase(), amountMinor: Math.round(num(v.amount) * 100), status: 'ACTIVE', origin: 'STAFF', purchaserId: null, purchaserName: null, recipient: str(v.recipientName) || str(v.recipientEmail), recipientName: str(v.recipientName) || null, recipientEmail: str(v.recipientEmail), senderName: null, message: str(v.message) || null, locale: str(v.locale) || 'en', sendAt: str(v.sendAt) ? `${str(v.sendAt)}T09:00:00Z` : ctx.now.toISOString(), deliveryStatus: str(v.sendAt) ? 'SCHEDULED' : 'SENT', deliveryCount: str(v.sendAt) ? 0 : 1, sentAt: str(v.sendAt) ? null : ctx.now.toISOString(), issueReason: str(v.reason), issuedByName: ctx.actor, redeemedByName: null, redeemedAt: null, voidedByName: null, voidedAt: null, voidReason: null, refundedToCard: 'No', createdAt: ctx.now.toISOString() },
+        activity: []
+      })
+    }
+  },
+  'credit-liabilities': {
+    title: 'Credit & gift card liability',
+    columns: [col('item', 'What', 'strong', 38), col('amountMinor', 'Amount', 'money', 16), col('count', 'Count', 'number', 10), col('account', 'Ledger account', 'mono', 14), col('note', 'What it means', 'text', 22)],
+    facets: [],
+    exportable: true,
+    titleOf: (r) => str(r.fields.item),
+    subtitleOf: (r) => `$${(num(r.fields.amountMinor) / 100).toFixed(2)}`,
+    sections: [['This line', ['item', 'amountMinor', 'count', 'account', 'note']]],
+    actions: []
+  },
+  'money-settings': {
+    title: 'Credit & gift card limits',
+    columns: [col('giftCardMinMinor', 'Smallest gift card', 'money', 18), col('giftCardMaxMinor', 'Largest gift card', 'money', 18), col('creditApprovalLimitMinor', 'Second approver above', 'money', 20), col('updatedByName', 'Last changed by', 'text', 24), col('updatedAt', 'Changed', 'datetime', 20)],
+    facets: [],
+    exportable: false,
+    titleOf: () => 'Credit and gift card limits',
+    subtitleOf: (r) => `Version ${str(r.fields.version)} · ${str(r.fields.updatedByName)}`,
+    sections: [
+      ['Gift cards', ['giftCardMinMinor', 'giftCardMaxMinor', 'presetsText']],
+      ['Credit granted by staff', ['creditApprovalLimitMinor']],
+      ['Gift card terms (shown on the buy page)', ['termsEn', 'termsFr', 'termsEs', 'termsAr', 'termsYo']],
+      ['Last change', ['updatedByName', 'updatedAt']]
+    ],
+    linesTitle: 'Who changed it and why',
+    lineColumns: [col('changedAt', 'When', 'datetime', 20), col('changedByName', 'Who', 'text', 24), col('reason', 'Why', 'text', 56)],
+    actions: [],
+    edit: {
+      permission: 'payments:configure',
+      form: (r) => form('Change the credit and gift card limits', 'Save', [
+        field('giftCardMin', 'Smallest gift card (dollars)', 'number', true, { min: 0, max: 100_000, value: num(r.fields.giftCardMinMinor) / 100 }),
+        field('giftCardMax', 'Largest gift card (dollars)', 'number', true, { min: 0, max: 100_000, value: num(r.fields.giftCardMaxMinor) / 100 }),
+        field('presets', 'Amounts offered on the buy page (dollars, separated by commas; up to 8)', 'text', true, { maxLength: 120, pattern: '^\\s*\\d+(\\.\\d{1,2})?(\\s*,\\s*\\d+(\\.\\d{1,2})?){0,7}\\s*$', help: 'For example 25, 50, 100, 200', value: str(r.fields.presetsText).replace(/\$/g, '') }),
+        field('creditApprovalLimit', 'A second approver is needed for staff credit above (dollars)', 'number', true, { min: 0, max: 100_000, value: num(r.fields.creditApprovalLimitMinor) / 100 }),
+        ...(['en', 'fr', 'es', 'ar', 'yo'] as const).map((l) => field(`terms.${l}`, `Gift card terms · ${l.toUpperCase()} (empty = built-in terms)`, 'textarea', false, { maxLength: 4000, value: str(r.fields[`terms${l.charAt(0).toUpperCase()}${l.slice(1)}`]) })),
+        field('reason', 'Why it changes (at least 15 characters)', 'textarea', true, { maxLength: 500, value: '' })
+      ], 'Takes effect at once for new gift cards and staff credit. Every change is kept with who made it and why.', ['giftCardMin', 'giftCardMax', 'presets', 'creditApprovalLimit', 'terms.en', 'terms.fr', 'terms.es', 'terms.ar', 'terms.yo']),
+      apply: (r, v, ctx) => {
+        const presets = str(v.presets).split(',').map((p) => p.trim()).filter(Boolean);
+        r.fields.giftCardMinMinor = Math.round(num(v.giftCardMin) * 100);
+        r.fields.giftCardMaxMinor = Math.round(num(v.giftCardMax) * 100);
+        r.fields.creditApprovalLimitMinor = Math.round(num(v.creditApprovalLimit) * 100);
+        r.fields.presetsText = presets.map((p) => `$${Number(p).toFixed(2)}`).join(', ');
+        for (const l of ['en', 'fr', 'es', 'ar', 'yo']) r.fields[`terms${l.charAt(0).toUpperCase()}${l.slice(1)}`] = str(v[`terms.${l}`]);
+        r.fields.version = num(r.fields.version) + 1;
+        r.fields.updatedByName = ctx?.actor ?? 'Platform Admin';
+        r.fields.updatedAt = (ctx?.now ?? new Date()).toISOString();
+        r.lines = [{ id: `mh-${num(r.fields.version)}`, changedAt: str(r.fields.updatedAt), changedByName: str(r.fields.updatedByName), reason: str(v.reason) }, ...(r.lines ?? [])];
+      }
+    }
+  },
+  referrals: {
+    title: 'Referrals',
+    columns: [col('referrerName', 'Referrer', 'strong', 17), col('referredName', 'Friend', 'text', 17), col('status', 'Status', 'status', 12), col('flagsText', 'Held for', 'text', 14), col('rewardsText', 'Rewards', 'text', 20), col('costMinor', 'Paid by AfroTransact', 'money', 10), col('signedUpAt', 'Signed up', 'date', 10)],
+    statusKey: 'status',
+    facets: facets('IN_REVIEW', 'PENDING', 'WAITING', 'PARTIALLY_REWARDED', 'REWARDED', 'REJECTED', 'EXPIRED'),
+    exportable: true,
+    ids: { referrerId: 'Referrer', referredId: 'Friend' },
+    titleOf: (r) => `${str(r.fields.referrerName)} referred ${str(r.fields.referredName)}`,
+    subtitleOf: (r) => `${humanize(str(r.fields.status))} · $${(num(r.fields.costMinor) / 100).toFixed(2)} paid`,
+    sections: [
+      ['The referral', ['referrerName', 'referredName', 'status', 'signedUpAt', 'expiresAt', 'costMinor']],
+      ['The qualifying order', ['qualifyingOrderId', 'qualifyingMinor', 'deliveredAt', 'eligibleAt']],
+      ['Checks and decision', ['flagsText', 'decision', 'decisionReason', 'decidedByName', 'decidedAt']]
+    ],
+    linesTitle: 'Rewards',
+    lineColumns: [col('who', 'Who', 'strong', 24), col('side', 'As', 'text', 16), col('reward', 'Reward', 'text', 24), col('status', 'Status', 'status', 16), col('grantedAt', 'Granted', 'datetime', 20)],
+    actions: [
+      {
+        key: 'approve', label: 'Approve', tone: 'primary', permission: 'ledger:adjust', confirm: 'The checks found something shared between the referrer and the friend. Approving says it is fine: the rewards are then granted after the return window.',
+        when: (r) => stateReason(r, 'IN_REVIEW'),
+        form: () => form('Why is it fine?', 'Approve', [field('reason', 'Reason (at least 15 characters)', 'textarea', true, { maxLength: 500 })], 'The reason is kept with your name. If the return window has passed, both rewards are granted now.'),
+        apply: (r, v, ctx) => { if (str(v.reason).trim().length < 15) throw new Error('Say why (at least 15 characters)'); r.fields.status = 'WAITING'; r.fields.flagsText = ''; r.fields.decision = 'APPROVED'; r.fields.decisionReason = str(v.reason); r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); log(r, ctx, `Approved — ${str(v.reason)}`); }
+      },
+      {
+        key: 'reject', label: 'Reject', tone: 'danger', permission: 'ledger:adjust', when: (r) => stateReason(r, 'IN_REVIEW', 'WAITING'),
+        form: () => form('Why is it rejected?', 'Reject', [field('reason', 'Reason (at least 15 characters)', 'textarea', true, { maxLength: 500 })], 'No reward is granted to either side. The reason is kept with your name.'),
+        apply: (r, v, ctx) => { if (str(v.reason).trim().length < 15) throw new Error('Say why (at least 15 characters)'); r.fields.status = 'REJECTED'; r.fields.decision = 'REJECTED'; r.fields.decisionReason = str(v.reason); r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); log(r, ctx, `Rejected — ${str(v.reason)}`); }
+      }
+    ]
+  },
+  'referral-settings': {
+    title: 'Referral program',
+    columns: [col('stateText', 'Program', 'status', 10), col('referrerText', 'Referrer earns', 'text', 22), col('referredText', 'Friend earns', 'text', 22), col('minOrderMinor', 'Smallest order', 'money', 14), col('returnWindowDays', 'Return window (days)', 'text', 12), col('updatedByName', 'Last changed by', 'text', 20)],
+    statusKey: 'stateText',
+    facets: [],
+    exportable: false,
+    titleOf: () => 'Referral program',
+    subtitleOf: (r) => `${str(r.fields.stateText)} · version ${str(r.fields.version)} · ${str(r.fields.updatedByName)}`,
+    sections: [
+      ['The offer', ['stateText', 'referrerText', 'referredText']],
+      ['The rules', ['qualifyingEvent', 'minOrderMinor', 'returnWindowDays', 'maxRewardedPerReferrer', 'maxCreditPerCustomerMinor', 'validityDays']],
+      ['What the program has cost so far', ['costMinor', 'pendingMinor', 'membershipDaysGranted', 'countsText']],
+      ['Last change', ['updatedByName', 'updatedAt']]
+    ],
+    linesTitle: 'Who changed it and why',
+    lineColumns: [col('changedAt', 'When', 'datetime', 20), col('changedByName', 'Who', 'text', 24), col('reason', 'Why', 'text', 56)],
+    actions: [],
+    edit: {
+      permission: 'payments:configure',
+      form: (r) => {
+        const rewardTypes = [{ value: 'CREDIT', label: 'AfroTransact credit' }, { value: 'MEMBERSHIP_DAYS', label: 'Free membership days' }];
+        const sharer = 'What the customer who shares earns';
+        const friend = 'What the friend who joins earns';
+        const rules = 'When it is earned';
+        const limits = 'Limits';
+        return form('Change the referral program', 'Save', [
+          field('enabled', 'Program on (off stops new referrals and pauses granting)', 'toggle', false, { value: r.fields.enabled === true, section: 'The program' }),
+          field('referrerType', 'Reward', 'select', true, { options: rewardTypes, value: str(r.fields.referrerType) || 'CREDIT', section: sharer }),
+          field('referrerCredit', 'Credit (dollars, when the reward is credit)', 'number', false, { min: 0, max: 1000, value: num(r.fields.referrerCreditMinor) / 100, section: sharer }),
+          field('referrerDays', 'Membership days (when the reward is membership)', 'number', false, { min: 0, max: 366, value: num(r.fields.referrerDays), section: sharer }),
+          field('referredType', 'Reward', 'select', true, { options: rewardTypes, value: str(r.fields.referredType) || 'CREDIT', section: friend }),
+          field('referredCredit', 'Credit (dollars, when the reward is credit)', 'number', false, { min: 0, max: 1000, value: num(r.fields.referredCreditMinor) / 100, section: friend }),
+          field('referredDays', 'Membership days (when the reward is membership)', 'number', false, { min: 0, max: 366, value: num(r.fields.referredDays), section: friend }),
+          field('qualifyingEvent', 'Qualifying event', 'select', true, { options: [{ value: 'FIRST_ORDER_DELIVERED', label: "The friend's first order is delivered" }], value: 'FIRST_ORDER_DELIVERED', section: rules }),
+          field('minOrder', 'Smallest order that qualifies (dollars)', 'number', true, { min: 0, max: 10_000, value: num(r.fields.minOrderMinor) / 100, section: rules }),
+          field('returnWindowDays', 'Grant the rewards this many days after delivery (the return window)', 'number', true, { min: 0, max: 180, value: num(r.fields.returnWindowDays), section: rules }),
+          field('validityDays', 'A friend can qualify for this many days after signing up', 'number', true, { min: 0, max: 730, value: num(r.fields.validityDays), section: rules }),
+          field('maxRewarded', 'Most rewarded referrals per customer (0 = no limit)', 'number', true, { min: 0, max: 10_000, value: num(r.fields.maxRewardedPerReferrer), section: limits }),
+          field('maxCredit', 'Most referral credit one customer can earn (dollars, 0 = no limit)', 'number', true, { min: 0, max: 1_000_000, value: num(r.fields.maxCreditPerCustomerMinor) / 100, section: limits }),
+          field('reason', 'Why it changes (at least 15 characters)', 'textarea', true, { maxLength: 500, value: '', section: 'Why' })
+        ], 'AfroTransact pays the rewards. Each side is set on its own. Credit only buys products and services and is never cash. A change applies to new sign-ups and to referrals that qualify afterwards; rewards already promised keep their amounts. Every change is kept with who made it and why.',
+        ['enabled', 'referrerType', 'referrerCredit', 'referrerDays', 'referredType', 'referredCredit', 'referredDays', 'qualifyingEvent', 'minOrder', 'returnWindowDays', 'validityDays', 'maxRewarded', 'maxCredit']);
+      },
+      apply: (r, v, ctx) => {
+        if (str(v.reason).trim().length < 15) throw new Error('Say why (at least 15 characters)');
+        const text = (type: string, credit: number, days: number) => (type === 'MEMBERSHIP_DAYS' ? `${days} membership days` : `$${credit.toFixed(2)} credit`);
+        r.fields.enabled = v.enabled === true;
+        r.fields.stateText = v.enabled === true ? 'On' : 'Off';
+        r.fields.referrerType = str(v.referrerType);
+        r.fields.referrerCreditMinor = str(v.referrerType) === 'MEMBERSHIP_DAYS' ? 0 : Math.round(num(v.referrerCredit) * 100);
+        r.fields.referrerDays = str(v.referrerType) === 'MEMBERSHIP_DAYS' ? num(v.referrerDays) : 0;
+        r.fields.referredType = str(v.referredType);
+        r.fields.referredCreditMinor = str(v.referredType) === 'MEMBERSHIP_DAYS' ? 0 : Math.round(num(v.referredCredit) * 100);
+        r.fields.referredDays = str(v.referredType) === 'MEMBERSHIP_DAYS' ? num(v.referredDays) : 0;
+        r.fields.referrerText = text(str(v.referrerType), num(r.fields.referrerCreditMinor) / 100, num(r.fields.referrerDays));
+        r.fields.referredText = text(str(v.referredType), num(r.fields.referredCreditMinor) / 100, num(r.fields.referredDays));
+        r.fields.minOrderMinor = Math.round(num(v.minOrder) * 100);
+        r.fields.returnWindowDays = num(v.returnWindowDays);
+        r.fields.validityDays = num(v.validityDays);
+        r.fields.maxRewardedPerReferrer = num(v.maxRewarded);
+        r.fields.maxCreditPerCustomerMinor = Math.round(num(v.maxCredit) * 100);
+        r.fields.version = num(r.fields.version) + 1;
+        r.fields.updatedByName = ctx?.actor ?? 'Platform Admin';
+        r.fields.updatedAt = (ctx?.now ?? new Date()).toISOString();
+        r.lines = [{ id: `rh-${num(r.fields.version)}`, changedAt: str(r.fields.updatedAt), changedByName: str(r.fields.updatedByName), reason: str(v.reason) }, ...(r.lines ?? [])];
+      }
+    }
+  },
+  'stripe-lookup': {
+    title: 'Stripe lookup',
+    columns: [col('ref', 'Stripe id', 'mono', 30), col('kind', 'What it is', 'text', 20), col('stripeStatus', 'Status at Stripe', 'status', 20), col('amountMinor', 'Amount', 'money', 14), col('created', 'Created', 'datetime', 16)],
+    statusKey: 'stripeStatus',
+    facets: [],
+    exportable: false,
+    titleOf: (r) => `Stripe ${str(r.fields.ref)}`,
+    subtitleOf: (r) => str(r.fields.kind),
+    sections: [['What Stripe says', ['ref', 'kind', 'stripeStatus', 'amountMinor', 'created']]],
+    actions: [],
+    create: {
+      permission: 'payments:read',
+      form: form('Look up in Stripe', 'Look up', [
+        field('ref', 'Stripe id', 'text', true, { maxLength: 120, pattern: '^[a-z]{2,6}_[A-Za-z0-9_]{6,100}$', help: 'For example po_…, tr_…, pi_…, ch_…, re_…, txn_…, dp_…, acct_…' }),
+        field('orgId', 'Seller (for a payout)', 'text', false, { maxLength: 80, lookup: 'sellers' })
+      ], 'Reads the object from Stripe and shows what the ledger booked for it.'),
+      build: (v, _id, ctx) => ({ id: `${str(v.ref)} ${str(v.orgId)}`.trim(), fields: { ref: str(v.ref), kind: 'Payout', stripeStatus: 'in_transit', amountMinor: 50_000, created: ctx.now.toISOString() }, activity: [] })
+    }
+  },
+  'payment-settings': {
+    title: 'Payments & payouts',
+    columns: [col('label', 'Setting', 'strong', 30), col('value', 'In force', 'text', 40), col('source', 'Set in', 'mono', 22)],
+    facets: [],
+    exportable: false,
+    titleOf: (r) => str(r.fields.label),
+    subtitleOf: (r) => str(r.fields.value),
+    sections: [['This setting', ['label', 'value', 'help', 'source']]],
+    actions: []
+  },
+  'tax-nexus': {
+    title: 'Nexus tracker',
+    columns: [col('jurisdiction', 'State', 'mono', 9), col('name', 'Name', 'strong', 16), col('salesMinor', 'Sales, last 12 months', 'money', 16), col('salesThresholdMinor', 'Sales threshold', 'money', 14), col('orders', 'Orders', 'text', 9), col('percentLabel', 'Of threshold', 'text', 11), col('registrationNumber', 'Registration', 'mono', 16), col('status', 'Status', 'status', 16)],
+    statusKey: 'status',
+    facets: facets('EXCEEDED', 'APPROACHING', 'REGISTERED', 'BELOW'),
+    exportable: true,
+    titleOf: (r) => `${str(r.fields.name)} (${str(r.fields.jurisdiction)})`,
+    subtitleOf: (r) => str(r.fields.status),
+    sections: [['Where sales stand', ['status', 'salesMinor', 'orders', 'salesThresholdMinor', 'percentLabel', 'facilitatorLabel']], ['Registration', ['registrationNumber']]],
+    actions: [],
+    edit: {
+      permission: 'tax:configure',
+      form: (r) => form(`Thresholds and registration for ${str(r.fields.name)}`, 'Save', [
+        field('salesThreshold', 'Sales threshold (dollars)', 'number', true, { value: num(r.fields.salesThresholdMinor) / 100 }),
+        field('registered', 'Registered in this state', 'toggle', false, { value: r.fields.registered === true }),
+        field('registrationNumber', 'Registration or permit number', 'text', false, { maxLength: 80, value: str(r.fields.registrationNumber) }),
+        field('registeredOn', 'Registration effective on', 'date', false)
+      ], 'The defaults are a common state figure, not legal advice: confirm each state with your tax advisor.'),
+      apply: (r, v) => {
+        const registered = v.registered === true;
+        if (registered && !str(v.registrationNumber).trim()) throw new Error("Give the state's registration or permit number");
+        r.fields.salesThresholdMinor = Math.round(num(v.salesThreshold) * 100);
+        r.fields.registered = registered;
+        r.fields.registrationNumber = registered ? str(v.registrationNumber) : null;
+        const percent = Math.round((num(r.fields.salesMinor) * 100) / Math.max(num(r.fields.salesThresholdMinor), 1));
+        r.fields.percent = percent;
+        r.fields.percentLabel = `${percent}%`;
+        r.fields.status = registered ? 'REGISTERED' : percent >= 100 ? 'EXCEEDED' : percent >= 80 ? 'APPROACHING' : 'BELOW';
+      }
+    }
+  },
+  'tax-filings': {
+    title: 'Tax filings',
+    columns: [col('month', 'Month', 'mono', 10), col('jurisdiction', 'State', 'mono', 10), col('dueMinor', 'Due now', 'money', 12), col('paidMinor', 'Paid', 'money', 12), col('outstandingMinor', 'Outstanding', 'money', 12), col('filedOn', 'Filed', 'date', 12), col('confirmationRef', 'State confirmation', 'mono', 18), col('state', 'Status', 'status', 12)],
+    statusKey: 'state',
+    facets: facets('NOT_FILED', 'OWES_MORE', 'OVERPAID', 'SETTLED', 'NOTHING_DUE'),
+    exportable: true,
+    titleOf: (r) => `${str(r.fields.jurisdiction)} · ${str(r.fields.month)}`,
+    subtitleOf: (r) => str(r.fields.statusLabel),
+    sections: [['What the ledger says', ['month', 'jurisdiction', 'dueMinor', 'state', 'outstandingMinor']], ['What was filed and paid', ['paidMinor', 'filedOn', 'confirmationRef']]],
+    actions: [
+      {
+        key: 'record', label: 'Record filing and payment', tone: 'primary', permission: 'tax:configure',
+        when: (r) => (r.fields.remittanceId ? 'A remittance is already recorded; void it first if it was a mistake.' : null),
+        form: (r) => form('Record what was filed and paid', 'Record', [
+          field('paid', 'Amount paid to the state (dollars)', 'number', true, { value: Math.max(num(r.fields.dueMinor), 0) / 100 }),
+          field('filedOn', 'Return filed on', 'date', true),
+          field('paidOn', 'Payment made on', 'date', true),
+          field('confirmationRef', 'State confirmation number', 'text', false, { maxLength: 80 }),
+          field('note', 'Note', 'textarea', false, { maxLength: 1000 })
+        ], 'Do this after you have filed the return and paid it. A mistake is voided, not edited.'),
+        apply: (r, v) => {
+          const paid = Math.round(num(v.paid) * 100);
+          r.fields.paidMinor = paid;
+          r.fields.filedOn = str(v.filedOn);
+          r.fields.confirmationRef = str(v.confirmationRef) || null;
+          r.fields.remittanceId = `rem-${Date.now()}`;
+          r.fields.outstandingMinor = num(r.fields.dueMinor) - paid;
+          r.fields.state = r.fields.outstandingMinor === 0 ? 'SETTLED' : r.fields.outstandingMinor > 0 ? 'OWES_MORE' : 'OVERPAID';
+          r.fields.statusLabel = str(r.fields.state);
+        }
+      },
+      {
+        key: 'void', label: 'Void this record', tone: 'danger', permission: 'tax:configure',
+        when: (r) => (r.fields.remittanceId ? null : 'Nothing is recorded for this month and state.'),
+        form: () => form('Why is it voided?', 'Void', [field('note', 'Explanation (at least 10 characters)', 'textarea', true, { maxLength: 2000 })]),
+        apply: (r) => {
+          r.fields.paidMinor = null; r.fields.filedOn = null; r.fields.confirmationRef = null; r.fields.remittanceId = null;
+          r.fields.outstandingMinor = num(r.fields.dueMinor); r.fields.state = 'NOT_FILED'; r.fields.statusLabel = 'Not filed';
+        }
+      }
+    ]
+  },
+  maintenance: {
+    title: 'Maintenance mode',
+    columns: [col('setting', 'Setting', 'strong', 24), col('stateLabel', 'Now', 'status', 40), col('updatedByName', 'Changed by', 'text', 16), col('updatedAt', 'Changed', 'datetime', 12)],
+    facets: [],
+    exportable: false,
+    titleOf: () => 'Maintenance mode',
+    subtitleOf: (r) => str(r.fields.stateLabel),
+    sections: [['Now', ['stateLabel', 'title', 'message', 'expectedBackAt', 'updatedByName', 'updatedAt']]],
+    actions: [],
+    edit: {
+      permission: 'content:site.edit',
+      form: (r) => form('Maintenance mode', 'Save', [
+        field('enabled', 'Maintenance mode on', 'toggle', false, { value: str(r.fields.state) === 'ON' }),
+        field('scope', 'Who is paused', 'select', true, { options: [{ value: 'SHOPPERS', label: 'Shoppers only (sellers can keep working)' }, { value: 'ALL', label: 'Shoppers and sellers' }], value: str(r.fields.scope) || 'SHOPPERS' }),
+        field('title', 'Heading', 'text', false, { maxLength: 80, value: str(r.fields.title) }),
+        field('message', 'What customers are told (required when turning on)', 'textarea', false, { maxLength: 600, value: str(r.fields.message) }),
+        field('backIn', 'When we expect to be back', 'select', false, { options: [{ value: '0', label: 'Not sure yet' }, { value: '15', label: 'About 15 minutes' }, { value: '30', label: 'About 30 minutes' }, { value: '60', label: 'About 1 hour' }], value: '0' })
+      ], 'While it is on, shoppers see the maintenance page instead of the site. Staff can still sign in.'),
+      apply: (r, v) => {
+        const on = v.enabled === true;
+        if (on && str(v.message).trim().length < 10) throw new Error('Tell customers what is happening, in at least 10 characters.');
+        r.fields.state = on ? 'ON' : 'OFF';
+        r.fields.stateLabel = on ? 'On: Shoppers only see the maintenance page' : 'Off: the platform is open';
+        r.fields.scope = str(v.scope);
+        r.fields.title = str(v.title) || 'We’ll be right back';
+        r.fields.message = str(v.message);
+      }
+    }
+  },
+  'tax-settings': {
+    title: 'Sales tax method',
+    columns: [col('setting', 'Setting', 'strong', 30), col('methodLabel', 'In force', 'text', 24), col('stripeLabel', 'Stripe Tax', 'text', 18), col('changedByName', 'Changed by', 'text', 16), col('changedAt', 'Changed', 'datetime', 12)],
+    facets: [],
+    exportable: false,
+    titleOf: () => 'Who calculates sales tax',
+    subtitleOf: (r) => `${str(r.fields.methodLabel)} is in force`,
+    sections: [['In force', ['methodLabel', 'stripeLabel', 'configuredDefault', 'changedByName', 'changedAt']]],
+    actions: [],
+    edit: {
+      permission: 'tax:configure',
+      form: (r) => form('Change who calculates sales tax', 'Change method', [
+        field('method', 'Method', 'select', true, { options: [{ value: 'RULES', label: 'Our own rules (rate tables and tax codes)' }, { value: 'STRIPE_TAX', label: 'Stripe Tax (needs to be set up)' }], value: str(r.fields.method) }),
+        field('reason', 'Why (at least 10 characters)', 'textarea', true, { maxLength: 500 })
+      ], 'Our own rules are always available. Stripe Tax can only be chosen once it is set up. The change applies to new quotes; orders already placed keep their tax.', ['method']),
+      apply: (r, v) => {
+        if (str(v.method) === 'STRIPE_TAX') throw new Error('Stripe Tax is not set up yet');
+        r.fields.method = str(v.method);
+        r.fields.methodLabel = 'Our own rules';
+      }
+    }
+  },
+  'tax-rules': {
+    title: 'Tax classification rules',
+    columns: [col('productType', 'Product type', 'mono', 16), col('attrKey', 'Question', 'mono', 14), col('attrValue', "Seller's answer", 'text', 28), col('taxCode', 'Tax code', 'strong', 18), col('kind', 'Rule', 'status', 10), col('note', 'Why', 'text', 24)],
+    statusKey: 'kind',
+    facets: facets('TYPE', 'ANSWER'),
+    exportable: true,
+    titleOf: (r) => `${str(r.fields.productType)} ${str(r.fields.attrValue)}`.trim(),
+    subtitleOf: (r) => `→ ${str(r.fields.taxCode)}`,
+    actions: []
+  },
+  'tax-review': {
+    title: 'Tax review queue',
+    columns: [col('productType', 'Product type', 'mono', 16), col('answer', "Seller's answer", 'text', 28), col('taxCode', 'Taxed as', 'strong', 18), col('count', 'Order lines', 'number', 10), col('lastSeen', 'Last seen', 'datetime', 16), col('state', 'State', 'status', 12)],
+    statusKey: 'state',
+    facets: facets('OPEN', 'REVIEWED'),
+    exportable: true,
+    titleOf: (r) => `${str(r.fields.productType)} ${str(r.fields.answer)}`.trim(),
+    subtitleOf: () => 'Taxed as general goods because no rule matched. Add a rule, or mark it reviewed if general goods is right.',
+    actions: []
+  },
   'tax-rates': {
     title: 'Tax rates',
-    columns: [col('kind', 'Rule', 'status', 10), col('state', 'State', 'mono', 8), col('zipPrefix', 'ZIP prefix', 'mono', 12), col('name', 'Name', 'strong', 22), col('generalRate', 'General', 'percent', 12), col('groceryRate', 'Grocery', 'percent', 12), col('preparedFoodRate', 'Prepared food', 'percent', 14), col('version', 'Version', 'number', 10)],
+    columns: [col('kind', 'Rule', 'status', 10), col('country', 'Country', 'mono', 8), col('state', 'State', 'mono', 8), col('zipPrefix', 'ZIP prefix', 'mono', 10), col('name', 'Name', 'strong', 20), col('generalRate', 'General', 'percent', 10), col('groceryRate', 'Grocery', 'percent', 10), col('preparedFoodRate', 'Prepared food', 'percent', 12), col('version', 'Version', 'number', 8)],
     statusKey: 'kind',
     facets: facets('STATE', 'LOCAL'),
     exportable: true,
@@ -648,10 +1197,83 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       ]),
       build: (v) => ({ id: `local:${str(v.state)}:${str(v.zipPrefix)}`, fields: { kind: 'LOCAL', state: str(v.state), zipPrefix: str(v.zipPrefix), name: str(v.name), generalRate: num(v.rate), groceryRate: null, preparedFoodRate: null, shippingTaxable: null, facilitator: null, version: null }, activity: [] })
     }
-  }
+  },
+  organisations: {
+    title: 'Organisations',
+    columns: [col('name', 'Organisation', 'strong', 30), col('kind', 'Kind', 'text', 14), col('plan', 'Plan', 'text', 16), col('createdAt', 'Since', 'date', 14), col('status', 'Status', 'status', 14)],
+    statusKey: 'status',
+    facets: facets('APPROVED', 'SUSPENDED'),
+    exportable: true,
+    titleOf: (r) => str(r.fields.name),
+    subtitleOf: (r) => str(r.fields.kind),
+    actions: []
+  },
+  'connect-accounts': {
+    title: 'Stripe Connect accounts',
+    columns: [col('organisation', 'Organisation', 'strong', 30), col('accountId', 'Account', 'mono', 22), col('payoutsEnabled', 'Payouts', 'text', 12), col('status', 'Status', 'status', 14)],
+    statusKey: 'status',
+    facets: facets('ACTIVE', 'RESTRICTED'),
+    exportable: true,
+    titleOf: (r) => str(r.fields.organisation),
+    subtitleOf: (r) => str(r.fields.accountId),
+    actions: []
+  },
+  coupons: {
+    title: 'Platform coupons',
+    columns: [col('code', 'Code', 'mono', 10), col('description', 'Description', 'text', 22), col('type', 'Type', 'status', 10), col('value', 'Value', 'number', 8), col('scope', 'Scope', 'text', 12), col('status', 'Status', 'status', 10), col('redeemedCount', 'Redeemed', 'number', 8)],
+    statusKey: 'status',
+    facets: facets('ACTIVE', 'PAUSED', 'EXPIRED'),
+    exportable: true,
+    titleOf: (r) => str(r.fields.code),
+    subtitleOf: (r) => str(r.fields.description),
+    actions: [
+      { key: 'pause', label: 'Pause', tone: 'neutral', permission: 'coupons:manage', confirm: 'Pause this coupon?', when: (r) => (r.fields.status === 'ACTIVE' ? null : 'Only active coupons can be paused'), apply: (r) => { r.fields.status = 'PAUSED'; } },
+      { key: 'activate', label: 'Activate', tone: 'primary', permission: 'coupons:manage', confirm: 'Activate this coupon?', when: (r) => (r.fields.status === 'PAUSED' ? null : 'Only paused coupons can be activated'), apply: (r) => { r.fields.status = 'ACTIVE'; } }
+    ],
+    create: {
+      permission: 'coupons:manage',
+      form: form('New platform coupon', 'Create coupon', [
+        field('code', 'Code', 'text', true, { pattern: '^[A-Za-z0-9]{3,20}$', placeholder: 'WELCOME10' }),
+        field('description', 'Description', 'text', false, { maxLength: 300 }),
+        field('type', 'Type', 'select', true, { options: options('PERCENT', 'FIXED', 'FREE_SHIPPING'), value: 'PERCENT' }),
+        field('value', 'Value', 'number', true, { min: 0, value: 10 }),
+        field('scope', 'Scope', 'select', true, { options: options('CART', 'CATEGORY', 'PRODUCT', 'SELLER', 'FULFILLED_BY_AFROTRANSACT'), value: 'CART' })
+      ]),
+      build: (v, id) => ({
+        id,
+        fields: { code: str(v.code).toUpperCase(), description: str(v.description), type: str(v.type), value: num(v.value), scope: str(v.scope), status: 'ACTIVE', funding: 'PLATFORM', redeemedCount: 0, version: 1 },
+        activity: []
+      })
+    }
+  },
+  'exchange-rates': exchangeRatesDef,
+  // Identity & access (S291)
+  ...IDENTITY_RESOURCES
 };
 
 function placementsDef(title: string, announcementsOnly: boolean): MockResource {
+  const baseActions: MockAction[] = [
+    { key: 'submit', label: 'Send for review', tone: 'primary', permission: 'content:placements.edit', confirm: 'Send this placement for review?', when: (r) => stateReason(r, 'DRAFT'), apply: setStatus('IN_REVIEW', 'Sent for review') },
+    { key: 'approve', label: 'Approve', tone: 'primary', permission: 'content:placements.approve', level: 'APPROVE', confirm: 'Approve and schedule?', when: (r) => stateReason(r, 'IN_REVIEW'), apply: setStatus('LIVE', 'Approved — live') },
+    { key: 'reject', label: 'Reject', tone: 'danger', permission: 'content:placements.approve', level: 'APPROVE', form: noteForm('Reject back to draft', 'Reject'), when: (r) => stateReason(r, 'IN_REVIEW'), apply: setStatus('DRAFT', 'Rejected back to draft') },
+    { key: 'end', label: 'End now', tone: 'danger', permission: 'content:placements.edit', confirm: 'End this placement now?', when: (r) => stateReason(r, 'SCHEDULED', 'LIVE'), apply: setStatus('ENDED', 'Ended') }
+  ];
+  const actions =
+    announcementsOnly
+      ? baseActions
+      : [
+          ...baseActions,
+          {
+            key: 'delete',
+            label: 'Delete',
+            tone: 'danger' as const,
+            permission: 'advert:delete',
+            confirm: 'Permanently delete this advert?',
+            when: (r: MockRecord) => (r.fields.paid ? stateReason(r, 'DRAFT', 'ENDED') : 'Only paid adverts can be deleted.'),
+            removes: true,
+            apply: () => {}
+          }
+        ];
   return {
     title,
     columns: [col('name', 'Name', 'strong', 28), col('slot', 'Slot', 'mono', 18), col('advertiser', 'Advertiser', 'text', 16), col('startsAt', 'Starts', 'date', 12), col('endsAt', 'Ends', 'date', 12), col('status', 'Status', 'status', 14)],
@@ -660,12 +1282,7 @@ function placementsDef(title: string, announcementsOnly: boolean): MockResource 
     exportable: true,
     titleOf: (r) => str(r.fields.name),
     subtitleOf: (r) => `${str(r.fields.slot)}${r.fields.paid ? ` · paid by ${str(r.fields.advertiser)}` : ''}`,
-    actions: [
-      { key: 'submit', label: 'Send for review', tone: 'primary', permission: 'content:placements.edit', confirm: 'Send this placement for review?', when: (r) => stateReason(r, 'DRAFT'), apply: setStatus('IN_REVIEW', 'Sent for review') },
-      { key: 'approve', label: 'Approve', tone: 'primary', permission: 'content:placements.approve', level: 'APPROVE', confirm: 'Approve and schedule?', when: (r) => stateReason(r, 'IN_REVIEW'), apply: setStatus('LIVE', 'Approved — live') },
-      { key: 'reject', label: 'Reject', tone: 'danger', permission: 'content:placements.approve', level: 'APPROVE', form: noteForm('Reject back to draft', 'Reject'), when: (r) => stateReason(r, 'IN_REVIEW'), apply: setStatus('DRAFT', 'Rejected back to draft') },
-      { key: 'end', label: 'End now', tone: 'danger', permission: 'content:placements.edit', confirm: 'End this placement now?', when: (r) => stateReason(r, 'SCHEDULED', 'LIVE'), apply: setStatus('ENDED', 'Ended') }
-    ],
+    actions,
     edit: {
       permission: 'content:placements.edit',
       form: (r) => form('Edit draft', 'Save draft', [

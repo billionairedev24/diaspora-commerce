@@ -14,10 +14,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 import com.afrotransact.orders.domain.BusinessDays;
+import com.afrotransact.orders.domain.DefaultShippingPolicy;
 import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
+import com.afrotransact.orders.domain.FeeRuleSnapshot;
 import com.afrotransact.orders.domain.FulfilmentType;
 import com.afrotransact.orders.domain.HandoverPolicy;
 import com.afrotransact.orders.domain.LocalDelivery;
@@ -28,6 +31,7 @@ import com.afrotransact.orders.domain.OrderOrigin;
 import com.afrotransact.orders.domain.PickupEligibility;
 import com.afrotransact.orders.domain.PreorderFulfilment;
 import com.afrotransact.orders.domain.PreorderPackage;
+import com.afrotransact.orders.domain.PreorderSource;
 import com.afrotransact.orders.domain.PreorderStage;
 import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.domain.ShippingPolicy;
@@ -42,6 +46,8 @@ import com.afrotransact.orders.port.OrderRepository;
 import com.afrotransact.orders.port.PaymentsClient;
 import com.afrotransact.orders.port.PickupLocations;
 import com.afrotransact.orders.port.PickupPoints;
+import com.afrotransact.orders.port.DeliveryFeeRules;
+import com.afrotransact.orders.port.DeliveryRunSlots;
 import com.afrotransact.orders.port.PreorderEligibility;
 import com.afrotransact.orders.port.ProductFactsClient;
 import com.afrotransact.orders.port.PromiseClient;
@@ -59,6 +65,7 @@ import org.springframework.stereotype.Component;
 class CheckoutActivitiesImpl implements CheckoutActivities {
 
     private static final Logger LOG = LoggerFactory.getLogger(CheckoutActivitiesImpl.class);
+    private static final Pattern ZIP = Pattern.compile("\\d{5}");
 
     private final MarketEligibility markets;
     private final ProductFactsClient catalog;
@@ -79,6 +86,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private final LocalDeliveryQuotes localDelivery;
     private final PickupPoints pickupPoints;
     private final PreorderEligibility preorders;
+    private final DeliveryRunSlots runSlots;
+    private final DeliveryFeeRules deliveryFees;
     private final PreorderSettings preorderSettings;
     private final OrdersSettings settings;
     private final Clock clock;
@@ -89,8 +98,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                            OfferInventory offerInventory, PaymentsClient payments, CartClient cart, CouponsClient coupons,
                            OrderCouponRepository orderCoupons, OrderRepository orderRepository,
                            OrderPlacementService placement, LocalDeliveryQuotes localDelivery,
-                           PickupPoints pickupPoints, PreorderEligibility preorders, PreorderSettings preorderSettings,
-                           OrdersSettings settings, Clock clock) {
+                           PickupPoints pickupPoints, PreorderEligibility preorders, DeliveryRunSlots runSlots,
+                           DeliveryFeeRules deliveryFees, PreorderSettings preorderSettings, OrdersSettings settings, Clock clock) {
         this.markets = markets;
         this.catalog = catalog;
         this.promises = promises;
@@ -110,6 +119,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         this.localDelivery = localDelivery;
         this.pickupPoints = pickupPoints;
         this.preorders = preorders;
+        this.runSlots = runSlots;
+        this.deliveryFees = deliveryFees;
         this.preorderSettings = preorderSettings;
         this.settings = settings;
         this.clock = clock;
@@ -242,7 +253,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                         i.productAtin(), i.title(), i.imageUrl(), i.quantity(), i.priceMinor(),
                         rate.taxOf(itemsMinor), f.map(ProductFactsClient.Facts::category).orElse(null),
                         f.map(ProductFactsClient.Facts::perishable).orElse(false), rate.jurisdiction(), lineDays,
-                        i.offerId(), 0, f.map(ProductFactsClient.Facts::productType).orElse(null), null, 0));
+                        i.offerId(), 0, f.map(ProductFactsClient.Facts::productType).orElse(null), null, 0,
+                        i.sellerOrgId(), i.sellerName()));
             }
             LocalDelivery quoted = sellerStore && method == DeliveryMethod.AFROTRANSACT_DELIVERY
                     ? localDelivery.quote(first.sellerOrgId(), first.sellerName(), pickups.get(offerKey(first)), to)
@@ -295,25 +307,78 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     }
 
     /**
-     * Asks delivery-runs which lines are pre-orders here. A shopper's checkout degrades to "ships now" when
-     * delivery-runs is unavailable (logged); a late add needs the answer.
+     * Which lines are sold as a pre-order here, and through what. Precedence (S261): AfroTransact-held goods (Retail
+     * and FBA stock) go on the next open delivery run staff scheduled for the address when one takes orders; every
+     * other line is asked about at delivery-runs' windows. A line is never offered both. A shopper's checkout degrades
+     * to "ships now" when delivery-runs is unavailable (logged); a late add needs the answer.
      */
     private Map<String, PreorderEligibility.Line> preorderLines(CheckoutInput in, ShipTo to,
                                                                 List<CartClient.Item> items) {
         if (!preorderSettings.enabled() && in.lateAdd() == null) {
             return Map.of();
         }
+        Map<String, PreorderEligibility.Line> out = new LinkedHashMap<>();
+        List<CartClient.Item> rest = items;
+        if (in.lateAdd() == null && preorderSettings.runsEnabled()) {
+            Optional<DeliveryRunSlots.OpenRun> run = nextOpenRun(in, to);
+            if (run.isPresent()) {
+                rest = new ArrayList<>();
+                for (CartClient.Item i : items) {
+                    if (deliveredByRun(i)) {
+                        out.put(i.variantAtin(), runLine(i.variantAtin(), run.get()));
+                    } else {
+                        rest.add(i);
+                    }
+                }
+            }
+        }
+        if (rest.isEmpty()) {
+            return out;
+        }
         try {
-            return preorders.eligibility(to.country(), to.state(), to.city(),
-                    items.stream().map(CartClient.Item::variantAtin).distinct().toList());
+            out.putAll(preorders.eligibility(to.country(), to.state(), to.city(),
+                    rest.stream().map(CartClient.Item::variantAtin).distinct().toList()));
         } catch (UpstreamFailure f) {
             if (in.lateAdd() != null) {
                 throw f;
             }
-            LOG.warn("delivery-runs pre-order eligibility unavailable for order {} ({}); every line ships now",
+            LOG.warn("delivery-runs pre-order eligibility unavailable for order {} ({}); lines without a run ship now",
                     in.orderNumber(), f.code());
-            return Map.of();
         }
+        return out;
+    }
+
+    /** Runs deliver AfroTransact's own stock (ADR 0005 §2): Retail and FBA lines that can be bought now. */
+    private boolean deliveredByRun(CartClient.Item i) {
+        return !i.unavailable() && fulfilmentType(i).inventoryTracked();
+    }
+
+    /** The first open run covering the address that has room (the "next" run once an earlier one closed or filled). */
+    private Optional<DeliveryRunSlots.OpenRun> nextOpenRun(CheckoutInput in, ShipTo to) {
+        String zip = to.postalCode() == null ? "" : to.postalCode().trim();
+        if (zip.length() > 5 && zip.charAt(5) == '-') {
+            zip = zip.substring(0, 5);
+        }
+        if (!ZIP.matcher(zip).matches()) {
+            return Optional.empty();
+        }
+        try {
+            return runSlots.openRuns(zip).stream().filter(r -> !r.full()).findFirst();
+        } catch (UpstreamFailure f) {
+            LOG.warn("delivery-runs open runs unavailable for order {} ({}); no run is offered", in.orderNumber(),
+                    f.code());
+            return Optional.empty();
+        }
+    }
+
+    /** A run as an eligibility line: the run's own id, cutoff, date, fee and the rule behind it. */
+    private static PreorderEligibility.Line runLine(String atin, DeliveryRunSlots.OpenRun run) {
+        String name = run.town() == null || run.town().isBlank() ? "Delivery run" : run.town() + " delivery run";
+        return new PreorderEligibility.Line(atin, true, run.runId(), null, name, PreorderStage.OPEN, run.deliversOn(),
+                run.cutoffAt(), run.door(), run.pickup(), run.door() ? run.feeMinor() : 0,
+                run.pickup() ? run.feeMinor() : 0, run.currency(), null, run.pickupPointId(),
+                run.door() ? run.feeRule() : null, run.pickup() ? run.feeRule() : null, PreorderSource.RUN,
+                run.minOrders(), run.ordersSoFar());
     }
 
     /**
@@ -340,11 +405,11 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         DeliveryPreferences prefs = sel == null || sel.preferences() == null ? DeliveryPreferences.defaults()
                 : sel.preferences();
         PreorderPackage preorder = PreorderPackage.placed(w.windowId(), w.windowCode(), w.windowName(),
-                w.deliversOn(), w.closesAt(), fulfilment);
+                w.deliversOn(), w.closesAt(), fulfilment, w.source());
         return new CheckoutPlan.Package(PREORDER_PACKAGE + w.windowId(), lines.isEmpty() ? null
                 : sellerOf(in, lines.getFirst()), w.windowName(), FulfilmentType.PREORDER, fulfilment.method(),
                 "preorder_" + fulfilment.name().toLowerCase(Locale.ROOT), pickupPoint, prefs, 0, lines, null,
-                preorder, fee);
+                preorder, fee, w.feeRule(fulfilment));
     }
 
     private static String sellerOf(CheckoutInput in, CheckoutPlan.Line line) {
@@ -361,7 +426,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                 i.title(), i.imageUrl(), i.quantity(), i.priceMinor(), rate.taxOf(itemsMinor),
                 f.map(ProductFactsClient.Facts::category).orElse(null),
                 f.map(ProductFactsClient.Facts::perishable).orElse(false), rate.jurisdiction(), lineDays,
-                i.offerId(), 0, f.map(ProductFactsClient.Facts::productType).orElse(null), null, 0);
+                i.offerId(), 0, f.map(ProductFactsClient.Facts::productType).orElse(null), null, 0,
+                i.sellerOrgId(), i.sellerName());
     }
 
     // ------------------------------------------------------------------ reserve + split
@@ -386,6 +452,11 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             if (p.fulfilmentType().inventoryTracked()) {
                 p.lines().forEach(l -> tracked.add(new InventoryClient.Item(reservationSku(l), l.quantity(),
                         l.lineId())));
+            } else if (p.preorder() != null) {
+                // Pre-order and run lines of AfroTransact's own stock hold a real reservation, so cancelling gives
+                // the units back; a seller's own goods in a window are not AfroTransact's to reserve.
+                p.lines().stream().filter(l -> heldByAfroTransact(in, l)).forEach(l -> tracked.add(
+                        new InventoryClient.Item(reservationSku(l), l.quantity(), l.lineId())));
             }
         }
         Map<String, String> nodeBySku = new LinkedHashMap<>();
@@ -437,17 +508,18 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                 }
                 int days = lines.stream().mapToInt(CheckoutPlan.Line::promiseDays).max().orElse(p.promiseDays());
                 int slack = p.method() == DeliveryMethod.CARRIER ? 2 : 0;
+                FeeRuleSnapshot rule = carrierRule(p, items, plan.currency());
                 shipments.add(new OrderDraft.DraftShipment(id, seq, p.sellerOrgId(), p.sellerName(),
                         p.fulfilmentType(), group.getKey().isEmpty() ? null : group.getKey(), p.method(),
                         p.serviceLevel(), p.pickupLocationId(), p.preferences(), perishable, codeNeeded, hash, sealed,
-                        shippingOf(p, items), BusinessDays.add(today, days), BusinessDays.add(today, days + slack),
-                        lines, p.localDelivery()));
+                        shippingOf(p, items, rule), BusinessDays.add(today, days),
+                        BusinessDays.add(today, days + slack), lines, p.localDelivery(), null, rule));
             }
         }
         OrderOrigin origin = in.lateAdd() != null ? null : OrderOrigin.checkout(in.attribution());
         return checkoutTax.tax(new OrderDraft(in.orderId(), in.orderNumber(), in.customerId(), in.workflowId(),
                 plan.currency(), in.shipTo(), reserved, shipments, Instant.now(clock), null, origin,
-                plan.paymentMethodTypes(), in.savePaymentMethod()));
+                plan.paymentMethodTypes(), in.savePaymentMethod(), in.useCredit()));
     }
 
     /**
@@ -488,7 +560,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             out.add(new OrderDraft.DraftShipment(id, seq, e.getKey(), sellerNames.get(e.getKey()),
                     FulfilmentType.PREORDER, null, p.method(), p.serviceLevel(), p.pickupLocationId(),
                     p.preferences(), perishable, codeNeeded, hash, sealed, fees[g++], deliversOn, deliversOn, lines,
-                    null, p.preorder()));
+                    null, p.preorder(), p.feeRule()));
         }
         return out;
     }
@@ -537,7 +609,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             List<CouponsClient.Line> lines = new ArrayList<>();
             for (CheckoutPlan.Package p : plan.packages()) {
                 long items = p.lines().stream().mapToLong(CheckoutPlan.Line::itemsMinor).sum();
-                shippingEstimate += shippingOf(p, items);
+                shippingEstimate += shippingOf(p, items, carrierRule(p, items, in.currency()));
                 p.lines().stream().filter(l -> l.offerId() != null)
                         .forEach(l -> lines.add(new CouponsClient.Line(l.offerId(), l.quantity())));
             }
@@ -634,6 +706,32 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     // ------------------------------------------------------------------ payment + persistence
 
     @Override
+    public String reserveRunSlot(CheckoutInput in, OrderDraft draft) {
+        String runId = draft.shipments().stream().map(OrderDraft.DraftShipment::preorder)
+                .filter(p -> p != null && p.run()).map(PreorderPackage::runId).findFirst().orElse(null);
+        if (runId == null) {
+            return null;
+        }
+        return guard(() -> {
+            try {
+                runSlots.reserve(runId, in.orderId(), in.customerId());
+            } catch (DeliveryRunSlots.RunUnavailable e) {
+                throw new OrdersRuleViolation(e.code(), e.getMessage() + ". Your cart shows the next run, if there is "
+                        + "one.");
+            }
+            return runId;
+        });
+    }
+
+    @Override
+    public void releaseRunSlot(String orderId, String runId) {
+        guard(() -> {
+            runSlots.release(runId, orderId);
+            return null;
+        });
+    }
+
+    @Override
     public PaymentRef createPayment(OrderDraft draft) {
         return guard(() -> {
             Order order = OrderDrafts.toOrder(draft, null);
@@ -641,8 +739,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                     order.totals().grandTotalMinor(), order.currency(), Instant.now(clock),
                     Map.of("order_number", order.number(), "customer_id", order.customerId()),
                     PaymentLines.of(order), order.customerId(), draft.paymentMethodTypes(), false,
-                    draft.savePaymentMethod()));
-            return new PaymentRef(intent.paymentId(), intent.clientSecret(), intent.status());
+                    draft.savePaymentMethod(), draft.useCredit()));
+            return new PaymentRef(intent.paymentId(), intent.clientSecret(), intent.status(), intent.creditMinor());
         });
     }
 
@@ -730,12 +828,33 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
      * The quoted AfroTransact Delivery charge for a seller's store (S255), the pre-order window's fee (S272), else the
      * shipping policy's fee.
      */
-    private long shippingOf(CheckoutPlan.Package p, long itemsMinor) {
+    private long shippingOf(CheckoutPlan.Package p, long itemsMinor, FeeRuleSnapshot rule) {
         if (p.preorder() != null) {
             return p.preorderFeeMinor();
         }
-        return p.localDelivery() != null ? p.localDelivery().customerChargeMinor()
-                : shipping.fee(p.method(), p.serviceLevel(), itemsMinor);
+        if (p.localDelivery() != null) {
+            return p.localDelivery().customerChargeMinor();
+        }
+        return rule != null ? rule.amountMinor() : shipping.fee(p.method(), p.serviceLevel(), itemsMinor);
+    }
+
+    /**
+     * The staff carrier rate (ADR 0005 §3) of a standard carrier shipment, which is what an address beyond
+     * AfroTransact's coverage pays; the rule is kept on the shipment. Null for every other method and for express
+     * (flat rates), and when staff configured no carrier rule or delivery-runs cannot answer.
+     */
+    private FeeRuleSnapshot carrierRule(CheckoutPlan.Package p, long itemsMinor, String currency) {
+        if (p.preorder() != null || p.localDelivery() != null || p.method() != DeliveryMethod.CARRIER
+                || DefaultShippingPolicy.EXPRESS.equalsIgnoreCase(p.serviceLevel())) {
+            return null;
+        }
+        return deliveryFees.carrier(currency, null, itemsMinor).orElse(null);
+    }
+
+    /** The pre-order line is AfroTransact's own stock (Retail or FBA), which inventory-service can reserve. */
+    private boolean heldByAfroTransact(CheckoutInput in, CheckoutPlan.Line l) {
+        return in.items().stream().filter(i -> i.variantAtin().equals(l.variantAtin())).findFirst()
+                .map(i -> fulfilmentType(i).inventoryTracked()).orElse(false);
     }
 
     private static boolean fromSellerStore(CartClient.Item i) {

@@ -54,6 +54,8 @@ type LabelService interface {
 	Buy(ctx context.Context, req BuyRequest) (LabelView, error)
 	Get(ctx context.Context, id string) (LabelView, error)
 	Document(ctx context.Context, id string) ([]byte, string, error)
+	// DocumentByTracking is the printable document of the purchased label with this tracking number.
+	DocumentByTracking(ctx context.Context, carrier domain.CarrierCode, trackingNumber string) ([]byte, string, error)
 	Void(ctx context.Context, id string) (LabelView, error)
 }
 
@@ -259,11 +261,23 @@ func (s *labelServiceImpl) Get(ctx context.Context, id string) (LabelView, error
 	return s.view(ctx, rec), nil
 }
 
+func (s *labelServiceImpl) DocumentByTracking(ctx context.Context, carrier domain.CarrierCode, trackingNumber string) ([]byte, string, error) {
+	rec, err := s.labels.ByTracking(ctx, carrier, strings.TrimSpace(trackingNumber))
+	if err != nil {
+		return nil, "", fmt.Errorf("get label by tracking number: %w", err)
+	}
+	return s.document(ctx, rec)
+}
+
 func (s *labelServiceImpl) Document(ctx context.Context, id string) ([]byte, string, error) {
 	rec, err := s.labels.Get(ctx, id)
 	if err != nil {
 		return nil, "", fmt.Errorf("get label: %w", err)
 	}
+	return s.document(ctx, rec)
+}
+
+func (s *labelServiceImpl) document(ctx context.Context, rec domain.LabelRecord) ([]byte, string, error) {
 	if rec.LabelKey == "" || rec.Status != domain.LabelPurchased {
 		return nil, "", fmt.Errorf("%w: label has no printable document", domain.ErrNotFound)
 	}

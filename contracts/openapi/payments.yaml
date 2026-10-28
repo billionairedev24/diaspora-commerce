@@ -22,6 +22,12 @@ security:
 tags:
 - name: Settlement & payouts
   description: Settlement hold after delivery, Connect transfers and payouts on request
+- name: Plan fees from earnings
+  description: 'Seller plan invoices paid from earnings instead of the card (S298): withheld from the next transfers, released
+    when the invoice is voided or refunded'
+- name: Negotiated rates
+  description: 'Commission and connection fees negotiated with one organisation: dated, with a required reason, audited and
+    expired by a job; they win over plan, category and default rates while active'
 - name: Finance
   description: 'Staff views and configuration: payment split, fees & commissions, ledger, reconciliation, connected accounts'
 - name: Payments
@@ -34,6 +40,23 @@ tags:
   description: Signed, idempotent inbox for Stripe events
 - name: Saved payment methods
   description: The signed-in shopper's wallet (called by gateway-bff with the customer's token)
+- name: Gift cards
+  description: Buy a gift card with the normal card payment, have it emailed on a chosen date and redeem the code once into
+    AfroTransact credit (S321). Codes are stored hashed; wrong codes are rate limited. A redeemed card is credit and is never
+    refunded to a card.
+- name: Money settings
+  description: Staff-configurable gift card limits and terms and the credit approval limit (Settings, Money). Each change
+    has a reason and is kept in a history.
+- name: Credit
+  description: 'AfroTransact credit: a per-customer append-only ledger (grant, spend, refund, adjustment). Credit only buys
+    products and services; there is no cash-out, payout, card refund or transfer of credit anywhere in this API (ADR 0006).'
+- name: Referrals
+  description: 'The referral program (S322): every customer has a code; when a friend who signed up with it has a first order
+    delivered (and its return window passed) both are rewarded by AfroTransact, as credit or membership days. Flagged referrals
+    wait for staff.'
+- name: Referral settings
+  description: 'Staff-configurable referral program (Settings, Money or Growth): each side''s reward, the qualifying event,
+    minimum order, return-window delay, caps, validity and on/off. Each change has a reason and is kept in a history.'
 paths:
   /v1/connected-accounts/{orgId}:
     get:
@@ -110,7 +133,7 @@ paths:
       tags:
       - Saved payment methods
       summary: List saved payment methods (display data only, never full numbers)
-      operationId: list
+      operationId: list_1
       responses:
         '200':
           description: OK
@@ -263,10 +286,12 @@ paths:
     get:
       tags:
       - Finance
-      summary: Effective fees for an organisation and category (payments:service or payments:read)
-      description: 'Commission (seller override, then category, then default), card-fee estimate (cardPctBps + cardFixedMinor
-        per charge) and FBA fee of the version in force at `at` (default now). AfroTransact Retail gets zero commission and
-        zero FBA fee (source RETAIL): only its card fee share applies. Callers such as bookings use it instead of hard-coding
+      summary: Effective fees for an organisation, kind and category (payments:service, payments:fees.read or payments:read)
+      description: 'The commission (kind PRODUCT, default) or connection fee (kind SERVICE: category = the service''s category)
+        of the version in force at `at` (default now), first match wins: an active negotiated rate of the organisation (its
+        category, then ''*''), the organisation''s plan rate (category, then the plan''s ''*''), the category rate, the default.
+        Plus the card-fee estimate (cardPctBps + cardFixedMinor per charge) and the FBA fee (products only). AfroTransact
+        Retail pays none (source RETAIL): only its card fee share applies. Callers such as bookings use it instead of hard-coding
         fees. Fee schedules are per currency; there is no market dimension.'
       operationId: effectiveFees
       parameters:
@@ -286,6 +311,14 @@ paths:
         schema:
           type: string
           format: date-time
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PRODUCT
+          - SERVICE
       responses:
         '200':
           description: OK
@@ -381,6 +414,126 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/BalanceResponse'
+  /v1/negotiated-rates:
+    get:
+      tags:
+      - Negotiated rates
+      summary: Negotiated rates, newest first
+      description: 'Staff fee readers (payments:read) and services (payments:fees.read) see every organisation (filter with
+        orgId); organisation members only their own. Filters: type (COMMISSION, CONNECTION_FEE), status (SCHEDULED, ACTIVE,
+        ENDED, EXPIRED); limit ≤ 500.'
+      operationId: listNegotiatedRates
+      parameters:
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - COMMISSION
+          - CONNECTION_FEE
+          - FBA_FEE
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - SCHEDULED
+          - ACTIVE
+          - ENDED
+          - EXPIRED
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 200
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NegotiatedRate'
+    post:
+      tags:
+      - Negotiated rates
+      summary: Negotiate a rate with an organisation (Super Admin / Finance, payments:configure)
+      description: A commission (products) or connection fee (services) for one category or '*', from startsAt (default now,
+        never in the past) to endsAt (optional). The reason is required and audited with negotiatedBy and the reference. 409
+        payments.negotiated-rate-overlap when another rate of the organisation, type and category overlaps; 422 payments.retail-no-fees
+        for AfroTransact Retail. Payments created before it starts keep their snapshotted rate.
+      operationId: createNegotiatedRate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewNegotiatedRate'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/NegotiatedRate'
+  /v1/negotiated-rates/{id}:
+    get:
+      tags:
+      - Negotiated rates
+      summary: One negotiated rate with its audit trail
+      operationId: negotiatedRate
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/NegotiatedRate'
+  /v1/negotiated-rates/{id}/end:
+    post:
+      tags:
+      - Negotiated rates
+      summary: End a negotiated rate now (Super Admin / Finance, payments:configure)
+      description: With a reason (audited). The organisation's plan, category or default rate applies to payments created
+        afterwards. 409 payments.negotiated-rate-ended when it already ended or expired.
+      operationId: endNegotiatedRate
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndNegotiatedRate'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/NegotiatedRate'
   /v1/orders/{orderId}/refunds:
     post:
       tags:
@@ -438,6 +591,144 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/SplitResponse'
+  /v1/orgs/{orgId}/plan-fee-withholdings:
+    get:
+      tags:
+      - Plan fees from earnings
+      summary: Plan fees withheld from the organisation's earnings, newest first, with the transfers that settled them
+      description: The seller service (payments:plan-fees), the organisation's members who see payouts, or staff with payments:read.
+        Each deduction is a "Plan fee (invoice …)" line of the settlement it reduced.
+      operationId: list
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanFeeWithholdingResponse'
+    post:
+      tags:
+      - Plan fees from earnings
+      summary: Withhold a plan invoice from the organisation's earnings (seller service, payments:plan-fees)
+      description: 'Takes up to amountMinor from the organisation''s delivered, undisputed and untransferred nets (less outstanding
+        label charges and earlier plan fees): status WITHHELD with withheldMinor (the card pays the rest), or DECLINED with
+        a reason when nothing is available. The seller payable is debited at once (Dr 2000:org / Cr 4600) and the next transfers
+        are smaller by it. Idempotency-Key must be plan-fee-<invoiceId>; a replay answers the first decision, another amount
+        for the same invoice is 409 payments.idempotency-conflict.'
+      operationId: withhold
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanFeeWithholdingRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanFeeWithholdingResponse'
+  /v1/orgs/{orgId}/plan-fee-withholdings/{invoiceId}/release:
+    post:
+      tags:
+      - Plan fees from earnings
+      summary: Release a withheld plan fee back to the organisation's next transfer (seller service, payments:plan-fees)
+      description: 'Invoice voided or deleted (everything), or refunded out of band (amountMinor). Posts Dr 4600 / Cr 2000:org;
+        what was already recovered is paid back with the next transfer. Idempotency-Key plan-fee-release-<invoice or credit
+        note>: a replay releases nothing more. A DECLINED or fully released withholding is answered unchanged.'
+      operationId: release_1
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: invoiceId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanFeeReleaseRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanFeeWithholdingResponse'
+  /v1/orgs/{orgId}/rate-card:
+    get:
+      tags:
+      - Finance
+      summary: Every commission or connection-fee rate of an organisation, with its source
+      description: 'kind PRODUCT (default): product commission per category; SERVICE: connection fee per service category.
+        Each rate says where it comes from (OVERRIDE = negotiated, PLAN, CATEGORY, DEFAULT, RETAIL), plus the rate of unlisted
+        categories, the organisation''s plan and its negotiated rates that are active or scheduled at `at` (default now).
+        Staff fee readers and services (payments:read, payments:fees.read), or the organisation''s members who see payouts.'
+      operationId: rateCard
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PRODUCT
+          - SERVICE
+      - name: at
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RateCard'
   /v1/payments:
     get:
       tags:
@@ -464,10 +755,7 @@ paths:
       - Payments
       summary: Create the order's PaymentIntent (manual capture) and return its client secret
       description: Stripe idempotency key = <orderId>:create-intent. Replays (same order, same lines) return 200 with replayed=true;
-        a different amount or lines for the same order is 409. S272 late pre-order adds set offSession (confirmed now on
-        the default saved card; 422 payments.no-saved-method without one); a late add paid with a pay-now link is an
-        ordinary intent that the customer confirms with Stripe Elements on AfroTransact's pay page. payments never
-        creates a Stripe-hosted page (Checkout Session or Payment Link).
+        a different amount or lines for the same order is 409.
       operationId: create
       parameters:
       - name: Idempotency-Key
@@ -555,13 +843,12 @@ paths:
       tags:
       - Payments
       summary: Capture one shipment and post its journal
-      description: >-
-        Stripe amount_to_capture = the lines' items + shipping + tax (multicapture; final_capture releases the
-        rest). A single-capture payment (multicapture false) is captured once: an order's (capture_plan=per_shipment)
-        first shipment captures every line not captured yet (the response's lineIds), and a later shipment whose lines
-        were taken by it gets that capture back (replayed); other payments capture the lines asked for and Stripe
-        releases the rest. Posts Dr 1000 Stripe clearing / Dr 5000 Stripe fees, Cr 2000 seller payables, 2100 sales tax,
-        4000 commission, 4100 FBA fees, 4200 shipping. Idempotent per (payment, shipmentId).
+      description: 'Stripe amount_to_capture = the lines'' items + shipping + tax (multicapture; final_capture releases the
+        rest). A single-capture payment (multicapture false) is captured once: an order''s (capture_plan=per_shipment) first
+        shipment captures every line not captured yet (the response''s lineIds), and a later shipment whose lines were taken
+        by it gets that capture back (replayed); other payments capture the lines asked for and Stripe releases the rest.
+        Posts Dr 1000 Stripe clearing / Dr 5000 Stripe fees, Cr 2000 seller payables, 2100 sales tax, 4000 commission, 4100
+        FBA fees, 4200 shipping. Idempotent per (payment, shipmentId).'
       operationId: capture
       parameters:
       - name: id
@@ -1082,6 +1369,9 @@ paths:
             - LABEL_CHARGE
             - LABEL_CREDIT
             - LABEL_RECOVERY
+            - PLAN_FEE_WITHHELD
+            - PLAN_FEE_RELEASED
+            - PLAN_FEE_SETTLED
             - SUPPLIER_PAYABLE
             - SUPPLIER_PAYMENT
           uniqueItems: true
@@ -1136,6 +1426,55 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ReconciliationResponse'
+  /v1/settings/summary:
+    get:
+      tags:
+      - Settings
+      summary: 'What governs holds, payouts and Stripe, in words (payments:read)'
+      description: 'Read-only: the values come from the deployment configuration.'
+      operationId: settingsSummary
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentsSetting'
+  /v1/settlement/transfers:
+    get:
+      tags:
+      - Settlement & payouts
+      summary: 'Stripe Connect transfers: an organisation''s (orgId) or one order''s (orderId)'
+      description: 'The tr_ ids to find in the Stripe dashboard (dashboardUrl opens them). Members see their organisation''s; staff with payments:read see any, or an order''s by orderId alone.'
+      operationId: transfers
+      parameters:
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: orderId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SettlementTransfer'
   /v1/settlements/{orderId}:
     get:
       tags:
@@ -1372,6 +1711,240 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/SupplierPayment'
+  /v1/stripe/lookup:
+    get:
+      tags:
+      - Reconciliation
+      summary: 'Stripe lookup: one Stripe object next to what the ledger booked for it (payments:read)'
+      description: 'ref is a Stripe id (po_, tr_, pi_, ch_, re_, txn_, dp_, acct_). A payout lives on the seller connected account, so pass orgId. When Stripe has no such object, or cannot be asked, object is null and problem says why; the ledger journals are still returned.'
+      operationId: lookup
+      parameters:
+      - name: ref
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StripeLookup'
+  /v1/reconciliation/items:
+    get:
+      tags:
+      - Reconciliation
+      summary: 'Reconciliation differences, newest first (payments:read)'
+      operationId: items
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [OPEN, EXPLAINED, ADJUSTED, SUPERSEDED]
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReconciliationItem'
+  /v1/reconciliation/items/{id}:
+    get:
+      tags:
+      - Reconciliation
+      summary: 'One difference with Stripe view, ledger journals and its adjustments (payments:read)'
+      operationId: item
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReconciliationItemDetail'
+  /v1/reconciliation/items/{id}/explain:
+    post:
+      tags:
+      - Reconciliation
+      summary: 'Mark an open difference explained, posting nothing (ledger:adjust)'
+      operationId: explain
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplainRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReconciliationItem'
+  /v1/ledger/adjustments:
+    get:
+      tags:
+      - Reconciliation
+      summary: 'Ledger adjustments, newest first (payments:read)'
+      operationId: adjustments
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [PROPOSED, POSTED, REJECTED]
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LedgerAdjustment'
+    post:
+      tags:
+      - Reconciliation
+      summary: 'Propose a correcting journal (ledger:adjust)'
+      description: 'Nothing is posted until a different person with ledger:approve approves it. Lines must balance. 422 payments.adjustment-pending while another proposal for the same difference waits.'
+      operationId: proposeAdjustment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposeRequest'
+        required: true
+      responses:
+        '201':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LedgerAdjustment'
+  /v1/ledger/adjustments/{id}:
+    get:
+      tags:
+      - Reconciliation
+      summary: 'One ledger adjustment (payments:read)'
+      operationId: adjustment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LedgerAdjustment'
+  /v1/ledger/adjustments/{id}/approve:
+    post:
+      tags:
+      - Reconciliation
+      summary: 'Approve and post a proposed adjustment (ledger:approve, not the proposer)'
+      description: '403 payments.adjustment-four-eyes when the approver proposed it.'
+      operationId: approveAdjustment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LedgerAdjustment'
+  /v1/ledger/adjustments/{id}/reject:
+    post:
+      tags:
+      - Reconciliation
+      summary: 'Reject a proposed adjustment with the reason (ledger:approve; the proposer may withdraw)'
+      operationId: rejectAdjustment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LedgerAdjustment'
+  /v1/payouts/requests/{id}/sync:
+    post:
+      tags:
+      - Settlement & payouts
+      summary: 'Ask Stripe where an in-transit payout stands and close the request (payouts:approve)'
+      description: 'The manual twin of the payout.paid and payout.failed webhooks. Changes nothing while Stripe still says pending or in transit.'
+      operationId: syncPayout
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PayoutResponse'
   /v1/webhooks/stripe:
     post:
       tags:
@@ -1400,8 +1973,957 @@ paths:
               schema:
                 $ref: '#/components/schemas/WebhookAck'
       security: []
+  /v1/money/settings:
+    get:
+      tags:
+      - Money settings
+      summary: Money settings in force (payments:read)
+      operationId: getMoneySettings
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MoneySettings'
+    put:
+      tags:
+      - Money settings
+      summary: Change the money settings with a reason (payments:configure)
+      description: Takes effect at once for new purchases and grants; a concurrent change is 409 payments.money-settings-changed.
+      operationId: updateMoneySettings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoneySettingsUpdate'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MoneySettings'
+  /v1/orders/{orderId}/credit-refunds:
+    post:
+      tags:
+      - Credit
+      summary: Take the card part of an order's refunds as credit, for the customer, with a reason (ledger:adjust)
+      description: The same one-way choice made by staff; the reason and the staff member are kept.
+      operationId: chooseCreditRefundsAsStaff
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditRefundChoiceRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditRefundChoice'
+  /v1/gift-cards:
+    get:
+      tags:
+      - Gift cards
+      summary: Look up gift cards (payments:read)
+      description: q matches a card id, the last four characters of the code, the recipient's email or name, the sender's name
+        or the purchaser's customer id.
+      operationId: searchGiftCards
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING_PAYMENT
+          - ACTIVE
+          - REDEEMED
+          - VOID
+          - PAYMENT_FAILED
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GiftCard'
+    post:
+      tags:
+      - Gift cards
+      summary: Issue a gift card (ledger:adjust)
+      description: 'Goodwill or a promotion: a reason is required, the amount follows the limits of Settings, Money, and the
+        card is a liability from the start. It is emailed on sendAt (now by default).'
+      operationId: issueGiftCard
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GiftCardIssueRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCard'
+  /v1/gift-cards/{id}/void:
+    post:
+      tags:
+      - Gift cards
+      summary: Void an unredeemed gift card (ledger:adjust)
+      description: A purchased card is refunded to the buyer's card; one staff issued just ends. A redeemed card is credit and
+        cannot be voided (409 payments.gift-card-redeemed).
+      operationId: voidGiftCard
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GiftCardReasonRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCard'
+  /v1/gift-cards/{id}/resend:
+    post:
+      tags:
+      - Gift cards
+      summary: Email the gift card again with a new code (ledger:adjust)
+      description: The old code stops working.
+      operationId: resendGiftCard
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GiftCardReasonRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCard'
+  /v1/gift-cards/redeem:
+    post:
+      tags:
+      - Gift cards
+      summary: Redeem a gift card code into the signed-in shopper's credit
+      description: Once per card. Wrong codes are counted per shopper and per network address (X-Client-Address, set by the
+        gateway); over the limit the answer is 429 with Retry-After.
+      operationId: redeemGiftCard
+      parameters:
+      - name: X-Client-Address
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GiftCardRedeemRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCardRedemption'
+  /v1/gift-cards/purchases:
+    post:
+      tags:
+      - Gift cards
+      summary: Start buying a gift card; returns the Stripe client secret to pay with Elements
+      description: 'Idempotent per Idempotency-Key. The card is not active until the payment is captured (POST …/confirm, or
+        the Stripe webhook). Only a card payment buys a gift card: credit never does.'
+      operationId: startGiftCardPurchase
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GiftCardPurchaseRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCardPurchase'
+  /v1/gift-cards/purchases/{id}/confirm:
+    post:
+      tags:
+      - Gift cards
+      summary: 'After the payment was confirmed: capture it and issue the card'
+      operationId: confirmGiftCardPurchase
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCardPurchase'
+  /v1/customers/me/orders/{orderId}/credit-refunds:
+    post:
+      tags:
+      - Credit
+      summary: Take the card part of this order's refunds as credit (the shopper's own order)
+      description: 'One way: credit never goes back to a card or to cash. Refunds already sent to the card stay there. 409 payments.no-card-portion
+        when the order was paid with credit only (its refunds already come back as credit); 403 payments.not-your-order for
+        another shopper''s order.'
+      operationId: chooseCreditRefundsAsShopper
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditRefundChoice'
+  /v1/credit/grants:
+    post:
+      tags:
+      - Credit
+      summary: Grant credit for a program (referral, membership, promotion; payments:credit.grant)
+      description: 'Idempotent per Idempotency-Key: a replay returns the first entry and adds nothing. There is no matching
+        operation to take credit out or to move it between customers.'
+      operationId: grantCredit
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditGrantRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditEntry'
+  /v1/credit/adjustments:
+    get:
+      tags:
+      - Credit
+      summary: Credit adjustments, newest first (payments:read)
+      operationId: listCreditAdjustments
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PROPOSED
+          - POSTED
+          - REJECTED
+      - name: customerId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CreditAdjustment'
+    post:
+      tags:
+      - Credit
+      summary: Staff grant or correction of a customer's credit (ledger:adjust)
+      description: A reason is required. Up to the limit set in Settings, Money, it is posted at once; above it, it is PROPOSED
+        and a different person with ledger:approve posts it (four eyes).
+      operationId: adjustCredit
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditAdjustRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditAdjustment'
+  /v1/credit/adjustments/{id}/reject:
+    post:
+      tags:
+      - Credit
+      summary: Reject a proposed credit adjustment with the reason (ledger:approve)
+      operationId: rejectCreditAdjustment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditDecisionRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditAdjustment'
+  /v1/credit/adjustments/{id}/approve:
+    post:
+      tags:
+      - Credit
+      summary: Approve a proposed credit adjustment (ledger:approve; never your own)
+      operationId: approveCreditAdjustment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditDecisionRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditAdjustment'
+  /v1/money/settings/history:
+    get:
+      tags:
+      - Money settings
+      summary: Who changed the money settings, when and why (payments:read)
+      operationId: moneySettingsHistory
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MoneySettingsChange'
+  /v1/gift-cards/{id}:
+    get:
+      tags:
+      - Gift cards
+      summary: One gift card (payments:read)
+      operationId: getGiftCard
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCard'
+  /v1/gift-cards/mine:
+    get:
+      tags:
+      - Gift cards
+      summary: The gift cards the signed-in shopper bought, newest first
+      operationId: myGiftCards
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GiftCardPurchase'
+  /v1/gift-cards/config:
+    get:
+      tags:
+      - Gift cards
+      summary: Gift card limits, preset amounts and terms
+      operationId: giftCardConfig
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCardConfig'
+  /v1/credit/me:
+    get:
+      tags:
+      - Credit
+      summary: The signed-in shopper's credit balance
+      operationId: myCreditBalance
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditBalance'
+  /v1/credit/me/entries:
+    get:
+      tags:
+      - Credit
+      summary: The signed-in shopper's credit history, newest first
+      description: before pages backwards (the createdAt of the last entry seen).
+      operationId: myCreditEntries
+      parameters:
+      - name: before
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CreditEntry'
+  /v1/credit/liabilities:
+    get:
+      tags:
+      - Credit
+      summary: Credit and gift card liabilities for finance (payments:read)
+      description: Credit owed to customers and unredeemed gift cards, apart, with the general-ledger accounts 2600 and 2650
+        beside them.
+      operationId: creditLiabilities
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditLiabilities'
+  /v1/credit/customers/{customerId}:
+    get:
+      tags:
+      - Credit
+      summary: 'A customer''s credit: balance, history and adjustments (staff with payments:read)'
+      operationId: getCustomerCredit
+      parameters:
+      - name: customerId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CustomerCredit'
+  /v1/credit/customers/{customerId}/balance:
+    get:
+      tags:
+      - Credit
+      summary: One customer's credit balance (payments:service for checkout, or staff with payments:read)
+      operationId: creditBalanceOf
+      parameters:
+      - name: customerId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditBalance'
+  /v1/referral-settings:
+    get:
+      tags:
+      - Referral settings
+      summary: Referral settings in force (payments:read)
+      operationId: getReferralSettings
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReferralSettings'
+    put:
+      tags:
+      - Referral settings
+      summary: Change the referral settings with a reason (payments:configure)
+      description: Takes effect at once for new sign-ups and for referrals that qualify afterwards; rewards already promised
+        keep their amounts. A concurrent change is 409 payments.referral-settings-changed.
+      operationId: updateReferralSettings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReferralSettingsUpdate'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReferralSettings'
+  /v1/referrals/{id}/reject:
+    post:
+      tags:
+      - Referrals
+      summary: Reject a flagged or waiting referral (ledger:adjust)
+      description: No reward is granted. Needs a reason of at least 15 characters.
+      operationId: rejectReferral
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReferralDecisionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Referral'
+  /v1/referrals/{id}/approve:
+    post:
+      tags:
+      - Referrals
+      summary: Clear a flagged referral (ledger:adjust)
+      description: It then waits for the return window like any other, and its rewards are granted at once if that has passed.
+        Needs a reason of at least 15 characters.
+      operationId: approveReferral
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReferralDecisionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Referral'
+  /v1/referrals:
+    get:
+      tags:
+      - Referrals
+      summary: Referrals, newest first (payments:read)
+      operationId: listReferrals
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - WAITING
+          - IN_REVIEW
+          - PARTIALLY_REWARDED
+          - REWARDED
+          - REJECTED
+          - EXPIRED
+      - name: customerId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Referral'
+  /v1/referrals/{id}:
+    get:
+      tags:
+      - Referrals
+      summary: One referral with its rewards (payments:read)
+      operationId: getReferral
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Referral'
+  /v1/referrals/summary:
+    get:
+      tags:
+      - Referrals
+      summary: What the program has cost and referrals per status (payments:read)
+      operationId: referralSummary
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReferralSummary'
+  /v1/referrals/me:
+    get:
+      tags:
+      - Referrals
+      summary: The signed-in customer's referral code, the offer and their earnings (customer)
+      description: The code is created on first use and never changes.
+      operationId: getMyReferral
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReferralOverview'
+  /v1/referrals/me/friends:
+    get:
+      tags:
+      - Referrals
+      summary: Friends the signed-in customer referred, newest first, with what they earned from each (customer)
+      operationId: listMyReferrals
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MyReferral'
+  /v1/referral-settings/history:
+    get:
+      tags:
+      - Referral settings
+      summary: Who changed the referral settings, when and why (payments:read)
+      operationId: referralSettingsHistory
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReferralSettingsChange'
 components:
   schemas:
+    PaymentsSetting:
+      type: object
+      properties:
+        key: {type: string}
+        label: {type: string}
+        value: {type: string}
+        help: {type: string}
+        source: {type: string, description: 'Where it is set: the environment setting that changes it'}
+    SettlementTransfer:
+      type: object
+      description: A Stripe Connect transfer of a seller's net for one order
+      properties:
+        id: {type: string, format: uuid}
+        orderId: {type: string}
+        orgId: {type: string}
+        stripeTransferId: {type: string, description: 'Stripe transfer id (tr_): search for it in the Stripe dashboard'}
+        amountMinor: {type: integer, format: int64}
+        reversedMinor: {type: integer, format: int64}
+        currency: {type: string}
+        createdAt: {type: string, format: date-time}
+        dashboardUrl: {type: string, description: Open it in the Stripe dashboard; null for the local stand-in}
+    ReconciliationItem:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        runId: {type: string, format: uuid}
+        windowStart: {type: string, format: date-time}
+        stripeRef: {type: string}
+        currency: {type: string}
+        ledgerMinor: {type: integer, format: int64}
+        stripeMinor: {type: integer, format: int64}
+        differenceMinor: {type: integer, format: int64, description: 'Ledger minus Stripe; positive: the ledger holds more than Stripe'}
+        status: {type: string, enum: [OPEN, EXPLAINED, ADJUSTED, SUPERSEDED]}
+        note: {type: string}
+        resolvedBy: {type: string}
+        resolvedAt: {type: string, format: date-time}
+        createdAt: {type: string, format: date-time}
+    AdjustmentLine:
+      type: object
+      properties:
+        account: {type: string}
+        title: {type: string}
+        side: {type: string}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        orgId: {type: string}
+    LedgerAdjustment:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        itemId: {type: string, format: uuid}
+        stripeRef: {type: string}
+        currency: {type: string}
+        reason: {type: string}
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdjustmentLine'
+        status: {type: string, enum: [PROPOSED, POSTED, REJECTED]}
+        proposedBy: {type: string}
+        proposedAt: {type: string, format: date-time}
+        decidedBy: {type: string}
+        decidedAt: {type: string, format: date-time}
+        decisionNote: {type: string}
+        journalId: {type: string, format: uuid}
+    StripeObject:
+      type: object
+      properties:
+        id: {type: string}
+        kind: {type: string}
+        status: {type: string}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        created: {type: string, format: date-time}
+        description: {type: string}
+        failure: {type: string}
+        links:
+          type: object
+          additionalProperties: {type: string}
+    StripeConnectedBalance:
+      type: object
+      properties:
+        account: {type: string}
+        currency: {type: string}
+        availableMinor: {type: integer, format: int64}
+        pendingMinor: {type: integer, format: int64}
+    StripeLookup:
+      type: object
+      properties:
+        ref: {type: string}
+        object:
+          $ref: '#/components/schemas/StripeObject'
+        problem: {type: string}
+        journals:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalResponse'
+        connectedAccount: {type: string}
+        balance:
+          $ref: '#/components/schemas/StripeConnectedBalance'
+        dashboardUrl: {type: string, description: Open the object in the Stripe dashboard; null for the local stand-in}
+    ReconciliationItemDetail:
+      type: object
+      properties:
+        item:
+          $ref: '#/components/schemas/ReconciliationItem'
+        stripe:
+          $ref: '#/components/schemas/StripeLookup'
+        journals:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalResponse'
+        adjustments:
+          type: array
+          items:
+            $ref: '#/components/schemas/LedgerAdjustment'
+    ExplainRequest:
+      type: object
+      required: [note]
+      properties:
+        note: {type: string}
+    DecisionRequest:
+      type: object
+      properties:
+        note: {type: string}
+    AdjustmentLineRequest:
+      type: object
+      required: [account, side, amountMinor]
+      properties:
+        account: {type: string, description: 'Chart account code, e.g. 1000, 2000, 5000'}
+        key: {type: string, description: 'Sub-account key for scoped accounts: the organisation id for 2000, the jurisdiction for 2100'}
+        side: {type: string, enum: [DEBIT, CREDIT]}
+        amountMinor: {type: integer, format: int64, minimum: 1}
+        orgId: {type: string, description: Seller the line is attributed to}
+    ProposeRequest:
+      type: object
+      required: [reason, lines]
+      properties:
+        itemId: {type: string, format: uuid, description: The reconciliation difference this corrects}
+        stripeRef: {type: string, description: 'Stripe object the journal is booked against; required when a line is on 1000 and there is no itemId'}
+        reason: {type: string}
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdjustmentLineRequest'
     ConnectedAccountRequest:
       type: object
       properties:
@@ -1724,13 +3246,19 @@ components:
           minLength: 0
         saveForOffSession:
           type: boolean
-          description: Save the confirmed payment method on the shopper's Stripe Customer (setup_future_usage=off_session)
-            so a later balance can be charged off-session; customerId is then the shopper's Stripe Customer
+          description: Save the confirmed payment method on the shopper's Stripe Customer (setup_future_usage=off_session) so
+            a later balance can be charged off-session; customerId is then the shopper's Stripe Customer
         offSession:
           type: boolean
-          description: 'S272 late pre-order adds: confirm the intent now, off-session, on the shopper''s default saved card
-            (shopperId required); the response status is AUTHORIZED, REQUIRES_ACTION (the customer must authenticate) or
-            FAILED'
+          description: 'S272 late pre-order adds: confirm the intent now, off-session, on the shopper''s default saved card (shopperId
+            required); the response status is AUTHORIZED, REQUIRES_ACTION (the customer must authenticate) or FAILED. A late add
+            paid with a pay-now link is an ordinary intent: the customer confirms it on AfroTransact''s pay page with Stripe Elements;
+            payments never creates a hosted Stripe page'
+        useCredit:
+          type: boolean
+          description: 'S320: pay with the shopper''s AfroTransact credit first (shopperId required). The PaymentIntent is for
+            amountMinor minus the credit applied, and there is none when credit pays everything (the payment is AUTHORIZED at
+            once). Credit leaves at least 0.50 for the card or pays the whole order'
       required:
       - amountMinor
       - currency
@@ -1754,8 +3282,6 @@ components:
           minLength: 0
         fulfilment:
           type: string
-          description: 'PREORDER (S272): the line''s shipping is its share of the pre-order window''s delivery fee, booked
-            to 4250 Local delivery fees (also for AfroTransact Retail) and refunded from there'
           enum:
           - FBA
           - SELF
@@ -1793,6 +3319,14 @@ components:
             at checkout (POST /v1/delivery-pricing/quote) and snapshotted by orders. Credited to 4250 at capture; ignored
             for AfroTransact Retail; must be 0 on other lines'
           minimum: 0
+        kind:
+          type: string
+          description: 'PRODUCT (default): AfroTransact charges a commission (4000). SERVICE (service bookings): a connection
+            fee (4050) under the fee schedule''s connectionFee section, the category being the service''s category. Omitted
+            with category ''services'' = SERVICE (bookings before connection fees)'
+          enum:
+          - PRODUCT
+          - SERVICE
       required:
       - fulfilment
       - itemsMinor
@@ -1870,6 +3404,32 @@ components:
           type: integer
           format: int64
           description: Delivery fee given back by customer-fault refunds
+        feeKind:
+          type: string
+          description: PRODUCT (commissionMinor is commission) or SERVICE (commissionMinor is the connection fee)
+          enum:
+          - PRODUCT
+          - SERVICE
+        rateBps:
+          type: integer
+          format: int32
+          description: Rate snapshotted when the payment was created (null on older lines, which keep their fee-schedule version's
+            commission)
+        rateSource:
+          type: string
+          enum:
+          - OVERRIDE
+          - PLAN
+          - CATEGORY
+          - DEFAULT
+          - RETAIL
+        ratePlanCode:
+          type: string
+          description: The seller's plan when the rate was resolved
+        negotiatedRateId:
+          type: string
+          format: uuid
+          description: The negotiated rate that applied (rateSource OVERRIDE)
     PaymentResponse:
       type: object
       properties:
@@ -1884,8 +3444,8 @@ components:
           type: string
         clientSecret:
           type: string
-          description: For Stripe.js / PaymentSheet confirmation (also to complete authentication of an off-session charge
-            in REQUIRES_ACTION); only returned to the calling service
+          description: For Stripe.js / PaymentSheet confirmation (also to complete authentication of an off-session charge in
+            REQUIRES_ACTION); only returned to the calling service
         amountMinor:
           type: integer
           format: int64
@@ -1921,15 +3481,22 @@ components:
           type: boolean
         multicapture:
           type: boolean
-          description: The PaymentIntent allows one partial capture per shipment (Stripe multicapture, only when the
-            account has flexible payments and at.payments.stripe.multicapture is on). False = single capture; an order
-            (metadata capture_plan=per_shipment) is then captured whole with its first shipment
+          description: The PaymentIntent allows one partial capture per shipment (Stripe multicapture). False = single capture;
+            an order (metadata capture_plan=per_shipment) is then captured whole with its first shipment
         replayed:
           type: boolean
         lines:
           type: array
           items:
             $ref: '#/components/schemas/PaymentLineResponse'
+        creditMinor:
+          type: integer
+          format: int64
+          description: The part of amountMinor paid with AfroTransact credit; the card pays amountMinor minus this (no PaymentIntent
+            when it is all of it)
+        cardRefundsAsCredit:
+          type: boolean
+          description: The shopper or staff chose credit for the card part of this order's refunds (one way)
     ReleaseRequest:
       type: object
       description: Release the uncaptured rest of the authorisation (e.g. booking cancelled or no-show after the deposit capture)
@@ -1979,6 +3546,16 @@ components:
           enum:
           - SELLER
           - CUSTOMER
+        cardAsCredit:
+          type: boolean
+          description: 'S320: take the part that was paid with the card as AfroTransact credit instead of a card refund. One way:
+            credit never goes back to a card or to cash. The credit part of an order always comes back as credit'
+        chosenBy:
+          type: string
+          description: Who chose credit (the customer, or the staff member who did so for them with a reason); kept on the credit
+            entry
+          maxLength: 120
+          minLength: 0
       required:
       - lines
     RefundLineResponse:
@@ -2004,6 +3581,9 @@ components:
           type: integer
           format: int64
           description: AfroTransact Delivery fee returned to the seller (customer fault)
+        connectionFee:
+          type: boolean
+          description: 'A service line: commissionReversedMinor is connection fee given back (4050)'
     RefundResponse:
       type: object
       properties:
@@ -2042,6 +3622,15 @@ components:
           format: date-time
         replayed:
           type: boolean
+        creditMinor:
+          type: integer
+          format: int64
+          description: 'S320: the part returned as AfroTransact credit (the credit the order used, plus the card part when the
+            shopper or staff chose credit)'
+        cardMinor:
+          type: integer
+          format: int64
+          description: The part that goes back to the card through Stripe
     Reversal:
       type: object
       properties:
@@ -2146,10 +3735,119 @@ components:
           type: string
           maxLength: 500
           minLength: 0
+    PlanFeeWithholdingRequest:
+      type: object
+      description: Withhold a seller plan invoice from the organisation's earnings (S298)
+      properties:
+        invoiceId:
+          type: string
+          description: Stripe invoice id (in_…)
+          maxLength: 80
+          minLength: 0
+        invoiceNumber:
+          type: string
+          description: Invoice number, when Stripe assigned one
+          maxLength: 80
+          minLength: 0
+        amountMinor:
+          type: integer
+          format: int64
+          description: What the invoice still needs after the customer's credit balance
+          exclusiveMinimum: 0
+        currency:
+          type: string
+          pattern: '[A-Za-z]{3}'
+      required:
+      - invoiceId
+    PlanFeeDeductionResponse:
+      type: object
+      description: 'Part of a plan fee settled with one order''s transfer: positive when deducted from it, negative when a
+        released fee was paid back with it'
+      properties:
+        orderId:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        at:
+          type: string
+          format: date-time
+        label:
+          type: string
+          description: e.g. Plan fee (invoice INV-0042) deducted from order …
+    PlanFeeWithholdingResponse:
+      type: object
+      description: 'A seller plan invoice paid from earnings: what was asked, withheld (possibly less: the card pays the rest;
+        DECLINED when nothing was available), released and settled with transfers'
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        invoiceId:
+          type: string
+        invoiceNumber:
+          type: string
+        currency:
+          type: string
+        requestedMinor:
+          type: integer
+          format: int64
+        withheldMinor:
+          type: integer
+          format: int64
+          description: Taken from earnings; the card pays requested − withheld
+        releasedMinor:
+          type: integer
+          format: int64
+        settledMinor:
+          type: integer
+          format: int64
+          description: Recovered from transfers minus paid back with them
+        outstandingMinor:
+          type: integer
+          format: int64
+          description: 'Still to settle with the next transfers: positive deducted from them, negative paid back with them'
+        status:
+          type: string
+          enum:
+          - WITHHELD
+          - DECLINED
+          - RELEASED
+        reason:
+          type: string
+        label:
+          type: string
+          description: Plan fee (invoice …)
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deductions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanFeeDeductionResponse'
+    PlanFeeReleaseRequest:
+      type: object
+      description: Release a withheld plan fee (voided invoice, refund out of band)
+      properties:
+        amountMinor:
+          type: integer
+          format: int64
+          description: At most what is still withheld; omit to release all of it
+          exclusiveMinimum: 0
+        reason:
+          type: string
+          description: Why, e.g. invoice voided
+          maxLength: 200
+          minLength: 0
     OrderRefundRequest:
       type: object
-      description: 'Refund by order and line ids (service callers such as trust-ops): the amount is spread over the lines''
-        remaining items, shipping and tax'
+      description: 'Refund by order and line ids (service callers such as trust-ops): the amount is spread over the lines'' remaining
+        items, shipping and tax'
       properties:
         lineIds:
           type: array
@@ -2174,8 +3872,189 @@ components:
           enum:
           - SELLER
           - CUSTOMER
+        cardAsCredit:
+          type: boolean
+          description: Take the card part as credit; see POST /v1/payments/{id}/refunds
+        chosenBy:
+          type: string
+          maxLength: 120
+          minLength: 0
       required:
       - lineIds
+    NewNegotiatedRate:
+      type: object
+      description: A commission or connection fee negotiated with one organisation
+      properties:
+        orgId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        type:
+          type: string
+          enum:
+          - COMMISSION
+          - CONNECTION_FEE
+          - FBA_FEE
+        category:
+          type: string
+          description: One category; omit or '*' for every category
+          maxLength: 80
+          minLength: 0
+        rateBps:
+          type: integer
+          format: int32
+          description: Basis points (800 = 8 %)
+          maximum: 10000
+          minimum: 0
+        amountMinor:
+          type: integer
+          format: int64
+          description: 'FBA_FEE only: the fee per unit in minor units; applies to every FBA line of the organisation and wins over its plan''s FBA fee'
+          minimum: 0
+        startsAt:
+          type: string
+          format: date-time
+          description: Default now; never in the past
+        endsAt:
+          type: string
+          format: date-time
+          description: Omit for open-ended; a job records the expiry at this time
+        reason:
+          type: string
+          description: Why (kept in the audit trail)
+          maxLength: 500
+          minLength: 0
+        negotiatedBy:
+          type: string
+          description: Staff member who negotiated it; default the caller
+          maxLength: 120
+          minLength: 0
+        reference:
+          type: string
+          description: Contract or ticket reference
+          maxLength: 120
+          minLength: 0
+      required:
+      - orgId
+      - reason
+      - type
+    NegotiatedRate:
+      type: object
+      description: A negotiated commission or connection fee with its status now
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        type:
+          type: string
+          enum:
+          - COMMISSION
+          - CONNECTION_FEE
+          - FBA_FEE
+        category:
+          type: string
+          description: '''*'' = every category'
+        rateBps:
+          type: integer
+          format: int32
+        amountMinor:
+          type: integer
+          format: int64
+          description: 'FBA_FEE: the fee per unit in minor units; null otherwise'
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+          - SCHEDULED
+          - ACTIVE
+          - ENDED
+          - EXPIRED
+        reason:
+          type: string
+        negotiatedBy:
+          type: string
+        reference:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+        endedBy:
+          type: string
+        endReason:
+          type: string
+        expiredAt:
+          type: string
+          format: date-time
+        rowVersion:
+          type: integer
+          format: int64
+        audit:
+          type: array
+          items:
+            $ref: '#/components/schemas/NegotiatedRateAuditEntry'
+    NegotiatedRateAuditEntry:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+          - CREATED
+          - ENDED
+          - EXPIRED
+        actor:
+          type: string
+        reason:
+          type: string
+        at:
+          type: string
+          format: date-time
+    EndNegotiatedRate:
+      type: object
+      description: Why a negotiated rate ends now (audited)
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    ConnectionFee:
+      type: object
+      description: 'The connection fee providers pay on each booking''s service amount, on top of their plan fee: default,
+        per service category and per plan (plan → category → bps, ''*'' = the plan''s other categories). Negotiated connection
+        fees win over all of them'
+      properties:
+        defaultBps:
+          type: integer
+          format: int32
+          description: Rate of service categories nobody lists
+          example: 1000
+          maximum: 10000
+          minimum: 0
+        categoryBps:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        planBps:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: integer
+              format: int32
     DeliveryBand:
       type: object
       description: Trips of fromMiles (inclusive) up to toMiles (exclusive) cost feeMinor
@@ -2222,7 +4101,7 @@ components:
           minItems: 0
     DeliveryTariff:
       type: object
-      description: 'FLAT: flatPerPackageMinor × packages. DISTANCE (per trip): the fee of the band covering the distance,
+      description: 'FLAT: flatPerPackageMinor × packages. PER_WEIGHT: baseMinor + perLbMinor × weightLb. DISTANCE (per trip): the fee of the band covering the distance,
         else baseMinor + perMileMinor × miles (half up), then at least minMinor and at most maxMinor'
       properties:
         mode:
@@ -2230,6 +4109,7 @@ components:
           enum:
           - FLAT
           - DISTANCE
+          - PER_WEIGHT
         flatPerPackageMinor:
           type: integer
           format: int64
@@ -2242,6 +4122,11 @@ components:
           type: integer
           format: int64
           description: Minor units per mile (85 = $0.85 / mi)
+          minimum: 0
+        perLbMinor:
+          type: integer
+          format: int64
+          description: Minor units per pound (50 = $0.50 / lb)
           minimum: 0
         bands:
           type: array
@@ -2309,6 +4194,19 @@ components:
           $ref: '#/components/schemas/DeliveryPricingRequest'
           description: AfroTransact Delivery pricing (S255). Omit to carry the latest version's section over; send enabled=false
             to stop offering AfroTransact Delivery from seller stores
+        planBps:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: integer
+              format: int32
+          description: 'Product commission per plan: plan code → category → bps (''*'' = the plan''s rate for categories it
+            does not list). Applies after negotiated rates and before category rates. Omit to carry the latest version''s
+            plan rates over; {} removes them'
+        connectionFee:
+          $ref: '#/components/schemas/ConnectionFee'
+          description: Service connection fees (on service bookings). Omit to carry the latest version's section over
       required:
       - categoryBps
     OverrideRequest:
@@ -2412,6 +4310,18 @@ components:
         deliveryPricing:
           $ref: '#/components/schemas/DeliveryPricing'
           description: AfroTransact Delivery pricing (S255)
+        planBps:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: integer
+              format: int32
+          description: Product commission per plan (plan → category → bps)
+        connectionFee:
+          $ref: '#/components/schemas/ConnectionFee'
+          description: Service connection fees; null for versions created before they existed (services then paid the 'services'
+            commission)
     CancelFeeScheduleRequest:
       type: object
       description: Why a scheduled fee schedule version is withdrawn (audited)
@@ -2591,6 +4501,14 @@ components:
           type: string
         carrier:
           type: string
+        commissionMinor:
+          type: integer
+          format: int64
+          description: Product commission taken in this movement (negative when a refund gave it back)
+        connectionFeeMinor:
+          type: integer
+          format: int64
+          description: Service connection fee taken in this movement (negative when a refund gave it back), apart from commission
     ProviderFeeResponse:
       type: object
       description: A fee a provider owes (late provider cancellation), collected by a Stripe account debit
@@ -2726,6 +4644,12 @@ components:
           format: int64
           description: 'Shipping labels bought through AfroTransact and not yet recovered from a transfer; deducted from availableMinor,
             which may go negative. Negative when voided labels are owed back (paid with the next transfer). Details: GET /v1/payouts/label-charges'
+        planFeesMinor:
+          type: integer
+          format: int64
+          description: 'Seller plan fees withheld from earnings (S298) and not yet recovered from a transfer: they come out
+            of onHoldMinor; only the part the amounts on hold no longer cover reduces availableMinor. Negative when a released
+            fee is paid back with the next transfer. Details: GET /v1/orgs/{orgId}/plan-fee-withholdings'
         deliveryFeesMinor:
           type: integer
           format: int64
@@ -2748,8 +4672,91 @@ components:
           - MANUAL
           - DEAUTHORIZED
           - CHARGES_DISABLED
+        connectedAccount:
+          type: boolean
+          description: Payments has a Stripe Connect account for the organisation; false means settlement transfers wait (earnings stay on hold) until the account is registered
+    AppliedRate:
+      type: object
+      description: A commission or connection-fee rate and where it comes from
+      properties:
+        category:
+          type: string
+        bps:
+          type: integer
+          format: int32
+          description: Basis points (800 = 8 %)
+        source:
+          type: string
+          enum:
+          - OVERRIDE
+          - PLAN
+          - CATEGORY
+          - DEFAULT
+          - RETAIL
+        planCode:
+          type: string
+        negotiatedRateId:
+          type: string
+          format: uuid
+        negotiatedUntil:
+          type: string
+          format: date-time
+    RateCard:
+      type: object
+      description: Every rate one organisation pays on PRODUCT (commission) or SERVICE (connection fee) lines at a time, with
+        the source of each and its negotiated rates
+      properties:
+        orgId:
+          type: string
+        kind:
+          type: string
+          enum:
+          - PRODUCT
+          - SERVICE
+        feeScheduleId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int32
+        effectiveFrom:
+          type: string
+          format: date-time
+        at:
+          type: string
+          format: date-time
+        currency:
+          type: string
+        planCode:
+          type: string
+        otherRate:
+          $ref: '#/components/schemas/AppliedRate'
+          description: Rate of any category not listed
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppliedRate'
+        negotiated:
+          type: array
+          items:
+            $ref: '#/components/schemas/NegotiatedRate'
+        cardPctBps:
+          type: integer
+          format: int32
+        cardFixedMinor:
+          type: integer
+          format: int64
+        fbaPerUnitMinor:
+          type: integer
+          format: int64
+        reverseCommissionOnRefund:
+          type: boolean
+        retail:
+          type: boolean
     LineSplitResponse:
       type: object
+      description: 'One line: commissionBps / commissionMinor are the line''s take rate and amount: commission for PRODUCT
+        lines, connection fee for SERVICE lines (also in connectionFeeMinor)'
       properties:
         lineId:
           type: string
@@ -2767,6 +4774,23 @@ components:
         shippingToPlatform:
           type: boolean
         deliveryFeeMinor:
+          type: integer
+          format: int64
+        feeKind:
+          type: string
+          enum:
+          - PRODUCT
+          - SERVICE
+        rateSource:
+          type: string
+          description: Where the rate came from; null on lines created before rates were snapshotted
+          enum:
+          - OVERRIDE
+          - PLAN
+          - CATEGORY
+          - DEFAULT
+          - RETAIL
+        connectionFeeMinor:
           type: integer
           format: int64
     RecipientResponse:
@@ -2814,6 +4838,10 @@ components:
         netMinor:
           type: integer
           format: int64
+        connectionFeesMinor:
+          type: integer
+          format: int64
+          description: Service connection fees (4050), apart from product commission
     SplitResponse:
       type: object
       properties:
@@ -2913,7 +4941,8 @@ components:
             $ref: '#/components/schemas/JournalLineResponse'
     EffectiveFeesResponse:
       type: object
-      description: Fees payments applies to one organisation and category (fee-schedule version in force)
+      description: Fees payments applies to one organisation, kind and category (fee-schedule version in force). For kind
+        SERVICE, commissionBps is the connection fee
       properties:
         feeScheduleId:
           type: string
@@ -2933,11 +4962,13 @@ components:
         commissionBps:
           type: integer
           format: int32
-          description: Commission in basis points (1000 = 10 %)
+          description: Commission (PRODUCT) or connection fee (SERVICE) in basis points (1000 = 10 %)
         commissionSource:
           type: string
+          description: 'First match: OVERRIDE (negotiated), PLAN, CATEGORY, DEFAULT; RETAIL = AfroTransact Retail pays none'
           enum:
           - OVERRIDE
+          - PLAN
           - CATEGORY
           - DEFAULT
           - RETAIL
@@ -2954,6 +4985,959 @@ components:
           format: int64
           description: FBA fee per unit; 0 for AfroTransact Retail
         reverseCommissionOnRefund:
+          type: boolean
+        kind:
+          type: string
+          enum:
+          - PRODUCT
+          - SERVICE
+        planCode:
+          type: string
+          description: The organisation's plan (null when none or unknown)
+        negotiatedRateId:
+          type: string
+          format: uuid
+          description: The negotiated rate that applies (source OVERRIDE)
+        negotiatedUntil:
+          type: string
+          format: date-time
+          description: When that negotiated rate ends (null = open-ended)
+    CreditAdjustRequest:
+      type: object
+      properties:
+        customerId:
+          type: string
+          maxLength: 120
+          minLength: 0
+        amountMinor:
+          type: integer
+          format: int64
+          description: Positive adds credit, negative takes it back (never below zero)
+        source:
+          type: string
+          enum:
+          - STAFF
+          - PROMO
+        reason:
+          type: string
+          description: At least 15 characters
+          maxLength: 500
+          minLength: 0
+      required:
+      - amountMinor
+      - customerId
+      - reason
+      - source
+    CreditAdjustment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        source:
+          type: string
+          enum:
+          - STAFF
+          - PROMO
+        reason:
+          type: string
+        status:
+          type: string
+          enum:
+          - PROPOSED
+          - POSTED
+          - REJECTED
+        proposedBy:
+          type: string
+        proposedAt:
+          type: string
+          format: date-time
+        decidedBy:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+        decisionNote:
+          type: string
+        entryId:
+          type: string
+          format: uuid
+    CreditBalance:
+      type: object
+      properties:
+        customerId:
+          type: string
+        balanceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+    CreditDecisionRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+    CreditEntry:
+      type: object
+      description: One line of the ledger; the balance is the sum of amountMinor
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+        kind:
+          type: string
+          enum:
+          - GRANT
+          - SPEND
+          - REFUND
+          - ADJUSTMENT
+        amountMinor:
+          type: integer
+          format: int64
+          description: 'Signed: credit added is positive, credit spent negative'
+        currency:
+          type: string
+        source:
+          type: string
+          enum:
+          - REFERRAL
+          - GIFT_CARD
+          - MEMBERSHIP
+          - REFUND
+          - STAFF
+          - PROMO
+          - ORDER
+        reason:
+          type: string
+        actor:
+          type: string
+          description: 'Who did it: the customer, a staff member or a service'
+        orderId:
+          type: string
+        reference:
+          type: string
+        balanceAfterMinor:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+    CreditGrantRequest:
+      type: object
+      properties:
+        customerId:
+          type: string
+          maxLength: 120
+          minLength: 0
+        amountMinor:
+          type: integer
+          format: int64
+          description: Above zero
+        source:
+          type: string
+          enum:
+          - REFERRAL
+          - MEMBERSHIP
+          - PROMO
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+        orderId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        reference:
+          type: string
+          description: The referral, membership period or promotion behind it
+          maxLength: 120
+          minLength: 0
+      required:
+      - amountMinor
+      - customerId
+      - reason
+      - source
+    CreditLiabilities:
+      type: object
+      description: What AfroTransact owes in credit and in unredeemed gift cards, separately. creditOnOpenOrdersMinor is credit
+        spent on orders that are not shipped yet.
+      properties:
+        currency:
+          type: string
+        creditOutstandingMinor:
+          type: integer
+          format: int64
+        accountsWithCredit:
+          type: integer
+          format: int64
+        flowsMinor:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        giftCardsOutstandingMinor:
+          type: integer
+          format: int64
+        giftCardsOutstandingCount:
+          type: integer
+          format: int64
+        giftCardsRedeemedMinor:
+          type: integer
+          format: int64
+        giftCardsVoidedMinor:
+          type: integer
+          format: int64
+        ledgerCreditMinor:
+          type: integer
+          format: int64
+        ledgerGiftCardsMinor:
+          type: integer
+          format: int64
+        creditOnOpenOrdersMinor:
+          type: integer
+          format: int64
+    CreditRefundChoice:
+      type: object
+      properties:
+        orderId:
+          type: string
+        cardRefundsAsCredit:
+          type: boolean
+          description: From now on the card part of every refund of this order comes back as AfroTransact credit
+        cardPartMinor:
+          type: integer
+          format: int64
+          description: What the card paid for the order
+        currency:
+          type: string
+        chosenBy:
+          type: string
+        chosenAt:
+          type: string
+          format: date-time
+    CreditRefundChoiceRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: At least 15 characters; kept in the audit trail
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    CustomerCredit:
+      type: object
+      properties:
+        balance:
+          $ref: '#/components/schemas/CreditBalance'
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreditEntry'
+        adjustments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreditAdjustment'
+    GiftCard:
+      type: object
+      description: A gift card as staff see it (the code is never shown, only its last four characters)
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - PENDING_PAYMENT
+          - ACTIVE
+          - REDEEMED
+          - VOID
+          - PAYMENT_FAILED
+        origin:
+          type: string
+          enum:
+          - PURCHASE
+          - STAFF
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        codeLast4:
+          type: string
+        purchaserId:
+          type: string
+        senderName:
+          type: string
+        recipientEmail:
+          type: string
+        recipientName:
+          type: string
+        message:
+          type: string
+        locale:
+          type: string
+        sendAt:
+          type: string
+          format: date-time
+        deliveryStatus:
+          type: string
+          enum:
+          - SCHEDULED
+          - SENT
+        deliveryCount:
+          type: integer
+          format: int32
+        sentAt:
+          type: string
+          format: date-time
+        issueReason:
+          type: string
+        issuedBy:
+          type: string
+        redeemedBy:
+          type: string
+        redeemedAt:
+          type: string
+          format: date-time
+        voidReason:
+          type: string
+        voidedBy:
+          type: string
+        voidedAt:
+          type: string
+          format: date-time
+        refundedToCard:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    GiftCardConfig:
+      type: object
+      description: Limits, preset amounts and terms for the purchase page
+      properties:
+        minMinor:
+          type: integer
+          format: int64
+        maxMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        presetsMinor:
+          type: array
+          items:
+            type: integer
+            format: int64
+        terms:
+          type: object
+          additionalProperties:
+            type: string
+          description: Terms by language, as set by staff; empty = the page's built-in terms
+    GiftCardIssueRequest:
+      type: object
+      properties:
+        amountMinor:
+          type: integer
+          format: int64
+        recipientEmail:
+          type: string
+          maxLength: 254
+          minLength: 0
+        recipientName:
+          type: string
+          maxLength: 120
+          minLength: 0
+        message:
+          type: string
+          maxLength: 500
+          minLength: 0
+        sendAt:
+          type: string
+          format: date-time
+        locale:
+          type: string
+          maxLength: 10
+          minLength: 0
+        reason:
+          type: string
+          description: Why staff issue it; at least 15 characters
+          maxLength: 500
+          minLength: 0
+      required:
+      - amountMinor
+      - reason
+      - recipientEmail
+    GiftCardPurchase:
+      type: object
+      description: A gift card as its buyer sees it
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - PENDING_PAYMENT
+          - ACTIVE
+          - REDEEMED
+          - VOID
+          - PAYMENT_FAILED
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        recipientEmail:
+          type: string
+        recipientName:
+          type: string
+        senderName:
+          type: string
+        message:
+          type: string
+        sendAt:
+          type: string
+          format: date-time
+        deliveryStatus:
+          type: string
+          enum:
+          - SCHEDULED
+          - SENT
+        sentAt:
+          type: string
+          format: date-time
+        redeemed:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        clientSecret:
+          type: string
+          description: Stripe client secret to confirm the payment with Stripe Elements; only while the payment is pending
+    GiftCardPurchaseRequest:
+      type: object
+      properties:
+        amountMinor:
+          type: integer
+          format: int64
+          description: Within the limits of Settings, Money (default 10.00 to 500.00)
+        recipientEmail:
+          type: string
+          maxLength: 254
+          minLength: 0
+        recipientName:
+          type: string
+          maxLength: 120
+          minLength: 0
+        senderName:
+          type: string
+          maxLength: 120
+          minLength: 0
+        message:
+          type: string
+          maxLength: 500
+          minLength: 0
+        sendAt:
+          type: string
+          format: date-time
+          description: When to email the card; omit to send it now. Up to a year ahead
+        locale:
+          type: string
+          description: 'Language of the email: en, fr, es, ar or yo'
+          maxLength: 10
+          minLength: 0
+      required:
+      - amountMinor
+      - recipientEmail
+    GiftCardReasonRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: At least 15 characters
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    GiftCardRedeemRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          maxLength: 64
+          minLength: 0
+      required:
+      - code
+    GiftCardRedemption:
+      type: object
+      properties:
+        redeemedMinor:
+          type: integer
+          format: int64
+        balanceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+    MoneySettings:
+      type: object
+      properties:
+        giftCardMinMinor:
+          type: integer
+          format: int64
+        giftCardMaxMinor:
+          type: integer
+          format: int64
+        giftCardPresets:
+          type: array
+          items:
+            type: integer
+            format: int64
+        giftCardTerms:
+          type: object
+          additionalProperties:
+            type: string
+        creditApprovalLimitMinor:
+          type: integer
+          format: int64
+          description: Staff grants and adjustments of credit above this need a second approver
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          description: Send it back with the next change; a concurrent change is 409
+    MoneySettingsChange:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        changedBy:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        before:
+          type: string
+        after:
+          type: string
+    MoneySettingsUpdate:
+      type: object
+      properties:
+        giftCardMinMinor:
+          type: integer
+          format: int64
+        giftCardMaxMinor:
+          type: integer
+          format: int64
+        giftCardPresets:
+          type: array
+          items:
+            type: integer
+            format: int64
+          maxItems: 8
+          minItems: 0
+        giftCardTerms:
+          type: object
+          additionalProperties:
+            type: string
+        creditApprovalLimitMinor:
+          type: integer
+          format: int64
+        reason:
+          type: string
+          description: At least 15 characters
+          maxLength: 500
+          minLength: 0
+        version:
+          type: integer
+          format: int64
+      required:
+      - creditApprovalLimitMinor
+      - giftCardMaxMinor
+      - giftCardMinMinor
+      - giftCardPresets
+      - giftCardTerms
+      - reason
+      - version
+    MyReferral:
+      type: object
+      description: A friend the customer invited, or the customer's own referral
+      properties:
+        id:
+          type: string
+          format: uuid
+        friendName:
+          type: string
+          description: First name and last initial
+        status:
+          type: string
+          enum:
+          - PENDING
+          - WAITING
+          - REWARDED
+          - EXPIRED
+          - CLOSED
+        signedUpAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        eligibleAt:
+          type: string
+          format: date-time
+        reward:
+          $ref: '#/components/schemas/MyReferralReward'
+          description: What the customer earns from this referral; null when nothing
+    MyReferralReward:
+      type: object
+      properties:
+        terms:
+          $ref: '#/components/schemas/ReferralRewardTerms'
+        granted:
+          type: boolean
+        grantedAt:
+          type: string
+          format: date-time
+    Referral:
+      type: object
+      description: A referral as staff see it
+      properties:
+        id:
+          type: string
+          format: uuid
+        referrerId:
+          type: string
+        referredId:
+          type: string
+        referredName:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - WAITING
+          - IN_REVIEW
+          - PARTIALLY_REWARDED
+          - REWARDED
+          - REJECTED
+          - EXPIRED
+        flags:
+          type: array
+          description: Abuse checks that fired (SAME_DEVICE, SAME_NETWORK, SAME_ADDRESS, SAME_PAYMENT_METHOD)
+          items:
+            type: string
+        signedUpAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        qualifyingOrderId:
+          type: string
+        qualifyingMinor:
+          type: integer
+          format: int64
+        deliveredAt:
+          type: string
+          format: date-time
+        eligibleAt:
+          type: string
+          format: date-time
+        decision:
+          type: string
+          enum:
+          - APPROVED
+          - REJECTED
+          - SYSTEM
+        decisionReason:
+          type: string
+        decidedBy:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+        rewards:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferralRewardLine'
+        costMinor:
+          type: integer
+          format: int64
+          description: Credit AfroTransact has paid for this referral, both sides
+        createdAt:
+          type: string
+          format: date-time
+    ReferralDecisionRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: At least 15 characters
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    ReferralEarnings:
+      type: object
+      properties:
+        invited:
+          type: integer
+          format: int32
+        open:
+          type: integer
+          format: int32
+        rewarded:
+          type: integer
+          format: int32
+        earnedMinor:
+          type: integer
+          format: int64
+        membershipDays:
+          type: integer
+          format: int32
+        pendingMinor:
+          type: integer
+          format: int64
+    ReferralOverview:
+      type: object
+      properties:
+        code:
+          type: string
+        displayCode:
+          type: string
+        program:
+          $ref: '#/components/schemas/ReferralProgramTerms'
+        earnings:
+          $ref: '#/components/schemas/ReferralEarnings'
+        asFriend:
+          $ref: '#/components/schemas/MyReferral'
+          description: The customer's own referral when someone referred them; else null
+    ReferralProgramTerms:
+      type: object
+      description: The offer in force
+      properties:
+        enabled:
+          type: boolean
+        referrerReward:
+          $ref: '#/components/schemas/ReferralRewardTerms'
+        referredReward:
+          $ref: '#/components/schemas/ReferralRewardTerms'
+        minOrderMinor:
+          type: integer
+          format: int64
+        returnWindowDays:
+          type: integer
+          format: int32
+        validityDays:
+          type: integer
+          format: int32
+        currency:
+          type: string
+    ReferralRewardLine:
+      type: object
+      description: One side's reward of a referral (staff)
+      properties:
+        side:
+          type: string
+          enum:
+          - REFERRER
+          - REFERRED
+        customerId:
+          type: string
+        terms:
+          $ref: '#/components/schemas/ReferralRewardTerms'
+        currency:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - GRANTED
+          - DEFERRED
+          - CAPPED
+          - VOID
+        grantedAt:
+          type: string
+          format: date-time
+    ReferralRewardSetting:
+      type: object
+      description: 'What one side earns: credit or free membership days'
+      properties:
+        type:
+          type: string
+          enum:
+          - CREDIT
+          - MEMBERSHIP_DAYS
+        creditMinor:
+          type: integer
+          format: int64
+          description: Credit in minor units; 0 unless type is CREDIT
+        membershipDays:
+          type: integer
+          format: int32
+          description: Free membership days; 0 unless type is MEMBERSHIP_DAYS
+      required:
+      - type
+    ReferralRewardTerms:
+      type: object
+      description: What one side earns
+      properties:
+        type:
+          type: string
+          enum:
+          - CREDIT
+          - MEMBERSHIP_DAYS
+        creditMinor:
+          type: integer
+          format: int64
+        membershipDays:
+          type: integer
+          format: int32
+    ReferralSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        referrer:
+          $ref: '#/components/schemas/ReferralRewardSetting'
+        referred:
+          $ref: '#/components/schemas/ReferralRewardSetting'
+        qualifyingEvent:
+          type: string
+          enum:
+          - FIRST_ORDER_DELIVERED
+        minOrderMinor:
+          type: integer
+          format: int64
+        returnWindowDays:
+          type: integer
+          format: int32
+        maxRewardedPerReferrer:
+          type: integer
+          format: int32
+          description: Rewarded referrals one customer can have; 0 is no limit
+        maxCreditPerCustomerMinor:
+          type: integer
+          format: int64
+          description: Referral credit one customer can earn in all; 0 is no limit
+        validityDays:
+          type: integer
+          format: int32
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          description: Send it back with the next change; a concurrent change is 409
+    ReferralSettingsChange:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        changedBy:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        before:
+          type: string
+        after:
+          type: string
+    ReferralSettingsUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        referrer:
+          $ref: '#/components/schemas/ReferralRewardSetting'
+        referred:
+          $ref: '#/components/schemas/ReferralRewardSetting'
+        qualifyingEvent:
+          type: string
+          enum:
+          - FIRST_ORDER_DELIVERED
+        minOrderMinor:
+          type: integer
+          format: int64
+        returnWindowDays:
+          type: integer
+          format: int32
+        maxRewardedPerReferrer:
+          type: integer
+          format: int32
+        maxCreditPerCustomerMinor:
+          type: integer
+          format: int64
+        validityDays:
+          type: integer
+          format: int32
+        reason:
+          type: string
+          description: At least 15 characters
+          maxLength: 500
+          minLength: 0
+        version:
+          type: integer
+          format: int64
+      required:
+      - enabled
+      - maxCreditPerCustomerMinor
+      - maxRewardedPerReferrer
+      - minOrderMinor
+      - qualifyingEvent
+      - reason
+      - referred
+      - referrer
+      - returnWindowDays
+      - validityDays
+      - version
+    ReferralSummary:
+      type: object
+      description: What the program has cost (staff)
+      properties:
+        costMinor:
+          type: integer
+          format: int64
+        membershipDays:
+          type: integer
+          format: int32
+        pendingMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        byStatus:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        enabled:
           type: boolean
   securitySchemes:
     bearer:

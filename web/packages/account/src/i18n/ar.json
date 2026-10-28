@@ -274,5 +274,11 @@
   "hub.crumb": "مسار التنقل",
   "hub.securityTitle": "تسجيل الدخول والأمان",
   "common.showAll": "عرض الكل ({n})",
-  "common.showFewer": "عرض أقل"
+  "common.showFewer": "عرض أقل",
+  "hub.deliveryAlerts": "تنبيهات التوصيل",
+  "hub.deliveryAlertsSub": "جولات التوصيل والطلبات المسبقة في منطقتك، عبر البريد أو الرسائل أو التطبيق أو واتساب",
+  "hub.credit": "رصيد أفروترانزاكت",
+  "hub.creditSub": "الرصيد والسجل وبطاقات الهدايا",
+  "hub.refer": "ادعُ صديقًا",
+  "hub.referSub": "شارك رمزك واربح مكافآت"
 }

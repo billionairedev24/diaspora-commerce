@@ -1,4 +1,6 @@
-# media · prod. Product images go to UploadThing; private files to the primary cloud's object-locked bucket.
+# media · prod (lean): product images go to Cloudflare R2 (10 GB free, no egress fees, served from media.afrotransact.com);
+# private files to the primary cloud's object-locked bucket. UploadThing is no longer used in prod (its adapter stays
+# available: add the store back with kind: uploadthing).
 # The private store below is AWS S3; for GCP use name: gcs + endpoint https://storage.googleapis.com (HMAC keys),
 # for Azure use kind: azure-blob with account + AZURE_STORAGE_KEY. Cloudflare R2 is the alternative public store.
 port: 8080
@@ -6,11 +8,7 @@ port: 8080
 # the base of media-hosted long-lived links.
 apiBaseUrl: https://api.afrotransact.com
 docsEnabled: false
-uploadthing:
-  appId: afrotransact-prod
 stores:
-  uploadthing:
-    kind: uploadthing
   r2:
     kind: s3
     name: r2
@@ -27,8 +25,8 @@ stores:
     region: us-east-1
     bucket: afrotransact-prod-kyc-evidence
 purposes:
-  product-image: uploadthing
-  storefront: uploadthing
+  product-image: r2
+  storefront: r2
   proof-photo: private
   return-photo: private
   kyc-document: private

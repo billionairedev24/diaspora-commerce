@@ -143,6 +143,26 @@ class PlacementServiceImpl implements PlacementService {
         return load(id);
     }
 
+    @Override
+    @Transactional
+    public void delete(String id) {
+        Actor actor = access.require(ContentPermissions.ADVERT_DELETE);
+        Placement p = load(id);
+        if (!p.sponsorship().paid()) {
+            throw new ContentRuleViolation("content.advert-not-paid", "Only paid adverts can be deleted.", Map.of());
+        }
+        if (p.status() == PlacementStatus.LIVE || p.status() == PlacementStatus.SCHEDULED
+                || p.status() == PlacementStatus.IN_REVIEW) {
+            throw new ContentRuleViolation("content.advert-active",
+                    "End or reject this advert before deleting it.", Map.of("status", p.status().name()));
+        }
+        if (!placements.deleteById(id)) {
+            throw new NotFoundException("content.placement-not-found", "No placement " + id);
+        }
+        audit.record(actor.subject(), "placement.deleted", ENTITY, id, Map.of("paid", true));
+        cache.invalidate();
+    }
+
     private void checkPayload(Slot slot, String payload) {
         List<String> problems = schemas.validate(slot.payloadSchema(), payload);
         if (!problems.isEmpty()) {

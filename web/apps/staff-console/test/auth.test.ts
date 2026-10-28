@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { loginHref, signOutEverywhere } from '@/lib/auth';
+import { loginHref, signedOutHref, signOutEverywhere } from '@/lib/auth';
 
 describe('hosted sign-in (single sign-on through identity)', () => {
   it('starts sign-in on this app’s own BFF proxy and returns to the absolute URL', () => {
@@ -14,19 +14,30 @@ describe('hosted sign-in (single sign-on through identity)', () => {
 describe('sign-out', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('follows identity’s end-session URL so the identity session ends too', async () => {
+  const stubPage = (path: string, search = '') => {
     const assign = vi.fn();
-    vi.stubGlobal('location', { ...window.location, assign });
-    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ redirectTo: 'http://localhost:8100/connect/logout?id_token_hint=x' })));
-    await signOutEverywhere('http://localhost:3000');
+    vi.stubGlobal('location', { ...window.location, pathname: path, search, assign });
+    return assign;
+  };
+
+  it('sends the page it signs out on and follows identity’s end-session URL so the identity session ends too', async () => {
+    const assign = stubPage('/orders', '?tab=open');
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => Response.json({ redirectTo: 'http://localhost:8100/connect/logout?id_token_hint=x' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await signOutEverywhere();
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(url).toBe('/api/bff/v1/auth/sign-out');
+    expect(JSON.parse(String(init?.body))).toEqual({ returnTo: '/orders?tab=open' });
     expect(assign).toHaveBeenCalledWith('http://localhost:8100/connect/logout?id_token_hint=x');
   });
 
-  it('falls back to the given URL without an identity session', async () => {
-    const assign = vi.fn();
-    vi.stubGlobal('location', { ...window.location, assign });
-    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ redirectTo: null })));
-    await signOutEverywhere('http://localhost:3000');
-    expect(assign).toHaveBeenCalledWith('http://localhost:3000');
+  it('without an answer goes to this app’s own sign-in (never the storefront or another app)', async () => {
+    const assign = stubPage('/orders');
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('offline');
+    }));
+    await signOutEverywhere();
+    expect(assign).toHaveBeenCalledWith('/api/bff/v1/auth/signed-out/staff-console?state=%2Forders');
+    expect(signedOutHref('/')).toBe('/api/bff/v1/auth/signed-out/staff-console');
   });
 });

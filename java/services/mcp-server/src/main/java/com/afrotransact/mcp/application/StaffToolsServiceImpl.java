@@ -6,7 +6,9 @@ import com.afrotransact.mcp.domain.PiiMasker;
 import com.afrotransact.mcp.port.ApplicationsApi;
 import com.afrotransact.mcp.port.CatalogApi;
 import com.afrotransact.mcp.port.Downstream;
+import com.afrotransact.mcp.port.OrdersApi;
 import com.afrotransact.mcp.port.PaymentsApi;
+import com.afrotransact.mcp.port.SellerApi;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -16,14 +18,18 @@ class StaffToolsServiceImpl implements StaffToolsService {
     private final ApplicationsApi applications;
     private final CatalogApi catalog;
     private final PaymentsApi payments;
+    private final OrdersApi orders;
+    private final SellerApi sellers;
     private final PiiMasker masker;
 
     StaffToolsServiceImpl(ToolGuardService guard, ApplicationsApi applications, CatalogApi catalog,
-                          PaymentsApi payments, PiiMasker masker) {
+                          PaymentsApi payments, OrdersApi orders, SellerApi sellers, PiiMasker masker) {
         this.guard = guard;
         this.applications = applications;
         this.catalog = catalog;
         this.payments = payments;
+        this.orders = orders;
+        this.sellers = sellers;
         this.masker = masker;
     }
 
@@ -59,5 +65,32 @@ class StaffToolsServiceImpl implements StaffToolsService {
         guard.require(caller.profile(), ToolCatalog.ORDER_PAYMENT_SPLIT);
         return Results.from(payments.orderSplit(orderId == null ? "" : orderId.trim(), caller.bearerToken()),
                 "payment split");
+    }
+
+    @Override
+    public ToolResult orderLookup(McpCaller caller, String orderId) {
+        guard.require(caller.profile(), ToolCatalog.ORDER_LOOKUP);
+        Downstream d = orders.order(orderId == null ? "" : orderId.trim(), caller.bearerToken());
+        return d.ok() ? new ToolResult("OK", masker.mask(d.body()), "Personal data is masked.")
+                : Results.from(d, "order");
+    }
+
+    @Override
+    public ToolResult sellerPayoutStatus(McpCaller caller, String orgId) {
+        guard.require(caller.profile(), ToolCatalog.SELLER_PAYOUT_STATUS);
+        if (orgId == null || orgId.isBlank()) {
+            return ToolResult.of("REJECTED", "orgId is required");
+        }
+        return Results.from(payments.payoutBalance(orgId.trim(), caller.bearerToken()), "payout balance");
+    }
+
+    @Override
+    public ToolResult sellerAccountHealth(McpCaller caller, String orgId) {
+        guard.require(caller.profile(), ToolCatalog.SELLER_ACCOUNT_HEALTH);
+        if (orgId == null || orgId.isBlank()) {
+            return ToolResult.of("REJECTED", "orgId is required");
+        }
+        Downstream d = sellers.accountHealth(orgId.trim(), caller.bearerToken());
+        return d.ok() ? ToolResult.ok(masker.mask(d.body())) : Results.from(d, "account health");
     }
 }

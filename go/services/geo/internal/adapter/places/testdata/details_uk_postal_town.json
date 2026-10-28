@@ -1,0 +1,14 @@
+{
+  "formattedAddress": "Flat 3, 27 Peckham High St, London SE15 5EB, UK",
+  "addressComponents": [
+    {"longText": "Flat 3", "shortText": "Flat 3", "types": ["subpremise"], "languageCode": "en"},
+    {"longText": "27", "shortText": "27", "types": ["street_number"], "languageCode": "en"},
+    {"longText": "Peckham High Street", "shortText": "Peckham High St", "types": ["route"], "languageCode": "en"},
+    {"longText": "London", "shortText": "London", "types": ["postal_town"], "languageCode": "en"},
+    {"longText": "Greater London", "shortText": "Greater London", "types": ["administrative_area_level_2", "political"], "languageCode": "en"},
+    {"longText": "England", "shortText": "England", "types": ["administrative_area_level_1", "political"], "languageCode": "en"},
+    {"longText": "United Kingdom", "shortText": "GB", "types": ["country", "political"], "languageCode": "en"},
+    {"longText": "SE15 5EB", "shortText": "SE15 5EB", "types": ["postal_code"], "languageCode": "en"}
+  ],
+  "location": {"latitude": 51.4737, "longitude": -0.0691}
+}

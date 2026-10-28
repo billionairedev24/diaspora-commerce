@@ -170,3 +170,22 @@
     overflow-wrap: normal;
   }
 }
+
+/* Shell loaders (ShellLoading): until the page's scripts run, the "taking longer than usual" note is revealed by CSS
+   alone after 10 s, so a page whose scripts never load or never hydrate still offers a way out. Hydration replaces it. */
+@keyframes at-shell-reveal {
+  to {
+    max-height: none;
+    visibility: visible;
+  }
+}
+
+.at-shell-slow-nojs {
+  max-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  animation: at-shell-reveal 0s linear 10s forwards;
+}
+
+/* An element marked hidden stays hidden even when a component class sets its display. */
+[hidden] { display: none !important; }

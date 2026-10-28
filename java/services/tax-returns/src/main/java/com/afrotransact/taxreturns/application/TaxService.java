@@ -17,4 +17,7 @@ public interface TaxService {
     LocalTaxRate upsertLocal(LocalTaxRate rate);
 
     void deleteLocal(String state, String zipPrefix);
+
+    /** Upsert every STATE and LOCAL row from a CSV upload (tax:configure). */
+    TaxRatesImportResult importCsv(String csv);
 }

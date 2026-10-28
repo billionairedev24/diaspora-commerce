@@ -115,6 +115,16 @@ channels:
         $ref: '#/components/messages/catalogProductTakenDown'
       catalogProductReinstated:
         $ref: '#/components/messages/catalogProductReinstated'
+      catalogProductTermsChanged:
+        $ref: '#/components/messages/catalogProductTermsChanged'
+      catalogProductResubmitted:
+        $ref: '#/components/messages/catalogProductResubmitted'
+  catalogProductImportEvents:
+    address: at.product-import.events
+    description: Bulk product uploads (S308, key = upload id). Headers event-id, event-type, occurred-at.
+    messages:
+      catalogImportCompleted:
+        $ref: '#/components/messages/catalogImportCompleted'
   catalogCategoryRequestEvents:
     address: at.category-request.events
     description: New-category requests (key = request id).
@@ -173,6 +183,8 @@ channels:
         $ref: '#/components/messages/deliveryRunsRunConfirmed'
       deliveryRunsRunExtended:
         $ref: '#/components/messages/deliveryRunsRunExtended'
+      deliveryRunsRunCollecting:
+        $ref: '#/components/messages/deliveryRunsRunCollecting'
       deliveryRunsRunCancelled:
         $ref: '#/components/messages/deliveryRunsRunCancelled'
       deliveryRunsRunOutForDelivery:
@@ -203,10 +215,18 @@ channels:
         $ref: '#/components/messages/preorderWindowClosed'
       preorderWindowDelivered:
         $ref: '#/components/messages/preorderWindowDelivered'
+      preorderWindowDecisionNeeded:
+        $ref: '#/components/messages/preorderWindowDecisionNeeded'
+      preorderWindowDecided:
+        $ref: '#/components/messages/preorderWindowDecided'
+      preorderWindowCancelled:
+        $ref: '#/components/messages/preorderWindowCancelled'
       preorderSettingsChanged:
         $ref: '#/components/messages/preorderSettingsChanged'
       preorderAreasChanged:
         $ref: '#/components/messages/preorderAreasChanged'
+      deliveryRunsLocationChanged:
+        $ref: '#/components/messages/deliveryRunsLocationChanged'
       preorderExportCreated:
         $ref: '#/components/messages/preorderExportCreated'
       preorderWaitlistJoined:
@@ -232,6 +252,8 @@ channels:
         $ref: '#/components/messages/fulfilmentTaskReady'
       fulfilmentTaskCancelled:
         $ref: '#/components/messages/fulfilmentTaskCancelled'
+      fulfilmentRunPlanned:
+        $ref: '#/components/messages/fulfilmentRunPlanned'
       fulfilmentRoutePlanned:
         $ref: '#/components/messages/fulfilmentRoutePlanned'
       fulfilmentRouteAssigned:
@@ -317,6 +339,10 @@ channels:
         $ref: '#/components/messages/identityInvitationRevoked'
       identityInvitationAccepted:
         $ref: '#/components/messages/identityInvitationAccepted'
+      identityPasswordResetFederated:
+        $ref: '#/components/messages/identityPasswordResetFederated'
+      identityPasswordChanged:
+        $ref: '#/components/messages/identityPasswordChanged'
   indexerDeadLetters:
     address: at.indexer.dlq.events
     description: Events the indexer could not project after its retries (same key, headers and payload as the original event).
@@ -399,6 +425,10 @@ channels:
         $ref: '#/components/messages/identityUserPhoneVerified'
       notificationsIdentityNotificationPreferencesUpdated:
         $ref: '#/components/messages/identityNotificationPreferencesUpdated'
+      notificationsIdentityPasswordResetFederated:
+        $ref: '#/components/messages/identityPasswordResetFederated'
+      notificationsIdentityPasswordChanged:
+        $ref: '#/components/messages/identityPasswordChanged'
       notificationsRequestedIdentity:
         $ref: '#/components/messages/notificationsRequested'
   notificationsOrderEvents:
@@ -480,10 +510,16 @@ channels:
         $ref: '#/components/messages/contentNewsletterConfirmationRequested'
   notificationsPaymentEvents:
     address: at.payment.events
-    description: payments → the customer when an off-session charge needs authentication (customerId resolved through identity).
+    description: payments → the customer when an off-session charge needs authentication (customerId resolved through identity),
+      the gift card recipient on the send date (payload email), and both sides of a referral when their reward is granted
+      (customerId resolved through identity).
     messages:
       notificationsPaymentIntentActionRequired:
         $ref: '#/components/messages/paymentsIntentActionRequired'
+      notificationsPaymentGiftCardDeliver:
+        $ref: '#/components/messages/paymentsGiftCardDeliver'
+      notificationsPaymentReferralRewarded:
+        $ref: '#/components/messages/paymentsReferralRewarded'
   notificationsTrustOpsEvents:
     address: at.trustops.events
     description: trust-ops (S230) → the customer (customerId resolved through identity) and every owner of the seller organisation
@@ -503,6 +539,12 @@ channels:
         $ref: '#/components/messages/trustOpsSellerReinstated'
       notificationsRequestedTrustOps:
         $ref: '#/components/messages/notificationsRequested'
+  notificationsCatalogImportEvents:
+    address: at.product-import.events
+    description: catalog bulk uploads (S308) → the member who uploaded the file (uploadedBy resolved through identity).
+    messages:
+      notificationsCatalogImportCompleted:
+        $ref: '#/components/messages/catalogImportCompleted'
   notificationsInventoryEvents:
     address: at.inventory.events
     description: inventory availability → back-in-stock alerts (SKU = variant ATIN; available > 0 sends each active alert
@@ -563,6 +605,10 @@ channels:
         $ref: '#/components/messages/ordersPreorderMissedDeliveryAnswered'
       ordersPreorderPaymentLinkCreated:
         $ref: '#/components/messages/ordersPreorderPaymentLinkCreated'
+      ordersPreorderRefundSettled:
+        $ref: '#/components/messages/ordersPreorderRefundSettled'
+      ordersPreorderRefundFailed:
+        $ref: '#/components/messages/ordersPreorderRefundFailed'
   paymentsPaymentEvents:
     address: at.payment.events
     description: Payment lifecycle, captures, refunds, settlement transfers and chargebacks from payments-service (key = order
@@ -591,6 +637,26 @@ channels:
         $ref: '#/components/messages/paymentsDisputeOpened'
       paymentsDisputeClosed:
         $ref: '#/components/messages/paymentsDisputeClosed'
+      paymentsGiftCardDeliver:
+        $ref: '#/components/messages/paymentsGiftCardDeliver'
+      paymentsGiftCardPurchased:
+        $ref: '#/components/messages/paymentsGiftCardPurchased'
+      paymentsGiftCardIssued:
+        $ref: '#/components/messages/paymentsGiftCardIssued'
+      paymentsGiftCardRedeemed:
+        $ref: '#/components/messages/paymentsGiftCardRedeemed'
+      paymentsGiftCardVoided:
+        $ref: '#/components/messages/paymentsGiftCardVoided'
+      paymentsGiftCardResent:
+        $ref: '#/components/messages/paymentsGiftCardResent'
+      paymentsCreditAdjusted:
+        $ref: '#/components/messages/paymentsCreditAdjusted'
+      paymentsReferralRewarded:
+        $ref: '#/components/messages/paymentsReferralRewarded'
+      paymentsReferralFlagged:
+        $ref: '#/components/messages/paymentsReferralFlagged'
+      paymentsReferralDecided:
+        $ref: '#/components/messages/paymentsReferralDecided'
   paymentsPayoutEvents:
     address: at.payout.events
     description: Payout requests on manual Connect payout schedules and provider fees debited from connected accounts (key
@@ -751,10 +817,12 @@ channels:
         $ref: '#/components/messages/sellerListingsRestored'
   sellerSubscriptionEvents:
     address: at.seller-subscription.events
-    description: Plan subscriptions on Stripe Billing (key = org id).
+    description: Plan subscriptions on Stripe Billing, and the rewards and staff adjustments applied to them (key = org id).
     messages:
       sellerSubscriptionChanged:
         $ref: '#/components/messages/sellerSubscriptionChanged'
+      sellerBillingGrantApplied:
+        $ref: '#/components/messages/sellerBillingGrantApplied'
   taxReturnsEvents:
     address: at.taxreturns.events
     description: 'Returns (RMAs), refunds and the tax ledger from tax-returns-service, written to its transactional outbox
@@ -1054,6 +1122,31 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/CatalogProductEvent'
+    catalogProductTermsChanged:
+      name: catalog.product.terms_changed
+      title: Price, quantity, "was" price, condition, fulfilment, handling time or ship-from changed (S307)
+      summary: Published with catalog.product.updated when the seller edits these through the one-step product form or a bulk
+        update, or adds variants; offers-service updates the seller's offers (price, list price, seller quantity, handling
+        time, ship-from) and creates offers for new variants.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogProductEvent'
+    catalogProductResubmitted:
+      name: catalog.product.resubmitted
+      title: A rejected listing was edited and is back in review (S307)
+      summary: trust-ops-service queues it for moderation again, like catalog.product.created with status IN_REVIEW.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogProductEvent'
+    catalogImportCompleted:
+      name: catalog.import.completed
+      title: A bulk upload finished importing (S308)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogImportCompleted'
     catalogCategoryRequestCreated:
       name: catalog.category-request.created
       headers:
@@ -1210,6 +1303,28 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/PreorderWindowEvent'
+    preorderWindowDecisionNeeded:
+      name: preorder.window.decision_needed
+      title: The window closed below its minimum order count and waits for staff to cancel or proceed (notify staff)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PreorderWindowEvent'
+    preorderWindowDecided:
+      name: preorder.window.decided
+      title: Staff proceeded below the minimum, cancelled the window or closed it early (audit - who, when, why)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PreorderWindowEvent'
+    preorderWindowCancelled:
+      name: preorder.window.cancelled
+      title: 'The window was cancelled: orders-service refunds every order in orders[] in full (delivery fee included) and
+        releases stock; a run it was handed to is cancelled too (delivery-runs.run.cancelled)'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PreorderWindowEvent'
     preorderSettingsChanged:
       name: preorder.settings.changed
       title: Platform pre-order settings, payment setup or coverage areas changed (audit; key preorder-settings)
@@ -1224,6 +1339,14 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/PreorderAreasChanged'
+    deliveryRunsLocationChanged:
+      name: delivery-runs.location.changed
+      title: 'Staff created, edited, switched on or switched off a delivery-run location (audit: who, when and, for a switch,
+        why; keyed by location id)'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/DeliveryRunsLocationChanged'
     preorderExportCreated:
       name: preorder.export.created
       title: Staff exported a window's orders, picking list or advertorial report (audit)
@@ -1291,16 +1414,26 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/DeliveryRunsRunEvent'
+    deliveryRunsRunCollecting:
+      name: delivery-runs.run.collecting
+      title: 'The first order was collected from its seller (the driver''s pickup, or staff): the sweep has started (S264).
+        Not sent to customers.'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/DeliveryRunsRunEvent'
     deliveryRunsRunOutForDelivery:
       name: delivery-runs.run.out_for_delivery
-      title: The run left for the town (dispatch announcement); orders[] are the orders on board
+      title: 'Every order was collected from its seller and the run is on the road (S264: derived from the drivers'' shipment
+        events; staff can still press it); orders[] are the orders on board'
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/DeliveryRunsRunEvent'
     deliveryRunsRunCompleted:
       name: delivery-runs.run.completed
-      title: Every drop was made; orders[] are the run's orders
+      title: 'Every order was delivered or came back (S264: derived from orders-service shipment events when the last one
+        is handed over; staff can still press it); orders[] are the run''s orders'
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -1369,6 +1502,13 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/FulfilmentTaskEvent'
+    fulfilmentRunPlanned:
+      name: fulfilment.run.planned
+      title: A delivery run's routes were planned (S264; key = run id). Planning again publishes it again for the new routes.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/FulfilmentRunPlanned'
     fulfilmentRoutePlanned:
       name: fulfilment.route.planned
       title: Route created by hand or by the zone route builder
@@ -1532,10 +1672,12 @@ components:
         $ref: '#/components/schemas/IdentityUserEmailVerified'
     identityVerificationRequested:
       name: identity.verification.requested
-      title: Deliver a one-time code (email verification, SMS sign-in code, SMS enrolment, phone verification)
+      title: Deliver a one-time code (email verification, SMS sign-in code, SMS enrolment, phone verification, password reset)
       description: 'Contains the plain one-time code so notifications-service can render template identity.verification on
         the payload channel (email or sms; phone verification, S234, is purpose PHONE_VERIFICATION with channel sms and recipient.phone).
-        Security message: always sent, quiet hours do not apply. Never log the payload.'
+        Password reset (S300) is purpose PASSWORD_RESET: one code, published once per channel (email, and sms when the account
+        has a verified phone), rendered with identity.password_reset. Security message: always sent, quiet hours do not apply.
+        Never log the payload.'
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -1644,6 +1786,26 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/IdentityInvitationRevoked'
+    identityPasswordResetFederated:
+      name: identity.password-reset.federated
+      title: A password reset was asked for an account that only signs in with Google, Apple or Facebook (S300)
+      description: 'The account has no password, so no code is sent: notifications-service emails recipient.email (template
+        identity.password_reset.federated) to sign in with the linked provider instead. Security message, never resolved through
+        identity. The requester gets the same answer as for any email (no account enumeration).'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/IdentityPasswordResetFederated'
+    identityPasswordChanged:
+      name: identity.password.changed
+      title: The account's password was reset with a code (S300)
+      description: Every session and refresh token of the account was revoked (signed out everywhere) and trusted browsers
+        were forgotten, so two-step verification is asked again where it applies. notifications-service emails recipient.email
+        (template identity.password_changed). Security message, never resolved through identity.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/IdentityPasswordChanged'
     identityInvitationAccepted:
       name: identity.invitation.accepted
       title: The invitee joined the organisation, signed in or by signing up from the link (key = user id)
@@ -1702,7 +1864,8 @@ components:
         $ref: '#/components/schemas/InventoryReservationEvent'
     inventoryReservationCommitted:
       name: inventory.reservation.committed
-      title: Order shipped; cogs carries the landed cost of the shipped lots
+      title: Order shipped; cogsUsdMinor carries the landed cost of the shipped lots in US cents (cogs holds the amounts per
+        currency paid)
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -1909,6 +2072,20 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/OrdersPreorderPaymentLinkCreated'
+    ordersPreorderRefundSettled:
+      name: orders.preorder.refund_settled
+      title: A cancelled pre-order package was refunded in full (REFUNDED) or its authorisation released (VOIDED)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersPreorderRefundSettled'
+    ordersPreorderRefundFailed:
+      name: orders.preorder.refund_failed
+      title: A cancelled pre-order package could not be cancelled or refunded automatically; staff must act
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersPreorderRefundFailed'
     paymentsIntentCreated:
       name: payments.intent.created
       title: PaymentIntent created for an order (manual capture)
@@ -1986,6 +2163,76 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/PaymentsDispute'
+    paymentsGiftCardDeliver:
+      name: payments.gift_card.deliver
+      title: 'A gift card is due: email the recipient with the code (S321; key = gift card id)'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsGiftCardDeliver'
+    paymentsGiftCardPurchased:
+      name: payments.gift_card.purchased
+      title: A gift card was paid for and is active (unredeemed gift cards are a liability, not revenue)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsGiftCardAudit'
+    paymentsGiftCardIssued:
+      name: payments.gift_card.issued
+      title: Staff issued a gift card (audit)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsGiftCardAudit'
+    paymentsGiftCardRedeemed:
+      name: payments.gift_card.redeemed
+      title: A gift card was redeemed into AfroTransact credit (audit)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsGiftCardAudit'
+    paymentsGiftCardVoided:
+      name: payments.gift_card.voided
+      title: Staff voided an unredeemed gift card (refunded to the buyer if it was bought) (audit)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsGiftCardAudit'
+    paymentsGiftCardResent:
+      name: payments.gift_card.resent
+      title: Staff sent a gift card again with a new code (audit)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsGiftCardAudit'
+    paymentsCreditAdjusted:
+      name: payments.credit.adjusted
+      title: A staff grant or correction of a customer's credit was posted (audit; key = customer id)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsCreditAdjusted'
+    paymentsReferralRewarded:
+      name: payments.referral.rewarded
+      title: A referral reward was granted to one side, as credit or membership days (S322; key = customer id)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsReferralRewarded'
+    paymentsReferralFlagged:
+      name: payments.referral.flagged
+      title: Abuse checks hold a referral for staff review (audit; key = referral id)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsReferralFlagged'
+    paymentsReferralDecided:
+      name: payments.referral.decided
+      title: Staff approved or rejected a referral, or the system rejected it (audit; key = referral id)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsReferralDecided'
     paymentsPayoutRequested:
       name: payments.payout.requested
       title: Seller / provider requested a payout
@@ -2438,6 +2685,13 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/SellerSubscriptionChanged'
+    sellerBillingGrantApplied:
+      name: seller.billing.grant_applied
+      title: A reward or staff billing adjustment was applied at Stripe
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerBillingGrantApplied'
     returnsRmaRequested:
       name: returns.rma.requested
       title: A customer started a return (or reported a problem with a perishable item)
@@ -3307,6 +3561,57 @@ components:
           items:
             type: string
           description: Diaspora communities from the community / communities attribute (comma-separated there)
+        condition:
+          type: string
+          enum:
+          - NEW
+          - RENEWED
+          - USED_LIKE_NEW
+          - USED_VERY_GOOD
+          - USED_GOOD
+          - USED_ACCEPTABLE
+          description: The listed item condition (S307)
+        fulfilment:
+          type: string
+          enum:
+          - SELLER
+          - AFROTRANSACT
+          description: Ships from the seller, or Fulfilled by AfroTransact (S307)
+        handlingDays:
+          type: integer
+          minimum: 1
+          maximum: 30
+          description: Business days from order to dispatch
+        shipFrom:
+          type:
+          - object
+          - 'null'
+          description: The seller's ship-from location (snapshot); null = the seller's default
+          properties:
+            locationId:
+              type:
+              - string
+              - 'null'
+            label:
+              type:
+              - string
+              - 'null'
+            city:
+              type:
+              - string
+              - 'null'
+            region:
+              type:
+              - string
+              - 'null'
+            country:
+              type:
+              - string
+              - 'null'
+            postalCode:
+              type:
+              - string
+              - 'null'
         variants:
           type: array
           items:
@@ -3327,6 +3632,66 @@ components:
                 type: string
               quantity:
                 type: integer
+              compareAtMinor:
+                type:
+                - integer
+                - 'null'
+                format: int64
+                description: '"Was" price shown struck through (offers'' list price); null for none (S307)'
+    CatalogImportCompleted:
+      type: object
+      required:
+      - importId
+      - reference
+      - ownerOrgId
+      - uploadedBy
+      - fileName
+      - mode
+      - totalRows
+      - processedRows
+      - createdProducts
+      - updatedProducts
+      - failedRows
+      - skippedRows
+      - notifySeller
+      - finishedAt
+      properties:
+        importId:
+          type: string
+          format: uuid
+        reference:
+          type: string
+          description: Shown to the seller (BU-000123)
+        ownerOrgId:
+          type: string
+        uploadedBy:
+          type: string
+          description: Token subject of the member who uploaded the file
+        fileName:
+          type: string
+        mode:
+          type: string
+          enum:
+          - CREATE
+          - UPDATE
+        totalRows:
+          type: integer
+        processedRows:
+          type: integer
+        createdProducts:
+          type: integer
+        updatedProducts:
+          type: integer
+        failedRows:
+          type: integer
+        skippedRows:
+          type: integer
+          description: Rows with errors that were not imported
+        notifySeller:
+          type: boolean
+        finishedAt:
+          type: string
+          format: date-time
     CatalogProductFlagged:
       type: object
       required:
@@ -3834,7 +4199,28 @@ components:
           type:
           - string
           - 'null'
-          description: Six digits; confirmed pickup-point runs only
+          description: Six digits; confirmed pickup-point runs only. Window runs hand over with the order's own 4-digit code
+            (orders-service), which the driver app checks.
+    DeliveryRunsSellerRef:
+      type: object
+      description: A seller the run collects from (confirmed pre-order runs; notifications tells each seller the pickup time)
+      required:
+      - sellerOrgId
+      - orders
+      - units
+      properties:
+        sellerOrgId:
+          type: string
+        sellerName:
+          type:
+          - string
+          - 'null'
+        orders:
+          type: integer
+          description: Run orders with lines of this seller
+        units:
+          type: integer
+          description: Units to pick
     DeliveryRunsRunEvent:
       type: object
       required:
@@ -4017,6 +4403,14 @@ components:
           description: confirmed, cancelled, out_for_delivery and completed only
           items:
             $ref: '#/components/schemas/DeliveryRunsOrderRef'
+        sellers:
+          type:
+          - array
+          - 'null'
+          description: 'confirmed pre-order runs only (S264): the sellers to collect from at sellerPickupAt, largest first.
+            Each reads its own pick list in Seller Center.'
+          items:
+            $ref: '#/components/schemas/DeliveryRunsSellerRef'
     DeliveryRunsSubscriptionEvent:
       type: object
       required:
@@ -4422,6 +4816,8 @@ components:
           - OPEN
           - CLOSED
           - DELIVERED
+          - AWAITING_DECISION
+          - CANCELLED
         targets:
           type: array
           items:
@@ -4525,6 +4921,103 @@ components:
           - string
           - 'null'
           description: Staff subject who paused, resumed or edited the window (audit); null for scheduler events
+        minOrders:
+          type: integer
+          description: Fewest orders the window needs (0 = none)
+        orders:
+          type:
+          - array
+          - 'null'
+          description: preorder.window.cancelled only - every order orders-service must refund
+          items:
+            type: object
+            required:
+            - orderId
+            properties:
+              orderId:
+                type: string
+              customerId:
+                type:
+                - string
+                - 'null'
+              fulfilment:
+                type: string
+                enum:
+                - DOOR
+                - PICKUP
+        decision:
+          type:
+          - object
+          - 'null'
+          description: decision_needed, decided and cancelled only
+          required:
+          - kind
+          - reason
+          - actor
+          - orders
+          - minimum
+          - at
+          properties:
+            kind:
+              type: string
+              enum:
+              - AWAITING
+              - PROCEED
+              - CANCEL
+              - EARLY_CLOSE
+            reason:
+              type: string
+            actor:
+              type: string
+              description: Staff subject, or system
+            orders:
+              type: integer
+              description: Orders that counted
+            minimum:
+              type: integer
+            at:
+              type: string
+              format: date-time
+    DeliveryRunsLocationChanged:
+      type: object
+      required:
+      - locationId
+      - slug
+      - name
+      - action
+      - active
+      - actorId
+      properties:
+        locationId:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          examples:
+          - bastrop-tx
+        name:
+          type: string
+          examples:
+          - Bastrop
+        action:
+          type: string
+          enum:
+          - CREATED
+          - UPDATED
+          - ACTIVATED
+          - DEACTIVATED
+        active:
+          type: boolean
+          description: Whether the location takes runs after the change
+        actorId:
+          type: string
+          description: Staff subject
+        reason:
+          type: string
+          description: Why it was switched off (required for DEACTIVATED) or on (optional)
+        changedAt:
+          type: string
+          format: date-time
     PreorderAreasChanged:
       type: object
       required:
@@ -4962,6 +5455,43 @@ components:
         at:
           type: string
           format: date-time
+    FulfilmentRunPlanned:
+      type: object
+      required:
+      - runId
+      - town
+      - serviceDate
+      - dropMode
+      - routes
+      - orders
+      - shipments
+      - at
+      properties:
+        runId:
+          type: string
+          description: delivery-runs run id
+        town:
+          type: string
+          examples:
+          - Bastrop
+        serviceDate:
+          type: string
+          format: date
+        dropMode:
+          type: string
+          enum:
+          - DOORSTEP
+          - PICKUP_POINT
+        routes:
+          type: integer
+          description: Routes planned now (more than one when the run is split by capacity)
+        orders:
+          type: integer
+        shipments:
+          type: integer
+        at:
+          type: string
+          format: date-time
     FulfilmentRouteEvent:
       type: object
       required:
@@ -5274,6 +5804,26 @@ components:
         registeredAt:
           type: string
           format: date-time
+        referralCode:
+          type:
+          - string
+          - 'null'
+          maxLength: 20
+          description: Referral code from the friend's link or typed on the sign-up form (S322), as given; payments attaches
+            it when it owns the code
+        deviceHash:
+          type:
+          - string
+          - 'null'
+          pattern: ^[0-9a-f]{64}$
+          description: HMAC of the sign-up browser's device cookie (S322); only compared for equality by the referral abuse
+            checks
+        networkHash:
+          type:
+          - string
+          - 'null'
+          pattern: ^[0-9a-f]{64}$
+          description: HMAC of the sign-up network, IPv4 /24 or IPv6 /64 (S322)
     IdentityUserEmailVerified:
       type: object
       required:
@@ -5343,6 +5893,7 @@ components:
           - SIGN_IN_SMS
           - SMS_ENROLMENT
           - PHONE_VERIFICATION
+          - PASSWORD_RESET
         userId:
           type: string
           format: uuid
@@ -5731,6 +6282,91 @@ components:
         at:
           type: string
           format: date-time
+    IdentityPasswordResetFederated:
+      type: object
+      description: Follows the notifications-service payload convention (recipient block).
+      required:
+      - recipient
+      - userId
+      - providers
+      - transactional
+      properties:
+        recipient:
+          type: object
+          required:
+          - id
+          - email
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+              format: email
+        userId:
+          type: string
+          format: uuid
+        firstName:
+          type:
+          - string
+          - 'null'
+        providers:
+          type: array
+          description: Display names of the linked providers, in a stable order
+          items:
+            type: string
+            examples:
+            - Google
+            - Apple
+            - Facebook
+        transactional:
+          type: boolean
+          const: true
+    IdentityPasswordChanged:
+      type: object
+      description: Follows the notifications-service payload convention (recipient block).
+      required:
+      - recipient
+      - userId
+      - method
+      - changedAt
+      - sessionsRevoked
+      - transactional
+      properties:
+        recipient:
+          type: object
+          required:
+          - id
+          - email
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+              format: email
+        userId:
+          type: string
+          format: uuid
+        firstName:
+          type:
+          - string
+          - 'null'
+        method:
+          type: string
+          enum:
+          - RESET
+          description: How the password was changed
+        changedAt:
+          type: string
+          format: date-time
+        sessionsRevoked:
+          type: integer
+          minimum: 0
+          description: Signed-in apps and devices that were signed out
+        transactional:
+          type: boolean
+          const: true
     InventoryInboundShipment:
       type: object
       required:
@@ -5987,8 +6623,18 @@ components:
         unitLandedCostMinor:
           type: integer
           format: int64
+          description: Unit landed cost in minor units of `currency` (the currency the lot was paid in)
         currency:
           type: string
+          description: ISO 4217 code of the currency paid
+        unitCostUsdMinor:
+          type: integer
+          format: int64
+          description: Unit landed cost in US cents
+          fixed at receiving; finance books this: null
+        fxRateToUsd:
+          type: number
+          description: US dollars per 1 unit of `currency` used for the USD value
         reason:
           type:
           - string
@@ -6035,8 +6681,13 @@ components:
             type: string
         cogs:
           type: array
+          description: COGS per currency the lots were paid in
           items:
             $ref: '#/components/schemas/InventoryMoney'
+        cogsUsdMinor:
+          type: integer
+          format: int64
+          description: COGS in US cents (what margin and the GL use)
         lines:
           type: array
           items:
@@ -6088,6 +6739,10 @@ components:
                       format: int64
                     currency:
                       type: string
+                    unitCostUsdMinor:
+                      type: integer
+                      format: int64
+                      description: Unit landed cost of the lot in US cents
     InventoryMoney:
       type: object
       properties:
@@ -6356,6 +7011,10 @@ components:
           type: string
           description: 'Inventory SKU of the offer''s stock (Fulfilled by AfroTransact: the FBA stock it sells). Inventory
             keeps a projection of AFROTRANSACT offers by (sellerOrgId, inventorySku) to flag stranded FBA stock (S067).'
+        sellerQuantity:
+          type: integer
+          description: Units the seller declared and still has (SELLER and AFROTRANSACT_DELIVERY offers; 0 for Fulfilled by
+            AfroTransact, whose stock is inventory's). Catalog mirrors it on the variant so every screen shows the same number.
     OffersBuyBoxChanged:
       type: object
       required:
@@ -6791,6 +7450,81 @@ components:
         answeredAt:
           type: string
           format: date-time
+    OrdersPreorderRefundSettled:
+      type: object
+      required:
+      - orderId
+      - orderNumber
+      - customerId
+      - shipmentId
+      - status
+      - amountMinor
+      - currency
+      - at
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        customerId:
+          type: string
+        shipmentId:
+          type: string
+          format: uuid
+        windowId:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+          enum:
+          - REFUNDED
+          - VOIDED
+        amountMinor:
+          type: integer
+          format: int64
+          description: 'Refunded or released: items, tax and the delivery fee'
+        currency:
+          type: string
+        at:
+          type: string
+          format: date-time
+    OrdersPreorderRefundFailed:
+      type: object
+      required:
+      - orderId
+      - orderNumber
+      - customerId
+      - shipmentId
+      - code
+      - error
+      - at
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        customerId:
+          type: string
+        shipmentId:
+          type: string
+          format: uuid
+        windowId:
+          type:
+          - string
+          - 'null'
+        code:
+          type: string
+          examples:
+          - orders.invalid-transition
+          - payments.unavailable
+        error:
+          type: string
+        at:
+          type: string
+          format: date-time
     OrdersPreorderPaymentLinkCreated:
       type: object
       required:
@@ -6891,6 +7625,14 @@ components:
           type:
           - string
           - 'null'
+        source:
+          type: string
+          enum:
+          - WINDOW
+          - RUN
+          description: 'WINDOW (default when absent), or RUN for a delivery run staff scheduled (S261): windowId is then the
+            run id and the order holds a slot on the run (POST /v1/service/runs/{id}/reservations), not a pre-order window
+            order'
     OrdersShipmentStatus:
       type: string
       enum:
@@ -7210,6 +7952,16 @@ components:
                       - 'null'
                     quantity:
                       type: integer
+                    sellerOrgId:
+                      type:
+                      - string
+                      - 'null'
+                      description: 'The line''s own seller (S264): a PREORDER package mixes sellers, so delivery-runs and
+                        fulfilment plan seller pickups and pick lists from it. Null for orders placed before it was kept.'
+                    sellerName:
+                      type:
+                      - string
+                      - 'null'
                     unitPriceMinor:
                       type: integer
                       format: int64
@@ -7586,6 +8338,224 @@ components:
         offSession:
           type: boolean
           description: True for an off-session follow-up charge
+    PaymentsGiftCardDeliver:
+      type: object
+      description: 'Notifications'' payload convention: a recipient block plus template fields. The code appears here and
+        nowhere else at rest (the database keeps only its HMAC); a resend makes a new code.'
+      required:
+      - recipient
+      - giftCardId
+      - amountMinor
+      - currency
+      - code
+      properties:
+        recipient:
+          type: object
+          required:
+          - email
+          properties:
+            email:
+              type: string
+              format: email
+        locale:
+          type:
+          - string
+          - 'null'
+          description: 'Language of the email: en, fr, es, ar or yo'
+        giftCardId:
+          type: string
+          format: uuid
+        recipientName:
+          type:
+          - string
+          - 'null'
+        senderName:
+          type:
+          - string
+          - 'null'
+        message:
+          type:
+          - string
+          - 'null'
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        code:
+          type: string
+          examples:
+          - ABCD-EFGH-JKLM-2345
+    PaymentsGiftCardAudit:
+      type: object
+      required:
+      - giftCardId
+      - action
+      - actor
+      - amountMinor
+      - currency
+      - status
+      properties:
+        giftCardId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          examples:
+          - issued
+          - redeemed
+          - voided
+          - resent
+          - purchased
+        actor:
+          type: string
+          description: The staff member or customer
+        reason:
+          type:
+          - string
+          - 'null'
+          description: Required for staff actions
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING_PAYMENT
+          - ACTIVE
+          - REDEEMED
+          - VOID
+          - PAYMENT_FAILED
+    PaymentsCreditAdjusted:
+      type: object
+      required:
+      - adjustmentId
+      - customerId
+      - amountMinor
+      - currency
+      - source
+      - reason
+      - proposedBy
+      properties:
+        adjustmentId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+          description: Positive adds credit, negative takes it back
+        currency:
+          type: string
+        source:
+          type: string
+          enum:
+          - STAFF
+          - PROMO
+        reason:
+          type: string
+        proposedBy:
+          type: string
+        decidedBy:
+          type: string
+          description: The approver, or the proposer when it was within the staff-set limit
+    PaymentsReferralRewarded:
+      type: object
+      required:
+      - referralId
+      - customerId
+      - side
+      - rewardType
+      - creditMinor
+      - currency
+      - membershipDays
+      properties:
+        referralId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          description: The side that earned the reward
+        side:
+          type: string
+          enum:
+          - REFERRER
+          - REFERRED
+        rewardType:
+          type: string
+          enum:
+          - CREDIT
+          - MEMBERSHIP_DAYS
+        creditMinor:
+          type: integer
+          format: int64
+          description: Credit granted; 0 for membership days
+        currency:
+          type: string
+        membershipDays:
+          type: integer
+          description: Free membership days granted; 0 for credit
+        friendName:
+          type:
+          - string
+          - 'null'
+          description: First name and last initial of the friend, for the referrer's message; null for the friend
+    PaymentsReferralFlagged:
+      type: object
+      required:
+      - referralId
+      - referrerId
+      - referredId
+      - flags
+      properties:
+        referralId:
+          type: string
+          format: uuid
+        referrerId:
+          type: string
+        referredId:
+          type: string
+        flags:
+          type: array
+          items:
+            type: string
+            enum:
+            - SAME_DEVICE
+            - SAME_NETWORK
+            - SAME_ADDRESS
+            - SAME_PAYMENT_METHOD
+    PaymentsReferralDecided:
+      type: object
+      required:
+      - referralId
+      - referrerId
+      - referredId
+      - decision
+      - reason
+      - decidedBy
+      properties:
+        referralId:
+          type: string
+          format: uuid
+        referrerId:
+          type: string
+        referredId:
+          type: string
+        decision:
+          type: string
+          enum:
+          - APPROVED
+          - REJECTED
+          - SYSTEM
+        reason:
+          type: string
+        decidedBy:
+          type: string
+          description: The staff member
+          or system: null
     PaymentsIntentActionRequired:
       type: object
       required:
@@ -9264,6 +10234,7 @@ components:
           - STATUS_CHANGED
           - PAYMENT_FAILED
           - PAYMENT_SUCCEEDED
+          - MIGRATED
         planCode:
           type: string
           examples:
@@ -9324,6 +10295,71 @@ components:
           - NONE
           - RETRYING
           - FINAL_ATTEMPT_FAILED
+        occurredAt:
+          type: string
+          format: date-time
+    SellerBillingGrantApplied:
+      type: object
+      required:
+      - orgId
+      - grantId
+      - source
+      - type
+      - summary
+      - occurredAt
+      properties:
+        orgId:
+          type: string
+        grantId:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+          - RULE
+          - MANUAL
+        type:
+          type: string
+          enum:
+          - FREE_DAYS
+          - CREDIT
+          - PERCENT_OFF
+          - WAIVE_INVOICE
+          - TRIAL_END
+        summary:
+          type: string
+          examples:
+          - 1 month free
+          - $25 credit
+          - 20% off your next 3 invoices
+        reason:
+          type:
+          - string
+          - 'null'
+          description: The reward rule's name (RULE grants)
+        creditCents:
+          type:
+          - integer
+          - 'null'
+          format: int64
+        freeDays:
+          type:
+          - integer
+          - 'null'
+        percentOff:
+          type:
+          - number
+          - 'null'
+        durationInvoices:
+          type:
+          - integer
+          - 'null'
+        trialEndsAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: The subscription's trial end afterwards
         occurredAt:
           type: string
           format: date-time
@@ -10140,6 +11176,13 @@ operations:
       / reinstated: Trust and Safety removed a live or paused listing (POST /v1/products/{id}/takedown, status TAKEN_DOWN,
       hidden from public reads) or reversed it (POST /v1/products/{id}/restore, back to LIVE or PAUSED). Read models keep
       a product public only while its status is LIVE and sellerHidden is false.'
+  publishCatalogProductImportEvents:
+    action: send
+    channel:
+      $ref: '#/channels/catalogProductImportEvents'
+    summary: 'catalog.import.completed: a bulk upload finished importing (every importable row created, updated or failed;
+      rows with errors skipped). notifySeller is true for uploads of at least at.catalog.imports.notify-min-rows rows (100
+      by default); notifications-service then tells the member who uploaded it.'
   publishCatalogCategoryRequestEvents:
     action: send
     channel:
@@ -10188,17 +11231,24 @@ operations:
       (24 h before cutoff, again after an extension) and out_for_delivery to the location''s opted-in subscribers (audience
       from GET /v1/service/locations/{id}/audience) and the run''s customers (orders[]), sends the double opt-in link of subscription.created
       (confirmUrl) and confirms / cancels customers'' preorders on confirmed / cancelled. orders captures payment on run.confirmed
-      and releases stock and payment holds on run.cancelled. fulfilment plans the sweep on run.confirmed (GET /v1/service/runs/{id}/dispatch).
-      content refreshes run advertorials on announced / opened / extended and expires them on cancelled / confirmed. Pre-orders
-      (S270–S275): notifications sends preorder.comms.due by kind — ANNOUNCE (preorder.announce email / SMS / push to the
-      window''s audience from GET /v1/service/preorders/{windowId}/audience?segment=SUBSCRIBERS, and preorder.waitlist.opened
-      email to segment=WAITLIST), REMIND_48H (preorder.reminder email / push), LAST_CALL_6H (preorder.last_call SMS / push),
-      CLOSED (preorder.closed email to orders[]) and OUT_FOR_DELIVERY (preorder.out_for_delivery SMS / push to orders[]) —
-      and texts the payment link of preorder.late_order.added (payment PAYMENT_LINK, preorder.late_order.payment_link). preorder.window.*
-      follow a window''s lifecycle (keyed by window id; opened / closed / delivered come from the scheduler, closed after
-      the paid orders were handed to a run, which publishes delivery-runs.run.confirmed; paused / resumed carry the staff
-      actorId); preorder.settings.changed and preorder.areas.changed (key preorder-settings) and preorder.export.created are
-      audit records; preorder.waitlist.joined records a waitlist sign-up.'
+      and releases stock and payment holds on run.cancelled. fulfilment plans the sweep on run.confirmed (GET /v1/service/runs/{id}/dispatch)
+      and cancels the routes that have not started on run.cancelled. content refreshes run advertorials on announced / opened
+      / extended and expires them on cancelled / confirmed. Pre-orders (S270–S275): notifications sends preorder.comms.due
+      by kind — ANNOUNCE (preorder.announce email / SMS / push to the window''s audience from GET /v1/service/preorders/{windowId}/audience?segment=SUBSCRIBERS,
+      and preorder.waitlist.opened email to segment=WAITLIST), REMIND_48H (preorder.reminder email / push), LAST_CALL_6H (preorder.last_call
+      SMS / push), CLOSED (preorder.closed email to orders[]) and OUT_FOR_DELIVERY (preorder.out_for_delivery SMS / push to
+      orders[]) — and texts the payment link of preorder.late_order.added (payment PAYMENT_LINK, preorder.late_order.payment_link).
+      preorder.window.* follow a window''s lifecycle (keyed by window id; opened / closed / delivered come from the scheduler,
+      closed after the paid orders were handed to a run, which publishes delivery-runs.run.confirmed; paused / resumed carry
+      the staff actorId); preorder.settings.changed and preorder.areas.changed (key preorder-settings), delivery-runs.location.changed
+      (key location id; trust-ops audits it with the staff member and reason) and preorder.export.created are audit records;
+      preorder.waitlist.joined records a waitlist sign-up. ADR 0005 §4: staff set a minimum order count per window. When the
+      close date passes below it the window is not cancelled: it becomes AWAITING_DECISION and preorder.window.decision_needed
+      tells staff (decision.kind AWAITING, orders and minimum counted). Staff then CANCEL or PROCEED with a required reason;
+      every decision (and an early close once the minimum is met) is published as preorder.window.decided with who, when and
+      why. A cancelled window (preorder.window.cancelled, orders[] = every order) is refunded in full by orders-service (consumer
+      orders-delivery-runs-events), which also consumes delivery-runs.run.cancelled the same way; progress per order comes
+      back as orders.preorder.refund_settled / refund_failed.'
   receiveDeliveryRunsOrderEvents:
     action: receive
     channel:
@@ -10206,8 +11256,15 @@ operations:
     summary: 'delivery-runs projects pre-orders (consumer delivery-runs-preorders, inbox-deduplicated on event-id): orders.order.placed
       with shipments[] of fulfilmentType PREORDER (preorder.windowId, preorder.fulfilment, attribution {src, cr, po} on the
       order or the preorder block) becomes a window order numbered <CODE>-1001…; orders.shipment.cancelled cancels that package
-      (the order once none is left); orders.order.cancelled of a placed order cancels it. Late adds (<CODE>-L90…) are completed
-      by their order''s placed event.'
+      (the order once none is left, with its refund PENDING); orders.preorder.refund_settled (REFUNDED or VOIDED) and orders.preorder.refund_failed
+      record the refund progress of a cancelled order; orders.order.cancelled of a placed order cancels it. Late adds (<CODE>-L90…)
+      are completed by their order''s placed event. S264: the run follows what happens to its orders'' PREORDER shipments
+      (consumer delivery-runs-progress, inbox-deduplicated on event-id, forward only, harmless when repeated or late): orders.shipment.status_changed
+      to picked_up (collected from the seller), out_for_delivery, delivery_failed or returned, and orders.shipment.delivered
+      (deliveredAt is kept on the order''s slot). The first collection moves the run to COLLECTING (delivery-runs.run.collecting),
+      the last one to OUT_FOR_DELIVERY, and when every order is delivered or back the run is COMPLETED. A cancelled shipment
+      (orders.shipment.cancelled) leaves the run. The seller payout hold starts in orders-service / payments from the same
+      delivered event.'
   publishFulfilmentEvents:
     action: send
     channel:
@@ -10219,15 +11276,30 @@ operations:
       a shipment to the driver or the FC loads it out (trust-ops seller health); fulfilment.return_pickup.* (key RMA id) follow
       return pickups scheduled by tax-returns-service. fulfilment.pickup.auto_assigned / dispatch_assigned (S255, key shipment
       id): a seller pickup (AfroTransact Delivery from the seller''s store) joined the nearest available driver''s route,
-      or dispatch moved it with a logged reason.'
+      or dispatch moved it with a logged reason. fulfilment.run.planned (S264, key = delivery-runs run id): a delivery run''s
+      routes were planned.'
+  receiveFulfilmentDeliveryRunsEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/deliveryRunsEvents'
+    summary: 'fulfilment-service (consumer group fulfilment-service, inbox-deduplicated) plans delivery runs (S264): delivery-runs.run.confirmed
+      (a closed pre-order window''s paid orders) fetches GET /v1/service/runs/{id}/dispatch (scope delivery-runs:read) and
+      turns the shipments of the run''s orders into routes: one route per capacity chunk (RUN_ROUTE_CAPACITY bags), a pickup
+      stop per seller before the drops, doorstep drops ordered by road distance from the hub (geo POST /v1/distance/batch)
+      or one drop per order at the community pickup point (each needing the customer''s handover code). The shipments are
+      confirmed in orders-service. When delivery-runs cannot be reached the run is kept PENDING with the reason and staff
+      plan it from the console. delivery-runs.run.cancelled cancels the routes that have not started. Other run events are
+      ignored.'
   receiveFulfilmentOrderEvents:
     action: receive
     channel:
       $ref: '#/channels/ordersOrderEvents'
     summary: 'fulfilment-service (consumer group fulfilment-service, inbox-deduplicated) handles orders.order.placed: a pick
       / pack task per FBA_AFROTRANSACT or RETAIL_1P shipment (node from inventory''s reservation), and an entry in the dispatch
-      pool per AFROTRANSACT_DELIVERY shipment (FC load-out or seller pickup), each with one ATS package label. A seller pickup
-      with a pickup position (shipments[].pickup, S255) goes to the nearest available driver''s route at once (fulfilment.pickup.auto_assigned);
+      pool per AFROTRANSACT_DELIVERY shipment (FC load-out or seller pickup), each with one ATS package label. PREORDER shipments
+      (door or pickup point, S264) wait for their run instead: they are kept out of the zone builder and the seller-pickup
+      screens, and their lines (each with its own sellerOrgId) become one labelled bag per seller. A seller pickup with a
+      pickup position (shipments[].pickup, S255) goes to the nearest available driver''s route at once (fulfilment.pickup.auto_assigned);
       otherwise it waits for the zone route builder. orders.shipment.cancelled cancels the task and takes the shipment off
       a route that has not started. Other order events are ignored.'
   receiveFulfilmentIdentityEvents:
@@ -10334,31 +11406,33 @@ operations:
     action: receive
     channel:
       $ref: '#/channels/notificationsIdentityEvents'
-    summary: 'identity.verification.requested → identity.verification (email, or the payload''s channel; security, never resolved
-      through identity), or identity.verification.phone for purpose PHONE_VERIFICATION (sms); identity.invitation.created
-      → org.invitation (email to recipient.email only, never resolved through identity: the invitee may have no account);
-      identity.user.registered → account.welcome (email; not for STAFF); identity.user.phone-verified and identity.notification-preferences.updated
-      send nothing and drop the user''s cached contact lookup.'
+    summary: '>- identity.verification.requested → identity.verification (email, or the payload''s channel; security, never
+      resolved through identity), identity.verification.phone for purpose PHONE_VERIFICATION (sms), or identity.password_reset
+      for purpose PASSWORD_RESET (the payload''s channel: email, or sms to a verified phone); identity.password-reset.federated
+      → identity.password_reset.federated (email: sign in with the linked provider); identity.password.changed → identity.password_changed
+      (email); identity.invitation.created → org.invitation (email to recipient.email only, never resolved through identity:
+      the invitee may have no account); identity.user.registered → account.welcome (email; not for STAFF); identity.user.phone-verified
+      and identity.notification-preferences.updated send nothing and drop the user''s cached contact lookup.'
   consumeNotificationsOrderEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsOrderEvents'
-    summary: orders.order.placed → order.confirmed (email, sms, push); orders.order.cancelled with wasPlaced=true → order.cancelled
+    summary: '>- orders.order.placed → order.confirmed (email, sms, push); orders.order.cancelled with wasPlaced=true → order.cancelled
       (email, push); orders.shipment.status_changed → shipment.shipped (picked_up, or in_transit without a pickup scan; email,
       push), shipment.out_for_delivery (sms, push, email), shipment.ready_for_pickup (ready + PICKUP; email, sms, push), shipment.delivery_failed
       (email, sms, push); orders.shipment.delivered → shipment.delivered (email, push); orders.shipment.cancelled → shipment.cancelled
-      (email, push).
+      (email, push).'
   consumeNotificationsSellerApplicationEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsSellerApplicationEvents'
-    summary: seller.application.submitted → seller.application.submitted (email); info_requested → seller.application.info_requested
-      (email, sms); approved → seller.application.approved (email, sms, push); rejected → seller.application.rejected (email).
+    summary: '>- seller.application.submitted → seller.application.submitted (email); info_requested → seller.application.info_requested
+      (email, sms); approved → seller.application.approved (email, sms, push); rejected → seller.application.rejected (email).'
   consumeNotificationsSellerComplianceEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsSellerComplianceEvents'
-    summary: 'seller.compliance.reminder → seller.compliance.reminder and seller.compliance.changed (new items, or status
+    summary: '>- seller.compliance.reminder → seller.compliance.reminder and seller.compliance.changed (new items, or status
       moved to RESTRICTED_SOON / RESTRICTED) → seller.compliance.action_needed, on the payload''s channels (in_app → push;
       reminder category: preferences and quiet hours apply); seller.payouts.paused / resumed and seller.listings.hidden /
       restored → matching templates (email, plus sms when paused / hidden); with reason SUSPENDED / REINSTATED (Trust and
@@ -10373,26 +11447,35 @@ operations:
     action: receive
     channel:
       $ref: '#/channels/notificationsBookingsEvents'
-    summary: 'booking.confirmed / cancelled / rescheduled → matching templates (email, sms, push); booking.declined → booking.declined
+    summary: '>- booking.confirmed / cancelled / rescheduled → matching templates (email, sms, push); booking.declined → booking.declined
       (email, push); booking.balance_unpaid → booking.balance_unpaid to the customer (email, push: update the card or authenticate).
       booking.reminder has a template but no event yet: bookings can send it with notification.requested (templateKey booking.reminder).'
+  consumeNotificationsCatalogImportEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/notificationsCatalogImportEvents'
+    summary: '>- catalog.import.completed with notifySeller=true (large uploads) → catalog.import_completed to the uploader
+      (email, push): created, updated and failed counts and a link to the upload''s report.'
   consumeNotificationsContentEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsContentEvents'
-    summary: content.career-application.received → careers.application_received (email); content.newsletter.confirmation_requested
-      → newsletter.confirm (email).
+    summary: '>- content.career-application.received → careers.application_received (email); content.newsletter.confirmation_requested
+      → newsletter.confirm (email).'
   consumeNotificationsPaymentEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsPaymentEvents'
-    summary: payments.intent.action_required with a customerId → payment.authentication_required to the customer (email, push;
-      link to the booking for BK- references, else the orders page). Other payment events are ignored.
+    summary: '>- payments.intent.action_required with a customerId → payment.authentication_required to the customer (email,
+      push; link to the booking for BK- references, else the orders page). payments.gift_card.deliver → payment.gift_card.delivered
+      to the recipient''s email in the language the buyer chose (en, fr, es, ar, yo); the code is in the email and nowhere
+      else. payments.referral.rewarded → payment.referral.rewarded to the customer who earned it (email, push), in their language.
+      Other payment events are ignored.'
   consumeNotificationsTrustOpsEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsTrustOpsEvents'
-    summary: trustops.claim.opened → claim.opened to the customer (email, push) and, while AWAITING_SELLER, claim.seller_response_due
+    summary: '>- trustops.claim.opened → claim.opened to the customer (email, push) and, while AWAITING_SELLER, claim.seller_response_due
       to the seller owners (email, sms; deadline = dueAt); trustops.claim.decided → claim.decided to the customer (email,
       push) and claim.decided.seller to the seller owners (email); trustops.claim.withdrawn → claim.withdrawn to the seller
       owners (email); trustops.claim.response_due_soon → claim.seller_response_reminder (email, sms) and trustops.claim.response_lapsed
@@ -10400,19 +11483,19 @@ operations:
       (NEW_LISTING; email) or listing.taken_down (LIVE_LISTING; email, sms) to the seller owners; trustops.seller.suspended
       → seller.suspended (email, sms) and trustops.seller.reinstated → seller.reinstated (email) to the seller owners. notification.requested
       with templateKey claim.opened, claim.decided or claim.withdrawn is ignored (the typed claim events above cover both
-      parties).
+      parties).'
   consumeNotificationsInventoryEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsInventoryEvents'
-    summary: inventory.availability.changed with available > 0 claims every active stock alert for the SKU (= variant ATIN)
-      and sends stock.back_in_stock (email, push) once; redeliveries re-claim the same alerts and the inbox stops a second
-      send.
+    summary: '>- inventory.availability.changed with available > 0 claims every active stock alert for the SKU (= variant
+      ATIN) and sends stock.back_in_stock (email, push) once; redeliveries re-claim the same alerts and the inbox stops a
+      second send.'
   consumeNotificationsRetailEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsRetailEvents'
-    summary: 'notification.requested with templateKey retail.purchase_order.sent → the supplier PO email (email, to recipient.email
+    summary: '>- notification.requested with templateKey retail.purchase_order.sent → the supplier PO email (email, to recipient.email
       only; transactional). Fields: contactName, poNumber, supplierName, orderDate, deliverBy, incoterm, paymentTerms, total
       (else totalMinor + currency), documentUrl, documentExpiresAt; nulls render as empty and the optional rows are dropped.
       data.attachments (the PO PDF as a media asset reference) is fetched from an allow-listed host within the size limit
@@ -10489,6 +11572,16 @@ operations:
       (notifications sends preorder.delivery_missed with refund / new-date links) and the customer''s answer as orders.preorder.missed_delivery_answered;
       late adds paid by link publish orders.preorder.payment_link_created (notifications texts preorder.late_order.payment_link).
       orders also routes payments.intent.* of late adds (no saga) to place or void them.'
+  receiveOrdersDeliveryRunsEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/deliveryRunsEvents'
+    summary: 'ADR 0005 §1 (consumer orders-delivery-runs-events): preorder.window.cancelled cancels every placed PREORDER
+      shipment of the window, and delivery-runs.run.cancelled the PREORDER shipments of the orders[] it lists, through the
+      same cancellation path a customer''s own cancellation uses (orders.shipment.cancelled, then the CANCEL follow-up: a
+      captured payment is refunded in full with the delivery fee, an uncaptured authorisation is released, stock held for
+      the lines is released). Idempotent per shipment, so redeliveries and the window event followed by its run''s event do
+      no harm. A package that can no longer be cancelled (already on its way) publishes orders.preorder.refund_failed.'
   receiveOrdersPaymentEvents:
     action: receive
     channel:
@@ -10506,6 +11599,23 @@ operations:
       or packed move to ready with actor PICKUP_POINT and source carrier (which also triggers the pickup capture); shipments
       already ready or further along are left as they are. Every transition is published as orders.shipment.status_changed
       and pushed to GET /v1/shipments/stream on every replica through Valkey pub/sub (channel at:orders:shipment-status).'
+  consumePaymentsReferralIdentityEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/identityEvents'
+    summary: 'payments-service (consumer group payments-service-referral, listener payments-referral-identity-events) feeds
+      the referral program (S322) from identity.user.registered: the sign-up device and network hashes are kept for the abuse
+      checks, and a referralCode the program owns attaches the new customer to the code''s owner (one referral per customer;
+      own code, unknown code, staff sign-ups and a program that is off attach nothing). Other events are ignored.'
+  consumePaymentsReferralOrderEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/ordersOrderEvents'
+    summary: 'payments-service (listener payments-referral-order-events) feeds the referral program (S322): orders.order.placed
+      keeps a hash of the delivery address and, for a referred customer waiting for a first order, tracks the order''s shipments;
+      orders.shipment.delivered / orders.shipment.cancelled end them. When every shipment ended and the delivered value reaches
+      the program''s minimum the referral qualifies; the rewards are granted through the credit ledger once the return window
+      has passed. Other events are ignored.'
   consumePaymentsSellerComplianceEvents:
     action: receive
     channel:
@@ -10513,6 +11623,16 @@ operations:
     summary: 'payments-service (consumer group payments-service, inbox-deduplicated) handles seller.payouts.paused / resumed:
       the organisation''s payout_hold is set or cleared (older decisions never override newer ones). While paused, POST /v1/payouts/requests
       and approvals fail with 422 payments.payouts_paused; balances keep accruing.'
+  consumePaymentsSellerSubscriptionEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/sellerSubscriptionEvents'
+    summary: payments-service (consumer group payments-service, listener payments-seller-subscription, inbox consumer payments.seller-subscription)
+      keeps each organisation's current plan from seller.subscription.changed (planCode, status; a CANCELED or PENDING_ACTIVATION
+      subscription has no plan; older events never override newer ones). The plan selects the fee schedule's plan rates for
+      product commission and service connection fees, snapshotted on each payment line. Until an organisation's first event,
+      payments reads its plan once from the seller service's GET /v1/orgs/{orgId}/billing (client payments-service, scope
+      seller:billing). Every other event is ignored.
   consumePaymentsBookingsEvents:
     action: receive
     channel:
@@ -10634,7 +11754,28 @@ operations:
     action: send
     channel:
       $ref: '#/channels/sellerSubscriptionEvents'
-    summary: Plan changes, trials and dunning; identity / feature limits and finance consume them.
+    summary: 'Plan changes, trials, dunning and staff migrations to a new plan version (change MIGRATED); identity / feature
+      limits and finance consume them. seller.billing.grant_applied (S296-S297): a reward rule or a staff adjustment (credit,
+      free days, discount, waived invoice, trial change) was applied at Stripe; notifications-service emails the organisation''s
+      owners (seller.billing.reward_earned / seller.billing.credit_granted).'
+  receiveSellerRewardMetrics:
+    action: receive
+    channel:
+      $ref: '#/channels/ordersOrderEvents'
+    summary: 'S296: seller-service (consumer group seller-service, inbox consumer seller.reward-metrics) counts orders.shipment.delivered
+      per sellerOrgId (gross sales in USD cents, completed orders) for reward rules, then evaluates the organisation''s live
+      rules on those metrics.'
+  receiveSellerRewardBookings:
+    action: receive
+    channel:
+      $ref: '#/channels/bookingsEvents'
+    summary: S296 reward rules count booking.completed per orgId (completed bookings, providers).
+  receiveSellerRewardListings:
+    action: receive
+    channel:
+      $ref: '#/channels/offersEvents'
+    summary: 'S296 reward rules track offers.offer.created / updated / withdrawn per sellerOrgId: a listing is active while
+      the offer is ACTIVE and its product live.'
   publishTaxReturnsEvents:
     action: send
     channel:

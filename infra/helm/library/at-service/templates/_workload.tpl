@@ -68,6 +68,9 @@ spec:
       tolerations: {{- toYaml . | nindent 8 }}
       {{- end }}
       terminationGracePeriodSeconds: 30
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: app
           image: {{ include "at-service.image" . }}

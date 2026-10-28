@@ -5,10 +5,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.afrotransact.deliveryruns.adapter.in.web.LocationDtos.DeactivateRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.LocationDtos.LocationHistoryResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.LocationDtos.LocationRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.LocationDtos.LocationResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.LocationDtos.SubscriberCountsResponse;
+import com.afrotransact.deliveryruns.adapter.in.web.LocationDtos.SwitchRequest;
 import com.afrotransact.deliveryruns.application.LocationService;
 import com.afrotransact.deliveryruns.application.SubscriptionService;
 import com.afrotransact.deliveryruns.domain.Channel;
@@ -68,6 +70,22 @@ class LocationController {
     @DeleteMapping("/v1/locations/{id}")
     LocationResponse deactivate(@PathVariable UUID id) {
         return LocationResponse.of(locations.deactivate(id));
+    }
+
+    @Operation(summary = "Switch a location off with the reason that is audited (delivery-runs:manage)",
+            description = "The reason is required and recorded with who and when (event delivery-runs.location.changed, "
+                    + "audit log). 409 delivery-runs.location-has-live-runs while a run of the location announced, "
+                    + "takes orders or is on the road. Already inactive: unchanged.")
+    @PostMapping("/v1/locations/{id}/deactivate")
+    LocationResponse deactivateWithReason(@PathVariable UUID id, @Valid @RequestBody DeactivateRequest body) {
+        return LocationResponse.of(locations.deactivate(id, body.reason()));
+    }
+
+    @Operation(summary = "Switch a deactivated location back on (delivery-runs:manage)",
+            description = "The optional reason is audited like the switch off. Already active: unchanged.")
+    @PostMapping("/v1/locations/{id}/activate")
+    LocationResponse activate(@PathVariable UUID id, @Valid @RequestBody(required = false) SwitchRequest body) {
+        return LocationResponse.of(locations.activate(id, body == null ? null : body.reason()));
     }
 
     @Operation(summary = "Per-location history: runs with orders and fees, subscribers and monthly growth",

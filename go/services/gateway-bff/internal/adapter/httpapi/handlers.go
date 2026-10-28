@@ -17,6 +17,9 @@ import (
 type Services struct {
 	Sessions app.SessionService
 	Auth     app.AuthService
+	// Native signs the customer and driver apps in with email and password (in-app form, no hosted page); routes are
+	// registered when set.
+	Native   app.NativeAuthService
 	Site     app.SiteService
 	Location app.LocationService
 	Search   app.SearchService
@@ -25,8 +28,12 @@ type Services struct {
 	Account  app.AccountService
 	Checkout app.CheckoutService
 	Careers  app.CareersService
+	// Maintenance is the maintenance switch: the gate refuses customer and seller calls while it is on (nil = never).
+	Maintenance app.MaintenanceService
 	// Preorders serves the storefront's pre-order routes (S270–S275); registered when set.
 	Preorders app.PreorderService
+	// RunAlerts serves the delivery-run locations, location subscriptions and advertorials (S262, S263); registered when set.
+	RunAlerts app.RunAlertService
 	// Seller Center & Provider Hub (contracts/openapi/gateway-bff-seller.yaml); routes are registered when set.
 	SellerShell     app.SellerShellService
 	SellerDashboard app.SellerDashboardService
@@ -37,8 +44,24 @@ type Services struct {
 	SellerTeam      app.SellerTeamService
 	ProviderHub     app.ProviderHubService
 	SellerShipFrom  app.SellerShipFromService
+	// SellerRunPickups gives sellers the delivery runs that collect from them, with a pick list (S264); registered when set.
+	SellerRunPickups app.SellerRunPickupsService
+	// SellerBusinessPage is the page settings (description, logo, brand colour).
+	SellerBusinessPage app.SellerBusinessPageService
+
+	// SellerListing is the one-step product form (S307) and SellerImports the bulk upload (S308); registered when set.
+	SellerListing app.SellerListingService
+	SellerImports app.SellerImportService
 	// SellerOffers is the fulfilment choice of offers (S255); its routes are registered when set.
 	SellerOffers app.SellerOffersService
+	// SellerAssistant is Lola in Seller Center, with the plan's tier; its routes are registered when set.
+	SellerAssistant app.SellerAssistantService
+	// SellerCoupons manages seller-funded promotional codes (offers-service).
+	SellerCoupons app.SellerCouponsService
+	// SellerCases lists the organisation's returns and disputes.
+	SellerCases app.SellerCasesService
+	// SellerTax is the monthly statement of the sales tax collected on the seller's behalf; its routes are registered when set.
+	SellerTax app.SellerTaxService
 	// SellerFba is Seller Center's Send to AfroTransact (S281); its routes are registered when set.
 	SellerFba app.SellerFbaService
 	// SellerExports exports Seller Center tables; SellerExportFiles serves the files the BFF keeps itself (nil when
@@ -77,7 +100,9 @@ func New(s Services, rl port.RateLimiter, o SecurityOptions, log *slog.Logger) H
 }
 
 func (h *handlersImpl) chain(next http.Handler) http.Handler {
+	next = maintenanceGate(h.s.Maintenance, h.log)(next)
 	next = identify(h.s.Sessions, h.o, h.log)(next)
+	next = actingContext(next)
 	next = csrf(h.o, h.log)(next)
 	next = bodyLimit(h.o.MaxBodyBytes)(next)
 	next = rewriteMedia(h.o)(next)
@@ -91,6 +116,8 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 
 	mux.Handle("OPTIONS /v1/", cors(h.o)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })))
 
+	// Maintenance status (always answered, even in maintenance: it is how the apps know to show the page)
+	route("GET /v1/maintenance", h.maintenance)
 	// Site & content
 	route("GET /v1/site-config", h.siteConfig)
 	route("GET /v1/home", h.home)
@@ -107,6 +134,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("GET /v1/delivery-location", h.getLocation)
 	route("PUT /v1/delivery-location", h.setLocation)
 	route("GET /v1/geo/address-suggestions", lookup(h.addressSuggestions))
+	route("GET /v1/geo/address-suggestions/{id}", lookup(h.resolveAddressSuggestion))
 	// Search & catalogue
 	route("GET /v1/search", h.search)
 	route("GET /v1/search/suggestions", h.suggest)
@@ -126,12 +154,19 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("PUT /v1/cart/preorder-fulfilment", h.setPreorderFulfilment)
 	// Pre-orders
 	h.registerPreorders(route, lookup)
+	h.registerRunAlerts(route, lookup)
 	// Auth
 	route("GET /v1/me", h.me)
 	route("GET /v1/auth/login", auth(h.login))
 	route("GET /v1/auth/oidc/{provider}/authorize", auth(h.socialLogin))
 	route("GET /v1/auth/oidc/callback", auth(h.callback))
+	if h.s.Native != nil {
+		route("POST /v1/auth/native/password", auth(h.nativePassword))
+		route("POST /v1/auth/native/mfa/sms", auth(h.nativeSMS))
+		route("POST /v1/auth/native/mfa/verify", auth(h.nativeVerify))
+	}
 	route("POST /v1/auth/sign-out", h.signOut)
+	route("GET /v1/auth/signed-out/{app}", auth(h.signedOut))
 	// Account
 	route("GET /v1/account/addresses", h.listAddresses)
 	route("POST /v1/account/addresses", h.createAddress)
@@ -383,6 +418,11 @@ func (h *handlersImpl) addressSuggestions(w http.ResponseWriter, r *http.Request
 		return
 	}
 	v, err := h.s.Location.Suggest(r.Context(), text, q.Get("country"), q.Get("sessionToken"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) resolveAddressSuggestion(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Location.ResolveSuggestion(r.Context(), r.PathValue("id"), r.URL.Query().Get("sessionToken"))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

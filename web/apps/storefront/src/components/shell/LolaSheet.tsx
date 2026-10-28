@@ -191,6 +191,7 @@ export function LolaSheet({ open, onOpenChange, prompt, onPromptSent }: { open: 
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
+      persistent
       title={t('lola.title')}
       description={t('lola.subtitle')}
       header={

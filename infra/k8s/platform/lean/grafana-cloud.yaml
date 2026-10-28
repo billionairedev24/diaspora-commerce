@@ -1,0 +1,19 @@
+# Credentials for the OTLP collector (infra/k8s/platform/envs/prod/opentelemetry-collector-gateway.yaml), which ships
+# traces, metrics and logs to Grafana Cloud (free tier: 10k metric series, 50 GB logs, 50 GB traces per month) instead
+# of running Prometheus, Loki and Tempo on the node (~3 GB of RAM). ExternalSecret key afrotransact/grafana-cloud:
+#   endpoint     https://otlp-gateway-<region>.grafana.net/otlp
+#   instance-id  numeric instance id (basic-auth user)
+#   api-token    access policy token with metrics/logs/traces:write
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: grafana-cloud-otlp
+  namespace: observability
+spec:
+  refreshInterval: 1h
+  secretStoreRef: {kind: ClusterSecretStore, name: platform-secrets}
+  target: {name: grafana-cloud-otlp}
+  data:
+    - {secretKey: GRAFANA_OTLP_ENDPOINT, remoteRef: {key: afrotransact/grafana-cloud, property: endpoint}}
+    - {secretKey: GRAFANA_INSTANCE_ID, remoteRef: {key: afrotransact/grafana-cloud, property: instance-id}}
+    - {secretKey: GRAFANA_API_TOKEN, remoteRef: {key: afrotransact/grafana-cloud, property: api-token}}

@@ -171,7 +171,12 @@ final class BrowserSession {
     }
 
     HttpResponse<String> api(String method, String path, String bearer, String jsonBody) {
+        return api(method, path, bearer, jsonBody, Map.of());
+    }
+
+    HttpResponse<String> api(String method, String path, String bearer, String jsonBody, Map<String, String> headers) {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + path)).header("Accept", "application/json");
+        headers.forEach(b::header);
         if (bearer != null) {
             b.header("Authorization", "Bearer " + bearer);
         }

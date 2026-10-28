@@ -10,5 +10,7 @@ import { sellEntryUrl,type SellRole } from './entry';
 export async function startSelling(role: SellRole): Promise<never> {
   const api = await serverApi();
   const me = await api.getMe().catch(() => null);
-  redirect(sellEntryUrl({ role, signedIn: me?.authenticated === true, sellerCenterUrl: sellerCenterUrl() }));
+  const app = role === 'provider' ? 'provider-hub' : 'seller-center';
+  const approved = me?.user?.backOffices?.some((b) => b.app === app && b.state === 'active') === true;
+  redirect(sellEntryUrl({ role, signedIn: me?.authenticated === true, sellerCenterUrl: sellerCenterUrl(), approved }));
 }

@@ -2,6 +2,7 @@ package upstreams
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -24,13 +25,21 @@ var _ port.WalletClient = (*walletImpl)(nil)
 // NewWallet returns the payments client for the shopper's saved methods (/v1/customers/me/...).
 func NewWallet(c httpclient.Client) port.WalletClient { return &walletImpl{c: c} }
 
-func (w *walletImpl) List(ctx context.Context, bearer string) ([]port.WalletMethod, error) {
-	res, err := call(ctx, w.c, httpclient.Request{Path: "/v1/customers/me/payment-methods", Bearer: bearer}, nil)
+func (w *walletImpl) List(ctx context.Context, bearer string) (port.Wallet, error) {
+	var raw json.RawMessage
+	_, err := call(ctx, w.c, httpclient.Request{Path: "/v1/customers/me/payment-methods", Bearer: bearer}, &raw)
 	if err != nil {
-		return nil, err
+		return port.Wallet{}, err
 	}
-	items, _, err := itemsOf[port.WalletMethod](res.Body)
-	return items, err
+	var out port.Wallet
+	if err := json.Unmarshal(raw, &out); err == nil && len(out.Items) > 0 {
+		return out, nil
+	}
+	var items []port.WalletMethod
+	if err := json.Unmarshal(raw, &items); err == nil {
+		return port.Wallet{Items: items}, nil
+	}
+	return out, nil
 }
 
 func (w *walletImpl) SetupIntent(ctx context.Context, bearer string, types []string) (port.WalletSetupIntent, error) {
@@ -119,6 +128,35 @@ func (o *customerOrdersImpl) ConfirmPayment(ctx context.Context, bearer, number 
 	var out port.UpCheckout
 	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/checkout/" + esc(number) + "/confirm", Bearer: bearer,
 		RetryUnsafe: true, Slow: true}, &out)
+	return out, err
+}
+
+// ---------------------------------------------------------------- tax-returns
+
+type returnsImpl struct {
+	c      httpclient.Client
+	tokens port.ServiceTokens
+}
+
+var _ port.ReturnsClient = (*returnsImpl)(nil)
+
+// NewReturns returns the tax-returns client for checkout tax estimates. They
+// call POST /v1/tax/quotes with the gateway-bff service token (scope tax:quote).
+func NewReturns(c httpclient.Client, tokens port.ServiceTokens) port.ReturnsClient {
+	return &returnsImpl{c: c, tokens: tokens}
+}
+
+func (r *returnsImpl) TaxQuote(ctx context.Context, req port.UpTaxQuoteRequest) (port.UpTaxQuote, error) {
+	var out port.UpTaxQuote
+	bearer := ""
+	if r.tokens != nil {
+		t, err := r.tokens.Token(ctx, "tax:quote")
+		if err != nil {
+			return out, err
+		}
+		bearer = t
+	}
+	_, err := call(ctx, r.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/tax/quotes", Bearer: bearer, JSON: req}, &out)
 	return out, err
 }
 
@@ -422,23 +460,6 @@ func (b *customerBookingsImpl) Review(ctx context.Context, bearer, id string, ra
 func (b *customerBookingsImpl) SyncPayment(ctx context.Context, bearer, id string) (port.UpBkBooking, error) {
 	var out port.UpBkBooking
 	_, err := call(ctx, b.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/bookings/" + esc(id) + "/payment/sync", Bearer: bearer}, &out)
-	return out, err
-}
-
-// ---------------------------------------------------------------- storefront published pages
-
-type publishedPagesImpl struct{ c httpclient.Client }
-
-var _ port.PublishedPagesClient = (*publishedPagesImpl)(nil)
-
-// NewPublishedPages returns the storefront client for published pages (GET /v1/storefronts/{slug}).
-func NewPublishedPages(c httpclient.Client) port.PublishedPagesClient {
-	return &publishedPagesImpl{c: c}
-}
-
-func (p *publishedPagesImpl) Published(ctx context.Context, slug string) (port.UpPublishedPage, error) {
-	var out port.UpPublishedPage
-	_, err := call(ctx, p.c, httpclient.Request{Path: "/v1/storefronts/" + esc(slug)}, &out)
 	return out, err
 }
 

@@ -26,7 +26,7 @@ const TOKENS: Record<string, string> = {
   '--at-color-danger': '#C62828',
   '--at-color-action-secondary': '#1E7B3C',
   '--at-color-link': '#17602F',
-  '--at-font-sans': '"Figtree", ui-sans-serif, system-ui',
+  '--at-font-sans': '"Inter", ui-sans-serif, system-ui',
   '--at-radius-sm': '6px'
 };
 
@@ -35,11 +35,11 @@ const cents = (text: string) => Math.round(Number(text.replace(/[^0-9.]/g, '')) 
 describe('Stripe Appearance and deferred-intent options', () => {
   afterEach(() => Object.keys(TOKENS).forEach((k) => document.documentElement.style.removeProperty(k)));
 
-  it('reads the design tokens at runtime: gold primary, Figtree, radius, colours, designed tabs', () => {
+  it('reads the design tokens at runtime: gold primary, the platform font, radius, colours, designed tabs', () => {
     Object.entries(TOKENS).forEach(([k, v]) => document.documentElement.style.setProperty(k, v));
     const a = stripeAppearance();
     expect(a.variables).toMatchObject({ colorPrimary: '#FFD400', colorText: '#1F1F1F', colorDanger: '#C62828', borderRadius: '6px' });
-    expect(a.variables.fontFamily).toContain('Figtree');
+    expect(a.variables.fontFamily).toContain('Inter');
     expect(a.rules['.Tab--selected']).toMatchObject({ borderColor: '#1E7B3C', color: '#17602F' });
   });
 
@@ -48,14 +48,20 @@ describe('Stripe Appearance and deferred-intent options', () => {
   });
 
   it('builds manual-capture deferred options, saving and pre-order restrictions like orders does', () => {
-    expect(deferredIntentOptions({ amountMinor: 4599, currency: 'USD' })).toMatchObject({ mode: 'payment', amount: 4599, currency: 'usd', captureMethod: 'manual' });
+    expect(deferredIntentOptions({ amountMinor: 4599, currency: 'USD' })).toMatchObject({
+      mode: 'payment',
+      amount: 4599,
+      currency: 'usd',
+      captureMethod: 'automatic_async',
+      automaticPaymentMethods: { enabled: true }
+    });
     expect(deferredIntentOptions({ amountMinor: 1, currency: 'usd' })).not.toHaveProperty('setupFutureUsage');
     expect(deferredIntentOptions({ amountMinor: 1, currency: 'usd', save: true }).setupFutureUsage).toBe('off_session');
     expect(stripePaymentMethodTypes([])).toBeUndefined();
     expect(stripePaymentMethodTypes([['CARD', 'WALLET', 'ACH']])).toBeUndefined();
     expect(stripePaymentMethodTypes([['CARD', 'WALLET', 'ACH'], ['CARD', 'WALLET']])).toEqual(['card', 'link']);
     expect(stripePaymentMethodTypes([['CARD']])).toEqual(['card']);
-    expect(stripePaymentMethodTypes([['ACH']])).toBeUndefined();
+    expect(stripePaymentMethodTypes([['ACH']])).toEqual(['us_bank_account']);
   });
 });
 
@@ -111,7 +117,7 @@ describe('checkout with Stripe Elements (fake Stripe.js)', () => {
     await chooseNewMethod(user);
     expect(stripe.factory).toHaveBeenCalledWith('pk_test_fake');
     const opts = stripe.payment()?.options;
-    expect(opts).toMatchObject({ mode: 'payment', amount: total(), currency: 'usd', captureMethod: 'manual' });
+    expect(opts).toMatchObject({ mode: 'payment', amount: total(), currency: 'usd', captureMethod: 'automatic_async' });
     expect(opts).not.toHaveProperty('setupFutureUsage');
     expect(opts).not.toHaveProperty('clientSecret');
     expect(screen.queryByTestId('mock-payment-element')).not.toBeInTheDocument();
@@ -129,9 +135,8 @@ describe('checkout with Stripe Elements (fake Stripe.js)', () => {
     const before = total();
     const pkg = await screen.findByTestId('checkout-package');
     await user.click(within(pkg).getByRole('radio', { name: /UPS Next Day Air/ }));
-    expect(total()).not.toBe(before);
+    await waitFor(() => expect(total()).not.toBe(before));
     expect(stripe.payment()?.updates).toContainEqual({ amount: total() });
-    expect(stripe.express()).toBeUndefined();
   });
 
   it('places the order in Stripe’s order: elements.submit(), then the order, then confirmPayment with the client secret', async () => {

@@ -3,6 +3,7 @@
 import { http, HttpResponse } from 'msw';
 import { z } from 'zod';
 
+import { creditSplit } from '../credit-split';
 import { type PaymentMethod } from '../schemas/account';
 import { type CartPackage } from '../schemas/cart';
 import { type DeliveryOption } from '../schemas/cart';
@@ -22,13 +23,14 @@ import {
   type ServiceDetail,
   type ShipmentDetail
 } from '../schemas/shopper';
+import { checkoutCredit, creditState, spendCredit } from './credit';
 import { getDb, type MockSession } from './db';
 import { addBusinessDays, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, metroOf } from './delivery';
 import { PICKUP_POINTS } from './fixtures/geo';
 import { body, type Ctx, json, problem, readCookie, requireUser, route } from './http-kit';
 import { lolaStream } from './lola';
 import { nextPreorderNumber, preorderCheckoutPackage } from './preorders';
-import { buildCart, MockProblem, sessionLocation } from './service';
+import { buildCart, isGroceryProductType, MockProblem, sessionLocation } from './service';
 import { account, type AccountState, bookingFor, type MockOrder, PROVIDERS, seq, SERVICES } from './shopper-state';
 
 const DEMO_CODE = '246810';
@@ -159,20 +161,101 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
     });
 }
 
-function summary(ctx: Ctx, addressId: string | null): CheckoutSummary {
+function packageDeliveryFees(packages: CheckoutSummary['packages'], raw: string | null): number {
+  const byPkg = new Map<string, string>();
+  for (const part of (raw ?? '').split(',')) {
+    const i = part.indexOf(':');
+    if (i > 0) byPkg.set(part.slice(0, i).trim(), part.slice(i + 1).trim());
+  }
+  return packages.reduce((sum, p) => {
+    const key = byPkg.get(p.packageId) ?? p.deliveryOptions[0]?.key;
+    const opt = p.deliveryOptions.find((o) => o.key === key) ?? p.deliveryOptions[0];
+    return sum + (opt?.feeMinor ?? 0);
+  }, 0);
+}
+
+function mockCouponQuote(code: string, packages: CheckoutPackage[], shipping: number): CheckoutSummary['coupon'] {
+  const normalized = code.trim().toUpperCase();
+  if (!normalized) return undefined;
+  if (normalized === 'EXPIRED1') {
+    return { code: normalized, applicable: false, rejection: 'EXPIRED', message: 'This coupon has expired.', discountMinor: 0, shippingDiscountMinor: 0 };
+  }
+  const subtotal = packages.reduce((s, p) => s + p.subtotalMinor, 0);
+  const sellerShares: NonNullable<CheckoutSummary['coupon']>['sellerShares'] = [];
+  if (normalized === 'WELCOME10') {
+    const discountMinor = Math.round(subtotal * 0.1);
+    packages.forEach((p) => {
+      const amt = Math.round(p.subtotalMinor * 0.1);
+      if (amt > 0) sellerShares.push({ sellerOrgId: p.seller.id, sellerName: p.seller.name, discountMinor: amt, funding: 'platform' });
+    });
+    return {
+      code: normalized,
+      applicable: true,
+      discountMinor,
+      shippingDiscountMinor: 0,
+      funding: 'platform',
+      message: '10% off your order',
+      sellerShares
+    };
+  }
+  if (normalized === 'FREESHIP') {
+    return {
+      code: normalized,
+      applicable: shipping > 0,
+      discountMinor: 0,
+      shippingDiscountMinor: shipping,
+      funding: 'platform',
+      message: shipping > 0 ? 'Free shipping on this order' : 'Add shippable items to use this code',
+      sellerShares: []
+    };
+  }
+  return { code: normalized, applicable: false, rejection: 'NOT_FOUND', message: "We don't recognise that code.", discountMinor: 0, shippingDiscountMinor: 0 };
+}
+
+function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | null, couponCode?: string | null): CheckoutSummary {
   const a = me(ctx);
   const addr = a.addresses.find((x) => x.id === addressId) ?? a.addresses.find((x) => x.isDefault) ?? a.addresses[0];
   const packages = checkoutPackages(ctx.session, addr?.zip.slice(0, 5) ?? ctx.session.zip, ctx.now);
   if (!packages.length) throw new MockProblem(409, 'CART_EMPTY', 'Your cart is empty', 'Select at least one item to check out.', { available: 0, inCart: 0, requested: 0 });
   const subtotal = packages.reduce((s, p) => s + p.subtotalMinor, 0);
-  const shipping = packages.reduce((s, p) => s + (p.deliveryOptions[0]?.feeMinor ?? 0), 0);
-  return { packages, addresses: a.addresses, paymentMethods: a.paymentMethods, subtotalMinor: subtotal, shippingMinor: shipping, taxMinor: 0,
-    taxRateLabel: 'Calculated when you place your order', totalMinor: subtotal + shipping, currency: 'USD',
-    sellerCount: new Set(packages.map((p) => p.seller.id)).size, publishableKey: publishableKey(ctx) };
+  const shipping = packageDeliveryFees(packages, packageDelivery ?? null);
+  const coupon = couponCode ? mockCouponQuote(couponCode, packages, shipping) : undefined;
+  const discountMinor = coupon?.applicable ? coupon.discountMinor : 0;
+  const shippingDiscountMinor = coupon?.applicable ? coupon.shippingDiscountMinor : 0;
+  const netShipping = Math.max(0, shipping - shippingDiscountMinor);
+  const tx = addr?.state === 'TX';
+  const generalSubtotal = packages.reduce(
+    (s, p) => s + p.lines.reduce((n, l) => n + (isGroceryProductType(l.productType) ? 0 : l.lineTotalMinor), 0),
+    0
+  );
+  const stateRate = 0.0625;
+  const localRate = 0.02;
+  const combinedRate = stateRate + localRate;
+  const taxableItems = Math.max(0, generalSubtotal - discountMinor);
+  const taxable = taxableItems + (tx ? netShipping : 0);
+  const taxMinor = tx ? Math.round(taxable * combinedRate) : 0;
+  const taxRateLabel = tx ? `${(combinedRate * 100).toFixed(2)}%` : addr ? 'No sales tax' : 'Add your address to see an estimate';
+  return {
+    packages,
+    addresses: a.addresses,
+    paymentMethods: a.paymentMethods,
+    subtotalMinor: subtotal,
+    shippingMinor: shipping,
+    discountMinor,
+    shippingDiscountMinor,
+    coupon,
+    taxMinor,
+    taxRateLabel,
+    totalMinor: subtotal - discountMinor + netShipping + taxMinor,
+    currency: 'USD',
+    sellerCount: new Set(packages.map((p) => p.seller.id)).size,
+    publishableKey: publishableKey(ctx),
+    credit: checkoutCredit(creditState(a, requireUser(ctx).id), subtotal - discountMinor + netShipping + taxMinor)
+  };
 }
 
-function confirmation(c: { orderNumber: string; status: OrderConfirmation['status']; clientSecret: string; totalMinor: number; order: MockOrder; preorder?: OrderConfirmation['preorder'] }): OrderConfirmation {
-  return { orderNumber: c.orderNumber, status: c.status, paymentClientSecret: c.clientSecret, totalMinor: c.totalMinor, currency: 'USD',
+function confirmation(c: { orderNumber: string; status: OrderConfirmation['status']; clientSecret: string | null; totalMinor: number; order: MockOrder; preorder?: OrderConfirmation['preorder'] }): OrderConfirmation {
+  return { orderNumber: c.orderNumber, status: c.status, paymentClientSecret: c.clientSecret, creditMinor: c.order.creditMinor ?? 0, totalMinor: c.totalMinor, currency: 'USD',
     shipments: c.order.shipments.map((s) => ({ shipmentId: s.shipmentId, label: s.label, eta: s.promisedBy ?? '', deliveryCode: s.deliveryCode })), preorder: c.preorder ?? null };
 }
 
@@ -199,7 +282,8 @@ function orderPayment(o: MockOrder) {
   }));
   const refundedMinor = [...refunded.values()].reduce((n, x) => n + x, 0);
   const capturedMinor = o.shipments.filter((s) => s.status === 'delivered').reduce((n, s) => n + s.lines.reduce((m, l) => m + l.itemsMinor, 0), 0);
-  return { shipments, payment: { status: capturedMinor ? 'captured' : 'authorized', capturedMinor, refundedMinor, refundableMinor: Math.max(0, capturedMinor - refundedMinor), shippingTaxMinor: 0 } };
+  return { shipments, payment: { status: capturedMinor ? 'captured' : 'authorized', capturedMinor, refundedMinor, refundableMinor: Math.max(0, capturedMinor - refundedMinor), shippingTaxMinor: 0,
+    creditMinor: o.creditMinor ?? 0, cardRefundsAsCredit: o.cardRefundsAsCredit ?? false } };
 }
 
 /* ── Services ──────────────────────────────────────────────────── */
@@ -322,13 +406,20 @@ export const shopperHandlers = [
   })),
 
   /* Orders */
-  http.get('*/v1/account/orders', route((ctx) => json({
-    items: me(ctx).orders.map((o) => ({ orderNumber: o.orderNumber, placedAt: o.placedAt, totalMinor: o.totalMinor, currency: o.currency, shipTo: o.shipTo, status: o.status,
+  http.get('*/v1/account/orders', route((ctx) => {
+    // Cursor paging like the BFF: `limit` per page, the cursor is where the next page starts.
+    const q = new URL(ctx.request.url).searchParams;
+    const limit = Math.min(100, Math.max(1, Number(q.get('limit') ?? 20)));
+    const start = Math.max(0, Number(q.get('cursor') ?? 0) || 0);
+    const all = me(ctx).orders;
+    return json({
+    items: all.slice(start, start + limit).map((o) => ({ orderNumber: o.orderNumber, placedAt: o.placedAt, totalMinor: o.totalMinor, currency: o.currency, shipTo: o.shipTo, status: o.status,
       shipments: o.shipments.map((s) => ({ shipmentId: s.shipmentId, label: s.label, status: s.statusLabel, items: s.items, cancellable: s.cancellable, carrier: s.carrier,
         trackingNumber: s.trackingNumber, promisedBy: s.promisedBy, deliveredAt: s.deliveredAt, deliveryCode: s.deliveryCode,
         ...reportFacts(o, s.shipmentId, ctx.now) })) })),
-    nextCursor: null
-  }))),
+    nextCursor: start + limit < all.length ? String(start + limit) : null
+  });
+  })),
   http.get('*/v1/account/orders/:orderNumber', route((ctx, p) => {
     const o = me(ctx).orders.find((x) => x.orderNumber === p.orderNumber);
     if (!o) throw new MockProblem(404, 'ORDER_NOT_FOUND', 'Order not found', 'We couldn’t find that order.');
@@ -414,7 +505,10 @@ export const shopperHandlers = [
   })),
 
   /* Checkout */
-  http.get('*/v1/checkout/summary', route((ctx) => json(summary(ctx, new URL(ctx.request.url).searchParams.get('addressId'))))),
+  http.get('*/v1/checkout/summary', route((ctx) => {
+    const q = new URL(ctx.request.url).searchParams;
+    return json(summary(ctx, q.get('addressId'), q.get('packageDelivery'), q.get('couponCode')));
+  })),
   http.post('*/v1/checkout/orders', route(async (ctx) => {
     const a = me(ctx);
     const key = idemKey(ctx);
@@ -426,7 +520,10 @@ export const shopperHandlers = [
     const addr = a.addresses.find((x) => x.id === req.addressId);
     if (!addr) errors.addressId = 'Choose a delivery address';
     const sources = [!!req.paymentMethodId, !!req.wallet, !!req.newPaymentMethod].filter(Boolean).length;
-    if (!sources) errors.paymentMethodId = 'Choose a payment method';
+    const userId = requireUser(ctx).id;
+    const wallet = creditState(a, userId);
+    const creditPaysAll = !!req.useCredit && wallet.balanceMinor > 0 && summary(ctx, req.addressId).credit?.cardDueMinor === 0;
+    if (!sources && !creditPaysAll) errors.paymentMethodId = 'Choose a payment method';
     else if (sources > 1) errors.paymentMethodId = 'Pay with one of a saved method, a wallet or a new payment method';
     if (req.savePaymentMethod && !req.newPaymentMethod) errors.savePaymentMethod = 'Only a new payment method can be saved';
     if (req.paymentMethodId && !a.paymentMethods.some((x) => x.id === req.paymentMethodId)) errors.paymentMethodId = 'Unknown payment method';
@@ -467,6 +564,7 @@ export const shopperHandlers = [
         deliveryCode: needsCode ? String(1000 + ((n * 7919) % 9000)) : null,
         lines: p.lines.map((l) => ({ lineId: l.lineId, atin: l.atin, title: l.title, imageUrl: null, quantity: l.quantity, unitPriceMinor: l.priceMinor, itemsMinor: l.lineTotalMinor })),
         timeline: [{ status: 'placed', label: 'Order placed', at: iso(ctx.now) }],
+        deliveryFeeRule: opt?.feeRule ?? null,
         localDelivery: p.localDelivery?.available
           ? { roadMiles: p.localDelivery.roadMiles, durationMinutes: p.localDelivery.durationMinutes, chargeMinor: p.localDelivery.chargeMinor ?? 0 }
           : null,
@@ -480,7 +578,11 @@ export const shopperHandlers = [
       shippingAddress: addr ? { name: addr.name, line1: addr.line1, line2: addr.line2, city: addr.city, state: addr.state, zip: addr.zip } : null, shipments,
       perishable: new Set(s.packages.flatMap((p) => p.lines.filter((l) => l.perishable).map((l) => l.lineId))) };
     const pre = s.packages.find((p) => p.preorder)?.preorder;
-    const pending = { orderNumber, clientSecret: `pi_mock_${n}_secret_mock`, totalMinor: order.totalMinor, status: 'awaiting_payment' as const, order,
+    // Credit is spent when the order is placed (payments: once per order); full credit needs no card and places at once.
+    const spent = req.useCredit ? spendCredit(wallet, order.totalMinor, ctx.now) : 0;
+    if (spent > 0) order.creditMinor = spent;
+    const byCredit = spent > 0 && creditSplit(spent, order.totalMinor).cardDueMinor === 0 && spent === order.totalMinor;
+    const pending = { orderNumber, clientSecret: byCredit ? null : `pi_mock_${n}_secret_mock`, totalMinor: order.totalMinor, status: (byCredit ? 'placed' : 'awaiting_payment') as 'placed' | 'awaiting_payment', order,
       lineIds: s.packages.flatMap((p) => p.lines.map((l) => l.lineId)),
       attribution: req.attribution ?? null,
       preorder: pre
@@ -488,6 +590,10 @@ export const shopperHandlers = [
             otherItemCount: s.packages.filter((p) => !p.preorder).reduce((a, p) => a + p.itemCount, 0) }
         : null };
     a.checkouts.set(key, pending);
+    if (byCredit) {
+      a.orders.unshift(order);
+      ctx.session.lines = ctx.session.lines.filter((l) => !pending.lineIds.includes(l.lineId));
+    }
     return json(confirmation(pending), 201);
   })),
   http.get('*/v1/checkout/orders/:orderNumber', route((ctx, p) => {
@@ -575,10 +681,14 @@ export const shopperHandlers = [
     const services = SERVICES.filter((s) => s.orgId === p.orgId);
     const first = services[0] as ServiceDetail;
     return json({ orgId: p.orgId, displayName: prov.displayName, timeZone: 'America/Chicago', location: prov.location, policy: first.policy, instantBooking: first.instantBooking,
-      team: first.team, services, design: { slug: prov.slug, tagline: prov.tagline, layout: prov.layout, header: prov.layout === 'CLASSIC' ? 'BAND' : 'COVER',
-        buttonShape: 'ROUNDED', coverUrl: null, tokens: {}, social: [{ network: 'instagram', url: `https://instagram.com/${prov.slug.replace(/-/g, '')}` }, { network: 'website', url: `https://${prov.slug}.example` }],
-        gallery: [{ url: '', caption: 'Recent work' }, { url: '', caption: 'Studio' }, { url: '', caption: 'Happy clients' }],
-        featured: [{ id: 'f1', headline: `Book ${first.name}`, body: first.description, url: null, serviceId: first.id }] } });
+      team: first.team, services });
+  })),
+  http.get('*/v1/business-pages/:slug', route((_ctx, p) => {
+    const prov = Object.entries(PROVIDERS).find(([, v]) => v.slug === p.slug);
+    if (!prov) throw new MockProblem(404, 'NOT_FOUND', 'Page not found', 'There is no business page at this address.');
+    const services = SERVICES.filter((s) => s.orgId === prov[0]);
+    return json({ slug: prov[1].slug, kind: 'PROVIDER', name: prov[1].displayName, description: prov[1].tagline, brandColor: '#8a3b12', logoUrl: null, contactEmail: 'hello@example.com', indexable: true,
+      services: services.map((s) => ({ serviceId: s.id, name: s.name, durationMinutes: s.durationMinutes, priceMinor: s.priceMinor, currency: s.currency })), products: [] });
   })),
   http.post('*/v1/services/bookings', route(async (ctx) => {
     const a = me(ctx);

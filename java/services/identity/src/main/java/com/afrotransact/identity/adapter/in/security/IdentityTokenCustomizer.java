@@ -1,8 +1,11 @@
 package com.afrotransact.identity.adapter.in.security;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeSet;
 
@@ -10,6 +13,8 @@ import com.afrotransact.identity.application.TokenClaims;
 import com.afrotransact.identity.application.TokenClaimsService;
 import com.afrotransact.identity.domain.PrincipalType;
 import com.afrotransact.identity.domain.UserAccount;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.FactorGrantedAuthority;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
@@ -42,6 +47,8 @@ public class IdentityTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodin
     public static final String EMAIL = "email";
     public static final String EMAIL_VERIFIED = "email_verified";
     public static final String PHONE_NUMBER = "phone_number";
+    /** When the person last authenticated (the sign-in, kept across refreshes); step-up reads it (S291). */
+    public static final String AUTH_TIME = "auth_time";
 
     private final TokenClaimsService tokenClaims;
 
@@ -73,9 +80,18 @@ public class IdentityTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodin
         if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
             claims.claim(PERMS, sorted(c.access().permissions()));
             addAccessTokenProfile(claims, c.user());
+            // A Date, like the ID token's auth_time: written as epoch seconds, and (unlike an Instant or a Long) both
+            // encodable by the JWT encoder and readable back from the authorization's stored claims on refresh.
+            signInTime(context.getPrincipal()).ifPresent(at -> claims.claim(AUTH_TIME, Date.from(at)));
         } else if (OidcParameterNames.ID_TOKEN.equals(context.getTokenType().getValue())) {
             addProfileClaims(claims, c.user(), context.getAuthorizedScopes());
         }
+    }
+
+    /** The latest factor (password, passkey) the sign-in recorded, with its time. */
+    private static Optional<Instant> signInTime(Authentication principal) {
+        return principal.getAuthorities().stream().filter(FactorGrantedAuthority.class::isInstance)
+                .map(a -> ((FactorGrantedAuthority) a).getIssuedAt()).filter(Objects::nonNull).max(Instant::compareTo);
     }
 
     /** Prefill claims on every user access token, independent of the OIDC scopes requested. */

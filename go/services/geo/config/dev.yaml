@@ -1,4 +1,4 @@
-# geo · dev. DB_URL, GOOGLE_PLACES_API_KEY, SMARTY_AUTH_ID/TOKEN come from the environment.
+# geo · dev. DB_URL, GOOGLE_PLACES_API_KEY (or GOOGLE_MAPS_API_KEY: Google Places is then the only autocomplete provider), SMARTY_AUTH_ID/TOKEN come from the environment.
 port: 8080
 docsEnabled: true
 databaseUrl: ""

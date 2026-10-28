@@ -39,22 +39,25 @@ type TimelineEvent struct {
 
 // ShipmentDetail is one shipment of an order with tracking.
 type ShipmentDetail struct {
-	ShipmentID     string          `json:"shipmentId"`
-	Label          string          `json:"label"`
-	Status         string          `json:"status"`
-	StatusLabel    string          `json:"statusLabel"`
-	Items          string          `json:"items"`
-	SellerName     string          `json:"sellerName"`
-	DeliveryMethod string          `json:"deliveryMethod"`
-	Cancellable    bool            `json:"cancellable"`
-	Carrier        *string         `json:"carrier"`
-	TrackingNumber *string         `json:"trackingNumber"`
-	PromisedFrom   *string         `json:"promisedFrom"`
-	PromisedBy     *string         `json:"promisedBy"`
-	DeliveredAt    *string         `json:"deliveredAt"`
-	DeliveryCode   *string         `json:"deliveryCode"`
-	Lines          []OrderLineView `json:"lines"`
-	Timeline       []TimelineEvent `json:"timeline"`
+	ShipmentID     string `json:"shipmentId"`
+	Label          string `json:"label"`
+	Status         string `json:"status"`
+	StatusLabel    string `json:"statusLabel"`
+	Items          string `json:"items"`
+	SellerName     string `json:"sellerName"`
+	DeliveryMethod string `json:"deliveryMethod"`
+	Cancellable    bool   `json:"cancellable"`
+	// CancellableUntil is when Cancel stops being offered (before packing and inside the cancellation window); null when
+	// it is not offered now.
+	CancellableUntil *string         `json:"cancellableUntil"`
+	Carrier          *string         `json:"carrier"`
+	TrackingNumber   *string         `json:"trackingNumber"`
+	PromisedFrom     *string         `json:"promisedFrom"`
+	PromisedBy       *string         `json:"promisedBy"`
+	DeliveredAt      *string         `json:"deliveredAt"`
+	DeliveryCode     *string         `json:"deliveryCode"`
+	Lines            []OrderLineView `json:"lines"`
+	Timeline         []TimelineEvent `json:"timeline"`
 	// Returns (S148/S166): show "Return items" when returnable, "Report a problem" when only that is possible.
 	Returnable         bool    `json:"returnable"`
 	ReturnWindowEndsAt *string `json:"returnWindowEndsAt"`
@@ -63,6 +66,11 @@ type ShipmentDetail struct {
 	LocalDelivery *OrderLocalDelivery `json:"localDelivery"`
 	// Pickup is where a pickup shipment is collected; nil for other shipments (or when the point can't be read).
 	Pickup *OrderPickup `json:"pickup"`
+	// Proof is how our driver handed it over (photo, who received it); null for carrier, pickup and manual deliveries.
+	Proof *DeliveryProof `json:"proof"`
+	// DeliveryFeeRule is the delivery fee rule the shipping was charged by, as it was when the order was placed: later
+	// edits of the rule never change it. Null for flat rates and AfroTransact Delivery from a seller's store.
+	DeliveryFeeRule *FeeRuleRef `json:"deliveryFeeRule"`
 }
 
 // OrderPickup is the pickup point of a pickup shipment as the order page shows it.
@@ -100,6 +108,10 @@ type OrderPayment struct {
 	RefundedMinor    int64  `json:"refundedMinor"`
 	RefundableMinor  int64  `json:"refundableMinor"`
 	ShippingTaxMinor int64  `json:"shippingTaxMinor"`
+	// CreditMinor is the part of the order paid with AfroTransact credit (S320); the card paid the rest.
+	CreditMinor int64 `json:"creditMinor"`
+	// CardRefundsAsCredit: the card part of this order's refunds comes back as credit (the shopper's one-way choice).
+	CardRefundsAsCredit bool `json:"cardRefundsAsCredit"`
 }
 
 // ---------------------------------------------------------------- returns
@@ -300,43 +312,7 @@ type BookingQuote struct {
 	ProviderAnswersWithinMinutes *int64   `json:"providerAnswersWithinMinutes"`
 }
 
-// ProviderSocialLink is an approved social link on a provider page.
-type ProviderSocialLink struct {
-	Network string `json:"network"`
-	URL     string `json:"url"`
-}
-
-// ProviderGalleryItem is one gallery picture.
-type ProviderGalleryItem struct {
-	URL     string `json:"url"`
-	Caption string `json:"caption"`
-}
-
-// ProviderFeature is a published featured-work post.
-type ProviderFeature struct {
-	ID        string  `json:"id"`
-	Headline  string  `json:"headline"`
-	Body      string  `json:"body"`
-	URL       *string `json:"url"`
-	ServiceID *string `json:"serviceId"`
-}
-
-// ProviderDesign is the provider's published page (storefront service): layout, header, theme tokens, approved
-// links, gallery and featured work.
-type ProviderDesign struct {
-	Slug        string                `json:"slug"`
-	Tagline     string                `json:"tagline"`
-	Layout      string                `json:"layout"`
-	Header      string                `json:"header"`
-	ButtonShape string                `json:"buttonShape"`
-	CoverURL    *string               `json:"coverUrl"`
-	Tokens      map[string]string     `json:"tokens"`
-	Social      []ProviderSocialLink  `json:"social"`
-	Gallery     []ProviderGalleryItem `json:"gallery"`
-	Featured    []ProviderFeature     `json:"featured"`
-}
-
-// ProviderPage is a provider's public page: bookings profile and services plus the designed page when published.
+// ProviderPage is a provider's public page: bookings profile and services.
 type ProviderPage struct {
 	OrgID          string          `json:"orgId"`
 	DisplayName    string          `json:"displayName"`
@@ -346,7 +322,6 @@ type ProviderPage struct {
 	InstantBooking bool            `json:"instantBooking"`
 	Team           []ServiceMember `json:"team"`
 	Services       []ServiceDetail `json:"services"`
-	Design         *ProviderDesign `json:"design"`
 }
 
 // BookedService is the service as booked.
@@ -533,4 +508,31 @@ func (r PlaceOrderRequest) Selections() []PlaceOrderRequestSelection {
 		out = append(out, s)
 	}
 	return out
+}
+
+// BusinessPage is the plain public page of a business: name, description, logo and one brand colour, and for providers
+// the services it offers. Nobody edits it as a page; it is made from the application.
+type BusinessPage struct {
+	Slug string `json:"slug"`
+	// Kind is SELLER or PROVIDER.
+	Kind         string  `json:"kind"`
+	Name         string  `json:"name"`
+	Description  *string `json:"description"`
+	BrandColor   *string `json:"brandColor"`
+	LogoURL      *string `json:"logoUrl"`
+	ContactEmail *string `json:"contactEmail"`
+	// Indexable is false until the business is approved: keep the page out of search engines.
+	Indexable bool                  `json:"indexable"`
+	Services  []BusinessPageService `json:"services"`
+	// Products are a seller's live products (a few, best match first); empty for providers.
+	Products []ProductSummary `json:"products"`
+}
+
+// BusinessPageService is one service a provider offers, as listed on its page.
+type BusinessPageService struct {
+	ServiceID       string `json:"serviceId"`
+	Name            string `json:"name"`
+	DurationMinutes int    `json:"durationMinutes"`
+	PriceMinor      int64  `json:"priceMinor"`
+	Currency        string `json:"currency"`
 }

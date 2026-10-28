@@ -21,6 +21,7 @@ const (
 	TopicOrders             = "orders"
 	TopicSellerApplications = "sellerApplications"
 	TopicSellerCompliance   = "sellerCompliance"
+	TopicSellerSubscription = "sellerSubscription"
 	TopicPayouts            = "payouts"
 	TopicBookings           = "bookings"
 	TopicContent            = "content"
@@ -29,6 +30,7 @@ const (
 	TopicTrustOps           = "trustOps"
 	TopicRetail             = "retail"
 	TopicDeliveryRuns       = "deliveryRuns"
+	TopicCatalogImports     = "catalogImports"
 )
 
 // DefaultTopics are the AsyncAPI channel addresses (contracts/asyncapi/events.yaml) for each logical topic.
@@ -37,6 +39,7 @@ var DefaultTopics = map[string]string{
 	TopicOrders:             "at.order.events",
 	TopicSellerApplications: "at.seller-application.events",
 	TopicSellerCompliance:   "at.seller-compliance.events",
+	TopicSellerSubscription: "at.seller-subscription.events",
 	TopicPayouts:            "at.payout.events",
 	TopicBookings:           "at.bookings.events",
 	TopicContent:            "at.content.events",
@@ -45,6 +48,7 @@ var DefaultTopics = map[string]string{
 	TopicTrustOps:           "at.trustops.events",
 	TopicRetail:             "at.retail.events",
 	TopicDeliveryRuns:       "at.delivery-runs.events",
+	TopicCatalogImports:     "at.product-import.events",
 }
 
 // ResolveTopics overlays configured addresses on DefaultTopics. Unknown names and empty addresses are errors, so a
@@ -93,6 +97,9 @@ const (
 	// RecipientAudience pages through a pre-order window's audience (Segment) on each of the rule's channels
 	// (IngestConfig.Audience, delivery-runs); the window id is in IDField.
 	RecipientAudience RecipientSource = "audience"
+	// RecipientLocation pages through the run-alert subscribers of a delivery-runs location (IngestConfig.Locations)
+	// on each of the rule's channels; the location id is in IDField (S262).
+	RecipientLocation RecipientSource = "location"
 	// RecipientCustomers resolves the distinct customerId of every object in the list IDField names (a window's
 	// orders[]).
 	RecipientCustomers RecipientSource = "customers"
@@ -179,11 +186,20 @@ var DefaultEventRules = map[string][]EventRule{
 	// ---- identity (at.identity.events) ----
 	"identity.verification.requested": {
 		{Topic: TopicIdentity, Template: "identity.verification", Channels: chEmail, Recipient: RecipientPayload,
-			IDField: "userId", Security: true, When: fieldNot("purpose", "PHONE_VERIFICATION")},
+			IDField: "userId", Security: true, When: fieldNot("purpose", "PHONE_VERIFICATION", "PASSWORD_RESET")},
 		// Phone verification (S234): sms to the number being verified, "Your AfroTransact code is …".
 		{Topic: TopicIdentity, Template: "identity.verification.phone", Channels: chSMS, Recipient: RecipientPayload,
 			IDField: "userId", Security: true, When: fieldIs("purpose", "PHONE_VERIFICATION")},
+		// Password reset (S300): one code, published once per channel (email, and sms to a verified phone).
+		{Topic: TopicIdentity, Template: "identity.password_reset", Channels: chEmailSMS, Recipient: RecipientPayload,
+			IDField: "userId", Security: true, When: fieldIs("purpose", "PASSWORD_RESET"), Enrich: enrichAccountSecurity},
 	},
+	// S300: a reset asked for an account that only signs in with Google / Apple / Facebook: no code, use the provider.
+	"identity.password-reset.federated": {{Topic: TopicIdentity, Template: "identity.password_reset.federated",
+		Channels: chEmail, Recipient: RecipientPayload, IDField: "userId", Security: true, Enrich: enrichAccountSecurity}},
+	// S300: the password was reset and every session signed out.
+	"identity.password.changed": {{Topic: TopicIdentity, Template: "identity.password_changed", Channels: chEmail,
+		Recipient: RecipientPayload, IDField: "userId", Security: true, Enrich: enrichAccountSecurity}},
 	// The invitee usually has no account: recipient.email from the payload only, never looked up.
 	"identity.invitation.created": {{Topic: TopicIdentity, Template: "org.invitation", Channels: chEmail,
 		Recipient: RecipientPayload, Security: true, Enrich: enrichInvitation}},
@@ -207,6 +223,17 @@ var DefaultEventRules = map[string][]EventRule{
 	// ---- pre-orders (at.delivery-runs.events), S270–S275 ----
 	"preorder.comms.due":        preorderCommsRules,
 	"preorder.late_order.added": {preorderLatePaymentRule},
+
+	// ---- delivery runs (at.delivery-runs.events), S262: announcements, dispatch, cancellation, subscriptions ----
+	// WhatsApp is off here; main enables it with RunRulesWithWhatsApp when deliveryRuns.whatsapp.enabled is set.
+	"delivery-runs.run.announced":          runEventRules["delivery-runs.run.announced"],
+	"delivery-runs.run.opened":             runEventRules["delivery-runs.run.opened"],
+	"delivery-runs.run.cutoff_reminder":    runEventRules["delivery-runs.run.cutoff_reminder"],
+	"delivery-runs.run.out_for_delivery":   runEventRules["delivery-runs.run.out_for_delivery"],
+	"delivery-runs.run.confirmed":          runEventRules["delivery-runs.run.confirmed"],
+	"delivery-runs.run.cancelled":          runEventRules["delivery-runs.run.cancelled"],
+	"delivery-runs.subscription.created":   runEventRules["delivery-runs.subscription.created"],
+	"delivery-runs.subscription.confirmed": runEventRules["delivery-runs.subscription.confirmed"],
 	"orders.order.cancelled": {{Topic: TopicOrders, Template: "order.cancelled", Channels: chEmailPush,
 		Recipient: RecipientUser, IDField: "customerId",
 		When: func(d map[string]any) bool { return boolean(d, "wasPlaced") }, Enrich: enrichOrder}},
@@ -270,6 +297,14 @@ var DefaultEventRules = map[string][]EventRule{
 			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldIs("reason", "REINSTATED"), Enrich: enrichSuspensionHold},
 	},
 
+	// ---- seller plans (at.seller-subscription.events), S296–S297: rewards and staff adjustments ----
+	"seller.billing.grant_applied": {
+		{Topic: TopicSellerSubscription, Template: "seller.billing.reward_earned", Channels: chEmailPush,
+			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldIs("source", "RULE"), Enrich: enrichGrant},
+		{Topic: TopicSellerSubscription, Template: "seller.billing.credit_granted", Channels: chEmail,
+			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldIs("source", "MANUAL"), Enrich: enrichGrant},
+	},
+
 	// ---- payouts (at.payout.events) ----
 	"payments.payout.paid": {{Topic: TopicPayouts, Template: "payout.paid", Channels: chEmailPush,
 		Recipient: RecipientOrgOwners, IDField: "orgId", Enrich: enrichPayout}},
@@ -292,6 +327,14 @@ var DefaultEventRules = map[string][]EventRule{
 	// ---- payments (at.payment.events): off-session charge needs the customer to authenticate (SCA) ----
 	"payments.intent.action_required": {{Topic: TopicPayments, Template: "payment.authentication_required",
 		Channels: chEmailPush, Recipient: RecipientUser, IDField: "customerId", Enrich: enrichActionRequired}},
+
+	// ---- gift cards (at.payment.events), S321: payments emails the recipient on the send date, in the buyer's language ----
+	"payments.gift_card.deliver": {{Topic: TopicPayments, Template: "payment.gift_card.delivered", Channels: chEmail,
+		Recipient: RecipientPayload, Enrich: enrichGiftCard}},
+
+	// ---- referrals (at.payment.events), S322: AfroTransact pays both sides; each is told in their own language ----
+	"payments.referral.rewarded": {{Topic: TopicPayments, Template: "payment.referral.rewarded", Channels: chEmail,
+		Recipient: RecipientUser, IDField: "customerId", Enrich: enrichReferralRewarded}},
 
 	// ---- trust & safety (at.trustops.events), S230 ----
 	"trustops.claim.opened": {
@@ -326,6 +369,11 @@ var DefaultEventRules = map[string][]EventRule{
 	"trustops.seller.reinstated": {{Topic: TopicTrustOps, Template: "seller.reinstated", Channels: chEmail,
 		Recipient: RecipientOrgOwners, IDField: "orgId", Enrich: enrichSellerEnforcement}},
 
+	// ---- catalog bulk uploads (at.product-import.events), S308: large imports tell the member who uploaded ----
+	"catalog.import.completed": {{Topic: TopicCatalogImports, Template: "catalog.import_completed",
+		Channels: chEmailPush, Recipient: RecipientUser, IDField: "uploadedBy", When: flagSet("notifySeller"),
+		Enrich: enrichImportCompleted}},
+
 	// ---- content (at.content.events) ----
 	"content.career-application.received": {{Topic: TopicContent, Template: "careers.application_received",
 		Channels: chEmail, Recipient: RecipientPayload,
@@ -334,10 +382,43 @@ var DefaultEventRules = map[string][]EventRule{
 		Channels: chEmail, Recipient: RecipientPayload}},
 }
 
+// flagSet selects events whose boolean field is true.
+func flagSet(k string) func(map[string]any) bool {
+	return func(d map[string]any) bool { b, ok := d[k].(bool); return ok && b }
+}
+
+// enrichImportCompleted links the upload's report in Seller Center and words the outcome.
+func enrichImportCompleted(d map[string]any, l Links) {
+	d["reportUrl"] = join(l.SellerCenter, "/listings/bulk/"+str(d, "importId"))
+	failed, _ := d["failedRows"].(float64)
+	skipped, _ := d["skippedRows"].(float64)
+	d["hasProblems"] = failed+skipped > 0
+	d["problemRows"] = int(failed + skipped)
+}
+
 func setDefault(d map[string]any, k, v string) {
 	if str(d, k) == "" && v != "" {
 		d[k] = v
 	}
+}
+
+// enrichAccountSecurity fills the account-security emails (password reset and change, S300): a greeting that works
+// without a first name, the linked providers as words, the date of the change, and links to sign in and get help.
+func enrichAccountSecurity(d map[string]any, l Links) {
+	d["greetingName"] = firstNonBlank(str(d, "firstName"), "there")
+	d["providerList"] = humanList(stringList(d, "providers"))
+	d["changedOn"] = friendlyDate(str(d, "changedAt"))
+	d["signInUrl"] = join(l.Storefront, "/signin")
+	d["helpUrl"] = join(l.Storefront, "/help")
+}
+
+func firstNonBlank(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 func enrichWelcome(d map[string]any, l Links) {
@@ -417,10 +498,20 @@ func enrichShipment(d map[string]any, l Links) {
 func enrichShipmentCancelled(d map[string]any, l Links) {
 	enrichShipmentView(d, l)
 	d["refund"] = ""
-	if boolean(d, "captured") {
+	// ADR 0005: a pre-order cancelled by AfroTransact (its window or delivery run was cancelled) is refunded in full,
+	// delivery fee included; say so plainly.
+	byUs := str(d, "fulfilmentType") == "PREORDER" && str(d, "actorType") != "CUSTOMER"
+	switch {
+	case boolean(d, "captured") && byUs:
+		d["refund"] = moneyField(d, "totalMinor")
+		d["refundNote"] = "AfroTransact cancelled this pre-order. We're refunding the full " + moneyField(d, "totalMinor") +
+			", delivery fee included, to your original payment method. It can take 5–10 business days to show."
+	case boolean(d, "captured"):
 		d["refund"] = moneyField(d, "totalMinor")
 		d["refundNote"] = "We're refunding " + moneyField(d, "totalMinor") + " to your original payment method. It can take 5–10 business days to show."
-	} else {
+	case byUs:
+		d["refundNote"] = "AfroTransact cancelled this pre-order. You haven't been charged, and the hold on your card is being released."
+	default:
 		d["refundNote"] = "You haven't been charged for these items."
 	}
 }
@@ -481,6 +572,46 @@ func enrichEnforcement(d map[string]any, l Links) {
 	d["itemsText"] = humanList(stringList(d, "pastDue"))
 	setDefault(d, "itemsText", "your Stripe account details")
 	d["actionUrl"] = join(l.SellerCenter, "/payouts")
+}
+
+// enrichGrant words a reward or adjustment: the trial end it moved to and, for credits, that the next invoices use it.
+func enrichGrant(d map[string]any, l Links) {
+	setDefault(d, "summary", "a billing update")
+	setDefault(d, "reason", "a milestone")
+	d["trialLine"] = ""
+	if f := friendlyDate(str(d, "trialEndsAt")); f != "" && (str(d, "type") == "FREE_DAYS" || str(d, "type") == "TRIAL_END") {
+		d["trialLine"] = "Your next plan charge is now on " + f + "."
+	}
+	d["creditLine"] = ""
+	if str(d, "type") == "CREDIT" {
+		d["creditLine"] = "Your next invoices use the credit first."
+	}
+	d["actionUrl"] = join(l.SellerCenter, "/billing")
+}
+
+// enrichGiftCard formats the amount and points the button at the credit page, where the code is redeemed. The buyer's
+// name, the recipient's name and the message are free text: they reach the template as plain strings (escaped there).
+func enrichGiftCard(d map[string]any, l Links) {
+	d["amount"] = moneyField(d, "amountMinor")
+	nullable(d, "recipientName", "senderName", "message", "code")
+	d["redeemUrl"] = join(l.Storefront, "/account/credit")
+}
+
+// enrichReferralRewarded words one side's reward: credit as an amount, membership as days. The friend's name arrives as
+// first name and last initial; the button goes to the credit page, or to the referrals page for membership days.
+func enrichReferralRewarded(d map[string]any, l Links) {
+	nullable(d, "friendName")
+	setDefault(d, "friendName", "your friend")
+	d["isReferrer"] = str(d, "side") == "REFERRER"
+	d["isCredit"] = str(d, "rewardType") != "MEMBERSHIP_DAYS"
+	d["amount"] = moneyField(d, "creditMinor")
+	if n, ok := integer(d, "membershipDays"); ok {
+		d["days"] = n
+	} else {
+		d["days"] = 0
+	}
+	d["creditUrl"] = join(l.Storefront, "/account/credit")
+	d["referUrl"] = join(l.Storefront, "/account/refer")
 }
 
 func enrichPayout(d map[string]any, l Links) {

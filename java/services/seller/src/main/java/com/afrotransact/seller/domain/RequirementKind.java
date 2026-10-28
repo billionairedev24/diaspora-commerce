@@ -1,6 +1,6 @@
 package com.afrotransact.seller.domain;
 
-/** Kinds of Stripe requirements we can collect in our own Account health UI. */
+/** Kinds of Stripe requirements, for the label Account health shows; Stripe's embedded components collect them. */
 public enum RequirementKind {
     TAX_ID,
     ID_NUMBER,

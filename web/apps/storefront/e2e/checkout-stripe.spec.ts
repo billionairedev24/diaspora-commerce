@@ -39,13 +39,15 @@ function installFakeStripe() {
                 calls.push(['mount', type]);
                 const box = document.createElement('div');
                 box.setAttribute('data-fake-stripe', type);
-                box.style.cssText = 'border:1px solid #c9c9c9;border-radius:6px;padding:12px;font:14px Figtree,sans-serif;background:#fff';
+                box.style.cssText = 'border:1px solid #c9c9c9;border-radius:6px;padding:12px;font:14px Inter,sans-serif;background:#fff';
                 box.style.padding = '0';
                 const row = (label: string, open: boolean) =>
                   `<div style="border-bottom:1px solid #e0e0e0;padding:12px 14px"><label style="display:flex;gap:10px;align-items:center;font-weight:600"><input type="radio" name="fake-pm" ${open ? 'checked' : ''}> ${label}</label>` +
                   (open ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px"><input aria-label="Fake Stripe card number" placeholder="1234 1234 1234 1234" style="grid-column:1/-1;min-width:0;box-sizing:border-box;width:100%;height:40px;border:1px solid #c9c9c9;border-radius:6px;padding:0 10px"><input aria-label="Fake Stripe expiry" placeholder="MM / YY" style="min-width:0;box-sizing:border-box;width:100%;height:40px;border:1px solid #c9c9c9;border-radius:6px;padding:0 10px"><input aria-label="Fake Stripe CVC" placeholder="CVC" style="min-width:0;box-sizing:border-box;width:100%;height:40px;border:1px solid #c9c9c9;border-radius:6px;padding:0 10px"></div>' : '') +
                   '</div>';
-                box.innerHTML = ['Card', 'Apple Pay', 'Klarna', 'Amazon Pay', 'Cash App Pay'].map((l, i) => row(l, i === 0)).join('');
+                // Static markup of this fake only (no user input): parsed, not written through innerHTML.
+                const markup = ['Card', 'Apple Pay', 'Klarna', 'Amazon Pay', 'Cash App Pay'].map((l, i) => row(l, i === 0)).join('');
+                box.replaceChildren(...new DOMParser().parseFromString(markup, 'text/html').body.children);
                 el.appendChild(box);
                 box.addEventListener('input', () => on.change?.({ complete: true, empty: false, value: { type: 'card' } }));
                 setTimeout(() => {
@@ -112,15 +114,15 @@ test('the stand-in 3-D Secure card returns through /checkout/complete, which con
   await expect(page).toHaveURL(/\/orders\?placed=AT-2026-/);
 });
 
-test('with a Stripe key: inline Payment Element (deferred intent), no Express Checkout, submit → order → confirmPayment', async ({ page }) => {
+test('with a Stripe key: Payment Element only (deferred intent), submit → order → confirmPayment', async ({ page }) => {
   await useFakeStripe(page);
   await signInWithCart(page);
-  await expect(page.locator('[data-fake-stripe="payment"]')).toBeVisible();
   await expect(page.locator('[data-fake-stripe="expressCheckout"]')).toHaveCount(0);
+  await expect(page.locator('[data-fake-stripe="payment"]')).toBeVisible();
   await expect(page.getByTestId('stripe-dev-notice')).toHaveCount(0);
   await expect(page.getByRole('img', { name: 'Powered by Stripe' }).first()).toBeVisible();
   const elements = (await calls(page)).filter(([k]) => k === 'elements').map(([, o]) => o as Record<string, unknown>);
-  expect(elements.at(-1)).toMatchObject({ mode: 'payment', currency: 'usd', captureMethod: 'manual' });
+  expect(elements.at(-1)).toMatchObject({ mode: 'payment', currency: 'usd', captureMethod: 'automatic_async' });
   await page.getByLabel('Fake Stripe card number').fill('4242 4242 4242 4242');
   await page.getByRole('button', { name: 'Place your order' }).click();
   await expect(page).toHaveURL(/\/orders\?placed=AT-2026-/);

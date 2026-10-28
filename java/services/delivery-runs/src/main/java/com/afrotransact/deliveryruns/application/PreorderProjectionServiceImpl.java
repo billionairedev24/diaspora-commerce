@@ -12,6 +12,7 @@ import com.afrotransact.deliveryruns.domain.PreorderOrder;
 import com.afrotransact.deliveryruns.domain.PreorderOrderStatus;
 import com.afrotransact.deliveryruns.domain.PreorderPackage;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
+import com.afrotransact.deliveryruns.domain.RefundStatus;
 import com.afrotransact.deliveryruns.port.PreorderOrderRepository;
 import com.afrotransact.deliveryruns.port.PreorderSequences;
 import com.afrotransact.deliveryruns.port.PreorderWindowRepository;
@@ -99,8 +100,28 @@ class PreorderProjectionServiceImpl implements PreorderProjectionService {
         if (o.isEmpty() && shipmentId != null) {
             o = orders.findByShipment(shipmentId);
         }
+        Instant now = Instant.now(clock);
         o.filter(x -> x.status() != PreorderOrderStatus.CANCELLED)
-                .ifPresent(x -> orders.update(x.cancelShipment(shipmentId, Instant.now(clock))));
+                .ifPresent(x -> {
+                    PreorderOrder cancelled = orders.update(x.cancelShipment(shipmentId, now));
+                    if (cancelled.status() == PreorderOrderStatus.CANCELLED) {
+                        // The cancel follow-up in orders-service refunds it; refund_settled / refund_failed follow.
+                        orders.recordRefund(cancelled.orderId(), RefundStatus.PENDING, null, null, now);
+                    }
+                });
+    }
+
+    @Override
+    @Transactional
+    public void onRefund(UUID eventId, String orderId, RefundStatus status, Long amountMinor, String error,
+                         Instant at) {
+        if (!inbox.firstDelivery(CONSUMER, eventId)) {
+            return;
+        }
+        if (!orders.recordRefund(orderId, status, amountMinor, error, at == null ? Instant.now(clock) : at)) {
+            LOG.debug("Refund {} for order {} not recorded (not a projected pre-order, or already settled)", status,
+                    orderId);
+        }
     }
 
     @Override

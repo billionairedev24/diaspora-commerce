@@ -56,3 +56,23 @@
 @media (pointer: coarse) {
   .socialIcon { width: var(--at-size-touch); height: var(--at-size-touch); }
 }
+
+/* Floating WhatsApp chat with support: bottom corner, clear of the safe-area inset. */
+.chatFab {
+  position: fixed;
+  inset-block-end: max(var(--at-space-4), env(safe-area-inset-bottom, 0px));
+  inset-inline-start: max(var(--at-space-4), env(safe-area-inset-left, 0px));
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--at-radius-pill);
+  background: var(--at-brand-whatsapp);
+  box-shadow: var(--at-shadow-md, 0 4px 14px rgba(0, 0, 0, 0.25));
+  transition: transform var(--at-duration-fast) var(--at-ease);
+}
+.chatFab:hover { transform: translateY(-2px); }
+.chatFab svg { width: 30px; height: 30px; fill: var(--at-brand-on-mark); }
+@media print { .chatFab { display: none; } }

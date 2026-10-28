@@ -2,7 +2,7 @@
 # Build context: go/   (docker build -f services/notifications/Dockerfile go)
 FROM golang:1.27.2 AS build
 WORKDIR /src
-ENV CGO_ENABLED=0 GOWORK=off GOFLAGS=-trimpath
+ENV CGO_ENABLED=0 GOWORK=off GOFLAGS="-trimpath -buildvcs=false"
 COPY pkg/go.mod pkg/go.sum ./pkg/
 COPY services/notifications/go.mod services/notifications/go.sum ./services/notifications/
 WORKDIR /src/services/notifications

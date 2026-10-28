@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 
 import com.afrotransact.payments.domain.Settlement;
+import com.afrotransact.payments.domain.SettlementTransfer;
 import com.afrotransact.payments.domain.SettlementKind;
 import com.afrotransact.payments.domain.ShipmentSettlement;
 
@@ -34,4 +35,10 @@ public interface SettlementService {
      * {@code maxOrders} order holds. Returns transfers created.
      */
     int releaseMatured(int maxOrders);
+
+    /**
+     * Stripe Connect transfers: an organisation's, newest first (its members and staff who see its payouts), or one
+     * order's (staff). These are the {@code tr_…} ids to look up in the Stripe dashboard.
+     */
+    List<SettlementTransfer> transfers(String orgId, String orderId, int limit);
 }

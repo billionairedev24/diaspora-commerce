@@ -3,12 +3,16 @@ package com.afrotransact.payments.domain;
 import java.util.Locale;
 import java.util.Optional;
 
-/** Saved payment method types offered at checkout. */
+/**
+ * Saved payment method types offered at checkout. Apple Pay and Google Pay save a {@code card} (with
+ * {@code card.wallet}); Link, Cash App Pay and Amazon Pay save their own type.
+ */
 public enum PaymentMethodType {
     CARD("card"),
     US_BANK_ACCOUNT("us_bank_account"),
     CASHAPP("cashapp"),
-    LINK("link");
+    LINK("link"),
+    AMAZON_PAY("amazon_pay");
 
     private final String stripe;
 

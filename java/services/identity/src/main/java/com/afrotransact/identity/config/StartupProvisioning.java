@@ -4,7 +4,11 @@ import java.time.Instant;
 import java.util.UUID;
 
 import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAuthenticationProvider;
+import com.afrotransact.identity.adapter.out.crypto.Pem;
 import com.afrotransact.identity.application.BootstrapService;
+import com.afrotransact.identity.application.SigningKeyAdminService;
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.jwk.RSAKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -12,15 +16,16 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
+import org.springframework.security.oauth2.server.authorization.client.JdbcRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.stereotype.Component;
 
 /**
- * Seeds the OAuth clients configured for this environment ({@code at.identity.clients}) and the bootstrap super
- * administrator. Clients are upserted by client id, so configuration changes apply on the next deploy.
+ * Seeds the configured signing key (when no key is stored yet), the OAuth clients configured for this environment
+ * ({@code at.identity.clients}) and the bootstrap super administrator. Clients are only created when missing: once a
+ * client exists the staff console owns it (S291), so an edit made there is never overwritten by a deploy.
  */
 @Component
 class StartupProvisioning implements ApplicationRunner {
@@ -28,28 +33,46 @@ class StartupProvisioning implements ApplicationRunner {
     private static final Logger LOG = LoggerFactory.getLogger(StartupProvisioning.class);
 
     private final IdentityProperties props;
-    private final RegisteredClientRepository clients;
+    private final JdbcRegisteredClientRepository clients;
     private final PasswordEncoder encoder;
     private final BootstrapService bootstrap;
+    private final SigningKeyAdminService signingKeys;
+    private final ConfiguredSigningKeys configuredKeys;
 
-    StartupProvisioning(IdentityProperties props, RegisteredClientRepository clients, PasswordEncoder encoder,
-                        BootstrapService bootstrap) {
+    StartupProvisioning(IdentityProperties props, JdbcRegisteredClientRepository clients, PasswordEncoder encoder,
+                        BootstrapService bootstrap, SigningKeyAdminService signingKeys,
+                        ConfiguredSigningKeys configuredKeys) {
         this.props = props;
         this.clients = clients;
         this.encoder = encoder;
         this.bootstrap = bootstrap;
+        this.signingKeys = signingKeys;
+        this.configuredKeys = configuredKeys;
     }
 
     @Override
     public void run(ApplicationArguments args) {
+        if (configuredKeys.keys().get(0) instanceof RSAKey signing) {
+            try {
+                signingKeys.seedIfEmpty(signing.getKeyID(), Pem.publicKey(signing.toRSAPublicKey()),
+                        Pem.privateKey(signing.toPrivateKey()));
+            } catch (JOSEException ex) {
+                throw new IllegalStateException("The configured signing key cannot be read", ex);
+            }
+        }
+        int created = 0;
         for (IdentityProperties.Client c : props.clients()) {
             if (!c.isPublic() && (c.secret() == null || c.secret().isBlank())) {
                 LOG.warn("Skipping confidential client {}: no secret configured", c.clientId());
                 continue;
             }
-            clients.save(toRegisteredClient(c));
+            if (clients.findByClientId(c.clientId()) == null) {
+                clients.save(toRegisteredClient(c));
+                created++;
+            }
         }
-        LOG.info("Seeded {} OAuth clients", props.clients().size());
+        LOG.info("Created {} of {} configured OAuth clients (existing clients are left as they are)", created,
+                props.clients().size());
         IdentityProperties.BootstrapAdmin admin = props.bootstrapAdmin();
         if (admin.email() != null && !admin.email().isBlank() && admin.password() != null
                 && !admin.password().isBlank()) {
@@ -60,12 +83,10 @@ class StartupProvisioning implements ApplicationRunner {
     }
 
     private RegisteredClient toRegisteredClient(IdentityProperties.Client c) {
-        RegisteredClient existing = clients.findByClientId(c.clientId());
-        String id = existing != null ? existing.getId() : UUID.randomUUID().toString();
-        RegisteredClient.Builder b = RegisteredClient.withId(id)
+        RegisteredClient.Builder b = RegisteredClient.withId(UUID.randomUUID().toString())
                 .clientId(c.clientId())
                 .clientName(c.name())
-                .clientIdIssuedAt(existing != null ? existing.getClientIdIssuedAt() : Instant.now());
+                .clientIdIssuedAt(Instant.now());
         if (c.isPublic()) {
             b.clientAuthenticationMethod(ClientAuthenticationMethod.NONE);
         } else {

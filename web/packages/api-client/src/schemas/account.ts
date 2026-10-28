@@ -21,7 +21,7 @@ export type Address = z.infer<typeof AddressSchema>;
 
 export const PaymentMethodSchema = z.object({
   id: z.string(),
-  type: z.enum(['card', 'us_bank_account', 'cashapp', 'link']),
+  type: z.enum(['card', 'us_bank_account', 'cashapp', 'link', 'amazon_pay']),
   brand: z.string().nullable(),
   last4: z.string().nullable(),
   label: z.string(),
@@ -43,7 +43,10 @@ export const OrderSummarySchema = z.object({
       label: z.string(),
       status: z.string(),
       items: z.string(),
+      sellerName: z.string().optional(),
+      lines: z.array(z.object({ title: z.string(), quantity: z.number().int(), imageUrl: z.string().nullable().optional(), productAtin: z.string().optional() })).optional(),
       cancellable: z.boolean().optional(),
+      cancellableUntil: z.string().nullable().optional(),
       carrier: z.string().nullable().optional(),
       trackingNumber: z.string().nullable().optional(),
       promisedBy: z.string().nullable().optional(),

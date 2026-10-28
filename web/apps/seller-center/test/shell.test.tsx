@@ -27,7 +27,7 @@ describe('portal shell', () => {
 
   it('shows the owner every seller module, grouped, with the payouts-paused banner', async () => {
     renderWithProviders(<PortalShell><p>page body</p></PortalShell>);
-    expect(await navHrefs()).toEqual(['/', '/orders', '/listings', '/inventory', '/storefront', '/payouts', '/fees', '/billing', '/account-health', '/team']);
+    expect(await navHrefs()).toEqual(['/', '/orders', '/returns', '/disputes', '/listings', '/inventory', '/coupons', '/payouts', '/fees', '/billing', '/account-health', '/team']);
     expect(screen.getByRole('button', { name: /commerce/i })).toHaveAttribute('aria-expanded', 'false');
     expect(await screen.findByText('Payouts are paused.')).toBeInTheDocument();
     expect(screen.getByText('page body')).toBeInTheDocument();
@@ -54,7 +54,7 @@ describe('portal shell', () => {
     await mockApi().setActiveOrg(PROVIDER_ORG);
     renderWithProviders(<PortalShell><p>home</p></PortalShell>);
     const hrefs = await navHrefs();
-    expect(hrefs).toEqual(expect.arrayContaining(['/calendar', '/requests', '/hours', '/services', '/policy', '/public-page', '/earnings']));
+    expect(hrefs).toEqual(expect.arrayContaining(['/calendar', '/requests', '/hours', '/services', '/policy', '/earnings']));
     expect(hrefs).not.toContain('/orders');
   });
 });
@@ -66,7 +66,7 @@ describe('My account in Seller Center', () => {
     nav.replace.mockReset();
   });
 
-  it('keeps the account menu inside Seller Center; only the storefront link leaves it', async () => {
+  it('keeps the account menu inside Seller Center; only the AfroTransact link leaves it', async () => {
     nav.pathname = '/';
     const user = userEvent.setup();
     renderWithProviders(
@@ -80,7 +80,7 @@ describe('My account in Seller Center', () => {
     const items = await screen.findAllByRole('menuitem');
     const links = Object.fromEntries(items.map((i) => [i.textContent?.trim() ?? '', i.getAttribute('href')]));
     expect(links).toMatchObject({ 'My account': '/account', 'Sign-in & security': '/account/security', Notifications: '/account/notifications', Preferences: '/account/preferences' });
-    const storefront = items.find((i) => i.textContent?.includes('Open the storefront'));
+    const storefront = items.find((i) => i.textContent?.includes('Open AfroTransact'));
     expect(storefront).toHaveAttribute('target', '_blank');
     expect(storefront?.getAttribute('href')).toMatch(/^http/);
   });

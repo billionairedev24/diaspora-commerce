@@ -44,6 +44,9 @@ type ProductEvent struct {
 	Brand string `json:"brand"`
 	// Communities are the diaspora communities the product is tagged with.
 	Communities []string `json:"communities"`
+	// Description is the shopper description and Keywords the seller's search keywords: both are searched.
+	Description string   `json:"description"`
+	Keywords    []string `json:"keywords"`
 }
 
 // SellerOrgEvent mirrors seller-service's seller.org.approved / seller.org.updated payload (fields the indexer uses).

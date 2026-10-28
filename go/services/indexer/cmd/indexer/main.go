@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/elastic/go-elasticsearch/v9"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"golang.org/x/sync/errgroup"
@@ -24,7 +23,6 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/telemetry"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/catalog"
-	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/elastic"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/embedder"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/sellers"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/app"
@@ -60,18 +58,12 @@ func run() error {
 	}
 	defer func() { _ = shutdownTracing(context.WithoutCancel(ctx)) }()
 
-	esOpts := []elasticsearch.Option{elasticsearch.WithAddresses(cfg.Elasticsearch.URLs...), elasticsearch.WithRetry(3)}
-	switch {
-	case cfg.Elasticsearch.APIKey != "":
-		esOpts = append(esOpts, elasticsearch.WithAPIKey(cfg.Elasticsearch.APIKey))
-	case cfg.Elasticsearch.Username != "":
-		esOpts = append(esOpts, elasticsearch.WithBasicAuth(cfg.Elasticsearch.Username, cfg.Elasticsearch.Password))
-	}
-	es, err := elasticsearch.New(esOpts...)
+	be, err := newBackend(cfg)
 	if err != nil {
-		return fmt.Errorf("elasticsearch client: %w", err)
+		return err
 	}
-	if err := elastic.NewIndexAdmin(es, cfg.SynonymsSet).EnsureIndex(ctx, cfg.Market); err != nil {
+	log.Info("search engine", "provider", be.name)
+	if err := be.ensureIndex(ctx, cfg.Market); err != nil {
 		return fmt.Errorf("ensure index: %w", err)
 	}
 
@@ -82,7 +74,7 @@ func run() error {
 	}, []string{"type", "outcome"})
 	registry.MustRegister(processed)
 
-	index := elastic.NewIndex(es, cfg.Elasticsearch.Refresh)
+	index := be.index
 	httpClient := &http.Client{Timeout: 5 * time.Second}
 	directory := newSellerDirectory(cfg, httpClient, log)
 	// S213: warm seller names before consuming, so a restart never changes indexed seller names.
@@ -121,7 +113,7 @@ func run() error {
 	}
 	srv := httpserver.New(httpserver.Options{
 		Name: "Indexer", Addr: ":" + strconv.Itoa(cfg.Port), OpenAPI: openapi, DocsOn: cfg.DocsEnabled,
-		Checks: []httpserver.ReadinessCheck{readiness{index: index}}, Logger: log, Registry: registry,
+		Checks: []httpserver.ReadinessCheck{readiness{index: index, engine: be.name}}, Logger: log, Registry: registry,
 	})
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -227,9 +219,12 @@ func (c counting) Handle(ctx context.Context, e events.Envelope) error {
 	return nil
 }
 
-type readiness struct{ index port.ProductIndex }
+type readiness struct {
+	index  port.ProductIndex
+	engine string
+}
 
-func (readiness) Name() string { return "elasticsearch" }
+func (r readiness) Name() string { return r.engine }
 
 func (r readiness) Check(ctx context.Context) error {
 	if err := r.index.Ping(ctx); err != nil {

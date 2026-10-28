@@ -42,7 +42,8 @@ class ShipmentController {
     @Operation(summary = "Move a shipment to another status",
             description = "Seller-fulfilled: only the seller confirms, packs and marks ready; platform admins may "
                     + "confirm delivery, record a failure, process returns or cancel — never packed. AfroTransact-"
-                    + "fulfilled: admins and fulfilment ops own every step. Refusals: 403 orders.transition-forbidden "
+                    + "fulfilled: admins and fulfilment ops own every step. A pickup order is handed over (delivered) with the "
+                    + "customer's 4-digit code. Refusals: 403 orders.transition-forbidden "
                     + "(not this actor's step) or 409 orders.invalid-transition. The optional Idempotency-Key makes "
                     + "retries safe (same key = same result).")
     @PostMapping("/v1/shipments/{id}/transitions")
@@ -50,7 +51,7 @@ class ShipmentController {
                                     @RequestHeader(value = CheckoutController.IDEMPOTENCY_KEY, required = false)
                                     String key,
                                     @Valid @RequestBody TransitionRequest body) {
-        return shipments.transition(id, body.to(), body.reason(), key);
+        return shipments.transition(id, body.to(), body.reason(), body.handoverCode(), key);
     }
 
     @Operation(summary = "Driver-app event (AfroTransact Delivery)",

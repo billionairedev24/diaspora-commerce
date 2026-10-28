@@ -83,6 +83,10 @@ func TestSellerContractConformance(t *testing.T) {
 			t.Errorf("%s %s answered %d, which the contract does not document: %s", req.Method, req.URL.Path, rec.Code, rec.Body.Bytes())
 			return
 		}
+		if strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") {
+			validated[route.Operation.OperationID]++ // a printable document: the status is documented, there is no schema
+			return
+		}
 		in := &openapi3filter.ResponseValidationInput{
 			RequestValidationInput: &openapi3filter.RequestValidationInput{Request: req, PathParams: params, Route: route,
 				Options: &openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc}},
@@ -131,16 +135,65 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("GET", "/v1/seller/orders?status=SHIPPED_NOPE", nil), 422)
 	mustStatus(t, b.do("GET", "/v1/seller/orders/AT-2026-000123", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/orders/AT-0000", nil), 404)
-	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "DELIVERED"}), 422)
+	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "DELIVERED", "handoverCode": "12"}), 422) // a code, when given, has 4 digits
+	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "DELIVERED"}), 409)                       // no code: orders decides (placed → delivered is not a step)
 	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "PACKED"}), 409)
 	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "CONFIRMED"}), 200)
 	mustStatus(t, b.do("POST", orderPath+"/rates", map[string]any{"parcel": parcel, "shipFrom": from}), 200)
+	rateRes := b.do("POST", orderPath+"/rates", map[string]any{"carrier": "fedex", "parcel": parcel, "shipFrom": from})
+	mustStatus(t, rateRes, 200)
+	if quotes, ok := rateRes.json(t)["quotes"].([]any); !ok || len(quotes) == 0 {
+		t.Fatalf("expected fedex quotes, got %v", rateRes.body)
+	} else {
+		for _, q := range quotes {
+			if q.(map[string]any)["carrier"] != "fedex" {
+				t.Fatalf("expected only fedex quotes, got %v", q)
+			}
+		}
+	}
 	mustStatus(t, b.do("POST", orderPath+"/rates", map[string]any{"parcel": map[string]any{"weightLb": 0}, "shipFrom": from}), 422)
 	mustStatus(t, b.do("POST", orderPath+"/labels", map[string]any{"carrier": "usps", "service": "USPS_GROUND_ADVANTAGE", "parcel": parcel, "shipFrom": from}), 422)
 	b.headers["Idempotency-Key"] = "label-0123456789"
 	mustStatus(t, b.do("POST", orderPath+"/labels", map[string]any{"carrier": "usps", "service": "USPS_GROUND_ADVANTAGE", "parcel": parcel, "shipFrom": from}), 201)
 	mustStatus(t, b.do("POST", orderPath+"/labels", map[string]any{"carrier": "usps", "service": "USPS_GROUND_ADVANTAGE", "parcel": parcel, "shipFrom": from}), 409)
 	delete(b.headers, "Idempotency-Key")
+	// Plan capabilities: the label bought above can be downloaded again; coupons, the image library and brand suggestions.
+	mustStatus(t, b.do("GET", "/v1/seller/orders/AT-2026-000123/shipments/sh-1/label", nil), 200)
+	mustStatus(t, b.do("GET", "/v1/seller/orders/AT-2026-000123/shipments/sh-9/label", nil), 404)
+	// Returns and disputes: read only, scoped to the organisation by the upstreams, the buyer never identified.
+	if r := b.do("GET", "/v1/seller/returns?status=RECEIVED", nil); r.status != 200 || !strings.Contains(string(r.body), "RMA-5E11E5") || !strings.Contains(string(r.body), "Garri 2kg") {
+		t.Fatalf("returns = %d %s", r.status, r.body)
+	}
+	// The tax statement: what was collected on the seller's behalf, by state, with totals and a CSV.
+	if r := b.do("GET", "/v1/seller/tax/statement?month=2026-09", nil); r.status != 200 || !strings.Contains(string(r.body), `"month":"2026-09"`) || !strings.Contains(string(r.body), `"netTaxMinor":2415`) ||
+		!strings.Contains(string(r.body), `"state":"TX"`) || !strings.Contains(string(r.body), `"months":["`) {
+		t.Fatalf("tax statement = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("GET", "/v1/seller/tax/statement?month=September", nil), 422)
+	if r := b.do("GET", "/v1/seller/tax/statement/export?month=2026-09", nil); r.status != 200 || !strings.Contains(string(r.body), "US-TX,3,20.63") {
+		t.Fatalf("tax statement csv = %d %s", r.status, r.body)
+	}
+	if r := b.do("GET", "/v1/seller/disputes", nil); r.status != 200 || !strings.Contains(string(r.body), "CLM-1001") || strings.Contains(string(r.body), "cust-secret") ||
+		!strings.Contains(string(r.body), "Waiting for your response") || !strings.Contains(string(r.body), "2026-10-28T10:00:00Z") {
+		t.Fatalf("disputes = %d %s", r.status, r.body)
+	}
+	if r := b.do("GET", "/v1/seller/coupons", nil); r.status != 200 {
+		t.Fatalf("coupons = %d %s", r.status, r.body)
+	} else if items := r.json(t)["items"].([]any); len(items) != 1 || items[0].(map[string]any)["code"] != "WELCOME10" {
+		t.Fatalf("coupons must hide expired ones: %v", items)
+	}
+	mustStatus(t, b.do("POST", "/v1/seller/coupons", map[string]any{"code": "SPRING5", "description": "5% off", "type": "PERCENT", "value": 5, "scope": "SELLER",
+		"minSpendMinor": 1000, "totalLimit": 100, "perCustomerLimit": 1}), 201)
+	mustStatus(t, b.do("POST", "/v1/seller/coupons/cp-1/status", map[string]any{"status": "PAUSED"}), 200)
+	mustStatus(t, b.do("DELETE", "/v1/seller/coupons/cp-1", nil), 204)
+	mustStatus(t, b.do("GET", "/v1/seller/image-library?page=0&size=20", nil), 200)
+	mustStatus(t, b.do("GET", "/v1/seller/image-library?status=NOPE", nil), 422)
+	mustStatus(t, b.do("PATCH", "/v1/seller/image-library/img-1", map[string]any{"fileName": "OFADA-5LB-front.jpg"}), 200)
+	mustStatus(t, b.do("PATCH", "/v1/seller/image-library/img-1", map[string]any{"fileName": ""}), 422)
+	mustStatus(t, b.do("POST", "/v1/seller/image-library/attach", map[string]any{"skus": []string{"OFADA-5LB", "NOPE-1"}}), 200)
+	mustStatus(t, b.do("DELETE", "/v1/seller/image-library/img-1", nil), 204)
+	mustStatus(t, b.do("GET", "/v1/seller/catalog/brands?q=ma", nil), 200)
+
 	// Listings and the product builder.
 	mustStatus(t, b.do("GET", "/v1/seller/listings?page=0&size=25", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/listings?status=NOPE", nil), 422)
@@ -220,7 +273,24 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("POST", "/v1/seller/inventory/adjustments", map[string]any{"sku": "OFADA-5LB", "quantity": 30, "reason": "STOCK_TAKE"}), 503)
 	mustStatus(t, b.do("POST", "/v1/seller/inventory/adjustments", map[string]any{"sku": "", "quantity": -1, "reason": "?"}), 422)
 	exerciseSellerFba(t, b)
+	exerciseSellerListing(t, bff, b)
 	// Money.
+	// S298: plan invoices paid from sales are listed as "Plan fee (invoice …)" deductions; DECLINED ones took nothing.
+	// Held funds and plan fee deductions name the order by its number, never by payments' id.
+	if v := b.do("GET", "/v1/seller/payouts", nil).json(t); true {
+		holds := v["balance"].(map[string]any)["holds"].([]any)
+		if len(holds) != 2 || holds[0].(map[string]any)["orderNumber"] != "AT-2026-000123" || holds[1].(map[string]any)["orderNumber"] != nil {
+			t.Fatalf("holds = %v", holds)
+		}
+		transfers := v["planFeeDeductions"].([]any)[0].(map[string]any)["transfers"].([]any)
+		if transfers[0].(map[string]any)["orderNumber"] != "AT-2026-000123" {
+			t.Fatalf("plan fee transfers = %v", transfers)
+		}
+	}
+	if r := b.do("GET", "/v1/seller/payouts", nil); r.status != 200 || len(r.json(t)["planFeeDeductions"].([]any)) != 1 ||
+		r.json(t)["planFeeDeductions"].([]any)[0].(map[string]any)["label"] != "Plan fee (invoice AT-0003)" {
+		t.Fatalf("payouts plan fees = %d %s", r.status, r.body)
+	}
 	if r := b.do("GET", "/v1/seller/payouts", nil); r.status != 200 || r.json(t)["historyAvailable"] != false {
 		t.Fatalf("payouts = %d %s", r.status, r.body)
 	} else if bal := r.json(t)["balance"].(map[string]any); bal["payoutsPaused"] != true || bal["payoutsPausedReason"] != "AUTO_PAST_DUE" ||
@@ -263,12 +333,60 @@ func TestSellerContractConformance(t *testing.T) {
 			t.Fatalf("upcoming delivery fee = %v", df)
 		}
 	}
-	mustStatus(t, b.do("GET", "/v1/seller/billing", nil), 200)
+	billing := b.do("GET", "/v1/seller/billing", nil)
+	mustStatus(t, billing, 200)
+	// S298: how the plan is paid, and on each invoice what credit, sales and the card paid.
+	bv := billing.json(t)
+	inv0 := bv["invoices"].([]any)[0].(map[string]any)
+	if bv["planFeeCollection"].(map[string]any)["mode"] != "EARNINGS_FIRST" ||
+		bv["planFeeCollection"].(map[string]any)["canChange"] != true ||
+		num(inv0, "paidFromCreditMinor") != 2000 || num(inv0, "paidFromSalesMinor") != 7000 || num(inv0, "paidByCardMinor") != 2115 ||
+		inv0["canRetry"] != false || len(inv0["lines"].([]any)) != 1 {
+		t.Fatalf("billing plan fees = %v / %v", bv["planFeeCollection"], bv["invoices"])
+	}
+	// Staff conditions on the charges and what the plan allows come through for the seller to read.
+	sub := bv["subscription"].(map[string]any)
+	if gate := sub["chargeGate"].(map[string]any); gate["mode"] != "START_AFTER" || num(gate, "progress") != 42000 ||
+		!strings.Contains(gate["label"].(string), "Charging starts after $1,000") {
+		t.Fatalf("charge gate = %v", sub["chargeGate"])
+	}
+	if ent := sub["entitlements"].(map[string]any); num(ent, "listings") != 1000 || ent["aiListingWriter"] != true || ent["lolaTier"] != "GROWTH" {
+		t.Fatalf("entitlements = %v", sub["entitlements"])
+	}
+	if retry := b.do("POST", "/v1/seller/billing/invoices/inv_s3/retry", nil); retry.status != 200 || retry.json(t)["status"] != "PAID" {
+		t.Fatalf("retry invoice = %d %s", retry.status, retry.body)
+	}
+	if doc := b.do("GET", "/v1/seller/billing/invoices/inv_s3/document", nil); doc.status != 200 || !strings.Contains(string(doc.body), "AT-INV-2026-1003") {
+		t.Fatalf("invoice document = %d %s", doc.status, doc.body)
+	}
+	if pf := b.do("PUT", "/v1/seller/billing/plan-fee-collection", map[string]any{"mode": "CARD"}); pf.status != 200 || pf.json(t)["mode"] != "CARD" {
+		t.Fatalf("plan fee collection = %d %s", pf.status, pf.body)
+	}
+	mustStatus(t, b.do("PUT", "/v1/seller/billing/plan-fee-collection", map[string]any{"mode": "SOMETIMES"}), 422)
+	bff.Upstreams.PlanFeeCollectionOff = true
+	mustStatus(t, b.do("PUT", "/v1/seller/billing/plan-fee-collection", map[string]any{"mode": "EARNINGS_FIRST"}), 409)
+	bff.Upstreams.PlanFeeCollectionOff = false
 	mustStatus(t, b.do("POST", "/v1/seller/billing/plan", map[string]any{"planCode": "seller_pro", "cadence": "ANNUAL"}), 200)
 	mustStatus(t, b.do("POST", "/v1/seller/billing/plan", map[string]any{"planCode": "seller_pro", "cadence": "WEEKLY"}), 422)
 	mustStatus(t, b.do("DELETE", "/v1/seller/billing/payment-methods/aaaaaaaa-0000-0000-0000-000000000001", nil), 409)
 	mustStatus(t, b.do("POST", "/v1/seller/billing/payment-methods/aaaaaaaa-0000-0000-0000-000000000002/default", nil), 200)
 	mustStatus(t, b.do("DELETE", "/v1/seller/billing/payment-methods/aaaaaaaa-0000-0000-0000-000000000001", nil), 200)
+	// S292–S297: rewards, the proration preview and adding a payment method with a SetupIntent.
+	rewards := b.do("GET", "/v1/seller/billing/rewards", nil)
+	mustStatus(t, rewards, 200)
+	// S299: low-sales relief is pending until its check and, once applied, says when Stripe charges next.
+	if body := string(rewards.body); !strings.Contains(body, `"comparison":"LESS_THAN","windowAnchor":"SUBSCRIPTION_START","windowDays":30,"pending":true,"checkAt":"2026-11-08T10:00:00Z"`) ||
+		!strings.Contains(body, `"comparison":"LESS_THAN","nextChargeAt":"2026-11-08T10:00:00Z"`) ||
+		!strings.Contains(body, `"comparison":"AT_LEAST","nextChargeAt":null`) {
+		t.Errorf("rewards = %s", body)
+	}
+	mustStatus(t, b.do("GET", "/v1/seller/billing/plan/preview?planCode=seller_pro&cadence=QUARTERLY", nil), 200)
+	mustStatus(t, b.do("GET", "/v1/seller/billing/plan/preview?planCode=nope", nil), 422)
+	mustStatus(t, b.do("GET", "/v1/seller/billing/plan/preview?planCode=seller_pro&cadence=WEEKLY", nil), 422)
+	mustStatus(t, b.do("POST", "/v1/seller/billing/setup-intents", nil), 201)
+	mustStatus(t, b.do("POST", "/v1/seller/billing/payment-methods", map[string]any{"stripePaymentMethodId": "pm_card_visa", "kind": "CARD",
+		"brand": "Visa", "last4": "4242", "expMonth": 12, "expYear": 2030}), 201)
+	mustStatus(t, b.do("POST", "/v1/seller/billing/payment-methods", map[string]any{"stripePaymentMethodId": "card_1", "kind": "CASH"}), 422)
 	// Team.
 	mustStatus(t, b.do("GET", "/v1/seller/team", nil), 200)
 	invited := b.do("POST", "/v1/seller/team/invitations", map[string]any{"email": "kemi@example.com", "roleKey": "seller.fulfilment"})
@@ -285,8 +403,25 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("POST", "/v1/seller/invitations/lookup", map[string]any{"token": ""}), 422)
 	mustStatus(t, b.do("POST", "/v1/seller/invitations/accept", map[string]any{"token": testkit.InviteTokenExpired}), 422)
 	mustStatus(t, b.do("POST", "/v1/seller/invitations/accept", map[string]any{"token": testkit.InviteTokenValid}), 200)
-	// Storefront (seller).
-	mustStatus(t, b.do("GET", "/v1/seller/storefront", nil), 200)
+	// Business page settings: the logo, colour and description of the public page.
+	if r := b.do("GET", "/v1/seller/business-page", nil); r.status != 200 || r.json(t)["name"] != "Ade's Kitchen" || r.json(t)["canEdit"] != true {
+		t.Fatalf("business page = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("PUT", "/v1/seller/business-page", map[string]any{"brandColor": "green"}), 422)
+	if r := b.do("PUT", "/v1/seller/business-page", map[string]any{"description": " Jollof and more ", "brandColor": "#1a7f4b",
+		"logoUrl": "https://img.afrotransact.dev/a1.webp"}); r.status != 200 || r.json(t)["logoUrl"] != "https://img.afrotransact.dev/a1.webp" {
+		t.Fatalf("business page save = %d %s", r.status, r.body)
+	}
+	// Run pick lists (S264): the active org's runs, the collected flag from the bag's stage, a run that is not there is 404.
+	if r := b.do("GET", "/v1/seller/run-pickups?orgId=someone-else", nil); r.status != 200 || len(r.json(t)["items"].([]any)) != 1 {
+		t.Fatalf("run pickups = %d %s", r.status, r.body)
+	}
+	if r := b.do("GET", "/v1/seller/run-pickups/"+testkit.RunPickupID, nil); r.status != 200 || r.json(t)["bags"].([]any)[0].(map[string]any)["collected"] != true ||
+		r.json(t)["bags"].([]any)[1].(map[string]any)["collected"] != false || r.json(t)["pickupAt"] != "2026-11-06T16:00:00Z" {
+		t.Fatalf("run pickup = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("GET", "/v1/seller/run-pickups/0b1f0e52-3a47-4d0e-9b6a-5d2e7c1a9f99", nil), 404)
+	mustStatus(t, b.do("GET", "/v1/seller/run-pickups/not-a-run", nil), 404)
 	// Ship-from addresses live in the seller service (no more browser storage).
 	if r := b.do("GET", "/v1/seller/ship-from-addresses", nil); r.status != 200 || len(r.json(t)["items"].([]any)) != 0 {
 		t.Fatalf("ship-from list = %d %s", r.status, r.body)
@@ -364,6 +499,11 @@ func TestSellerContractConformance(t *testing.T) {
 		t.Fatalf("not geocoded = %v", p)
 	}
 	pickup("nope", map[string]any{"enabled": false, "hours": []any{}}, 404)
+	// Lola for sellers: status and one question (answered from the scripted model).
+	mustStatus(t, b.do("GET", "/v1/seller/assistant", nil), 200)
+	mustStatus(t, b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": "hello"}), 200)
+	mustStatus(t, b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": ""}), 422)
+
 	// Offers: the fulfilment choice per listing, with the pickup location for AfroTransact Delivery.
 	mustStatus(t, b.do("GET", "/v1/seller/offers", nil), 422)
 	if items := b.do("GET", "/v1/seller/offers?productId=p-1", nil).json(t)["items"].([]any); len(items) != 1 ||
@@ -435,11 +575,6 @@ func TestSellerContractConformance(t *testing.T) {
 			t.Errorf("bookings was not called with %s", call)
 		}
 	}
-	mustStatus(t, b.do("GET", "/v1/seller/storefront", nil), 200)
-	mustStatus(t, b.do("PUT", "/v1/seller/storefront", map[string]any{"tagline": "Neat, long-lasting braids", "layout": "GALLERY_FIRST",
-		"social": []map[string]any{{"network": "instagram", "url": "https://instagram.com/adeskitchen"}, {"network": "tiktok", "url": "https://tiktok.com/@ama"}}}), 200)
-	mustStatus(t, b.do("PUT", "/v1/seller/storefront", map[string]any{"primaryColor": "gold", "social": []map[string]any{{"network": "tiktok", "url": "https://instagram.com/x"}}}), 422)
-	mustStatus(t, b.do("POST", "/v1/seller/storefront/publish", nil), 200)
 
 	// Onboarding wizard (S289): each step's save, embedded Stripe, plans, documents and submit, with their failures.
 	wup, w := startedApplicant(t, "pk_test_x")
@@ -452,9 +587,6 @@ func TestSellerContractConformance(t *testing.T) {
 		{"firstName": "Kofi", "lastName": "Mensah", "ownershipPercent": 70}, {"firstName": "Ama", "lastName": "Mensah", "ownershipPercent": 40}}}), 422)
 	mustStatus(t, w.do("POST", "/v1/seller/onboarding/stripe/session", nil), 200)
 	mustStatus(t, w.do("POST", "/v1/seller/onboarding/stripe/refresh", nil), 200)
-	mustStatus(t, w.do("PUT", "/v1/seller/onboarding/payouts", map[string]any{"accountHolderName": "Kofi Mensah", "accountType": "checking",
-		"routingNumber": "021000021", "accountNumber": "000123456789", "accountNumberConfirmation": "000123456789"}), 200)
-	mustStatus(t, w.do("PUT", "/v1/seller/onboarding/payouts", map[string]any{"accountHolderName": "Kofi Mensah"}), 422)
 	mustStatus(t, w.do("GET", "/v1/seller/onboarding/plans", nil), 200)
 	mustStatus(t, w.do("PUT", "/v1/seller/onboarding/plan", map[string]any{"planCode": "seller_growth", "cadence": "monthly", "paymentMethodKind": "card",
 		"stripePaymentMethodId": "pm_1", "cardBrand": "visa", "cardLast4": "4242", "cardExpMonth": 8, "cardExpYear": 2029}), 200)
@@ -478,14 +610,21 @@ func TestSellerContractConformance(t *testing.T) {
 	_, nokey := startedApplicant(t, "")
 	nokey.onResponse = check
 	mustStatus(t, nokey.do("POST", "/v1/seller/onboarding/stripe/session", nil), 503)
+	// Account health: an Account Session for Stripe's components (owner / finance of the active organisation).
+	mustStatus(t, b.do("POST", "/v1/seller/stripe/session", nil), 503)
+	keyed, kb := sellerSetup(t, testkit.Options{SellerPublishableKey: "pk_test_health"})
+	kb.onResponse = check
+	mustStatus(t, kb.do("POST", "/v1/seller/stripe/session", nil), 200)
+	keyed.Upstreams.AccountHealthForbidden = true
+	mustStatus(t, kb.do("POST", "/v1/seller/stripe/session", nil), 403)
 
 	for _, op := range []string{"getSellerSession", "setActiveOrg", "getOnboarding", "getCompliance", "getDashboard", "listSellerOrders", "getSellerOrder",
 		"updateShipmentStatus", "quoteShippingRates", "buyShippingLabel", "listListings", "setListingActive", "submitProduct", "getCategoryTree",
 		"getProductType", "checkGtin", "listCategoryRequests", "requestCategory", "requestUpload", "completeUpload", "getInventory", "adjustStock",
 		"getPayouts", "requestPayout", "getSellerFees", "getBilling", "changePlan", "makeDefaultPaymentMethod", "removePaymentMethod", "getTeam", "inviteMember",
 		"assignRole", "removeMember", "revokeInvitation", "lookupInvitation", "acceptInvitation", "getCalendar", "listBookingRequests", "actOnBooking", "getWorkingHours", "saveWorkingHours", "listServices", "createService",
-		"updateService", "getCancellationPolicy", "saveCancellationPolicy", "getEarnings", "getPublicPage", "savePublicPage", "publishPublicPage",
-		"saveOnboardingOwners", "saveOnboardingPayouts", "saveOnboardingPlan", "saveOnboardingCompliance", "getOnboardingPlans", "createOnboardingStripeSession",
+		"updateService", "getCancellationPolicy", "saveCancellationPolicy", "getEarnings",
+		"saveOnboardingOwners", "createSellerStripeSession", "saveOnboardingPlan", "saveOnboardingCompliance", "getOnboardingPlans", "createOnboardingStripeSession",
 		"refreshOnboardingStripe", "submitOnboarding", "requestOnboardingUpload", "completeOnboardingUpload"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)
@@ -507,7 +646,7 @@ func TestSellerNavigationIsRoleAwareAndGatedByApproval(t *testing.T) {
 		t.Fatalf("seller session = %v", s)
 	}
 	keys := moduleKeys(t, s)
-	for _, want := range []string{"home", "orders", "listings", "inventory", "payouts", "billing", "account-health", "team", "storefront"} {
+	for _, want := range []string{"home", "orders", "listings", "inventory", "payouts", "billing", "account-health", "team"} {
 		if !slices.Contains(keys, want) {
 			t.Fatalf("owner nav lacks %s: %v", want, keys)
 		}

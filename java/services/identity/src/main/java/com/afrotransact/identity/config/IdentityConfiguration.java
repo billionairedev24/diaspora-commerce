@@ -1,18 +1,26 @@
 package com.afrotransact.identity.config;
 
 import java.time.Clock;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import com.afrotransact.identity.adapter.in.security.TrustedBrowserCookie;
 import com.afrotransact.identity.adapter.in.web.LoginPageSettings;
+import com.afrotransact.identity.adapter.out.crypto.KeycloakPbkdf2PasswordEncoder;
+import com.afrotransact.identity.adapter.out.persistence.RotatingSecretEncoder;
+import com.afrotransact.identity.application.AuthSettingsService;
 import com.afrotransact.identity.application.FirstPartySignInSettings;
 import com.afrotransact.identity.application.InvitationSettings;
+import com.afrotransact.identity.application.ProtectedClients;
+import com.afrotransact.identity.application.TokenIssuer;
 import com.afrotransact.identity.adapter.out.notification.LoggingVerificationCodeSender;
 import com.afrotransact.identity.adapter.out.notification.MailpitVerificationCodeSender;
 import com.afrotransact.identity.adapter.out.notification.OutboxVerificationCodeSender;
 import com.afrotransact.identity.domain.AccessPolicy;
 import com.afrotransact.identity.domain.AddressBookPolicy;
+import com.afrotransact.identity.domain.AuthSettings;
 import com.afrotransact.identity.domain.DefaultAccessPolicy;
 import com.afrotransact.identity.domain.DefaultAddressBookPolicy;
 import com.afrotransact.identity.domain.DefaultLandingPolicy;
@@ -41,7 +49,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /** Explicit wiring of framework-free domain policies and environment-selected adapters. */
@@ -50,8 +59,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 class IdentityConfiguration {
 
     @Bean
-    PasswordPolicy passwordPolicy() {
-        return new DefaultPasswordPolicy();
+    PasswordPolicy passwordPolicy(AuthSettingsService authSettings) {
+        return new DefaultPasswordPolicy(() -> authSettings.effective().passwordMinLength());
     }
 
     @Bean
@@ -114,10 +123,42 @@ class IdentityConfiguration {
         return new OutboxVerificationCodeSender(events, clock);
     }
 
-    /** BCrypt by default; the delegating encoder keeps older hashes verifiable when the default changes. */
+    /**
+     * BCrypt by default; the delegating encoder keeps older hashes verifiable when the default changes. Hashes imported
+     * from Keycloak ({@code {kc-pbkdf2-sha256}} and friends) verify but are never produced.
+     */
     @Bean
-    PasswordEncoder passwordEncoder() {
-        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    PasswordEncoder passwordEncoder(Clock clock) {
+        Map<String, PasswordEncoder> encoders = new HashMap<>();
+        PasswordEncoder bcrypt = new BCryptPasswordEncoder();
+        encoders.put("bcrypt", bcrypt);
+        for (KeycloakPbkdf2PasswordEncoder.Variant v : KeycloakPbkdf2PasswordEncoder.Variant.values()) {
+            encoders.put(v.id(), new KeycloakPbkdf2PasswordEncoder(v));
+        }
+        // A client secret in rotation (S291) reads as {rotating}: either of its two hashes verifies until the old one
+        // expires. The encoder for it is built over the hashes above.
+        encoders.put(RotatingSecretEncoder.ID,
+                new RotatingSecretEncoder(new DelegatingPasswordEncoder("bcrypt", Map.copyOf(encoders)), clock));
+        return new DelegatingPasswordEncoder("bcrypt", encoders);
+    }
+
+    /** The configured defaults of the settings the staff console can override. */
+    @Bean
+    AuthSettings authSettingsDefaults(IdentityProperties props) {
+        IdentityProperties.Auth a = props.auth();
+        return new AuthSettings(a.passwordMinLength(), a.mfaRequiredAccount(), a.mfaRequiredSeller(),
+                a.mfaRequiredProvider(), (int) a.sessionIdleTimeout().toMinutes(),
+                (int) a.sessionAbsoluteTimeout().toMinutes(), null, null);
+    }
+
+    @Bean
+    ProtectedClients protectedClients(IdentityProperties props) {
+        return new ProtectedClients(Set.copyOf(props.firstParty().clientIds()));
+    }
+
+    @Bean
+    TokenIssuer tokenIssuer(IdentityProperties props) {
+        return new TokenIssuer(props.issuer());
     }
 
     @Bean
@@ -150,7 +191,8 @@ class IdentityConfiguration {
 
     @Bean
     FirstPartySignInSettings firstPartySignInSettings(IdentityProperties props) {
-        return new FirstPartySignInSettings(Set.copyOf(props.firstParty().clientIds()));
+        return new FirstPartySignInSettings(Set.copyOf(props.firstParty().clientIds()),
+                Set.copyOf(props.firstParty().nativeClientIds()));
     }
 
     private static DefaultSignInThrottlePolicy.Limits limits(IdentityProperties.Limit l) {

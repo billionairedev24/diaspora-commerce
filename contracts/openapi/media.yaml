@@ -36,6 +36,7 @@ security: [{bearer: []}]
 tags:
   - {name: Uploads, description: Direct-to-storage upload URLs}
   - {name: Assets, description: Finalised media assets and their metadata}
+  - {name: Image library, description: 'The organisation''s product image library, matched to SKUs by file name (S310)'}
 paths:
   /v1/uploads:
     post:
@@ -57,6 +58,12 @@ paths:
                   enum: [image/jpeg, image/png, image/webp, application/pdf, text/csv,
                          application/vnd.openxmlformats-officedocument.spreadsheetml.sheet]
                 size: {type: integer, format: int64, minimum: 1}
+                library:
+                  type: boolean
+                  default: false
+                  description: >-
+                    `product-image` only: add the image to the organisation's image library. The file name is parsed
+                    for SKU matching (`sku`, `slot` of the asset).
       responses:
         '201':
           description: Upload instructions
@@ -67,6 +74,36 @@ paths:
                 properties:
                   asset: {$ref: '#/components/schemas/Asset'}
                   upload: {$ref: '#/components/schemas/Upload'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/assets/import:
+    post:
+      tags: [Uploads]
+      operationId: importAsset
+      summary: Copy a public image from a URL for an organisation (catalog-service, scope media:import)
+      description: |
+        Images of bulk product uploads (S308). Only the importer client `catalog-service` with scope `media:import`,
+        only purpose `product-image`. media downloads the https URL itself (public addresses only: private, loopback,
+        link-local and reserved ranges are refused; at most 3 https redirects; 20 s; at most 8 MB), checks the bytes
+        are a JPG, PNG or WebP image, stores it in quarantine and completes it like an upload: inspection, metadata
+        stripping, duplicate check and AI moderation. The asset is owned by `ownerOrg`. 201 with the asset (status
+        READY, FLAGGED when held for review, or REJECTED with flags); 422 when the URL can't be fetched or isn't an
+        allowed image.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, url, ownerOrg]
+              properties:
+                purpose: {$ref: '#/components/schemas/Purpose'}
+                url: {type: string, maxLength: 2048}
+                ownerOrg: {type: string, minLength: 1, maxLength: 80}
+                uploadedBy: {type: string, maxLength: 120, description: The member who uploaded the sheet}
+      responses:
+        '201': {description: Asset, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
   /v1/assets/{id}/complete:
@@ -84,6 +121,13 @@ paths:
       tags: [Assets]
       operationId: getAsset
       summary: Asset metadata (private assets include a signed URL, 5 minutes unless asked otherwise)
+      description: >-
+        Readable by the uploader, the owning organisation and staff with the purpose's permission. Two service clients
+        read with their own client-credentials token and scope `media:read`: `delivery-runs-service` (public assets,
+        including ones not published yet) and `gateway-bff`, which also reads driver proof-of-delivery photos and
+        signatures (purpose `proof-photo`, nothing else private) to hand the customer's, the seller's and staff's
+        order pages a short-lived link. The BFF asks only for ids that orders-service returned for an order the viewer
+        may already read.
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
         - name: urlTtlSeconds
@@ -141,6 +185,93 @@ paths:
             Location: {description: Short-lived storage URL, schema: {type: string, format: uri}}
         '404': {$ref: '#/components/responses/Problem'}
         '410': {$ref: '#/components/responses/Problem'}
+  /v1/library:
+    get:
+      tags: [Image library]
+      operationId: listLibrary
+      summary: The caller's organisation's image library, newest first
+      description: >-
+        Completed library images (READY, FLAGGED while held for review, REJECTED with the reason in `flags`); uploads
+        never completed are left out. `q` matches the file name or SKU (case-insensitive, contains).
+      parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 120}}
+        - {name: status, in: query, schema: {type: string, enum: [READY, FLAGGED, REJECTED]}}
+        - {name: matched, in: query, description: 'true = file names with a SKU and slot, false = the others', schema: {type: boolean}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200': {description: Library page, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryPage'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+  /v1/library/lookup:
+    post:
+      tags: [Image library]
+      operationId: lookupLibrary
+      summary: Library images of an organisation by SKU and file name (catalog-service, scope media:import)
+      description: >-
+        For bulk uploads and "attach matching images": per requested SKU the newest READY or FLAGGED image of each
+        slot, and per requested file name the newest READY or FLAGGED image with that name (case-insensitive). SKUs
+        and file names that match nothing are simply absent. Only the importer client `catalog-service` with
+        `media:import`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ownerOrg]
+              properties:
+                ownerOrg: {type: string, minLength: 1, maxLength: 80}
+                skus: {type: array, maxItems: 5000, items: {type: string, maxLength: 64}}
+                fileNames: {type: array, maxItems: 5000, items: {type: string, maxLength: 200}}
+      responses:
+        '200':
+          description: Matching images
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [images]
+                properties:
+                  images: {type: array, items: {$ref: '#/components/schemas/LibraryImage'}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/library/{id}:
+    patch:
+      tags: [Image library]
+      operationId: renameLibraryImage
+      summary: Rename a library image and re-match SKU / slot
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName]
+              properties:
+                fileName: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '200':
+          description: Renamed image
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LibraryImage'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [Image library]
+      operationId: removeFromLibrary
+      summary: Remove an image from the library (listings that use it keep it)
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '204': {description: Removed}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
   /v1/assets:
     get:
       tags: [Assets]
@@ -203,6 +334,40 @@ components:
           format: date-time
           description: When the signed `url` of a private asset stops working (absent for public assets).
         moderation: {$ref: '#/components/schemas/Moderation'}
+        library: {type: boolean, description: In the organisation's image library}
+        sku: {type: string, description: 'Library images: the SKU parsed from the file name (upper case), absent when none'}
+        slot: {$ref: '#/components/schemas/LibrarySlot'}
+    LibrarySlot:
+      type: string
+      enum: [MAIN, PT01, PT02, PT03, PT04, PT05, PT06, PT07, PT08, SWCH]
+      description: 'Where a library image goes: MAIN image, additional images PT01–PT08 in order, or the variant swatch'
+    LibraryImage:
+      type: object
+      required: [assetId, fileName, sku, slot, status, url, width, height, bytes, contentType, flags, createdAt]
+      properties:
+        assetId: {type: string, format: uuid}
+        fileName: {type: string}
+        sku: {type: [string, 'null'], description: SKU parsed from the file name (upper case)}
+        slot:
+          oneOf:
+            - {$ref: '#/components/schemas/LibrarySlot'}
+            - {type: 'null'}
+        status: {type: string, enum: [READY, FLAGGED, REJECTED]}
+        url: {type: [string, 'null'], description: 'Public URL when READY; null while held or when rejected'}
+        width: {type: integer}
+        height: {type: integer}
+        bytes: {type: integer, format: int64}
+        contentType: {type: string}
+        flags: {type: array, items: {type: string}}
+        createdAt: {type: string, format: date-time}
+    LibraryPage:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/LibraryImage'}}
+        total: {type: integer}
+        page: {type: integer}
+        size: {type: integer}
     Moderation:
       type: object
       description: Checks a public image went through before it could be published (absent for other purposes).

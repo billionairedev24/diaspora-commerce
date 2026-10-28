@@ -25,6 +25,10 @@ public final class DefaultHandoverPolicy implements HandoverPolicy {
         if (method == DeliveryMethod.CARRIER) {
             return false;
         }
+        if (method == DeliveryMethod.PICKUP) {
+            // Whoever hands a pickup order over checks the customer's code, so it goes to the person who is there.
+            return true;
+        }
         return perishable || preferences != null && preferences.handToCustomer();
     }
 

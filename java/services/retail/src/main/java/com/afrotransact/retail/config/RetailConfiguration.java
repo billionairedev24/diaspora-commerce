@@ -146,9 +146,10 @@ class RetailConfiguration {
     }
 
     @Bean
-    CatalogClient catalogClient(RestClient.Builder builder, RetailProperties props, JsonMapper json) {
+    CatalogClient catalogClient(RestClient.Builder builder, RetailProperties props, ServiceTokenProvider tokens,
+                                JsonMapper json) {
         return new HttpCatalogClient(builder.clone().baseUrl(props.catalog().baseUrl())
-                .requestFactory(factory(props.catalog().timeout())).build(), json);
+                .requestFactory(factory(props.catalog().timeout())).build(), tokens, json);
     }
 
     @Bean

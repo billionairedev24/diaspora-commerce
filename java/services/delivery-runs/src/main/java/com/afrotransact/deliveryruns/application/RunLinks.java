@@ -49,6 +49,15 @@ class RunLinks {
         return runUrl(location, run) + "&" + utm(source, medium, campaign(location, run), content);
     }
 
+    /**
+     * The run link from an advertorial: {@code src=page&cr=<creative>} is the order attribution the storefront keeps
+     * until checkout (so the advertorial is credited with the run's order), plus the UTM of the click.
+     */
+    String runAdvertorialUrl(Location location, Run run, String creative) {
+        return runUrl(location, run) + "&src=page&cr=" + encode(creative) + "&"
+                + utm("storefront", "advertorial", campaign(location, run), creative);
+    }
+
     /** One attributed run link per announcement channel, plus {@code social} for shares. */
     Map<String, String> channelLinks(Location location, Run run, String content) {
         Map<String, String> out = new LinkedHashMap<>();
@@ -72,6 +81,20 @@ class RunLinks {
         out.put("x", "https://twitter.com/intent/tweet?text=" + encode(text) + "&url=" + encode(x));
         out.put("whatsapp", "https://wa.me/?text=" + encode(text + " " + wa));
         return out;
+    }
+
+    /** The storefront's pre-order page. */
+    String windowUrl() {
+        return settings.publicWebUrl() + "/pre-orders";
+    }
+
+    /**
+     * The pre-order page from an advertorial: {@code src=page&cr=<creative>&po=<window code>} is the order attribution
+     * the storefront keeps until checkout (so the advertorial is credited with the order), plus the UTM of the click.
+     */
+    String windowAdvertorialUrl(String windowCode, String creative) {
+        return windowUrl() + "?src=page&cr=" + encode(creative) + "&po=" + encode(windowCode) + "&"
+                + utm("storefront", "advertorial", "preorder-" + windowCode, creative);
     }
 
     String confirmUrl(String token) {

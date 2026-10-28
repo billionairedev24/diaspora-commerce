@@ -14,6 +14,7 @@ import { c, sp, t } from '@/theme';
 import { DriverScreen } from '@/ui/DriverScreen';
 import { AppText, Banner, Button, Empty, Loading } from '@/ui/primitives';
 import { useToast } from '@/ui/Toast';
+import { useRouteRefresh } from '@/ui/useRouteRefresh';
 
 const ICON: Record<Phase, typeof Check> = { inspect: ClipboardText, loadout: Package, route: Path, end: FlagCheckered };
 
@@ -22,11 +23,21 @@ export default function Today() {
   const router = useRouter();
   const toast = useToast();
   const { user, sync, engine } = useDriver();
+  const refresh = useRouteRefresh();
   const r = sync.route;
   if (!r) {
+    const load = sync.routeLoad;
     return (
-      <DriverScreen title={tr('dr.index.today')} inTabs>
-        {sync.online ? <Loading /> : <Empty icon={Path} title={tr('dr.index.noRouteOnThisPhone')} body="Connect to the internet to download today’s route." />}
+      <DriverScreen title={tr('dr.index.today')} inTabs refresh={refresh}>
+        {!sync.online ? (
+          <Empty icon={Path} title={tr('dr.index.noRouteOnThisPhone')} body="Connect to the internet to download today’s route." />
+        ) : load.status === 'failed' ? (
+          <Empty icon={WarningCircle} title="We couldn’t load your route" body={`${load.error ?? 'Try again.'} Pull down or tap Try again.`} action={{ label: 'Try again', onPress: refresh.onRefresh }} />
+        ) : load.status === 'none' ? (
+          <Empty icon={Path} title="No route assigned yet" body="Dispatch hasn’t assigned you a route for today. Pull down to check again." action={{ label: 'Check again', onPress: refresh.onRefresh }} />
+        ) : (
+          <Loading />
+        )}
       </DriverScreen>
     );
   }
@@ -49,7 +60,7 @@ export default function Today() {
   };
   const pkgs = r.packages.length;
   return (
-    <DriverScreen title={tr('dr.index.today')} inTabs footer={<Button label={primary.label} disabled={primary.disabled} onPress={() => void onPrimary()} />}>
+    <DriverScreen title={tr('dr.index.today')} inTabs refresh={refresh} footer={<Button label={primary.label} disabled={primary.disabled} onPress={() => void onPrimary()} />}>
       <View style={styles.shift}>
         <Hero photo={heroPhoto} art={<DriverHeroArt crop="wide" />} accessibilityLabel="Your shift">
           <View style={styles.hello}>

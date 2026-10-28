@@ -5,17 +5,20 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 import { z } from 'zod';
 
+import { withCorrelationHeaders } from './correlation';
 import { ApiError, problemFrom } from './errors';
 import { absolute, type ApiClientOptions, type FetchLike, joinUrl, type Requester } from './http';
+import { type DeliveryFeeRule, type FeeRuleRef, FeeRuleRefSchema, resolveDoorFee, resolvePickupFee } from './staff-delivery-fees';
 import { tableSearchParams } from './table-query';
+import { randomUuid } from './uuid';
 
 /* ── Enums ─────────────────────────────────────────────── */
 
-export const PreorderStatusSchema = z.enum(['DRAFT', 'PAUSED', 'UPCOMING', 'OPEN', 'CLOSED', 'DELIVERED']);
+export const PreorderStatusSchema = z.enum(['DRAFT', 'PAUSED', 'UPCOMING', 'OPEN', 'CLOSED', 'DELIVERED', 'AWAITING_DECISION', 'CANCELLED']);
 export type PreorderStatus = z.infer<typeof PreorderStatusSchema>;
 
-/** List tabs: All, Open, Scheduled (upcoming), Closed (closed + delivered) and Drafts. */
-export const PreorderListTabSchema = z.enum(['all', 'open', 'upcoming', 'closed', 'draft']);
+/** List tabs: All, Open, Scheduled (upcoming), Needs a decision, Closed (closed, delivered and cancelled) and Drafts. */
+export const PreorderListTabSchema = z.enum(['all', 'open', 'upcoming', 'decision', 'closed', 'draft']);
 export type PreorderListTab = z.infer<typeof PreorderListTabSchema>;
 
 export const CreativeSlotSchema = z.enum(['HERO', 'PDP', 'STORY', 'FEED', 'EMAIL']);
@@ -28,6 +31,25 @@ export const PreorderChannelSchema = z.enum([
   'SITE_HERO', 'SITE_RIBBON', 'SITE_PDP', 'SITE_PAGE', 'SITE_DIRECT', 'APP', 'INSTAGRAM', 'FACEBOOK', 'TIKTOK', 'WHATSAPP', 'EMAIL', 'SMS', 'AGENT_LATE'
 ]);
 export type PreorderChannel = z.infer<typeof PreorderChannelSchema>;
+
+/**
+ * What became of a window beyond its dates (ADR 0005 §4): closed below its minimum and waiting for staff, proceeded
+ * below it, or cancelled (every order refunded in full).
+ */
+export const PreorderOutcomeSchema = z.enum(['AWAITING_DECISION', 'PROCEEDED', 'CANCELLED']);
+export type PreorderOutcome = z.infer<typeof PreorderOutcomeSchema>;
+
+/** What staff can decide for a window that closed below its minimum. */
+export const PreorderChoiceSchema = z.enum(['CANCEL', 'PROCEED']);
+export type PreorderChoice = z.infer<typeof PreorderChoiceSchema>;
+
+/** Entries of the decision log: the system noting the shortfall, then what staff decided. */
+export const DecisionKindSchema = z.enum(['AWAITING', 'PROCEED', 'CANCEL', 'EARLY_CLOSE']);
+export type DecisionKind = z.infer<typeof DecisionKindSchema>;
+
+/** Refund progress of a cancelled order: refunding, refunded in full, authorisation released (nothing charged), or failed. */
+export const RefundStatusSchema = z.enum(['PENDING', 'REFUNDED', 'VOIDED', 'FAILED']);
+export type RefundStatus = z.infer<typeof RefundStatusSchema>;
 
 export const PreorderOrderStatusSchema = z.enum(['PAID', 'LATE_ADD', 'CANCELLED']);
 export type PreorderOrderStatus = z.infer<typeof PreorderOrderStatusSchema>;
@@ -65,7 +87,7 @@ export const PREORDER_SWITCH_LABEL: Record<PreorderSwitchState, string> = {
 };
 
 export const PREORDER_STATUS_LABEL: Record<PreorderStatus, string> = {
-  OPEN: 'Open', UPCOMING: 'Scheduled', CLOSED: 'Closed · delivering', DELIVERED: 'Delivered', DRAFT: 'Draft', PAUSED: 'Paused'
+  OPEN: 'Open', UPCOMING: 'Scheduled', CLOSED: 'Closed · delivering', DELIVERED: 'Delivered', DRAFT: 'Draft', PAUSED: 'Paused', AWAITING_DECISION: 'Needs a decision', CANCELLED: 'Cancelled'
 };
 
 export const PREORDER_CHANNEL_LABEL: Record<PreorderChannel, string> = {
@@ -75,6 +97,10 @@ export const PREORDER_CHANNEL_LABEL: Record<PreorderChannel, string> = {
 
 /** Channels in the Orders filter, in the design's order. */
 export const PREORDER_FILTER_CHANNELS: PreorderChannel[] = ['SITE_HERO', 'SITE_RIBBON', 'SITE_PDP', 'APP', 'INSTAGRAM', 'FACEBOOK', 'TIKTOK', 'WHATSAPP', 'EMAIL', 'SMS', 'AGENT_LATE'];
+
+export const REFUND_STATUS_LABEL: Record<RefundStatus, string> = {
+  PENDING: 'Refunding', REFUNDED: 'Refunded', VOIDED: 'Released (not charged)', FAILED: 'Refund failed'
+};
 
 export const PREORDER_ORDER_STATUS_LABEL: Record<PreorderOrderStatus, string> = { PAID: 'Paid', LATE_ADD: 'Late add', CANCELLED: 'Cancelled' };
 
@@ -160,13 +186,16 @@ export const PreorderWindowSchema = z.object({
   door: z.boolean(),
   pickup: z.boolean(),
   pickupPoint: z.string().nullable(),
-  /** Per-window fee overrides in minor units (null = the platform default for the window's currency). */
+  /** Per-window fee overrides in minor units (null = the delivery fee rule of the method, see Delivery fees). */
   doorFeeOverride: z.number().int().nullable(),
   pickupFeeOverride: z.number().int().nullable(),
   currency: z.string(),
-  /** Fees shoppers pay for this window (override, else the platform default). */
+  /** Fees shoppers pay for this window (override, else the delivery fee rule). */
   effectiveDoorFee: z.number().int(),
   effectivePickupFee: z.number().int(),
+  /** The rule behind each fee (method, rule version, distance band, source); null when door delivery is not offered. */
+  doorFeeRule: FeeRuleRefSchema.nullable().default(null),
+  pickupFeeRule: FeeRuleRefSchema.nullable().default(null),
   showCount: z.boolean(),
   socialBudget: z.number().int(),
   comms: z.array(CommKindSchema),
@@ -182,6 +211,15 @@ export const PreorderWindowSchema = z.object({
   creatives: z.array(PreorderCreativeSchema),
   orderCount: z.number().int(),
   revenue: z.number().int(),
+  /** Fewest orders the window needs (0 = none). Below it at the close date the window waits for a staff decision. */
+  minOrders: z.number().int().default(0),
+  /** A minimum is set and orderCount has reached it. */
+  minimumMet: z.boolean().default(false),
+  /** OPEN with the minimum met: staff may close it early. */
+  canCloseEarly: z.boolean().default(false),
+  /** Closed below the minimum: staff must cancel or proceed. */
+  decisionNeeded: z.boolean().default(false),
+  outcome: PreorderOutcomeSchema.nullable().default(null),
   /** Optimistic-lock version; PUT sends it back as If-Match. */
   version: z.number().int()
 });
@@ -190,16 +228,23 @@ export type PreorderWindow = z.infer<typeof PreorderWindowSchema>;
 export const PreorderListRowSchema = PreorderWindowSchema.pick({
   id: true, code: true, name: true, where: true, opensAt: true, closesAt: true, deliversOn: true, status: true, areaOff: true, orderCount: true, revenue: true, currency: true,
   active: true, switchable: true, switchState: true, version: true
-}).extend({ active: z.boolean().default(true), version: z.number().int().default(0) });
+}).extend({
+  active: z.boolean().default(true),
+  version: z.number().int().default(0),
+  minOrders: z.number().int().default(0),
+  decisionNeeded: z.boolean().default(false)
+});
 export type PreorderListRow = z.infer<typeof PreorderListRowSchema>;
 
 export const PreorderListSchema = z.object({
   items: z.array(PreorderListRowSchema),
-  counts: z.object({ all: z.number().int(), open: z.number().int(), upcoming: z.number().int(), closed: z.number().int(), draft: z.number().int() }),
+  counts: z.object({ all: z.number().int(), open: z.number().int(), upcoming: z.number().int(), decision: z.number().int().default(0), closed: z.number().int(), draft: z.number().int() }),
   total: z.number().int(),
   page: z.number().int(),
   size: z.number().int(),
-  enabled: z.boolean()
+  enabled: z.boolean(),
+  /** The minimum order count a new window starts with (set by the platform; staff change it per window). */
+  defaultMinOrders: z.number().int().default(10)
 });
 export type PreorderList = z.infer<typeof PreorderListSchema>;
 
@@ -221,7 +266,9 @@ export const PreorderWindowInputSchema = z.object({
   pickupFeeOverride: z.number().int().min(0).nullable(),
   showCount: z.boolean(),
   socialBudget: z.number().int().min(0),
-  comms: z.array(CommKindSchema)
+  comms: z.array(CommKindSchema),
+  /** Fewest orders the window needs (0 = none); left out, a new window takes the platform default and an edit keeps its value. */
+  minOrders: z.number().int().min(0).max(100_000).optional()
 });
 export type PreorderWindowInput = z.infer<typeof PreorderWindowInputSchema>;
 
@@ -229,7 +276,7 @@ export const PreorderOrderLineSchema = z.object({ atin: z.string(), name: z.stri
 export type PreorderOrderLine = z.infer<typeof PreorderOrderLineSchema>;
 
 /** A late add's Idempotency-Key (16–64 characters), made when the dialog opens and kept until the order is added. */
-export const newLateAddKey = (random: () => string = () => crypto.randomUUID()): string => `late-${random()}`;
+export const newLateAddKey = (random: () => string = randomUuid): string => `late-${random()}`;
 
 export const PreorderOrderSchema = z.object({
   orderId: z.string(),
@@ -251,7 +298,12 @@ export const PreorderOrderSchema = z.object({
   fulfilment: FulfilmentSchema,
   total: z.number().int(),
   status: PreorderOrderStatusSchema,
-  note: z.string()
+  note: z.string(),
+  /** Refund progress once the window or run was cancelled (absent otherwise). */
+  refundStatus: RefundStatusSchema.nullable().default(null),
+  refundAmount: z.number().int().nullable().default(null),
+  refundUpdatedAt: z.string().nullable().default(null),
+  refundError: z.string().nullable().default(null)
 });
 export type PreorderOrder = z.infer<typeof PreorderOrderSchema>;
 
@@ -287,6 +339,42 @@ export const PreorderSummarySchema = z.object({
 });
 export type PreorderSummary = z.infer<typeof PreorderSummarySchema>;
 
+/** One entry of a window's decision log: who decided what, when and why. */
+export const PreorderDecisionSchema = z.object({
+  id: z.string(),
+  kind: DecisionKindSchema,
+  reason: z.string(),
+  /** Staff subject, or "system". */
+  actor: z.string(),
+  /** Orders that counted when it was decided. */
+  orders: z.number().int(),
+  minimum: z.number().int(),
+  at: z.string()
+});
+export type PreorderDecision = z.infer<typeof PreorderDecisionSchema>;
+export const PreorderDecisionLogSchema = z.object({ items: z.array(PreorderDecisionSchema) });
+
+/** Refund progress of a cancelled window: orders per status; `done` once none is pending or failed. */
+export const PreorderRefundsSchema = z.object({
+  total: z.number().int(),
+  pending: z.number().int(),
+  refunded: z.number().int(),
+  voided: z.number().int(),
+  failed: z.number().int(),
+  done: z.boolean()
+});
+export type PreorderRefunds = z.infer<typeof PreorderRefundsSchema>;
+
+/** The longest reason delivery-runs keeps for a decision. */
+export const DECISION_REASON_MAX = 500;
+
+/** Why a decision's reason cannot be sent (null = fine): it is required, and logged with who and when. */
+export function decisionReasonProblem(reason: string): 'required' | 'tooLong' | null {
+  const r = reason.trim();
+  if (!r) return 'required';
+  return [...r].length > DECISION_REASON_MAX ? 'tooLong' : null;
+}
+
 /** A late add's payment link lasts 1–24 hours: orders-service creates links for at most 24 h (delivery-runs enforces it). */
 export const LINK_EXPIRY_MIN_HOURS = 1;
 export const LINK_EXPIRY_MAX_HOURS = 24;
@@ -300,9 +388,6 @@ export function linkExpiryProblem(hours: number): string | null {
 }
 
 export const PreorderPaymentSettingsSchema = z.object({
-  /** Door delivery fee per currency, minor units (default USD 799). */
-  doorFee: z.record(z.string(), z.number().int().min(0)),
-  pickupFee: z.record(z.string(), z.number().int().min(0)),
   pickupWindow: z.string(),
   allowedMethods: z.array(PaymentMethodSchema),
   lateAdd: z.object({
@@ -551,8 +636,13 @@ const DAY = 86_400_000;
 export const dateAtNoon = (d: string): number => new Date(`${d.slice(0, 10)}T12:00`).getTime();
 
 /** Derived status: DRAFT, else PAUSED, else UPCOMING < opens ≤ OPEN ≤ closes < CLOSED < deliversOn + 1 day ≤ DELIVERED. */
-export function preorderStatus(w: Pick<PreorderWindow, 'draft' | 'active' | 'opensAt' | 'closesAt' | 'deliversOn'>, now: number): PreorderStatus {
+export function preorderStatus(
+  w: Pick<PreorderWindow, 'draft' | 'active' | 'opensAt' | 'closesAt' | 'deliversOn'> & { outcome?: PreorderOutcome | null },
+  now: number
+): PreorderStatus {
   if (w.draft) return 'DRAFT';
+  if (w.outcome === 'CANCELLED') return 'CANCELLED';
+  if (w.outcome === 'AWAITING_DECISION') return 'AWAITING_DECISION';
   if (!w.active) return 'PAUSED';
   if (now < Date.parse(w.opensAt)) return 'UPCOMING';
   if (now <= Date.parse(w.closesAt)) return 'OPEN';
@@ -562,7 +652,17 @@ export function preorderStatus(w: Pick<PreorderWindow, 'draft' | 'active' | 'ope
 
 /** Which list tab a status belongs to (delivered windows sit under Closed; paused only under All). */
 export const tabOf = (s: PreorderStatus): PreorderListTab | null =>
-  s === 'OPEN' ? 'open' : s === 'UPCOMING' ? 'upcoming' : s === 'CLOSED' || s === 'DELIVERED' ? 'closed' : s === 'DRAFT' ? 'draft' : null;
+  s === 'OPEN'
+    ? 'open'
+    : s === 'UPCOMING'
+      ? 'upcoming'
+      : s === 'AWAITING_DECISION'
+        ? 'decision'
+        : s === 'CLOSED' || s === 'DELIVERED' || s === 'CANCELLED'
+          ? 'closed'
+          : s === 'DRAFT'
+            ? 'draft'
+            : null;
 
 export type PreorderCheckKey = 'name' | 'area' | 'dates' | 'delivery' | 'hero' | 'ribbon' | 'fulfilment';
 export interface PreorderCheck {
@@ -624,7 +724,7 @@ export const setAreasOn = (areas: CoverageArea[], keys: string[], on: boolean): 
  * read first, so a paused window says "Off" whatever the master switch says; the master switch never rewrites it.
  */
 export function switchStateOf(w: { draft: boolean; active: boolean; status: PreorderStatus }, masterOn: boolean, anyAreaOn: boolean): PreorderSwitchState {
-  if (w.draft || w.status === 'DRAFT' || w.status === 'DELIVERED') return 'NOT_LIVE';
+  if (w.draft || w.status === 'DRAFT' || w.status === 'DELIVERED' || w.status === 'CANCELLED' || w.status === 'AWAITING_DECISION') return 'NOT_LIVE';
   if (!w.active) return 'PAUSED';
   if (!masterOn) return 'GLOBAL_OFF';
   if (!anyAreaOn) return 'AREA_OFF';
@@ -660,24 +760,24 @@ export const currencyOfCountry = (country: string): string => CURRENCY[country] 
 export const currencyOfTargets = (targets: string[]): string => currencyOfCountry(areaFromKey(targets[0] ?? 'US').country);
 
 export const DEFAULT_PAYMENT: PreorderPaymentSettings = {
-  doorFee: { USD: 799, CAD: 999 },
-  pickupFee: { USD: 0, CAD: 0 },
   pickupWindow: '10am–2pm',
   allowedMethods: ['CARD', 'WALLET', 'ACH'],
   lateAdd: { savedCard: true, paymentLink: true, linkExpiryHours: 24 },
   missedDelivery: { offerRefund: true, offerNewDate: true }
 };
 
-/** Fees a window charges: its override, else the platform default for its currency (USD default when none is set). */
+/**
+ * Fees a window charges and the rules behind them (ADR 0005 §3): its own fee, else the delivery fee rules of the door
+ * and pickup methods. A door fee is 0 and its rule null when no rule can price it.
+ */
 export function effectiveFees(
   w: Pick<PreorderWindowInput, 'doorFeeOverride' | 'pickupFeeOverride'>,
-  payment: PreorderPaymentSettings,
+  rules: readonly DeliveryFeeRule[],
   currency: string
-): { door: number; pickup: number } {
-  return {
-    door: w.doorFeeOverride ?? payment.doorFee[currency] ?? payment.doorFee.USD ?? DEFAULT_PAYMENT.doorFee.USD ?? 0,
-    pickup: w.pickupFeeOverride ?? payment.pickupFee[currency] ?? payment.pickupFee.USD ?? 0
-  };
+): { door: number; pickup: number; doorRule: FeeRuleRef | null; pickupRule: FeeRuleRef } {
+  const doorRule = resolveDoorFee(rules, currency, null, w.doorFeeOverride);
+  const pickupRule = resolvePickupFee(rules, currency, w.pickupFeeOverride);
+  return { door: doorRule?.amountMinor ?? 0, pickup: pickupRule.amountMinor, doorRule, pickupRule };
 }
 
 export interface LateAddDraft {
@@ -819,6 +919,21 @@ export function createStaffPreordersApi(request: Requester, options: ApiClientOp
       request(`${P}/${enc(id)}`, PreorderWindowSchema, { method: 'PATCH', body: { active }, headers: version === undefined ? undefined : ifMatch(version) }),
     /** Switch several windows on or off, each on its own (SWITCHED / UNCHANGED / SKIPPED with the reason). */
     setActiveMany: (ids: string[], active: boolean): Promise<PreorderBulkSwitch> => request(P, PreorderBulkSwitchSchema, { method: 'PATCH', body: { ids, active } }),
+    /**
+     * A window that closed below its minimum (status AWAITING_DECISION): CANCEL refunds every order in full, PROCEED
+     * goes ahead. The reason is required (422) and logged with who and when. 409 when the window is not awaiting.
+     */
+    decide: (id: string, decision: PreorderChoice, reason: string, version?: number): Promise<PreorderWindow> =>
+      request(`${P}/${enc(id)}/decision`, PreorderWindowSchema, { method: 'POST', body: { decision, reason }, headers: version === undefined ? undefined : ifMatch(version) }),
+    /** Cancels a published window that is not delivered and refunds every order in full (reason required, logged). */
+    cancel: (id: string, reason: string, version?: number): Promise<PreorderWindow> =>
+      request(`${P}/${enc(id)}/cancel`, PreorderWindowSchema, { method: 'POST', body: { reason }, headers: version === undefined ? undefined : ifMatch(version) }),
+    /** Closes an open window early once its minimum is met (422 `delivery-runs.preorder-minimum-not-met` before). */
+    closeEarly: (id: string, reason: string, version?: number): Promise<PreorderWindow> =>
+      request(`${P}/${enc(id)}/close-early`, PreorderWindowSchema, { method: 'POST', body: { reason }, headers: version === undefined ? undefined : ifMatch(version) }),
+    decisions: (id: string, signal?: AbortSignal): Promise<PreorderDecision[]> =>
+      request(`${P}/${enc(id)}/decisions`, PreorderDecisionLogSchema, { signal }).then((r) => r.items),
+    refunds: (id: string, signal?: AbortSignal): Promise<PreorderRefunds> => request(`${P}/${enc(id)}/refunds`, PreorderRefundsSchema, { signal }),
     setCreative: (id: string, slot: CreativeSlot, assetId: string): Promise<PreorderWindow> =>
       request(`${P}/${enc(id)}/creatives/${slot}`, PreorderWindowSchema, { method: 'PUT', body: { assetId } }),
     removeCreative: (id: string, slot: CreativeSlot): Promise<PreorderWindow> => request(`${P}/${enc(id)}/creatives/${slot}`, PreorderWindowSchema, { method: 'DELETE' }),
@@ -873,7 +988,7 @@ export function createStaffPreordersApi(request: Requester, options: ApiClientOp
       absolute(joinUrl(options.baseUrl, `${P}/${enc(id)}/exports/${kind}.csv`, kind === 'orders-filtered' && q ? ordersQuery(q) : undefined)),
     /** Fetches a CSV export and saves it in the browser. Returns the file name and row count (lines − header). */
     downloadCsv: async (id: string, kind: PreorderExportKind, q?: PreorderOrdersQuery): Promise<{ fileName: string; rows: number }> => {
-      const res = await doFetch(new Request(api.exportUrl(id, kind, q), { headers: { Accept: 'text/csv', ...options.headers }, credentials: 'include' }));
+      const res = await doFetch(new Request(api.exportUrl(id, kind, q), { headers: withCorrelationHeaders({ Accept: 'text/csv', ...options.headers }), credentials: 'include' }));
       if (!res.ok) throw new ApiError(await problemFrom(res));
       const text = await res.text();
       const fileName = fileNameOf(res.headers.get('content-disposition'), `${id}-${kind}.csv`);
@@ -903,6 +1018,8 @@ export const staffPreorderKeys = {
   window: (id: string) => [...staffPreorderKeys.all, 'window', id] as const,
   orders: (id: string, q: PreorderOrdersQuery) => [...staffPreorderKeys.window(id), 'orders', q] as const,
   summary: (id: string) => [...staffPreorderKeys.window(id), 'summary'] as const,
+  decisions: (id: string) => [...staffPreorderKeys.window(id), 'decisions'] as const,
+  refunds: (id: string) => [...staffPreorderKeys.window(id), 'refunds'] as const,
   products: (id: string) => [...staffPreorderKeys.window(id), 'products'] as const,
   customers: (id: string, q: string) => [...staffPreorderKeys.window(id), 'customers', q] as const,
   settings: () => [...staffPreorderKeys.all, 'settings'] as const,
@@ -919,6 +1036,10 @@ export const staffPreorderQueries = {
   orders: (api: StaffPreordersApi, id: string, q: PreorderOrdersQuery) =>
     queryOptions({ queryKey: staffPreorderKeys.orders(id, q), queryFn: ({ signal }) => api.orders(id, q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
   summary: (api: StaffPreordersApi, id: string) => queryOptions({ queryKey: staffPreorderKeys.summary(id), queryFn: ({ signal }) => api.summary(id, signal), staleTime: 15_000 }),
+  decisions: (api: StaffPreordersApi, id: string) => queryOptions({ queryKey: staffPreorderKeys.decisions(id), queryFn: ({ signal }) => api.decisions(id, signal), staleTime: 5_000 }),
+  /** Refresh every few seconds while orders-service is still refunding. */
+  refunds: (api: StaffPreordersApi, id: string) =>
+    queryOptions({ queryKey: staffPreorderKeys.refunds(id), queryFn: ({ signal }) => api.refunds(id, signal), staleTime: 2_000 }),
   products: (api: StaffPreordersApi, id: string) => queryOptions({ queryKey: staffPreorderKeys.products(id), queryFn: ({ signal }) => api.products(id, signal), staleTime: 60_000 }),
   customers: (api: StaffPreordersApi, id: string, q: string) =>
     queryOptions({ queryKey: staffPreorderKeys.customers(id, q), queryFn: ({ signal }) => api.customers(q, id, signal), placeholderData: keepPreviousData, staleTime: 30_000 }),

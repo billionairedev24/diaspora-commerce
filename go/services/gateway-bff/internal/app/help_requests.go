@@ -295,7 +295,7 @@ var helpStatuses = map[string][2]string{
 }
 
 // toHelpRequest keeps only what the customer may see. A claim that is not the caller's reads as not found.
-func (s *helpRequestsServiceImpl) toHelpRequest(c *domain.Caller, k port.UpClaim) (domain.HelpRequest, error) {
+func (s *helpRequestsServiceImpl) toHelpRequest(c *domain.Caller, k port.UpHelpClaim) (domain.HelpRequest, error) {
 	if k.CustomerID != "" && k.CustomerID != c.Subject {
 		return domain.HelpRequest{}, helpRequestNotFound(nil)
 	}

@@ -26,6 +26,9 @@ const WebOrigin = "http://localhost:3000"
 // SellerCenterOrigin is the Seller Center origin the test BFF allows.
 const SellerCenterOrigin = "http://localhost:3001"
 
+// StaffConsoleOrigin is the staff console origin the test BFF allows.
+const StaffConsoleOrigin = "http://localhost:3002"
+
 func chicago() *time.Location {
 	if l, err := time.LoadLocation("America/Chicago"); err == nil {
 		return l
@@ -38,6 +41,9 @@ const RedirectURI = WebOrigin + "/api/bff/v1/auth/oidc/callback"
 
 // SellerCenterRedirectURI is Seller Center's own BFF callback (sign-ins started there return there).
 const SellerCenterRedirectURI = SellerCenterOrigin + "/api/bff/v1/auth/oidc/callback"
+
+// StaffConsoleRedirectURI is the staff console's own BFF callback.
+const StaffConsoleRedirectURI = StaffConsoleOrigin + "/api/bff/v1/auth/oidc/callback"
 
 // BFF is a fully wired BFF against fake upstreams.
 type BFF struct {
@@ -109,19 +115,23 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	identityClient := client("identity", base)
 	clientCreds := upstreams.IdentityOptions{ClientID: u.ClientID, ClientSecret: u.Secret, Now: clock.Now}
 	media := upstreams.NewMedia(client("media", base))
-	sellerDeps := app.SellerDeps{Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", base)), Addresses: identity,
+	sellerCases := upstreams.NewSellerCases(client("tax-returns", base), client("trust-ops", base))
+	sellerDeps := app.SellerDeps{Cases: sellerCases, Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", base)), Addresses: identity,
 		Catalog: upstreams.NewSellerCatalog(client("catalog", base), cache, 10*time.Minute), Stock: upstreams.NewStock(client("inventory", base)),
+		Listing: upstreams.NewSellerListing(client("catalog", base)), Writer: upstreams.NewListingWriter(client("ai-gateway", base)),
 		Offers: upstreams.NewOffers(offersClient), Media: media,
 		Orders: upstreams.NewSellerOrders(client("orders", pending)), Carrier: upstreams.NewCarrier(client("carrier-gateway", base)),
-		Payouts: upstreams.NewPayouts(client("payments", base)), Fees: upstreams.NewFees(client("payments", base), upstreams.NewServiceTokens(identityClient, clientCreds)),
-		Storefront: upstreams.NewStorefront(client("storefront", base)), InventoryAPI: upstreams.NewStaffUpstream(client("inventory", base)),
+		Payouts: upstreams.NewPayouts(client("payments", base)), TaxStatements: upstreams.NewTaxStatements(client("tax-returns", base)), Fees: upstreams.NewFees(client("payments", base), upstreams.NewServiceTokens(identityClient, clientCreds)),
+		InventoryAPI: upstreams.NewStaffUpstream(client("inventory", base)), RunPickups: upstreams.NewStaffUpstream(client("delivery-runs", base)),
 		Bookings: upstreams.NewBookings(client("bookings", pending), clock.Now), Cache: cache, MatrixTTL: time.Millisecond, Location: chicago(),
-		Clock: clock.Now, Log: log, PublishableKey: u.opts.SellerPublishableKey}
+		ListingCache: app.NewListingCache(clock.Now),
+		Clock:        clock.Now, Log: log, PublishableKey: u.opts.SellerPublishableKey}
 
 	estimator := domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: 599, FreeShippingThresholdMinor: 4900})
 	sellers := app.SellerDirectory{RetailOrgID: "org_afrotransact_retail", Names: map[string]string{"org_kente": "Kente Naturals"}}
 	sessions := app.NewSessionService(store, identity, verifier, app.SessionOptions{SigningKey: "test-signing-key-0123456789abcdef0123",
 		VerifyBearer: true, Clock: clock.Now, Log: log})
+	sellerDeps.Sessions = sessions
 	location := app.NewLocationService(geo, content, sessions, app.LocationOptions{DefaultZIP: "77042", DefaultCity: "Houston", DefaultState: "TX", Log: log})
 	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Selection: store, Sessions: sessions,
 		Estimator: estimator, Clock: clock.Now, Log: log})
@@ -129,11 +139,16 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		Sessions: sessions,
 		Auth: app.NewAuthService(sessions, store, store, identity, verifier, cart, payments, app.AuthOptions{
 			IdentityPublicURL: base, ClientID: u.ClientID, RedirectURI: RedirectURI, WebOrigin: WebOrigin,
-			RedirectURIs: map[string]string{WebOrigin: RedirectURI, SellerCenterOrigin: SellerCenterRedirectURI}, Clock: clock.Now, Log: log}),
+			RedirectURIs: map[string]string{WebOrigin: RedirectURI, SellerCenterOrigin: SellerCenterRedirectURI,
+				StaffConsoleOrigin: StaffConsoleRedirectURI},
+			AppOrigins: map[string]string{"storefront": WebOrigin, "seller-center": SellerCenterOrigin, "staff-console": StaffConsoleOrigin},
+			BFFPath:    "/api/bff", Applications: sellerDeps.Sellers, OrgSync: sellerDeps.Orgs, Clock: clock.Now, Log: log}),
+		Native: app.NewNativeAuthService(upstreams.NewNativeSignIn(identityClient, upstreams.NewServiceTokens(identityClient, clientCreds)), app.NativeAuthOptions{}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Location: location,
 			Estimator: estimator, Sellers: sellers, Market: "us", Clock: clock.Now, Log: log}),
 		Location: location,
-		Search:   app.NewSearchService(search, storefrontOffers, location, estimator, "us", clock.Now),
+		Search: app.NewSearchService(search, storefrontOffers, location, estimator, "us", clock.Now,
+			app.WithServices(upstreams.NewCustomerBookings(client("bookings", base+ShopperPrefix)))),
 		Products: app.NewProductService(app.ProductDeps{Catalog: catalog, Inventory: inventory, Promise: promise, Notifications: notifications, Offers: storefrontOffers,
 			Location: location, Estimator: estimator, Sellers: sellers, Clock: clock.Now, Log: log}),
 		Cart:     carts,
@@ -142,18 +157,26 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		Careers:  app.NewCareersService(media, upstreams.NewServiceTokens(identityClient, clientCreds)),
 		Preorders: app.NewPreorderService(upstreams.NewPreorders(client("delivery-runs", base), cache, 0), location, "us",
 			app.WithPreorderCatalog(catalog)),
+		RunAlerts: app.NewRunAlertService(upstreams.NewRunAlerts(client("delivery-runs", base)), location, "us"),
 
-		SellerShell:     app.NewSellerShellService(sellerDeps),
-		SellerDashboard: app.NewSellerDashboardService(sellerDeps),
-		SellerOrders:    app.NewSellerOrdersService(sellerDeps),
-		SellerCatalog:   app.NewSellerCatalogService(sellerDeps),
-		SellerMoney:     app.NewSellerMoneyService(sellerDeps),
-		SellerFees:      app.NewSellerFeesService(sellerDeps),
-		SellerTeam:      app.NewSellerTeamService(sellerDeps),
-		ProviderHub:     app.NewProviderHubService(sellerDeps),
-		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),
-		SellerOffers:    app.NewSellerOffersService(sellerDeps),
-		SellerFba:       app.NewSellerFbaService(sellerDeps),
+		SellerShell:        app.NewSellerShellService(sellerDeps),
+		SellerDashboard:    app.NewSellerDashboardService(sellerDeps),
+		SellerOrders:       app.NewSellerOrdersService(sellerDeps),
+		SellerCatalog:      app.NewSellerCatalogService(sellerDeps),
+		SellerListing:      app.NewSellerListingService(sellerDeps),
+		SellerImports:      app.NewSellerImportService(sellerDeps, "/api/bff"),
+		SellerMoney:        app.NewSellerMoneyService(sellerDeps),
+		SellerFees:         app.NewSellerFeesService(sellerDeps),
+		SellerTeam:         app.NewSellerTeamService(sellerDeps),
+		ProviderHub:        app.NewProviderHubService(sellerDeps),
+		SellerShipFrom:     app.NewSellerShipFromService(sellerDeps),
+		SellerRunPickups:   app.NewSellerRunPickupsService(sellerDeps),
+		SellerBusinessPage: app.NewSellerBusinessPageService(sellerDeps),
+		SellerOffers:       app.NewSellerOffersService(sellerDeps),
+		SellerCoupons:      app.NewSellerCouponsService(sellerDeps),
+		SellerCases:        app.NewSellerCasesService(sellerDeps),
+		SellerTax:          app.NewSellerTaxService(sellerDeps),
+		SellerFba:          app.NewSellerFbaService(sellerDeps),
 	}
 	// Seller Center exports: the BFF's own file store (signed links served by /v1/seller/export-files/{id}).
 	if files, err := exportfiles.NewLocal(exportfiles.Options{Dir: filepath.Join(os.TempDir(), "gateway-bff-testkit-exports"), SigningKey: "testkit",
@@ -162,9 +185,12 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 			Renderer: exportfiles.NewRenderer(), BasePath: "/api/bff", Background: func(fn func()) { fn() }})
 		services.SellerExportFiles = files
 	}
+	services.SellerAssistant = app.NewSellerAssistantService(sellerDeps, app.AssistantDeps{Model: upstreams.NewAssistantModel(client("ai-gateway", base)), Counter: NewMemStore(),
+		Orders: services.SellerOrders, Catalog: services.SellerCatalog, Fees: services.SellerFees, Money: services.SellerMoney, Coupons: services.SellerCoupons, Cases: sellerCases, Shell: services.SellerShell, Dashboard: services.SellerDashboard,
+		Now: clock.Now})
 	services.Shopper = shopperServices(u, client, identity, store, services, clock, log)
 	mux := http.NewServeMux()
-	httpapi.New(services, store, httpapi.SecurityOptions{AllowedOrigins: []string{WebOrigin, SellerCenterOrigin}, CookieName: "at_session",
+	httpapi.New(services, store, httpapi.SecurityOptions{AllowedOrigins: []string{WebOrigin, SellerCenterOrigin, StaffConsoleOrigin}, CookieName: "at_session",
 		CookieSecure: true, MaxBodyBytes: 64 << 10, AuthPerMinute: cfg.AuthPerMinute, LookupPerMinute: 1000}, log).Register(mux)
 	return &BFF{Handler: mux, Upstreams: u, Store: store, Metrics: reg, Clock: clock}
 }

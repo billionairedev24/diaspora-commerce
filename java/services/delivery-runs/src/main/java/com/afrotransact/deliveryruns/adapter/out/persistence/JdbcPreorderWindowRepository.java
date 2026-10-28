@@ -21,6 +21,7 @@ import com.afrotransact.deliveryruns.domain.CreativeSlot;
 import com.afrotransact.deliveryruns.domain.Money;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
 import com.afrotransact.deliveryruns.domain.WindowDetails;
+import com.afrotransact.deliveryruns.domain.WindowOutcome;
 import com.afrotransact.deliveryruns.port.ConcurrentUpdateException;
 import com.afrotransact.deliveryruns.port.DuplicateEntryException;
 import com.afrotransact.deliveryruns.port.PreorderWindowRepository;
@@ -40,9 +41,9 @@ class JdbcPreorderWindowRepository implements PreorderWindowRepository {
                        LocalDate deliversOn, ZoneId zone, String ribbon, String headline, String sms,
                        Set<String> categories, boolean door, boolean pickup, String pickupPointId,
                        String pickupAddress, boolean showCount, long budgetMinor, String currency,
-                       Set<CommKind> comms, Long doorFeeMinor, Long pickupFeeMinor, UUID locationId, boolean draft,
-                       boolean active, UUID runId, Instant createdAt, Instant updatedAt,
-                       long version) {
+                       Set<CommKind> comms, Long doorFeeMinor, Long pickupFeeMinor, UUID locationId, int minOrders,
+                       boolean draft, boolean active, UUID runId, WindowOutcome outcome, Instant createdAt,
+                       Instant updatedAt, long version) {
     }
 
     private final JdbcClient jdbc;
@@ -60,11 +61,11 @@ class JdbcPreorderWindowRepository implements PreorderWindowRepository {
                     insert into preorder_window (id, code, name, opens_at, closes_at, delivers_on, time_zone, ribbon,
                         headline, sms_copy, categories, door, pickup, pickup_point_id, pickup_address, show_count,
                         social_budget_minor, currency, comms, door_fee_override_minor, pickup_fee_override_minor,
-                        location_id, draft, active, run_id, created_at, updated_at, version)
+                        location_id, min_orders, draft, active, run_id, outcome, created_at, updated_at, version)
                     values (:id, :code, :name, :opensAt, :closesAt, :deliversOn, :zone, :ribbon, :headline, :sms,
                         cast(:categories as jsonb), :door, :pickup, :pickupPointId, :pickupAddress, :showCount,
-                        :budget, :currency, cast(:comms as jsonb), :doorFee, :pickupFee, :locationId, :draft, :active,
-                        :runId, :createdAt, :updatedAt, 0)
+                        :budget, :currency, cast(:comms as jsonb), :doorFee, :pickupFee, :locationId, :minOrders, :draft,
+                        :active, :runId, :outcome, :createdAt, :updatedAt, 0)
                     """), w).param("code", w.code()).param("createdAt", Sql.ts(w.createdAt())).update();
         } catch (DuplicateKeyException e) {
             throw new DuplicateEntryException("Pre-order code " + w.code() + " is taken", e);
@@ -82,8 +83,8 @@ class JdbcPreorderWindowRepository implements PreorderWindowRepository {
                     pickup_point_id = :pickupPointId, pickup_address = :pickupAddress, show_count = :showCount,
                     social_budget_minor = :budget, currency = :currency, comms = cast(:comms as jsonb),
                     door_fee_override_minor = :doorFee, pickup_fee_override_minor = :pickupFee,
-                    location_id = :locationId, draft = :draft, active = :active, run_id = :runId,
-                    updated_at = :updatedAt, version = version + 1
+                    location_id = :locationId, min_orders = :minOrders, draft = :draft, active = :active,
+                    run_id = :runId, outcome = :outcome, updated_at = :updatedAt, version = version + 1
                 where id = :id and version = :version
                 """), w).param("version", w.version()).update();
         if (rows == 0) {
@@ -157,9 +158,10 @@ class JdbcPreorderWindowRepository implements PreorderWindowRepository {
                     r.door(), r.pickup(), r.pickupPointId(), r.pickupAddress(), r.showCount(),
                     new Money(r.budgetMinor(), r.currency()), r.comms(),
                     r.doorFeeMinor() == null ? null : new Money(r.doorFeeMinor(), r.currency()),
-                    r.pickupFeeMinor() == null ? null : new Money(r.pickupFeeMinor(), r.currency()), r.locationId());
+                    r.pickupFeeMinor() == null ? null : new Money(r.pickupFeeMinor(), r.currency()), r.locationId(),
+                    r.minOrders());
             out.add(new PreorderWindow(r.id(), r.code(), d, creatives.getOrDefault(r.id(), Map.of()), r.draft(),
-                    r.active(), r.runId(), r.createdAt(), r.updatedAt(), r.version()));
+                    r.active(), r.runId(), r.outcome(), r.createdAt(), r.updatedAt(), r.version()));
         }
         return out;
     }
@@ -206,9 +208,11 @@ class JdbcPreorderWindowRepository implements PreorderWindowRepository {
                 .param("doorFee", d.doorFeeOverride() == null ? null : d.doorFeeOverride().minor())
                 .param("pickupFee", d.pickupFeeOverride() == null ? null : d.pickupFeeOverride().minor())
                 .param("locationId", d.locationId())
+                .param("minOrders", d.minOrders())
                 .param("draft", w.draft())
                 .param("active", w.active())
                 .param("runId", w.runId())
+                .param("outcome", w.outcome() == null ? null : w.outcome().name())
                 .param("updatedAt", Sql.ts(w.updatedAt()));
     }
 
@@ -224,8 +228,10 @@ class JdbcPreorderWindowRepository implements PreorderWindowRepository {
                 json.read(rs.getString("categories"), STRINGS), rs.getBoolean("door"), rs.getBoolean("pickup"),
                 rs.getString("pickup_point_id"), rs.getString("pickup_address"), rs.getBoolean("show_count"),
                 rs.getLong("social_budget_minor"), rs.getString("currency"), json.read(rs.getString("comms"), COMMS),
-                doorFee, pickupFee, rs.getObject("location_id", UUID.class), rs.getBoolean("draft"),
-                rs.getBoolean("active"), rs.getObject("run_id", UUID.class), Sql.instant(rs, "created_at"),
+                doorFee, pickupFee, rs.getObject("location_id", UUID.class), rs.getInt("min_orders"),
+                rs.getBoolean("draft"), rs.getBoolean("active"), rs.getObject("run_id", UUID.class),
+                rs.getString("outcome") == null ? null : WindowOutcome.valueOf(rs.getString("outcome")),
+                Sql.instant(rs, "created_at"),
                 Sql.instant(rs, "updated_at"), rs.getLong("version"));
     }
 }

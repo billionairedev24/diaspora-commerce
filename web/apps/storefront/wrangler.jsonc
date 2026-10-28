@@ -12,24 +12,25 @@
   "vars": {
     "BFF_ORIGIN": "https://api.dev.afrotransact.com/bff",
     "SELLER_CENTER_URL": "https://seller.dev.afrotransact.com",
+    "STAFF_CONSOLE_URL": "https://admin.dev.afrotransact.com",
     "API_MOCKS": "0"
   },
   "env": {
     // PR previews: a version of storefront-dev on the in-process mock BFF.
     "preview": {
       "name": "storefront-dev",
-      "vars": { "API_MOCKS": "1", "BFF_ORIGIN": "", "SELLER_CENTER_URL": "https://seller.dev.afrotransact.com" }
+      "vars": { "API_MOCKS": "1", "BFF_ORIGIN": "", "SELLER_CENTER_URL": "https://seller.dev.afrotransact.com", "STAFF_CONSOLE_URL": "https://admin.dev.afrotransact.com" }
     },
     "uat": {
       "name": "storefront-uat",
-      "vars": { "API_MOCKS": "0", "BFF_ORIGIN": "https://api.uat.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller.uat.afrotransact.com" }
+      "vars": { "API_MOCKS": "0", "BFF_ORIGIN": "https://api.uat.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller.uat.afrotransact.com", "STAFF_CONSOLE_URL": "https://admin.uat.afrotransact.com" }
     },
     "prod": {
       "name": "storefront-prod",
       // The prod storefront is the bare domain (same zone route as infra/cloudflare). www.afrotransact.com is not
       // served as a second storefront: it redirects to the bare domain at the edge.
       "routes": [{ "pattern": "afrotransact.com/*", "zone_name": "afrotransact.com" }],
-      "vars": { "API_MOCKS": "0", "BFF_ORIGIN": "https://api.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller.afrotransact.com" }
+      "vars": { "API_MOCKS": "0", "BFF_ORIGIN": "https://api.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller.afrotransact.com", "STAFF_CONSOLE_URL": "https://admin.afrotransact.com" }
     }
   }
 }

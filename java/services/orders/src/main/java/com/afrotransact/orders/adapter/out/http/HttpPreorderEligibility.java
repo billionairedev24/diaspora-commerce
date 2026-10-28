@@ -113,7 +113,9 @@ class HttpPreorderEligibility implements PreorderEligibility {
                 instant(text(n, "closesAt", text(w, "closesAt", null))), bool(n, w, "door", true),
                 bool(n, w, "pickup", false), fee(n, fees, "door", DEFAULT_DOOR_FEE_MINOR),
                 fee(n, fees, "pickup", 0), text(n, "currency", text(w, "currency", text(fees, "currency", "USD"))),
-                methods, text(n, "pickupPointId", text(w, "pickupPointId", null)));
+                methods, text(n, "pickupPointId", text(w, "pickupPointId", null)),
+                HttpDeliveryFeeRules.snapshot(rule(n, w, "doorFeeRule")),
+                HttpDeliveryFeeRules.snapshot(rule(n, w, "pickupFeeRule")));
     }
 
     /** {@code <kind>FeeMinor}, else {@code <kind>Fee} in minor units (or an object with amountMinor / minor). */
@@ -140,6 +142,10 @@ class HttpPreorderEligibility implements PreorderEligibility {
             }
         }
         return fallback;
+    }
+
+    private static JsonNode rule(JsonNode n, JsonNode w, String field) {
+        return n.has(field) ? n.path(field) : w.path(field);
     }
 
     private static boolean bool(JsonNode n, JsonNode w, String field, boolean fallback) {

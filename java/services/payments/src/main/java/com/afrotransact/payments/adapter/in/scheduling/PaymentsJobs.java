@@ -4,7 +4,10 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import com.afrotransact.payments.application.GiftCardService;
+import com.afrotransact.payments.application.NegotiatedRateService;
 import com.afrotransact.payments.application.ProviderFeeService;
+import com.afrotransact.payments.application.ReferralProgram;
 import com.afrotransact.payments.application.ReconciliationService;
 import com.afrotransact.payments.application.SettlementService;
 import com.afrotransact.payments.application.WebhookService;
@@ -29,22 +32,33 @@ class PaymentsJobs {
     private final SettlementService settlements;
     private final ProviderFeeService providerFees;
     private final ReconciliationService reconciliation;
+    private final NegotiatedRateService negotiatedRates;
+    private final GiftCardService giftCards;
+    private final ReferralProgram referrals;
     private final Clock clock;
     private final int webhookBatch;
     private final int settlementBatch;
+    private final int referralBatch;
     private final ZoneId zone;
 
     PaymentsJobs(WebhookService webhooks, SettlementService settlements, ProviderFeeService providerFees,
-                 ReconciliationService reconciliation, Clock clock, @Value("${at.payments.jobs.webhook-batch:100}") int webhookBatch,
+                 ReconciliationService reconciliation, NegotiatedRateService negotiatedRates, GiftCardService giftCards,
+                 ReferralProgram referrals, Clock clock,
+                 @Value("${at.payments.jobs.webhook-batch:100}") int webhookBatch,
                  @Value("${at.payments.jobs.settlement-batch:200}") int settlementBatch,
+                 @Value("${at.payments.jobs.referral-batch:100}") int referralBatch,
                  @Value("${at.payments.zone:UTC}") String zone) {
         this.webhooks = webhooks;
         this.settlements = settlements;
         this.providerFees = providerFees;
         this.reconciliation = reconciliation;
+        this.negotiatedRates = negotiatedRates;
+        this.giftCards = giftCards;
+        this.referrals = referrals;
         this.clock = clock;
         this.webhookBatch = webhookBatch;
         this.settlementBatch = settlementBatch;
+        this.referralBatch = referralBatch;
         this.zone = ZoneId.of(zone);
     }
 
@@ -73,6 +87,45 @@ class PaymentsJobs {
     @Scheduled(cron = "${at.payments.jobs.reconciliation-cron:0 10 3 * * *}", zone = "${at.payments.zone:UTC}")
     void reconcileYesterday() {
         run("reconciliation", () -> reconciliation.runDaily(LocalDate.now(clock.withZone(zone)).minusDays(1)));
+    }
+
+    /** Records the expiry of negotiated rates that reached their end date (they stop applying at it anyway). */
+    @Scheduled(cron = "${at.payments.jobs.negotiated-rate-expiry-cron:0 */5 * * * *}")
+    void expireNegotiatedRates() {
+        run("negotiated-rate-expiry", () -> {
+            int expired = negotiatedRates.expireDue();
+            if (expired > 0) {
+                LOG.info("Expired {} negotiated rates", expired);
+            }
+        });
+    }
+
+    /** Emails the gift cards whose send date has come (S321); the code is generated at this moment. */
+    @Scheduled(fixedDelayString = "${at.payments.jobs.gift-card-interval:30s}")
+    void deliverGiftCards() {
+        run("gift-card-delivery", () -> {
+            int sent = giftCards.deliverDue();
+            if (sent > 0) {
+                LOG.info("Handed {} gift cards to notifications", sent);
+            }
+            // The code travels in the event only; once relayed it is removed, so the database holds the hash alone.
+            giftCards.scrubDeliveredCodes();
+        });
+    }
+
+    /**
+     * Grants the referral rewards whose return window has passed and expires referrals whose friend never qualified
+     * (S322). Safe on several replicas: each referral is locked while it is settled and the ledger key is once per side.
+     */
+    @Scheduled(fixedDelayString = "${at.payments.jobs.referral-interval:5m}")
+    void settleReferrals() {
+        run("referral-rewards", () -> {
+            int settled = referrals.grantDue(referralBatch);
+            int expired = referrals.expireStale(referralBatch);
+            if (settled > 0 || expired > 0) {
+                LOG.info("Referrals: {} settled, {} expired", settled, expired);
+            }
+        });
     }
 
     private static void run(String job, Runnable body) {

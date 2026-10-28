@@ -4,7 +4,7 @@ import { type CountryCode } from 'libphonenumber-js/mobile';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { AddressAutocomplete, createFixtureAddressSearch, Dialog, ErrorSummary, fromNominatim, ImagePlaceholder, Menu, MenuItem, PasswordField, PhoneInput, ProductCard, type ProductCardData, QuantityStepper, SAMPLE_ADDRESSES, Sheet, SocialButton, Stars } from '../src';
+import { AddressAutocomplete, createFixtureAddressSearch, Dialog, ErrorSummary, fromNominatim, ImagePlaceholder, Menu, MenuItem, PasswordField, PhoneInput, ProductCard, type ProductCardData, QuantityStepper, SAMPLE_ADDRESSES, Sheet, SocialButton, Spinner, Stars } from '../src';
 
 function Phone() {
   const [country, setCountry] = useState<CountryCode>('US');
@@ -128,6 +128,12 @@ describe('AddressAutocomplete', () => {
     expect(input).toHaveValue('9800 Westheimer Rd');
   });
 
+  it('suggests from the first character typed', async () => {
+    render(<Demo onSelect={vi.fn()} />);
+    await userEvent.type(screen.getByRole('combobox', { name: 'Street address' }), '9');
+    await waitFor(() => expect(screen.getAllByRole('option').length).toBeGreaterThan(0));
+  });
+
   it('maps Nominatim results', () => {
     const s = fromNominatim({ place_id: 1, lat: '29.7', lon: '-95.5', display_name: '9800, Westheimer Road, Houston', address: { house_number: '9800', road: 'Westheimer Road', city: 'Houston', state: 'Texas', postcode: '77042', country_code: 'us' } });
     expect(s).toMatchObject({ label: '9800 Westheimer Road', secondary: 'Houston, TX 77042', source: 'osm', address: { state: 'TX', zip: '77042', country: 'US' } });
@@ -197,13 +203,13 @@ describe('ImagePlaceholder', () => {
   });
 });
 
-function PageWithSheet({ side }: { side?: 'left' | 'right' }) {
+function PageWithSheet({ side, persistent }: { side?: 'left' | 'right'; persistent?: boolean }) {
   const [open, setOpen] = useState(true);
   const [clicks, setClicks] = useState(0);
   return (
     <>
       <button type="button" onClick={() => setClicks((c) => c + 1)}>Page action {clicks}</button>
-      <Sheet open={open} onOpenChange={setOpen} title="Record" side={side}>
+      <Sheet open={open} onOpenChange={setOpen} title="Record" side={side} persistent={persistent}>
         <p>Details</p>
       </Sheet>
     </>
@@ -211,12 +217,40 @@ function PageWithSheet({ side }: { side?: 'left' | 'right' }) {
 }
 
 describe('Sheet', () => {
-  it('right sheets leave the page usable: no overlay, page clicks work and do not close the sheet', async () => {
+  it('right sheets have no overlay and close when anything outside them is clicked', async () => {
     render(<PageWithSheet />);
     expect(screen.getByRole('dialog', { name: 'Record' })).toBeInTheDocument();
     expect(document.querySelector('[data-state="open"][class*="overlay"]')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Page action 0' }));
     expect(screen.getByRole('button', { name: 'Page action 1' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('a click inside another dialog that opened above it does not close the sheet behind it', async () => {
+    function Both() {
+      const [sheet, setSheet] = useState(false);
+      return (
+        <>
+          <Dialog open title="Client secret" onOpenChange={() => undefined}>
+            <button type="button" onClick={() => setSheet(true)}>Open the record</button>
+            <p>Shown once</p>
+          </Dialog>
+          <Sheet open={sheet} onOpenChange={setSheet} title="Record">
+            <p>Details</p>
+          </Sheet>
+        </>
+      );
+    }
+    render(<Both />);
+    await userEvent.click(screen.getByRole('button', { name: 'Open the record' }));
+    expect(await screen.findByRole('dialog', { name: 'Record' })).toBeInTheDocument();
+    await userEvent.click(screen.getByText('Shown once'));
+    expect(screen.getByRole('dialog', { name: 'Record' })).toBeInTheDocument();
+  });
+
+  it('a persistent sheet (the assistant) stays open while the page is used, until Close', async () => {
+    render(<PageWithSheet persistent />);
+    await userEvent.click(screen.getByRole('button', { name: 'Page action 0' }));
     expect(screen.getByRole('dialog', { name: 'Record' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -226,5 +260,23 @@ describe('Sheet', () => {
     render(<PageWithSheet side="left" />);
     expect(screen.getByRole('dialog', { name: 'Record' })).toBeInTheDocument();
     expect(document.querySelector('[class*="overlay"]')).not.toBeNull();
+  });
+});
+
+describe('Spinner', () => {
+  it('renders with role="status" and accessible label', () => {
+    render(<Spinner label="Loading items…" />);
+    const status = screen.getByRole('status');
+    expect(status).toBeInTheDocument();
+    expect(status).toHaveTextContent('Loading items…');
+  });
+
+  it('supports sr-only label when requested', () => {
+    render(<Spinner label="Processing…" srOnlyLabel />);
+    const status = screen.getByRole('status');
+    expect(status).toBeInTheDocument();
+    const span = status.querySelector('.sr-only');
+    expect(span).not.toBeNull();
+    expect(span).toHaveTextContent('Processing…');
   });
 });

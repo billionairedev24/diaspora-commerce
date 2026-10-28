@@ -25,6 +25,7 @@ TRUST_OPS_URL, TAX_RETURNS_URL, CART_URL, GEO_URL). Auth: SEED_TOKEN, or SEED_CL
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -36,6 +37,21 @@ from seedlib.seeder import STEPS, Seeder, load_env
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def guard_not_production() -> None:
+    """The seeder writes demo sellers, products, orders and test users: it must never run against production or UAT."""
+    env = os.environ.get("APP_ENV", "local").lower()
+    if env in ("prod", "production", "uat"):
+        sys.exit(f"seed: refusing to run with APP_ENV={env}: demo data is for local and dev stacks only")
+    seeded = ("CATALOG_URL", "OFFERS_URL", "INVENTORY_URL", "MEDIA_URL", "CONTENT_URL", "DELIVERY_RUNS_URL", "SELLER_URL",
+              "BOOKINGS_URL", "SEARCH_URL", "ORDERS_URL", "PAYMENTS_URL", "RETAIL_URL", "FULFILMENT_URL", "TRUST_OPS_URL",
+              "TAX_RETURNS_URL", "CART_URL", "GEO_URL", "CARRIER_GATEWAY_URL", "AUTH_ISSUER_URL")
+    remote = [k for k in seeded if os.environ.get(k, "").startswith("http")
+              and not any(h in os.environ[k] for h in ("localhost", "127.0.0.1", "host.docker.internal"))]
+    if remote and os.environ.get("SEED_ALLOW_REMOTE") != "1":
+        sys.exit("seed: " + ", ".join(sorted(remote)) + " point away from this machine; set SEED_ALLOW_REMOTE=1 only "
+                 "for a dev environment you mean to fill with demo data")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--only", help=f"comma-separated steps: {','.join(STEPS)}")
@@ -44,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="seed only what is missing: everything on an empty catalog, else the ops step when its data "
                          "is missing")
     args = ap.parse_args(argv)
+    guard_not_production()
     steps = tuple(s.strip() for s in args.only.split(",")) if args.only else STEPS
     if args.skip:
         steps = tuple(s for s in steps if s not in {x.strip() for x in args.skip.split(",")})

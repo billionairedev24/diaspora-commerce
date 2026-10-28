@@ -1,0 +1,21 @@
+# Lean (single-node) data plane that replaces the paid SaaS: Kafka (was Confluent Cloud), Temporal (was Temporal
+# Cloud) and the Grafana Cloud credentials for the OTLP collector (was in-cluster Prometheus/Loki/Tempo). Postgres,
+# Valkey and Meilisearch are external (Layerbase). Argo CD: platform-manifests-lean element `lean`.
+# Cost and sizing: docs/engineering/cloud-cost.md.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs: {app.kubernetes.io/part-of: afrotransact-platform}
+    includeSelectors: false
+resources:
+  - namespaces.yaml
+  - kafka.yaml
+  - temporal.yaml
+  - grafana-cloud.yaml
+  # In-cluster data stores, OFF by default (production keeps Postgres, Valkey and Meilisearch on Layerbase). Uncomment:
+  #   - the first three for the TRIAL (docs/runbooks/trial-environment.md): everything in the cluster, nothing external
+  #   - data/valkey.yaml + data/meilisearch.yaml for option B of docs/engineering/cloud-cost.md (Layerbase 4 GB = Postgres only)
+  # - data/namespace.yaml
+  # - data/valkey.yaml
+  # - data/meilisearch.yaml
+  # - data/postgres-trial.yaml

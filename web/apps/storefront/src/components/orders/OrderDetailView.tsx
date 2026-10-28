@@ -2,7 +2,7 @@
 
 import { isApiError, orderKeys } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, ImagePlaceholder, Key, Skeleton, Truck, useToast } from '@afrotransact/ui';
+import { buttonClassName, ImagePlaceholder, Key, Skeleton, Truck, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 
@@ -12,14 +12,18 @@ import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 import { productHref } from '@/lib/links';
 
+import { CancelShipment } from './CancelShipment';
+import { DeliveryProofCard } from './DeliveryProofCard';
 import styles from './Orders.module.css';
 import { placedDate } from './OrdersView';
 import { PickupDetails } from './PickupDetails';
 
-const stamp = (tag: string, iso: string) => new Date(iso).toLocaleString(tag, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const day = (tag: string, iso: string | null) => (iso ? new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso).toLocaleDateString(tag, { weekday: 'short', month: 'short', day: 'numeric' }) : null);
 
-/** One order (S148): shipments with tracking timelines, delivery codes, items, totals, cancel and return. */
+/**
+ * One order, kept short: where each delivery stands, what is in it and what was paid. Cancelling is possible until it ships; once
+ * delivered there is no self-service refund or return, the shopper contacts support with evidence and staff resolve it.
+ */
 export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
   const fmt = useFormatters();
   const t = useT();
@@ -59,38 +63,19 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                   <p className={pageStyles.muted}>
                     {s.label} · {t('ord.soldBy', { seller: s.sellerName })}
                   </p>
-                  {s.promisedBy && !s.deliveredAt && <p className={pageStyles.success}>{t('ord.arriving', { date: day(fmt.tag, s.promisedBy) ?? '' })}</p>}
-                  {s.localDelivery && (
-                    <p className={pageStyles.muted} data-testid="order-local-delivery">
-                      <Truck aria-hidden />{' '}
-                      {s.localDelivery.roadMiles !== null && s.localDelivery.durationMinutes !== null
-                        ? t('ld.orderInfo', {
-                            miles: fmt.number(s.localDelivery.roadMiles, { maximumFractionDigits: 1 }),
-                            minutes: Math.round(s.localDelivery.durationMinutes),
-                            amount: fmt.money(s.localDelivery.chargeMinor)
-                          })
-                        : t('ld.orderInfoShort', { amount: fmt.money(s.localDelivery.chargeMinor) })}
-                    </p>
-                  )}
+                  {s.status.toLowerCase() !== 'cancelled' && s.promisedBy && !s.deliveredAt && <p className={pageStyles.success}>{t('ord.arriving', { date: day(fmt.tag, s.promisedBy) ?? '' })}</p>}
                   {s.pickup && <PickupDetails pickup={s.pickup} />}
-                  {s.carrier && s.trackingNumber && (
+                  {s.status.toLowerCase() !== 'cancelled' && s.carrier && s.trackingNumber && (
                     <p className={pageStyles.muted}>
                       <Truck aria-hidden /> {t('ord.trackingNo', { carrier: s.carrier.toUpperCase(), number: s.trackingNumber })}
                     </p>
                   )}
-                  {s.deliveryCode && (
+                  {s.status.toLowerCase() !== 'cancelled' && s.deliveryCode && (
                     <span className={styles.code}>
-                      <Key aria-hidden /> {t('ord.deliveryCode')} <strong className={pageStyles.code}>{s.deliveryCode}</strong> · {t('ord.codeHint')}
+                      <Key aria-hidden /> {t(s.deliveryMethod === 'pickup' ? 'ord.pickupCode' : 'ord.deliveryCode')} <strong className={pageStyles.code}>{s.deliveryCode}</strong> · {t(s.deliveryMethod === 'pickup' ? 'ord.codeHintPickup' : 'ord.codeHint')}
                     </span>
                   )}
-                  <ol className={styles.timeline} aria-label={t('ord.timeline')}>
-                    {s.timeline.map((e) => (
-                      <li key={`${e.status}-${e.at}`} className={styles.step}>
-                        <strong>{e.label}</strong>
-                        <span className={styles.when}>{stamp(fmt.tag, e.at)}</span>
-                      </li>
-                    ))}
-                  </ol>
+                  {s.proof && <DeliveryProofCard proof={s.proof} />}
                   <ul className={styles.lines}>
                     {s.lines.map((l) => (
                       <li key={l.lineId} className={styles.line}>
@@ -104,28 +89,13 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                     ))}
                   </ul>
                   <div className={pageStyles.actions}>
-                    {s.cancellable && (
-                      <Button size="sm" variant="neutral" onClick={() => cancel.mutate(s.shipmentId)} loading={cancel.isPending}>
-                        {t('ord.cancelItems')}
-                      </Button>
-                    )}
-                    {(s.returnable ?? Boolean(s.deliveredAt)) && (
-                      <Link href={`/account/returns/new?order=${encodeURIComponent(o.orderNumber)}`} className={buttonClassName({ variant: 'neutral', size: 'sm' })}>
-                        {t('ord.returnItems')}
-                      </Link>
-                    )}
-                    {s.problemReportOnly && !s.returnable && (
-                      <Link href={`/account/returns/new?order=${encodeURIComponent(o.orderNumber)}`} className={buttonClassName({ variant: 'neutral', size: 'sm' })}>
-                        {t('ord.reportProblem')}
-                      </Link>
-                    )}
+                    <CancelShipment shipment={s} onCancel={() => cancel.mutate(s.shipmentId)} loading={cancel.isPending} />
                     {s.deliveredAt && (
-                      <Link href={`/account/returns?order=${encodeURIComponent(o.orderNumber)}`} className={buttonClassName({ variant: 'link', size: 'sm' })}>
-                        {t('ord.viewReturns')}
+                      <Link href={`/account/help/new?order=${encodeURIComponent(o.orderNumber)}`} className={buttonClassName({ variant: 'neutral', size: 'sm' })} data-testid="order-get-help">
+                        {t('ord.getHelp')}
                       </Link>
                     )}
                   </div>
-                  {s.returnable && s.returnWindowEndsAt && <p className={pageStyles.muted}>{t('ord.returnBy', { date: day(fmt.tag, s.returnWindowEndsAt) ?? '' })}</p>}
                 </section>
               ))}
             </div>
@@ -157,6 +127,12 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                   <dd>
                     <strong>{fmt.money(o.totalMinor)}</strong>
                   </dd>
+                  {o.payment && o.payment.creditMinor > 0 && (
+                    <>
+                      <dt>{t('ord.paidWithCredit')}</dt>
+                      <dd data-testid="order-credit">{fmt.money(o.payment.creditMinor)}</dd>
+                    </>
+                  )}
                   {o.payment && o.payment.refundedMinor > 0 && (
                     <>
                       <dt>{t('ord.refunded')}</dt>

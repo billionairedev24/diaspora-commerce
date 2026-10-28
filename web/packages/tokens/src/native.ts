@@ -2,6 +2,7 @@
    React Native styles need unitless numbers and concrete colours, so this module converts the resolved CSS values:
    "16px" → 16, "rgb(0 0 0 / .55)" → "rgba(0,0,0,0.55)", "-0.015em" at a font size → letterSpacing in points,
    CSS box-shadows → iOS shadow* props + Android elevation. Import with `@afrotransact/tokens/native`. */
+import { fonts } from './generated/fonts';
 import { tokens } from './generated/tokens';
 
 type Tree = typeof tokens;
@@ -91,7 +92,7 @@ export const nativeTokens = {
   },
   /** Durations in milliseconds. */
   duration: { fast: toNumber(tokens.duration.fast.replace('ms', '')), base: toNumber(tokens.duration.value.replace('ms', '')) },
-  fontFamily: { sans: 'Figtree', mono: 'Menlo' }
+  fontFamily: { sans: fonts.sans.family, display: fonts.display.family, mono: 'Menlo' }
 } as const;
 
 export type NativeTokens = typeof nativeTokens;

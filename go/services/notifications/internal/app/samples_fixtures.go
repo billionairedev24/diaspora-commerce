@@ -18,7 +18,15 @@ func SampleEvents(l Links) map[string][]map[string]any {
 			{"recipient": map[string]any{"id": "u-1", "phone": "+15550002222"}, "channel": "sms", "code": "654321",
 				"expiresInMinutes": 10, "expiresAt": "2026-10-10T10:10:00Z", "purpose": "PHONE_VERIFICATION", "userId": "u-1",
 				"transactional": true},
+			{"recipient": map[string]any{"id": "u-1", "email": "ada@example.com"}, "channel": "email", "code": "482913",
+				"expiresInMinutes": 10, "expiresAt": "2026-10-10T10:10:00Z", "purpose": "PASSWORD_RESET", "userId": "u-1",
+				"firstName": "Ada", "transactional": true},
 		},
+		"identity.password-reset.federated": {{"recipient": map[string]any{"id": "u-2", "email": "kofi@example.com"},
+			"userId": "u-2", "firstName": "Kofi", "providers": []string{"Google"}, "transactional": true}},
+		"identity.password.changed": {{"recipient": map[string]any{"id": "u-1", "email": "ada@example.com"},
+			"userId": "u-1", "firstName": "Ada", "method": "RESET", "changedAt": "2026-10-12T14:05:00Z",
+			"sessionsRevoked": 3, "transactional": true}},
 		"identity.invitation.created": {{"invitationId": "5b0c7d2e-8a41-4f0e-b3c2-9d6e1a2f4b01", "orgId": "org_1",
 			"orgName": "Mama Put", "orgKind": "SELLER", "email": "invitee@example.com", "roleKey": "seller.catalog",
 			"roleName": "Catalog manager", "token": "tok", "acceptUrl": join(l.SellerCenter, "/invitations/accept?token=tok"),
@@ -43,6 +51,17 @@ func SampleEvents(l Links) map[string][]map[string]any {
 			"orderId": "6d3e9f20-4b5c-4d6e-9f70-8b9c0d1e2f32", "number": "LBK-L90", "customerId": "cust-1", "phone": "+15550001111",
 			"payment": "PAYMENT_LINK", "paymentUrl": "http://localhost:3000/orders/AT-2026-PAY001/pay?token=1.vbkms0.Fh2nQ8l5XyZr0aB3cD4eFg", "totalMinor": 4297, "currency": "USD",
 			"deliversOn": "2026-10-25", "expiresAt": "2026-10-23T05:00:00Z", "reason": "Customer called", "actor": "staff-4"}},
+		"delivery-runs.run.announced":        {sampleRun(l, "ANNOUNCED", "announced", nil)},
+		"delivery-runs.run.opened":           {sampleRun(l, "OPEN", "opened", nil)},
+		"delivery-runs.run.cutoff_reminder":  {sampleRun(l, "OPEN", "cutoff_reminder", nil)},
+		"delivery-runs.run.confirmed":        {sampleRun(l, "CONFIRMED", "confirmed", map[string]any{"orders": sampleRunOrders("CONFIRMED", nil)})},
+		"delivery-runs.run.cancelled":        {sampleRun(l, "CANCELLED", "cancelled", map[string]any{"reason": "MINIMUM_NOT_MET", "orders": sampleRunOrders("CANCELLED", nil)})},
+		"delivery-runs.run.out_for_delivery": {sampleRun(l, "OUT_FOR_DELIVERY", "out_for_delivery", map[string]any{"orders": sampleRunOrders("CONFIRMED", "482913")})},
+		"delivery-runs.subscription.created": {
+			sampleRunSubscription(l, "PENDING_CONFIRMATION", nil, "neighbour@example.com", []string{"EMAIL"}, "http://localhost:3000/delivery-runs/subscriptions/confirm?token=sample-confirm"),
+			sampleRunSubscription(l, "ACTIVE", "cust-1", nil, []string{"EMAIL", "SMS", "PUSH"}, nil),
+		},
+		"delivery-runs.subscription.confirmed": {sampleRunSubscription(l, "ACTIVE", nil, "neighbour@example.com", []string{"EMAIL"}, nil)},
 		"orders.order.cancelled": {{"orderId": "0f6c1d5a-2b3e-4c7d-8e9f-a0b1c2d3e401", "orderNumber": "AT-2026-7KQ3MD",
 			"customerId": "cust-1", "code": "orders.all-shipments-cancelled", "wasPlaced": true, "cancelledAt": "2026-10-10T10:00:00Z"}},
 		"orders.shipment.status_changed": {
@@ -73,16 +92,31 @@ func SampleEvents(l Links) map[string][]map[string]any {
 		"seller.payouts.resumed":   {sampleEnforcement("CLEARED"), sampleEnforcement("REINSTATED")},
 		"seller.listings.hidden":   {sampleEnforcement("CHARGES_DISABLED"), sampleEnforcement("SUSPENDED")},
 		"seller.listings.restored": {sampleEnforcement("CLEARED"), sampleEnforcement("REINSTATED")},
-		"payments.payout.paid":     {samplePayout("PAID")},
-		"payments.payout.failed":   {samplePayout("FAILED")},
-		"booking.confirmed":        {sampleBooking(l, "CONFIRMED")},
-		"booking.cancelled":        {sampleBooking(l, "CANCELLED_PROVIDER")},
-		"booking.declined":         {sampleBooking(l, "DECLINED")},
-		"booking.rescheduled":      {sampleBooking(l, "CONFIRMED")},
-		"booking.balance_unpaid":   {sampleBalanceUnpaid(l)},
+		"seller.billing.grant_applied": {
+			{"orgId": "org_1", "grantId": "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "source": "RULE", "type": "FREE_DAYS",
+				"summary": "1 month free", "reason": "$1,000 in sales in your first 60 days", "creditCents": nil,
+				"freeDays": 30, "percentOff": nil, "durationInvoices": nil, "trialEndsAt": "2026-12-09T10:00:00Z",
+				"occurredAt": "2026-10-10T10:00:00Z"},
+			{"orgId": "org_1", "grantId": "8b2c3d4e-5f6a-4b7c-9d8e-0f1a2b3c4d5e", "source": "MANUAL", "type": "CREDIT",
+				"summary": "$25 credit", "reason": nil, "creditCents": 2500, "freeDays": nil, "percentOff": nil,
+				"durationInvoices": nil, "trialEndsAt": nil, "occurredAt": "2026-10-10T10:00:00Z"},
+		},
+		"payments.payout.paid":   {samplePayout("PAID")},
+		"payments.payout.failed": {samplePayout("FAILED")},
+		"booking.confirmed":      {sampleBooking(l, "CONFIRMED")},
+		"booking.cancelled":      {sampleBooking(l, "CANCELLED_PROVIDER")},
+		"booking.declined":       {sampleBooking(l, "DECLINED")},
+		"booking.rescheduled":    {sampleBooking(l, "CONFIRMED")},
+		"booking.balance_unpaid": {sampleBalanceUnpaid(l)},
 		"payments.intent.action_required": {{"paymentId": "2b8e3f7c-4d5a-4e9f-a0b1-c2d3e4f5a603", "orderId": "BK-24018",
 			"parentPaymentId": "3c9f4a8d-5e6b-4fa0-b1c2-d3e4f5a6b704", "customerId": "cust-1", "stripePaymentIntentId": nil,
 			"amountMinor": 15000, "currency": "USD", "reason": "authentication_required", "lineIds": []string{}}},
+		"payments.gift_card.deliver": {{"recipient": map[string]any{"email": "ama@example.com"}, "locale": "en", "giftCardId": "5d0e4f1a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+			"recipientName": "Ama", "senderName": "Kofi", "message": "Happy birthday! Treat yourself.", "amountMinor": 5000, "currency": "USD", "code": "ABCD-EFGH-JKLM-2345"}},
+		"payments.referral.rewarded": {{"referralId": "6e1f5a2b-7c8d-4e9f-a0b1-2c3d4e5f6a71", "customerId": "cust-1", "side": "REFERRER",
+			"rewardType": "CREDIT", "creditMinor": 1000, "currency": "USD", "membershipDays": 0, "friendName": "Amara O."},
+			{"referralId": "6e1f5a2b-7c8d-4e9f-a0b1-2c3d4e5f6a71", "customerId": "cust-2", "side": "REFERRED",
+				"rewardType": "MEMBERSHIP_DAYS", "creditMinor": 0, "currency": "USD", "membershipDays": 14, "friendName": nil}},
 		"trustops.claim.opened":            {sampleClaim("AWAITING_SELLER", nil), sampleClaim("AWAITING_SELLER", nil)},
 		"trustops.claim.decided":           {sampleClaim("RESOLVED_REFUND", "REFUND"), sampleClaim("RESOLVED_DENIED", "DENY")},
 		"trustops.claim.withdrawn":         {sampleClaim("WITHDRAWN", nil)},
@@ -94,6 +128,10 @@ func SampleEvents(l Links) map[string][]map[string]any {
 			"changedAt": "2026-10-10T10:00:00Z"}},
 		"trustops.seller.reinstated": {{"orgId": "org_1", "status": "ACTIVE", "reason": nil, "note": nil, "actorId": "staff-1",
 			"payoutsHeld": false, "buyBoxRestricted": false, "listingsHidden": false, "changedAt": "2026-10-10T10:00:00Z"}},
+		"catalog.import.completed": {{"importId": "7f3c2a10-4b5e-4c1d-9a8b-0c1d2e3f4a5b", "reference": "BU-000123",
+			"ownerOrgId": "org_1", "uploadedBy": "u-1", "fileName": "dresses.xlsx", "mode": "CREATE",
+			"totalRows": 1240, "processedRows": 1236, "createdProducts": 410, "updatedProducts": 0, "failedRows": 3,
+			"skippedRows": 4, "notifySeller": true, "finishedAt": "2026-10-10T10:00:00Z"}},
 		"content.career-application.received": {{"reference": "CAR-000123", "jobId": "j1", "jobTitle": "Backend Engineer",
 			"team": "Platform", "location": "Remote", "name": "Kofi Mensah", "email": "kofi@example.com", "resumeAssetId": "a1",
 			"resumeFileName": "cv.pdf", "submittedAt": "2026-10-10T10:00:00Z"}},
@@ -134,7 +172,52 @@ func SampleData(l Links) map[string]map[string]any {
 	}
 }
 
-const samplePreorderWindowID = "7b1e2c3d-0000-4000-8000-000000000007"
+const (
+	samplePreorderWindowID = "7b1e2c3d-0000-4000-8000-000000000007"
+	sampleRunID            = "9d4a1c7e-0000-4000-8000-000000000009"
+	sampleLocationID       = "4b2f9d3a-0000-4000-8000-00000000000a"
+)
+
+// sampleRun is a delivery-runs run event for the Bastrop run (the display strings are in the location's time zone;
+// every channel link is the run link with its UTM).
+func sampleRun(l Links, status, content string, extra map[string]any) map[string]any {
+	locationURL := join(l.Storefront, "/delivery-runs/bastrop-tx")
+	runURL := locationURL + "?run=" + sampleRunID
+	link := func(channel string) string {
+		return runURL + "&utm_source=" + channel + "&utm_medium=" + channel +
+			"&utm_campaign=delivery-run-bastrop-tx-20261024&utm_content=" + content
+	}
+	e := map[string]any{"runId": sampleRunID, "status": status, "previousStatus": nil, "locationId": sampleLocationID,
+		"locationSlug": "bastrop-tx", "town": "Bastrop", "market": "US", "state": "TX", "timeZone": "America/Chicago",
+		"windowStart": "2026-10-24T15:00:00Z", "windowEnd": "2026-10-24T19:00:00Z", "cutoffAt": "2026-10-23T01:00:00Z",
+		"previousCutoffAt": nil, "sellerPickupAt": nil, "deliveryDay": "Saturday, October 24",
+		"windowDisplay": "10:00 AM – 2:00 PM", "cutoffDisplay": "Thu, Oct 22 · 8:00 PM CDT", "feeMinor": 799,
+		"currency": "USD", "feeDisplay": "$7.99", "dropMode": "DOORSTEP", "pickupPoint": nil, "minOrders": 10,
+		"reservedOrders": 4, "capacityOrders": 40, "extensions": 0, "reason": nil, "runUrl": runURL,
+		"links": map[string]any{"email": link("email"), "sms": link("sms"), "push": link("push"),
+			"whatsapp": link("whatsapp"), "social": link("share")},
+		"locationUrl": locationURL, "whatsappInviteUrl": "https://chat.whatsapp.com/BastropRuns"}
+	for k, v := range extra {
+		e[k] = v
+	}
+	return e
+}
+
+// sampleRunOrders are the orders on a run; code is a pickup-point handover code (nil at the door).
+func sampleRunOrders(status string, code any) []any {
+	return []any{map[string]any{"orderId": "0f6c1d5a-2b3e-4c7d-8e9f-a0b1c2d3e401", "customerId": "cust-1", "packages": 1,
+		"status": status, "handoverCode": code}}
+}
+
+// sampleRunSubscription is delivery-runs.subscription.created / .confirmed for the Bastrop alerts.
+func sampleRunSubscription(l Links, status string, userID, email any, channels []string, confirmURL any) map[string]any {
+	locationURL := join(l.Storefront, "/delivery-runs/bastrop-tx")
+	return map[string]any{"subscriptionId": "3e7a1c2b-0000-4000-8000-000000000003", "locationId": sampleLocationID,
+		"locationSlug": "bastrop-tx", "town": "Bastrop", "userId": userID, "email": email, "status": status,
+		"channels": channels, "changedChannels": channels, "source": "location-page", "confirmUrl": confirmURL,
+		"unsubscribeUrl": locationURL + "/subscriptions/unsubscribe?token=sample", "locationUrl": locationURL,
+		"whatsappInviteUrl": "https://chat.whatsapp.com/BastropRuns"}
+}
 
 // samplePreorderComms is delivery-runs' preorder.comms.due for the Lubbock window (fees from the payment settings;
 // display strings in the market's time zone). CLOSED and OUT_FOR_DELIVERY carry the window's buyers.

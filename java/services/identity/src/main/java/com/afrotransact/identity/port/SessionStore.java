@@ -16,4 +16,10 @@ public interface SessionStore {
 
     /** Revokes every session except the one holding {@code keepAccessToken}; returns how many were revoked. */
     int revokeAll(UUID userId, Optional<String> keepAccessToken);
+
+    /**
+     * Ends every identity browser session (single sign-on cookie) the user is signed in with, so the hosted pages ask
+     * for credentials again everywhere; returns how many were ended.
+     */
+    int endBrowserSessions(UUID userId);
 }

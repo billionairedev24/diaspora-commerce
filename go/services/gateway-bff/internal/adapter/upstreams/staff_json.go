@@ -21,7 +21,7 @@ func (s *staffJSONImpl) Name() string { return s.c.Name() }
 
 func (s *staffJSONImpl) Call(ctx context.Context, bearer string, sc port.StaffCall, out any) error {
 	req := httpclient.Request{Method: sc.Method, Path: sc.Path, Query: sc.Query, JSON: sc.Body, Bearer: bearer, Slow: sc.Slow}
-	if sc.IdempotencyKey != "" || sc.IfMatch != "" {
+	if sc.IdempotencyKey != "" || sc.IfMatch != "" || sc.StepUp != "" {
 		req.Header = http.Header{}
 		if sc.IdempotencyKey != "" {
 			req.Header.Set("Idempotency-Key", sc.IdempotencyKey)
@@ -29,6 +29,9 @@ func (s *staffJSONImpl) Call(ctx context.Context, bearer string, sc port.StaffCa
 		}
 		if sc.IfMatch != "" {
 			req.Header.Set("If-Match", sc.IfMatch)
+		}
+		if sc.StepUp != "" {
+			req.Header.Set("X-Step-Up", sc.StepUp)
 		}
 	}
 	_, err := call(ctx, s.c, req, out)

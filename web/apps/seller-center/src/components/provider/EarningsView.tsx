@@ -8,11 +8,13 @@ import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
+import { ConnectionFeesCard } from '@/components/money/FeesView';
 import { Card } from '@/components/ui/Card';
 import { ModulePage } from '@/components/ui/ModulePage';
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
+import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { toCsv } from '@/lib/export/csv';
 import { dateTime, isoDay, money, shortDate } from '@/lib/format';
@@ -36,7 +38,7 @@ const columns: ColumnDef<EarningsRow>[] = [
   { id: 'startAt', accessorFn: (r) => r.startAt, header: 'Date', size: 120, meta: { kind: 'date' }, cell: ({ row }) => shortDate(row.original.startAt) },
   { id: 'status', accessorFn: (r) => r.statusLabel, header: 'Status', size: 130, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.statusLabel}</StatusPill> },
   { id: 'collectedMinor', accessorFn: (r) => r.collectedMinor, header: 'Collected', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.collectedMinor) },
-  { id: 'commissionMinor', accessorFn: (r) => r.commissionMinor, header: 'Commission', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => (row.original.commissionMinor ? `−${money(row.original.commissionMinor)}` : '—') },
+  { id: 'commissionMinor', accessorFn: (r) => r.commissionMinor, header: 'Connection fee', size: 120, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => (row.original.commissionMinor ? `−${money(row.original.commissionMinor)}` : '—') },
   { id: 'cardFeesMinor', accessorFn: (r) => r.cardFeesMinor, header: 'Stripe fees', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => (row.original.cardFeesMinor ? `−${money(row.original.cardFeesMinor)}` : '—') },
   { id: 'lateCancelFeeMinor', accessorFn: (r) => r.lateCancelFeeMinor, header: 'Late-cancel fee', size: 120, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => (row.original.lateCancelFeeMinor ? <span className="text-danger">−{money(row.original.lateCancelFeeMinor)}</span> : '—') },
   { id: 'netMinor', accessorFn: (r) => r.netMinor, header: 'Net', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => <strong>{money(row.original.netMinor)}</strong> }
@@ -45,7 +47,7 @@ const columns: ColumnDef<EarningsRow>[] = [
 export function earningsCsv(e: Earnings): string {
   return toCsv({
     title: 'Earnings',
-    headers: ['Reference', 'Customer', 'Service', 'Date', 'Status', 'Collected', 'Commission', 'Stripe fees', 'Late-cancel fee', 'Net'],
+    headers: ['Reference', 'Customer', 'Service', 'Date', 'Status', 'Collected', 'Connection fee', 'Stripe fees', 'Late-cancel fee', 'Net'],
     rows: e.rows.map((r) => [r.reference, r.customerName, r.serviceName, r.startAt.slice(0, 10), r.statusLabel, r.collectedMinor / 100, r.commissionMinor / 100, r.cardFeesMinor / 100,
       r.lateCancelFeeMinor / 100, r.netMinor / 100])
   });
@@ -86,8 +88,9 @@ export function ProviderFeesCard({ fees, currency }: { fees: ProviderFees; curre
   );
 }
 
-/** Earnings: what customers paid, AfroTransact commission, Stripe card fees, late-cancel fees and net, plus outstanding provider fees. */
+/** Earnings: what customers paid, the AfroTransact connection fee, Stripe card fees, late-cancel fees and net, plus outstanding provider fees. */
 export function EarningsView() {
+  const t = useT();
   const api = sellerApi();
   const { orgId } = useSeller();
   const [range, setRange] = useState<Range>('30');
@@ -105,7 +108,7 @@ export function EarningsView() {
           <dl aria-label="Earnings totals" className="m-0 grid grid-cols-[repeat(auto-fit,minmax(min(100%,150px),1fr))] gap-3">
             {[
               ['Customers paid', money(e.totals.collectedMinor, e.currency), ''],
-              [`Commission (${e.commissionPercent}%)`, `−${money(e.totals.commissionMinor, e.currency)}`, ''],
+              [t('sc.earnings.connectionFeeTotal', { pct: String(e.commissionPercent) }), `−${money(e.totals.commissionMinor, e.currency)}`, ''],
               ['Stripe card fees', `−${money(e.totals.cardFeesMinor, e.currency)}`, ''],
               ['Late-cancel fees', `−${money(e.totals.lateCancelFeesMinor, e.currency)}`, e.totals.lateCancelFeesMinor ? 'text-danger' : ''],
               ['Net earnings', money(e.totals.netMinor, e.currency), ''],
@@ -118,6 +121,7 @@ export function EarningsView() {
             ))}
           </dl>
           <p className="m-0 text-sm text-muted">Paid out every {e.payoutDay}. Deposits held are authorised but not yet captured.</p>
+          {e.connectionFee ? <ConnectionFeesCard card={e.connectionFee} t={t} /> : null}
           <ProviderFeesCard fees={e.providerFees} currency={e.currency} />
           <DataTable<EarningsRow> id="seller.earnings" label="Earnings by booking" columns={columns} data={e.rows} getRowId={(r) => r.bookingId} rowLabel={(r) => r.reference}
             state={state} mode="client" fetching={q.isFetching} empty="No completed or charged bookings in this period." onExport={exportDataset} pollExport={pollExport} />

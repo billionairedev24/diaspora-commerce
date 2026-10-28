@@ -1,5 +1,6 @@
 import { LEGAL_DOCUMENT_KEYS, type LegalDocumentKey, legalHref, type LegalPage } from '@afrotransact/api-client';
 import { type Translator } from '@afrotransact/i18n';
+import { LogoMark, wordmarkClassName } from '@afrotransact/ui';
 import Link from 'next/link';
 import { type ReactNode } from 'react';
 
@@ -49,6 +50,15 @@ export function LegalDocumentView({ docKey, page, locale, t, children }: LegalDo
       )}
       <div className={styles.layout}>
         <nav aria-label={t('legal.docs')} className={styles.docsNav} data-noprint>
+          <div className={styles.brandBlock}>
+            <Link href="/" className={styles.brandLink} aria-label={t('header.home')}>
+              <LogoMark size={28} />
+              <span className={wordmarkClassName}>afrotransact</span>
+            </Link>
+            <Link href="/" className={styles.backLink}>
+              ← {t('common.backToShop')}
+            </Link>
+          </div>
           <h2 className={styles.eyebrow}>{t('legal.docs')}</h2>
           <ul className={styles.docsList}>
             {LEGAL_DOCUMENT_KEYS.map((k) => (

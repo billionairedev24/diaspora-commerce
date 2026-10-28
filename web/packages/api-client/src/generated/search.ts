@@ -360,6 +360,8 @@ export interface operations {
                 community?: string;
                 fulfilment?: "AFROTRANSACT" | "SELLER";
                 sellerKind?: "PLATFORM" | "SELLER";
+                /** @description One seller's products (an organisation id) */
+                sellerId?: string;
                 minRating?: number;
                 /** @description Minor units */
                 minPrice?: number;

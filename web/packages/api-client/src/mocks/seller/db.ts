@@ -16,18 +16,30 @@ import {
   type OrgStatus,
   type Payout,
   type Plan,
+  type PlanCapability,
+  type PlanEntitlements,
+  type PlanFeeCollectionMode,
+  type PlanFeeDeduction,
   type ProductTypeSchema,
-  type PublicPage,
+  type SellerCoupon,
+  type SellerDispute,
   type SellerOffer,
   type SellerOrderDetail,
+  type SellerProductDetail,
+  type SellerReturn,
+  type SellerRewardsView,
+  type SellerRunPickup,
   type ServiceOffer,
   type ShipFromAddress,
   type ShipmentStatus,
   type Subscription,
   type TeamMember
 } from '../../schemas/seller';
+import { chargeTermsOf, planFeatureList } from '../../staff-plans';
+import { type MockDraft, type MockImport } from './listing-form';
 import { allowedBookingActions, BOOKING_LABELS, SHIPMENT_LABELS, takeHome } from './model';
 import { type MockApplication } from './onboarding';
+import { seedRunPickups } from './run-pickups';
 
 export interface MockOrg {
   id: string;
@@ -52,21 +64,45 @@ export interface MockSellerDb {
   subscription: Record<OrgKind, Subscription>;
   paymentMethods: Record<OrgKind, BillingPaymentMethod[]>;
   invoices: Invoice[];
+  /**
+   * How each organisation pays its plan (S298): from sales first or by card; `planFeeCollectionAvailable` is the
+   * platform kill switch; `planFeeDeductions` the "Plan fee (invoice …)" lines of payouts.
+   */
+  planFeeCollection: Record<OrgKind, PlanFeeCollectionMode>;
+  planFeeCollectionAvailable: boolean;
+  planFeeDeductions: PlanFeeDeduction[];
+  /** Rewards the organisation can earn and the ones it received (S296). */
+  rewards: Record<OrgKind, SellerRewardsView>;
   team: Record<string, TeamMember[]>;
   bookings: BookingCard[];
   availability: Availability;
   services: ServiceOffer[];
   policy: Required<CancellationPolicyInput>;
   earnings: EarningsRow[];
-  pages: Record<string, PublicPage>;
   /** The application per organisation (S286, S289): answers (prefilled from the account on start), Stripe, submission. */
   onboarding: Record<string, MockApplication>;
   /** Saved ship-from addresses per organisation (seller service /v1/orgs/{orgId}/ship-from-addresses). */
   shipFrom: Record<string, ShipFromAddress[]>;
+  /** Delivery run pick lists per organisation (delivery-runs /v1/seller/run-pickups; S264). */
+  runPickups: Record<string, SellerRunPickup[]>;
+  /** How each organisation's public page looks (seller service /v1/orgs/{orgId}/business-page). */
+  businessPage: Record<string, { description: string; brandColor: string; logoUrl: string }>;
   /** offers-service offers of the listings' variants: the fulfilment choice (S255). */
   offers: SellerOffer[];
+  /** Seller-funded coupons (offers-service). */
+  coupons: SellerCoupon[];
+  /** Returns customers started on the organisation's orders (tax-returns). */
+  returns: SellerReturn[];
+  /** Disputes and A-to-z claims against the organisation (trust-ops). */
+  disputes: SellerDispute[];
   /** Export jobs (the file body is CSV text in the mock). */
   exports: (ExportJob & { owner: string; orgId: string; body: string })[];
+  /** What the one-step form stored per product (S307); seeded listings derive theirs from the row. */
+  productDetails: Record<string, SellerProductDetail>;
+  /** Autosaved drafts of the product form (S307). */
+  drafts: MockDraft[];
+  /** Bulk uploads with their validated rows (S308). */
+  imports: MockImport[];
   seq: number;
 }
 
@@ -135,6 +171,9 @@ function seedOrders(now: Date): SellerOrderDetail[] {
           trackingNumber: tracking,
           nextActions: next,
           canBuyLabel: !fba && !local && !tracking && ['CONFIRMED', 'PACKED', 'READY'].includes(status),
+          hasLabel: !fba && !local && Boolean(tracking),
+          proof: null,
+          suggestedParcel: { weightLb: 1.2, lengthIn: 9, widthIn: 6, heightIn: 2 },
           timeline: [{ status: 'PLACED', at: iso(placed), actor: 'customer' }],
           localDelivery: local
             ? { pickupLocationId: 'sfa-store', roadMiles: Math.round(roadMiles * 10) / 10, durationMinutes: Math.round(roadMiles * 2.6), customerChargeMinor: chargeMinor, sellerFeeMinor: deliveryFee }
@@ -212,7 +251,7 @@ function booking(id: number, svc: (typeof PROVIDER_SERVICES)[number], start: Dat
     status, statusLabel: BOOKING_LABELS[status], priceMinor: svc.priceMinor, depositMinor: svc.depositMinor, currency: 'USD',
     depositState: status === 'REQUESTED' ? 'held' : status === 'COMPLETED' || status === 'CONFIRMED' ? 'captured' : status === 'DECLINED' || status === 'EXPIRED' ? 'released' : 'none',
     note, practitioner: 'Ama O.', expiresAt: status === 'REQUESTED' ? iso(new Date(now.getTime() + 3 * 3_600_000)) : null, proposedStartAt: null,
-    allowedActions: allowedBookingActions(status, iso(start), now)
+    allowedActions: allowedBookingActions(status, iso(start), now), serviceCategory: 'hair & beauty', takeHome: null
   };
 }
 
@@ -247,6 +286,29 @@ const PLAN_CATALOG: Record<OrgKind, { code: string; name: string; tagline: strin
 
 const usd = (minor: number) => `$${(minor / 100).toLocaleString('en-US', { minimumFractionDigits: minor % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
+const ENTITLEMENTS: Record<string, PlanEntitlements> = {
+  seller_essentials: { listings: 50, listingsUnlimited: false, aiListingWriter: false, lolaTier: 'ESSENTIALS', bulkUpload: false, imageLibrary: false, coupons: false },
+  seller_growth: { listings: 1000, listingsUnlimited: false, aiListingWriter: true, lolaTier: 'GROWTH', bulkUpload: true, imageLibrary: true, coupons: true },
+  seller_pro: { listings: null, listingsUnlimited: true, aiListingWriter: true, lolaTier: 'PRO', bulkUpload: true, imageLibrary: true, coupons: true },
+  provider_solo: { listings: 20, listingsUnlimited: false, aiListingWriter: false, lolaTier: 'ESSENTIALS', bulkUpload: false, imageLibrary: false, coupons: false },
+  provider_studio: { listings: 100, listingsUnlimited: false, aiListingWriter: true, lolaTier: 'GROWTH', bulkUpload: false, imageLibrary: false, coupons: false },
+  provider_business: { listings: null, listingsUnlimited: true, aiListingWriter: true, lolaTier: 'PRO', bulkUpload: false, imageLibrary: false, coupons: false }
+};
+export const entitlementsOf = (code: string): PlanEntitlements | null => ENTITLEMENTS[code] ?? null;
+
+/** The capabilities a plan includes, as the BFF lists them in the session. */
+export function capabilitiesOf(code: string): PlanCapability[] {
+  const e = entitlementsOf(code);
+  if (!e) return [];
+  const out: PlanCapability[] = [];
+  if (e.bulkUpload) out.push('bulkUpload');
+  if (e.imageLibrary) out.push('imageLibrary');
+  if (e.coupons) out.push('coupons');
+  if (e.aiListingWriter) out.push('aiListingWriter');
+  if (e.lolaTier !== 'NONE') out.push('lola');
+  return out;
+}
+
 /** Plans with monthly, quarterly (5% off) and annual (2 months free) prices, as the seller service computes them. */
 export function plansFor(kind: OrgKind, currentCode: string): Plan[] {
   return PLAN_CATALOG[kind].map((p) => {
@@ -266,7 +328,7 @@ export function plansFor(kind: OrgKind, currentCode: string): Plan[] {
         savingLabel: saving > 0 ? `Save ${usd(saving)} vs monthly` : ''
       };
     });
-    return { code: p.code, name: p.name, tagline: p.tagline, monthlyMinor: m, trialDays: p.trial, features: p.features, prices, current: p.code === currentCode };
+    return { code: p.code, name: p.name, tagline: p.tagline, monthlyMinor: m, trialDays: p.trial, features: planFeatureList(entitlementsOf(p.code) ?? ENTITLEMENTS.seller_essentials!), prices, current: p.code === currentCode, chargeTerms: chargeTermsOf(p.code === 'seller_growth' ? { chargeFreeMonths: '3', chargeThen: 'CHARGE' } : undefined, m), entitlements: entitlementsOf(p.code) };
   });
 }
 
@@ -299,42 +361,52 @@ export const CATEGORY_TREE: CategoryNode[] = [
 
 const COLORS = ['Black', 'White', 'Gold', 'Royal blue', 'Emerald', 'Wine'];
 
+type Attr = ProductTypeSchema['attributes'][number];
+/** An attribute of a mock product type (kind follows the options unless given). */
+const attr = (key: string, label: string, options: string[] = [], extra: Partial<Attr> = {}): Attr => ({
+  key, label, options, required: true, multiline: false, kind: options.length ? 'ENUM' : 'TEXT', units: [], section: 'DETAILS', help: null, ...extra
+});
+const NO_TRAITS = { food: false, perishable: false, regulated: false, preorder: false };
+
 export const PRODUCT_TYPES: Record<string, ProductTypeSchema> = {
-  grocery: { code: 'grocery', label: 'packaged food', identifierRule: 'gtin', attributes: [
-    { key: 'brand', label: 'Brand', options: [], required: true, multiline: false },
-    { key: 'ingredients', label: 'Ingredients', options: [], required: true, multiline: true },
-    { key: 'allergens', label: 'Allergens (FALCPA)', options: ['None', 'Contains peanuts', 'Contains shellfish', 'Contains fish', 'Contains wheat', 'Contains soy'], required: true, multiline: false },
-    { key: 'storage', label: 'Storage', options: ['Room temperature', 'Refrigerate after opening'], required: true, multiline: false },
-    { key: 'origin', label: 'Country of origin', options: [], required: true, multiline: false }
+  grocery: { code: 'grocery', label: 'packaged food', identifierRule: 'gtin', traits: { food: true, perishable: false, regulated: false, preorder: true }, attributes: [
+    attr('brand', 'Brand'),
+    attr('ingredients', 'Ingredients', [], { multiline: true, kind: 'MULTILINE', section: 'FOOD' }),
+    attr('allergens', 'Allergens (FALCPA)', ['None', 'Contains peanuts', 'Contains shellfish', 'Contains fish', 'Contains wheat', 'Contains soy'], { section: 'FOOD' }),
+    attr('shelf', 'Shelf life', [], { kind: 'NUMBER', units: ['days', 'months'], section: 'FOOD', help: 'From the date of manufacture, unopened' }),
+    attr('storage', 'Storage', ['Room temperature', 'Refrigerate after opening'], { section: 'FOOD' }),
+    attr('origin', 'Country of origin')
   ], themes: [{ name: 'Net weight', dimensions: [{ name: 'Net weight', options: ['8 oz', '1 lb', '2 lb', '5 lb', '10 lb'] }] }, { name: 'Net weight × Pack', dimensions: [{ name: 'Net weight', options: ['1 lb', '5 lb'] }, { name: 'Pack', options: ['1', '2', '4'] }] }] },
-  perishable: { code: 'perishable', label: 'frozen & perishable food', identifierRule: 'gtin', attributes: [
-    { key: 'brand', label: 'Brand', options: [], required: true, multiline: false },
-    { key: 'ingredients', label: 'Ingredients', options: [], required: true, multiline: true },
-    { key: 'temp', label: 'Storage temperature', options: ['Frozen (≤ 0°F)', 'Chilled (33–40°F)'], required: true, multiline: false },
-    { key: 'permit', label: 'Food facility / permit no.', options: [], required: true, multiline: false }
+  perishable: { code: 'perishable', label: 'frozen & perishable food', identifierRule: 'gtin', traits: { food: true, perishable: true, regulated: true, preorder: true }, attributes: [
+    attr('brand', 'Brand'),
+    attr('ingredients', 'Ingredients', [], { multiline: true, kind: 'MULTILINE', section: 'FOOD' }),
+    attr('temp', 'Storage temperature', ['Frozen (≤ 0°F)', 'Chilled (33–40°F)'], { section: 'FOOD', help: 'How the product must be kept until it reaches the shopper' }),
+    attr('shelf', 'Shelf life', [], { required: false, kind: 'NUMBER', units: ['days', 'months'], section: 'FOOD', help: 'Frozen: from the date of freezing' }),
+    attr('permit', 'Food facility / permit no.', [], { section: 'REGULATED', help: 'FDA food facility registration or state permit number' })
   ], themes: [{ name: 'Net weight', dimensions: [{ name: 'Net weight', options: ['1 lb', '2 lb', '5 lb'] }] }] },
-  dress: { code: 'dress', label: 'women’s dresses', identifierRule: 'gtin', attributes: [
-    { key: 'brand', label: 'Brand', options: [], required: true, multiline: false },
-    { key: 'material', label: 'Material', options: ['Cotton wax print', 'Cotton', 'Lace', 'Silk', 'Polyester blend'], required: true, multiline: false },
-    { key: 'fit', label: 'Fit', options: ['Regular', 'Fitted', 'Relaxed', 'Plus size'], required: true, multiline: false },
-    { key: 'length', label: 'Length', options: ['Mini', 'Knee', 'Midi', 'Maxi'], required: true, multiline: false },
-    { key: 'care', label: 'Care', options: [], required: true, multiline: false }
+  dress: { code: 'dress', label: 'women’s dresses', identifierRule: 'gtin', traits: NO_TRAITS, attributes: [
+    attr('brand', 'Brand'),
+    attr('material', 'Material', ['Cotton wax print', 'Cotton', 'Lace', 'Silk', 'Polyester blend']),
+    attr('fit', 'Fit', ['Regular', 'Fitted', 'Relaxed', 'Plus size']),
+    attr('length', 'Length', ['Mini', 'Knee', 'Midi', 'Maxi']),
+    attr('care', 'Care', [], { required: false, help: 'e.g. Cold wash, line dry' })
   ], themes: [{ name: 'Size × Color', dimensions: [{ name: 'Size', options: ['XS', 'S', 'M', 'L', 'XL', '2XL'] }, { name: 'Color', options: COLORS }] }, { name: 'Size', dimensions: [{ name: 'Size', options: ['XS', 'S', 'M', 'L', 'XL', '2XL'] }] }] },
-  beauty: { code: 'beauty', label: 'beauty & personal care', identifierRule: 'gtin', attributes: [
-    { key: 'brand', label: 'Brand', options: [], required: true, multiline: false },
-    { key: 'inci', label: 'Ingredients (INCI)', options: [], required: true, multiline: true },
-    { key: 'skin', label: 'Skin / hair type', options: ['All', 'Dry', 'Oily', 'Sensitive'], required: true, multiline: false },
-    { key: 'mocra', label: 'MoCRA product listing no.', options: [], required: true, multiline: false }
+  beauty: { code: 'beauty', label: 'beauty & personal care', identifierRule: 'gtin', traits: { ...NO_TRAITS, regulated: true }, attributes: [
+    attr('brand', 'Brand'),
+    attr('inci', 'Ingredients (INCI)', [], { multiline: true, kind: 'MULTILINE' }),
+    attr('skin', 'Skin / hair type', ['All', 'Dry', 'Oily', 'Sensitive']),
+    attr('mocra', 'MoCRA product listing no.', [], { section: 'REGULATED', help: 'FDA Cosmetics Direct product listing number (MoCRA)' })
   ], themes: [{ name: 'Size', dimensions: [{ name: 'Size', options: ['4 oz', '8 oz', '16 oz'] }] }] },
-  book: { code: 'book', label: 'books', identifierRule: 'isbn', attributes: [
-    { key: 'author', label: 'Author', options: [], required: true, multiline: false },
-    { key: 'publisher', label: 'Publisher', options: [], required: true, multiline: false },
-    { key: 'language', label: 'Language', options: ['English', 'French', 'Yoruba', 'Swahili', 'Amharic'], required: true, multiline: false }
+  book: { code: 'book', label: 'books', identifierRule: 'isbn', traits: NO_TRAITS, attributes: [
+    attr('author', 'Author'),
+    attr('publisher', 'Publisher'),
+    attr('language', 'Language', ['English', 'French', 'Yoruba', 'Swahili', 'Amharic']),
+    attr('pages', 'Pages', [], { kind: 'NUMBER' })
   ], themes: [{ name: 'Format', dimensions: [{ name: 'Format', options: ['Hardcover', 'Paperback'] }] }] },
-  custom: { code: 'custom', label: 'your requested category', identifierRule: 'gtin', attributes: [
-    { key: 'brand', label: 'Brand', options: [], required: true, multiline: false },
-    { key: 'material', label: 'Material / main ingredient', options: [], required: true, multiline: false },
-    { key: 'details', label: 'Key details shoppers need', options: [], required: true, multiline: true }
+  custom: { code: 'custom', label: 'your requested category', identifierRule: 'gtin', traits: NO_TRAITS, attributes: [
+    attr('brand', 'Brand'),
+    attr('material', 'Material / main ingredient'),
+    attr('details', 'Key details shoppers need', [], { multiline: true, kind: 'MULTILINE' })
   ], themes: [{ name: 'Option', dimensions: [{ name: 'Option', options: ['Standard', 'Small', 'Medium', 'Large'] }] }, { name: 'Size × Color', dimensions: [{ name: 'Size', options: ['S', 'M', 'L', 'XL'] }, { name: 'Color', options: ['Black', 'White', 'Gold', 'Multicolour'] }] }] }
 };
 
@@ -373,6 +445,9 @@ function freshDb(now: Date): MockSellerDb {
     orders: seedOrders(now),
     labels: {},
     exports: [],
+    productDetails: {},
+    drafts: [],
+    imports: [],
     listings: seedListings(now),
     categoryRequests: [{ id: 'cr-1', reference: 'REQ-4821', path: 'Fashion › Women › Bridal aso-ebi sets', status: 'PENDING_REVIEW', decisionNote: null, createdAt: iso(new Date(now.getTime() - 2 * DAY)) }],
     payouts: [
@@ -385,10 +460,49 @@ function freshDb(now: Date): MockSellerDb {
     subscription: {
       SELLER: { planCode: 'seller_growth', planName: 'Seller Growth', cadence: 'QUARTERLY', status: 'ACTIVE', priceLabel: '$37.05/mo', billedLabel: 'Billed $111.15 every 3 months',
         trialEndsAt: null, currentPeriodEnd: iso(new Date(now.getTime() + 92 * DAY)), nextChargeAt: iso(new Date(now.getTime() + 92 * DAY)), nextChargeMinor: 11115,
-        nextChargeLabel: `$111.15 on ${new Date(now.getTime() + 92 * DAY).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`, cancelAtPeriodEnd: false, pendingChange: null, dunning: null },
+        nextChargeLabel: `$111.15 on ${new Date(now.getTime() + 92 * DAY).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`, cancelAtPeriodEnd: false, pendingChange: null, dunning: null,
+        planVersion: 1, creditBalanceMinor: 2500, trialSource: 'PLAN', chargeGate: null, entitlements: entitlementsOf('seller_growth') },
       PROVIDER: { planCode: 'provider_studio', planName: 'Provider Studio', cadence: 'MONTHLY', status: 'TRIALING', priceLabel: '$49/mo', billedLabel: 'Billed $49 every month',
         trialEndsAt: iso(new Date(now.getTime() + 10 * DAY)), currentPeriodEnd: iso(new Date(now.getTime() + 10 * DAY)), nextChargeAt: iso(new Date(now.getTime() + 10 * DAY)), nextChargeMinor: 4900,
-        nextChargeLabel: 'Free for 30 days. First charge of $49 when the trial ends', cancelAtPeriodEnd: false, pendingChange: null, dunning: null }
+        nextChargeLabel: 'Free for 30 days. First charge of $49 when the trial ends', cancelAtPeriodEnd: false, pendingChange: null, dunning: null,
+        planVersion: 1, creditBalanceMinor: 0, trialSource: 'CAMPAIGN',
+        chargeGate: { mode: 'START_AFTER', metric: 'COMPLETED_BOOKINGS', threshold: 10, progress: 4, until: null, metAt: null, label: 'Charging starts after 10 completed bookings — you’re at 4' },
+        entitlements: entitlementsOf('provider_studio') }
+    },
+    rewards: {
+      SELLER: {
+        available: [
+          { ruleId: 'rr_sales', name: 'First $1,000 in sales', description: 'Reach $1,000 in delivered sales within 60 days of approval.', metric: 'GROSS_SALES', value: 64000,
+            threshold: 100000, percent: 64, qualifies: false, label: '$640 of $1,000 in sales', rewardLabel: '1 month free', conditionLabel: '$1,000 in sales within 60 days of approval',
+            endsAt: null, comparison: 'AT_LEAST', windowAnchor: 'APPROVAL', windowDays: null, pending: false,
+            checkAt: null, windowClosesAt: null },
+          { ruleId: 'rr_listings', name: '25 live listings', description: null, metric: 'ACTIVE_LISTINGS', value: 18, threshold: 25, percent: 72, qualifies: false,
+            label: '18 of 25 active listings', rewardLabel: '$25 credit', conditionLabel: '25 active listings', endsAt: iso(new Date(now.getTime() + 45 * DAY)), comparison: 'AT_LEAST', windowAnchor: 'APPROVAL', windowDays: null, pending: false,
+            checkAt: null, windowClosesAt: null }
+        ],
+        earned: [
+          { id: 'gr_1', source: 'RULE', type: 'CREDIT', summary: '$25 credit', reason: 'First 10 orders', status: 'APPLIED', creditMinor: 2500, freeDays: null,
+            createdAt: iso(new Date(now.getTime() - 12 * DAY)), appliedAt: iso(new Date(now.getTime() - 12 * DAY)),
+            comparison: 'AT_LEAST', nextChargeAt: null },
+          // S299: low-sales relief applied before the first invoice: the next charge moved by a month.
+          { id: 'gr_relief', source: 'RULE', type: 'FREE_DAYS', summary: '1 month free', reason: 'Low-sales relief', status: 'APPLIED', creditMinor: null, freeDays: 30,
+            createdAt: iso(new Date(now.getTime() - 40 * DAY)), appliedAt: iso(new Date(now.getTime() - 40 * DAY)),
+            comparison: 'LESS_THAN', nextChargeAt: iso(new Date(now.getTime() + 92 * DAY)) }
+        ]
+      },
+      PROVIDER: {
+        available: [
+          { ruleId: 'rr_bookings', name: '10 completed bookings', description: null, metric: 'COMPLETED_BOOKINGS', value: 3, threshold: 10, percent: 30, qualifies: false,
+            label: '3 of 10 completed bookings', rewardLabel: '20% off 3 invoices', conditionLabel: '10 completed bookings in 30 days', endsAt: null, comparison: 'AT_LEAST', windowAnchor: 'APPROVAL', windowDays: null, pending: false,
+            checkAt: null, windowClosesAt: null },
+          // S299: low-sales relief, checked once 24 h before the 30-day trial ends (in 10 days).
+          { ruleId: 'rr_relief', name: 'Low-sales relief', description: 'A quiet first month? The second one is on us.', metric: 'GROSS_SALES', value: 20000,
+            threshold: 100000, percent: 20, qualifies: false, label: '$200 in sales so far (less than $1,000 → 1 month free)', rewardLabel: '1 month free',
+            conditionLabel: 'less than $1,000 in sales in the first 30 days of the subscription', endsAt: null, comparison: 'LESS_THAN', windowAnchor: 'SUBSCRIPTION_START',
+            windowDays: 30, pending: true, checkAt: iso(new Date(now.getTime() + 9 * DAY)), windowClosesAt: iso(new Date(now.getTime() + 10 * DAY)) }
+        ],
+        earned: []
+      }
     },
     paymentMethods: {
       SELLER: [
@@ -400,11 +514,28 @@ function freshDb(now: Date): MockSellerDb {
         { id: 'pm_p2', kind: 'card', brand: 'mastercard', last4: '5454', expMonth: 3, expYear: 2027, bankName: null, accountType: null, verified: true, receivesPayouts: false, isDefault: false, label: 'Mastercard ending in 5454' }
       ]
     },
-    invoices: [0, 1, 2].map((i) => ({
-      id: `in_${3 - i}`, number: `AT-${String(1003 - i)}`, periodStart: iso(new Date(now.getTime() - (i + 1) * 92 * DAY)), periodEnd: iso(new Date(now.getTime() - i * 92 * DAY)),
-      amountDueMinor: i === 2 ? 0 : 11115, amountPaidMinor: i === 2 ? 0 : 11115, currency: 'USD', status: 'PAID', pdfUrl: `https://invoices.afrotransact.dev/in_${3 - i}.pdf`,
-      hostedUrl: `https://invoices.afrotransact.dev/in_${3 - i}`, createdAt: iso(new Date(now.getTime() - i * 92 * DAY))
-    })),
+    // The latest invoice was paid mostly from sales (S298): $90.00 from sales, the card the remaining $21.15.
+    invoices: [0, 1, 2].map((i) => {
+      const due = i === 0 ? 11115 : i === 2 ? 0 : 11115;
+      const sales = i === 0 ? 9000 : 0;
+      const credit = i === 0 ? 0 : 0;
+      return {
+        id: `inv_${3 - i}`, number: `AT-${String(1003 - i)}`, periodStart: iso(new Date(now.getTime() - (i + 1) * 92 * DAY)), periodEnd: iso(new Date(now.getTime() - i * 92 * DAY)),
+        subtotalMinor: 11115, discountMinor: i === 2 ? 11115 : 0, amountDueMinor: i === 2 ? 0 : due, amountPaidMinor: i === 2 ? 0 : due, currency: 'USD', status: 'PAID' as const,
+        createdAt: iso(new Date(now.getTime() - i * 92 * DAY)), paidAt: iso(new Date(now.getTime() - i * 92 * DAY)), nextAttemptAt: null, lastError: null,
+        lines: [
+          { kind: 'PLAN' as const, description: 'Seller Growth, billed every 3 months', amountMinor: 11115 },
+          ...(i === 2 ? [{ kind: 'WAIVER' as const, description: 'Free quarter (welcome offer)', amountMinor: -11115 }] : [])
+        ],
+        paidFromCreditMinor: credit, paidFromSalesMinor: sales, paidByCardMinor: i === 2 ? 0 : due - sales - credit, waivedMinor: 0, canRetry: false
+      };
+    }),
+    planFeeCollection: { SELLER: 'EARNINGS_FIRST', PROVIDER: 'CARD' },
+    planFeeCollectionAvailable: true,
+    planFeeDeductions: [
+      { invoiceId: 'in_3', invoiceNumber: 'AT-1003', label: 'Plan fee (invoice AT-1003)', status: 'WITHHELD', requestedMinor: 11115, withheldMinor: 9000, releasedMinor: 0,
+        outstandingMinor: 0, createdAt: iso(now), transfers: [{ orderId: 'ord-400112', orderNumber: 'AT-2026-400112', amountMinor: 9000, at: iso(now), label: 'Plan fee (invoice AT-1003) deducted from order AT-2026-400112' }] }
+    ],
     team: {
       [SELLER_ORG]: [
         { userId: 'user-titilayo', name: 'Titilayo Adebayo', email: 'titilayo@adeskitchen.com', roleKey: 'seller.owner', roleLabel: 'Owner', status: 'ACTIVE', isYou: true },
@@ -438,6 +569,8 @@ function freshDb(now: Date): MockSellerDb {
     services: PROVIDER_SERVICES.map((s) => ({ ...s, currency: 'USD', active: true, takeHome: takeHome(s.priceMinor) })),
     policy: { kind: 'MODERATE', freeHours: 48, partialRefund: true, partialFromHours: 24, partialPercent: 50, noShow: 'DEPOSIT', rescheduleHours: 48, maxReschedules: 2 },
     earnings: [],
+    businessPage: {},
+    runPickups: { [SELLER_ORG]: seedRunPickups(now) },
     shipFrom: {
       [SELLER_ORG]: [
         { id: 'sfa-store', label: 'Warehouse', name: 'Ade Okafor', company: 'Ade’s Kitchen', phone: '+17135550142', line1: '9800 Bissonnet St', line2: 'Unit 4',
@@ -454,22 +587,29 @@ function freshDb(now: Date): MockSellerDb {
       ]
     },
     offers: [],
-    pages: {
-      [SELLER_ORG]: { kind: 'SELLER', slug: 'ades-kitchen', name: 'Ade’s Kitchen', tagline: 'Home-style Nigerian pantry, shipped from Houston', status: 'PUBLISHED',
-        publishedAt: iso(new Date(now.getTime() - 30 * DAY)), primaryColor: '#0A8264', accentColor: '#FFD400', layout: 'CLASSIC', header: 'BAND', buttonShape: 'ROUNDED',
-        gallerySize: 6, gallery: [], featured: [], social: [{ network: 'instagram', url: 'https://instagram.com/adeskitchen', status: 'APPROVED' }], publicPath: '/store/ades-kitchen' },
-      [PROVIDER_ORG]: { kind: 'PROVIDER', slug: 'amas-braiding-studio', name: 'Ama’s Braiding Studio', tagline: 'Neat, long-lasting braids from a Dakar-trained stylist', status: 'DRAFT',
-        publishedAt: null, primaryColor: '#FFD400', accentColor: '#067457', layout: 'GALLERY_FIRST', header: 'COVER', buttonShape: 'ROUNDED', gallerySize: 8, gallery: [],
-        featured: [
-          { id: 'po1', headline: 'Knotless braids that last 8 weeks', body: 'Pre-stretched, itch-free hair and a hot-water seal on every install.', serviceId: 's1a', published: true },
-          { id: 'po2', headline: 'Back-to-school cornrows for kids', body: 'Gentle, neat rows in under 2 hours.', serviceId: 's1c', published: true }
-        ],
-        social: [{ network: 'instagram', url: 'https://instagram.com/amasbraids', status: 'APPROVED' }, { network: 'facebook', url: 'https://facebook.com/amasbraids', status: 'PENDING' }],
-        publicPath: '/pro/amas-braiding-studio' }
-    },
+    coupons: [],
+    returns: [
+      { number: 'RMA-5E11E5A1', orderNumber: 'AT-2026-000123', title: 'Garri 2kg', status: 'RECEIVED', statusLabel: 'Received', method: 'DROP_OFF', refundMinor: 1798,
+        currency: 'USD', refundState: 'PENDING', items: [{ title: 'Garri 2kg', quantity: 2, reason: 'DAMAGED' }], carrier: 'UPS', trackingNumber: '1Z999AA10123456784',
+        dropOffBy: null, createdAt: iso(new Date(now.getTime() - 3 * DAY)) },
+      { number: 'RMA-7B20C9D4', orderNumber: 'AT-2026-000118', title: 'Egusi and 1 more item', status: 'REQUESTED', statusLabel: 'Waiting for approval', method: 'DRIVER_PICKUP', refundMinor: 2450,
+        currency: 'USD', refundState: '', items: [{ title: 'Egusi 500g', quantity: 1, reason: 'NOT_AS_DESCRIBED' }, { title: 'Palm oil 1L', quantity: 1, reason: 'DEFECTIVE' }],
+        carrier: null, trackingNumber: null, dropOffBy: null, createdAt: iso(new Date(now.getTime() - 1 * DAY)) }
+    ],
+    disputes: [
+      { reference: 'CLM-1001', type: 'NOT_AS_DESCRIBED', typeLabel: 'Not as described', status: 'AWAITING_SELLER', statusLabel: 'Waiting for your response', orderNumber: 'AT-2026-000118',
+        amountMinor: 2450, currency: 'USD', description: 'The jollof seasoning was a different brand.', responded: false, sellerResponse: null,
+        respondBy: iso(new Date(now.getTime() + 2 * DAY)), deadlineState: 'AT_RISK', escalated: false, outcome: null, refundMinor: 0, openedAt: iso(new Date(now.getTime() - 2 * DAY)) },
+      { reference: 'CLM-0987', type: 'ITEM_NOT_RECEIVED', typeLabel: 'Item not received', status: 'RESOLVED_DENIED', statusLabel: 'Resolved: denied', orderNumber: 'AT-2026-000101',
+        amountMinor: 3200, currency: 'USD', description: 'My parcel never came.', responded: true, sellerResponse: 'Delivered with a signature on 2 Oct.', respondBy: null, deadlineState: null,
+        escalated: false, outcome: 'DENY', refundMinor: 0, openedAt: iso(new Date(now.getTime() - 12 * DAY)) }
+    ],
     seq: 1
   };
   db.offers = seedOffers(db.listings);
+  db.coupons = [
+    { id: 'cp-mock-1', code: 'ADE10', description: '10% off Ade’s Kitchen', type: 'PERCENT', value: 10, currency: 'USD', scope: 'SELLER', minSpendMinor: 2500, status: 'ACTIVE', funding: 'SELLER', editable: true, version: 1 }
+  ];
   return db;
 }
 

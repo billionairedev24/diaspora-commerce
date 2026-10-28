@@ -1,216 +1,190 @@
 'use client';
 
 import { isApiError, type OnboardingStatus, type OnboardingStripeSession, sellerKeys } from '@afrotransact/api-client';
-import { Button, cx } from '@afrotransact/ui';
-import { CheckCircle, CircleDashed, CircleNotch, Flask, ShieldCheck, WarningCircle } from '@phosphor-icons/react/ssr';
+import { Button } from '@afrotransact/ui';
+import { ArrowDown, Bank, CheckCircle, IdentificationCard, LockSimple, Receipt } from '@phosphor-icons/react/ssr';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 import { sellerApi } from '@/lib/api';
-import { fieldId } from '@/lib/onboarding-form';
+import { fieldId, payoutAccountLabel } from '@/lib/onboarding-form';
 import { useSeller } from '@/lib/session';
-import { hasStripeKey, initConnect } from '@/lib/stripe';
 
+import { isLocalSession, LocalStripeForm, StripeEmbedded, StripeLoadFailed, StripeLoading } from '../StripeEmbedded';
 import { type StepProps } from '../WizardKit';
 
-type Row = { name: string; ok: boolean; note: string };
+/** How long the success state shows before the wizard moves on by itself. */
+export const ADVANCE_AFTER_MS = 1200;
 
-/** Verification rows as designed: the account, identity (KYC), the IRS name / TIN match and sanctions screening. */
-function rows(st: OnboardingStatus): Row[] {
-  const s = st.stripe;
-  const sole = st.form.business.entityType === 'SOLE_PROPRIETOR';
-  const verified = s.status === 'VERIFIED';
-  const account: Row = {
-    name: 'Stripe Connect account',
-    ok: verified,
-    note:
-      s.status === 'NOT_STARTED'
-        ? 'Verification runs inside AfroTransact, powered by Stripe. You won’t need a Stripe login. About 3 minutes.'
-        : s.status === 'IN_PROGRESS'
-          ? 'Started — finish the questions below.'
-          : s.status === 'REQUIREMENTS_DUE'
-            ? `Stripe needs more information: ${s.currentlyDue.join(', ')}`
-            : s.status === 'PENDING'
-              ? 'Submitted — Stripe is checking your details. You can continue meanwhile.'
-              : s.status === 'REJECTED'
-                ? 'Stripe could not verify this business. Contact AfroTransact support.'
-                : 'Verified · charges enabled · payouts on request from your back office'
-  };
-  return [
-    account,
+/** What Stripe will ask for: three short items, no boxes. */
+function WhatStripeAsks({ sole }: { sole: boolean }) {
+  const items: { icon: ReactNode; title: string; text: string }[] = [
     {
-      name: sole ? 'Identity (KYC)' : 'Owners & representative (KYC)',
-      ok: s.identityStatus === 'verified',
-      note: s.identityStatus === 'verified' ? 'Verified by Stripe' : 'Stripe checks name, date of birth, address and ID where needed'
+      icon: <IdentificationCard size={24} aria-hidden />,
+      title: sole ? 'About you' : 'Owners & representative',
+      text: 'Name, date of birth, home address and, if needed, a photo ID'
     },
     {
-      name: sole ? 'SSN / ITIN — IRS name & TIN match' : 'EIN — IRS name & TIN match',
-      ok: s.taxIdStatus === 'verified',
-      note: s.taxIdStatus === 'verified' ? 'Matched against IRS records' : 'Stripe compares the legal name and tax ID with the IRS database'
+      icon: <Receipt size={24} aria-hidden />,
+      title: sole ? 'SSN or ITIN' : 'EIN',
+      text: 'Checked against IRS records'
     },
     {
-      name: 'Sanctions screening',
-      ok: verified,
-      note: verified ? 'No OFAC / PEP hits' : 'Run by Stripe and repeated nightly by AfroTransact'
+      icon: <Bank size={24} aria-hidden />,
+      title: 'Payout bank account',
+      text: 'Where your earnings are paid'
     }
   ];
+  return (
+    <ul aria-label="What Stripe will ask for" className="m-0 grid list-none grid-cols-1 gap-x-6 gap-y-3 p-0 sm:grid-cols-3">
+      {items.map((i) => (
+        <li key={i.title} className="flex items-start gap-3">
+          <span className="grid size-10 flex-none place-items-center rounded-pill bg-gold-50">{i.icon}</span>
+          <span className="flex min-w-0 flex-col">
+            <strong className="text-sm">{i.title}</strong>
+            <span className="text-xs text-muted">{i.text}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Stripe has what it needs: a clear success state (and, right after finishing, the move to the next step). */
+function Verified({ status, moving }: { status: OnboardingStatus; moving: boolean }) {
+  const pending = status.stripe.status === 'PENDING';
+  const bank = status.form.payouts;
+  return (
+    <div role="status" className="flex flex-col items-start gap-3 rounded-lg bg-success-bg px-5 py-6 sm:px-8">
+      <CheckCircle size={40} weight="fill" className="text-success" aria-hidden />
+      <div className="flex flex-col gap-1">
+        <strong className="text-xl">{pending ? 'Submitted to Stripe' : 'Verified by Stripe'}</strong>
+        <span className="text-sm text-muted">
+          {pending
+            ? 'Stripe is finishing its checks. You can continue meanwhile — we’ll let you know if it needs anything else.'
+            : 'Identity and tax ID checked.'}
+          {bank.accountLast4 ? ` Payouts go to ${payoutAccountLabel(bank)}.` : ''}
+        </span>
+      </div>
+      {moving ? <span className="text-sm font-semibold">Taking you to the next step…</span> : null}
+    </div>
+  );
 }
 
 /**
- * Local stand-in (local stack without a Stripe key, or the mock BFF): clearly labelled, nothing leaves the machine.
- * The seller service refuses it on every other profile.
+ * Step 4 "Stripe verification": one path forward. A one-line intro and what Stripe will ask, then Stripe's embedded
+ * account onboarding as the step's main content (loaded as soon as the step opens, no button before it, no box around
+ * it). When the seller finishes, the step shows a success state and the wizard moves on by itself; the page's
+ * Continue stays as a fallback. The account is Stripe-collected: Stripe keeps the liability and the bank details.
  */
-function LocalVerification({ onComplete, busy }: { onComplete: () => void; busy: boolean }) {
-  return (
-    <div role="region" aria-label="Local test verification" className="flex flex-col gap-3 rounded-md border border-dashed border-gold-500 bg-gold-50 p-4">
-      <div className="flex items-start gap-3">
-        <Flask size={22} aria-hidden className="mt-0.5 flex-none" />
-        <div className="flex flex-col gap-1 text-sm">
-          <strong>Local test mode — Stripe isn’t configured on this machine</strong>
-          <span className="text-muted">
-            With a Stripe key, Stripe’s secure verification opens right here: identity, date of birth, SSN or EIN and address. Locally the seller service
-            simulates a verified account instead. Nothing is sent to Stripe.
-          </span>
-        </div>
-      </div>
-      <div>
-        <Button size="sm" onClick={onComplete} disabled={busy}>
-          {busy ? 'Verifying…' : 'Complete test verification'}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/** Stripe's embedded account onboarding (Connect.js), mounted in the page; closing it re-reads the results. */
-function EmbeddedOnboarding({ session, onExit }: { session: OnboardingStripeSession; onExit: () => void }) {
-  const box = useRef<HTMLDivElement>(null);
-  const [failed, setFailed] = useState<string | null>(null);
-  const exit = useRef(onExit);
-  exit.current = onExit;
-  useEffect(() => {
-    let cancelled = false;
-    let mounted: HTMLElement | null = null;
-    initConnect(session.publishableKey, async () => (await sellerApi().createOnboardingStripeSession()).clientSecret)
-      .then((connect) => {
-        if (cancelled || !box.current) return;
-        const el = connect.create('account-onboarding');
-        el.setCollectionOptions?.({
-          fields: 'eventually_due',
-          futureRequirements: 'include'
-        });
-        el.setOnExit?.(() => exit.current());
-        box.current.appendChild(el);
-        mounted = el;
-      })
-      .catch(() => setFailed('Stripe verification couldn’t load. Check your connection and try again.'));
-    return () => {
-      cancelled = true;
-      mounted?.remove();
-    };
-  }, [session.publishableKey, session.accountId]);
-  return (
-    <div className="flex flex-col gap-2">
-      {failed ? (
-        <p role="alert" className="m-0 text-sm text-danger">
-          {failed}
-        </p>
-      ) : null}
-      <div ref={box} className="min-h-24 rounded-md border border-border p-2" aria-label="Stripe embedded onboarding" />
-    </div>
-  );
-}
-
-/** Step 4 "Stripe verification": identity and tax ID checked by Stripe Connect, embedded (no Stripe-hosted page). */
-export function StripeStep({ status, ref }: StepProps) {
+export function StripeStep({ status, ref, advance }: StepProps) {
   const qc = useQueryClient();
   const { orgId } = useSeller();
   const [session, setSession] = useState<OnboardingStripeSession | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const s = status.stripe;
+  const [phase, setPhase] = useState<'idle' | 'loading' | 'failed' | 'ready'>('idle');
+  const [failure, setFailure] = useState<string>('');
+  const [note, setNote] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
   const done = status.steps.find((x) => x.key === 'STRIPE_VERIFICATION')?.state === 'DONE';
-  const disabled = !status.form.editable;
+  const editable = status.form.editable;
+  const sole = status.form.business.entityType === 'SOLE_PROPRIETOR';
+  const advanceRef = useRef(advance);
+  advanceRef.current = advance;
+
+  const apply = useCallback((st: OnboardingStatus) => qc.setQueryData(sellerKeys.onboarding(orgId), st), [qc, orgId]);
+  const problem = (e: unknown) => (isApiError(e) && e.problem.detail ? e.problem.detail : 'Stripe is unavailable right now. Try again in a minute.');
+
+  const open = useCallback(async () => {
+    setPhase('loading');
+    try {
+      setSession(await sellerApi().createOnboardingStripeSession());
+      setPhase('ready');
+      apply(await sellerApi().getOnboarding());
+    } catch (e) {
+      setFailure(problem(e));
+      setPhase('failed');
+    }
+  }, [apply]);
+
+  // The form opens with the step: nothing to click before it.
+  useEffect(() => {
+    if (!done && editable && phase === 'idle') void open();
+  }, [done, editable, phase, open]);
+
+  /** Stripe says the seller finished (or closed the form): read the result and, when complete, move on. */
+  const finished = async (): Promise<boolean> => {
+    setNote(null);
+    try {
+      const st = await sellerApi().refreshOnboardingStripe();
+      apply(st);
+      if (st.steps.find((x) => x.key === 'STRIPE_VERIFICATION')?.state === 'DONE') {
+        setMoving(true);
+        window.setTimeout(() => advanceRef.current?.(), ADVANCE_AFTER_MS);
+        return true;
+      }
+      setNote('Stripe still needs a few details. Continue in the form below.');
+      return false;
+    } catch (e) {
+      setNote(problem(e));
+      return false;
+    }
+  };
 
   useImperativeHandle(ref, () => ({
-    save: (mode) => {
-      if (mode === 'draft' || done) return Promise.resolve(true);
-      setError('Finish Stripe verification to continue.');
-      return Promise.resolve(false);
+    save: async (mode) => {
+      if (mode === 'draft' || done) return true;
+      // The page's Continue is a fallback: check with Stripe before saying it isn't finished.
+      if (await finished()) return true;
+      setNote('Finish the Stripe form to continue.');
+      return false;
     }
   }));
 
-  const apply = (st: OnboardingStatus) => qc.setQueryData(sellerKeys.onboarding(orgId), st);
-  const fail = (e: unknown) =>
-    setError(isApiError(e) && e.problem.detail ? e.problem.detail : 'Stripe verification is unavailable right now. Try again in a minute.');
+  if (done) return <Verified status={status} moving={moving} />;
 
-  const start = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const se = await sellerApi().createOnboardingStripeSession();
-      setSession(se);
-      apply(await sellerApi().getOnboarding());
-    } catch (e) {
-      fail(e);
-    } finally {
-      setBusy(false);
-    }
-  };
-  const refresh = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      apply(await sellerApi().refreshOnboardingStripe());
-      setSession(null);
-    } catch (e) {
-      fail(e);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const local = session ? session.localTest || !hasStripeKey(session.publishableKey) : false;
+  const local = session ? isLocalSession(session) : false;
   return (
-    <div className="flex flex-col gap-3">
-      <ul className="m-0 flex list-none flex-col gap-2 p-0">
-        {rows(status).map((r, i) => (
-          <li key={r.name} className="flex items-center gap-3 rounded-sm border border-border px-4 py-2.5">
-            {r.ok ? (
-              <CheckCircle size={24} weight="fill" className="flex-none text-success" aria-hidden />
-            ) : i === 0 && s.status === 'REQUIREMENTS_DUE' ? (
-              <WarningCircle size={24} weight="fill" className="flex-none text-warning" aria-hidden />
-            ) : i === 0 ? (
-              <ShieldCheck size={24} className="flex-none text-muted" aria-hidden />
-            ) : (
-              <CircleDashed size={24} className="flex-none text-subtle" aria-hidden />
-            )}
-            <div className="min-w-0 flex-1">
-              <strong className="text-sm">{r.name}</strong>
-              <div className="text-xs text-muted">{r.note}</div>
-            </div>
-            {i === 0 && !done && !disabled && !session ? (
-              <Button id={fieldId('stripe')} size="sm" variant="neutral" onClick={() => void start()} disabled={busy}>
-                {busy ? <CircleNotch size={16} className="animate-spin" aria-hidden /> : null}
-                {s.status === 'NOT_STARTED' ? 'Start verification' : 'Continue verification'}
+    <div className="flex flex-col gap-6">
+      <WhatStripeAsks sole={sole} />
+      <div id={fieldId('stripe')} tabIndex={-1} className="flex flex-col gap-3 outline-none">
+        <p className="m-0 flex items-center gap-2 text-md font-semibold">
+          <ArrowDown size={18} aria-hidden className="flex-none" />
+          Continue in the secure Stripe form below — it saves as you go.
+        </p>
+        {note ? (
+          <p role="alert" className="m-0 rounded-md bg-warning-bg px-4 py-2.5 text-sm">
+            {note}
+          </p>
+        ) : null}
+        {!editable ? <p className="m-0 text-sm text-muted">Your application is with our team; Stripe verification can’t be changed now.</p> : null}
+        {editable && (phase === 'loading' || phase === 'idle') ? <StripeLoading /> : null}
+        {phase === 'failed' ? <StripeLoadFailed message={failure} onRetry={() => void open()} /> : null}
+        {phase === 'ready' && session && local ? (
+          <LocalStripeForm
+            label="Local test verification"
+            title="Verify your business with Stripe"
+            action={
+              <Button onClick={() => void finished()} disabled={moving}>
+                Complete test verification
               </Button>
-            ) : null}
-            {i === 0 && s.status === 'PENDING' && !session ? (
-              <Button size="sm" variant="link" onClick={() => void refresh()} disabled={busy}>
-                Refresh status
-              </Button>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      {session && local ? <LocalVerification onComplete={() => void refresh()} busy={busy} /> : null}
-      {session && !local ? <EmbeddedOnboarding session={session} onExit={() => void refresh()} /> : null}
-      <p className="m-0 text-xs text-muted">
-        Identity, SSN/EIN and date of birth are collected inside Stripe’s embedded Connect onboarding, and Stripe runs KYC plus the IRS name/TIN match.
-        AfroTransact only receives the verification result — never ID images or full tax numbers.
-      </p>
-      <p role={error ? 'alert' : undefined} className={cx('m-0 min-h-4 text-sm', error ? 'text-danger' : 'text-muted')}>
-        {error}
+            }
+          >
+            Stripe isn’t configured on this machine. With a Stripe key, Stripe’s secure form opens right here and asks for the details above. Locally the seller
+            service simulates a verified account with Stripe’s test bank, and nothing is sent to Stripe.
+          </LocalStripeForm>
+        ) : null}
+        {phase === 'ready' && session && !local ? (
+          <StripeEmbedded
+            session={session}
+            component="account-onboarding"
+            fetchClientSecret={async () => (await sellerApi().createOnboardingStripeSession()).clientSecret}
+            onExit={() => void finished()}
+          />
+        ) : null}
+      </div>
+      <p className="m-0 flex items-center gap-1.5 text-xs text-muted">
+        <LockSimple size={14} aria-hidden className="flex-none" />
+        Stripe runs the checks. AfroTransact never sees your ID, full tax number or bank numbers.
       </p>
     </div>
   );

@@ -7,6 +7,15 @@ import { MapPin } from '../icons';
 import styles from './AddressAutocomplete.module.css';
 import { type AddressSuggestionItem, type SearchAddresses } from './types';
 
+/** A new autocomplete session token: 32 URL-safe characters (the BFF and Google Places accept 8–36). */
+export function newSessionToken(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID().replace(/-/g, '');
+  let out = '';
+  for (let i = 0; i < 32; i += 1) out += Math.floor(Math.random() * 16).toString(16);
+  return out;
+}
+
 export interface AddressAutocompleteProps {
   label: ReactNode;
   value: string;
@@ -23,6 +32,8 @@ export interface AddressAutocompleteProps {
   emptyLabel?: string;
   errorLabel?: string;
   loadingLabel?: string;
+  /** Read out while a picked suggestion's full address loads (Google Place Details). */
+  resolvingLabel?: string;
   id?: string;
   name?: string;
   autoFocus?: boolean;
@@ -41,11 +52,12 @@ export function AddressAutocomplete({
   error,
   help,
   attribution,
-  minChars = 2,
+  minChars = 1,
   debounceMs = 200,
   emptyLabel = 'No matching addresses',
   errorLabel = 'Address suggestions are unavailable — keep typing your full address.',
   loadingLabel = 'Searching…',
+  resolvingLabel = 'Loading the address…',
   id,
   name,
   autoFocus
@@ -56,6 +68,9 @@ export function AddressAutocomplete({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const skipNext = useRef(false);
+  /** The address entry's session token: created on the first search, reused until a suggestion is picked. */
+  const session = useRef<string | null>(null);
+  const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
     if (skipNext.current) {
@@ -71,7 +86,8 @@ export function AddressAutocomplete({
     const ctrl = new AbortController();
     const t = setTimeout(() => {
       setStatus('loading');
-      searchAddresses(q, { signal: ctrl.signal })
+      session.current ??= newSessionToken();
+      searchAddresses(q, { signal: ctrl.signal, sessionToken: session.current })
         .then((r) => {
           setItems(r);
           setStatus('ready');
@@ -91,9 +107,20 @@ export function AddressAutocomplete({
 
   const pick = (s: AddressSuggestionItem) => {
     skipNext.current = true;
-    onSelect(s);
     setOpen(false);
     setActive(-1);
+    // The pick ends the session (Place Details closes it); the next entry starts a new one.
+    session.current = null;
+    if (!s.resolve || s.resolved !== false) {
+      onSelect(s);
+      return;
+    }
+    setResolving(true);
+    s.resolve()
+      .then((address) => onSelect({ ...s, address, resolved: true }))
+      // Details unavailable: keep the street line; the rest of the form stays editable.
+      .catch(() => onSelect(s))
+      .finally(() => setResolving(false));
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -132,6 +159,7 @@ export function AddressAutocomplete({
             aria-expanded={showList}
             aria-controls={listId}
             aria-activedescendant={showList && active >= 0 ? `${listId}-${active}` : undefined}
+            aria-busy={resolving || undefined}
             onChange={(e) => {
               onChange(e.target.value);
               setOpen(true);
@@ -140,6 +168,11 @@ export function AddressAutocomplete({
             onBlur={() => setTimeout(() => setOpen(false), 120)}
             onKeyDown={onKeyDown}
           />
+          {resolving && (
+            <span className={styles.resolving} role="status">
+              {resolvingLabel}
+            </span>
+          )}
           {showList && (
             <ul id={listId} role="listbox" className={styles.list} aria-label="Address suggestions">
               {status === 'loading' && items.length === 0 && <li className={styles.status} role="presentation">{loadingLabel}</li>}

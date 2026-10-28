@@ -1,0 +1,11 @@
+appId: com.afrotransact.customer.local
+---
+- runFlow: _sign-in.yaml
+- tapOn: "Account"
+- tapOn: "Orders"
+- assertVisible: "Your orders"
+- tapOn: "Order details"
+- assertVisible: ".*AT-.*"
+- back
+- tapOn: "Return items"
+- assertVisible: ".*[Rr]eturn.*"

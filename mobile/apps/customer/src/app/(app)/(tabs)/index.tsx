@@ -11,6 +11,7 @@ import { type MessageKey, useFormatters, useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { LogoMark } from '@/ui/Logo';
 import { AppText, IconButton } from '@/ui/primitives';
+import { QueryBoundary, useRefresh } from '@/ui/QueryStates';
 import { Screen } from '@/ui/Screen';
 
 const CATS: Array<{ label: MessageKey; icon: Icon; bg: string; q: string | null }> = [
@@ -32,8 +33,9 @@ export default function Home() {
   const def = addresses.data?.find((a) => a.isDefault) ?? addresses.data?.[0];
   const active = orders.data?.find((o) => o.shipments.some((s) => stepIndex(s.status) < 4 && !['returned', 'cancelled'].includes(s.status)) && o.status !== 'refunded');
   const hits = products.data?.hits ?? [];
-  const again = hits.filter((p) => ['ATBASMAT05', 'ATSHITO001', 'ATGARI0004', 'ATSOAP0007'].includes(p.atin)).concat(hits).slice(0, 4);
+  const reorder = hits.slice(0, 4);
   const sameDay = hits.filter((p) => p.delivery.days === 0).slice(0, 4);
+  const refresh = useRefresh(products, orders, addresses);
 
   const header = (
     <View style={styles.header}>
@@ -47,7 +49,7 @@ export default function Home() {
   );
 
   return (
-    <Screen inTabs header={header}>
+    <Screen inTabs header={header} refresh={refresh}>
       <Pressable accessibilityRole="button" onPress={() => router.push('/addresses')} style={styles.deliver}>
         <MapPin size={18} color={c.text} />
         <AppText variant="small" color={c.textMuted}>Deliver to {user?.first} ·</AppText>
@@ -90,24 +92,33 @@ export default function Home() {
         </View>
         <CaretRight size={18} color={c.text} />
       </Pressable>
-      <View style={{ gap: sp['2'] }}>
-        <View style={styles.sectionHead}><AppText variant="heading">{tr('cu.index.buyAgain')}</AppText><AppText variant="caption" color={c.textMuted}>{tr('cu.index.basedOnYourOrders')}</AppText></View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: sp['3'] }}>
-          {again.map((p) => (
-            <Pressable key={p.atin} accessibilityRole="button" accessibilityLabel={p.title} onPress={() => router.push(`/product/${p.atin}`)} style={{ width: 110, gap: 4 }}>
-              <ProductImage title={p.title} size={110} />
-              <AppText variant="caption" numberOfLines={2}>{p.title}</AppText>
-              <AppText variant="small" style={{ fontWeight: t.fontWeight.bold }}>{fmt.money(p.priceMinor, p.currency)}</AppText>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
-      <View style={{ gap: sp['2'] }}>
-        <View style={styles.sectionHead}><AppText variant="heading">{tr('cu.index.todayBy8Pm')}</AppText><AppText variant="caption" color={c.textMuted}>Same-day in {def?.city ?? 'Houston'}</AppText></View>
-        <View style={styles.grid}>
-          {sameDay.map((p) => <View key={p.atin} style={styles.cell}><ProductTile p={p} /></View>)}
-        </View>
-      </View>
+      <QueryBoundary query={products} hasData={hits.length > 0}>
+        {reorder.length ? (
+          <View style={{ gap: sp['2'] }}>
+            <View style={styles.sectionHead}>
+              <AppText variant="heading">{orders.data?.length ? tr('cu.index.buyAgain') : tr('cu.index.popularNow')}</AppText>
+              {orders.data?.length ? <AppText variant="caption" color={c.textMuted}>{tr('cu.index.basedOnYourOrders')}</AppText> : null}
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: sp['3'] }}>
+              {reorder.map((p) => (
+                <Pressable key={p.atin} accessibilityRole="button" accessibilityLabel={p.title} onPress={() => router.push(`/product/${p.atin}`)} style={{ width: 110, gap: 4 }}>
+                  <ProductImage title={p.title} uri={p.imageUrl} size={110} />
+                  <AppText variant="caption" numberOfLines={2}>{p.title}</AppText>
+                  <AppText variant="small" style={{ fontWeight: t.fontWeight.bold }}>{fmt.money(p.priceMinor, p.currency)}</AppText>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+        {sameDay.length ? (
+          <View style={{ gap: sp['2'] }}>
+            <View style={styles.sectionHead}><AppText variant="heading">{tr('cu.index.todayBy8Pm')}</AppText>{def?.city ? <AppText variant="caption" color={c.textMuted}>Same-day in {def.city}</AppText> : null}</View>
+            <View style={styles.grid}>
+              {sameDay.map((p) => <View key={p.atin} style={styles.cell}><ProductTile p={p} /></View>)}
+            </View>
+          </View>
+        ) : null}
+      </QueryBoundary>
       <Pressable accessibilityRole="button" onPress={() => router.push('/services')} style={styles.lola}>
         <Scissors size={24} color={c.text} />
         <View style={{ flex: 1 }}>

@@ -2,12 +2,15 @@ package com.afrotransact.bookings.domain;
 
 /**
  * Fees taken from service bookings, as payments-service applies them to a provider organisation
- * ({@code GET /v1/fee-schedules/effective?category=services&orgId=…}; e.g. commission 10 %, card 2.9 % + 30¢).
+ * ({@code GET /v1/fee-schedules/effective?kind=SERVICE&category=…&orgId=…}; e.g. connection fee 10 %, card 2.9 % +
+ * 30¢). The connection fee is AfroTransact's percentage of each booking's service amount, on top of the provider's
+ * plan fee.
  *
- * @param commissionBps  AfroTransact commission on what the customer actually paid
+ * @param commissionBps  AfroTransact's connection fee on what the customer actually paid
  * @param cardPctBps     card processing percentage per charge
  * @param cardFixedMinor card processing fixed fee per charge
- * @param source         where the commission comes from: OVERRIDE, CATEGORY, DEFAULT, RETAIL (payments) or CONFIG
+ * @param source         where the fee comes from: OVERRIDE (negotiated), PLAN, CATEGORY, DEFAULT, RETAIL (payments)
+ *                       or CONFIG
  *                       (bookings' configured fallback while payments is unavailable)
  * @param version        payments' fee-schedule version, or null for the configured fallback
  */

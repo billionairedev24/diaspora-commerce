@@ -59,9 +59,9 @@ class OrderQueryServiceImpl implements OrderQueryService {
         Page<OrderRepository.SellerShipment> page = orders.sellerShipments(org, filter, offset(cursor),
                 clamp(limit));
         Viewer viewer = new Viewer(Viewer.Kind.SELLER, org);
-        return page(page, page.items().stream().map(r -> new SellerShipmentView(r.orderNumber(),
+        return page(page, page.items().stream().map(r -> new SellerShipmentView(r.shipment().orderId(), r.orderNumber(),
                 r.orderStatus().name().toLowerCase(Locale.ROOT), r.placedAt(), r.shipTo(),
-                views.shipment(r.shipment(), r.shipmentCount(), viewer, List.of()))).toList());
+                views.shipment(null, r.shipment(), r.shipmentCount(), viewer, List.of()))).toList());
     }
 
     @Override

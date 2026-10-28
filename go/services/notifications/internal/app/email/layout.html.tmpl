@@ -1,9 +1,14 @@
 {{- /*
   The shared AfroTransact email layout (S279). Every email template's body is a content fragment rendered inside it.
-  Email-client safe: tables for layout, inline styles (the <style> block only adds the mobile and dark-mode
-  refinements clients that support it apply), 600 px max, hosted PNG images with alt text, a hidden preheader, a gold
-  bulletproof button with a VML fallback for Outlook, Figtree with a safe fallback stack. Colours mirror
-  web/packages/tokens (gold-500 #FFD400, green-600 #067457, ink-1000 #000000, ink-900 #191816, ink-50 #F6F4EF).
+  Email-client safe: tables for layout, inline styles (the <style> block only adds mobile refinements), 600 px max,
+  hosted PNG images with alt text, a hidden preheader, a gold bulletproof button with a VML fallback for Outlook,
+  Figtree with a safe fallback stack. Colours mirror web/packages/tokens (gold-500 #FFD400, green-600 #067457,
+  ink-1000 #000000, ink-900 #191816, ink-50 #F6F4EF, ink-0 #FFFFFF).
+  Light only, in every client: a white body on the ink-50 canvas between the black header, the green WhatsApp band and
+  the black footer. color-scheme "light only" keeps Apple Mail and iOS Mail from recolouring it; Gmail on the web never
+  recolours. There is deliberately no prefers-color-scheme: dark variant (it rendered a muddy dark grey body with
+  white text between the black bands) and no half-way [data-ogsc] overrides: apps that force their own dark mode
+  (Outlook.com, the Gmail apps) recolour backgrounds and text together, which stays readable.
   html/template drops HTML comments, so Outlook's conditional comments come from the mso* functions.
 */ -}}
 {{define "layout" -}}
@@ -15,12 +20,12 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="x-apple-disable-message-reformatting">
 <meta name="format-detection" content="telephone=no, date=no, address=no, email=no, url=no">
-<meta name="color-scheme" content="light dark">
-<meta name="supported-color-schemes" content="light dark">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light">
 <title>{{.Subject}}</title>
 {{msoHead}}
 <style>
-:root { color-scheme: light dark; supported-color-schemes: light dark; }
+:root { color-scheme: light only; supported-color-schemes: light; }
 body { margin: 0 !important; padding: 0 !important; width: 100% !important; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
 table { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
 img { border: 0; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }
@@ -33,6 +38,7 @@ u + #body a { color: inherit; text-decoration: none; font-size: inherit; font-fa
   .at-pad { padding-left: 20px !important; padding-right: 20px !important; }
   .at-stack, .at-stack > tbody, .at-stack > tbody > tr, .at-col { display: block !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box; }
   .at-col-pad { padding: 0 0 16px 0 !important; }
+  .at-col-start { text-align: left !important; padding-left: 0 !important; }
   .at-hide-mobile { display: none !important; max-height: 0 !important; overflow: hidden !important; mso-hide: all; }
   .at-h1 { font-size: 24px !important; line-height: 30px !important; }
   .at-full { width: 100% !important; height: auto !important; }
@@ -41,19 +47,6 @@ u + #body a { color: inherit; text-decoration: none; font-size: inherit; font-fa
   .at-promo-img { width: 100% !important; height: auto !important; }
   .at-promo-thumb { width: 100% !important; height: auto !important; }
 }
-@media (prefers-color-scheme: dark) {
-  .at-canvas { background-color: #191816 !important; }
-  .at-card { background-color: #2D2B27 !important; }
-  .at-card p, .at-card li, .at-card td, .at-card h1, .at-card h2, .at-card h3, .at-text { color: #F6F4EF !important; }
-  .at-muted { color: #C8C3B8 !important; }
-  .at-panel { background-color: #191816 !important; border-color: #44413B !important; }
-  .at-line { border-color: #44413B !important; }
-  .at-link { color: #93D2BC !important; }
-}
-[data-ogsc] .at-canvas { background-color: #191816 !important; }
-[data-ogsc] .at-card { background-color: #2D2B27 !important; }
-[data-ogsc] .at-text, [data-ogsc] .at-card p, [data-ogsc] .at-card td { color: #F6F4EF !important; }
-[data-ogsc] .at-muted { color: #C8C3B8 !important; }
 </style>
 </head>
 <body id="body" class="at-canvas" style="margin:0;padding:0;width:100%;background-color:#F6F4EF;">
@@ -111,7 +104,7 @@ u + #body a { color: inherit; text-decoration: none; font-size: inherit; font-fa
             <p style="margin:0;font-size:18px;line-height:24px;font-weight:800;color:#FFFFFF;">Join our WhatsApp community</p>
             <p style="margin:4px 0 0 0;font-size:14px;line-height:20px;color:#E8F5F0;">Pre-order drops in your city, restock alerts and recipes from home, shared first with the community.</p>
           </td>
-          <td class="at-col" valign="middle" align="right" style="padding-left:16px;white-space:nowrap;">
+          <td class="at-col at-col-start" valign="middle" align="right" style="padding-left:16px;white-space:nowrap;">
             {{waButton .WhatsAppURL}}
           </td>
         </tr>

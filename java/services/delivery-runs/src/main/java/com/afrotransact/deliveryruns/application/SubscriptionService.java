@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import com.afrotransact.deliveryruns.domain.Channel;
 import com.afrotransact.deliveryruns.domain.Subscription;
+import com.afrotransact.deliveryruns.domain.UtmTags;
 import com.afrotransact.deliveryruns.port.SubscriberCounts;
 
 /** Location run alerts with per-channel consent (S262). */
@@ -13,6 +14,12 @@ public interface SubscriptionService {
 
     /** Signed-in shopper: subscribe (or add channels); active at once. */
     Subscription subscribeMine(UUID locationId, Set<Channel> channels, String source);
+
+    /**
+     * As above, for a shopper who arrived with UTM tags (S262): the sign-up is counted under them. {@code runId} is
+     * the run they were looking at, if any.
+     */
+    Subscription subscribeMine(UUID locationId, Set<Channel> channels, String source, UtmTags utm, UUID runId);
 
     List<Subscription> mine();
 
@@ -24,6 +31,9 @@ public interface SubscriptionService {
      * {@code delivery-runs.subscription.created}. Same answer whether or not the address was known.
      */
     void subscribeEmail(UUID locationId, String email, String source);
+
+    /** As above, for a shopper who arrived with UTM tags: the sign-up is counted under them once it is confirmed. */
+    void subscribeEmail(UUID locationId, String email, String source, UtmTags utm, UUID runId);
 
     /** Confirmation link used; the subscription becomes active. */
     Subscription confirm(String token);

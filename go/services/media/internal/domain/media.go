@@ -39,20 +39,37 @@ const (
 	ClientRetailService       = "retail-service"
 	ClientGatewayBFF          = "gateway-bff"
 	ClientDeliveryRunsService = "delivery-runs-service"
+	ClientCatalogService      = "catalog-service"
 )
 
 // PermissionMediaRead is the scope a reader client's token must carry.
 const PermissionMediaRead = "media:read"
 
+// PermissionMediaImport is the scope an importer client's token must carry (POST /v1/assets/import).
+const PermissionMediaImport = "media:import"
+
+// ImporterClients are service clients whose own tokens, with scope media:import, may copy public images from a URL
+// for an organisation (catalog-service: images of bulk product uploads, S308).
+func ImporterClients() []string { return []string{ClientCatalogService} }
+
+// ImportablePurposes are the purposes an image can be imported from a URL for: public, moderated product images.
+func ImportablePurposes() []Purpose { return []Purpose{PurposeProductImage} }
+
 // ReaderClients are service clients whose own client-credentials tokens, with scope media:read, may read public
 // assets (GET /v1/assets/{id}: delivery-runs verifies pre-order creatives and stores their size). They never upload.
 func ReaderClients() []string { return []string{ClientDeliveryRunsService} }
 
+// ProofReaderClients are service clients whose own tokens, with scope media:read, may also read driver proof-of-delivery
+// photos and signatures (private, purpose proof-photo) and get a short-lived signed link to them. gateway-bff does, for
+// the order pages of the customer, the seller and staff: it asks only for asset ids that orders-service returned to a
+// viewer it had already authorised.
+func ProofReaderClients() []string { return []string{ClientGatewayBFF} }
+
 // AcceptedServiceClients are the service clients whose own client-credentials tokens media accepts: the clients the
-// purpose rules name and the reader clients.
+// purpose rules name, the reader clients and the importer clients.
 func AcceptedServiceClients() []string {
 	out := ServiceClients()
-	for _, c := range ReaderClients() {
+	for _, c := range append(append(ReaderClients(), ProofReaderClients()...), ImporterClients()...) {
 		if !slices.Contains(out, c) {
 			out = append(out, c)
 		}
@@ -178,6 +195,11 @@ type Asset struct {
 	PHash *uint64 `json:"-"`
 	// Version guards updates (optimistic locking): an update of a stale copy fails with ErrConflict.
 	Version int `json:"-"`
+	// Library marks a product image of the organisation's image library (S310); SKU and Slot are parsed from its
+	// file name (empty when the name has no slot).
+	Library bool        `json:"library,omitempty"`
+	SKU     string      `json:"sku,omitempty"`
+	Slot    LibrarySlot `json:"slot,omitempty"`
 }
 
 // ErrConflict is returned when an asset changed since it was read (concurrent completion or review).

@@ -40,6 +40,10 @@ final class Inputs {
         });
     }
 
+    static <E extends Enum<E>> E enumOf(Class<E> type, String raw, String field) {
+        return parse(raw, field, () -> Enum.valueOf(type, norm(raw)));
+    }
+
     private static String norm(String raw) {
         return raw.trim().toUpperCase(Locale.ROOT).replace('-', '_');
     }

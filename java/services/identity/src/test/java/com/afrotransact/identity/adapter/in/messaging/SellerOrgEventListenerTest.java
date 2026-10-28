@@ -32,6 +32,12 @@ class SellerOrgEventListenerTest {
             changes.add(change);
             return true;
         }
+
+        @Override
+        public boolean reconcile(SellerOrgChange truth) {
+            calls.add("reconcile");
+            return true;
+        }
     }, JsonMapper.builder().build());
 
     private static ConsumerRecord<String, String> rec(String type, String eventId, String json) {

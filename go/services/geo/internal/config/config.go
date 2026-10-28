@@ -8,11 +8,14 @@ type Config struct {
 	Port        int    `yaml:"port" env:"PORT"`
 	DocsEnabled bool   `yaml:"docsEnabled" env:"DOCS_ENABLED"`
 	DatabaseURL string `yaml:"databaseUrl" env:"DB_URL"`
-	// Providers in priority order: google-places, osm-nominatim, fixture. Google is skipped without a key.
+	// Providers is the autocomplete chain used when no Google key is configured (osm-nominatim, fixture). With a key,
+	// Google Places (New) is the only autocomplete provider: see AddressProviders.
 	Providers []string `yaml:"providers" env:"GEO_PROVIDERS"`
-	// ReverseProviders in priority order: google-geocoding, osm-nominatim, fixture. Google is skipped without a key.
+	// ReverseProviders in priority order: google-geocoding, osm-nominatim, fixture. With a key, google-geocoding
+	// leads (see ReverseGeocoders); without one it is skipped.
 	ReverseProviders []string `yaml:"reverseProviders" env:"GEO_REVERSE_PROVIDERS"`
 	Google           struct {
+		// APIKey is GOOGLE_PLACES_API_KEY; GOOGLE_MAPS_API_KEY (Routing.GoogleAPIKey) is used when it is blank.
 		APIKey string `env:"GOOGLE_PLACES_API_KEY"`
 	} `yaml:"google"`
 	Nominatim struct {
@@ -46,4 +49,53 @@ type Config struct {
 		OTLPEndpoint string  `yaml:"otlpEndpoint" env:"OTEL_EXPORTER_OTLP_ENDPOINT_HOST"`
 		SampleRatio  float64 `yaml:"sampleRatio" env:"TRACE_SAMPLING"`
 	} `yaml:"telemetry"`
+}
+
+// Provider names.
+const (
+	ProviderGooglePlaces    = "google-places"
+	ProviderGoogleGeocoding = "google-geocoding"
+	ProviderNominatim       = "osm-nominatim"
+	ProviderFixture         = "fixture"
+)
+
+// GoogleKey is the Google Maps Platform key for Places (New) and Geocoding: GOOGLE_PLACES_API_KEY, else
+// GOOGLE_MAPS_API_KEY (one key with Places API (New), Geocoding API and Routes API enabled serves every feature).
+func (c Config) GoogleKey() string {
+	if c.Google.APIKey != "" {
+		return c.Google.APIKey
+	}
+	return c.Routing.GoogleAPIKey
+}
+
+// AddressProviders is the autocomplete chain. With a Google key, Google Places (New) Autocomplete + Place Details is
+// the primary and only provider: its coverage is what the shopper expects, and mixing in Nominatim answers would
+// split one billable session. Without a key the configured providers answer (Nominatim, fixtures), google-places
+// skipped.
+func (c Config) AddressProviders() []string {
+	if c.GoogleKey() != "" {
+		return []string{ProviderGooglePlaces}
+	}
+	out := make([]string, 0, len(c.Providers))
+	for _, p := range c.Providers {
+		if p != ProviderGooglePlaces {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// ReverseGeocoders is the reverse-geocoding chain: google-geocoding first when a key is configured (then the
+// configured fallbacks), the configured providers without it otherwise.
+func (c Config) ReverseGeocoders() []string {
+	out := make([]string, 0, len(c.ReverseProviders)+1)
+	if c.GoogleKey() != "" {
+		out = append(out, ProviderGoogleGeocoding)
+	}
+	for _, p := range c.ReverseProviders {
+		if p != ProviderGoogleGeocoding {
+			out = append(out, p)
+		}
+	}
+	return out
 }

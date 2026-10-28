@@ -68,11 +68,34 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 	mustStatus(t, b.do("GET", "/v1/services/"+testkit.ShopperServiceID+"/summary?mode=IN_PERSON", nil), 200)
 	r = b.do("GET", "/v1/service-providers/"+testkit.ShopperProviderID, nil)
 	mustStatus(t, r, 200)
-	design, _ := r.json(t)["design"].(map[string]any)
-	if design == nil || design["layout"] != "GALLERY_FIRST" || len(design["social"].([]any)) != 1 {
-		t.Fatalf("provider page should carry the published layout and only approved links: %v", design)
+	if _, has := r.json(t)["design"]; has {
+		t.Fatal("the provider page no longer carries a designed page")
 	}
 	mustStatus(t, b.do("GET", "/v1/service-providers/org_nope", nil), 404)
+	// A text search also carries the services matching its words (first page only), so "braids" finds a provider.
+	sp := b.do("GET", "/v1/search?q=jollof", nil).json(t)
+	if svc, _ := sp["services"].([]any); len(svc) != 1 || svc[0].(map[string]any)["name"] != "Knotless braids" {
+		t.Fatalf("search services = %v", sp["services"])
+	}
+	if svc, _ := b.do("GET", "/v1/search?q=jollof&page=1", nil).json(t)["services"].([]any); len(svc) != 0 {
+		t.Fatalf("only the first page carries services: %v", svc)
+	}
+	// The plain public page of a business (what Stripe is given as its website): public, with a provider's services.
+	r = b.do("GET", "/v1/business-pages/braids-by-ama", nil)
+	mustStatus(t, r, 200)
+	page := r.json(t)
+	if page["name"] != "Braids by Ama" || page["brandColor"] != "#8a3b12" || page["indexable"] != true || len(page["services"].([]any)) != 1 {
+		t.Fatalf("business page = %v", page)
+	}
+	// A seller's page lists its live products (through search, limited to the seller) and stays out of search engines
+	// until the organisation is approved.
+	r = b.do("GET", "/v1/business-pages/ades-kitchen", nil)
+	mustStatus(t, r, 200)
+	if sp := r.json(t); sp["indexable"] != false || len(sp["products"].([]any)) == 0 {
+		t.Fatalf("seller business page = %v", sp)
+	}
+	mustStatus(t, b.do("GET", "/v1/business-pages/nobody", nil), 404)
+	mustStatus(t, b.do("GET", "/v1/business-pages/Not%20A%20Slug", nil), 404)
 	mustStatus(t, b.do("GET", "/v1/account/security", nil), 401)
 	mustStatus(t, b.do("POST", "/v1/lola/chat", map[string]any{"message": "hi"}), 401)
 
@@ -115,6 +138,10 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 	}
 	if sh["returnable"] != true || sh["returnWindowEndsAt"] != "2026-11-02T17:00:00Z" || sh["problemReportOnly"] != false {
 		t.Fatalf("order detail should carry the return window: %v", sh)
+	}
+	if rule, _ := sh["deliveryFeeRule"].(map[string]any); rule == nil || rule["method"] != "CARRIER" || rule["ruleVersion"] != float64(4) ||
+		rule["band"] != "free over 35.00" || rule["source"] != "RULE" || rule["amountMinor"] != float64(0) {
+		t.Fatalf("order detail keeps the delivery fee rule it was charged by: %v", sh["deliveryFeeRule"])
 	}
 	if line := sh["lines"].([]any)[0].(map[string]any); line["refundedMinor"] != float64(1353) {
 		t.Fatalf("line refunds from payments: %v", line)

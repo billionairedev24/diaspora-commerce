@@ -12,6 +12,8 @@ export const SiteConfigSchema = z.object({
   socials: z.array(z.object({ network: SocialNetworkSchema, url: z.url(), label: z.string() })),
   contacts: z.object({
     phone: z.string(),
+    /** The support phone in E.164 (+18335550199); also the number of the WhatsApp chat with support. Empty when not set. */
+    phoneE164: z.string().default(''),
     privacyEmail: z.string(),
     accessibilityEmail: z.string(),
     legalEmail: z.string(),

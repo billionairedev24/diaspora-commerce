@@ -28,7 +28,7 @@
     "@opennextjs/cloudflare": "^1.20.10",
     "@phosphor-icons/react": "^2.1.10",
     "@tanstack/react-query": "^5.104.1",
-    "next": "16.4.0",
+    "next": "16.4.3",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "^0.0.1",
@@ -44,7 +44,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "jsdom": "^27.0.0",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "vite": "^8.3.4",
     "vitest": "5.0.3",
     "wrangler": "^4.149.0"

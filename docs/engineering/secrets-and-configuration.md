@@ -23,7 +23,7 @@ without a key the stack uses a local fallback (Mailpit, the log, OpenStreetMap, 
 | Kind | Examples | Locally | dev / uat / prod |
 |---|---|---|---|
 | **(a) External-provider secrets and ids** | `STRIPE_SECRET_KEY`, `TWILIO_AUTH_TOKEN`, `RESEND_API_KEY`, `OPENROUTER_API_KEY`, `GOOGLE_CLIENT_SECRET` | `.local/secrets.env` (you create them at the provider) | the service's secret in the cloud secret store |
-| **(b) Internal secrets** | `DB_PASSWORD`, `SIGNING_KEY_PEM`, `IDENTITY_DATA_KEY`, `HANDOVER_CODE_KEY`, `*_CLIENT_SECRET` | committed, clearly-labelled local defaults in `application-local.yml` / `config/local.yaml`: **nothing to do** | generated once (`openssl rand`) into the secret store; Terraform creates DB roles |
+| **(b) Internal secrets** | `DB_PASSWORD`, `SIGNING_KEY_PEM`, `IDENTITY_DATA_KEY`, `HANDOVER_CODE_KEY`, `*_CLIENT_SECRET` | committed, clearly-labelled local defaults in `application-local.yml` / `config/local.yaml`: **nothing to do** | generated once (`openssl rand`) into the secret store; OpenTofu creates DB roles |
 | **(c) Plain configuration** | `PUBLIC_WEB_URL`, `AUTH_ISSUER_URL`, ports, timeouts, feature flags | defaults in `application.yml` / `config/local.yaml`, plus what `local.sh` exports | `application-<env>.yml`, `config/<env>.yaml`, Helm `values-<env>.yaml`, `platform-values.yaml` |
 
 Plain configuration is too long to list here (about a thousand variable uses): `python3 tools/dev/secrets_check.py
@@ -68,7 +68,7 @@ Each switch is decided at start-up from whether the credentials are present, and
 | One-time codes (identity) | Twilio as above: `VERIFICATION_SENDER=outbox`, codes go through notifications (SMS by Twilio, email by Resend or Mailpit) | `mailpit`: identity drops every code (email and texted) in Mailpit itself | `tools/dev/local.sh` (`verification_sender`); prints `identity: one-time codes → …`. Your own `VERIFICATION_SENDER` wins |
 | Card payments | `STRIPE_PUBLISHABLE_KEY` set: Stripe Elements | the storefront's labelled dev-only card form ("Stripe test mode is not configured") | gateway-bff hands the key to the storefront; `isMockKey` in `web/apps/storefront/src/lib/payments/stripe.ts` |
 | Payments back end | `STRIPE_SECRET_KEY` | **no fallback**: payments starts with a placeholder key and every Stripe call fails (401) | `application-local.yml` of payments |
-| Address search | `GEO_PROVIDERS=google-places,…` + `GOOGLE_PLACES_API_KEY` | fixtures + OpenStreetMap Nominatim | geo `config/local.yaml` |
+| Address search | `GOOGLE_PLACES_API_KEY` or `GOOGLE_MAPS_API_KEY`: Google Places (New) is the only autocomplete provider | fixtures + OpenStreetMap Nominatim | geo `Config.AddressProviders` (log line `address autocomplete providers`) |
 | Files | (UploadThing is never used locally) | MinIO | media `config/local.yaml` |
 
 **Test users stay local.** With Resend or Twilio switched on, the seeded test users (`@afrotransact.test`) and their
@@ -94,22 +94,33 @@ Prices and free tiers change: check the provider's pricing page.
 - **Create:** [dashboard.stripe.com](https://dashboard.stripe.com) → toggle **Test mode** → **Developers → API keys**:
   *Publishable key* (`pk_test_…`) → `STRIPE_PUBLISHABLE_KEY`; *Secret key* (`sk_test_…`, or a restricted `rk_test_…`)
   → `STRIPE_SECRET_KEY`. Both from the **same account**. For seller onboarding also enable **Connect** (Settings →
-  Connect → get started; test mode needs no business verification).
+  Connect → get started; test mode needs no business verification) (sellers' accounts are created with Stripe
+  liable for negative balances and Stripe collecting their verification, through the embedded onboarding on the
+  Stripe verification step, with no redirect to Stripe: see "Seller accounts and liability" in
+  docs/engineering/payments-idempotency.md).
 - **Webhooks locally:** install the [Stripe CLI](https://docs.stripe.com/stripe-cli), then
-  `stripe login` and `stripe listen --forward-to localhost:8105/v1/webhooks/stripe`. It prints
-  `Your webhook signing secret is whsec_…` → `STRIPE_WEBHOOK_SECRET`, then `tools/dev/local.sh restart payments`. Keep
-  it running. The secret stays the same for your machine across runs. For seller events run a second listener:
-  `stripe listen --forward-connect-to localhost:8106/v1/webhooks/stripe-connect` → `STRIPE_CONNECT_WEBHOOK_SECRET`, and
-  `stripe listen --events customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.finalized,invoice.paid,invoice.payment_failed --forward-to
-  localhost:8106/v1/webhooks/stripe-billing` → `STRIPE_BILLING_WEBHOOK_SECRET` (each listener prints its own secret).
+  `stripe login` and, in a terminal you keep open:
+  `stripe listen --events payment_intent.succeeded,payment_intent.amount_capturable_updated,payment_intent.payment_failed,payment_intent.requires_action,payment_intent.canceled,charge.refunded,charge.dispute.created,charge.dispute.closed,transfer.reversed,payout.paid,payout.failed,setup_intent.succeeded,setup_intent.requires_action,payment_method.attached,payment_method.detached --forward-to localhost:8105/v1/webhooks/stripe`.
+  The CLI refuses to start without `--events`; do **not** use `--all-thin` (thin events are a different payload and every
+  delivery answers 400) and `--all-snapshot` only works if you accept noisy 200s for events we ignore. It prints
+  `Your webhook signing secret is whsec_…` → `STRIPE_WEBHOOK_SECRET`, then `tools/dev/local.sh restart payments`. The secret
+  stays the same for your machine across runs. For seller events run a second listener:
+  `stripe listen --events account.updated,capability.updated,person.created,person.updated,account.external_account.created,account.external_account.updated,account.external_account.deleted,payout.failed --forward-connect-to localhost:8106/v1/webhooks/stripe-connect` → `STRIPE_CONNECT_WEBHOOK_SECRET`, and, for bank debits of plan fees that settle days later,
+  `stripe listen --events payment_intent.succeeded,payment_intent.payment_failed --forward-to localhost:8106/v1/webhooks/stripe-billing` → `STRIPE_BILLING_WEBHOOK_SECRET` (each listener prints its own secret).
 - **Deployed:** Developers → **Webhooks** → Add endpoint `https://<api host>/payments/v1/webhooks/stripe` (and the two
   seller endpoints); the endpoint's *Signing secret* goes into the secret store. Events per endpoint:
 
   | Endpoint | Listen to | Events |
   |---|---|---|
   | payments `/v1/webhooks/stripe` | Your account | `payment_intent.succeeded`, `payment_intent.amount_capturable_updated`, `payment_intent.payment_failed`, `payment_intent.requires_action`, `payment_intent.canceled`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, `payout.paid`, `payout.failed`, `setup_intent.succeeded`, `setup_intent.requires_action` |
-  | seller `/v1/webhooks/stripe-connect` | Connected accounts | `account.updated`, `capability.updated`, `person.created`, `person.updated`, `account.external_account.updated`, `payout.failed`, `account.application.deauthorized` |
-  | seller `/v1/webhooks/stripe-billing` | Your account | `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.finalized`, `invoice.paid`, `invoice.payment_failed` |
+  | seller `/v1/webhooks/stripe-connect` | Connected accounts | `account.updated`, `capability.updated`, `person.created`, `person.updated`, `account.external_account.created`, `account.external_account.updated`, `account.external_account.deleted`, `payout.failed`, `account.application.deauthorized` |
+  | seller `/v1/webhooks/stripe-billing` | Your account | `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.created`, `invoice.finalized`, `invoice.paid`, `invoice.payment_failed`, `invoice.voided`, `invoice.deleted`, `credit_note.created` |
+- **Plan fees paid from sales (S298):** `invoice.created` lets the seller service pay a renewal invoice from the
+  seller's earnings before Stripe finalises it (it answers 503 while that is still pending, so Stripe redelivers and
+  keeps the draft); `invoice.voided` / `invoice.deleted` / `credit_note.created` give it back. The kill switch is plain
+  configuration, `COLLECT_PLAN_FEES_FROM_EARNINGS` (seller; on in local and dev, off in uat / prod until operations
+  switch it on in Helm `values-<env>.yaml`), with `PAYMENTS_URL` and the seller-service client's `payments:plan-fees`
+  scope at identity (no new secret). See docs/engineering/plans-and-billing.md.
 - **Test cards:** `4242 4242 4242 4242` (any future date, any CVC, any ZIP), `4000 0027 6000 3184` (3-D Secure),
   `4000 0000 0000 9995` (declined).
 - **Guards:** payments refuses live keys outside prod; gateway-bff refuses `pk_live_` locally; `make secrets-check`
@@ -155,7 +166,7 @@ Prices and free tiers change: check the provider's pricing page.
   all through ai-gateway (OpenAI-compatible API, model routing per task).
 - **Create:** [openrouter.ai](https://openrouter.ai) → **Keys → Create Key** → `OPENROUTER_API_KEY` (`sk-or-v1-…`); add
   credit under **Credits** (some models are free).
-- **Note:** ai-gateway is not in `make up`'s default set: `tools/dev/local.sh restart ai-gateway` starts it.
+- **Note:** ai-gateway starts with `make up`. After adding the key, `tools/dev/local.sh restart ai-gateway` re-reads it. Without a key, AI chats answer 503. Every task defaults to the cheapest models (Gemini 2.5 Flash-Lite, then GPT-5 Nano); raise one with `AI_MODELS_<TASK>` (`INTENT`, `PLANNING`, `CHAT`, `LISTING_WRITER`, `TRANSLATION`, `TRIAGE`, `IMAGE_MODERATION`), a comma-separated list in fallback order.
 - **Cost:** pay per token; set a credit limit on the key.
 
 ### Social sign-in (optional): identity
@@ -178,15 +189,40 @@ Redirect URI pattern: `{identity}/login/oauth2/code/{google|apple|facebook}`, lo
 
 ### Google Maps Platform and Smarty (optional): geo
 
-- **Powers:** address autocomplete (`google-places`), reverse geocoding (`google-geocoding`), drive-time routing
-  (`google`); Smarty for US address autocomplete (`smarty`).
-- **Create:** Google Cloud Console → **Google Maps Platform → Keys & Credentials → Create credentials → API key**;
-  enable *Places API (New)*, *Geocoding API*, *Routes API*; restrict the key to those APIs →
-  `GOOGLE_PLACES_API_KEY` / `GOOGLE_MAPS_API_KEY`. A billing account is required; there is free monthly usage per
-  API. Smarty: [smarty.com](https://www.smarty.com) → **API Keys → Secret keys** → `SMARTY_AUTH_ID`,
+- **Powers:** address autocomplete and the structured address of a picked suggestion (Google Places (New)
+  Autocomplete + Place Details, provider `google-places`) in every address field of the storefront, Seller Center,
+  staff console and customer app; reverse geocoding (`google-geocoding`, "Use my current location"); drive-time
+  routing (`google`). Smarty: US deliverability checks (`smarty`).
+- **Which provider answers:** with `GOOGLE_PLACES_API_KEY` (or, when that is blank, `GOOGLE_MAPS_API_KEY`) set,
+  Google Places is the **only** autocomplete provider in every environment, local included; OpenStreetMap
+  Nominatim (and the sample addresses locally) answer only when no key is configured. geo logs the chain at
+  start-up: `address autocomplete providers providers=[google-places]`. `GEO_PROVIDERS` only orders the no-key
+  fallbacks. One key can serve every Google feature.
+- **Create the key:** [Google Cloud Console](https://console.cloud.google.com/) → pick or create a project → **Billing**:
+  link a billing account (required, even inside the free usage) → **APIs & Services → Library**: enable
+  **Places API (New)** (`places.googleapis.com`; *not* the legacy "Places API"), and for the other features
+  **Geocoding API** and **Routes API** → **Google Maps Platform → Keys & Credentials → Create credentials → API
+  key**.
+- **Restrict the key** (Edit API key):
+  - *API restrictions* → **Restrict key** → Places API (New) (+ Geocoding API, Routes API if you use them). This is
+    the restriction that matters: geo calls Google from the server.
+  - *Application restrictions*: **HTTP referrers cannot be used** (the browser never calls Google; geo does, with
+    the key in the `X-Goog-Api-Key` header). Deployed: **IP addresses** = the cluster's egress (NAT) IPs. Locally:
+    **None**, or your public IP; use a separate key for local development and keep it out of git
+    (`.local/secrets.env`).
+  - Put the key in the environment's secret store as `GOOGLE_MAPS_API_KEY` (or `GOOGLE_PLACES_API_KEY`) for geo
+    only; no web or mobile app needs it.
+- **Cost:** autocomplete is billed per **session**: the BFF and the address fields send one session token per
+  address entry (all keystrokes) and the Place Details call of the picked suggestion closes it, so one address
+  entry is one *Autocomplete session* + one *Place Details Essentials* request (geo asks only for
+  `addressComponents,formattedAddress,location`). Suggestions are never resolved per keystroke. Typing without
+  picking is billed as autocomplete requests. Google gives a monthly free usage cap per SKU; check current prices on
+  the [Maps Platform pricing page](https://mapsplatform.google.com/pricing/) and set **budget alerts** and
+  **per-API quotas** (APIs & Services → Places API (New) → Quotas) on production and on your local key.
+- **Smarty:** [smarty.com](https://www.smarty.com) → **API Keys → Secret keys** → `SMARTY_AUTH_ID`,
   `SMARTY_AUTH_TOKEN` (free trial).
-- **Locally** geo uses fixtures + OpenStreetMap Nominatim (no key). To try Google: also set
-  `GEO_PROVIDERS=google-places,osm-nominatim,fixture` and restart geo.
+- **Locally** without a key geo uses the sample addresses + OpenStreetMap Nominatim. With a key in
+  `.local/secrets.env`, `tools/dev/local.sh restart geo` switches local autocomplete to Google.
 
 ### Carriers: UPS, USPS, FedEx, DHL Express (optional): carrier-gateway
 
@@ -229,7 +265,7 @@ EAS), never at runtime. Free developer plan.
 - **Amazon SES / End User Messaging SMS** (email and SMS failover): no keys; the notifications pod's workload identity
   (IRSA) needs `ses:SendEmail` / `sms-voice:SendTextMessage`. Settings `SES_REGION`, `AWS_SMS_REGION`,
   `AWS_SMS_ORIGINATION_IDENTITY` in `config/<env>.yaml`.
-- **Cloudflare** (storefront service cache purge, Workers deploys): `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`.
+- **Cloudflare** (Workers deploys): `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`.
 
 ### Tunnels for webhooks
 
@@ -294,12 +330,12 @@ loads with `envFrom` (`infra/helm/library/at-service`, `secrets.enabled: true` i
 
 | Cloud | Secret name | Created by |
 |---|---|---|
-| AWS Secrets Manager | `afrotransact/<env>/<service>`, e.g. `afrotransact/uat/payments` | Terraform `modules/aws/secrets` (KMS) |
-| GCP Secret Manager | `afrotransact-<env>-<service>` | Terraform `modules/gcp/secrets` |
-| Azure Key Vault | `afrotransact-<env>-<service>` | Terraform `modules/azure/secrets` |
+| AWS Secrets Manager | `afrotransact/<env>/<service>`, e.g. `afrotransact/uat/payments` | OpenTofu `modules/aws/secrets` (KMS) |
+| GCP Secret Manager | `afrotransact-<env>-<service>` | OpenTofu `modules/gcp/secrets` |
+| Azure Key Vault | `afrotransact-<env>-<service>` | OpenTofu `modules/azure/secrets` |
 
-Terraform seeds the non-secret values once (`APP_ENV`, database name and user, Kafka bootstrap and per-service
-credentials, `ES_URLS`); you add the secrets in the store (Terraform ignores later value drift). On GCP and Azure set
+OpenTofu seeds the non-secret values once (`APP_ENV`, database name and user, Kafka bootstrap and per-service
+credentials, `ES_URLS`); you add the secrets in the store (OpenTofu ignores later value drift). On GCP and Azure set
 `secrets.keySeparator: "-"` in `infra/argocd/envs/<env>/platform-values.yaml`. Example (AWS):
 
 ```bash
@@ -317,7 +353,9 @@ for email; `twilio, aws, vonage` for SMS) and webhook signatures are verified, s
 Internal secrets: generate with `openssl rand -base64 32` (data and field encryption keys: exactly 32 random bytes,
 base64), `openssl rand -hex 32` (HMAC keys), `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072` (identity's
 `SIGNING_KEY_PEM`). Each `<SERVICE>_CLIENT_SECRET` must hold the same value in the service's secret and in identity's
-(identity registers the client with it).
+(identity registers the client with it, **only when the client does not exist yet**: after that the staff console owns it,
+and a secret rotated there must be copied into the service's secret; `SIGNING_KEY_PEM` likewise only seeds the first signing
+key, later rotations are done in the console). See [identity-admin.md](identity-admin.md).
 
 ### Web apps (Cloudflare Workers)
 
@@ -361,11 +399,11 @@ Repository (or environment) **secrets**, Settings → Secrets and variables → 
 | Secret | Workflow | Purpose |
 |---|---|---|
 | `GITOPS_APP_ID`, `GITOPS_APP_PRIVATE_KEY` | `_deploy.yml` | GitHub App that commits image tags to the GitOps branch |
-| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `_web-app.yml`, `docs.yml`, `storybook.yml`, `terraform.yml` | Workers deploys, Cloudflare Terraform |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `_web-app.yml`, `docs.yml`, `storybook.yml`, `tofu.yml` | Workers deploys, Cloudflare OpenTofu |
 | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `_web-app.yml` | Vercel fallback hosting (`vars.VERCEL_FALLBACK`) |
 | `EXPO_TOKEN` | `mobile.yml` | EAS builds and updates (skipped with a notice while unset) |
 | `UPS_*`, `USPS_*`, `FEDEX_*`, `DHL_*`, `SMOKE_CLIENT_ID`, `SMOKE_CLIENT_SECRET` | `carrier-sandboxes.yml` | carrier sandbox smoke tests |
-| `CONFLUENT_CLOUD_API_KEY`/`_SECRET`, `EC_API_KEY`, `TEMPORAL_CLOUD_API_KEY` | `terraform.yml` | managed Kafka, Elastic Cloud, Temporal Cloud |
+| `CONFLUENT_CLOUD_API_KEY`/`_SECRET`, `EC_API_KEY`, `TEMPORAL_CLOUD_API_KEY` | `tofu.yml` | managed Kafka, Elastic Cloud, Temporal Cloud |
 | `NVD_API_KEY` | `security.yml` | OWASP dependency-check feed |
 
 Repository **variables**: `CLOUD`, `AWS_DEPLOY_ROLE_ARN`, `AWS_REGION`, `GCP_WORKLOAD_IDENTITY_PROVIDER`,
@@ -417,9 +455,9 @@ access uses OIDC federation: no cloud keys in GitHub.
 | `APPLE_CLIENT_SECRET` | Apple sign-in | identity | secret | optional | Sign in with Apple: a JWT you sign with your .p8 key (expires after at most 6 months). Without: no Apple button |
 | `FACEBOOK_CLIENT_ID` | Facebook sign-in | identity | public id | optional | Continue with Facebook. Without: no Facebook button |
 | `FACEBOOK_CLIENT_SECRET` | Facebook sign-in | identity | secret | optional | Continue with Facebook. Without: no Facebook button |
-| `GOOGLE_PLACES_API_KEY` | Google Maps Platform | geo | secret | optional | address autocomplete (provider google-places). Without: OpenStreetMap Nominatim + fixtures (local default) |
-| `GOOGLE_MAPS_API_KEY` | Google Maps Platform | geo | secret | optional | reverse geocoding (google-geocoding) and drive-time routing (google). Without: straight-line distance × detour factor |
-| `GEO_PROVIDERS` | Google Maps Platform | geo | config | optional | autocomplete provider order; locally fixture,osm-nominatim (set google-places,osm-nominatim,fixture to use Google). Without: fixture,osm-nominatim |
+| `GOOGLE_MAPS_API_KEY` | Google Maps Platform | geo | secret | optional | address autocomplete + Place Details (Google Places (New), the only autocomplete provider when set), reverse geocoding (google-geocoding) and drive-time routing (google); enable Places API (New), Geocoding API, Routes API. Without: OpenStreetMap Nominatim + sample addresses; straight-line distance × detour factor |
+| `GOOGLE_PLACES_API_KEY` | Google Maps Platform | geo | secret | optional | a separate key for Google Places (New) only; wins over GOOGLE_MAPS_API_KEY for autocomplete. Without: GOOGLE_MAPS_API_KEY, else OpenStreetMap Nominatim + sample addresses |
+| `GEO_PROVIDERS` | Google Maps Platform | geo | config | optional | autocomplete providers without a Google key (locally fixture,osm-nominatim); ignored when a key is set. Without: fixture,osm-nominatim |
 | `SMARTY_AUTH_ID` | Smarty | geo | public id | optional | US address autocomplete (provider smarty). Without: not used |
 | `SMARTY_AUTH_TOKEN` | Smarty | geo | secret | optional | US address autocomplete (provider smarty). Without: not used |
 | `UPS_CLIENT_ID` | UPS | carrier-gateway | public id | optional | UPS rates, labels, tracking (sandbox locally). Without: UPS is skipped at start-up |
@@ -465,8 +503,9 @@ Locally each has a committed, labelled default; deployed it goes in the service'
 | `BOOKINGS_CLIENT_SECRET` | bookings, identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
 | `BOOTSTRAP_ADMIN_PASSWORD` | identity | first super admin's password (identity creates the admin once) |
 | `CART_CLIENT_SECRET` | cart, identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
+| `CATALOG_CLIENT_SECRET` | catalog, identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
 | `CLOUDFLARE_API_TOKEN` | GitHub Actions, storefront | storefront service: Cloudflare cache purge (also a GitHub Actions secret) |
-| `DB_PASSWORD` | ai-gateway, bookings, catalog, content, delivery-runs, fulfilment, identity, inventory, offers, orders, payments, retail, seller, tax-returns, trust-ops | the service's Postgres password (Terraform creates the role; one database per service) |
+| `DB_PASSWORD` | ai-gateway, bookings, catalog, content, delivery-runs, fulfilment, identity, inventory, offers, orders, payments, retail, seller, tax-returns, trust-ops | the service's Postgres password (OpenTofu creates the role; one database per service) |
 | `DB_URL` | ai-gateway, bookings, carrier-gateway, cart, catalog, content, delivery-runs, fulfilment, geo, identity, inventory, media, notifications, offers, orders, payments, retail, seller, storefront, tax-returns, trust-ops | the service's Postgres URL (Go: DSN incl. password; Java: JDBC URL, password in DB_PASSWORD) |
 | `DELIVERY_RUNS_CLIENT_SECRET` | delivery-runs, identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
 | `EDI_AS2_KEYSTORE_PATH` | retail | retail: AS2 keystore file for supplier EDI |
@@ -493,7 +532,7 @@ Locally each has a committed, labelled default; deployed it goes in the service'
 | `OIDC_CLIENT_SECRET` | gateway-bff | gateway-bff's confidential OIDC client at identity (= identity's GATEWAY_BFF_CLIENT_SECRET) |
 | `OPENFGA_API_TOKEN` | authz-sync | OpenFGA pre-shared key (authz-sync) |
 | `ORDERS_CLIENT_SECRET` | identity, orders | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
-| `PAYMENTS_CLIENT_SECRET` | identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
+| `PAYMENTS_CLIENT_SECRET` | identity, payments | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
 | `RETAIL_CLIENT_SECRET` | identity, retail | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
 | `S3_ACCESS_KEY_ID` | carrier-gateway | carrier-gateway label store (S3-compatible) when not using workload identity |
 | `S3_SECRET_ACCESS_KEY` | carrier-gateway | carrier-gateway label store secret |
@@ -513,7 +552,7 @@ Locally each has a committed, labelled default; deployed it goes in the service'
 
 ### Per app: what goes in `afrotransact/<env>/<service>`
 
-Plus the Terraform-seeded values (`DB_*`, Kafka, `ES_URLS`). Web and mobile apps: see above.
+Plus the OpenTofu-seeded values (`DB_*`, Kafka, `ES_URLS`). Web and mobile apps: see above.
 
 <!-- BEGIN GENERATED by tools/dev/secrets_check.py --write-docs: per-app -->
 | App / service | Provider variables it reads | Internal secrets it reads |
@@ -523,13 +562,13 @@ Plus the Terraform-seeded values (`DB_*`, Kafka, `ES_URLS`). Web and mobile apps
 | bookings | - | `BOOKINGS_CLIENT_SECRET`, `DB_PASSWORD`, `DB_URL` |
 | carrier-gateway | `DHL_ACCOUNT`, `DHL_PASSWORD`, `DHL_USERNAME`, `DHL_WEBHOOK_SECRET`, `FEDEX_ACCOUNT`, `FEDEX_CLIENT_ID`, `FEDEX_CLIENT_SECRET`, `FEDEX_WEBHOOK_SECRET`, `UPS_ACCOUNT`, `UPS_CLIENT_ID`, `UPS_CLIENT_SECRET`, `UPS_WEBHOOK_CREDENTIAL`, `USPS_CLIENT_ID`, `USPS_CLIENT_SECRET`, `USPS_PAYMENT_TOKEN` | `DB_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` |
 | cart | - | `CART_CLIENT_SECRET`, `DB_URL` |
-| catalog | `GS1_API_KEY`, `GS1_ENABLED` | `DB_PASSWORD`, `DB_URL`, `FGA_API_TOKEN` |
+| catalog | `GS1_API_KEY`, `GS1_ENABLED` | `CATALOG_CLIENT_SECRET`, `DB_PASSWORD`, `DB_URL`, `FGA_API_TOKEN` |
 | content | - | `DB_PASSWORD`, `DB_URL`, `NEWSLETTER_TOKEN_KEY` |
 | delivery-runs | - | `DB_PASSWORD`, `DB_URL`, `DELIVERY_RUNS_CLIENT_SECRET` |
 | fulfilment | - | `DB_PASSWORD`, `DB_URL`, `FULFILMENT_CLIENT_SECRET` |
 | gateway-bff | `STRIPE_PUBLISHABLE_KEY` | `OIDC_CLIENT_SECRET`, `SESSION_SIGNING_KEY` |
 | geo | `GEO_PROVIDERS`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_PLACES_API_KEY`, `SMARTY_AUTH_ID`, `SMARTY_AUTH_TOKEN` | `DB_URL` |
-| identity | `APPLE_CLIENT_ID`, `APPLE_CLIENT_SECRET`, `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `BFF_CLIENT_SECRET`, `BOOKINGS_CLIENT_SECRET`, `BOOTSTRAP_ADMIN_PASSWORD`, `CART_CLIENT_SECRET`, `DB_PASSWORD`, `DB_URL`, `DELIVERY_RUNS_CLIENT_SECRET`, `FULFILMENT_CLIENT_SECRET`, `GATEWAY_BFF_CLIENT_SECRET`, `IDENTITY_DATA_KEY`, `IDENTITY_DATA_KEYS_PREVIOUS`, `IDENTITY_TEST_USERS_PASSWORD`, `INDEXER_CLIENT_SECRET`, `INVENTORY_CLIENT_SECRET`, `MEDIA_CLIENT_SECRET`, `NOTIFICATIONS_CLIENT_SECRET`, `OFFERS_CLIENT_SECRET`, `ORDERS_CLIENT_SECRET`, `PAYMENTS_CLIENT_SECRET`, `RETAIL_CLIENT_SECRET`, `SEARCH_CLIENT_SECRET`, `SELLER_SERVICE_CLIENT_SECRET`, `SIGNING_KEY_PEM`, `TAX_RETURNS_CLIENT_SECRET`, `TRUSTOPS_CLIENT_SECRET` |
+| identity | `APPLE_CLIENT_ID`, `APPLE_CLIENT_SECRET`, `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `BFF_CLIENT_SECRET`, `BOOKINGS_CLIENT_SECRET`, `BOOTSTRAP_ADMIN_PASSWORD`, `CART_CLIENT_SECRET`, `CATALOG_CLIENT_SECRET`, `DB_PASSWORD`, `DB_URL`, `DELIVERY_RUNS_CLIENT_SECRET`, `FULFILMENT_CLIENT_SECRET`, `GATEWAY_BFF_CLIENT_SECRET`, `IDENTITY_DATA_KEY`, `IDENTITY_DATA_KEYS_PREVIOUS`, `IDENTITY_TEST_USERS_PASSWORD`, `INDEXER_CLIENT_SECRET`, `INVENTORY_CLIENT_SECRET`, `MEDIA_CLIENT_SECRET`, `NOTIFICATIONS_CLIENT_SECRET`, `OFFERS_CLIENT_SECRET`, `ORDERS_CLIENT_SECRET`, `PAYMENTS_CLIENT_SECRET`, `RETAIL_CLIENT_SECRET`, `SEARCH_CLIENT_SECRET`, `SELLER_SERVICE_CLIENT_SECRET`, `SIGNING_KEY_PEM`, `TAX_RETURNS_CLIENT_SECRET`, `TRUSTOPS_CLIENT_SECRET` |
 | indexer | - | `ES_API_KEY`, `ES_PASSWORD`, `INDEXER_CLIENT_SECRET` |
 | inventory | - | `DB_PASSWORD`, `DB_URL`, `INVENTORY_CLIENT_SECRET` |
 | media | `UPLOADTHING_API_KEY`, `UPLOADTHING_APP_ID`, `UPLOADTHING_TOKEN` | `DB_URL`, `LINK_SIGNING_KEY`, `LINK_SIGNING_KEYS_PREVIOUS`, `MEDIA_CLIENT_SECRET` |
@@ -538,7 +577,7 @@ Plus the Terraform-seeded values (`DB_*`, Kafka, `ES_URLS`). Web and mobile apps
 | notifications | `APNS_KEY_ID`, `APNS_KEY_P8`, `APNS_TEAM_ID`, `EMAIL_FROM`, `EMAIL_REPLY_TO`, `FCM_PROJECT_ID`, `FCM_SERVICE_ACCOUNT_JSON`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `SENDGRID_API_KEY`, `SENDGRID_WEBHOOK_PUBLIC_KEY`, `SMTP_HOST`, `SMTP_PASSWORD`, `SMTP_USERNAME`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_MESSAGING_SERVICE_SID`, `VONAGE_API_KEY`, `VONAGE_API_SECRET`, `VONAGE_FROM`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TOKEN` | `DB_URL`, `NOTIFICATIONS_CLIENT_SECRET`, `UNSUBSCRIBE_SIGNING_KEY` |
 | offers | - | `DB_PASSWORD`, `DB_URL`, `FGA_API_TOKEN`, `OFFERS_CLIENT_SECRET` |
 | orders | - | `DB_PASSWORD`, `DB_URL`, `FGA_API_TOKEN`, `HANDOVER_CODE_KEY`, `ORDERS_CLIENT_SECRET`, `TEMPORAL_TLS_KEY` |
-| payments | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | `DB_PASSWORD`, `DB_URL`, `FGA_API_TOKEN` |
+| payments | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | `DB_PASSWORD`, `DB_URL`, `FGA_API_TOKEN`, `PAYMENTS_CLIENT_SECRET` |
 | retail | - | `DB_PASSWORD`, `DB_URL`, `EDI_AS2_KEYSTORE_PATH`, `EDI_SFTP_PRIVATE_KEY_PATH`, `RETAIL_CLIENT_SECRET` |
 | search | - | `ADS_TOKEN_KEY`, `ES_API_KEY`, `ES_PASSWORD`, `SEARCH_CLIENT_SECRET` |
 | seller | `STRIPE_BILLING_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY` | `DB_PASSWORD`, `DB_URL`, `FIELD_ENCRYPTION_KEY`, `MEDIA_SERVICE_TOKEN`, `SELLER_SERVICE_CLIENT_SECRET` |

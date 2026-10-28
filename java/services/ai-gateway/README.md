@@ -71,6 +71,7 @@ Every downstream call is a port with a `RestClient` adapter that relays the call
 | POST | `/v1/embeddings` `{input, purpose}` → `{embedding, model, dimensions}` | `ai:use`: search-service (`search-query`, hybrid search S036) and indexer-service (`search-document`, product embeddings) |
 | POST | `/v1/ai/moderate-image` `{image (base64), contentType, purpose}` → `{decision, labels, model}` | `ai:use` (media-service, S030) — see below |
 | POST | `/v1/ai/listing-writer`, `/v1/ai/translate`, `/v1/ai/tagline` | `ai:use` — drafts only, never published |
+| POST | `/v1/ai/seller-assistant/complete` | `ai:use`, seller and provider members only — one model turn for Lola in Seller Center: the gateway-bff sends the conversation and the tools, gets text or tool calls back and runs the tools itself. Billed to the organisation as AI credits; budget `seller-assistant` |
 | POST | `/v1/ai/triage` | `ai:triage` — cited fields, decision always `HUMAN_REVIEW_REQUIRED` |
 | GET | `/v1/ai/usage/orgs?from=&to=` | `ai:usage.read` (seller-service) or staff `ai:manage`: AI credits per organisation and UTC day for metered billing (S206). Calls by seller / provider members are attributed to their organisation (`ai_usage.org_id`); 1 credit = 10,000 micro-dollars of estimated cost, rounded up per day |
 

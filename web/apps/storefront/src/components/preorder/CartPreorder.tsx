@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { type ReactNode } from 'react';
 
 import { useT } from '@/i18n/t';
+import { feeRuleNote } from '@/lib/fee-rule';
 import { payNotes, preorderDates, stageCopy } from '@/lib/preorder/copy';
 import { usePreorderResolution } from '@/lib/preorder/usePreorder';
 
@@ -21,7 +22,7 @@ export function useCartPreorderCopy(block: CartPreorder | null | undefined) {
   const fmt = useFormatters();
   const { data: r } = usePreorderResolution();
   if (!block) return null;
-  const dates = preorderDates(block, fmt.tag);
+  const dates = preorderDates({ ...block, opensAt: block.opensAt || block.closesAt }, fmt.tag);
   const city = r?.place.city ?? '';
   const copy = stageCopy(t, { stage: block.stage, city, ribbon: '', headline: '', phone: r?.supportPhone ?? '', dates, doorFee: fmt.money(block.doorFeeMinor, block.currency) });
   return { dates, copy, phone: r?.supportPhone ?? '', metro: r?.metro ?? false };
@@ -37,9 +38,30 @@ export function CartPreorderHeader({ block, id }: { block: CartPreorder; id: str
     <div className={styles.cartHead} data-testid="cart-preorder-head">
       <CalendarCheck weight="fill" className={styles.cartHeadIcon} aria-hidden />
       <h2 id={id} className={styles.cartHeadTitle}>
-        {t('preorder.cart.head', { date: c.dates.deliversT })}
+        {t(block.kind === 'RUN' ? 'preorder.run.head' : 'preorder.cart.head', { date: c.dates.deliversT })}
       </h2>
       <Countdown variant="inline" className={styles.cartHeadCd} to={countdownTarget(block)} label={c.copy.cdLabel} onElapsed={() => void qc.invalidateQueries({ queryKey: preorderKeys.all })} />
+    </div>
+  );
+}
+
+/**
+ * The honest state of a delivery run (S261): the orders so far against the minimum, the cutoff and what happens after
+ * it. Renders nothing for a window.
+ */
+export function RunNote({ block, className }: { block: CartPreorder; className?: string }) {
+  const t = useT();
+  const c = useCartPreorderCopy(block);
+  if (block.kind !== 'RUN' || !c) return null;
+  const progress =
+    block.minOrders <= 0
+      ? t('preorder.run.progressNoMin', { so: block.ordersSoFar })
+      : t(block.minimumMet ? 'preorder.run.progressMet' : 'preorder.run.progressNeeds', { so: block.ordersSoFar, min: block.minOrders });
+  return (
+    <div className={cx(styles.runNote, className)} data-testid="run-note">
+      <p data-testid="run-progress">{progress}</p>
+      <p data-testid="run-cutoff">{t('preorder.run.cutoff', { cutoff: c.dates.closesT })}</p>
+      <p>{t('preorder.run.after')}</p>
     </div>
   );
 }
@@ -73,6 +95,7 @@ export function FulfilmentChoice({ block, busy, onChange }: { block: CartPreorde
           const title = door ? t('preorder.cart.door') : t('preorder.cart.pickup');
           const sub = door ? dates.deliversT : t('preorder.cart.pickupSub', { date: dates.deliversT, window: block.pickupWindow });
           const checked = block.fulfilment === o.fulfilment;
+          const rule = block.options.find((x) => x.fulfilment === o.fulfilment)?.rule;
           return (
             <button
               key={o.fulfilment}
@@ -87,6 +110,11 @@ export function FulfilmentChoice({ block, busy, onChange }: { block: CartPreorde
               <span className={styles.fulfilText}>
                 <strong className={styles.fulfilTitle}>{title}</strong>
                 <span className={styles.fulfilSub}>{sub}</span>
+                {rule ? (
+                  <span className={styles.fulfilSub} data-testid={`fulfil-rule-${o.fulfilment.toLowerCase()}`}>
+                    {feeRuleNote(t, rule)}
+                  </span>
+                ) : null}
               </span>
               <strong className={styles.fulfilPrice}>{price(o.feeMinor)}</strong>
             </button>

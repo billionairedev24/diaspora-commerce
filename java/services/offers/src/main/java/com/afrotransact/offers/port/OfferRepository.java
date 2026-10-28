@@ -39,6 +39,9 @@ public interface OfferRepository {
     List<Offer> findOpenBySellerAndAtin(String sellerOrgId, String atin);
 
     /** Whether another open offer of the seller in the same channel already uses this seller SKU. */
+    /** Live listings of the seller: offers shoppers can buy now (paused and withdrawn ones don't count). */
+    long countActive(String sellerOrgId);
+
     boolean sellerSkuTaken(String sellerOrgId, String sellerSku, boolean fulfilledByAfroTransact);
 
     /** Open offers of a seller carrying this seller SKU (any fulfilment). */

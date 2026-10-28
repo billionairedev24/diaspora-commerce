@@ -16,6 +16,8 @@ import (
 
 // SellerDeps are the upstreams of the Seller Center & Provider Hub routes.
 type SellerDeps struct {
+	// Cases reads the organisation's returns (tax-returns) and disputes (trust-ops); nil answers 503.
+	Cases   port.SellerCasesClient
 	Orgs    port.OrgAccessClient
 	Sellers port.SellerServiceClient
 	// Addresses is the identity address book: its default address prefills the business address (S286). Optional.
@@ -26,22 +28,49 @@ type SellerDeps struct {
 	Media     port.MediaClient
 	Orders    port.SellerOrdersClient
 	Carrier   port.CarrierClient
-	Payouts   port.PayoutsClient
+	// ProofLinks signs the links to a delivery's proof photo and signature (media-service; optional: no pictures without it).
+	ProofLinks port.ProofLinks
+	Payouts    port.PayoutsClient
+	// TaxStatements reads the tax collected on the seller's behalf (tax-returns); nil answers 503.
+	TaxStatements port.TaxStatementClient
+
+	// Listing edits products, keeps form drafts and runs bulk uploads at catalog (S307/S308); nil answers 503.
+	Listing port.SellerListingClient
+	// Writer is ai-gateway's AI listing writer (nil: never offered).
+	Writer port.ListingWriterClient
 	// Fees reads payments' fee schedules with the BFF's service token (nil: the Fees page answers 503).
-	Fees       port.FeesClient
-	Storefront port.StorefrontClient
-	Bookings   port.BookingsClient
+	Fees     port.FeesClient
+	Bookings port.BookingsClient
 	// PublishableKey is the Stripe publishable key Connect.js uses for the embedded onboarding (empty locally: the seller
 	// service's local stand-in then answers account sessions with localTest).
 	PublishableKey string
 	// InventoryAPI relays Seller Center's FBA inbound plans and lots to inventory-service with the member's token (S281).
 	InventoryAPI port.StaffUpstream
+	// RunPickups reads the organisation's delivery-run pick lists at delivery-runs with the member's token (S264); nil
+	// answers 503.
+	RunPickups port.StaffUpstream
+	// Sessions rotates the session's tokens after identity repaired an approval it had missed (nil: never).
+	Sessions TokenRefresher
 	// Cache holds identity's module matrix per portal (not personal data).
 	Cache     port.Cache
 	MatrixTTL time.Duration
-	Location  *time.Location
-	Clock     Clock
-	Log       *slog.Logger
+	// ListingCache caches table scans for seller listings across catalog, listing and offers.
+	ListingCache *scanCache[domain.ListingRow]
+	Location     *time.Location
+	Clock        Clock
+	Log          *slog.Logger
+}
+
+// NewListingCache returns a new scanCache for ListingRow.
+func NewListingCache(c Clock) *scanCache[domain.ListingRow] {
+	return newScanCache[domain.ListingRow](c)
+}
+
+func (d SellerDeps) listingCache() *scanCache[domain.ListingRow] {
+	if d.ListingCache != nil {
+		return d.ListingCache
+	}
+	return newScanCache[domain.ListingRow](d.clock())
 }
 
 // clock is the configured clock (time.Now by default).
@@ -68,7 +97,10 @@ func (s sellerCtx) provider() port.ProviderRef {
 }
 
 // orgResolver resolves the active organisation and the role's module access for every seller route.
-type orgResolver struct{ d SellerDeps }
+type orgResolver struct {
+	d    SellerDeps
+	memo *planMemo
+}
 
 func newResolver(d SellerDeps) *orgResolver {
 	if d.Log == nil {
@@ -80,7 +112,7 @@ func newResolver(d SellerDeps) *orgResolver {
 	if d.MatrixTTL <= 0 {
 		d.MatrixTTL = time.Minute
 	}
-	return &orgResolver{d: d}
+	return &orgResolver{d: d, memo: &planMemo{}}
 }
 
 func normalizeKind(k string) string {
@@ -225,11 +257,12 @@ type SellerShellService interface {
 	SaveOnboardingBusiness(ctx context.Context, c *domain.Caller, in domain.OnboardingBusinessInput) (domain.OnboardingStatus, error)
 	SaveOnboardingDetails(ctx context.Context, c *domain.Caller, in domain.OnboardingDetailsInput) (domain.OnboardingStatus, error)
 	SaveOnboardingOwners(ctx context.Context, c *domain.Caller, in domain.OnboardingOwnersInput) (domain.OnboardingStatus, error)
-	SaveOnboardingPayouts(ctx context.Context, c *domain.Caller, in domain.OnboardingPayoutsInput) (domain.OnboardingStatus, error)
 	SaveOnboardingPlan(ctx context.Context, c *domain.Caller, in domain.OnboardingPlanInput) (domain.OnboardingStatus, error)
 	SaveOnboardingCompliance(ctx context.Context, c *domain.Caller, in domain.OnboardingComplianceInput) (domain.OnboardingStatus, error)
 	// OnboardingStripeSession is the Account Session for Stripe's embedded Connect onboarding.
 	OnboardingStripeSession(ctx context.Context, c *domain.Caller) (domain.OnboardingStripeSession, error)
+	// SellerStripeSession is an Account Session for Account health (owner / finance of the active organisation).
+	SellerStripeSession(ctx context.Context, c *domain.Caller) (domain.OnboardingStripeSession, error)
 	// RefreshOnboardingStripe re-reads the verification results from Stripe.
 	RefreshOnboardingStripe(ctx context.Context, c *domain.Caller) (domain.OnboardingStatus, error)
 	// SubmitOnboarding sends the application to AfroTransact staff review.
@@ -262,7 +295,22 @@ func (s *sellerShellImpl) Session(ctx context.Context, c *domain.Caller) (domain
 	if err != nil {
 		return domain.SellerSession{}, mapErr("identity", err)
 	}
-	return s.session(ctx, c, m)
+	out, stale, err := s.session(ctx, c, m)
+	if err != nil || stale == "" {
+		return out, err
+	}
+	// The seller service approved an organisation identity does not show approved yet (its approval event was missed
+	// or is late): identity syncs it now and the session's tokens are rotated, then the session is read again.
+	if !healOrg(ctx, s.r.d.Orgs, s.r.d.Sessions, s.r.d.Log, c, stale) {
+		return out, nil
+	}
+	// Best effort: when identity cannot be read again, the session read before the repair still answers.
+	if m2, merr := s.r.d.Orgs.Member(ctx, c.BearerToken); merr == nil {
+		if healed, _, herr := s.session(ctx, c, m2); herr == nil {
+			return healed, nil
+		}
+	}
+	return out, nil
 }
 
 func (s *sellerShellImpl) SetActiveOrg(ctx context.Context, c *domain.Caller, orgID string) (domain.SellerSession, error) {
@@ -291,7 +339,8 @@ func (s *sellerShellImpl) SetActiveOrg(ctx context.Context, c *domain.Caller, or
 		m2 = m
 	}
 	m2.OrgID = orgID
-	return s.session(ctx, c, m2)
+	out, _, err := s.session(ctx, c, m2)
+	return out, err
 }
 
 func userOf(m port.Member) domain.SellerUser {
@@ -305,8 +354,10 @@ func summaryOf(o port.MemberOrg) domain.OrgSummary {
 		RoleKey: o.Role, RoleLabel: domain.RoleLabel(o.Role)}
 }
 
-func (s *sellerShellImpl) session(ctx context.Context, c *domain.Caller, m port.Member) (domain.SellerSession, error) {
-	out := domain.SellerSession{User: userOf(m), Orgs: []domain.OrgSummary{}, NavGroups: []domain.NavGroup{}, Landing: "onboarding",
+// session builds the shell's session; stale names an organisation the seller service shows approved while identity
+// does not (PENDING there, or not listed at all although the application was approved), which the caller may repair.
+func (s *sellerShellImpl) session(ctx context.Context, c *domain.Caller, m port.Member) (out domain.SellerSession, stale string, err error) {
+	out = domain.SellerSession{User: userOf(m), Orgs: []domain.OrgSummary{}, NavGroups: []domain.NavGroup{}, Capabilities: []string{}, Landing: "onboarding",
 		AccessNote: "Least-privilege by role · enforced server-side"}
 	for _, o := range memberOrgs(m) {
 		out.Orgs = append(out.Orgs, summaryOf(o))
@@ -315,15 +366,20 @@ func (s *sellerShellImpl) session(ctx context.Context, c *domain.Caller, m port.
 	if err != nil {
 		if p, ok := domain.AsProblem(err); ok && p.Code == domain.CodeNoOrganisation {
 			// An applicant whose DRAFT organisation identity does not know yet, or a customer who has not applied.
-			out, _ = s.applicantSession(ctx, c, out)
-			return out, nil
+			var approvedOrg string
+			out, _, approvedOrg = s.applicantSession(ctx, c, out)
+			return out, approvedOrg, nil
 		}
-		return out, err
+		return out, "", err
 	}
 	// The seller service has the detailed application status (identity mirrors only PENDING/APPROVED/…).
+	identityApproved := sc.approved
 	if org, err := s.r.d.Sellers.Org(ctx, c.BearerToken, sc.org.ID); err == nil && org.Status != "" {
 		sc.org.Status = orgStatus(org.Status)
 		sc.approved = sc.org.Status == domain.OrgApproved
+	}
+	if sc.approved && !identityApproved {
+		stale = sc.org.ID
 	}
 	active := summaryOf(sc.org)
 	active.Status, active.Approved = sc.org.Status, sc.approved
@@ -341,8 +397,18 @@ func (s *sellerShellImpl) session(ctx context.Context, c *domain.Caller, m port.
 		out.AccessNote = "Token scope: onboarding only"
 	}
 	out.NavGroups = domain.Navigation(sc.access, sc.approved, badges)
+	out.Capabilities = []string{}
+	if sc.approved {
+		// What the plan includes decides what is shown: a module the plan does not include is not in the navigation.
+		if e, err := s.r.entitlements(ctx, c, sc.org.ID); err == nil {
+			out.Capabilities = e.Capabilities()
+			if sc.kind() == domain.OrgKindSeller && !e.Allows(domain.CapCoupons) {
+				out.NavGroups = domain.WithoutModules(out.NavGroups, "coupons")
+			}
+		}
+	}
 	out.Landing = domain.Landing(out.NavGroups)
-	return out, nil
+	return out, stale, nil
 }
 
 // badges counts what needs attention: orders to ship, booking requests, open compliance items. Each source is
@@ -399,7 +465,15 @@ func (s *sellerShellImpl) Compliance(ctx context.Context, c *domain.Caller) (dom
 		PayoutsPaused: h.PayoutsPaused, ChargesEnabled: h.ChargesEnabled, PayoutsEnabled: h.PayoutsEnabled, ListingsHidden: h.ListingsHidden,
 		Items: []domain.ComplianceItem{}}
 	for _, r := range h.Requirements {
-		out.Items = append(out.Items, domain.ComplianceItem{Requirement: r.Requirement, Label: domain.RequirementLabel(r.Requirement), Bucket: r.Bucket})
+		component := domain.RequirementComponent(r.Requirement)
+		if r.Form != nil && r.Form.Component != "" {
+			component = r.Form.Component
+		}
+		out.Items = append(out.Items, domain.ComplianceItem{Requirement: r.Requirement, Label: domain.RequirementLabel(r.Requirement), Bucket: r.Bucket,
+			Component: component})
+	}
+	if b := h.PayoutBank; b != nil {
+		out.PayoutBank = &domain.ComplianceBank{BankName: strPtr(b.BankName), Last4: strPtr(b.Last4), Status: strPtr(b.Status)}
 	}
 	if out.OpenItems == 0 {
 		out.OpenItems = len(out.Items)

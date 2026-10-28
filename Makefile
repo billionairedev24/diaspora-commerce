@@ -18,10 +18,10 @@ ENV          ?= dev
 TOFU         ?= $(shell command -v tofu 2>/dev/null || echo $(HOME)/go/bin/tofu)
 CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/conftest)
 
-.PHONY: help up up-infra down logs ps reset apps-up apps-down mobile docs-up secrets-check \
-        java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links \
+.PHONY: help ovh-gh-setup up up-infra down logs ps reset apps-up apps-down mobile docs-up secrets-check stripe-setup \
+        java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links repair-orgs \
         helm-lint gitops-render rules dashboards observability-check \
-        env-check render tf-check security coverage smoke-carriers \
+        env-check render tf-check security coverage smoke-carriers perf-k6 perf-k6-smoke perf-ab perf-hey perf-wrk \
         web-dev web-build backlog seed seed-test mobile-lan lan-env mobile-adb-reverse mobile-android-device \
         mobile-ios-device mobile-apk mobile-brand mobile-hero
 
@@ -29,8 +29,11 @@ help: ## List targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # ------------------------------------------------------------------------------------------------ local stack
-up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — PROD=1 runs the web apps as production builds, MOBILE_HOST=lan serves it all on your Wi-Fi address for a phone, OBS=0 leaves out Grafana/Prometheus/Loki/Tempo
-	PROD=$(PROD) tools/dev/local.sh up $(SERVICES)
+ovh-gh-setup: ## One-time set-up of the single-server OVHcloud environment: asks for your values, creates the GitHub Environment ovh-vps and stores them as secrets/variables (docs/runbooks/ovh-vps.md)
+	tools/ovh/gh-setup.sh
+
+up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — the web apps run as production builds (DEV=1 for Next dev servers, REBUILD=1 to force a rebuild), MOBILE_HOST=lan serves it all on your Wi-Fi address for a phone, OBS=0 leaves out Grafana/Prometheus/Loki/Tempo
+	PROD=$(PROD) DEV=$(DEV) REBUILD=$(REBUILD) tools/dev/local.sh up $(SERVICES)
 
 up-infra: ## Start only the full Docker infrastructure incl. observability (Grafana, Prometheus, Loki, Tempo, Kibana; ~12 GB)
 	$(COMPOSE) up -d
@@ -126,10 +129,10 @@ render: ## Render one service as Argo CD would for an env: make render SERVICE=c
 	  -f infra/argocd/envs/$(ENV)/platform-values.yaml
 
 # ------------------------------------------------------------------------------------------------ infra / security
-tf-check: ## OpenTofu: fmt, module interface drift, conftest policy unit tests (validate needs providers: see infra/terraform/README.md)
-	$(TOFU) fmt -check -recursive infra/terraform infra/cloudflare
-	bash infra/terraform/scripts/sync-interface.sh --check
-	$(CONFTEST) verify --policy infra/policy/terraform
+tf-check: ## OpenTofu: fmt, module interface drift, conftest policy unit tests (validate needs providers: see infra/tofu/README.md)
+	$(TOFU) fmt -check -recursive infra/tofu infra/cloudflare
+	bash infra/tofu/scripts/sync-interface.sh --check
+	$(CONFTEST) verify --policy infra/policy/tofu
 
 security: ## Local security scans that work offline-first: gitleaks, Semgrep rules, govulncheck, Trivy (if installed)
 	@if command -v gitleaks >/dev/null || [ -x $(HOME)/go/bin/gitleaks ]; then \
@@ -147,9 +150,29 @@ coverage: ## Coverage summary + gate (SERVICE=<name> for one; Go modules are tes
 smoke-carriers: ## Carrier sandbox smoke against a running carrier-gateway (CARRIER_GATEWAY_URL, default localhost:8209)
 	tools/smoke/carriers.sh
 
+SCENARIO ?= smoke
+
+perf-k6: ## k6 load test (SCENARIO=smoke|gateway-readonly|search; K6_VUS, K6_DURATION, see tools/perf/README.md)
+	tools/perf/run-k6.sh $(SCENARIO)
+
+perf-k6-smoke: ## k6 quick health smoke (~15s, 5 VUs)
+	tools/perf/run-k6.sh smoke
+
+perf-ab: ## Apache Bench on gateway home + search (PERF_AB_REQUESTS, PERF_AB_CONCURRENCY)
+	tools/perf/run-ab.sh
+
+perf-hey: ## hey load generator on gateway + search
+	tools/perf/run-hey.sh
+
+perf-wrk: ## wrk on gateway healthz + search (WRK_THREADS, WRK_CONNECTIONS, WRK_DURATION)
+	tools/perf/run-wrk.sh
+
 # ------------------------------------------------------------------------------------------------ web / misc
 dev-up: ## Run everything locally: infra, services, the 3 web apps, docs portal and the 2 Expo apps, then print all links (SERVICES=… subset, PROD=1, WEB=0, DOCS=0, STORYBOOK=0, MOBILE=0)
-	PROD=$(PROD) tools/dev/local.sh up $(SERVICES)
+	PROD=$(PROD) DEV=$(DEV) REBUILD=$(REBUILD) tools/dev/local.sh up $(SERVICES)
+
+stripe-setup: ## Check your Stripe TEST account: keys, Connect and the seller account settings (plans are synced by the seller service)
+	python3 tools/dev/stripe_setup.py
 
 secrets-check: ## Which secrets/provider keys each app needs and which you set in .local/secrets.env (masked; fails only on required-but-missing)
 	python3 tools/dev/secrets_check.py $(if $(SERVICE),--app $(SERVICE),) $(if $(SECRETS_FILE),--file $(SECRETS_FILE),)
@@ -166,11 +189,14 @@ dev-logs: ## Follow one service's log: make dev-logs SERVICE=orders
 dev-restart: ## Rebuild and restart one service: make dev-restart SERVICE=delivery-runs
 	tools/dev/local.sh restart $(SERVICE)
 
+repair-orgs: ## Identity re-syncs every approved seller/provider organisation (status, owners) from the seller service now
+	tools/dev/local.sh repair-orgs
+
 mobile: ## Only the Expo apps against the running stack: customer :8081, driver :8082 (MOBILE_MOCKS=1 for in-app mocks; a phone needs the stack in LAN mode: make mobile-lan)
 	tools/dev/local.sh mobile
 
 mobile-lan: ## LAN mode: everything (sign-in included) on this Mac's Wi-Fi address for a phone on the same network; prints exp:// links + QR codes (MOBILE_HOST=<ip> to pick the address)
-	MOBILE_HOST=$${MOBILE_HOST:-lan} PROD=$(PROD) tools/dev/local.sh up $(SERVICES)
+	MOBILE_HOST=$${MOBILE_HOST:-lan} PROD=$(PROD) DEV=$(DEV) REBUILD=$(REBUILD) tools/dev/local.sh up $(SERVICES)
 
 lan-env: ## Print the addresses the stack would advertise for MOBILE_HOST (dry run): make lan-env MOBILE_HOST=lan
 	tools/dev/local.sh lan-env

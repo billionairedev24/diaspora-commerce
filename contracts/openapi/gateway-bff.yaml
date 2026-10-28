@@ -15,7 +15,8 @@ info:
     `GET /v1/auth/oidc/{provider}/authorize` and `GET /v1/auth/login`, which redirect to identity's
     `/oauth2/authorize`. Identity's hosted pages are the only place credentials are entered (single sign-on
     across the storefront, Seller Center and the staff console); `POST /v1/auth/sign-out` also ends the identity
-    session (RP-initiated logout). Native apps send `Authorization: Bearer <access token>` instead of the cookie.
+    session (RP-initiated logout) and identity then returns the browser to `GET /v1/auth/signed-out/{app}` on the
+    app that signed out. Native apps send `Authorization: Bearer <access token>` instead of the cookie.
     Guests get an anonymous session (cart, deliver-to ZIP); on sign-in the guest cart is merged into the
     customer's cart.
 
@@ -75,12 +76,31 @@ tags:
     description: >-
       A delivered order has no self-service refund or return. A customer with a problem describes it and uploads photos;
       staff resolve it in the disputes and claims tooling and the customer follows the outcome here.
+  - name: Referral
+    description: |
+      Refer a friend (S322, ADR 0006). Every customer has a code and a share link. When a friend signs up with it and
+      their first order is delivered (and its return window has passed), AfroTransact rewards both, as credit or free
+      membership days, as configured by staff. AfroTransact pays; nothing here is cash.
+  - name: Credit
+    description: |
+      AfroTransact credit and gift cards (S320, S321, ADR 0006). Credit is a balance the shopper spends at checkout
+      before the card and gets from refunds, gift cards, referrals and staff. It only buys products and services:
+      nothing in this API pays it out, refunds it to a card or transfers it. A gift card is bought with the normal
+      card payment (Stripe Elements), emailed on a chosen date and redeemed once into the recipient's credit.
   - name: Careers
     description: Open roles and applications
   - name: Services
     description: Services marketplace (bookings) — search by ZIP, provider pages, booking with a deposit, my bookings
   - name: Lola
     description: Lola, the AI shopping assistant (ai-gateway SSE relayed)
+  - name: Delivery runs
+    description: |
+      Delivery runs by location (delivery-runs; S262, S263, ADR 0005). Shoppers see the locations and their pages
+      (upcoming runs, WhatsApp community, share links with UTM attribution), subscribe to a location's run alerts
+      per channel (email by link with double opt-in, or signed in from Account -> Delivery alerts with consent
+      recorded per channel; WhatsApp only from approved templates to opted-in shoppers) and get the location-targeted
+      advertorials with a live countdown (views and clicks are counted; orders are attributed with
+      `src=page&cr=adv-...`). Every message carries an unsubscribe link (`/delivery-runs/subscriptions/unsubscribe`).
   - name: Pre-orders
     description: |
       Pre-order windows by city (delivery-runs; S270–S275). The storefront resolves the window covering the
@@ -94,6 +114,24 @@ security:
   - sessionCookie: []
   - bearer: []
 paths:
+  /v1/maintenance:
+    get:
+      tags: [Site]
+      operationId: getMaintenance
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Whether the platform is in maintenance, and what to tell customers
+      description: >-
+        Always answered, even in maintenance. Web and mobile apps read it to show the maintenance page. While `active`,
+        every other customer route (and Seller Center's when `scope` is ALL) answers 503 `MAINTENANCE` with `Retry-After`;
+        sign-in and staff routes keep working. Switched in the staff console under Settings → General → Maintenance mode.
+      responses:
+        '200':
+          description: Maintenance status
+          headers:
+            Cache-Control: {schema: {type: string}, example: no-store}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MaintenanceStatus'}
   /v1/site-config:
     get:
       tags: [Site]
@@ -305,17 +343,43 @@ paths:
       tags: [Location]
       operationId: suggestAddresses
       security: [{}, {sessionCookie: []}, {bearer: []}]
-      summary: Address autocomplete (geo service — Google Places or OpenStreetMap Nominatim)
+      summary: Address autocomplete (geo service — Google Places (New) with a key, else OpenStreetMap Nominatim)
+      description: >-
+        One call per keystroke of an address field. The first answer carries a `sessionToken`; send it with every
+        following keystroke of the same address entry and with `GET /v1/geo/address-suggestions/{id}` for the picked
+        suggestion, then start a new entry without one (Google Places bills the keystrokes and the Place Details call
+        as one session). Google suggestions come back with `resolved: false` (street line only) and are resolved when
+        picked; Nominatim and fixture suggestions are resolved already. Suggestions are restricted to `country`, by
+        default the market's.
       parameters:
         - {name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 120}}
-        - {name: country, in: query, schema: {type: string, default: US}}
-        - {name: sessionToken, in: query, schema: {type: string}, description: Places autocomplete session token for billing}
+        - {name: country, in: query, description: 'ISO 3166-1 alpha-2 country; default: the market''s (US)', schema: {type: string, pattern: '^[A-Za-z]{2}$'}}
+        - {name: sessionToken, in: query, description: Session token of the previous answer of this address entry (omit on the first keystroke), schema: {type: string, pattern: '^[A-Za-z0-9_-]{8,36}$'}}
       responses:
         '200':
-          description: Up to 5 suggestions
+          description: Up to 5 suggestions and the session token
           content:
             application/json:
               schema: {$ref: '#/components/schemas/AddressSuggestions'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/geo/address-suggestions/{id}:
+    get:
+      tags: [Location]
+      operationId: resolveAddressSuggestion
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Structured address of a picked suggestion (Google Place Details, closing the autocomplete session)
+      parameters:
+        - {name: id, in: path, required: true, description: 'Suggestion id (g:…, o:…, f:…)', schema: {type: string, maxLength: 512}}
+        - {name: sessionToken, in: query, description: The session token of the suggestions, schema: {type: string, pattern: '^[A-Za-z0-9_-]{8,36}$'}}
+      responses:
+        '200':
+          description: Street, unit, city, state, ZIP, country and coordinates
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PostalAddress'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
   /v1/search:
     get:
@@ -570,6 +634,10 @@ paths:
           in: query
           description: Organisation invitation token from an invite link; the account created on identity's sign-up page joins the organisation without an email code.
           schema: {type: string, maxLength: 200}
+        - name: referral
+          in: query
+          description: Referral code from a friend's share link (S322); identity's sign-up page shows it filled in, and both are rewarded after the new customer's first delivered order.
+          schema: {type: string, maxLength: 20}
         - name: intent
           in: query
           description: |
@@ -613,6 +681,77 @@ paths:
           headers:
             Location: {schema: {type: string}}
             Set-Cookie: {schema: {type: string}, description: 'at_session=…; HttpOnly; Secure; SameSite=Lax; Path=/'}
+  /v1/auth/native/password:
+    post:
+      tags: [Auth]
+      operationId: nativePasswordSignIn
+      security: [{}]
+      summary: Sign in inside the customer or driver app with email and password
+      description: |
+        The native apps show their own sign-in form instead of identity's hosted page. The BFF checks the credentials
+        with identity's first-party sign-in API and either asks for a second factor (`MFA_REQUIRED`, continue at
+        `/v1/auth/native/mfa/verify`) or redeems the one-time login ticket for the app's own authorization-code + PKCE
+        request and returns the authorization `code` (`AUTHENTICATED`). The app exchanges the code with its PKCE
+        verifier at identity's `/oauth2/token` and receives its own access and refresh tokens. A wrong password is 401
+        `INVALID_CREDENTIALS` (no token was sent, so the app shows it on the form), repeated failures 429 `RATE_LIMITED`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NativePasswordRequest'}
+      responses:
+        '200':
+          description: Second factor needed, or signed in
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativeSignInResult'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+  /v1/auth/native/mfa/sms:
+    post:
+      tags: [Auth]
+      operationId: nativeSendSmsCode
+      security: [{}]
+      summary: Text a sign-in code for a second-factor step
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NativeSmsRequest'}
+      responses:
+        '202':
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sentTo: {type: string, description: Masked phone, example: '•••• 0142'}
+                  expiresAt: {type: string, format: date-time}
+        '410': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+  /v1/auth/native/mfa/verify:
+    post:
+      tags: [Auth]
+      operationId: nativeVerifySecondFactor
+      security: [{}]
+      summary: Verify the second factor and get the authorization code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NativeVerifyRequest'}
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativeSignInResult'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
   /v1/auth/sign-out:
     post:
       tags: [Auth]
@@ -621,10 +760,17 @@ paths:
       summary: End the session (revokes the tokens at identity) and get identity's end-session URL
       description: |
         Clears the `at_session` cookie and revokes the refresh and access tokens. For a web session `redirectTo` is
-        identity's RP-initiated logout endpoint (`/connect/logout` with `id_token_hint`, `client_id` and a
-        `post_logout_redirect_uri` back to the home page of the calling app, chosen from the request's `Origin`):
-        navigating there ends the identity session too, so every app is signed out (single sign-out). `redirectTo`
-        is null when there was no signed-in web session.
+        identity's RP-initiated logout endpoint (`/connect/logout` with `id_token_hint`, `client_id` and the calling
+        app's registered `post_logout_redirect_uri`, `<origin>/api/bff/v1/auth/signed-out/<app>`, chosen from the
+        request's `Origin`): navigating there ends the identity session too, so every app is signed out (single
+        sign-out), and identity then sends the browser to `GET /v1/auth/signed-out/{app}`. Without an ID token to
+        end (the session had already expired) `redirectTo` is that signed-out URL directly. `redirectTo` is null for
+        native apps (bearer token).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SignOutRequest'}
       responses:
         '200':
           description: Signed out
@@ -633,6 +779,37 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SignOutResult'}
+  /v1/auth/signed-out/{app}:
+    get:
+      tags: [Auth]
+      operationId: signedOut
+      security: [{}]
+      summary: Where identity returns the browser after single sign-out (each app's registered post-logout URI)
+      description: |
+        Registered at identity as the `gateway-bff` client's `post_logout_redirect_uri` for each web app
+        (`<app origin>/api/bff/v1/auth/signed-out/<app>`). `state` carries the path the person signed out on
+        (from `SignOutRequest.returnTo`).
+
+        - `storefront`: back to that page (or the home page) with `signedOut=1`, where the storefront shows a
+          "You're signed out" toast. No sign-in wall.
+        - `seller-center`, `staff-console`: straight to that app's own sign-in, i.e. identity's hosted sign-in page
+          branded for the app (`prompt=login`, `notice=signed_out`), which returns to the app (that page, or its
+          home page) after signing in.
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema: {type: string, enum: [storefront, seller-center, staff-console]}
+        - name: state
+          in: query
+          description: The path on the app to come back to (a relative path; anything else is ignored).
+          schema: {type: string, maxLength: 2048}
+      responses:
+        '302':
+          description: To the storefront page with `signedOut=1`, or to identity's sign-in for Seller Center and the staff console
+          headers:
+            Location: {schema: {type: string}}
+        '404': {$ref: '#/components/responses/Problem'}
   /v1/account/addresses:
     get:
       tags: [Account]
@@ -889,6 +1066,470 @@ paths:
         '204': {description: Removed}
         '401': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/locations:
+    get:
+      tags: [Delivery runs]
+      operationId: listRunLocations
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Locations with delivery runs (active ones)
+      description: delivery-runs `GET /v1/public/locations`. Public data, cached for a minute.
+      responses:
+        '200':
+          description: Locations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/RunLocation'}}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/locations/{slug}:
+    get:
+      tags: [Delivery runs]
+      operationId: getRunLocation
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Location page data (upcoming runs, WhatsApp community link, social and share links)
+      description: |
+        delivery-runs `GET /v1/public/locations/{slug}`. `shareLinks` and the run links carry UTM attribution
+        (`utm_source`, `utm_medium`, `utm_campaign`) so orders and sign-ups can be traced to the channel that shared them.
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,79}$'}}
+      responses:
+        '200':
+          description: Location page
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RunLocationPage'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/locations/{slug}/visits:
+    post:
+      tags: [Delivery runs]
+      operationId: countRunLocationVisit
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Count a visit that arrived with UTM tags (best effort)
+      description: |
+        delivery-runs `POST /v1/public/locations/{slug}/visits`. The storefront sends it once per visit to a location page
+        or run link whose address has `utm_*` tags, so staff can see visits and sign-ups per source in Pre-orders ->
+        Delivery runs. Only the three tags (and the run viewed) are sent: no cookie, address or visitor id. A visit
+        without tags is accepted and not counted. The storefront ignores failures.
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,79}$'}}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RunVisitRequest'}
+      responses:
+        '204': {description: 'Counted, or nothing to count'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/subscriptions:
+    post:
+      tags: [Delivery runs]
+      operationId: subscribeRunAlerts
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Get run alerts for a location by email (double opt-in)
+      description: |
+        delivery-runs `POST /v1/public/subscriptions {locationId, email, source}`. Always 202 for a valid email (whether
+        or not it was known). Nothing else is sent until the link in the confirmation email is used
+        (`POST /v1/delivery-runs/subscriptions/confirm`); only the email channel is consented to this way. A signed-in
+        shopper chooses channels from the account screen instead (`POST /v1/account/run-subscriptions`). Rate limited
+        like other lookups.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [locationId, email]
+              properties:
+                locationId: {type: string, format: uuid}
+                email: {type: string, format: email, maxLength: 254}
+                source: {type: string, maxLength: 80, description: 'Where the sign-up happened, kept on the consent record (default storefront)', examples: [location-page]}
+                utmSource: {type: string, maxLength: 80, description: 'utm_source the visitor arrived with; counted as a sign-up of that source once confirmed', examples: [whatsapp]}
+                utmMedium: {type: string, maxLength: 80, examples: [social]}
+                utmCampaign: {type: string, maxLength: 120}
+      responses:
+        '202':
+          description: Accepted; the confirmation link is on its way
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [CONFIRMATION_SENT]}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/subscriptions/confirm:
+    post:
+      tags: [Delivery runs]
+      operationId: confirmRunAlerts
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Confirm an email subscription (token of the confirmation link)
+      description: |
+        delivery-runs `POST /v1/public/subscriptions/confirm {token}`; the storefront page
+        `/delivery-runs/subscriptions/confirm?token=` calls it. Confirming twice is fine; an unknown token is a 422 on
+        `token`. Records the email consent. Rate limited like other lookups.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '200':
+          description: Confirmed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RunSubscription'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/subscriptions/unsubscribe:
+    post:
+      tags: [Delivery runs]
+      operationId: unsubscribeRunAlerts
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Unsubscribe from a message link (token), per channel or all
+      description: |
+        delivery-runs `POST /v1/public/subscriptions/unsubscribe {token, channels}`; the storefront page
+        `/delivery-runs/subscriptions/unsubscribe?token=` calls it, and every run alert carries such a link. No
+        channels withdraws all of them. Withdrawal is recorded with its time on the consent record. Rate limited like
+        other lookups.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: {type: string, minLength: 1, maxLength: 200}
+                channels: {type: array, items: {$ref: '#/components/schemas/RunChannel'}}
+      responses:
+        '200':
+          description: Withdrawn
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RunSubscription'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/run-subscriptions:
+    get:
+      tags: [Account, Delivery runs]
+      operationId: listMyRunSubscriptions
+      summary: My delivery alerts (per location and channel, with consent records)
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Subscriptions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/RunSubscription'}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Account, Delivery runs]
+      operationId: subscribeMyRunAlerts
+      summary: Turn on delivery alerts for a location and channels (consent recorded, active at once)
+      description: |
+        delivery-runs `POST /v1/me/run-subscriptions`. Adds the channels to an existing subscription. SMS and WhatsApp
+        also need a verified phone number on the account; WhatsApp messages are only sent from approved templates to
+        shoppers who opted in here.
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [locationId, channels]
+              properties:
+                locationId: {type: string, format: uuid}
+                channels: {type: array, minItems: 1, items: {$ref: '#/components/schemas/RunChannel'}}
+                source: {type: string, maxLength: 80, examples: [account]}
+                utmSource: {type: string, maxLength: 80, description: utm_source the shopper arrived with (counted as a sign-up), examples: [whatsapp]}
+                utmMedium: {type: string, maxLength: 80, examples: [social]}
+                utmCampaign: {type: string, maxLength: 120}
+      responses:
+        '200':
+          description: Subscription
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RunSubscription'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/run-subscriptions/{locationId}:
+    delete:
+      tags: [Account, Delivery runs]
+      operationId: unsubscribeMyRunAlerts
+      summary: Turn off delivery alerts for a location (some channels, or all)
+      description: delivery-runs `DELETE /v1/me/run-subscriptions/{locationId}`. No `channel` withdraws all channels.
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: locationId, in: path, required: true, schema: {type: string, format: uuid}}
+        - name: channel
+          in: query
+          schema: {type: array, items: {$ref: '#/components/schemas/RunChannel'}}
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: Subscription with the withdrawals recorded
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RunSubscription'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/advertorials:
+    get:
+      tags: [Delivery runs]
+      operationId: listRunAdvertorials
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Advertorials for the shopper's deliver-to place (windows and runs that take orders now)
+      description: |
+        delivery-runs `GET /v1/public/advertorials`. The place is the explicit `zip`, `lat`/`lng` or
+        `country`+`region`(+`city`) when given, else the session's delivery location; with no place at all the list is
+        empty. One variant per advertorial (the same `visitor` keeps theirs), higher priority first. Each carries the
+        countdown target (the close or cutoff) and a link with UTM and order attribution (`src=page&cr=adv-...`); the
+        storefront counts a `VIEW` once per visit and a `CLICK` on the button
+        (`POST /v1/delivery-runs/advertorials/{advertorialId}/events`) and expires the card at `expiresAt`.
+      parameters:
+        - {name: zip, in: query, schema: {type: string, pattern: '^[0-9]{5}$'}}
+        - {name: lat, in: query, schema: {type: number}}
+        - {name: lng, in: query, schema: {type: number}}
+        - {name: country, in: query, schema: {type: string, minLength: 2, maxLength: 2}}
+        - {name: region, in: query, schema: {type: string, maxLength: 3}}
+        - {name: city, in: query, schema: {type: string, maxLength: 80}}
+        - {name: visitor, in: query, schema: {type: string, pattern: '^[A-Za-z0-9_-]{1,64}$'}, description: 'An anonymous id the storefront keeps per browser, so A/B variants stay stable'}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 10, default: 3}}
+      responses:
+        '200':
+          description: Advertorials
+          headers:
+            Cache-Control: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/RunAdvertorial'}}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/advertorials/{advertorialId}/events:
+    post:
+      tags: [Delivery runs]
+      operationId: recordRunAdvertorialEvent
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Count a view or a click on an advertorial
+      description: |
+        delivery-runs `POST /v1/public/advertorials/{id}/events {type}`. Best effort: the storefront sends `VIEW` once
+        per visit and `CLICK` on the button, and ignores a failure. Rate limited like other lookups.
+      parameters:
+        - {name: advertorialId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type: {type: string, enum: [VIEW, CLICK]}
+      responses:
+        '204': {description: Counted}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/credit:
+    get:
+      tags: [Credit]
+      operationId: getAccountCredit
+      summary: My credit balance and history, newest first
+      description: |
+        payments `GET /v1/credit/me` and `/v1/credit/me/entries` with the shopper's token. The balance is the sum of the
+        ledger. Each entry has a `kind` (GRANT, SPEND, REFUND, ADJUSTMENT) and a `source` (REFERRAL, GIFT_CARD, MEMBERSHIP,
+        REFUND, STAFF, PROMO, ORDER); the storefront words them in the shopper's language. Page backwards with
+        `before` = the previous page's `nextBefore`.
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: before, in: query, schema: {type: string, format: date-time}, description: Entries older than this}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: Balance and a page of history
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CreditAccount'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/referral:
+    get:
+      tags: [Referral]
+      operationId: getAccountReferral
+      summary: My referral code, share link, the offer, my friends and what I earned
+      description: |
+        payments `GET /v1/referrals/me` and `/v1/referrals/me/friends` with the shopper's token. The code is created on
+        first use and never changes; `shareUrl` is the storefront link that opens sign-up with the code filled in.
+        Friends are shown by first name and last initial. A referral held for a check shows as `WAITING`: the shopper
+        never sees the check or a staff decision. `asFriend` is the shopper's own referral when someone referred them.
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: The referral page
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AccountReferral'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/orders/{orderNumber}/credit-refunds:
+    post:
+      tags: [Credit]
+      operationId: chooseCreditRefunds
+      summary: Take the card part of my order's refunds as credit (one way)
+      description: |
+        A refund goes back to what paid each part: the part paid with credit comes back as credit and the part paid
+        with the card to the card. This chooses credit for the card part of every later refund of the order. It is one
+        way: credit never goes back to a card or to cash, and refunds already sent to the card stay there.
+        409 `NO_CARD_PORTION` when the order was paid with credit only.
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: orderNumber, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Chosen
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CreditRefundChoice'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/gift-cards/config:
+    get:
+      tags: [Credit]
+      operationId: getGiftCardConfig
+      summary: Gift card amount limits, preset amounts and terms (staff settings)
+      description: Default limits are 10.00 to 500.00; gift cards never expire. Staff change them without a release.
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Limits and terms
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GiftCardConfig'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/gift-cards:
+    get:
+      tags: [Credit]
+      operationId: listMyGiftCards
+      summary: The gift cards I bought, newest first (never with the code)
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: My gift cards
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GiftCardPage'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Credit]
+      operationId: buyGiftCard
+      summary: Start buying a gift card; confirm the card payment with the client secret
+      description: |
+        Requires `Idempotency-Key`. payments creates the card (PENDING_PAYMENT) and a PaymentIntent for it: confirm
+        `clientSecret` with Stripe Elements (a card; credit cannot pay for a gift card), then
+        `POST /v1/account/gift-cards/{giftCardId}/confirm`. The code is generated and emailed on `sendAt` (now when
+        omitted). 422 `errors.amountMinor` when the amount is outside the staff-set limits.
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 16, maxLength: 64}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GiftCardPurchaseRequest'}
+      responses:
+        '201':
+          description: Card created, payment pending
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GiftCardPurchase'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '402': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/gift-cards/{giftCardId}/confirm:
+    post:
+      tags: [Credit]
+      operationId: confirmGiftCard
+      summary: After the payment was confirmed, capture it and issue the card
+      description: Idempotent; the payments webhook does the same, so either order works.
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: giftCardId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: The card (ACTIVE once paid)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GiftCard'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/gift-cards/redeem:
+    post:
+      tags: [Credit]
+      operationId: redeemGiftCard
+      summary: Redeem a gift card code into my credit, once
+      description: |
+        404 `GIFT_CARD_INVALID` for a wrong code; 409 `GIFT_CARD_REDEEMED` when it was redeemed already. Wrong codes
+        are counted per shopper and per network address: over the limit the answer is 429 `RATE_LIMITED` with
+        `Retry-After`, even for a right code.
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GiftCardRedeemRequest'}
+      responses:
+        '200':
+          description: Redeemed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GiftCardRedemption'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/checkout/summary:
     get:
       tags: [Checkout]
@@ -897,6 +1538,18 @@ paths:
       security: [{sessionCookie: []}, {bearer: []}]
       parameters:
         - {name: addressId, in: query, schema: {type: string}}
+        - name: packageDelivery
+          in: query
+          description: |
+            Per-package delivery option keys for shipping and estimated tax (repeat the parameter or comma-separate
+            entries). Each value is `packageId:optionKey` (for example `pkg_1:ground,pkg_2:pickup`).
+          schema: {type: array, items: {type: string}}
+          style: form
+          explode: true
+        - name: couponCode
+          in: query
+          schema: {type: string, maxLength: 20}
+          description: Optional coupon to price against the cart (offers validate; does not redeem until place order).
       responses:
         '200':
           description: Summary
@@ -1968,19 +2621,31 @@ paths:
     get:
       tags: [Services]
       operationId: getProviderPage
-      summary: A provider's page — bookings profile and services plus the published design (layout, approved links)
-      description: >-
-        The storefront service serves published pages by slug only; pass `slug` when known, otherwise the BFF tries
-        the organisation id and returns `design: null` when there is no published page.
+      summary: A provider's page — bookings profile and services
       parameters:
         - {name: orgId, in: path, required: true, schema: {type: string}}
-        - {name: slug, in: query, schema: {type: string}}
       responses:
         '200':
           description: Provider
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ProviderPage'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/business-pages/{slug}:
+    get:
+      tags: [Services]
+      operationId: getBusinessPage
+      summary: A business's plain public page (what Stripe is given as its website)
+      description: Public, read-only. Name, description, logo and one brand colour from the business's application; providers also list their services. `indexable` is false until the business is approved, so search engines are kept off it.
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string, maxLength: 80}}
+      responses:
+        '200':
+          description: Page
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BusinessPage'}
         '404': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/services/bookings:
@@ -2356,6 +3021,54 @@ components:
       headers:
         Location: {schema: {type: string}}
   schemas:
+    NativeApp:
+      type: string
+      enum: [customer, driver]
+    NativePasswordRequest:
+      type: object
+      required: [app, email, password, codeChallenge, redirectUri]
+      properties:
+        app: {$ref: '#/components/schemas/NativeApp'}
+        email: {type: string, maxLength: 254}
+        password: {type: string, maxLength: 1024}
+        trustedDeviceToken: {type: string, description: From an earlier verification with trustDevice=true}
+        codeChallenge: {type: string, description: PKCE S256 challenge of the app's verifier, minLength: 43, maxLength: 43}
+        redirectUri: {type: string, description: The app's redirect URI registered at identity}
+    NativeSmsRequest:
+      type: object
+      required: [app, challengeId, codeChallenge, redirectUri]
+      properties:
+        app: {$ref: '#/components/schemas/NativeApp'}
+        challengeId: {type: string, format: uuid}
+        codeChallenge: {type: string}
+        redirectUri: {type: string}
+    NativeVerifyRequest:
+      type: object
+      required: [app, challengeId, factor, code, codeChallenge, redirectUri]
+      properties:
+        app: {$ref: '#/components/schemas/NativeApp'}
+        challengeId: {type: string, format: uuid}
+        factor: {type: string, enum: [TOTP, SMS, RECOVERY_CODE]}
+        code: {type: string, maxLength: 32}
+        trustDevice: {type: boolean, description: Return a trustedDeviceToken so this phone skips the second factor for 30 days}
+        codeChallenge: {type: string, minLength: 43, maxLength: 43}
+        redirectUri: {type: string}
+    NativeSignInResult:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [MFA_REQUIRED, AUTHENTICATED]}
+        challengeId: {type: string, format: uuid, description: MFA_REQUIRED only}
+        challengeExpiresAt: {type: string, format: date-time}
+        factors:
+          type: object
+          properties:
+            totp: {type: boolean}
+            sms: {type: boolean}
+            smsHint: {type: string}
+            recoveryCode: {type: boolean}
+        code: {type: string, description: 'AUTHENTICATED only: authorization code to exchange at identity /oauth2/token with the PKCE verifier'}
+        trustedDeviceToken: {type: string}
     PayLinkToken:
       type: object
       required: [token]
@@ -2603,6 +3316,119 @@ components:
       properties:
         atin: {$ref: '#/components/schemas/Atin'}
         status: {type: string, enum: [subscribed]}
+    RunChannel:
+      type: string
+      enum: [EMAIL, SMS, PUSH, WHATSAPP]
+      description: A way to reach a subscriber; each is consented to separately (WhatsApp only from approved templates)
+    RunPickupPoint:
+      type: [object, 'null']
+      additionalProperties: true
+      description: Where orders are collected when the drop mode is PICKUP_POINT
+    RunLocation:
+      type: object
+      required: [id, slug, name, market, timeZone, defaultFeeMinor, currency, dropMode]
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string, examples: [lubbock]}
+        name: {type: string, examples: [Lubbock]}
+        market: {type: string, examples: [US]}
+        state: {type: [string, 'null'], examples: [TX]}
+        timeZone: {type: string, examples: [America/Chicago]}
+        area: {type: object, additionalProperties: true, description: 'Coverage as delivery-runs keeps it (ZIP list, polygon or radius)'}
+        defaultFeeMinor: {type: integer, description: Delivery fee when the run sets none}
+        currency: {type: string, examples: [USD]}
+        dropMode: {type: string, enum: [DOORSTEP, PICKUP_POINT]}
+        pickupPoint: {$ref: '#/components/schemas/RunPickupPoint'}
+        whatsappInviteUrl: {type: [string, 'null'], description: The location's WhatsApp community invite}
+        socialLinks: {type: object, additionalProperties: {type: string}}
+    RunPublic:
+      type: object
+      required: [runId, locationId, status, windowStart, windowEnd, cutoffAt, feeMinor, currency, acceptingOrders, full]
+      description: A delivery run as shoppers see it
+      properties:
+        runId: {type: string, format: uuid}
+        locationId: {type: string, format: uuid}
+        locationSlug: {type: string}
+        town: {type: string}
+        status: {type: string}
+        windowStart: {type: string, format: date-time}
+        windowEnd: {type: string, format: date-time}
+        cutoffAt: {type: string, format: date-time, description: Orders close at this time}
+        feeMinor: {type: integer}
+        currency: {type: string}
+        dropMode: {type: string, enum: [DOORSTEP, PICKUP_POINT]}
+        pickupPoint: {$ref: '#/components/schemas/RunPickupPoint'}
+        acceptingOrders: {type: boolean}
+        ordersLeft: {type: [integer, 'null'], description: 'Orders left (null = not limited)'}
+        full: {type: boolean, description: No room left; checkout offers the next run}
+        runUrl: {type: string, description: 'Link to the run on the location page, with attribution'}
+    RunLocationPage:
+      type: object
+      required: [location, runs, locationUrl]
+      properties:
+        location: {$ref: '#/components/schemas/RunLocation'}
+        runs: {type: array, items: {$ref: '#/components/schemas/RunPublic'}}
+        locationUrl: {type: string, description: The location page URL}
+        shareLinks: {type: object, additionalProperties: {type: string}, description: 'Share URLs per channel, each with UTM attribution'}
+    RunConsent:
+      type: object
+      required: [channel, granted]
+      description: Consent for one channel with its record
+      properties:
+        channel: {$ref: '#/components/schemas/RunChannel'}
+        granted: {type: boolean}
+        consentedAt: {type: [string, 'null'], format: date-time}
+        source: {type: [string, 'null'], description: 'Where the consent was given (location-page, account, ...)'}
+        withdrawnAt: {type: [string, 'null'], format: date-time}
+    RunSubscription:
+      type: object
+      required: [id, locationId, status, consents]
+      properties:
+        id: {type: string, format: uuid}
+        locationId: {type: string, format: uuid}
+        status: {type: string, description: 'PENDING_CONFIRMATION, ACTIVE or UNSUBSCRIBED'}
+        consents: {type: array, items: {$ref: '#/components/schemas/RunConsent'}}
+        createdAt: {type: [string, 'null'], format: date-time}
+        confirmedAt: {type: [string, 'null'], format: date-time}
+    RunAdvertorial:
+      type: object
+      required: [id, source, sourceId, headline, ctaLabel, ctaUrl, expiresAt]
+      description: An advertorial served to the shopper's place, one variant
+      properties:
+        id: {type: string, format: uuid}
+        source: {type: string, enum: [WINDOW, RUN]}
+        sourceId: {type: string, description: The pre-order window or delivery run it promotes}
+        variant: {type: string, examples: [A]}
+        code: {type: [string, 'null'], description: Window code; null for runs}
+        place: {type: [string, 'null'], examples: ['Lubbock, TX']}
+        headline: {type: string}
+        body: {type: string}
+        ctaLabel: {type: string}
+        ctaUrl: {type: string, description: 'With UTM and order attribution (src=page&cr=adv-...)'}
+        imageUrl: {type: [string, 'null']}
+        countdownTarget: {type: [string, 'null'], format: date-time, description: The live countdown counts down to this}
+        expiresAt: {type: string, format: date-time}
+        deliveryDisplay: {type: [string, 'null']}
+        feeDisplay: {type: [string, 'null']}
+        featuredProducts:
+          type: array
+          maxItems: 4
+          description: 'Up to four products staff chose; the card links each to its product page (/p/{atin}). The price is not kept: the product page shows today''s.'
+          items: {$ref: '#/components/schemas/RunFeaturedProduct'}
+    RunFeaturedProduct:
+      type: object
+      required: [atin, title]
+      properties:
+        atin: {type: string, examples: [ATSHEA0001]}
+        title: {type: string}
+        imageUrl: {type: [string, 'null'], description: An https picture}
+    RunVisitRequest:
+      type: object
+      properties:
+        runId: {type: string, format: uuid, description: 'The run the visitor was looking at, if any'}
+        utmSource: {type: string, maxLength: 80, examples: [whatsapp]}
+        utmMedium: {type: string, maxLength: 80, examples: [social]}
+        utmCampaign: {type: string, maxLength: 120, examples: [delivery-run-bastrop-tx-20261024]}
     StockAlertItem:
       type: object
       required: [atin, productTitle, status, createdAt, notifiedAt]
@@ -2716,7 +3542,7 @@ components:
         count: {type: integer, minimum: 0}
     SearchPage:
       type: object
-      required: [hits, total, page, size, pageCount, facets, deliverToLabel, tookMs]
+      required: [hits, total, page, size, pageCount, facets, deliverToLabel, tookMs, services]
       properties:
         hits: {type: array, items: {$ref: '#/components/schemas/ProductSummary'}}
         total: {type: integer}
@@ -2736,6 +3562,22 @@ components:
             delivery: {type: array, items: {$ref: '#/components/schemas/FacetBucket'}}
         deliverToLabel: {type: string}
         tookMs: {type: integer}
+        services:
+          type: array
+          description: Services matching the typed words (first page of a text search only; at most four, best match first)
+          items:
+            type: object
+            required: [serviceId, orgId, name, providerName, category, durationMinutes, priceFromMinor, currency, location]
+            properties:
+              serviceId: {type: string}
+              orgId: {type: string}
+              name: {type: string}
+              providerName: {type: string}
+              category: {type: string}
+              durationMinutes: {type: integer}
+              priceFromMinor: {type: integer, format: int64}
+              currency: {type: string}
+              location: {type: string}
         searchId: {type: string, description: Identifies this search for click reporting (POST /v1/search/clicks)}
     Suggestions:
       type: object
@@ -2771,6 +3613,7 @@ components:
         stockStatus: {$ref: '#/components/schemas/StockStatus'}
         selected: {type: boolean}
         perishable: {type: boolean, description: 'Catalog product type or attribute perishable: hand delivery with a code, no safe place'}
+        productType: {type: string, description: 'Catalog product type code for sales-tax category mapping'}
     DeliveryOption:
       type: object
       required: [key, label, eta, feeMinor, free]
@@ -2783,6 +3626,24 @@ components:
         earliestDate: {type: string, format: date, description: Checkout only — promise service date range}
         latestDate: {type: string, format: date}
         cutoffLabel: {type: string, examples: [Order within 3 h 12 min]}
+        feeRule:
+          $ref: '#/components/schemas/DeliveryFeeRuleRef'
+    DeliveryFeeRuleRef:
+      type: object
+      description: |
+        The staff delivery fee rule behind a fee (ADR 0005 §3, staff manage them under Settings → Delivery fees): the
+        delivery method, the rule and its version, the amount and where it came from. The cart and checkout show it next
+        to the fee; the order keeps the rule it was charged by, so later edits never change it.
+      required: [method, ruleVersion, amountMinor]
+      properties:
+        method: {type: string, enum: [AFROTRANSACT_DELIVERY, CARRIER, PICKUP]}
+        ruleId: {type: string}
+        ruleVersion: {type: integer}
+        currency: {type: string}
+        amountMinor: {type: integer}
+        source: {type: string, enum: [RULE, WINDOW_OVERRIDE, CARRIER_QUOTE, CARRIER_FALLBACK]}
+        band: {type: string, examples: ['10–40 mi']}
+        distanceMiles: {type: number}
     CartPackage:
       type: object
       required: [packageId, seller, fulfilment, heading, shipsFrom, delivery, deliveryOptions, lines, itemCount, subtotalMinor, freeShippingNudge]
@@ -2941,20 +3802,31 @@ components:
         lon: {type: [number, 'null']}
     AddressSuggestions:
       type: object
-      required: [suggestions, attribution]
+      required: [suggestions, attribution, sessionToken]
       properties:
         suggestions:
           type: array
           items:
             type: object
-            required: [id, label, secondary, address, source]
+            required: [id, label, secondary, address, source, resolved]
             properties:
               id: {type: string}
               label: {type: string}
               secondary: {type: string}
               address: {$ref: '#/components/schemas/PostalAddress'}
               source: {type: string, enum: [google, osm, fixture]}
+              resolved: {type: boolean, description: 'false: `address` holds the street line only; resolve the suggestion when picked'}
         attribution: {type: string, description: Required attribution text (e.g. © OpenStreetMap contributors)}
+        sessionToken: {type: string, description: Autocomplete session of this address entry (Google Places billing)}
+    MaintenanceStatus:
+      type: object
+      required: [active]
+      properties:
+        active: {type: boolean}
+        scope: {type: string, enum: [SHOPPERS, ALL], description: SHOPPERS pauses the storefront and apps; ALL also pauses Seller Center.}
+        title: {type: string}
+        message: {type: string, description: What customers are told.}
+        expectedBackAt: {type: string, format: date-time, description: Omitted when unknown or already past.}
     SiteConfig:
       type: object
       required: [revision, socials, contacts, legal, identityProviders, locales, market, appLinks, paymentMethods, smsProgramName]
@@ -2972,9 +3844,10 @@ components:
               label: {type: string}
         contacts:
           type: object
-          required: [phone, privacyEmail, accessibilityEmail, legalEmail, pressEmail, partnersEmail, address]
+          required: [phone, phoneE164, privacyEmail, accessibilityEmail, legalEmail, pressEmail, partnersEmail, address]
           properties:
             phone: {type: string}
+            phoneE164: {type: string, description: 'The support phone in E.164 (+18335550199); also the number of the WhatsApp chat button in the storefront and Seller Center. Empty when not set (the button is then hidden).'}
             privacyEmail: {type: string}
             accessibilityEmail: {type: string}
             legalEmail: {type: string}
@@ -3195,6 +4068,21 @@ components:
         status: {type: string, enum: [RECEIVED, COMPLETED, DENIED]}
         submittedAt: {type: string, format: date-time}
         dueAt: {type: string, format: date-time, description: Response deadline (45 days)}
+    BackOffice:
+      type: object
+      description: A back office the signed-in person can open from the storefront (links use each app's configured URL).
+      required: [app, state]
+      properties:
+        app:
+          type: string
+          enum: [seller-center, provider-hub, staff-console]
+          description: Seller Center and Provider Hub are the Seller Center app (SELLER_CENTER_URL); the staff console is STAFF_CONSOLE_URL.
+        state:
+          type: string
+          enum: [active, application]
+          description: >-
+            `active`: an approved (or suspended) organisation, or staff. `application`: a seller or provider application
+            still in progress ("Continue your seller application"), which opens Seller Center onboarding.
     Me:
       type: object
       required: [authenticated, user, counts]
@@ -3202,7 +4090,7 @@ components:
         authenticated: {type: boolean}
         user:
           type: [object, 'null']
-          required: [id, firstName, lastName, email, initials, roles]
+          required: [id, firstName, lastName, email, initials, roles, backOffices]
           properties:
             id: {type: string}
             firstName: {type: string}
@@ -3212,6 +4100,14 @@ components:
             roles: {type: array, items: {type: string}}
             phone: {type: string, description: 'Masked account phone (•••• 0142); absent when identity is unavailable or no phone is set'}
             phoneVerified: {type: boolean, description: Whether the account phone passed SMS verification}
+            backOffices:
+              type: array
+              description: |
+                The person's back offices, for the storefront account menu and the customer app's account screen:
+                Seller Center for a seller organisation, Provider Hub for a provider organisation, the staff console
+                for staff. A person is always also a shopper; this only adds links (the storefront acts as the person,
+                never as their organisation). Empty for shoppers only.
+              items: {$ref: '#/components/schemas/BackOffice'}
         counts:
           type: [object, 'null']
           description: Badges for the account menu.
@@ -3220,13 +4116,26 @@ components:
             orders: {type: integer}
             addresses: {type: integer}
             paymentMethods: {type: integer}
+    SignOutRequest:
+      type: object
+      properties:
+        returnTo:
+          type: string
+          maxLength: 2048
+          description: >-
+            The path to come back to on the calling app: the storefront returns there signed out (send it only for
+            pages a guest may see); Seller Center and the staff console return there after signing in again.
+            Anything but a relative path is ignored.
     SignOutResult:
       type: object
       required: [redirectTo]
       properties:
         redirectTo:
           type: [string, 'null']
-          description: Identity's end-session URL to navigate to (ends the identity session, then returns to the calling app's home page); null without a signed-in web session.
+          description: >-
+            Where the browser goes next: identity's end-session URL (ends the identity session, then
+            `GET /v1/auth/signed-out/{app}` on the calling app), or that signed-out URL directly when there is no
+            identity session to end; null for native apps.
     PhoneCodeSent:
       type: object
       required: [sentTo, expiresAt]
@@ -3277,7 +4186,7 @@ components:
       required: [id, type, brand, last4, label, expires, isDefault]
       properties:
         id: {type: string}
-        type: {type: string, enum: [card, us_bank_account, cashapp, link]}
+        type: {type: string, enum: [card, us_bank_account, cashapp, link, amazon_pay]}
         brand: {type: [string, 'null']}
         last4: {type: [string, 'null']}
         label: {type: string}
@@ -3309,7 +4218,20 @@ components:
               label: {type: string}
               status: {type: string}
               items: {type: string}
-              cancellable: {type: boolean, description: The customer can still cancel it (until packed)}
+              sellerName: {type: string, description: Who sells and ships this shipment}
+              lines:
+                type: array
+                description: What is in the shipment (name, photo, quantity)
+                items:
+                  type: object
+                  required: [title, quantity]
+                  properties:
+                    title: {type: string}
+                    quantity: {type: integer}
+                    imageUrl: {type: [string, 'null']}
+                    productAtin: {type: string}
+              cancellable: {type: boolean, description: 'The customer can still cancel it: before the parcel is packed and inside the cancellation window'}
+              cancellableUntil: {type: [string, 'null'], format: date-time, description: 'When Cancel stops being offered; null when it is not offered now'}
               carrier: {type: [string, 'null']}
               trackingNumber: {type: [string, 'null']}
               promisedBy: {type: [string, 'null']}
@@ -3324,9 +4246,41 @@ components:
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/OrderSummary'}}
         nextCursor: {type: [string, 'null']}
+    CheckoutCouponSellerShare:
+      type: object
+      required: [sellerOrgId, discountMinor, funding]
+      properties:
+        sellerOrgId: {type: string}
+        sellerName: {type: string}
+        discountMinor: {type: integer}
+        funding: {type: string, enum: [platform, seller], description: Who pays this slice at settlement}
+    CheckoutCouponOfferDiscount:
+      type: object
+      required: [offerId, discountMinor]
+      properties:
+        offerId: {type: string}
+        sellerOrgId: {type: string}
+        discountMinor: {type: integer}
+    CheckoutCoupon:
+      type: object
+      required: [code, applicable, discountMinor, shippingDiscountMinor]
+      properties:
+        code: {type: string}
+        applicable: {type: boolean}
+        rejection: {type: [string, 'null']}
+        message: {type: string}
+        discountMinor: {type: integer}
+        shippingDiscountMinor: {type: integer}
+        funding: {type: string, enum: [platform, seller]}
+        fundedByOrg: {type: string, description: Seller org when funding is seller}
+        offerDiscounts: {type: array, items: {$ref: '#/components/schemas/CheckoutCouponOfferDiscount'}}
+        sellerShares:
+          type: array
+          items: {$ref: '#/components/schemas/CheckoutCouponSellerShare'}
+          description: Per-seller discount totals for settlement preview
     CheckoutSummary:
       type: object
-      required: [packages, addresses, paymentMethods, subtotalMinor, shippingMinor, taxMinor, taxRateLabel, totalMinor, currency, sellerCount]
+      required: [packages, addresses, paymentMethods, subtotalMinor, shippingMinor, discountMinor, shippingDiscountMinor, taxMinor, taxRateLabel, totalMinor, currency, sellerCount]
       properties:
         packages:
           type: array
@@ -3355,12 +4309,23 @@ components:
         paymentMethods: {type: array, items: {$ref: '#/components/schemas/PaymentMethod'}}
         subtotalMinor: {type: integer}
         shippingMinor: {type: integer}
+        discountMinor: {type: integer, description: Item discount from coupon}
+        shippingDiscountMinor: {type: integer, description: Shipping discount from coupon (e.g. free shipping)}
+        coupon: {$ref: '#/components/schemas/CheckoutCoupon'}
         taxMinor: {type: integer}
         taxRateLabel: {type: string, examples: ['8.25% TX']}
         totalMinor: {type: integer}
         currency: {type: string}
         sellerCount: {type: integer}
         publishableKey: {type: string, description: Stripe publishable key for Stripe.js (Payment / Express Checkout Elements)}
+        crossSell:
+          allOf:
+            - $ref: '#/components/schemas/Rail'
+          description: Optional checkout_cross_sell placement from content (product rail)
+        credit:
+          allOf:
+            - $ref: '#/components/schemas/CheckoutCredit'
+          description: What my AfroTransact credit would pay of this order (S320); absent when I have no credit
     CheckoutLocalDelivery:
       type: object
       description: |
@@ -3427,7 +4392,7 @@ components:
       type: object
       description: |
         Money and payment setup of a window, all money in minor units: the window's doorFeeOverride / pickupFeeOverride,
-        else Back office → Pre-orders → Settings → payment for the window's currency.
+        else the staff delivery fee rules (Settings → Delivery fees: AfroTransact delivery by distance band, pickup fee).
       properties:
         door: {type: boolean}
         pickup: {type: boolean}
@@ -3500,7 +4465,14 @@ components:
         - {$ref: '#/components/schemas/PreorderTerms'}
         - type: object
           properties:
-            windowId: {type: string}
+            windowId: {type: string, description: 'The window id, or the run id when kind is RUN'}
+            kind:
+              type: string
+              enum: [WINDOW, RUN]
+              description: WINDOW, or RUN for a delivery run staff scheduled (S261; closesAt is then its order cutoff)
+            minOrders: {type: integer, description: 'RUN: orders the run needs to go ahead'}
+            ordersSoFar: {type: integer, description: 'RUN: orders holding a slot now (counts toward the minimum and the capacity)'}
+            minimumMet: {type: boolean, description: 'RUN: ordersSoFar has reached minOrders'}
             code: {type: string}
             name: {type: string}
             stage: {type: string, enum: [UPCOMING, OPEN, CLOSED]}
@@ -3509,6 +4481,9 @@ components:
             deliversOn: {type: string, format: date}
             timeZone: {type: string}
             fulfilment: {type: string, enum: [DOOR, PICKUP]}
+            feeMinor: {type: integer, description: Fee of the chosen fulfilment}
+            feeRule:
+              $ref: '#/components/schemas/DeliveryFeeRuleRef'
             options:
               type: array
               items:
@@ -3517,6 +4492,8 @@ components:
                 properties:
                   fulfilment: {type: string, enum: [DOOR, PICKUP]}
                   feeMinor: {type: integer}
+                  rule:
+                    $ref: '#/components/schemas/DeliveryFeeRuleRef'
     PlaceOrderRequest:
       type: object
       required: [addressId, deliverySelections]
@@ -3532,6 +4509,13 @@ components:
           type: boolean
           description: With newPaymentMethod, save the method on the shopper's Stripe Customer for future purchases (the order's PaymentIntent gets setup_future_usage=off_session, so the Payment Element is created with setupFutureUsage off_session)
         gift: {type: boolean}
+        useCredit:
+          type: boolean
+          description: |
+            Pay with my AfroTransact credit first (S320). Credit is spent, up to the order total, when the order is placed
+            (once per order, never more than the balance); the card pays only the rest. When credit pays everything
+            (`summary.credit.cardDueMinor` is 0) no payment method is needed: send none, the answer has no
+            `paymentClientSecret`, and the order is placed without a card (then `POST …/confirm` returns `placed`).
         couponCode:
           type: string
           maxLength: 20
@@ -3552,6 +4536,168 @@ components:
                   safePlace: {type: string}
                   instructions: {type: string, maxLength: 240}
                   contact: {type: string, enum: [text, call, none]}
+    CreditEntry:
+      type: object
+      description: One line of the credit history; the balance is the sum of the lines. The storefront words it from kind and source.
+      required: [id, kind, source, amountMinor, currency, balanceAfterMinor, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [GRANT, SPEND, REFUND, ADJUSTMENT]}
+        source: {type: string, enum: [REFERRAL, GIFT_CARD, MEMBERSHIP, REFUND, STAFF, PROMO, ORDER]}
+        amountMinor: {type: integer, format: int64, description: 'Signed: credit added is positive, credit spent negative'}
+        currency: {type: string}
+        balanceAfterMinor: {type: integer, format: int64}
+        createdAt: {type: string, format: date-time}
+    CreditAccount:
+      type: object
+      required: [balanceMinor, currency, entries, nextBefore]
+      properties:
+        balanceMinor: {type: integer, format: int64}
+        currency: {type: string}
+        entries: {type: array, items: {$ref: '#/components/schemas/CreditEntry'}}
+        nextBefore: {type: [string, 'null'], description: Pass as `before` for older entries; null on the last page}
+    CheckoutCredit:
+      type: object
+      description: What the shopper's credit would pay of this order if used (payments decides when the order is placed)
+      required: [availableMinor, appliedMinor, cardDueMinor]
+      properties:
+        availableMinor: {type: integer, format: int64}
+        appliedMinor: {type: integer, format: int64, description: 'The balance up to the total, leaving at least 0.50 for the card or paying everything'}
+        cardDueMinor: {type: integer, format: int64, description: What the card pays then; 0 means no payment method is needed}
+    ReferralRewardTerms:
+      type: object
+      description: What one side earns
+      required: [type, creditMinor, membershipDays]
+      properties:
+        type: {type: string, enum: [CREDIT, MEMBERSHIP_DAYS]}
+        creditMinor: {type: integer, format: int64, description: Credit in minor units; 0 for membership days}
+        membershipDays: {type: integer, description: Free membership days; 0 for credit}
+    ReferralProgram:
+      type: object
+      description: The offer in force. AfroTransact pays both sides; credit only buys products and services.
+      required: [enabled, referrerReward, referredReward, minOrderMinor, returnWindowDays, validityDays, currency]
+      properties:
+        enabled: {type: boolean, description: false while staff have switched the program off}
+        referrerReward: {$ref: '#/components/schemas/ReferralRewardTerms'}
+        referredReward: {$ref: '#/components/schemas/ReferralRewardTerms'}
+        minOrderMinor: {type: integer, format: int64, description: The friend's delivered order must be worth at least this}
+        returnWindowDays: {type: integer, description: Rewards are granted this many days after delivery}
+        validityDays: {type: integer, description: Days after sign-up in which the friend can still qualify}
+        currency: {type: string}
+    ReferralEarnings:
+      type: object
+      required: [invited, open, rewarded, earnedMinor, membershipDays, pendingMinor]
+      properties:
+        invited: {type: integer, description: Friends who signed up with my code}
+        open: {type: integer, description: Referrals not finished yet}
+        rewarded: {type: integer, description: Referrals that paid me a reward}
+        earnedMinor: {type: integer, format: int64, description: Credit I earned from referrals}
+        membershipDays: {type: integer, description: Free membership days I earned from referrals}
+        pendingMinor: {type: integer, format: int64, description: 'Credit promised for friends who qualified, granted after the return window'}
+    ReferralFriend:
+      type: object
+      required: [id, friendName, status, signedUpAt, expiresAt, eligibleAt, reward]
+      properties:
+        id: {type: string, format: uuid}
+        friendName: {type: [string, 'null'], description: First name and last initial; null on my own referral}
+        status: {type: string, enum: [PENDING, WAITING, REWARDED, EXPIRED, CLOSED], description: 'PENDING: no qualifying order yet. WAITING: qualified, rewards after the return window (or under a check). CLOSED: not eligible.'}
+        signedUpAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        eligibleAt: {type: [string, 'null'], format: date-time, description: 'When the reward is due, once the friend qualified'}
+        reward:
+          oneOf: [{$ref: '#/components/schemas/ReferralFriendReward'}, {type: 'null'}]
+    ReferralFriendReward:
+      type: object
+      required: [terms, granted, grantedAt]
+      properties:
+        terms: {$ref: '#/components/schemas/ReferralRewardTerms'}
+        granted: {type: boolean}
+        grantedAt: {type: [string, 'null'], format: date-time}
+    AccountReferral:
+      type: object
+      required: [code, displayCode, shareUrl, program, earnings, friends, asFriend]
+      properties:
+        code: {type: string, description: 'Eight characters, for example KDM7XR3Q'}
+        displayCode: {type: string, description: 'The same as shown, KDM7-XR3Q'}
+        shareUrl: {type: string, format: uri, description: The storefront link that opens sign-up with the code filled in}
+        program: {$ref: '#/components/schemas/ReferralProgram'}
+        earnings: {$ref: '#/components/schemas/ReferralEarnings'}
+        friends: {type: array, items: {$ref: '#/components/schemas/ReferralFriend'}}
+        asFriend:
+          oneOf: [{$ref: '#/components/schemas/ReferralFriend'}, {type: 'null'}]
+    CreditRefundChoice:
+      type: object
+      required: [orderNumber, cardRefundsAsCredit, cardPartMinor, currency]
+      properties:
+        orderNumber: {type: string}
+        cardRefundsAsCredit: {type: boolean}
+        cardPartMinor: {type: integer, format: int64, description: What the card paid for the order}
+        currency: {type: string}
+    GiftCardConfig:
+      type: object
+      required: [minMinor, maxMinor, currency, presetsMinor, terms, publishableKey]
+      properties:
+        minMinor: {type: integer, format: int64}
+        maxMinor: {type: integer, format: int64}
+        currency: {type: string}
+        publishableKey: {type: string, description: 'The Stripe publishable key the buy page creates its Payment Element with (cards only)'}
+        presetsMinor: {type: array, items: {type: integer, format: int64}}
+        terms: {type: object, additionalProperties: {type: string}, description: 'Staff-written terms by language (en, fr, es, ar, yo); empty means the page shows its built-in terms'}
+    GiftCard:
+      type: object
+      description: A gift card as its buyer sees it. The code is never returned; the recipient gets it by email on the send date.
+      required: [id, status, amountMinor, currency, recipientEmail, sendAt, deliveryStatus, redeemed, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        status: {type: string, enum: [PENDING_PAYMENT, ACTIVE, REDEEMED, VOID, PAYMENT_FAILED]}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        recipientEmail: {type: string}
+        recipientName: {type: [string, 'null']}
+        senderName: {type: [string, 'null']}
+        message: {type: [string, 'null']}
+        sendAt: {type: string, format: date-time}
+        deliveryStatus: {type: string, enum: [SCHEDULED, SENT]}
+        sentAt: {type: [string, 'null'], format: date-time}
+        redeemed: {type: boolean}
+        createdAt: {type: string, format: date-time}
+    GiftCardPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/GiftCard'}}
+        nextCursor: {type: [string, 'null']}
+    GiftCardPurchase:
+      allOf:
+        - $ref: '#/components/schemas/GiftCard'
+        - type: object
+          required: [clientSecret, publishableKey]
+          properties:
+            clientSecret: {type: [string, 'null'], description: Confirm the payment with Stripe Elements; null when it was already paid}
+            publishableKey: {type: string}
+    GiftCardPurchaseRequest:
+      type: object
+      required: [amountMinor, recipientEmail]
+      properties:
+        amountMinor: {type: integer, format: int64, description: Within the staff-set limits (default 10.00 to 500.00)}
+        recipientEmail: {type: string, maxLength: 254}
+        recipientName: {type: string, maxLength: 120}
+        senderName: {type: string, maxLength: 120}
+        message: {type: string, maxLength: 500}
+        sendAt: {type: string, format: date-time, description: When to email the card; omit to send it now (at most a year ahead)}
+        locale: {type: string, enum: [en, fr, es, ar, yo], description: Language of the email}
+    GiftCardRedeemRequest:
+      type: object
+      required: [code]
+      properties:
+        code: {type: string, maxLength: 64, examples: [ABCD-EFGH-JKLM-2345]}
+    GiftCardRedemption:
+      type: object
+      required: [redeemedMinor, balanceMinor, currency]
+      properties:
+        redeemedMinor: {type: integer, format: int64}
+        balanceMinor: {type: integer, format: int64, description: The credit balance after redeeming}
+        currency: {type: string}
     OrderConfirmation:
       type: object
       required: [orderNumber, status, totalMinor, currency, shipments]
@@ -3561,6 +4707,7 @@ components:
         paymentClientSecret: {type: [string, 'null'], description: The order's PaymentIntent client secret (always present once orders created it)}
         totalMinor: {type: integer}
         currency: {type: string}
+        creditMinor: {type: integer, format: int64, description: The part of the total paid with AfroTransact credit (S320); the card pays the rest}
         preorder:
           type: [object, 'null']
           description: The "You're in" facts when the order holds a pre-order package (relayed from orders)
@@ -3623,6 +4770,21 @@ components:
         customerId: {type: string}
         ephemeralKey: {type: string}
         publishableKey: {type: string}
+    DeliveryProof:
+      type: [object, 'null']
+      description: |
+        How our driver handed the parcel over, shown on a delivered shipment. Null for carrier deliveries (the carrier's
+        tracking is the record), pickups and deliveries staff confirmed by hand. The photo and signature links are
+        short-lived (about 5 minutes): read the order again for fresh ones. The driver's GPS position is for staff only.
+      required: [method, recipientName, relationship, safePlace, photoUrl, signatureUrl, at]
+      properties:
+        method: {type: string, enum: [CUSTOMER, SOMEONE_ELSE, SAFE_PLACE], description: 'To the customer (who gave their code), to someone else (name, relationship, signature), or left in a safe place'}
+        recipientName: {type: [string, 'null']}
+        relationship: {type: [string, 'null']}
+        safePlace: {type: [string, 'null']}
+        photoUrl: {type: [string, 'null'], format: uri, description: Proof photo; null when none or it cannot be shown right now}
+        signatureUrl: {type: [string, 'null'], format: uri, description: Recipient's signature (someone-else handovers)}
+        at: {type: string, format: date-time, description: When it was delivered}
     TimelineEvent:
       type: object
       required: [status, label, at]
@@ -3645,13 +4807,15 @@ components:
     OrderPayment:
       type: object
       description: What was charged and refunded (payments); shippingTaxMinor is the part of the tax charged on delivery
-      required: [status, capturedMinor, refundedMinor, refundableMinor, shippingTaxMinor]
+      required: [status, capturedMinor, refundedMinor, refundableMinor, shippingTaxMinor, creditMinor, cardRefundsAsCredit]
       properties:
         status: {type: string}
         capturedMinor: {type: integer}
         refundedMinor: {type: integer}
         refundableMinor: {type: integer}
         shippingTaxMinor: {type: integer}
+        creditMinor: {type: integer, format: int64, description: The part of the order paid with AfroTransact credit (S320); the card paid the rest}
+        cardRefundsAsCredit: {type: boolean, description: The card part of this order's refunds comes back as credit (the shopper's one-way choice)}
     OrderDetail:
       type: object
       required: [orderNumber, placedAt, status, currency, itemsMinor, shippingMinor, taxMinor, discountMinor, totalMinor, shipTo, shippingAddress, shipments]
@@ -3689,12 +4853,14 @@ components:
               items: {type: string}
               sellerName: {type: string}
               deliveryMethod: {type: string, enum: [carrier, express, afrotransact_delivery, pickup]}
-              cancellable: {type: boolean}
+              cancellable: {type: boolean, description: 'Cancel is offered: before the parcel is packed and inside the cancellation window'}
+              cancellableUntil: {type: [string, 'null'], format: date-time, description: 'When Cancel stops being offered (the window''s end); null when it is not offered now'}
               carrier: {type: [string, 'null']}
               trackingNumber: {type: [string, 'null']}
               promisedFrom: {type: [string, 'null']}
               promisedBy: {type: [string, 'null']}
               deliveredAt: {type: [string, 'null']}
+              proof: {$ref: '#/components/schemas/DeliveryProof'}
               deliveryCode: {type: [string, 'null'], description: One-time handover code (hand delivery or perishables)}
               lines: {type: array, items: {$ref: '#/components/schemas/OrderLineView'}}
               timeline: {type: array, items: {$ref: '#/components/schemas/TimelineEvent'}}
@@ -3704,6 +4870,12 @@ components:
               localDelivery:
                 oneOf: [{$ref: '#/components/schemas/OrderLocalDelivery'}, {type: 'null'}]
                 description: AfroTransact Delivery from the seller's store (S255); null for other shipments
+              deliveryFeeRule:
+                description: |
+                  The delivery fee rule the shipping was charged by, as it was when the order was placed (ADR 0005 §3):
+                  later edits of the rule never change it. Null for flat rates and for AfroTransact Delivery from a
+                  seller's store (see localDelivery).
+                oneOf: [{$ref: '#/components/schemas/DeliveryFeeRuleRef'}, {type: 'null'}]
               pickup:
                 description: Where a pickup shipment is collected (carrier-gateway pickup location); null for other shipments
                 oneOf:
@@ -4063,9 +5235,36 @@ components:
         policyText: {type: string}
         instantBooking: {type: boolean}
         providerAnswersWithinMinutes: {type: [integer, 'null']}
+    BusinessPage:
+      type: object
+      required: [slug, kind, name, description, brandColor, logoUrl, contactEmail, indexable, services, products]
+      properties:
+        slug: {type: string}
+        kind: {type: string, enum: [SELLER, PROVIDER]}
+        name: {type: string}
+        description: {type: [string, 'null']}
+        brandColor: {type: [string, 'null'], description: '#rrggbb, or null for the platform colour'}
+        logoUrl: {type: [string, 'null']}
+        contactEmail: {type: [string, 'null']}
+        indexable: {type: boolean, description: False until the business is approved}
+        products:
+          type: array
+          description: A seller's live products (at most twelve, best match first); empty for providers
+          items: {$ref: '#/components/schemas/ProductSummary'}
+        services:
+          type: array
+          items:
+            type: object
+            required: [serviceId, name, durationMinutes, priceMinor, currency]
+            properties:
+              serviceId: {type: string}
+              name: {type: string}
+              durationMinutes: {type: integer}
+              priceMinor: {type: integer, format: int64}
+              currency: {type: string}
     ProviderPage:
       type: object
-      required: [orgId, displayName, timeZone, location, policy, instantBooking, team, services, design]
+      required: [orgId, displayName, timeZone, location, policy, instantBooking, team, services]
       properties:
         orgId: {type: string}
         displayName: {type: string}
@@ -4075,45 +5274,7 @@ components:
         instantBooking: {type: boolean}
         team: {type: array, items: {$ref: '#/components/schemas/ServiceMember'}}
         services: {type: array, items: {$ref: '#/components/schemas/ServiceDetail'}}
-        design:
-          type: [object, 'null']
-          description: The provider's published page (storefront service); social links are approved ones only.
-          required: [slug, tagline, layout, header, buttonShape, coverUrl, tokens, social, gallery, featured]
-          properties:
-            slug: {type: string}
-            tagline: {type: string}
-            layout: {type: string, enum: [CLASSIC, GALLERY_FIRST, STORY]}
-            header: {type: string, enum: [COVER, BAND]}
-            buttonShape: {type: string, enum: [ROUNDED, SQUARE]}
-            coverUrl: {type: [string, 'null']}
-            tokens: {type: object, additionalProperties: {type: string}, description: Vetted theme CSS custom properties (--at-*)}
-            social:
-              type: array
-              items:
-                type: object
-                required: [network, url]
-                properties:
-                  network: {type: string}
-                  url: {type: string}
-            gallery:
-              type: array
-              items:
-                type: object
-                required: [url, caption]
-                properties:
-                  url: {type: string}
-                  caption: {type: string}
-            featured:
-              type: array
-              items:
-                type: object
-                required: [id, headline, body, url, serviceId]
-                properties:
-                  id: {type: string}
-                  headline: {type: string}
-                  body: {type: string}
-                  url: {type: [string, 'null']}
-                  serviceId: {type: [string, 'null']}
+
     CancellationQuote:
       type: object
       required: [refundSharePercent, depositMinor, refundMinor, keptMinor, releaseHold, policy, explanation, currency]

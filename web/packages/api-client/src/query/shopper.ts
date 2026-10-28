@@ -29,7 +29,8 @@ export const securityKeys = {
 
 export const checkoutKeys = {
   all: [...accountKeys.all, 'checkout'] as const,
-  summary: (addressId: string | null) => [...checkoutKeys.all, 'summary', addressId ?? 'default'] as const
+  summary: (addressId: string | null, packageDelivery?: string, couponCode?: string) =>
+    [...checkoutKeys.all, 'summary', addressId ?? 'default', packageDelivery ?? '', couponCode ?? ''] as const
 };
 
 export const serviceKeys = {
@@ -66,6 +67,15 @@ export const shopperQueries = {
   addresses: (api: ApiClient) => queryOptions({ queryKey: accountKeys.addresses(), queryFn: () => api.getAddresses(), staleTime: MINUTE }),
   paymentMethods: (api: ApiClient) => queryOptions({ queryKey: accountKeys.paymentMethods(), queryFn: () => api.getPaymentMethods(), staleTime: MINUTE }),
   orders: (api: ApiClient) => queryOptions({ queryKey: orderKeys.lists(), queryFn: ({ signal }) => api.getOrderPage(undefined, signal), staleTime: 30_000 }),
+  /** Every page of the shopper's orders, newest first: `fetchNextPage` follows the cursor. */
+  infiniteOrders: (api: ApiClient) =>
+    infiniteQueryOptions({
+      queryKey: [...orderKeys.lists(), 'infinite'] as const,
+      queryFn: ({ pageParam, signal }) => api.getOrderPage(pageParam, signal),
+      initialPageParam: undefined as string | undefined,
+      getNextPageParam: (last) => last.nextCursor ?? undefined,
+      staleTime: 30_000
+    }),
   order: (api: ApiClient, orderNumber: string) =>
     queryOptions({ queryKey: orderKeys.detail(orderNumber), queryFn: ({ signal }) => api.getOrder(orderNumber, signal), staleTime: 30_000 }),
   /** My help requests, newest first; `fetchNextPage` follows nextCursor. */
@@ -82,8 +92,13 @@ export const shopperQueries = {
   security: (api: ApiClient) => queryOptions({ queryKey: securityKeys.overview(), queryFn: ({ signal }) => api.getSecurity(signal), staleTime: 0 }),
   notificationPreferences: (api: ApiClient) =>
     queryOptions({ queryKey: securityKeys.preferences(), queryFn: ({ signal }) => api.getNotificationPreferences(signal), staleTime: MINUTE }),
-  checkoutSummary: (api: ApiClient, addressId: string | null) =>
-    queryOptions({ queryKey: checkoutKeys.summary(addressId), queryFn: ({ signal }) => api.getCheckoutSummary(addressId ?? undefined, signal), staleTime: 0, placeholderData: keepPreviousData }),
+  checkoutSummary: (api: ApiClient, addressId: string | null, packageDelivery?: string, couponCode?: string) =>
+    queryOptions({
+      queryKey: checkoutKeys.summary(addressId, packageDelivery, couponCode),
+      queryFn: ({ signal }) => api.getCheckoutSummary(addressId ?? undefined, packageDelivery, couponCode, signal),
+      staleTime: 0,
+      placeholderData: keepPreviousData
+    }),
   serviceSearch: (api: ApiClient, q: { q?: string; category?: string; zip?: string }) =>
     queryOptions({ queryKey: serviceKeys.search(q), queryFn: ({ signal }) => api.searchServices(q, signal), staleTime: MINUTE }),
   service: (api: ApiClient, id: string) => queryOptions({ queryKey: serviceKeys.detail(id), queryFn: ({ signal }) => api.getService(id, signal), staleTime: 5 * MINUTE }),
@@ -95,7 +110,7 @@ export const shopperQueries = {
   bookingQuote: (api: ApiClient, id: string, q: SlotQuery) =>
     queryOptions({ queryKey: serviceKeys.quote(id, q), queryFn: ({ signal }) => api.getBookingQuote(id, q, signal), staleTime: MINUTE }),
   provider: (api: ApiClient, orgId: string) =>
-    queryOptions({ queryKey: serviceKeys.provider(orgId), queryFn: ({ signal }) => api.getProviderPage(orgId, undefined, signal), staleTime: 5 * MINUTE }),
+    queryOptions({ queryKey: serviceKeys.provider(orgId), queryFn: ({ signal }) => api.getProviderPage(orgId, signal), staleTime: 5 * MINUTE }),
   bookings: (api: ApiClient) => queryOptions({ queryKey: bookingKeys.list(), queryFn: ({ signal }) => api.getMyBookings(signal), staleTime: 30_000 }),
   cancellationQuote: (api: ApiClient, id: string) =>
     queryOptions({ queryKey: bookingKeys.cancellationQuote(id), queryFn: ({ signal }) => api.getBookingCancellationQuote(id, signal), staleTime: 0 }),

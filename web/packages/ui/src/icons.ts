@@ -27,6 +27,7 @@ export {
   Crosshair,
   Desktop,
   DeviceMobile,
+  DotsThreeVertical,
   Eye,
   EyeSlash,
   Fingerprint,

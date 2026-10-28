@@ -36,9 +36,11 @@ const m = (identity: string, key: ModuleKey, label: string, group: string, detai
 export const SELLER_MODULES: ModuleDef[] = [
   m('sHome', 'home', 'Home', 'overview', 'the store overview'),
   m('sOrders', 'orders', 'Orders', 'commerce', 'orders, shipping labels and refunds'),
+  m('sOrders', 'returns', 'Returns', 'commerce', 'customer returns and their refunds'),
+  m('sOrders', 'disputes', 'Disputes', 'commerce', 'disputes and A-to-z claims against you'),
   m('sListings', 'listings', 'Listings', 'commerce', 'product listings'),
   m('sInventory', 'inventory', 'Inventory & FBA', 'commerce', 'stock levels'),
-  m('sStorefront', 'storefront', 'Storefront & theme', 'growth', 'the storefront design'),
+  m('sAds', 'coupons', 'Coupons', 'growth', 'promotional codes for your listings'),
   m('sPayouts', 'payouts', 'Payouts', 'finance', 'payouts and balances'),
   m('sPayouts', 'fees', 'Fees & commission', 'finance', 'commission and fees'),
   m('sBilling', 'billing', 'Plan & billing', 'finance', 'the plan and invoices'),
@@ -53,7 +55,6 @@ export const PROVIDER_MODULES: ModuleDef[] = [
   m('pAvail', 'hours', 'Working hours', 'setup', 'working hours, breaks and time off'),
   m('pServices', 'services', 'Services & prices', 'setup', 'services, prices and deposits'),
   m('pPolicy', 'policy', 'Cancellation policy', 'setup', 'the cancellation and no-show policy'),
-  m('pPage', 'public-page', 'Public page', 'setup', 'the public page design, gallery and social links'),
   m('pPayouts', 'earnings', 'Earnings', 'money', 'earnings per booking'),
   m('pPayouts', 'payouts', 'Payouts', 'money', 'payouts and balances'),
   m('pPayouts', 'fees', 'Fees & commission', 'money', 'commission and fees'),
@@ -95,7 +96,7 @@ const matrix = (rows: Record<string, string>, roles: string[]): Record<string, R
 export const SELLER_MATRIX = matrix(
   {
     sHome: 'FULL,FULL,VIEW,VIEW,VIEW,VIEW,VIEW', sOrders: 'FULL,FULL,VIEW,FULL,VIEW,NONE,EDIT', sListings: 'FULL,FULL,FULL,VIEW,NONE,VIEW,VIEW',
-    sInventory: 'FULL,FULL,EDIT,FULL,NONE,NONE,NONE', sStorefront: 'FULL,FULL,EDIT,NONE,NONE,FULL,NONE', sPayouts: 'FULL,VIEW,NONE,NONE,FULL,NONE,NONE',
+    sInventory: 'FULL,FULL,EDIT,FULL,NONE,NONE,NONE', sAds: 'FULL,FULL,NONE,NONE,VIEW,FULL,NONE', sStorefront: 'FULL,FULL,EDIT,NONE,NONE,FULL,NONE', sPayouts: 'FULL,VIEW,NONE,NONE,FULL,NONE,NONE',
     sBilling: 'FULL,VIEW,NONE,NONE,FULL,NONE,NONE', sTeam: 'FULL,FULL,NONE,NONE,NONE,NONE,NONE', sCompliance: 'FULL,FULL,NONE,NONE,EDIT,NONE,NONE'
   },
   SELLER_ROLES.map((r) => r.key)

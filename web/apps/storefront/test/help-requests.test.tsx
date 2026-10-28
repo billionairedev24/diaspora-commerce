@@ -36,7 +36,7 @@ describe('Get help with an order — the list', () => {
   });
 
   it('is linked from the account menu', () => {
-    const menu = accountMenuModel({ authenticated: true, user: { id: 'u', firstName: 'A', lastName: 'B', email: 'a@b.c', initials: 'AB', roles: [] }, counts: { orders: 0, addresses: 0, paymentMethods: 0 } }, '/');
+    const menu = accountMenuModel({ authenticated: true, user: { id: 'u', firstName: 'A', lastName: 'B', email: 'a@b.c', initials: 'AB', roles: [], backOffices: [] }, counts: { orders: 0, addresses: 0, paymentMethods: 0 } }, '/');
     expect(menu.items.find((i) => i.id === 'help')).toMatchObject({ href: '/account/help', label: 'account.help' });
     expect(menu.items.some((i) => i.href?.includes('/account/returns'))).toBe(false);
   });

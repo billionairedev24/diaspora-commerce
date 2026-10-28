@@ -52,12 +52,14 @@ class CogsPostingServiceImpl implements CogsPostingService {
                 continue;
             }
             for (ShippedLine.LotCost lot : line.lots()) {
-                if (!settings.baseCurrency().equals(lot.currency())) {
-                    LOG.warn("Order {} lot {} is costed in {}, not {}; COGS skipped", orderId, lot.lotNo(),
-                            lot.currency(), settings.baseCurrency());
+                // Customers pay and the books are kept in USD: the lot's USD value fixed at receiving, whatever
+                // currency it was paid in.
+                if (lot.unitCostUsdMinor() == null || !"USD".equals(settings.baseCurrency())) {
+                    LOG.warn("Order {} lot {} ({}) has no USD value for base currency {}; COGS skipped", orderId,
+                            lot.lotNo(), lot.currency(), settings.baseCurrency());
                     continue;
                 }
-                cogs = Math.addExact(cogs, Math.multiplyExact((long) lot.qty(), lot.unitLandedCostMinor()));
+                cogs = Math.addExact(cogs, Math.multiplyExact((long) lot.qty(), lot.unitCostUsdMinor()));
             }
         }
         if (cogs == 0) {

@@ -1,6 +1,6 @@
 'use client';
 
-import { isApiError, type OnboardingStatus, sellerKeys, US_STATES } from '@afrotransact/api-client';
+import { addressLookup, isApiError, type OnboardingStatus, sellerKeys, US_STATES } from '@afrotransact/api-client';
 import { AddressAutocomplete, type AddressSuggestionItem, cx, ErrorSummary, type SearchAddresses, Select, TextField } from '@afrotransact/ui';
 import { CheckCircle, FileArrowUp, UserCircleCheck } from '@phosphor-icons/react/ssr';
 import { useQueryClient } from '@tanstack/react-query';
@@ -21,6 +21,8 @@ export interface StepHandle {
 export interface StepProps {
   status: OnboardingStatus;
   ref?: Ref<StepHandle>;
+  /** Moves the wizard to the next step (a step that completes on its own, like Stripe verification, calls it). */
+  advance?: () => void;
 }
 
 const SPAN: Record<number, string> = {
@@ -95,7 +97,7 @@ export function ChoiceCards<V extends string>({
             key={o.value}
             className={cx(
               'flex cursor-pointer items-start gap-2.5 rounded-sm border p-3 has-focus-visible:outline-2 has-focus-visible:outline-focus',
-              value === o.value ? 'border-gold-500 bg-gold-50' : 'border-border bg-surface hover:border-border-strong',
+              value === o.value ? 'border-gold-500 bg-gold-50' : 'border-transparent bg-surface-sunken hover:bg-surface-muted',
               disabled && 'cursor-not-allowed opacity-60'
             )}
           >
@@ -129,7 +131,7 @@ const STATES = US_STATES.map(([value, label]) => ({
 export const STATE_OPTIONS = STATES;
 
 /** The same address search the storefront uses (BFF /v1/geo/address-suggestions → geo service). */
-export const sellerAddressSearch: SearchAddresses = async (q, { signal }) => (await sellerApi().searchAddresses(q, signal)).suggestions;
+export const sellerAddressSearch: SearchAddresses = (q, options) => addressLookup(sellerApi())(q, options);
 
 /**
  * Street with address suggestions; picking one fills street, city, state and ZIP, and every part can still be typed.

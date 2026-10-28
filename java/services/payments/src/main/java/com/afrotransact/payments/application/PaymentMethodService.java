@@ -8,7 +8,7 @@ import java.util.List;
  */
 public interface PaymentMethodService {
 
-    List<WalletMethod> list();
+    Wallet list();
 
     /** @param types card, us_bank_account, cashapp, link (default: card) */
     SetupIntentResult createSetupIntent(List<String> types, String idempotencyKey);

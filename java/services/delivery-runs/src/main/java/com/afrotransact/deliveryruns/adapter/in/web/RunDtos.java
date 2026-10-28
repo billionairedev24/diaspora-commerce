@@ -12,9 +12,11 @@ import com.afrotransact.deliveryruns.application.RunCommand;
 import com.afrotransact.deliveryruns.application.SlotReservation;
 import com.afrotransact.deliveryruns.domain.CutoffPolicy;
 import com.afrotransact.deliveryruns.domain.DropMode;
+import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.RouteEstimate;
 import com.afrotransact.deliveryruns.domain.Run;
+import com.afrotransact.deliveryruns.domain.RunAction;
 import com.afrotransact.deliveryruns.domain.RunEconomics;
 import com.afrotransact.deliveryruns.domain.RunMilestones;
 import com.afrotransact.deliveryruns.domain.RunOrder;
@@ -49,12 +51,13 @@ final class RunDtos {
                       @Min(1) @Max(10_000) Integer capacityOrders,
                       @Min(1) @Max(100_000) Integer capacityPackages,
                       DropMode dropMode, @Valid PickupPointBody pickupPoint, CutoffPolicy cutoffPolicy,
-                      @Min(1) @Max(30) Integer extendDays) {
+                      @Min(1) @Max(30) Integer extendDays,
+                      @Size(max = 500) @Schema(description = "A note for staff and the driver") String notes) {
 
         RunCommand toCommand() {
             return new RunCommand(locationId, windowStart, windowEnd, cutoffAt, opensAt, sellerPickupAt, feeMinor,
                     currency, minOrders, capacityOrders, capacityPackages, dropMode,
-                    pickupPoint == null ? null : pickupPoint.toDomain(), cutoffPolicy, extendDays);
+                    pickupPoint == null ? null : pickupPoint.toDomain(), cutoffPolicy, extendDays, notes);
         }
     }
 
@@ -69,6 +72,25 @@ final class RunDtos {
 
     @Schema(name = "CancelRunRequest")
     record CancelRequest(@NotBlank @Size(max = 500) @Schema(example = "Weather: tropical storm warning") String reason) {
+    }
+
+    @Schema(name = "ConfirmRunRequest", description = "Optional while the run has reached its minimum; required to "
+            + "confirm below it (the override is logged with who and why)")
+    record ConfirmRequest(@Size(max = 500) @Schema(example = "Two sellers are delivering to the hub in person") String reason) {
+    }
+
+    @Schema(name = "RunAction", description = "One entry of the run's log: who decided what, when and why")
+    record RunActionResponse(UUID id, UUID runId,
+                             @Schema(allowableValues = {"EXTEND", "CONFIRM", "CONFIRM_OVERRIDE", "CANCEL"}) String kind,
+                             String reason, @Schema(description = "Staff subject, or system for the cutoff job")
+                             String actor, String fromStatus, String toStatus, int orders, int minimum,
+                             Instant fromCutoff, Instant toCutoff, Instant at) {
+
+        static RunActionResponse of(RunAction a) {
+            return new RunActionResponse(a.id(), a.runId(), a.kind().name(), a.reason(), a.actor(),
+                    a.fromStatus().name(), a.toStatus().name(), a.orders(), a.minimum(), a.fromCutoff(),
+                    a.toCutoff(), a.at());
+        }
     }
 
     @Schema(name = "EconomicsPreviewRequest", description = "Nulls take the location's defaults")
@@ -108,7 +130,7 @@ final class RunDtos {
                        Instant cutoffAt, Instant originalCutoffAt, Instant opensAt, Instant sellerPickupAt,
                        long feeMinor, String currency, int minOrders, Integer capacityOrders,
                        Integer capacityPackages, DropMode dropMode, PickupPointBody pickupPoint,
-                       CutoffPolicy cutoffPolicy, int extendDays, int extensions, int reservedOrders,
+                       CutoffPolicy cutoffPolicy, int extendDays, String notes, int extensions, int reservedOrders,
                        int reservedPackages, Integer ordersLeft, boolean minimumMet, String cancelReason,
                        RouteResponse estimate,
                        @Schema(description = "Fewest orders covering the estimated cost (create / get only)")
@@ -124,7 +146,7 @@ final class RunDtos {
             return new RunResponse(r.id(), r.locationId(), r.status().name(), t.window().start(), t.window().end(),
                     t.cutoffAt(), r.originalCutoffAt(), t.opensAt(), t.sellerPickupAt(), t.feeMinor(), t.currency(),
                     t.minOrders(), t.capacity().maxOrders(), t.capacity().maxPackages(), t.dropMode(),
-                    PickupPointBody.of(t.pickupPoint()), t.cutoffPolicy(), t.extendDays(), r.extensions(),
+                    PickupPointBody.of(t.pickupPoint()), t.cutoffPolicy(), t.extendDays(), t.notes(), r.extensions(),
                     r.reservedOrders(), r.reservedPackages(), t.capacity().ordersLeft(r.reservedOrders()),
                     r.minimumMet(), r.cancelReason(), RouteResponse.of(r.estimate()),
                     economics == null ? null : economics.breakEvenOrders(), MilestonesResponse.of(r.milestones()),
@@ -134,11 +156,18 @@ final class RunDtos {
 
     @Schema(name = "RunOrder", description = "A run slot held by an order")
     record RunOrderResponse(UUID id, UUID runId, String orderId, String customerId, int packages, String status,
-                            String handoverCode, UUID requestedRunId, Instant reservedAt, Instant updatedAt) {
+                            String handoverCode, UUID requestedRunId, Instant reservedAt, Instant updatedAt,
+                            @Schema(description = "Where the order's package is on the run: PENDING, COLLECTED, "
+                                    + "OUT_FOR_DELIVERY, FAILED, DELIVERED or RETURNED (from orders-service shipment "
+                                    + "events)") String stage,
+                            Instant stageAt,
+                            @Schema(description = "When the package was handed over; the seller payout hold starts "
+                                    + "from it") Instant deliveredAt) {
 
         static RunOrderResponse of(RunOrder o) {
             return new RunOrderResponse(o.id(), o.runId(), o.orderId(), o.customerId(), o.packages(),
-                    o.status().name(), o.handoverCode(), o.requestedRunId(), o.reservedAt(), o.updatedAt());
+                    o.status().name(), o.handoverCode(), o.requestedRunId(), o.reservedAt(), o.updatedAt(),
+                    o.stage().name(), o.stageAt(), o.deliveredAt());
         }
     }
 
@@ -163,12 +192,14 @@ final class RunDtos {
 
     @Schema(name = "DispatchLocation")
     record DispatchLocation(UUID id, String slug, String name, String state, String timeZone, double centerLat,
-                            double centerLng) {
+                            double centerLng,
+                            @Schema(description = "Where the run leaves from (the hub); drops are ordered by road "
+                                    + "distance from it") double originLat, double originLng) {
 
-        static DispatchLocation of(Location l) {
+        static DispatchLocation of(Location l, GeoPoint origin) {
             return new DispatchLocation(l.id(), l.slug(), l.name(), l.details().state(),
                     l.details().timeZone().getId(), l.details().area().center().lat(),
-                    l.details().area().center().lng());
+                    l.details().area().center().lng(), origin.lat(), origin.lng());
         }
     }
 
@@ -178,7 +209,7 @@ final class RunDtos {
 
         static DispatchResponse of(DispatchList d) {
             RunTerms t = d.run().terms();
-            return new DispatchResponse(RunResponse.of(d.run()), DispatchLocation.of(d.location()), t.dropMode(),
+            return new DispatchResponse(RunResponse.of(d.run()), DispatchLocation.of(d.location(), d.origin()), t.dropMode(),
                     PickupPointBody.of(t.pickupPoint()), t.sellerPickupAt(),
                     d.orders().stream().map(RunOrderResponse::of).toList());
         }

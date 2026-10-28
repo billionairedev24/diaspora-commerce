@@ -3,6 +3,26 @@
 /* eslint-disable */
 
 export interface paths {
+    "/v1/maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the platform is in maintenance, and what to tell customers
+         * @description Always answered, even in maintenance. Web and mobile apps read it to show the maintenance page. While `active`, every other customer route (and Seller Center's when `scope` is ALL) answers 503 `MAINTENANCE` with `Retry-After`; sign-in and staff routes keep working. Switched in the staff console under Settings → General → Maintenance mode.
+         */
+        get: operations["getMaintenance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/site-config": {
         parameters: {
             query?: never;
@@ -205,8 +225,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Address autocomplete (geo service — Google Places or OpenStreetMap Nominatim) */
+        /**
+         * Address autocomplete (geo service — Google Places (New) with a key, else OpenStreetMap Nominatim)
+         * @description One call per keystroke of an address field. The first answer carries a `sessionToken`; send it with every following keystroke of the same address entry and with `GET /v1/geo/address-suggestions/{id}` for the picked suggestion, then start a new entry without one (Google Places bills the keystrokes and the Place Details call as one session). Google suggestions come back with `resolved: false` (street line only) and are resolved when picked; Nominatim and fixture suggestions are resolved already. Suggestions are restricted to `country`, by default the market's.
+         */
         get: operations["suggestAddresses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/geo/address-suggestions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Structured address of a picked suggestion (Google Place Details, closing the autocomplete session) */
+        get: operations["resolveAddressSuggestion"];
         put?: never;
         post?: never;
         delete?: never;
@@ -516,6 +556,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/native/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign in inside the customer or driver app with email and password
+         * @description The native apps show their own sign-in form instead of identity's hosted page. The BFF checks the credentials
+         *     with identity's first-party sign-in API and either asks for a second factor (`MFA_REQUIRED`, continue at
+         *     `/v1/auth/native/mfa/verify`) or redeems the one-time login ticket for the app's own authorization-code + PKCE
+         *     request and returns the authorization `code` (`AUTHENTICATED`). The app exchanges the code with its PKCE
+         *     verifier at identity's `/oauth2/token` and receives its own access and refresh tokens. A wrong password is 401
+         *     `INVALID_CREDENTIALS` (no token was sent, so the app shows it on the form), repeated failures 429 `RATE_LIMITED`.
+         */
+        post: operations["nativePasswordSignIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/native/mfa/sms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Text a sign-in code for a second-factor step */
+        post: operations["nativeSendSmsCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/native/mfa/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify the second factor and get the authorization code */
+        post: operations["nativeVerifySecondFactor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/sign-out": {
         parameters: {
             query?: never;
@@ -528,12 +627,42 @@ export interface paths {
         /**
          * End the session (revokes the tokens at identity) and get identity's end-session URL
          * @description Clears the `at_session` cookie and revokes the refresh and access tokens. For a web session `redirectTo` is
-         *     identity's RP-initiated logout endpoint (`/connect/logout` with `id_token_hint`, `client_id` and a
-         *     `post_logout_redirect_uri` back to the home page of the calling app, chosen from the request's `Origin`):
-         *     navigating there ends the identity session too, so every app is signed out (single sign-out). `redirectTo`
-         *     is null when there was no signed-in web session.
+         *     identity's RP-initiated logout endpoint (`/connect/logout` with `id_token_hint`, `client_id` and the calling
+         *     app's registered `post_logout_redirect_uri`, `<origin>/api/bff/v1/auth/signed-out/<app>`, chosen from the
+         *     request's `Origin`): navigating there ends the identity session too, so every app is signed out (single
+         *     sign-out), and identity then sends the browser to `GET /v1/auth/signed-out/{app}`. Without an ID token to
+         *     end (the session had already expired) `redirectTo` is that signed-out URL directly. `redirectTo` is null for
+         *     native apps (bearer token).
          */
         post: operations["signOut"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/signed-out/{app}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where identity returns the browser after single sign-out (each app's registered post-logout URI)
+         * @description Registered at identity as the `gateway-bff` client's `post_logout_redirect_uri` for each web app
+         *     (`<app origin>/api/bff/v1/auth/signed-out/<app>`). `state` carries the path the person signed out on
+         *     (from `SignOutRequest.returnTo`).
+         *
+         *     - `storefront`: back to that page (or the home page) with `signedOut=1`, where the storefront shows a
+         *       "You're signed out" toast. No sign-in wall.
+         *     - `seller-center`, `staff-console`: straight to that app's own sign-in, i.e. identity's hosted sign-in page
+         *       branded for the app (`prompt=login`, `notice=signed_out`), which returns to the app (that page, or its
+         *       home page) after signing in.
+         */
+        get: operations["signedOut"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -755,6 +884,383 @@ export interface paths {
         post?: never;
         /** Stop a back-in-stock alert for a variant */
         delete: operations["removeStockAlert"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/delivery-runs/locations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Locations with delivery runs (active ones)
+         * @description delivery-runs `GET /v1/public/locations`. Public data, cached for a minute.
+         */
+        get: operations["listRunLocations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/delivery-runs/locations/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Location page data (upcoming runs, WhatsApp community link, social and share links)
+         * @description delivery-runs `GET /v1/public/locations/{slug}`. `shareLinks` and the run links carry UTM attribution
+         *     (`utm_source`, `utm_medium`, `utm_campaign`) so orders and sign-ups can be traced to the channel that shared them.
+         */
+        get: operations["getRunLocation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/delivery-runs/locations/{slug}/visits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Count a visit that arrived with UTM tags (best effort)
+         * @description delivery-runs `POST /v1/public/locations/{slug}/visits`. The storefront sends it once per visit to a location page
+         *     or run link whose address has `utm_*` tags, so staff can see visits and sign-ups per source in Pre-orders ->
+         *     Delivery runs. Only the three tags (and the run viewed) are sent: no cookie, address or visitor id. A visit
+         *     without tags is accepted and not counted. The storefront ignores failures.
+         */
+        post: operations["countRunLocationVisit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/delivery-runs/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get run alerts for a location by email (double opt-in)
+         * @description delivery-runs `POST /v1/public/subscriptions {locationId, email, source}`. Always 202 for a valid email (whether
+         *     or not it was known). Nothing else is sent until the link in the confirmation email is used
+         *     (`POST /v1/delivery-runs/subscriptions/confirm`); only the email channel is consented to this way. A signed-in
+         *     shopper chooses channels from the account screen instead (`POST /v1/account/run-subscriptions`). Rate limited
+         *     like other lookups.
+         */
+        post: operations["subscribeRunAlerts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/delivery-runs/subscriptions/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm an email subscription (token of the confirmation link)
+         * @description delivery-runs `POST /v1/public/subscriptions/confirm {token}`; the storefront page
+         *     `/delivery-runs/subscriptions/confirm?token=` calls it. Confirming twice is fine; an unknown token is a 422 on
+         *     `token`. Records the email consent. Rate limited like other lookups.
+         */
+        post: operations["confirmRunAlerts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/delivery-runs/subscriptions/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unsubscribe from a message link (token), per channel or all
+         * @description delivery-runs `POST /v1/public/subscriptions/unsubscribe {token, channels}`; the storefront page
+         *     `/delivery-runs/subscriptions/unsubscribe?token=` calls it, and every run alert carries such a link. No
+         *     channels withdraws all of them. Withdrawal is recorded with its time on the consent record. Rate limited like
+         *     other lookups.
+         */
+        post: operations["unsubscribeRunAlerts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/run-subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My delivery alerts (per location and channel, with consent records) */
+        get: operations["listMyRunSubscriptions"];
+        put?: never;
+        /**
+         * Turn on delivery alerts for a location and channels (consent recorded, active at once)
+         * @description delivery-runs `POST /v1/me/run-subscriptions`. Adds the channels to an existing subscription. SMS and WhatsApp
+         *     also need a verified phone number on the account; WhatsApp messages are only sent from approved templates to
+         *     shoppers who opted in here.
+         */
+        post: operations["subscribeMyRunAlerts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/run-subscriptions/{locationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Turn off delivery alerts for a location (some channels, or all)
+         * @description delivery-runs `DELETE /v1/me/run-subscriptions/{locationId}`. No `channel` withdraws all channels.
+         */
+        delete: operations["unsubscribeMyRunAlerts"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/delivery-runs/advertorials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Advertorials for the shopper's deliver-to place (windows and runs that take orders now)
+         * @description delivery-runs `GET /v1/public/advertorials`. The place is the explicit `zip`, `lat`/`lng` or
+         *     `country`+`region`(+`city`) when given, else the session's delivery location; with no place at all the list is
+         *     empty. One variant per advertorial (the same `visitor` keeps theirs), higher priority first. Each carries the
+         *     countdown target (the close or cutoff) and a link with UTM and order attribution (`src=page&cr=adv-...`); the
+         *     storefront counts a `VIEW` once per visit and a `CLICK` on the button
+         *     (`POST /v1/delivery-runs/advertorials/{advertorialId}/events`) and expires the card at `expiresAt`.
+         */
+        get: operations["listRunAdvertorials"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/delivery-runs/advertorials/{advertorialId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Count a view or a click on an advertorial
+         * @description delivery-runs `POST /v1/public/advertorials/{id}/events {type}`. Best effort: the storefront sends `VIEW` once
+         *     per visit and `CLICK` on the button, and ignores a failure. Rate limited like other lookups.
+         */
+        post: operations["recordRunAdvertorialEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/credit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My credit balance and history, newest first
+         * @description payments `GET /v1/credit/me` and `/v1/credit/me/entries` with the shopper's token. The balance is the sum of the
+         *     ledger. Each entry has a `kind` (GRANT, SPEND, REFUND, ADJUSTMENT) and a `source` (REFERRAL, GIFT_CARD, MEMBERSHIP,
+         *     REFUND, STAFF, PROMO, ORDER); the storefront words them in the shopper's language. Page backwards with
+         *     `before` = the previous page's `nextBefore`.
+         */
+        get: operations["getAccountCredit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/referral": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My referral code, share link, the offer, my friends and what I earned
+         * @description payments `GET /v1/referrals/me` and `/v1/referrals/me/friends` with the shopper's token. The code is created on
+         *     first use and never changes; `shareUrl` is the storefront link that opens sign-up with the code filled in.
+         *     Friends are shown by first name and last initial. A referral held for a check shows as `WAITING`: the shopper
+         *     never sees the check or a staff decision. `asFriend` is the shopper's own referral when someone referred them.
+         */
+        get: operations["getAccountReferral"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/orders/{orderNumber}/credit-refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take the card part of my order's refunds as credit (one way)
+         * @description A refund goes back to what paid each part: the part paid with credit comes back as credit and the part paid
+         *     with the card to the card. This chooses credit for the card part of every later refund of the order. It is one
+         *     way: credit never goes back to a card or to cash, and refunds already sent to the card stay there.
+         *     409 `NO_CARD_PORTION` when the order was paid with credit only.
+         */
+        post: operations["chooseCreditRefunds"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/gift-cards/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gift card amount limits, preset amounts and terms (staff settings)
+         * @description Default limits are 10.00 to 500.00; gift cards never expire. Staff change them without a release.
+         */
+        get: operations["getGiftCardConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/gift-cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The gift cards I bought, newest first (never with the code) */
+        get: operations["listMyGiftCards"];
+        put?: never;
+        /**
+         * Start buying a gift card; confirm the card payment with the client secret
+         * @description Requires `Idempotency-Key`. payments creates the card (PENDING_PAYMENT) and a PaymentIntent for it: confirm
+         *     `clientSecret` with Stripe Elements (a card; credit cannot pay for a gift card), then
+         *     `POST /v1/account/gift-cards/{giftCardId}/confirm`. The code is generated and emailed on `sendAt` (now when
+         *     omitted). 422 `errors.amountMinor` when the amount is outside the staff-set limits.
+         */
+        post: operations["buyGiftCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/gift-cards/{giftCardId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * After the payment was confirmed, capture it and issue the card
+         * @description Idempotent; the payments webhook does the same, so either order works.
+         */
+        post: operations["confirmGiftCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/gift-cards/redeem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeem a gift card code into my credit, once
+         * @description 404 `GIFT_CARD_INVALID` for a wrong code; 409 `GIFT_CARD_REDEEMED` when it was redeemed already. Wrong codes
+         *     are counted per shopper and per network address: over the limit the answer is 429 `RATE_LIMITED` with
+         *     `Retry-After`, even for a right code.
+         */
+        post: operations["redeemGiftCard"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1647,11 +2153,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * A provider's page — bookings profile and services plus the published design (layout, approved links)
-         * @description The storefront service serves published pages by slug only; pass `slug` when known, otherwise the BFF tries the organisation id and returns `design: null` when there is no published page.
-         */
+        /** A provider's page — bookings profile and services */
         get: operations["getProviderPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/business-pages/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A business's plain public page (what Stripe is given as its website)
+         * @description Public, read-only. Name, description, logo and one brand colour from the business's application; providers also list their services. `indexable` is false until the business is approved, so search engines are kept off it.
+         */
+        get: operations["getBusinessPage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1875,6 +2398,58 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        NativeApp: "customer" | "driver";
+        NativePasswordRequest: {
+            app: components["schemas"]["NativeApp"];
+            email: string;
+            password: string;
+            /** @description From an earlier verification with trustDevice=true */
+            trustedDeviceToken?: string;
+            /** @description PKCE S256 challenge of the app's verifier */
+            codeChallenge: string;
+            /** @description The app's redirect URI registered at identity */
+            redirectUri: string;
+        };
+        NativeSmsRequest: {
+            app: components["schemas"]["NativeApp"];
+            /** Format: uuid */
+            challengeId: string;
+            codeChallenge: string;
+            redirectUri: string;
+        };
+        NativeVerifyRequest: {
+            app: components["schemas"]["NativeApp"];
+            /** Format: uuid */
+            challengeId: string;
+            /** @enum {string} */
+            factor: "TOTP" | "SMS" | "RECOVERY_CODE";
+            code: string;
+            /** @description Return a trustedDeviceToken so this phone skips the second factor for 30 days */
+            trustDevice?: boolean;
+            codeChallenge: string;
+            redirectUri: string;
+        };
+        NativeSignInResult: {
+            /** @enum {string} */
+            status: "MFA_REQUIRED" | "AUTHENTICATED";
+            /**
+             * Format: uuid
+             * @description MFA_REQUIRED only
+             */
+            challengeId?: string;
+            /** Format: date-time */
+            challengeExpiresAt?: string;
+            factors?: {
+                totp?: boolean;
+                sms?: boolean;
+                smsHint?: string;
+                recoveryCode?: boolean;
+            };
+            /** @description AUTHENTICATED only: authorization code to exchange at identity /oauth2/token with the PKCE verifier */
+            code?: string;
+            trustedDeviceToken?: string;
+        };
         PayLinkToken: {
             /** @description The token of the SMS pay-now link */
             token: string;
@@ -2103,6 +2678,162 @@ export interface components {
             /** @enum {string} */
             status: "subscribed";
         };
+        /**
+         * @description A way to reach a subscriber; each is consented to separately (WhatsApp only from approved templates)
+         * @enum {string}
+         */
+        RunChannel: "EMAIL" | "SMS" | "PUSH" | "WHATSAPP";
+        /** @description Where orders are collected when the drop mode is PICKUP_POINT */
+        RunPickupPoint: {
+            [key: string]: unknown;
+        } | null;
+        RunLocation: {
+            /** Format: uuid */
+            id: string;
+            /** @example lubbock */
+            slug: string;
+            /** @example Lubbock */
+            name: string;
+            /** @example US */
+            market: string;
+            /** @example TX */
+            state?: string | null;
+            /** @example America/Chicago */
+            timeZone: string;
+            /** @description Coverage as delivery-runs keeps it (ZIP list, polygon or radius) */
+            area?: {
+                [key: string]: unknown;
+            };
+            /** @description Delivery fee when the run sets none */
+            defaultFeeMinor: number;
+            /** @example USD */
+            currency: string;
+            /** @enum {string} */
+            dropMode: "DOORSTEP" | "PICKUP_POINT";
+            pickupPoint?: components["schemas"]["RunPickupPoint"];
+            /** @description The location's WhatsApp community invite */
+            whatsappInviteUrl?: string | null;
+            socialLinks?: {
+                [key: string]: string;
+            };
+        };
+        /** @description A delivery run as shoppers see it */
+        RunPublic: {
+            /** Format: uuid */
+            runId: string;
+            /** Format: uuid */
+            locationId: string;
+            locationSlug?: string;
+            town?: string;
+            status: string;
+            /** Format: date-time */
+            windowStart: string;
+            /** Format: date-time */
+            windowEnd: string;
+            /**
+             * Format: date-time
+             * @description Orders close at this time
+             */
+            cutoffAt: string;
+            feeMinor: number;
+            currency: string;
+            /** @enum {string} */
+            dropMode?: "DOORSTEP" | "PICKUP_POINT";
+            pickupPoint?: components["schemas"]["RunPickupPoint"];
+            acceptingOrders: boolean;
+            /** @description Orders left (null = not limited) */
+            ordersLeft?: number | null;
+            /** @description No room left; checkout offers the next run */
+            full: boolean;
+            /** @description Link to the run on the location page, with attribution */
+            runUrl?: string;
+        };
+        RunLocationPage: {
+            location: components["schemas"]["RunLocation"];
+            runs: components["schemas"]["RunPublic"][];
+            /** @description The location page URL */
+            locationUrl: string;
+            /** @description Share URLs per channel, each with UTM attribution */
+            shareLinks?: {
+                [key: string]: string;
+            };
+        };
+        /** @description Consent for one channel with its record */
+        RunConsent: {
+            channel: components["schemas"]["RunChannel"];
+            granted: boolean;
+            /** Format: date-time */
+            consentedAt?: string | null;
+            /** @description Where the consent was given (location-page, account, ...) */
+            source?: string | null;
+            /** Format: date-time */
+            withdrawnAt?: string | null;
+        };
+        RunSubscription: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            locationId: string;
+            /** @description PENDING_CONFIRMATION, ACTIVE or UNSUBSCRIBED */
+            status: string;
+            consents: components["schemas"]["RunConsent"][];
+            /** Format: date-time */
+            createdAt?: string | null;
+            /** Format: date-time */
+            confirmedAt?: string | null;
+        };
+        /** @description An advertorial served to the shopper's place, one variant */
+        RunAdvertorial: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            source: "WINDOW" | "RUN";
+            /** @description The pre-order window or delivery run it promotes */
+            sourceId: string;
+            /** @example A */
+            variant?: string;
+            /** @description Window code; null for runs */
+            code?: string | null;
+            /** @example Lubbock, TX */
+            place?: string | null;
+            headline: string;
+            body?: string;
+            ctaLabel: string;
+            /** @description With UTM and order attribution (src=page&cr=adv-...) */
+            ctaUrl: string;
+            imageUrl?: string | null;
+            /**
+             * Format: date-time
+             * @description The live countdown counts down to this
+             */
+            countdownTarget?: string | null;
+            /** Format: date-time */
+            expiresAt: string;
+            deliveryDisplay?: string | null;
+            feeDisplay?: string | null;
+            /** @description Up to four products staff chose; the card links each to its product page (/p/{atin}). The price is not kept: the product page shows today's. */
+            featuredProducts?: components["schemas"]["RunFeaturedProduct"][];
+        };
+        RunFeaturedProduct: {
+            /** @example ATSHEA0001 */
+            atin: string;
+            title: string;
+            /** @description An https picture */
+            imageUrl?: string | null;
+        };
+        RunVisitRequest: {
+            /**
+             * Format: uuid
+             * @description The run the visitor was looking at, if any
+             */
+            runId?: string;
+            /** @example whatsapp */
+            utmSource?: string;
+            /** @example social */
+            utmMedium?: string;
+            /** @example delivery-run-bastrop-tx-20261024 */
+            utmCampaign?: string;
+        };
         StockAlertItem: {
             atin: components["schemas"]["Atin"];
             productTitle: string;
@@ -2237,6 +2968,19 @@ export interface components {
             };
             deliverToLabel: string;
             tookMs: number;
+            /** @description Services matching the typed words (first page of a text search only; at most four, best match first) */
+            services: {
+                serviceId: string;
+                orgId: string;
+                name: string;
+                providerName: string;
+                category: string;
+                durationMinutes: number;
+                /** Format: int64 */
+                priceFromMinor: number;
+                currency: string;
+                location: string;
+            }[];
             /** @description Identifies this search for click reporting (POST /v1/search/clicks) */
             searchId?: string;
         };
@@ -2267,6 +3011,8 @@ export interface components {
             selected: boolean;
             /** @description Catalog product type or attribute perishable: hand delivery with a code, no safe place */
             perishable?: boolean;
+            /** @description Catalog product type code for sales-tax category mapping */
+            productType?: string;
         };
         DeliveryOption: {
             /** @enum {string} */
@@ -2284,6 +3030,25 @@ export interface components {
             latestDate?: string;
             /** @example Order within 3 h 12 min */
             cutoffLabel?: string;
+            feeRule?: components["schemas"]["DeliveryFeeRuleRef"];
+        };
+        /**
+         * @description The staff delivery fee rule behind a fee (ADR 0005 §3, staff manage them under Settings → Delivery fees): the
+         *     delivery method, the rule and its version, the amount and where it came from. The cart and checkout show it next
+         *     to the fee; the order keeps the rule it was charged by, so later edits never change it.
+         */
+        DeliveryFeeRuleRef: {
+            /** @enum {string} */
+            method: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
+            ruleId?: string;
+            ruleVersion: number;
+            currency?: string;
+            amountMinor: number;
+            /** @enum {string} */
+            source?: "RULE" | "WINDOW_OVERRIDE" | "CARRIER_QUOTE" | "CARRIER_FALLBACK";
+            /** @example 10–40 mi */
+            band?: string;
+            distanceMiles?: number;
         };
         CartPackage: {
             /** @description {sellerId}:{fulfilment} */
@@ -2416,9 +3181,29 @@ export interface components {
                 address: components["schemas"]["PostalAddress"];
                 /** @enum {string} */
                 source: "google" | "osm" | "fixture";
+                /** @description false: `address` holds the street line only; resolve the suggestion when picked */
+                resolved: boolean;
             }[];
             /** @description Required attribution text (e.g. © OpenStreetMap contributors) */
             attribution: string;
+            /** @description Autocomplete session of this address entry (Google Places billing) */
+            sessionToken: string;
+        };
+        MaintenanceStatus: {
+            active: boolean;
+            /**
+             * @description SHOPPERS pauses the storefront and apps; ALL also pauses Seller Center.
+             * @enum {string}
+             */
+            scope?: "SHOPPERS" | "ALL";
+            title?: string;
+            /** @description What customers are told. */
+            message?: string;
+            /**
+             * Format: date-time
+             * @description Omitted when unknown or already past.
+             */
+            expectedBackAt?: string;
         };
         SiteConfig: {
             revision: number;
@@ -2432,6 +3217,8 @@ export interface components {
             }[];
             contacts: {
                 phone: string;
+                /** @description The support phone in E.164 (+18335550199); also the number of the WhatsApp chat button in the storefront and Seller Center. Empty when not set (the button is then hidden). */
+                phoneE164: string;
                 privacyEmail: string;
                 accessibilityEmail: string;
                 legalEmail: string;
@@ -2649,6 +3436,19 @@ export interface components {
              */
             dueAt: string;
         };
+        /** @description A back office the signed-in person can open from the storefront (links use each app's configured URL). */
+        BackOffice: {
+            /**
+             * @description Seller Center and Provider Hub are the Seller Center app (SELLER_CENTER_URL); the staff console is STAFF_CONSOLE_URL.
+             * @enum {string}
+             */
+            app: "seller-center" | "provider-hub" | "staff-console";
+            /**
+             * @description `active`: an approved (or suspended) organisation, or staff. `application`: a seller or provider application still in progress ("Continue your seller application"), which opens Seller Center onboarding.
+             * @enum {string}
+             */
+            state: "active" | "application";
+        };
         Me: {
             authenticated: boolean;
             user: {
@@ -2662,6 +3462,13 @@ export interface components {
                 phone?: string;
                 /** @description Whether the account phone passed SMS verification */
                 phoneVerified?: boolean;
+                /**
+                 * @description The person's back offices, for the storefront account menu and the customer app's account screen:
+                 *     Seller Center for a seller organisation, Provider Hub for a provider organisation, the staff console
+                 *     for staff. A person is always also a shopper; this only adds links (the storefront acts as the person,
+                 *     never as their organisation). Empty for shoppers only.
+                 */
+                backOffices: components["schemas"]["BackOffice"][];
             } | null;
             /** @description Badges for the account menu. */
             counts: {
@@ -2670,8 +3477,12 @@ export interface components {
                 paymentMethods: number;
             } | null;
         };
+        SignOutRequest: {
+            /** @description The path to come back to on the calling app: the storefront returns there signed out (send it only for pages a guest may see); Seller Center and the staff console return there after signing in again. Anything but a relative path is ignored. */
+            returnTo?: string;
+        };
         SignOutResult: {
-            /** @description Identity's end-session URL to navigate to (ends the identity session, then returns to the calling app's home page); null without a signed-in web session. */
+            /** @description Where the browser goes next: identity's end-session URL (ends the identity session, then `GET /v1/auth/signed-out/{app}` on the calling app), or that signed-out URL directly when there is no identity session to end; null for native apps. */
             redirectTo: string | null;
         };
         PhoneCodeSent: {
@@ -2716,7 +3527,7 @@ export interface components {
         PaymentMethod: {
             id: string;
             /** @enum {string} */
-            type: "card" | "us_bank_account" | "cashapp" | "link";
+            type: "card" | "us_bank_account" | "cashapp" | "link" | "amazon_pay";
             brand: string | null;
             last4: string | null;
             label: string;
@@ -2739,8 +3550,22 @@ export interface components {
                 label: string;
                 status: string;
                 items: string;
-                /** @description The customer can still cancel it (until packed) */
+                /** @description Who sells and ships this shipment */
+                sellerName?: string;
+                /** @description What is in the shipment (name, photo, quantity) */
+                lines?: {
+                    title: string;
+                    quantity: number;
+                    imageUrl?: string | null;
+                    productAtin?: string;
+                }[];
+                /** @description The customer can still cancel it: before the parcel is packed and inside the cancellation window */
                 cancellable?: boolean;
+                /**
+                 * Format: date-time
+                 * @description When Cancel stops being offered; null when it is not offered now
+                 */
+                cancellableUntil?: string | null;
                 carrier?: string | null;
                 trackingNumber?: string | null;
                 promisedBy?: string | null;
@@ -2758,6 +3583,36 @@ export interface components {
         OrderPage: {
             items: components["schemas"]["OrderSummary"][];
             nextCursor: string | null;
+        };
+        CheckoutCouponSellerShare: {
+            sellerOrgId: string;
+            sellerName?: string;
+            discountMinor: number;
+            /**
+             * @description Who pays this slice at settlement
+             * @enum {string}
+             */
+            funding: "platform" | "seller";
+        };
+        CheckoutCouponOfferDiscount: {
+            offerId: string;
+            sellerOrgId?: string;
+            discountMinor: number;
+        };
+        CheckoutCoupon: {
+            code: string;
+            applicable: boolean;
+            rejection?: string | null;
+            message?: string;
+            discountMinor: number;
+            shippingDiscountMinor: number;
+            /** @enum {string} */
+            funding?: "platform" | "seller";
+            /** @description Seller org when funding is seller */
+            fundedByOrg?: string;
+            offerDiscounts?: components["schemas"]["CheckoutCouponOfferDiscount"][];
+            /** @description Per-seller discount totals for settlement preview */
+            sellerShares?: components["schemas"]["CheckoutCouponSellerShare"][];
         };
         CheckoutSummary: {
             packages: (components["schemas"]["CartPackage"] & {
@@ -2783,6 +3638,11 @@ export interface components {
             paymentMethods: components["schemas"]["PaymentMethod"][];
             subtotalMinor: number;
             shippingMinor: number;
+            /** @description Item discount from coupon */
+            discountMinor: number;
+            /** @description Shipping discount from coupon (e.g. free shipping) */
+            shippingDiscountMinor: number;
+            coupon?: components["schemas"]["CheckoutCoupon"];
             taxMinor: number;
             /** @example 8.25% TX */
             taxRateLabel: string;
@@ -2791,6 +3651,10 @@ export interface components {
             sellerCount: number;
             /** @description Stripe publishable key for Stripe.js (Payment / Express Checkout Elements) */
             publishableKey?: string;
+            /** @description Optional checkout_cross_sell placement from content (product rail) */
+            crossSell?: components["schemas"]["Rail"];
+            /** @description What my AfroTransact credit would pay of this order (S320); absent when I have no credit */
+            credit?: components["schemas"]["CheckoutCredit"];
         };
         /**
          * @description AfroTransact Delivery from the seller's store (S255), quoted for the chosen address: geo road distance from the
@@ -2864,7 +3728,7 @@ export interface components {
         } | null;
         /**
          * @description Money and payment setup of a window, all money in minor units: the window's doorFeeOverride / pickupFeeOverride,
-         *     else Back office → Pre-orders → Settings → payment for the window's currency.
+         *     else the staff delivery fee rules (Settings → Delivery fees: AfroTransact delivery by distance band, pickup fee).
          */
         PreorderTerms: {
             door?: boolean;
@@ -2951,7 +3815,19 @@ export interface components {
         };
         /** @description Pre-order block of a PREORDER package (relayed from the cart service), money in minor units. */
         CartPreorder: components["schemas"]["PreorderTerms"] & {
+            /** @description The window id, or the run id when kind is RUN */
             windowId?: string;
+            /**
+             * @description WINDOW, or RUN for a delivery run staff scheduled (S261; closesAt is then its order cutoff)
+             * @enum {string}
+             */
+            kind?: "WINDOW" | "RUN";
+            /** @description RUN: orders the run needs to go ahead */
+            minOrders?: number;
+            /** @description RUN: orders holding a slot now (counts toward the minimum and the capacity) */
+            ordersSoFar?: number;
+            /** @description RUN: ordersSoFar has reached minOrders */
+            minimumMet?: boolean;
             code?: string;
             name?: string;
             /** @enum {string} */
@@ -2965,10 +3841,14 @@ export interface components {
             timeZone?: string;
             /** @enum {string} */
             fulfilment?: "DOOR" | "PICKUP";
+            /** @description Fee of the chosen fulfilment */
+            feeMinor?: number;
+            feeRule?: components["schemas"]["DeliveryFeeRuleRef"];
             options?: {
                 /** @enum {string} */
                 fulfilment: "DOOR" | "PICKUP";
                 feeMinor: number;
+                rule?: components["schemas"]["DeliveryFeeRuleRef"];
             }[];
         };
         PlaceOrderRequest: {
@@ -2983,6 +3863,13 @@ export interface components {
             /** @description With newPaymentMethod, save the method on the shopper's Stripe Customer for future purchases (the order's PaymentIntent gets setup_future_usage=off_session, so the Payment Element is created with setupFutureUsage off_session) */
             savePaymentMethod?: boolean;
             gift?: boolean;
+            /**
+             * @description Pay with my AfroTransact credit first (S320). Credit is spent, up to the order total, when the order is placed
+             *     (once per order, never more than the balance); the card pays only the rest. When credit pays everything
+             *     (`summary.credit.cardDueMinor` is 0) no payment method is needed: send none, the answer has no
+             *     `paymentClientSecret`, and the order is placed without a card (then `POST …/confirm` returns `placed`).
+             */
+            useCredit?: boolean;
             /** @description Coupon validated and redeemed by orders with the offers service (released if the order fails or is cancelled); 422 with errors.couponCode when it does not apply */
             couponCode?: string;
             deliverySelections: {
@@ -3000,6 +3887,230 @@ export interface components {
                 };
             }[];
         };
+        /** @description One line of the credit history; the balance is the sum of the lines. The storefront words it from kind and source. */
+        CreditEntry: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "GRANT" | "SPEND" | "REFUND" | "ADJUSTMENT";
+            /** @enum {string} */
+            source: "REFERRAL" | "GIFT_CARD" | "MEMBERSHIP" | "REFUND" | "STAFF" | "PROMO" | "ORDER";
+            /**
+             * Format: int64
+             * @description Signed: credit added is positive, credit spent negative
+             */
+            amountMinor: number;
+            currency: string;
+            /** Format: int64 */
+            balanceAfterMinor: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreditAccount: {
+            /** Format: int64 */
+            balanceMinor: number;
+            currency: string;
+            entries: components["schemas"]["CreditEntry"][];
+            /** @description Pass as `before` for older entries; null on the last page */
+            nextBefore: string | null;
+        };
+        /** @description What the shopper's credit would pay of this order if used (payments decides when the order is placed) */
+        CheckoutCredit: {
+            /** Format: int64 */
+            availableMinor: number;
+            /**
+             * Format: int64
+             * @description The balance up to the total, leaving at least 0.50 for the card or paying everything
+             */
+            appliedMinor: number;
+            /**
+             * Format: int64
+             * @description What the card pays then; 0 means no payment method is needed
+             */
+            cardDueMinor: number;
+        };
+        /** @description What one side earns */
+        ReferralRewardTerms: {
+            /** @enum {string} */
+            type: "CREDIT" | "MEMBERSHIP_DAYS";
+            /**
+             * Format: int64
+             * @description Credit in minor units; 0 for membership days
+             */
+            creditMinor: number;
+            /** @description Free membership days; 0 for credit */
+            membershipDays: number;
+        };
+        /** @description The offer in force. AfroTransact pays both sides; credit only buys products and services. */
+        ReferralProgram: {
+            /** @description false while staff have switched the program off */
+            enabled: boolean;
+            referrerReward: components["schemas"]["ReferralRewardTerms"];
+            referredReward: components["schemas"]["ReferralRewardTerms"];
+            /**
+             * Format: int64
+             * @description The friend's delivered order must be worth at least this
+             */
+            minOrderMinor: number;
+            /** @description Rewards are granted this many days after delivery */
+            returnWindowDays: number;
+            /** @description Days after sign-up in which the friend can still qualify */
+            validityDays: number;
+            currency: string;
+        };
+        ReferralEarnings: {
+            /** @description Friends who signed up with my code */
+            invited: number;
+            /** @description Referrals not finished yet */
+            open: number;
+            /** @description Referrals that paid me a reward */
+            rewarded: number;
+            /**
+             * Format: int64
+             * @description Credit I earned from referrals
+             */
+            earnedMinor: number;
+            /** @description Free membership days I earned from referrals */
+            membershipDays: number;
+            /**
+             * Format: int64
+             * @description Credit promised for friends who qualified, granted after the return window
+             */
+            pendingMinor: number;
+        };
+        ReferralFriend: {
+            /** Format: uuid */
+            id: string;
+            /** @description First name and last initial; null on my own referral */
+            friendName: string | null;
+            /**
+             * @description PENDING: no qualifying order yet. WAITING: qualified, rewards after the return window (or under a check). CLOSED: not eligible.
+             * @enum {string}
+             */
+            status: "PENDING" | "WAITING" | "REWARDED" | "EXPIRED" | "CLOSED";
+            /** Format: date-time */
+            signedUpAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /**
+             * Format: date-time
+             * @description When the reward is due, once the friend qualified
+             */
+            eligibleAt: string | null;
+            reward: components["schemas"]["ReferralFriendReward"] | null;
+        };
+        ReferralFriendReward: {
+            terms: components["schemas"]["ReferralRewardTerms"];
+            granted: boolean;
+            /** Format: date-time */
+            grantedAt: string | null;
+        };
+        AccountReferral: {
+            /** @description Eight characters, for example KDM7XR3Q */
+            code: string;
+            /** @description The same as shown, KDM7-XR3Q */
+            displayCode: string;
+            /**
+             * Format: uri
+             * @description The storefront link that opens sign-up with the code filled in
+             */
+            shareUrl: string;
+            program: components["schemas"]["ReferralProgram"];
+            earnings: components["schemas"]["ReferralEarnings"];
+            friends: components["schemas"]["ReferralFriend"][];
+            asFriend: components["schemas"]["ReferralFriend"] | null;
+        };
+        CreditRefundChoice: {
+            orderNumber: string;
+            cardRefundsAsCredit: boolean;
+            /**
+             * Format: int64
+             * @description What the card paid for the order
+             */
+            cardPartMinor: number;
+            currency: string;
+        };
+        GiftCardConfig: {
+            /** Format: int64 */
+            minMinor: number;
+            /** Format: int64 */
+            maxMinor: number;
+            currency: string;
+            /** @description The Stripe publishable key the buy page creates its Payment Element with (cards only) */
+            publishableKey: string;
+            presetsMinor: number[];
+            /** @description Staff-written terms by language (en, fr, es, ar, yo); empty means the page shows its built-in terms */
+            terms: {
+                [key: string]: string;
+            };
+        };
+        /** @description A gift card as its buyer sees it. The code is never returned; the recipient gets it by email on the send date. */
+        GiftCard: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "PENDING_PAYMENT" | "ACTIVE" | "REDEEMED" | "VOID" | "PAYMENT_FAILED";
+            /** Format: int64 */
+            amountMinor: number;
+            currency: string;
+            recipientEmail: string;
+            recipientName?: string | null;
+            senderName?: string | null;
+            message?: string | null;
+            /** Format: date-time */
+            sendAt: string;
+            /** @enum {string} */
+            deliveryStatus: "SCHEDULED" | "SENT";
+            /** Format: date-time */
+            sentAt?: string | null;
+            redeemed: boolean;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        GiftCardPage: {
+            items: components["schemas"]["GiftCard"][];
+            nextCursor: string | null;
+        };
+        GiftCardPurchase: components["schemas"]["GiftCard"] & {
+            /** @description Confirm the payment with Stripe Elements; null when it was already paid */
+            clientSecret: string | null;
+            publishableKey: string;
+        };
+        GiftCardPurchaseRequest: {
+            /**
+             * Format: int64
+             * @description Within the staff-set limits (default 10.00 to 500.00)
+             */
+            amountMinor: number;
+            recipientEmail: string;
+            recipientName?: string;
+            senderName?: string;
+            message?: string;
+            /**
+             * Format: date-time
+             * @description When to email the card; omit to send it now (at most a year ahead)
+             */
+            sendAt?: string;
+            /**
+             * @description Language of the email
+             * @enum {string}
+             */
+            locale?: "en" | "fr" | "es" | "ar" | "yo";
+        };
+        GiftCardRedeemRequest: {
+            /** @example ABCD-EFGH-JKLM-2345 */
+            code: string;
+        };
+        GiftCardRedemption: {
+            /** Format: int64 */
+            redeemedMinor: number;
+            /**
+             * Format: int64
+             * @description The credit balance after redeeming
+             */
+            balanceMinor: number;
+            currency: string;
+        };
         OrderConfirmation: {
             orderNumber: string;
             /**
@@ -3011,6 +4122,11 @@ export interface components {
             paymentClientSecret?: string | null;
             totalMinor: number;
             currency: string;
+            /**
+             * Format: int64
+             * @description The part of the total paid with AfroTransact credit (S320); the card pays the rest
+             */
+            creditMinor?: number;
             /** @description The "You're in" facts when the order holds a pre-order package (relayed from orders) */
             preorder?: {
                 /** @example LBK-1042 */
@@ -3073,6 +4189,36 @@ export interface components {
             ephemeralKey: string;
             publishableKey: string;
         };
+        /**
+         * @description How our driver handed the parcel over, shown on a delivered shipment. Null for carrier deliveries (the carrier's
+         *     tracking is the record), pickups and deliveries staff confirmed by hand. The photo and signature links are
+         *     short-lived (about 5 minutes): read the order again for fresh ones. The driver's GPS position is for staff only.
+         */
+        DeliveryProof: {
+            /**
+             * @description To the customer (who gave their code), to someone else (name, relationship, signature), or left in a safe place
+             * @enum {string}
+             */
+            method: "CUSTOMER" | "SOMEONE_ELSE" | "SAFE_PLACE";
+            recipientName: string | null;
+            relationship: string | null;
+            safePlace: string | null;
+            /**
+             * Format: uri
+             * @description Proof photo; null when none or it cannot be shown right now
+             */
+            photoUrl: string | null;
+            /**
+             * Format: uri
+             * @description Recipient's signature (someone-else handovers)
+             */
+            signatureUrl: string | null;
+            /**
+             * Format: date-time
+             * @description When it was delivered
+             */
+            at: string;
+        } | null;
         TimelineEvent: {
             status: string;
             label: string;
@@ -3096,6 +4242,13 @@ export interface components {
             refundedMinor: number;
             refundableMinor: number;
             shippingTaxMinor: number;
+            /**
+             * Format: int64
+             * @description The part of the order paid with AfroTransact credit (S320); the card paid the rest
+             */
+            creditMinor: number;
+            /** @description The card part of this order's refunds comes back as credit (the shopper's one-way choice) */
+            cardRefundsAsCredit: boolean;
         };
         OrderDetail: {
             orderNumber: string;
@@ -3126,12 +4279,19 @@ export interface components {
                 sellerName: string;
                 /** @enum {string} */
                 deliveryMethod: "carrier" | "express" | "afrotransact_delivery" | "pickup";
+                /** @description Cancel is offered: before the parcel is packed and inside the cancellation window */
                 cancellable: boolean;
+                /**
+                 * Format: date-time
+                 * @description When Cancel stops being offered (the window's end); null when it is not offered now
+                 */
+                cancellableUntil?: string | null;
                 carrier: string | null;
                 trackingNumber: string | null;
                 promisedFrom: string | null;
                 promisedBy: string | null;
                 deliveredAt: string | null;
+                proof?: components["schemas"]["DeliveryProof"];
                 /** @description One-time handover code (hand delivery or perishables) */
                 deliveryCode: string | null;
                 lines: components["schemas"]["OrderLineView"][];
@@ -3144,6 +4304,12 @@ export interface components {
                 problemReportOnly?: boolean;
                 /** @description AfroTransact Delivery from the seller's store (S255); null for other shipments */
                 localDelivery?: components["schemas"]["OrderLocalDelivery"] | null;
+                /**
+                 * @description The delivery fee rule the shipping was charged by, as it was when the order was placed (ADR 0005 §3):
+                 *     later edits of the rule never change it. Null for flat rates and for AfroTransact Delivery from a
+                 *     seller's store (see localDelivery).
+                 */
+                deliveryFeeRule?: components["schemas"]["DeliveryFeeRuleRef"] | null;
                 /** @description Where a pickup shipment is collected (carrier-gateway pickup location); null for other shipments */
                 pickup?: null | {
                     id: string;
@@ -3444,6 +4610,29 @@ export interface components {
             instantBooking: boolean;
             providerAnswersWithinMinutes: number | null;
         };
+        BusinessPage: {
+            slug: string;
+            /** @enum {string} */
+            kind: "SELLER" | "PROVIDER";
+            name: string;
+            description: string | null;
+            /** @description #rrggbb, or null for the platform colour */
+            brandColor: string | null;
+            logoUrl: string | null;
+            contactEmail: string | null;
+            /** @description False until the business is approved */
+            indexable: boolean;
+            /** @description A seller's live products (at most twelve, best match first); empty for providers */
+            products: components["schemas"]["ProductSummary"][];
+            services: {
+                serviceId: string;
+                name: string;
+                durationMinutes: number;
+                /** Format: int64 */
+                priceMinor: number;
+                currency: string;
+            }[];
+        };
         ProviderPage: {
             orgId: string;
             displayName: string;
@@ -3453,37 +4642,6 @@ export interface components {
             instantBooking: boolean;
             team: components["schemas"]["ServiceMember"][];
             services: components["schemas"]["ServiceDetail"][];
-            /** @description The provider's published page (storefront service); social links are approved ones only. */
-            design: {
-                slug: string;
-                tagline: string;
-                /** @enum {string} */
-                layout: "CLASSIC" | "GALLERY_FIRST" | "STORY";
-                /** @enum {string} */
-                header: "COVER" | "BAND";
-                /** @enum {string} */
-                buttonShape: "ROUNDED" | "SQUARE";
-                coverUrl: string | null;
-                /** @description Vetted theme CSS custom properties (--at-*) */
-                tokens: {
-                    [key: string]: string;
-                };
-                social: {
-                    network: string;
-                    url: string;
-                }[];
-                gallery: {
-                    url: string;
-                    caption: string;
-                }[];
-                featured: {
-                    id: string;
-                    headline: string;
-                    body: string;
-                    url: string | null;
-                    serviceId: string | null;
-                }[];
-            } | null;
         };
         CancellationQuote: {
             refundSharePercent: number;
@@ -3676,6 +4834,28 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getMaintenance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Maintenance status */
+            200: {
+                headers: {
+                    /** @example no-store */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceStatus"];
+                };
+            };
+        };
+    };
     getSiteConfig: {
         parameters: {
             query?: never;
@@ -3969,8 +5149,9 @@ export interface operations {
         parameters: {
             query: {
                 q: string;
+                /** @description ISO 3166-1 alpha-2 country; default: the market's (US) */
                 country?: string;
-                /** @description Places autocomplete session token for billing */
+                /** @description Session token of the previous answer of this address entry (omit on the first keystroke) */
                 sessionToken?: string;
             };
             header?: never;
@@ -3979,7 +5160,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Up to 5 suggestions */
+            /** @description Up to 5 suggestions and the session token */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3988,6 +5169,36 @@ export interface operations {
                     "application/json": components["schemas"]["AddressSuggestions"];
                 };
             };
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    resolveAddressSuggestion: {
+        parameters: {
+            query?: {
+                /** @description The session token of the suggestions */
+                sessionToken?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Suggestion id (g:…, o:…, f:…) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Street, unit, city, state, ZIP, country and coordinates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostalAddress"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -4291,6 +5502,8 @@ export interface operations {
                 login_hint?: string;
                 /** @description Organisation invitation token from an invite link; the account created on identity's sign-up page joins the organisation without an email code. */
                 invitation?: string;
+                /** @description Referral code from a friend's share link (S322); identity's sign-up page shows it filled in, and both are rewarded after the new customer's first delivered order. */
+                referral?: string;
                 /**
                  * @description Entry point the person came from (S286). `sell` ("Start selling") and `provide` ("Offer your services")
                  *     brand identity's sign-up page for it ("Create your account to start selling") and add the seller or
@@ -4350,6 +5563,95 @@ export interface operations {
             };
         };
     };
+    nativePasswordSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Second factor needed, or signed in */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeSignInResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+        };
+    };
+    nativeSendSmsCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeSmsRequest"];
+            };
+        };
+        responses: {
+            /** @description Code sent */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * @description Masked phone
+                         * @example •••• 0142
+                         */
+                        sentTo?: string;
+                        /** Format: date-time */
+                        expiresAt?: string;
+                    };
+                };
+            };
+            410: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+        };
+    };
+    nativeVerifySecondFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Signed in */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeSignInResult"];
+                };
+            };
+            410: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+        };
+    };
     signOut: {
         parameters: {
             query?: never;
@@ -4357,7 +5659,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SignOutRequest"];
+            };
+        };
         responses: {
             /** @description Signed out */
             200: {
@@ -4369,6 +5675,31 @@ export interface operations {
                     "application/json": components["schemas"]["SignOutResult"];
                 };
             };
+        };
+    };
+    signedOut: {
+        parameters: {
+            query?: {
+                /** @description The path on the app to come back to (a relative path; anything else is ignored). */
+                state?: string;
+            };
+            header?: never;
+            path: {
+                app: "storefront" | "seller-center" | "staff-console";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description To the storefront page with `signedOut=1`, or to identity's sign-in for Seller Center and the staff console */
+            302: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Problem"];
         };
     };
     listAddresses: {
@@ -4730,10 +6061,563 @@ export interface operations {
             404: components["responses"]["Problem"];
         };
     };
+    listRunLocations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Locations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["RunLocation"][];
+                    };
+                };
+            };
+            503: components["responses"]["Problem"];
+        };
+    };
+    getRunLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Location page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunLocationPage"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    countRunLocationVisit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RunVisitRequest"];
+            };
+        };
+        responses: {
+            /** @description Counted, or nothing to count */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    subscribeRunAlerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    locationId: string;
+                    /** Format: email */
+                    email: string;
+                    /**
+                     * @description Where the sign-up happened, kept on the consent record (default storefront)
+                     * @example location-page
+                     */
+                    source?: string;
+                    /**
+                     * @description utm_source the visitor arrived with; counted as a sign-up of that source once confirmed
+                     * @example whatsapp
+                     */
+                    utmSource?: string;
+                    /** @example social */
+                    utmMedium?: string;
+                    utmCampaign?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Accepted; the confirmation link is on its way */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "CONFIRMATION_SENT";
+                    };
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    confirmRunAlerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Confirmed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSubscription"];
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    unsubscribeRunAlerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                    channels?: components["schemas"]["RunChannel"][];
+                };
+            };
+        };
+        responses: {
+            /** @description Withdrawn */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSubscription"];
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listMyRunSubscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Subscriptions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["RunSubscription"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    subscribeMyRunAlerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    locationId: string;
+                    channels: components["schemas"]["RunChannel"][];
+                    /** @example account */
+                    source?: string;
+                    /**
+                     * @description utm_source the shopper arrived with (counted as a sign-up)
+                     * @example whatsapp
+                     */
+                    utmSource?: string;
+                    /** @example social */
+                    utmMedium?: string;
+                    utmCampaign?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Subscription */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSubscription"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    unsubscribeMyRunAlerts: {
+        parameters: {
+            query?: {
+                channel?: components["schemas"]["RunChannel"][];
+            };
+            header?: never;
+            path: {
+                locationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Subscription with the withdrawals recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSubscription"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listRunAdvertorials: {
+        parameters: {
+            query?: {
+                zip?: string;
+                lat?: number;
+                lng?: number;
+                country?: string;
+                region?: string;
+                city?: string;
+                /** @description An anonymous id the storefront keeps per browser, so A/B variants stay stable */
+                visitor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Advertorials */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["RunAdvertorial"][];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    recordRunAdvertorialEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                advertorialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    type: "VIEW" | "CLICK";
+                };
+            };
+        };
+        responses: {
+            /** @description Counted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccountCredit: {
+        parameters: {
+            query?: {
+                /** @description Entries older than this */
+                before?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Balance and a page of history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditAccount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccountReferral: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The referral page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountReferral"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    chooseCreditRefunds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderNumber: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Chosen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditRefundChoice"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getGiftCardConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Limits and terms */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GiftCardConfig"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listMyGiftCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description My gift cards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GiftCardPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    buyGiftCard: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GiftCardPurchaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Card created, payment pending */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GiftCardPurchase"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            402: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    confirmGiftCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                giftCardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The card (ACTIVE once paid) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GiftCard"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    redeemGiftCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GiftCardRedeemRequest"];
+            };
+        };
+        responses: {
+            /** @description Redeemed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GiftCardRedemption"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     getCheckoutSummary: {
         parameters: {
             query?: {
                 addressId?: string;
+                /**
+                 * @description Per-package delivery option keys for shipping and estimated tax (repeat the parameter or comma-separate
+                 *     entries). Each value is `packageId:optionKey` (for example `pkg_1:ground,pkg_2:pickup`).
+                 */
+                packageDelivery?: string[];
+                /** @description Optional coupon to price against the cart (offers validate; does not redeem until place order). */
+                couponCode?: string;
             };
             header?: never;
             path?: never;
@@ -6196,9 +8080,7 @@ export interface operations {
     };
     getProviderPage: {
         parameters: {
-            query?: {
-                slug?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 orgId: string;
@@ -6214,6 +8096,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderPage"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getBusinessPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BusinessPage"];
                 };
             };
             404: components["responses"]["Problem"];

@@ -26,6 +26,8 @@ public final class ContentPermissions {
     public static final String ADS_VIEW = "content:ads.view";
     /** Staff: create, edit, pause and end any organisation's campaigns. */
     public static final String ADS_EDIT = "content:ads.edit";
+    /** Staff: permanently delete a paid placement advert (draft or ended only). */
+    public static final String ADVERT_DELETE = "advert:delete";
     /** Seller members (owner, marketing): manage their own organisation's campaigns (Seller Center → Advertising). */
     public static final String ADS_MANAGE = "ads:manage";
     /** Service scope of search-service: read the campaigns eligible to serve. */

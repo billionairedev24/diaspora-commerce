@@ -17,6 +17,7 @@ import com.afrotransact.orders.domain.CourierProof;
 import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.FulfilmentType;
+import com.afrotransact.orders.domain.FeeRuleSnapshot;
 import com.afrotransact.orders.domain.LocalDelivery;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderLine;
@@ -49,7 +50,7 @@ class JdbcOrderRepository implements OrderRepository {
             s.handover_required, s.handover_code_hash, s.handover_code_sealed, s.status, s.shipping_minor, s.carrier,
             s.tracking_number, s.promised_from, s.promised_by, s.capture_id, s.captured_at, s.delivered_at,
             s.last_external_event_at, s.status_changed_at, s.version, s.local_delivery::text as local_delivery,
-            s.preorder::text as preorder""";
+            s.preorder::text as preorder, s.delivery_fee_rule::text as delivery_fee_rule""";
 
     private final JdbcClient jdbc;
     private final JsonCodec json;
@@ -89,11 +90,12 @@ class JdbcOrderRepository implements OrderRepository {
                         handover_code_hash, handover_code_sealed, status, shipping_minor, carrier, tracking_number,
                         promised_from, promised_by, capture_id, captured_at, delivered_at, last_external_event_at,
                         status_changed_at, created_at, updated_at, version, local_delivery, preorder,
-                        preorder_window_id)
+                        preorder_window_id, delivery_fee_rule)
                     values (:id, :order, :seq, :seller, :sellerName, :type, :node, :method, :level, :pickup,
                         cast(:prefs as jsonb), :perishable, :handover, :hash, :sealed, :status, :shipping, :carrier,
                         :tracking, :from, :by, :capture, :capturedAt, :deliveredAt, :lastExternal, :changedAt, :now,
-                        :now, 0, cast(:localDelivery as jsonb), cast(:preorder as jsonb), :windowId)
+                        :now, 0, cast(:localDelivery as jsonb), cast(:preorder as jsonb), :windowId,
+                        cast(:feeRule as jsonb))
                     """)
                     .param("id", Sql.uuid(s.id())).param("order", Sql.uuid(o.id())).param("seq", s.seq())
                     .param("seller", s.sellerOrgId()).param("sellerName", s.sellerName())
@@ -111,15 +113,17 @@ class JdbcOrderRepository implements OrderRepository {
                     .param("localDelivery", s.localDelivery() == null ? null : json.write(s.localDelivery()))
                     .param("preorder", s.preorder() == null ? null : json.write(s.preorder()))
                     .param("windowId", s.preorder() == null ? null : s.preorder().windowId())
+                    .param("feeRule", s.feeRule() == null ? null : json.write(s.feeRule()))
                     .update();
             for (OrderLine l : s.lines()) {
                 jdbc.sql("""
                         insert into order_line (id, shipment_id, order_id, line_no, variant_atin, product_atin, title,
                             image_url, quantity, unit_price_minor, tax_minor, discount_minor, category, perishable,
-                            tax_jurisdiction, product_type, local_tax_jurisdiction, shipping_tax_minor)
+                            tax_jurisdiction, product_type, local_tax_jurisdiction, shipping_tax_minor,
+                            seller_org_id, seller_name)
                         values (:id, :shipment, :order, :lineNo, :variant, :product, :title, :image, :qty, :unit, :tax,
                             :discount, :category, :perishable, :jurisdiction, :productType, :localJurisdiction,
-                            :shippingTax)
+                            :shippingTax, :sellerOrg, :sellerName)
                         """)
                         .param("id", Sql.uuid(l.id())).param("shipment", Sql.uuid(s.id()))
                         .param("order", Sql.uuid(o.id())).param("lineNo", l.lineNo())
@@ -130,6 +134,7 @@ class JdbcOrderRepository implements OrderRepository {
                         .param("perishable", l.perishable()).param("jurisdiction", l.taxJurisdiction())
                         .param("productType", l.productType()).param("localJurisdiction", l.localTaxJurisdiction())
                         .param("shippingTax", l.shippingTaxMinor())
+                        .param("sellerOrg", l.sellerOrgId()).param("sellerName", l.sellerName())
                         .update();
             }
         }
@@ -228,7 +233,7 @@ class JdbcOrderRepository implements OrderRepository {
     public List<StatusChange> history(String orderId) {
         return jdbc.sql("""
                 select shipment_id, event_id, from_status, to_status, actor_type, actor_id, actor_org, reason, source,
-                    occurred_at
+                    occurred_at, proof::text as proof
                 from shipment_status_change where order_id = :o order by id
                 """)
                 .param("o", Sql.uuid(orderId))
@@ -236,7 +241,8 @@ class JdbcOrderRepository implements OrderRepository {
                         rs.getString("from_status") == null ? null : ShipmentStatus.valueOf(rs.getString("from_status")),
                         ShipmentStatus.valueOf(rs.getString("to_status")), ActorKind.valueOf(rs.getString("actor_type")),
                         rs.getString("actor_id"), rs.getString("actor_org"), rs.getString("reason"),
-                        TransitionSource.valueOf(rs.getString("source")), Sql.instant(rs, "occurred_at")))
+                        TransitionSource.valueOf(rs.getString("source")), Sql.instant(rs, "occurred_at"),
+                        rs.getString("proof") == null ? null : json.read(rs.getString("proof"), CourierProof.class)))
                 .list();
     }
 
@@ -336,6 +342,16 @@ class JdbcOrderRepository implements OrderRepository {
     }
 
     @Override
+    public List<String> preorderShipmentsOfWindow(String windowId) {
+        return jdbc.sql("""
+                select s.id from shipment s
+                where s.fulfilment_type = 'PREORDER' and s.preorder_window_id = :window
+                order by s.created_at, s.id
+                """)
+                .param("window", windowId).query(UUID.class).list().stream().map(UUID::toString).toList();
+    }
+
+    @Override
     public List<String> lateAddsAwaitingPayment(int limit) {
         return jdbc.sql("""
                 select id from customer_order where channel = 'AGENT_LATE' and status = 'PENDING_PAYMENT'
@@ -360,7 +376,7 @@ class JdbcOrderRepository implements OrderRepository {
         jdbc.sql("""
                 select l.id, l.shipment_id, l.line_no, l.variant_atin, l.product_atin, l.title, l.image_url, l.quantity,
                     l.unit_price_minor, l.tax_minor, l.discount_minor, l.category, l.perishable, l.tax_jurisdiction,
-                    l.product_type, l.local_tax_jurisdiction, l.shipping_tax_minor
+                    l.product_type, l.local_tax_jurisdiction, l.shipping_tax_minor, l.seller_org_id, l.seller_name
                 from order_line l where l.order_id in (:ids) order by l.line_no
                 """)
                 .param("ids", ids)
@@ -411,7 +427,8 @@ class JdbcOrderRepository implements OrderRepository {
                 rs.getString("product_atin"), rs.getString("title"), rs.getString("image_url"), rs.getInt("quantity"),
                 rs.getLong("unit_price_minor"), rs.getLong("tax_minor"), rs.getLong("discount_minor"),
                 rs.getString("category"), rs.getBoolean("perishable"), rs.getString("tax_jurisdiction"),
-                rs.getString("product_type"), rs.getString("local_tax_jurisdiction"), rs.getLong("shipping_tax_minor"));
+                rs.getString("product_type"), rs.getString("local_tax_jurisdiction"), rs.getLong("shipping_tax_minor"),
+                rs.getString("seller_org_id"), rs.getString("seller_name"));
     }
 
     private record ShipmentRow(UUID id, UUID orderId, int seq, String sellerOrgId, String sellerName,
@@ -421,13 +438,13 @@ class JdbcOrderRepository implements OrderRepository {
                                long shippingMinor, String carrier, String trackingNumber, LocalDate promisedFrom,
                                LocalDate promisedBy, String captureId, Instant capturedAt, Instant deliveredAt,
                                Instant lastExternalEventAt, Instant statusChangedAt, long version,
-                               LocalDelivery localDelivery, PreorderPackage preorder) {
+                               LocalDelivery localDelivery, PreorderPackage preorder, FeeRuleSnapshot feeRule) {
 
         Shipment build(List<OrderLine> lines) {
             return new Shipment(id.toString(), orderId.toString(), seq, sellerOrgId, sellerName, type, nodeId, method,
                     serviceLevel, pickupLocationId, preferences, perishable, handoverRequired, hash, sealed, status,
                     shippingMinor, carrier, trackingNumber, promisedFrom, promisedBy, captureId, capturedAt,
-                    deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, localDelivery, preorder);
+                    deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, localDelivery, preorder, feeRule);
         }
     }
 
@@ -445,6 +462,8 @@ class JdbcOrderRepository implements OrderRepository {
                 Sql.instant(rs, "last_external_event_at"), Sql.instant(rs, "status_changed_at"), rs.getLong("version"),
                 rs.getString("local_delivery") == null ? null
                         : json.read(rs.getString("local_delivery"), LocalDelivery.class),
-                rs.getString("preorder") == null ? null : json.read(rs.getString("preorder"), PreorderPackage.class));
+                rs.getString("preorder") == null ? null : json.read(rs.getString("preorder"), PreorderPackage.class),
+                rs.getString("delivery_fee_rule") == null ? null
+                        : json.read(rs.getString("delivery_fee_rule"), FeeRuleSnapshot.class));
     }
 }

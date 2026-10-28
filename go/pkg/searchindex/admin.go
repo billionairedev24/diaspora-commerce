@@ -34,7 +34,7 @@ func (a *adminImpl) EnsureIndex(ctx context.Context, market string) error {
 	}
 	_ = exists.Body.Close()
 	if exists.StatusCode == http.StatusOK {
-		return nil
+		return a.putLateMappings(ctx, name)
 	}
 	body, err := Mapping()
 	if err != nil {
@@ -59,6 +59,20 @@ func (a *adminImpl) EnsureIndex(ctx context.Context, market string) error {
 	if alias.IsError() {
 		msg, _ := io.ReadAll(alias.Body)
 		return fmt.Errorf("alias %s: %s", name, msg)
+	}
+	return nil
+}
+
+// putLateMappings adds the fields introduced after the index was first created (idempotent).
+func (a *adminImpl) putLateMappings(ctx context.Context, name string) error {
+	res, err := a.es.Indices.PutMapping([]string{name}, strings.NewReader(LateMappings), a.es.Indices.PutMapping.WithContext(ctx))
+	if err != nil {
+		return fmt.Errorf("put mapping %s: %w", name, err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.IsError() {
+		msg, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("put mapping %s: %s", name, msg)
 	}
 	return nil
 }

@@ -23,15 +23,15 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
         }
 
         for (AttributeDefinition def : type.attributes()) {
-            String value = draft.attributes().get(def.key());
-            if (!def.accepts(value)) {
-                errors.put("attributes." + def.key(),
-                        value == null || value.isBlank() ? "Required" : "Choose one of " + def.options());
+            String problem = def.problem(draft.attributes().get(def.key()));
+            if (problem != null) {
+                errors.put("attributes." + def.key(), problem);
             }
         }
 
         checkImages(draft.images(), errors);
         checkVariants(draft, type, errors);
+        checkDetails(draft.details(), errors);
 
         if (!errors.isEmpty()) {
             throw new CatalogRuleViolation("The product has " + errors.size() + " problem(s)", errors);
@@ -59,14 +59,39 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
         }
     }
 
+    private static void checkDetails(ListingDetails d, Map<String, String> errors) {
+        if (d.description() != null && d.description().length() > ListingDetails.MAX_DESCRIPTION) {
+            errors.put("description", "At most " + ListingDetails.MAX_DESCRIPTION + " characters");
+        }
+        if (d.keywords().size() > ListingDetails.MAX_KEYWORDS) {
+            errors.put("keywords", "Up to " + ListingDetails.MAX_KEYWORDS + " keywords");
+        } else if (d.keywords().stream().anyMatch(k -> k.length() > ListingDetails.MAX_KEYWORD)) {
+            errors.put("keywords", "Each keyword at most " + ListingDetails.MAX_KEYWORD + " characters");
+        }
+        if (d.handlingDays() < 1 || d.handlingDays() > ListingDetails.MAX_HANDLING_DAYS) {
+            errors.put("handlingDays", "Between 1 and " + ListingDetails.MAX_HANDLING_DAYS + " days");
+        }
+        if (d.packaging() == null) {
+            if (d.fulfilment() == FulfilmentMode.AFROTRANSACT) {
+                errors.put("packaging", "Package size and weight are required for Fulfilled by AfroTransact");
+            }
+        } else if (d.packaging().problem() != null) {
+            errors.put("packaging", d.packaging().problem());
+        }
+    }
+
     private static void checkVariants(ProductDraft draft, ProductType type, Map<String, String> errors) {
-        VariationTheme theme = type.theme(draft.variationTheme()).orElse(null);
-        if (theme == null) {
+        VariationTheme theme = draft.variationTheme().isEmpty() ? null : type.theme(draft.variationTheme()).orElse(null);
+        if (theme == null && !draft.variationTheme().isEmpty()) {
             errors.put("variationTheme", "Choose a variation type for this product");
             return;
         }
         if (draft.variants().isEmpty()) {
-            errors.put("variants", "Pick at least one value for each variation");
+            errors.put("variants", theme == null ? "Add the price and quantity" : "Pick at least one value for each variation");
+            return;
+        }
+        if (theme == null && draft.variants().size() > 1) {
+            errors.put("variationTheme", "Choose how the product varies to list more than one variant");
             return;
         }
         Set<String> skus = new HashSet<>();
@@ -74,14 +99,16 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
         for (int i = 0; i < draft.variants().size(); i++) {
             VariantDraft v = draft.variants().get(i);
             String p = "variants[" + i + "].";
-            for (VariationDimension dim : theme.dimensions()) {
+            List<VariationDimension> dims = theme == null ? List.of() : theme.dimensions();
+            for (VariationDimension dim : dims) {
                 String value = v.options().get(dim.name());
                 if (value == null || !dim.options().contains(value)) {
                     errors.put(p + "options." + dim.name(), "Choose a " + dim.name().toLowerCase(Locale.ROOT));
                 }
             }
-            if (v.options().size() != theme.dimensions().size()) {
-                errors.put(p + "options", "Expected values for " + theme.name());
+            if (v.options().size() != dims.size()) {
+                errors.put(p + "options", theme == null ? "A product without variations has no options"
+                        : "Expected values for " + theme.name());
             }
             if (!combos.add(String.valueOf(v.options()))) {
                 errors.put(p + "options", "Duplicate variation");
@@ -98,6 +125,16 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
             }
             if (v.quantity() < 0) {
                 errors.put(p + "quantity", "Quantity cannot be negative");
+            } else if (v.quantity() > MAX_QUANTITY) {
+                errors.put(p + "quantity", "At most " + MAX_QUANTITY);
+            }
+            if (v.compareAtMinor() != null && v.compareAtMinor() <= v.priceMinor()) {
+                errors.put(p + "compareAtPrice", "Must be higher than the price");
+            }
+            if (v.images().size() > VariantDraft.MAX_IMAGES) {
+                errors.put(p + "images", "Up to " + VariantDraft.MAX_IMAGES + " images per variant");
+            } else if (v.images().stream().anyMatch(img -> !img.allowedType() || img.bytes() > ProductImage.MAX_BYTES)) {
+                errors.put(p + "images", "Use JPG, PNG or WebP of at most 8 MB");
             }
         }
     }

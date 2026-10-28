@@ -90,6 +90,7 @@ Local ports come from `infra/local/PORTS.md`.
 | customer app | `EXPO_PUBLIC_OIDC_ISSUER` | `http://<dev host>:8100` | `https://auth.<base>` (`AUTH_ISSUER_URL`) | sign-in |
 | customer app | `EXPO_PUBLIC_IDENTITY_URL` | `http://<dev host>:8100` | `https://api.<base>/identity` | devices, notification preferences |
 | customer app | `EXPO_PUBLIC_BOOKINGS_URL` | `http://<dev host>:8109` | `https://api.<base>/bookings` | bookings |
+| driver app | `EXPO_PUBLIC_BFF_URL` | `http://<dev host>:8200` | `https://api.<base>/bff` | in-app sign-in |
 | driver app | `EXPO_PUBLIC_FULFILMENT_URL` | `http://<dev host>:8108` | `https://api.<base>/fulfilment` | driver API |
 | driver app | `EXPO_PUBLIC_MEDIA_URL` | `http://<dev host>:8207` | `https://api.<base>/media` | proof photos, signatures |
 | driver app | `EXPO_PUBLIC_OIDC_ISSUER` | `http://<dev host>:8100` | `https://auth.<base>` | sign-in |

@@ -64,6 +64,15 @@ class InventoryAccess {
         return reader;
     }
 
+    /** Staff with {@code inventory:read}: figures that sellers never see (exchange rates, costs). */
+    Actor staffReader() {
+        Actor reader = permissions.require(InventoryPermissions.READ);
+        if (!isStaff(reader)) {
+            throw new ForbiddenActionException("inventory.staff-only", "Exchange rates are visible to staff only");
+        }
+        return reader;
+    }
+
     /** Requires {@code inventory:read}; returns the owner organisation the actor is limited to (empty for staff). */
     Optional<String> readScope() {
         Actor actor = permissions.require(InventoryPermissions.READ);

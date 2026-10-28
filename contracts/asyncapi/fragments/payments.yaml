@@ -18,6 +18,16 @@ channels:
       paymentsTransferCreated: {$ref: '#/components/messages/paymentsTransferCreated'}
       paymentsDisputeOpened: {$ref: '#/components/messages/paymentsDisputeOpened'}
       paymentsDisputeClosed: {$ref: '#/components/messages/paymentsDisputeClosed'}
+      paymentsGiftCardDeliver: {$ref: '#/components/messages/paymentsGiftCardDeliver'}
+      paymentsGiftCardPurchased: {$ref: '#/components/messages/paymentsGiftCardPurchased'}
+      paymentsGiftCardIssued: {$ref: '#/components/messages/paymentsGiftCardIssued'}
+      paymentsGiftCardRedeemed: {$ref: '#/components/messages/paymentsGiftCardRedeemed'}
+      paymentsGiftCardVoided: {$ref: '#/components/messages/paymentsGiftCardVoided'}
+      paymentsGiftCardResent: {$ref: '#/components/messages/paymentsGiftCardResent'}
+      paymentsCreditAdjusted: {$ref: '#/components/messages/paymentsCreditAdjusted'}
+      paymentsReferralRewarded: {$ref: '#/components/messages/paymentsReferralRewarded'}
+      paymentsReferralFlagged: {$ref: '#/components/messages/paymentsReferralFlagged'}
+      paymentsReferralDecided: {$ref: '#/components/messages/paymentsReferralDecided'}
   paymentsPayoutEvents:
     address: at.payout.events
     description: >-
@@ -34,6 +44,24 @@ channels:
       paymentsSupplierPaymentPaid: {$ref: '#/components/messages/paymentsSupplierPaymentPaid'}
       paymentsSupplierPaymentUpdated: {$ref: '#/components/messages/paymentsSupplierPaymentUpdated'}
 operations:
+  consumePaymentsReferralIdentityEvents:
+    action: receive
+    channel: {$ref: '#/channels/identityEvents'}
+    summary: >-
+      payments-service (consumer group payments-service-referral, listener payments-referral-identity-events) feeds the
+      referral program (S322) from identity.user.registered: the sign-up device and network hashes are kept for the abuse
+      checks, and a referralCode the program owns attaches the new customer to the code's owner (one referral per
+      customer; own code, unknown code, staff sign-ups and a program that is off attach nothing). Other events are
+      ignored.
+  consumePaymentsReferralOrderEvents:
+    action: receive
+    channel: {$ref: '#/channels/ordersOrderEvents'}
+    summary: >-
+      payments-service (listener payments-referral-order-events) feeds the referral program (S322): orders.order.placed
+      keeps a hash of the delivery address and, for a referred customer waiting for a first order, tracks the order's
+      shipments; orders.shipment.delivered / orders.shipment.cancelled end them. When every shipment ended and the delivered
+      value reaches the program's minimum the referral qualifies; the rewards are granted through the credit ledger once
+      the return window has passed. Other events are ignored.
   consumePaymentsSellerComplianceEvents:
     action: receive
     channel: {$ref: '#/channels/sellerComplianceEvents'}
@@ -41,6 +69,16 @@ operations:
       payments-service (consumer group payments-service, inbox-deduplicated) handles seller.payouts.paused / resumed:
       the organisation's payout_hold is set or cleared (older decisions never override newer ones). While paused,
       POST /v1/payouts/requests and approvals fail with 422 payments.payouts_paused; balances keep accruing.
+  consumePaymentsSellerSubscriptionEvents:
+    action: receive
+    channel: {$ref: '#/channels/sellerSubscriptionEvents'}
+    summary: >-
+      payments-service (consumer group payments-service, listener payments-seller-subscription, inbox consumer
+      payments.seller-subscription) keeps each organisation's current plan from seller.subscription.changed (planCode,
+      status; a CANCELED or PENDING_ACTIVATION subscription has no plan; older events never override newer ones). The
+      plan selects the fee schedule's plan rates for product commission and service connection fees, snapshotted on
+      each payment line. Until an organisation's first event, payments reads its plan once from the seller service's
+      GET /v1/orgs/{orgId}/billing (client payments-service, scope seller:billing). Every other event is ignored.
   consumePaymentsBookingsEvents:
     action: receive
     channel: {$ref: '#/channels/bookingsEvents'}
@@ -147,6 +185,56 @@ components:
       title: 'Chargeback closed as WON or LOST'
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/PaymentsDispute'}
+    paymentsGiftCardDeliver:
+      name: payments.gift_card.deliver
+      title: 'A gift card is due: email the recipient with the code (S321; key = gift card id)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsGiftCardDeliver'}
+    paymentsGiftCardPurchased:
+      name: payments.gift_card.purchased
+      title: 'A gift card was paid for and is active (unredeemed gift cards are a liability, not revenue)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsGiftCardAudit'}
+    paymentsGiftCardIssued:
+      name: payments.gift_card.issued
+      title: 'Staff issued a gift card (audit)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsGiftCardAudit'}
+    paymentsGiftCardRedeemed:
+      name: payments.gift_card.redeemed
+      title: 'A gift card was redeemed into AfroTransact credit (audit)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsGiftCardAudit'}
+    paymentsGiftCardVoided:
+      name: payments.gift_card.voided
+      title: 'Staff voided an unredeemed gift card (refunded to the buyer if it was bought) (audit)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsGiftCardAudit'}
+    paymentsGiftCardResent:
+      name: payments.gift_card.resent
+      title: 'Staff sent a gift card again with a new code (audit)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsGiftCardAudit'}
+    paymentsCreditAdjusted:
+      name: payments.credit.adjusted
+      title: 'A staff grant or correction of a customer''s credit was posted (audit; key = customer id)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsCreditAdjusted'}
+    paymentsReferralRewarded:
+      name: payments.referral.rewarded
+      title: 'A referral reward was granted to one side, as credit or membership days (S322; key = customer id)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsReferralRewarded'}
+    paymentsReferralFlagged:
+      name: payments.referral.flagged
+      title: 'Abuse checks hold a referral for staff review (audit; key = referral id)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsReferralFlagged'}
+    paymentsReferralDecided:
+      name: payments.referral.decided
+      title: 'Staff approved or rejected a referral, or the system rejected it (audit; key = referral id)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsReferralDecided'}
     paymentsPayoutRequested:
       name: payments.payout.requested
       title: 'Seller / provider requested a payout'
@@ -214,6 +302,80 @@ components:
           format: uuid
           description: Set for an off-session follow-up charge of the order (the order's primary payment)
         offSession: {type: boolean, description: True for an off-session follow-up charge}
+    PaymentsGiftCardDeliver:
+      type: object
+      description: 'Notifications'' payload convention: a recipient block plus template fields. The code appears here
+        and nowhere else at rest (the database keeps only its HMAC); a resend makes a new code.'
+      required: [recipient, giftCardId, amountMinor, currency, code]
+      properties:
+        recipient:
+          type: object
+          required: [email]
+          properties:
+            email: {type: string, format: email}
+        locale: {type: [string, 'null'], description: 'Language of the email: en, fr, es, ar or yo'}
+        giftCardId: {type: string, format: uuid}
+        recipientName: {type: [string, 'null']}
+        senderName: {type: [string, 'null']}
+        message: {type: [string, 'null']}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        code: {type: string, examples: [ABCD-EFGH-JKLM-2345]}
+    PaymentsGiftCardAudit:
+      type: object
+      required: [giftCardId, action, actor, amountMinor, currency, status]
+      properties:
+        giftCardId: {type: string, format: uuid}
+        action: {type: string, examples: [issued, redeemed, voided, resent, purchased]}
+        actor: {type: string, description: The staff member or customer}
+        reason: {type: [string, 'null'], description: Required for staff actions}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        status: {type: string, enum: [PENDING_PAYMENT, ACTIVE, REDEEMED, VOID, PAYMENT_FAILED]}
+    PaymentsCreditAdjusted:
+      type: object
+      required: [adjustmentId, customerId, amountMinor, currency, source, reason, proposedBy]
+      properties:
+        adjustmentId: {type: string, format: uuid}
+        customerId: {type: string}
+        amountMinor: {type: integer, format: int64, description: 'Positive adds credit, negative takes it back'}
+        currency: {type: string}
+        source: {type: string, enum: [STAFF, PROMO]}
+        reason: {type: string}
+        proposedBy: {type: string}
+        decidedBy: {type: string, description: 'The approver, or the proposer when it was within the staff-set limit'}
+    PaymentsReferralRewarded:
+      type: object
+      required: [referralId, customerId, side, rewardType, creditMinor, currency, membershipDays]
+      properties:
+        referralId: {type: string, format: uuid}
+        customerId: {type: string, description: The side that earned the reward}
+        side: {type: string, enum: [REFERRER, REFERRED]}
+        rewardType: {type: string, enum: [CREDIT, MEMBERSHIP_DAYS]}
+        creditMinor: {type: integer, format: int64, description: Credit granted; 0 for membership days}
+        currency: {type: string}
+        membershipDays: {type: integer, description: Free membership days granted; 0 for credit}
+        friendName: {type: [string, 'null'], description: 'First name and last initial of the friend, for the referrer''s message; null for the friend'}
+    PaymentsReferralFlagged:
+      type: object
+      required: [referralId, referrerId, referredId, flags]
+      properties:
+        referralId: {type: string, format: uuid}
+        referrerId: {type: string}
+        referredId: {type: string}
+        flags:
+          type: array
+          items: {type: string, enum: [SAME_DEVICE, SAME_NETWORK, SAME_ADDRESS, SAME_PAYMENT_METHOD]}
+    PaymentsReferralDecided:
+      type: object
+      required: [referralId, referrerId, referredId, decision, reason, decidedBy]
+      properties:
+        referralId: {type: string, format: uuid}
+        referrerId: {type: string}
+        referredId: {type: string}
+        decision: {type: string, enum: [APPROVED, REJECTED, SYSTEM]}
+        reason: {type: string}
+        decidedBy: {type: string, description: The staff member, or system}
     PaymentsIntentActionRequired:
       type: object
       required: [paymentId, orderId, parentPaymentId, customerId, amountMinor, currency, reason]

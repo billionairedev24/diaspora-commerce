@@ -28,6 +28,8 @@ channels:
       identityInvitationCreated: {$ref: '#/components/messages/identityInvitationCreated'}
       identityInvitationRevoked: {$ref: '#/components/messages/identityInvitationRevoked'}
       identityInvitationAccepted: {$ref: '#/components/messages/identityInvitationAccepted'}
+      identityPasswordResetFederated: {$ref: '#/components/messages/identityPasswordResetFederated'}
+      identityPasswordChanged: {$ref: '#/components/messages/identityPasswordChanged'}
 operations:
   publishIdentityEvents:
     action: send
@@ -58,11 +60,13 @@ components:
       payload: {$ref: '#/components/schemas/IdentityUserEmailVerified'}
     identityVerificationRequested:
       name: identity.verification.requested
-      title: Deliver a one-time code (email verification, SMS sign-in code, SMS enrolment, phone verification)
+      title: Deliver a one-time code (email verification, SMS sign-in code, SMS enrolment, phone verification, password reset)
       description: >-
         Contains the plain one-time code so notifications-service can render template identity.verification on the
         payload channel (email or sms; phone verification, S234, is purpose PHONE_VERIFICATION with channel sms and
-        recipient.phone). Security message: always sent, quiet hours do not apply. Never log the payload.
+        recipient.phone). Password reset (S300) is purpose PASSWORD_RESET: one code, published once per channel
+        (email, and sms when the account has a verified phone), rendered with identity.password_reset. Security
+        message: always sent, quiet hours do not apply. Never log the payload.
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/IdentityVerificationRequested'}
     identityRoleGranted:
@@ -147,6 +151,24 @@ components:
       title: An open invitation was withdrawn or replaced by a new one (key = organisation id)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/IdentityInvitationRevoked'}
+    identityPasswordResetFederated:
+      name: identity.password-reset.federated
+      title: A password reset was asked for an account that only signs in with Google, Apple or Facebook (S300)
+      description: >-
+        The account has no password, so no code is sent: notifications-service emails recipient.email (template
+        identity.password_reset.federated) to sign in with the linked provider instead. Security message, never
+        resolved through identity. The requester gets the same answer as for any email (no account enumeration).
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityPasswordResetFederated'}
+    identityPasswordChanged:
+      name: identity.password.changed
+      title: The account's password was reset with a code (S300)
+      description: >-
+        Every session and refresh token of the account was revoked (signed out everywhere) and trusted browsers were
+        forgotten, so two-step verification is asked again where it applies. notifications-service emails
+        recipient.email (template identity.password_changed). Security message, never resolved through identity.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityPasswordChanged'}
     identityInvitationAccepted:
       name: identity.invitation.accepted
       title: The invitee joined the organisation, signed in or by signing up from the link (key = user id)
@@ -171,6 +193,18 @@ components:
         emailVerified: {type: boolean, description: true for social sign-ups and staff provisioning}
         smsConsent: {type: boolean, description: Separate, optional SMS opt-in from the sign-up form}
         registeredAt: {type: string, format: date-time}
+        referralCode:
+          type: [string, 'null']
+          maxLength: 20
+          description: Referral code from the friend's link or typed on the sign-up form (S322), as given; payments attaches it when it owns the code
+        deviceHash:
+          type: [string, 'null']
+          pattern: '^[0-9a-f]{64}$'
+          description: HMAC of the sign-up browser's device cookie (S322); only compared for equality by the referral abuse checks
+        networkHash:
+          type: [string, 'null']
+          pattern: '^[0-9a-f]{64}$'
+          description: HMAC of the sign-up network, IPv4 /24 or IPv6 /64 (S322)
     IdentityUserEmailVerified:
       type: object
       required: [userId, email, verifiedAt]
@@ -194,7 +228,7 @@ components:
         code: {type: string, pattern: '^[0-9]{6}$'}
         expiresInMinutes: {type: integer, examples: [10]}
         expiresAt: {type: string, format: date-time}
-        purpose: {type: string, enum: [EMAIL_VERIFICATION, SIGN_IN_SMS, SMS_ENROLMENT, PHONE_VERIFICATION]}
+        purpose: {type: string, enum: [EMAIL_VERIFICATION, SIGN_IN_SMS, SMS_ENROLMENT, PHONE_VERIFICATION, PASSWORD_RESET]}
         userId: {type: string, format: uuid}
         firstName: {type: string}
         transactional: {type: boolean, const: true}
@@ -326,3 +360,38 @@ components:
         userId: {type: string, format: uuid}
         alreadyMember: {type: boolean, description: The user was a member already; their role was left unchanged}
         at: {type: string, format: date-time}
+    IdentityPasswordResetFederated:
+      type: object
+      description: Follows the notifications-service payload convention (recipient block).
+      required: [recipient, userId, providers, transactional]
+      properties:
+        recipient:
+          type: object
+          required: [id, email]
+          properties:
+            id: {type: string, format: uuid}
+            email: {type: string, format: email}
+        userId: {type: string, format: uuid}
+        firstName: {type: [string, 'null']}
+        providers:
+          type: array
+          description: Display names of the linked providers, in a stable order
+          items: {type: string, examples: [Google, Apple, Facebook]}
+        transactional: {type: boolean, const: true}
+    IdentityPasswordChanged:
+      type: object
+      description: Follows the notifications-service payload convention (recipient block).
+      required: [recipient, userId, method, changedAt, sessionsRevoked, transactional]
+      properties:
+        recipient:
+          type: object
+          required: [id, email]
+          properties:
+            id: {type: string, format: uuid}
+            email: {type: string, format: email}
+        userId: {type: string, format: uuid}
+        firstName: {type: [string, 'null']}
+        method: {type: string, enum: [RESET], description: How the password was changed}
+        changedAt: {type: string, format: date-time}
+        sessionsRevoked: {type: integer, minimum: 0, description: Signed-in apps and devices that were signed out}
+        transactional: {type: boolean, const: true}

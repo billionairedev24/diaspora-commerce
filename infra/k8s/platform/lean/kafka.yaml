@@ -1,0 +1,96 @@
+# Single-node Apache Kafka (KRaft, no ZooKeeper): broker and controller in one pod, 10 GiB disk, 3 days of retention.
+# Enough for ~20-200 users of event traffic (a few events per order); it is NOT highly available. A node restart
+# pauses event delivery for ~30 s and producers/consumers reconnect; nothing is lost (offsets and logs are on the disk).
+# Topics are auto-created on first use (3 partitions) so Terraform's Confluent topic module is not needed.
+# Services reach it at kafka.kafka.svc.cluster.local:9092 (KAFKA_BOOTSTRAP), plaintext, inside the cluster network only.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: kafka
+spec:
+  clusterIP: None
+  selector: {app.kubernetes.io/name: kafka}
+  ports:
+    - {name: broker, port: 9092}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: kafka
+  labels: {app.kubernetes.io/name: kafka}
+spec:
+  serviceName: kafka
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: kafka}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: kafka}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: kafka
+          image: apache/kafka:4.1.0
+          ports:
+            - {name: broker, containerPort: 9092}
+          env:
+            - {name: KAFKA_NODE_ID, value: "1"}
+            - {name: KAFKA_PROCESS_ROLES, value: "broker,controller"}
+            - {name: KAFKA_LISTENERS, value: "PLAINTEXT://:9092,CONTROLLER://localhost:9093"}
+            - {name: KAFKA_ADVERTISED_LISTENERS, value: "PLAINTEXT://kafka-0.kafka.kafka.svc.cluster.local:9092"}
+            - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"}
+            - {name: KAFKA_CONTROLLER_LISTENER_NAMES, value: CONTROLLER}
+            - {name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@localhost:9093"}
+            - {name: KAFKA_INTER_BROKER_LISTENER_NAME, value: PLAINTEXT}
+            - {name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1"}
+            - {name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS, value: "0"}
+            - {name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: "true"}
+            - {name: KAFKA_NUM_PARTITIONS, value: "3"}
+            - {name: KAFKA_LOG_RETENTION_HOURS, value: "72"}
+            - {name: KAFKA_LOG_DIRS, value: /var/lib/kafka/data}
+            - {name: KAFKA_HEAP_OPTS, value: "-Xms256m -Xmx384m"}
+          readinessProbe:
+            tcpSocket: {port: 9092}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 640Mi}
+            limits: {memory: 896Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/kafka/data}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 10Gi}
+---
+# Only AfroTransact service namespaces (labelled by Argo CD) reach the broker.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kafka
+  namespace: kafka
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: kafka}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {app.kubernetes.io/part-of: afrotransact}
+      ports:
+        - {port: 9092}

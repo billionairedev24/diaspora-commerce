@@ -33,6 +33,12 @@ const ACTIONS: Record<string, string> = {
   STARTED: 'Application started'
 };
 
+/** The reason the applicant was given when the application was declined. */
+function rejectionNote(status: OnboardingStatus): string | null {
+  const last = [...status.timeline].reverse().find((t) => t.action === 'REJECT');
+  return last?.note?.trim() ? last.note.trim() : null;
+}
+
 /** What happens after submitting, and where the application is now (status tracking). */
 export function SubmittedView({ status, onRefresh, refreshing }: { status: OnboardingStatus; onRefresh: () => void; refreshing: boolean }) {
   const portal = status.kind === 'PROVIDER' ? 'Provider Hub' : 'Seller Center';
@@ -40,7 +46,8 @@ export function SubmittedView({ status, onRefresh, refreshing }: { status: Onboa
   if (s === 'REJECTED') {
     return (
       <Notice tone="danger" title="Your application wasn’t approved." role="alert">
-        We’ve emailed you the reason. Contact AfroTransact support if you think this is a mistake.
+        {rejectionNote(status) ? <span className="block">{rejectionNote(status)}</span> : null}
+        <span className="block">We’ve emailed you the reason. Contact AfroTransact support if you think this is a mistake.</span>
       </Notice>
     );
   }
@@ -101,7 +108,7 @@ export function SubmittedView({ status, onRefresh, refreshing }: { status: Onboa
         ))}
       </ol>
       {status.timeline.length ? (
-        <section aria-label="History" className="flex flex-col gap-1 border-t border-border pt-3">
+        <section aria-label="History" className="flex flex-col gap-1 pt-2">
           <strong className="text-sm">History</strong>
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
             {[...status.timeline].reverse().map((t, i) => (

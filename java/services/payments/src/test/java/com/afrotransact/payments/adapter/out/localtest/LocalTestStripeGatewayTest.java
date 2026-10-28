@@ -84,4 +84,33 @@ class LocalTestStripeGatewayTest {
                 .isEqualTo("requires_capture");
         assertThat(gateway.retrievePaymentMethod("pm_1").last4()).isEqualTo("4242");
     }
+
+    /** Like setup_future_usage: the method of an intent created to save it is on the customer once authorised. */
+    @Test
+    void aMethodSavedWhilePayingIsListedOnTheCustomerOnceAuthorised() {
+        assertThat(gateway.customerWallet("cus_localtest_a").methods()).isEmpty();
+        IntentSnapshot saving = gateway.createIntent(new StripeGateway.CreateIntent(Money.of(2500, "USD"),
+                "cus_localtest_a", List.of(), "AfroTransact order o-9", Map.of("order_id", "o-9"), "o-9", true),
+                "o-9:create-intent");
+        create(1200, "o-10:create-intent");
+        assertThat(gateway.customerWallet("cus_localtest_a").methods()).as("not before the shopper confirms").isEmpty();
+
+        gateway.retrieveIntent(saving.id());
+        gateway.retrieveIntent(saving.id());
+
+        StripeGateway.CustomerWalletSnapshot wallet = gateway.customerWallet("cus_localtest_a");
+        assertThat(wallet.authoritative()).as("in memory only: payments never drops methods it lost").isFalse();
+        assertThat(wallet.methods()).singleElement().satisfies(pm -> {
+            assertThat(pm.id()).startsWith("pm_localtest_");
+            assertThat(pm.customer()).isEqualTo("cus_localtest_a");
+            assertThat(pm.last4()).isEqualTo("4242");
+        });
+        assertThat(wallet.defaultPaymentMethodId()).isEqualTo(wallet.methods().getFirst().id());
+        assertThat(gateway.retrievePaymentMethod(wallet.defaultPaymentMethodId()).customer())
+                .isEqualTo("cus_localtest_a");
+
+        gateway.detachPaymentMethod(wallet.defaultPaymentMethodId(), "detach");
+        assertThat(gateway.customerWallet("cus_localtest_a").methods()).isEmpty();
+        assertThat(gateway.customerWallet("cus_localtest_a").defaultPaymentMethodId()).isNull();
+    }
 }

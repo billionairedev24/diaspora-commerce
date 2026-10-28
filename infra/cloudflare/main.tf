@@ -13,7 +13,7 @@ terraform {
     cloudflare = { source = "cloudflare/cloudflare", version = "~> 5.0" }
     random     = { source = "hashicorp/random", version = "~> 3.6" }
   }
-  # backend "s3" {} | backend "gcs" {} | backend "azurerm" {}  - same state bucket as infra/terraform
+  # backend "s3" {} | backend "gcs" {} | backend "azurerm" {}  - same state bucket as infra/tofu
 }
 
 # API token from CLOUDFLARE_API_TOKEN (scopes: Zone Settings/DNS/WAF/Workers Routes/SSL edit, Account

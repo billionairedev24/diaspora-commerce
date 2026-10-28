@@ -13,12 +13,13 @@ import {
   shipFromToForm,
   validatePickupHours
 } from '@afrotransact/api-client';
-import { Button, buttonClassName, Checkbox, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
+import { AddressFields, Button, buttonClassName, Checkbox, PhoneNumberField, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { MapPin, Plus, Trash } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type FormEvent, useState } from 'react';
 
+import { sellerAddressSearch, STATE_OPTIONS } from '@/components/onboarding/WizardKit';
 import { Card } from '@/components/ui/Card';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -219,19 +220,21 @@ function AddressDialog({ open, address, onClose }: { open: boolean; address: Shi
     <TextField id={`sfa-${k}`} label={label} value={form[k]} error={errors[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.currentTarget.value }))} {...extra} />
   );
   return (
-    <Dialog open={open} onOpenChange={(o) => (o ? undefined : onClose())} title={address ? t('sc.shipFrom.editTitle', { label: address.label }) : t('sc.shipFrom.addTitle')}>
+    <Sheet width={520} open={open} onOpenChange={(o) => (o ? undefined : onClose())} title={address ? t('sc.shipFrom.editTitle', { label: address.label }) : t('sc.shipFrom.addTitle')}>
       <form noValidate onSubmit={submit} className="flex flex-col gap-3">
         {field('label', t('sc.shipFrom.label'))}
         {field('name', t('sc.shipFrom.name'), { autoComplete: 'name' })}
         {field('company', t('sc.shipFrom.company'), { autoComplete: 'organization' })}
-        {field('phone', t('sc.shipFrom.phone'), { autoComplete: 'tel' })}
-        {field('line1', t('sc.shipFrom.line1'), { autoComplete: 'address-line1' })}
-        {field('line2', t('sc.shipFrom.line2'), { autoComplete: 'address-line2' })}
-        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2">
-          {field('city', t('sc.shipFrom.city'), { autoComplete: 'address-level2' })}
-          {field('state', t('sc.shipFrom.state'), { autoComplete: 'address-level1' })}
-          {field('postalCode', t('sc.shipFrom.zip'), { autoComplete: 'postal-code', inputMode: 'numeric' })}
-        </div>
+        <PhoneNumberField id="sfa-phone" label={t('sc.shipFrom.phone')} value={form.phone} error={errors.phone} onChange={(phone) => setForm((f) => ({ ...f, phone }))} />
+        <AddressFields
+          idPrefix="sfa"
+          value={{ line1: form.line1, line2: form.line2, city: form.city, state: form.state, zip: form.postalCode, country: 'US' }}
+          onChange={(a) => setForm((f) => ({ ...f, line1: a.line1, line2: a.line2, city: a.city, state: a.state, postalCode: a.zip }))}
+          searchAddresses={sellerAddressSearch}
+          regions={STATE_OPTIONS}
+          errors={{ line1: errors.line1, line2: errors.line2, city: errors.city, state: errors.state, zip: errors.postalCode }}
+          labels={{ line1: t('sc.shipFrom.line1'), line2: t('sc.shipFrom.line2'), city: t('sc.shipFrom.city'), state: t('sc.shipFrom.state'), zip: t('sc.shipFrom.zip') }}
+        />
         {errors.form ? (
           <Notice tone="danger" title={errors.form} role="alert" />
         ) : null}
@@ -244,7 +247,7 @@ function AddressDialog({ open, address, onClose }: { open: boolean; address: Shi
           </Button>
         </div>
       </form>
-    </Dialog>
+    </Sheet>
   );
 }
 

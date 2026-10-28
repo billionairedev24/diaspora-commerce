@@ -13,7 +13,8 @@ public final class Postings {
 
     /**
      * Capture of a charge: Dr 1000 Stripe clearing (charge − fee) and Dr 5000 Stripe fees (AfroTransact's share) /
-     * Cr 2000 seller payable (net), Cr 2100 sales tax payable per jurisdiction, Cr 4000 commission, Cr 4100 FBA fees,
+     * Cr 2000 seller payable (net), Cr 2100 sales tax payable per jurisdiction, Cr 4000 commission (products), Cr 4050
+     * connection fees (service bookings), Cr 4100 FBA fees,
      * Cr 4200 AfroTransact shipping, Cr 4250 local delivery fees (AfroTransact Delivery from seller stores, and the
      * pre-order delivery fees of S272, which are part of the platform's shipping but not of 4200). Sellers
      * bear their fee share through a lower payable. AfroTransact Retail's net
@@ -21,10 +22,20 @@ public final class Postings {
      */
     public static Journal capture(UUID id, Instant at, String key, String orderId, String paymentId,
                                   String chargeId, PaymentSplit split) {
+        return capture(id, at, key, orderId, paymentId, chargeId, split, Money.zero(split.charge().currency()));
+    }
+
+    /**
+     * Capture of an order partly paid with credit: the credit share of the capture is Dr 2600 customer credit instead
+     * of money from Stripe, so Dr 1000 is the card share less the fee. The credit becomes revenue here, at shipment.
+     */
+    public static Journal capture(UUID id, Instant at, String key, String orderId, String paymentId,
+                                  String chargeId, PaymentSplit split, Money creditShare) {
         Journal.Builder b = Journal.builder(JournalType.CAPTURE, key).order(orderId).payment(paymentId)
                 .stripeRef(chargeId).description("Capture of order " + orderId);
         RecipientShare platform = split.platform();
-        b.debit(LedgerAccount.of(Chart.STRIPE_CLEARING), split.charge().minus(split.stripeFee()));
+        b.debit(LedgerAccount.of(Chart.STRIPE_CLEARING), split.charge().minus(split.stripeFee()).minus(creditShare));
+        b.debit(LedgerAccount.of(Chart.CUSTOMER_CREDIT), creditShare);
         b.debit(LedgerAccount.of(Chart.STRIPE_FEES), platform.stripeFee());
         for (RecipientShare s : split.sellers()) {
             LedgerAccount owner = s.isRetail() ? LedgerAccount.retailSales()
@@ -34,6 +45,7 @@ public final class Postings {
                 b.credit(LedgerAccount.salesTax(tax.getKey()), tax.getValue(), s.recipientId());
             }
             b.credit(LedgerAccount.of(Chart.COMMISSION_REVENUE), s.commission(), s.recipientId());
+            b.credit(LedgerAccount.of(Chart.CONNECTION_FEE_REVENUE), s.connectionFees(), s.recipientId());
             b.credit(LedgerAccount.of(Chart.FBA_FEE_REVENUE), s.fbaFees(), s.recipientId());
             b.credit(LedgerAccount.of(Chart.LOCAL_DELIVERY_FEE_REVENUE), s.deliveryFees(), s.recipientId());
         }
@@ -46,12 +58,21 @@ public final class Postings {
 
     /**
      * Refund: Dr 2100 tax, Dr 2000 seller payable (items + own shipping − commission returned), Dr 4000 commission
-     * returned, Dr 4200 AfroTransact shipping, Dr 4250 delivery fee returned (customer-fault refunds of AfroTransact
+     * returned (Dr 4050 for the connection fee of a service line), Dr 4200 AfroTransact shipping, Dr 4250 delivery fee returned (customer-fault refunds of AfroTransact
      * Delivery lines) / Cr 2200 customer refunds payable. FBA fees and Stripe fee shares are not given back. Lines of AfroTransact Retail ({@code retailOrgId}) debit 4400 Retail sales instead of a
      * payable (Retail paid no commission, so none is returned).
      */
     public static Journal refund(UUID id, Instant at, String key, String orderId, String paymentId, String refundRef,
                                  List<RefundLine> lines, String retailOrgId) {
+        return refund(id, at, key, orderId, paymentId, refundRef, lines, retailOrgId, null);
+    }
+
+    /**
+     * Refund with a credit part: the part given back as credit is Cr 2600 customer credit instead of Cr 2200 refunds
+     * payable (no Stripe refund follows for it).
+     */
+    public static Journal refund(UUID id, Instant at, String key, String orderId, String paymentId, String refundRef,
+                                 List<RefundLine> lines, String retailOrgId, Money creditPart) {
         Journal.Builder b = Journal.builder(JournalType.REFUND, key).order(orderId).payment(paymentId)
                 .stripeRef(refundRef).description("Refund on order " + orderId);
         Money total = null;
@@ -59,7 +80,8 @@ public final class Postings {
             total = total == null ? l.total() : total.plus(l.total());
             b.debit(LedgerAccount.salesTax(l.taxJurisdiction()), l.tax(), l.sellerOrg());
             b.debit(owner(l.sellerOrg(), retailOrgId), l.sellerDebit(), l.sellerOrg());
-            b.debit(LedgerAccount.of(Chart.COMMISSION_REVENUE), l.commissionReversed(), l.sellerOrg());
+            b.debit(LedgerAccount.of(l.connectionFee() ? Chart.CONNECTION_FEE_REVENUE : Chart.COMMISSION_REVENUE),
+                    l.commissionReversed(), l.sellerOrg());
             b.debit(LedgerAccount.of(Chart.LOCAL_DELIVERY_FEE_REVENUE), l.deliveryFeeReversed(), l.sellerOrg());
             if (l.shippingToPlatform()) {
                 b.debit(LedgerAccount.of(l.preorderDeliveryFee() ? Chart.LOCAL_DELIVERY_FEE_REVENUE
@@ -69,7 +91,9 @@ public final class Postings {
         if (total == null) {
             throw new PaymentsRuleViolation("payments.invalid-refund", "A refund needs at least one line");
         }
-        b.credit(LedgerAccount.of(Chart.CUSTOMER_REFUNDS_PAYABLE), total);
+        Money credit = creditPart == null ? Money.zero(total.currency()) : creditPart;
+        b.credit(LedgerAccount.of(Chart.CUSTOMER_REFUNDS_PAYABLE), total.minus(credit));
+        b.credit(LedgerAccount.of(Chart.CUSTOMER_CREDIT), credit);
         return b.build(id, at);
     }
 
@@ -78,8 +102,8 @@ public final class Postings {
         return Journal.builder(JournalType.REFUND_SETTLED, key).order(refund.orderId())
                 .payment(refund.paymentId().toString()).stripeRef(refund.stripeRefundId())
                 .description("Refund " + refund.stripeRefundId() + " paid by Stripe")
-                .debit(LedgerAccount.of(Chart.CUSTOMER_REFUNDS_PAYABLE), refund.amount())
-                .credit(LedgerAccount.of(Chart.STRIPE_CLEARING), refund.amount())
+                .debit(LedgerAccount.of(Chart.CUSTOMER_REFUNDS_PAYABLE), refund.stripeAmount())
+                .credit(LedgerAccount.of(Chart.STRIPE_CLEARING), refund.stripeAmount())
                 .build(id, at);
     }
 
@@ -203,6 +227,57 @@ public final class Postings {
     }
 
     /**
+     * A seller plan invoice paid from earnings (S298): Dr 2000:org seller payable / Cr 4600 plan fee revenue. Like a
+     * label charge the debit carries no order, so it never changes what one order's settlement owes; the
+     * organisation's next transfers recover it ({@link #planFeeSettled}). No money moves (the seller service credits
+     * the Stripe customer balance instead of charging the card), so 1000 and reconciliation are untouched.
+     */
+    public static Journal planFeeWithheld(UUID id, Instant at, String key, PlanFeeWithholding w) {
+        return Journal.builder(JournalType.PLAN_FEE_WITHHELD, key)
+                .description(planFeeLabel(w))
+                .debit(LedgerAccount.sellerPayable(w.orgId()), w.withheld(), w.orgId())
+                .credit(LedgerAccount.of(Chart.PLAN_FEE_REVENUE), w.withheld(), w.orgId())
+                .build(id, at);
+    }
+
+    /** A withheld plan fee credited back (voided or refunded invoice): the reverse of {@link #planFeeWithheld}. */
+    public static Journal planFeeReleased(UUID id, Instant at, String key, PlanFeeWithholding w, Money amount,
+                                          String why) {
+        return Journal.builder(JournalType.PLAN_FEE_RELEASED, key)
+                .description(planFeeLabel(w) + " released" + (why == null || why.isBlank() ? "" : " (" + why + ")"))
+                .debit(LedgerAccount.of(Chart.PLAN_FEE_REVENUE), amount, w.orgId())
+                .credit(LedgerAccount.sellerPayable(w.orgId()), amount, w.orgId())
+                .build(id, at);
+    }
+
+    /**
+     * Settles a plan fee against an order's payable before that order is transferred: a positive {@code amount} is
+     * recovered from the order (Dr 2000:org on the order / Cr 2000:org unattributed), so the transfer is smaller by the
+     * fee; a negative one pays a released fee back with the transfer (the opposite lines). Both lines stay on 2000:org,
+     * so the seller's total payable is unchanged.
+     */
+    public static Journal planFeeSettled(UUID id, Instant at, String key, String orderId, PlanFeeWithholding w,
+                                         Money amount) {
+        Journal.Builder b = Journal.builder(JournalType.PLAN_FEE_SETTLED, key)
+                .description(planFeeLabel(w) + (amount.isNegative() ? " paid back with order " : " deducted from order ")
+                        + orderId);
+        if (amount.isNegative()) {
+            b.debit(LedgerAccount.sellerPayable(w.orgId()), amount.negate(), w.orgId())
+                    .creditOrder(LedgerAccount.sellerPayable(w.orgId()), amount.negate(), w.orgId(), orderId);
+        } else {
+            b.debitOrder(LedgerAccount.sellerPayable(w.orgId()), amount, w.orgId(), orderId)
+                    .credit(LedgerAccount.sellerPayable(w.orgId()), amount, w.orgId());
+        }
+        return b.build(id, at);
+    }
+
+    /** "Plan fee (invoice INV-0042)": the line sellers see on statements and payouts. */
+    public static String planFeeLabel(PlanFeeWithholding w) {
+        return "Plan fee (invoice " + (w.invoiceNumber() == null || w.invoiceNumber().isBlank() ? w.invoiceId()
+                : w.invoiceNumber()) + ")";
+    }
+
+    /**
      * Dispute opened: Stripe withdraws the amount (Dr 1100 chargeback receivable / Cr 1000) and each responsible
      * seller's payable is debited into a chargeback reserve (Dr 2000 / Cr 2300) until the outcome. Stripe's dispute fee
      * is AfroTransact's cost (Dr 5100). AfroTransact Retail's part has no payable to reserve: it stays in 1100 until
@@ -263,5 +338,66 @@ public final class Postings {
     /** Who carries an order line's money: 4400 Retail sales for AfroTransact Retail, else the seller's 2000 payable. */
     public static LedgerAccount owner(String orgId, String retailOrgId) {
         return orgId.equals(retailOrgId) ? LedgerAccount.retailSales() : LedgerAccount.sellerPayable(orgId);
+    }
+
+    // ---------------------------------------------------------------- credit and gift cards (S320, S321)
+
+    /** Credit granted (staff, promotion, referral, membership): the program's cost. Dr 5200 / Cr 2600. */
+    public static Journal creditGranted(UUID id, Instant at, String key, String customerId, Money amount,
+                                        String reason) {
+        return Journal.builder(JournalType.CREDIT_GRANT, key).description("Credit granted to " + customerId + ": "
+                + reason).debit(LedgerAccount.of(Chart.CREDIT_GRANTED_EXPENSE), amount)
+                .credit(LedgerAccount.of(Chart.CUSTOMER_CREDIT), amount).build(id, at);
+    }
+
+    /** Credit taken back by a staff correction. Dr 2600 / Cr 5200. */
+    public static Journal creditTakenBack(UUID id, Instant at, String key, String customerId, Money amount,
+                                          String reason) {
+        return Journal.builder(JournalType.CREDIT_ADJUSTMENT, key).description("Credit corrected for " + customerId
+                + ": " + reason).debit(LedgerAccount.of(Chart.CUSTOMER_CREDIT), amount)
+                .credit(LedgerAccount.of(Chart.CREDIT_GRANTED_EXPENSE), amount).build(id, at);
+    }
+
+    /**
+     * A gift card paid by card: the money is a liability until the card is redeemed. Dr 1000 (charge less fee), Dr 5000
+     * (fee) / Cr 2650. Matched to the charge by reconciliation.
+     */
+    public static Journal giftCardSold(UUID id, Instant at, String key, GiftCard card, String chargeId, Money fee) {
+        return Journal.builder(JournalType.GIFT_CARD_SOLD, key).stripeRef(chargeId)
+                .description("Gift card " + card.id() + " sold")
+                .debit(LedgerAccount.of(Chart.STRIPE_CLEARING), card.amount().minus(fee))
+                .debit(LedgerAccount.of(Chart.STRIPE_FEES), fee)
+                .credit(LedgerAccount.of(Chart.GIFT_CARD_LIABILITY), card.amount()).build(id, at);
+    }
+
+    /** A gift card issued by staff. Dr 5200 / Cr 2650. */
+    public static Journal giftCardIssued(UUID id, Instant at, String key, GiftCard card) {
+        return Journal.builder(JournalType.GIFT_CARD_ISSUED, key).description("Gift card " + card.id()
+                + " issued by staff: " + card.issueReason())
+                .debit(LedgerAccount.of(Chart.CREDIT_GRANTED_EXPENSE), card.amount())
+                .credit(LedgerAccount.of(Chart.GIFT_CARD_LIABILITY), card.amount()).build(id, at);
+    }
+
+    /** A gift card redeemed into the recipient's credit. Dr 2650 / Cr 2600. */
+    public static Journal giftCardRedeemed(UUID id, Instant at, String key, GiftCard card, String customerId) {
+        return Journal.builder(JournalType.GIFT_CARD_REDEEMED, key).description("Gift card " + card.id()
+                + " redeemed by " + customerId)
+                .debit(LedgerAccount.of(Chart.GIFT_CARD_LIABILITY), card.amount())
+                .credit(LedgerAccount.of(Chart.CUSTOMER_CREDIT), card.amount()).build(id, at);
+    }
+
+    /**
+     * An unredeemed gift card voided. A purchased one is refunded to the purchaser's card (Dr 2650 / Cr 1000, matched
+     * to the Stripe refund); one staff issued just ends the liability (Dr 2650 / Cr 5200).
+     */
+    public static Journal giftCardVoided(UUID id, Instant at, String key, GiftCard card, String refundRef) {
+        Journal.Builder b = Journal.builder(JournalType.GIFT_CARD_VOIDED, key).description("Gift card " + card.id()
+                + " voided").debit(LedgerAccount.of(Chart.GIFT_CARD_LIABILITY), card.amount());
+        if (refundRef != null) {
+            b.stripeRef(refundRef).credit(LedgerAccount.of(Chart.STRIPE_CLEARING), card.amount());
+        } else {
+            b.credit(LedgerAccount.of(Chart.CREDIT_GRANTED_EXPENSE), card.amount());
+        }
+        return b.build(id, at);
     }
 }

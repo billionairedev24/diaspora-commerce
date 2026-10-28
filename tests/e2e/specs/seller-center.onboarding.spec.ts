@@ -60,7 +60,7 @@ test.describe('seller center · application wizard', () => {
     await expect(page.getByText(/There are \d problems with this step/)).toBeVisible();
     await expect(page).toHaveURL(/\/onboarding\/business$/);
     await page.getByRole('radio', { name: /Single-member LLC/ }).check();
-    await page.getByLabel(/Store or business display name/).fill('Titi Foods');
+    await page.getByLabel(/^Business name/).fill('Titi Foods');
     await expect(page.getByLabel(/Business email/)).toHaveValue('titilayo@adeskitchen.com');
     await expect(page.getByLabel(/Mobile phone/)).toHaveValue('(713) 249-0142');
     await shot(page, '1-business');
@@ -105,24 +105,35 @@ test.describe('seller center · application wizard', () => {
     await onStep(page, 'owners', 'Owners');
     await page.goForward();
 
-    // 4 · Stripe verification with the labelled local stand-in (no Stripe in the mock BFF).
+    // 4 · Stripe verification: Stripe's form opens with the step (here the labelled local stand-in: no Stripe in the
+    // mock BFF), right under one line saying where to continue. Finishing it shows success and moves on by itself.
     await onStep(page, 'stripe-verification', 'Stripe verification');
-    await saveAndContinue(page);
-    await expect(page.getByText('Finish Stripe verification to continue.')).toBeVisible();
-    await page.getByRole('button', { name: 'Start verification' }).click();
-    await expect(page.getByText(/Local test mode — Stripe isn’t configured on this machine/)).toBeVisible();
+    await expect(page.getByText('Continue in the secure Stripe form below — it saves as you go.')).toBeVisible();
+    await expect(page.getByRole('list', { name: 'What Stripe will ask for' }).getByRole('listitem')).toHaveCount(3);
+    const stripeForm = page.getByRole('region', { name: 'Local test verification' });
+    await expect(stripeForm).toBeVisible();
+    await expect(page.getByRole('button', { name: /Start verification/ })).toHaveCount(0);
     await shot(page, '4-stripe-verification');
-    await page.getByRole('button', { name: 'Complete test verification' }).click();
-    await expect(page.getByText(/Verified · charges enabled/)).toBeVisible();
-    await saveAndContinue(page);
+    // The page's own Continue is only a quiet fallback; the Stripe form holds the one primary action.
+    await expect(page.getByRole('button', { name: 'I’ve finished — continue' })).toBeVisible();
+    await stripeForm.getByRole('button', { name: 'Complete test verification' }).click();
+    await expect(page.getByText('Verified by Stripe')).toBeVisible();
+    // Stripe's onboarding (here the stand-in) collects the payout bank account too.
+    await expect(page.getByText(/Payouts go to STRIPE TEST BANK \(local\) ••6789/)).toBeVisible();
+    await shot(page, '4-stripe-verified');
 
-    // 5 · Payouts: complete only once the bank account is linked.
+    // 5 · Payouts (reached by itself): read-only — the bank Stripe holds; "Change bank account" opens Stripe's
+    // account management. Back sits at the top, beside the heading.
     await onStep(page, 'payouts', 'Payouts');
-    await page.getByLabel('Routing number').fill('021000021');
-    await page.getByLabel('Account type').selectOption('checking');
-    await page.getByLabel('Account number', { exact: true }).fill('000123456789');
-    await page.getByLabel('Confirm account number').fill('000123456789');
+    await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
+    await expect(page.getByText('STRIPE TEST BANK (local) ••6789')).toBeVisible();
+    await expect(page.getByText('Held by Stripe')).toBeVisible();
+    await expect(page.getByLabel('Routing number')).toHaveCount(0);
     await shot(page, '5-payouts');
+    await page.getByRole('button', { name: 'Change bank account' }).click();
+    await expect(page.getByRole('region', { name: 'Local test account management' })).toBeVisible();
+    await shot(page, '5-payouts-change-bank');
+    await page.getByRole('button', { name: 'Done' }).click();
     await saveAndContinue(page);
 
     // 6 · Plan: a paid plan with the labelled local test card; the fee summary.
@@ -151,7 +162,8 @@ test.describe('seller center · application wizard', () => {
 
     // 8 · Review & submit.
     await onStep(page, 'review', 'Review & submit');
-    await expect(page.getByRole('region', { name: 'Payouts' })).toContainText('Linked to Stripe Connect');
+    await expect(page.getByRole('region', { name: 'Payouts' })).toContainText('STRIPE TEST BANK (local) ••6789');
+    await expect(page.getByRole('region', { name: 'Payouts' })).toContainText('Held by Stripe');
     await expect(page.getByRole('region', { name: 'Business details & TIN' })).toContainText('••-•••6789');
     await expect(page.getByRole('link', { name: 'Edit Owners' })).toHaveAttribute('href', '/onboarding/owners');
     await shot(page, '8-review');

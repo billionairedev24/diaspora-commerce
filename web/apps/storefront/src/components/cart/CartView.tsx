@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 
-import { CartPreorderHeader, CartPreorderSummary, CartShipsNowHeader, FulfilmentChoice } from '@/components/preorder/CartPreorder';
+import { CartPreorderHeader, CartPreorderSummary, CartShipsNowHeader, FulfilmentChoice, RunNote } from '@/components/preorder/CartPreorder';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { searchQueries } from '@/lib/api/queries';
@@ -85,6 +85,7 @@ function PreorderPackage({ pkg }: { pkg: CartPackage & { preorder: NonNullable<C
   return (
     <section aria-labelledby={`pkg-${pkg.packageId}`} data-testid="cart-preorder-package">
       <CartPreorderHeader block={block} id={`pkg-${pkg.packageId}`} />
+      <RunNote block={block} />
       <div className={styles.preorderLines}>
         <ul className={styles.lines}>
           {pkg.lines.map((l) => (

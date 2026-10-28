@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
 )
 
 // Variant is a fake sellable variant.
@@ -113,6 +115,10 @@ type Upstreams struct {
 	AccessTTL time.Duration
 	// Calls counts requests per "METHOD path" (tests assert retries and caching).
 	Calls map[string]int
+	// actingAs is the X-Acting-As header of the last request with a bearer token per "METHOD path".
+	actingAs map[string]string
+	// AssistantCalls records the seller assistant's model calls.
+	AssistantCalls []AssistantCall
 	// FailInventory makes inventory answer 503.
 	FailInventory bool
 	opts          Options
@@ -121,6 +127,9 @@ type Upstreams struct {
 	ActiveOrgID string
 	// ServiceTokenRequests records the scopes of client-credentials token requests.
 	ServiceTokenRequests []string
+	// GeoAutocompleteQueries are the query strings geo's autocomplete received; GeoResolves "id?query" per resolve.
+	GeoAutocompleteQueries []url.Values
+	GeoResolves            []string
 	// LastClientIP is the clientIp identity's first-party API last received.
 	LastClientIP string
 	tickets      map[string]string
@@ -135,6 +144,9 @@ type Upstreams struct {
 	MemberRoles []string
 	// NoApplication makes GET /v1/applications/me answer 404 until an application is started.
 	NoApplication bool
+	// SellerTruth is the seller service's state of organisations identity's POST /v1/orgs/{id}/sync repairs from:
+	// syncing one puts it into MemberOrgs (and makes it the active organisation when there is none). Absent: 404.
+	SellerTruth map[string]MemberOrg
 	// DefaultAddresses is the address book of members who saved none themselves.
 	DefaultAddresses []map[string]any
 	ApplicantRoles   []string
@@ -143,15 +155,27 @@ type Upstreams struct {
 	// StepBodies records the seller service's step saves (PUT /v1/applications/me/steps/{step}) by step;
 	// StripeLocalTest makes account sessions come from the seller service's local stand-in;
 	// LastUploadPurpose is media's last upload purpose.
-	StepBodies        map[string]map[string]any
-	StripeLocalTest   bool
-	LastUploadPurpose string
+	StepBodies      map[string]map[string]any
+	StripeLocalTest bool
+	// PlanFeeCollectionOff makes the seller service answer 409 to plan fee collection changes (S298 kill switch off).
+	PlanFeeCollectionOff bool
+	LastUploadPurpose    string
+
+	// LastProductBody is the body of catalog's last PUT /v1/products/{id}; LastUpload the last bulk upload
+	// (name, contentType, mode, productType, uploadedByName, body) — S307/S308.
+	LastProductBody map[string]any
+	LastUpload      map[string]string
 	// PhoneVerified is identity's phoneVerified for every account; LastSignUp is the last POST /v1/accounts body.
 	PhoneVerified bool
 	LastSignUp    map[string]any
 	team          *teamState
 	// LastWaitlist is the last delivery-runs POST /v1/public/subscriptions body (pre-order waitlist).
 	LastWaitlist map[string]any
+	// Last delivery-runs bodies and queries of the run-alert routes (S262, S263) and the advertorial events counted.
+	LastRunUnsubscribe, LastRunSubscribeMine, LastRunVisit map[string]any
+	LastRunUnsubscribeMine                   []string
+	LastAdvertorialQuery                     url.Values
+	AdvertorialEvents                        []string
 	// LastConsent / LastConsentGPC are the last content POST /v1/consent/records body and Sec-GPC header.
 	LastConsent    map[string]any
 	LastConsentGPC string
@@ -174,7 +198,7 @@ func NewUpstreams(o Options) *Upstreams {
 	}
 	u := &Upstreams{ClientID: "gateway-bff", Secret: "test-secret", products: defaultProducts(), carts: map[string]*fakeCart{},
 		codes: map[string]issuedCode{}, refresh: map[string]string{}, addresses: map[string][]map[string]any{}, key: key,
-		AccessTTL: 5 * time.Minute, Calls: map[string]int{}, opts: o, MemberOrgs: DefaultMemberOrgs(), ActiveOrgID: SellerOrgID,
+		AccessTTL: 5 * time.Minute, Calls: map[string]int{}, actingAs: map[string]string{}, opts: o, MemberOrgs: DefaultMemberOrgs(), ActiveOrgID: SellerOrgID,
 		AccessDeniedMatrix: true, seller: newSellerState(), tickets: map[string]string{},
 		team: &teamState{removed: map[string]bool{}}}
 	mux := http.NewServeMux()
@@ -185,6 +209,9 @@ func NewUpstreams(o Options) *Upstreams {
 	u.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		u.Calls[r.Method+" "+r.URL.Path]++
+		if r.Header.Get("Authorization") != "" {
+			u.actingAs[r.Method+" "+r.URL.Path] = r.Header.Get(auth.ActingAsHeader)
+		}
 		u.mu.Unlock()
 		mux.ServeHTTP(w, r)
 	}))
@@ -196,6 +223,22 @@ func (u *Upstreams) Close() { u.Server.Close() }
 
 // URL is the base URL of every fake upstream.
 func (u *Upstreams) URL() string { return u.Server.URL }
+
+// ActingAsSent returns the X-Acting-As header of the last authenticated "METHOD path" request ("" when absent) and
+// whether there was one.
+func (u *Upstreams) ActingAsSent(key string) (string, bool) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	v, ok := u.actingAs[key]
+	return v, ok
+}
+
+// AccessClaimsOf returns the platform claims the fake identity puts on the subject's access token.
+func (u *Upstreams) AccessClaimsOf(sub string) jwt.MapClaims {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.accessClaims(sub)
+}
 
 // CallCount returns how often "METHOD path" was requested.
 func (u *Upstreams) CallCount(key string) int {
@@ -357,11 +400,29 @@ func (u *Upstreams) routes(mux *http.ServeMux) {
 		}
 		writeJSON(w, 200, map[string]any{"line1": "9800 Westheimer Rd", "city": "Houston", "state": "TX", "postalCode": "77042", "country": "US", "lat": 29.7376, "lon": -95.5134})
 	})
-	mux.HandleFunc("GET /v1/addresses/autocomplete", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /v1/addresses/autocomplete", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		u.GeoAutocompleteQueries = append(u.GeoAutocompleteQueries, r.URL.Query())
+		u.mu.Unlock()
+		// "Peckham …" answers like Google Places (resolved on pick), everything else like Nominatim.
+		if strings.HasPrefix(r.URL.Query().Get("q"), "Peckham") {
+			writeJSON(w, 200, map[string]any{"suggestions": []map[string]any{
+				{"id": "g:ChIJpeckham", "text": "27 Peckham High St, London, UK", "mainText": "27 Peckham High St", "secondaryText": "London, UK", "provider": "google-places"}},
+				"session": r.URL.Query().Get("session")})
+			return
+		}
 		writeJSON(w, 200, map[string]any{"suggestions": []map[string]any{
-			{"id": "o:1", "text": "9800 Westheimer Rd, Houston, TX", "mainText": "9800 Westheimer Rd", "secondaryText": "Houston, TX 77042", "provider": "osm-nominatim"}}})
+			{"id": "o:1", "text": "9800 Westheimer Rd, Houston, TX", "mainText": "9800 Westheimer Rd", "secondaryText": "Houston, TX 77042", "provider": "osm-nominatim"}},
+			"session": r.URL.Query().Get("session")})
 	})
-	mux.HandleFunc("GET /v1/addresses/resolve/{id}", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /v1/addresses/resolve/{id}", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		u.GeoResolves = append(u.GeoResolves, r.PathValue("id")+"?"+r.URL.RawQuery)
+		u.mu.Unlock()
+		if r.PathValue("id") == "g:ChIJpeckham" {
+			writeJSON(w, 200, map[string]any{"line1": "27 Peckham High St", "line2": "Flat 3", "city": "London", "state": "England", "postalCode": "SE15 5EB", "country": "GB", "lat": 51.47, "lon": -0.07})
+			return
+		}
 		writeJSON(w, 200, map[string]any{"line1": "9800 Westheimer Rd", "city": "Houston", "state": "TX", "postalCode": "77042", "country": "US", "lat": 29.73, "lon": -95.55})
 	})
 	mux.HandleFunc("POST /v1/addresses/validate", func(w http.ResponseWriter, r *http.Request) {
@@ -380,12 +441,12 @@ func (u *Upstreams) routes(mux *http.ServeMux) {
 		u.contentRoutes(mux)
 	}
 	if u.opts.Payments {
-		mux.HandleFunc("GET /v1/customers/me/payment-methods", func(w http.ResponseWriter, _ *http.Request) {
+		mux.HandleFunc("GET /v1/customers/me/payment-methods", customerOnly("payments.customer-only", func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, 200, map[string]any{"items": []map[string]any{{"id": "pm_1", "type": "card", "brand": "visa", "last4": "4242", "label": "Visa ending in 4242", "expires": "08/29", "isDefault": true}}})
-		})
-		mux.HandleFunc("POST /v1/customers/me/setup-intents", func(w http.ResponseWriter, _ *http.Request) {
+		}))
+		mux.HandleFunc("POST /v1/customers/me/setup-intents", customerOnly("payments.customer-only", func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, 201, map[string]any{"clientSecret": "seti_123_secret_abc", "publishableKey": "pk_test_123"})
-		})
+		}))
 	}
 	if u.opts.Offers {
 		u.offersRoutes(mux)
@@ -481,7 +542,7 @@ func subjectOf(r *http.Request) string {
 }
 
 func (u *Upstreams) owner(w http.ResponseWriter, r *http.Request) string {
-	if s := subjectOf(r); s != "" {
+	if s := customerSubject(r); s != "" {
 		return "user:" + s
 	}
 	g := r.Header.Get("X-Guest-Cart")
@@ -701,7 +762,7 @@ func (u *Upstreams) cartRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/cart/merge", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
-		sub := subjectOf(r)
+		sub := customerSubject(r)
 		g := r.Header.Get("X-Guest-Cart")
 		if sub == "" || g == "" {
 			problem(w, 400, "cart.merge-invalid", "A signed-in customer and a guest cart id are required", nil)
@@ -746,7 +807,19 @@ func PreorderCartBlock(fulfilment string) map[string]any {
 		"opensAt": "2026-10-06T14:00:00Z", "closesAt": "2026-10-22T04:59:00Z", "deliversOn": "2026-10-25", "timeZone": "America/Chicago",
 		"fulfilment": fulfilment, "door": true, "pickup": true, "doorFeeMinor": 799, "pickupFeeMinor": 0, "currency": "USD",
 		"pickupWindow": "10am–2pm", "allowedMethods": []string{"CARD", "WALLET"},
-		"options": []any{map[string]any{"fulfilment": "DOOR", "feeMinor": 799}, map[string]any{"fulfilment": "PICKUP", "feeMinor": 0}}}
+		"feeRule": preorderFeeRule(fulfilment),
+		"options": []any{map[string]any{"fulfilment": "DOOR", "feeMinor": 799, "rule": preorderFeeRule("DOOR")},
+			map[string]any{"fulfilment": "PICKUP", "feeMinor": 0, "rule": preorderFeeRule("PICKUP")}}}
+}
+
+// preorderFeeRule is the delivery fee rule (ADR 0005 §3) behind the fake window's door or pickup fee.
+func preorderFeeRule(fulfilment string) map[string]any {
+	if fulfilment == "PICKUP" {
+		return map[string]any{"method": "PICKUP", "ruleId": "7f0c6d4e-1c1e-4f43-9c1e-0a0f5f1d2a12", "ruleVersion": 2, "currency": "USD",
+			"amountMinor": 0, "source": "RULE"}
+	}
+	return map[string]any{"method": "AFROTRANSACT_DELIVERY", "ruleId": "7f0c6d4e-1c1e-4f43-9c1e-0a0f5f1d2a11", "ruleVersion": 3,
+		"currency": "USD", "amountMinor": 799, "source": "RULE", "band": "10–40 mi", "distanceMiles": 32.0}
 }
 
 // preorderRoutes fakes delivery-runs' public pre-order routes: Lubbock (US/TX/Lubbock) has an open window; every
@@ -776,14 +849,7 @@ func (u *Upstreams) preorderRoutes(mux *http.ServeMux) {
 			"deliversOn": "2026-10-25", "timeZone": "America/Chicago", "place": map[string]any{"country": "US", "region": "TX", "city": "Lubbock"},
 			"zip": "79401", "heroUrl": "https://img.example/hero.jpg", "doorFeeMinor": 799, "currency": "USD"}}})
 	})
-	mux.HandleFunc("POST /v1/public/subscriptions", func(w http.ResponseWriter, r *http.Request) {
-		var b map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&b)
-		u.mu.Lock()
-		u.LastWaitlist = b
-		u.mu.Unlock()
-		writeJSON(w, 202, map[string]any{"status": "CONFIRMATION_SENT"})
-	})
+	u.runAlertRoutes(mux)
 	mux.HandleFunc("POST /v1/public/preorders/waitlist/unsubscribe", func(w http.ResponseWriter, r *http.Request) {
 		var b map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&b)
@@ -822,11 +888,32 @@ func (u *Upstreams) Token(claims jwt.MapClaims) string {
 	return s
 }
 
+// accessClaims are the platform claims identity puts on a user's access token (IdentityTokenCustomizer,
+// DefaultAccessPolicy): a member of an organisation acts for the active one (pt SELLER_MEMBER / PROVIDER_MEMBER, org
+// and the org role), whichever app asked for the token; everyone else is a CUSTOMER. Callers hold u.mu.
+func (u *Upstreams) accessClaims(sub string) jwt.MapClaims {
+	claims := jwt.MapClaims{"sub": sub, "pt": "CUSTOMER", "roles": []string{"account.customer"}}
+	active, ok := u.orgByID(u.ActiveOrgID)
+	if !ok && len(u.MemberOrgs) > 0 {
+		active, ok = u.MemberOrgs[0], true
+	}
+	if !ok {
+		return claims
+	}
+	pt := "SELLER_MEMBER"
+	if active.Kind == "PROVIDER" || strings.HasPrefix(active.Role, "provider.") {
+		pt = "PROVIDER_MEMBER"
+	}
+	claims["pt"], claims["org"] = pt, active.ID
+	claims["roles"] = []string{"account.customer", active.Role}
+	return claims
+}
+
 func (u *Upstreams) tokens(sub, nonce string) map[string]any {
 	rt := "rt-" + newUUID()
 	u.refresh[rt] = sub
 	return map[string]any{
-		"access_token":  u.Token(jwt.MapClaims{"sub": sub, "pt": "CUSTOMER", "roles": []string{"account.customer"}}),
+		"access_token":  u.Token(u.accessClaims(sub)),
 		"refresh_token": rt,
 		"id_token": u.Token(jwt.MapClaims{"sub": sub, "aud": u.ClientID, "nonce": nonce, "given_name": "Adaeze",
 			"family_name": "Nwosu", "email": "adaeze@example.com", "roles": []string{"account.customer"}}),
@@ -875,6 +962,57 @@ func (u *Upstreams) identityRoutes(mux *http.ServeMux) {
 			writeJSON(w, 400, map[string]any{"error": "unsupported_grant_type"})
 		}
 	})
+	// First-party sign-in API (scope auth:first-party) and the login-ticket redemption on /oauth2/authorize.
+	// adaeze@example.com / Passw0rd! signs in; mfa@example.com / Passw0rd! needs the code 123456 first.
+	mux.HandleFunc("POST /v1/auth/password", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if r.Header.Get("Authorization") != "Bearer svc-auth:first-party" || b["appClientId"] == "" || b["clientIp"] == "" {
+			problem(w, 403, "identity.first-party-client-required", "Forbidden", nil)
+			return
+		}
+		email, _ := b["email"].(string)
+		if b["password"] != "Passw0rd!" || (email != "adaeze@example.com" && email != "mfa@example.com") {
+			problem(w, 401, "identity.invalid-credentials", "Email or password is incorrect", nil)
+			return
+		}
+		if email == "mfa@example.com" {
+			writeJSON(w, 200, map[string]any{"status": "MFA_REQUIRED", "challengeId": "chal-1", "challengeExpiresAt": "2026-10-10T12:05:00Z",
+				"factors": map[string]any{"totp": true, "sms": true, "smsHint": "•••• 0142", "recoveryCode": true}})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"status": "AUTHENTICATED", "userId": "user-1", "loginTicket": "ticket-" + b["appClientId"].(string)})
+	})
+	mux.HandleFunc("POST /v1/auth/mfa/sms", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 202, map[string]any{"sentTo": "•••• 0142", "expiresAt": "2026-10-10T12:05:00Z"})
+	})
+	mux.HandleFunc("POST /v1/auth/mfa/verify", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if b["challengeId"] != "chal-1" {
+			problem(w, 422, "identity.challenge-invalid", "This sign-in expired", nil)
+			return
+		}
+		if b["code"] != "123456" {
+			problem(w, 422, "identity.invalid-code", "That code isn't right", nil)
+			return
+		}
+		out := map[string]any{"status": "AUTHENTICATED", "userId": "user-1", "loginTicket": "ticket-" + b["appClientId"].(string)}
+		if b["trustDevice"] == true {
+			out["trustedDeviceToken"] = "trusted-1"
+		}
+		writeJSON(w, 200, out)
+	})
+	mux.HandleFunc("GET /oauth2/authorize", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("login_ticket") != "ticket-"+q.Get("client_id") || q.Get("code_challenge_method") != "S256" {
+			writeJSON(w, 400, map[string]any{"error": "invalid_grant"})
+			return
+		}
+		code := u.IssueCode(q.Get("code_challenge"), "", "user-1", q.Get("redirect_uri"))
+		w.Header().Set("Location", q.Get("redirect_uri")+"?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(q.Get("state")))
+		w.WriteHeader(http.StatusFound)
+	})
 	mux.HandleFunc("POST /oauth2/revoke", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
@@ -901,8 +1039,11 @@ func (u *Upstreams) identityRoutes(mux *http.ServeMux) {
 		if roles == nil {
 			roles = []string{"account.customer"}
 		}
+		u.mu.Lock()
+		pt := u.accessClaims(sub)["pt"]
+		u.mu.Unlock()
 		writeJSON(w, 200, map[string]any{"id": sub, "firstName": "Adaeze", "lastName": "Nwosu", "email": "adaeze@example.com", "roles": roles,
-			"landing": "shop", "orgId": active, "orgs": orgs, "phone": "+17135550142", "phoneVerified": verified})
+			"landing": "shop", "principalType": pt, "orgId": active, "orgs": orgs, "phone": "+17135550142", "phoneVerified": verified})
 	})
 	mux.HandleFunc("GET /v1/identity-providers", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, []map[string]any{{"id": "google", "displayName": "Google", "authorizationPath": "/oauth2/authorization/google"}})

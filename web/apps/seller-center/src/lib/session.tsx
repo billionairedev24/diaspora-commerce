@@ -1,6 +1,6 @@
 'use client';
 
-import { type AccessLevel, type ModuleKey, type NavModule, type SellerSession } from '@afrotransact/api-client';
+import { type AccessLevel, type ModuleKey, type NavModule, type PlanCapability, type SellerSession } from '@afrotransact/api-client';
 import { createContext, type ReactNode, useContext, useMemo } from 'react';
 
 const RANK: Record<AccessLevel, number> = { VIEW: 1, EDIT: 2, APPROVE: 3, FULL: 4 };
@@ -14,6 +14,8 @@ export interface SellerContextValue {
   /** Whether the role can change (EDIT or more) or at least view a module. */
   can: (key: ModuleKey, min?: AccessLevel) => boolean;
   module: (key: ModuleKey) => NavModule | null;
+  /** Whether the organisation's plan includes a capability; what it does not include is not shown. */
+  has: (capability: PlanCapability) => boolean;
 }
 
 const Ctx = createContext<SellerContextValue | null>(null);
@@ -30,7 +32,8 @@ export function buildSellerContext(session: SellerSession): SellerContextValue {
       const lv = level(key);
       return lv !== null && RANK[lv] >= RANK[min];
     },
-    module: (key) => modules.get(key) ?? null
+    module: (key) => modules.get(key) ?? null,
+    has: (capability) => session.capabilities.includes(capability)
   };
 }
 

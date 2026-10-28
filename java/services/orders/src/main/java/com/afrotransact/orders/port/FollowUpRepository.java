@@ -31,7 +31,9 @@ public interface FollowUpRepository {
         /** A shipment was cancelled: refund it, or cancel the payment and release stock when nothing is left. */
         CANCEL,
         /** One shipment of a multi-shipment order delivered: start that shipment's settlement hold. */
-        SETTLE_SHIPMENT
+        SETTLE_SHIPMENT,
+        /** A PREORDER shipment left (handed over): commit the stock inventory held for its lines. */
+        COMMIT_STOCK
     }
 
     /** One task. */

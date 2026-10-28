@@ -1,5 +1,6 @@
 package com.afrotransact.inventory.adapter.in.web;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -10,6 +11,7 @@ import com.afrotransact.inventory.application.ReceiptResult;
 import com.afrotransact.inventory.application.ReceiveCommand;
 import com.afrotransact.inventory.application.ReserveCommand;
 import com.afrotransact.inventory.application.ReturnResult;
+import com.afrotransact.inventory.domain.CostComponents;
 import com.afrotransact.inventory.domain.Lot;
 import com.afrotransact.inventory.domain.LotAllocation;
 import com.afrotransact.inventory.domain.Movement;
@@ -87,16 +89,45 @@ final class InventoryDtos {
 
     // ---- lots ----
 
-    @Schema(name = "Lot", description = "A batch of one SKU at one node with dates, bin, unit landed cost and status")
+    @Schema(name = "Lot", description = "A batch of one SKU at one node with dates, bin, unit landed cost and status. "
+            + "The cost is kept in the currency paid with the rate to USD fixed at receiving and the USD value "
+            + "valuation and COGS use.")
     record LotResponse(UUID id, String sku, String lotNo, String nodeId, String ownerOrg, String bin, int qtyOnHand,
                        int qtyReserved, int qtyAvailable, LocalDate mfgDate, LocalDate expDate, Instant receivedAt,
-                       long unitLandedCostMinor, String currency, String status, String reason, String markdownFlag,
+                       @Schema(description = "Unit landed cost in minor units of `currency`")
+                       long unitLandedCostMinor,
+                       @Schema(description = "ISO 4217 code of the currency the lot was paid in") String currency,
+                       @Schema(description = "US dollars per 1 unit of `currency` when the lot was received")
+                       BigDecimal fxRateToUsd,
+                       @Schema(description = "The day the rate is for") LocalDate fxRateDate,
+                       @Schema(description = "BASE (USD), ENTERED (by the receiver or sender) or TABLE (the "
+                               + "staff-managed rates)") String fxRateSource,
+                       @Schema(description = "Unit landed cost in US cents, fixed at receiving") long unitCostUsdMinor,
+                       @Schema(description = "Unit cost by goods, freight, duty and other, in `currency`")
+                       CostComponentsDto costComponents, String status, String reason, String markdownFlag,
                        String receiptRef, long version) {
 
         static LotResponse of(Lot l) {
             return new LotResponse(l.id(), l.sku(), l.lotNo(), l.nodeId(), l.ownerOrg(), l.bin(), l.qtyOnHand(),
                     l.qtyReserved(), l.available(), l.mfgDate(), l.expDate(), l.receivedAt(), l.unitLandedCostMinor(),
-                    l.currency(), l.status().name(), l.reason(), l.markdownFlag().name(), l.receiptRef(), l.version());
+                    l.currency(), l.cost().rateToUsd(), l.cost().rateDate(), l.cost().rateSource().name(),
+                    l.unitCostUsdMinor(), CostComponentsDto.of(l.cost().components()), l.status().name(), l.reason(),
+                    l.markdownFlag().name(), l.receiptRef(), l.version());
+        }
+    }
+
+    @Schema(name = "CostComponents", description = "Unit landed cost by what it is made of, in the lot's currency and "
+            + "minor units; the four add up to the unit cost")
+    record CostComponentsDto(@PositiveOrZero long goodsMinor, @PositiveOrZero long freightMinor,
+                             @PositiveOrZero long dutyMinor, @PositiveOrZero long otherMinor) {
+
+        static CostComponentsDto of(CostComponents c) {
+            return new CostComponentsDto(c.goodsMinor(), c.freightMinor(), c.dutyMinor(), c.otherMinor());
+        }
+
+        static CostComponents toDomain(CostComponentsDto c) {
+            return c == null ? null : new CostComponents(c.goodsMinor(), c.freightMinor(), c.dutyMinor(),
+                    c.otherMinor());
         }
     }
 
@@ -149,17 +180,30 @@ final class InventoryDtos {
     record ReceiptLine(@NotBlank @Size(max = 64) String sku, @NotBlank @Size(max = 59) String lotNo,
                        LocalDate mfgDate, LocalDate expDate, @PositiveOrZero int qtyGood,
                        @PositiveOrZero int qtyDamaged, @Size(max = 30) String bin,
+                       @Schema(description = "Unit landed cost in minor units of `currency`")
                        @PositiveOrZero long unitLandedCostMinor,
+                       @Schema(description = "The currency actually paid: USD or one of GET /v1/currencies")
                        @NotBlank @Size(min = 3, max = 3) String currency,
                        @Schema(description = "Shelf life from manufacture in days (short-dated rule)")
                        @Positive Integer shelfLifeDays,
                        @Schema(description = "Receive the good units straight into QUARANTINE with this reason "
                                + "(e.g. QC hold at the dock); omit for sellable stock")
-                       @Size(max = 500) String holdReason) {
+                       @Size(max = 500) String holdReason,
+                       @Schema(description = "US dollars per 1 unit of `currency` (> 0, at most 10 decimals); omit "
+                               + "to use the latest rate on or before the receiving date in GET /v1/exchange-rates; "
+                               + "not needed for USD")
+                       @Positive BigDecimal fxRateToUsd,
+                       @Schema(description = "The day `fxRateToUsd` is for; omit for the receiving date")
+                       LocalDate fxRateDate,
+                       @Schema(description = "Unit cost in US cents when the sender already valued it (needs "
+                               + "`fxRateToUsd`); omit to use unit cost × rate") @PositiveOrZero Long unitCostUsdMinor,
+                       @Schema(description = "Goods, freight, duty and other per unit in `currency`; must add up "
+                               + "to `unitLandedCostMinor`; omit for all goods") @Valid CostComponentsDto costComponents) {
 
         ReceiveCommand.Line toDomain() {
             return new ReceiveCommand.Line(sku, lotNo, mfgDate, expDate, qtyGood, qtyDamaged, bin, unitLandedCostMinor,
-                    currency, shelfLifeDays, holdReason);
+                    currency, shelfLifeDays, holdReason, fxRateToUsd, fxRateDate, unitCostUsdMinor,
+                    CostComponentsDto.toDomain(costComponents));
         }
     }
 
@@ -212,11 +256,13 @@ final class InventoryDtos {
 
     @Schema(name = "LotAllocation")
     record AllocationResponse(UUID lotId, String lotNo, int qty, LocalDate expDate, long unitLandedCostMinor,
-                              String currency) {
+                              String currency,
+                              @Schema(description = "Unit landed cost of the lot in US cents (what COGS uses)")
+                              long unitCostUsdMinor) {
 
         static AllocationResponse of(LotAllocation a) {
             return new AllocationResponse(a.lotId(), a.lotNo(), a.qty(), a.expDate(), a.unitLandedCostMinor(),
-                    a.currency());
+                    a.currency(), a.unitCostUsdMinor());
         }
     }
 
@@ -243,13 +289,15 @@ final class InventoryDtos {
         }
     }
 
-    @Schema(name = "CommitResult", description = "Shipped reservation with COGS at lot landed cost")
+    @Schema(name = "CommitResult", description = "Shipped reservation with COGS at lot landed cost: in USD "
+            + "(`cogsUsdMinor`, what margin uses) and per currency the lots were paid in (`cogs`)")
     record CommitResponse(ReservationResponse reservation, List<CommitResult.Money> cogs,
+                          @Schema(description = "COGS in US cents") long cogsUsdMinor,
                           List<CommitResult.LineCost> lines, boolean replayed) {
 
         static CommitResponse of(CommitResult r) {
-            return new CommitResponse(ReservationResponse.of(r.reservation(), r.replayed()), r.cogs(), r.lines(),
-                    r.replayed());
+            return new CommitResponse(ReservationResponse.of(r.reservation(), r.replayed()), r.cogs(),
+                    r.cogsUsdMinor(), r.lines(), r.replayed());
         }
     }
 

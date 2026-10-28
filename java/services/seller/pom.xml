@@ -13,11 +13,12 @@
 
     <artifactId>seller-service</artifactId>
     <name>AfroTransact :: seller-service</name>
-    <description>Seller and provider organisations, onboarding applications, two-step staff review, Stripe Connect accounts and compliance sync, plans and Stripe Billing.</description>
+    <description>Seller and provider organisations, onboarding applications, two-step staff review, Stripe Connect accounts and compliance sync, plans and billing (rrule-scheduled, Stripe Payments for collection).</description>
 
     <properties>
         <wiremock.version>3.13.2</wiremock.version>
-        <libphonenumber.version>9.0.41</libphonenumber.version>
+        <libphonenumber.version>9.0.42</libphonenumber.version>
+        <ical4j.version>4.4.0</ical4j.version>
     </properties>
 
     <dependencies>
@@ -46,6 +47,12 @@
             <groupId>com.googlecode.libphonenumber</groupId>
             <artifactId>libphonenumber</artifactId>
             <version>${libphonenumber.version}</version>
+        </dependency>
+        <!-- RFC 5545 rrule-based billing period scheduling (replaces Stripe Billing subscription lifecycle) -->
+        <dependency>
+            <groupId>org.mnode.ical4j</groupId>
+            <artifactId>ical4j</artifactId>
+            <version>${ical4j.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

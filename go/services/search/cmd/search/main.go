@@ -28,7 +28,6 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/search"
 	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/adapter/adtoken"
 	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/adapter/content"
-	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/adapter/elastic"
 	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/adapter/embedder"
 	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/adapter/eventbus"
 	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/adapter/httpapi"
@@ -70,16 +69,17 @@ func run() error {
 	}
 	defer func() { _ = shutdownTracing(context.WithoutCancel(ctx)) }()
 
-	es, err := newElasticsearch(cfg)
-	if err != nil {
-		return err
-	}
 	synonyms, err := config.LoadSynonyms(search.Files, cfg.Synonyms.File)
 	if err != nil {
 		return fmt.Errorf("synonyms: %w", err)
 	}
-	admin := elastic.NewAdmin(es, synonyms.Name)
-	bootstrap(ctx, cfg, admin, es, synonyms, local, log)
+	be, err := newBackend(cfg, synonyms.Name)
+	if err != nil {
+		return err
+	}
+	log.Info("search engine", "provider", be.name)
+	admin := be.admin
+	bootstrap(ctx, cfg, be, synonyms, local, log)
 
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
@@ -101,13 +101,13 @@ func run() error {
 	bus := eventbus.NewAsync(kafka, max(cfg.Kafka.Buffer, 1000), eventsTotal, log)
 
 	httpClient := &http.Client{Timeout: 5 * time.Second}
-	index := elastic.NewIndex(es)
+	index := be.index
 	opts := []app.SearcherOption{app.WithMarkets(cfg.Markets)}
 
 	var recorder app.AnalyticsRecorder
 	var reporter app.AnalyticsReporter
 	if cfg.Analytics.Enabled {
-		store := elastic.NewAnalyticsStore(es)
+		store := be.analytics()
 		recorder, reporter = app.NewAnalyticsRecorder(store, log), app.NewAnalyticsReporter(store)
 		opts = append(opts, app.WithAnalytics(recorder, bus))
 	}
@@ -166,7 +166,7 @@ func run() error {
 		Addr:     ":" + strconv.Itoa(cfg.Port),
 		OpenAPI:  openapi,
 		DocsOn:   cfg.DocsEnabled,
-		Checks:   []httpserver.ReadinessCheck{readiness{index: index}},
+		Checks:   []httpserver.ReadinessCheck{readiness{index: index, engine: be.name}},
 		Logger:   log,
 		Registry: registry,
 	})
@@ -206,9 +206,10 @@ func newElasticsearch(cfg config.Config) (*elasticsearch.Client, error) {
 
 // bootstrap seeds the synonyms set, creates indices in local, switches inline-synonym indices to the set when allowed
 // and ensures the analytics indices. Failures are logged: search keeps serving with whatever is in place.
-func bootstrap(ctx context.Context, cfg config.Config, admin port.IndexAdmin, es *elasticsearch.Client,
+func bootstrap(ctx context.Context, cfg config.Config, be backend,
 	synonyms domain.SynonymSet, local bool, log *slog.Logger,
 ) {
+	admin := be.admin
 	wrote, err := admin.SeedSynonyms(ctx, synonyms.Rules, cfg.Synonyms.Overwrite)
 	if err != nil {
 		log.Warn("could not seed the synonyms set (is Elasticsearch up?)", "set", synonyms.Name, "error", err)
@@ -225,7 +226,7 @@ func bootstrap(ctx context.Context, cfg config.Config, admin port.IndexAdmin, es
 			log.Warn("synonyms set not applied to the index", "market", m, "error", err)
 		}
 		if cfg.Analytics.Enabled {
-			if err := elastic.EnsureAnalyticsIndex(ctx, es, m); err != nil {
+			if err := be.ensureAnalytics(ctx, m); err != nil {
 				log.Warn("could not ensure the analytics index", "market", m, "error", err)
 			}
 		}
@@ -250,9 +251,12 @@ func migrateSynonyms(ctx context.Context, admin port.IndexAdmin, market string, 
 	return nil
 }
 
-type readiness struct{ index port.Index }
+type readiness struct {
+	index  port.Index
+	engine string
+}
 
-func (readiness) Name() string { return "elasticsearch" }
+func (r readiness) Name() string { return r.engine }
 func (r readiness) Check(ctx context.Context) error {
 	if err := r.index.Ping(ctx); err != nil {
 		return fmt.Errorf("ping: %w", err)

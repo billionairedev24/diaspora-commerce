@@ -278,13 +278,12 @@ class PreorderIT {
     void settingsCarryThePaymentSetupWithValidationAndIfMatch() {
         Res current = call(HttpMethod.GET, "/v1/preorder-settings", null, null);
         assertThat(current.status()).isEqualTo(200);
-        assertThat(current.body().path("payment").path("doorFee").path("USD").asLong()).isEqualTo(799);
+        assertThat(current.body().path("payment").has("doorFee")).as("fees are delivery fee rules now").isFalse();
         assertThat(current.body().path("payment").path("lateAdd").path("linkExpiryHours").asInt()).isEqualTo(24);
         assertThat(current.body().path("payment").path("pickupWindow").asString()).isEqualTo("10am–2pm");
         assertThat(current.body().path("placements").path("family").asBoolean()).isTrue();
         try {
             Map<String, Object> payment = new LinkedHashMap<>();
-            payment.put("doorFee", Map.of("USD", 899, "CAD", 1099));
             payment.put("allowedMethods", List.of("CARD", "WALLET"));
             payment.put("lateAdd", Map.of("savedCard", true, "paymentLink", false, "linkExpiryHours", 12));
             Res saved = call(HttpMethod.PUT, "/v1/preorder-settings", Map.of("fallback", "WAITLIST", "placements",
@@ -293,16 +292,11 @@ class PreorderIT {
             assertThat(saved.body().path("fallback").asString()).isEqualTo("WAITLIST");
             assertThat(saved.body().path("placements").path("family").asBoolean()).isFalse();
             assertThat(saved.body().path("placements").path("hero").asBoolean()).isTrue();
-            assertThat(saved.body().path("payment").path("doorFee").path("CAD").asLong()).isEqualTo(1099);
             assertThat(saved.body().path("payment").path("allowedMethods")).hasSize(2);
             assertThat(saved.body().path("payment").path("lateAdd").path("paymentLink").asBoolean()).isFalse();
 
             Res stale = call(HttpMethod.PUT, "/v1/preorder-settings", Map.of("enabled", true), current.etag());
             assertThat(stale.status()).isEqualTo(412);
-            Res tooHigh = call(HttpMethod.PUT, "/v1/preorder-settings",
-                    Map.of("payment", Map.of("doorFee", Map.of("USD", 10_001))), null);
-            assertThat(tooHigh.status()).isEqualTo(422);
-            assertThat(tooHigh.body().path("code").asString()).isEqualTo("delivery-runs.invalid-fee");
             Res noMethod = call(HttpMethod.PUT, "/v1/preorder-settings",
                     Map.of("payment", Map.of("allowedMethods", List.of())), null);
             assertThat(noMethod.status()).isEqualTo(422);
@@ -315,7 +309,6 @@ class PreorderIT {
             assertThat(outboxTypes("preorder-settings")).contains("preorder.settings.changed");
         } finally {
             Map<String, Object> defaults = new LinkedHashMap<>();
-            defaults.put("doorFee", Map.of("USD", 799, "CAD", 999));
             defaults.put("allowedMethods", List.of("CARD", "WALLET", "ACH"));
             defaults.put("lateAdd", Map.of("savedCard", true, "paymentLink", true, "linkExpiryHours", 24));
             assertThat(call(HttpMethod.PUT, "/v1/preorder-settings", Map.of("enabled", true, "fallback", "SHIP",
@@ -656,7 +649,7 @@ class PreorderIT {
             // Bulk: each window on its own.
             WindowView draft = windows.create(new WindowCommand("Draft #9", List.of("US/NM/Roswell"), now,
                     now.plus(Duration.ofDays(3)), LocalDate.now(clock).plusDays(5), "America/Chicago", "", "", "",
-                    Set.of("Pantry"), true, false, null, null, true, 0L, Set.of(), null, null, null));
+                    Set.of("Pantry"), true, false, null, null, true, 0L, Set.of(), null, null, null, 0));
             Res bulk = call(HttpMethod.PATCH, "/v1/preorders",
                     Map.of("ids", List.of(a, b, draft.window().id().toString()), "active", true), null);
             assertThat(bulk.status()).isEqualTo(200);
@@ -760,11 +753,15 @@ class PreorderIT {
     }
 
     private PreorderWindow publish(String name, String target, Instant opens, Instant closes) {
+        return publish(name, target, opens, closes, 0);
+    }
+
+    private PreorderWindow publish(String name, String target, Instant opens, Instant closes, int minOrders) {
         LocalDate delivers = closes.plus(Duration.ofDays(2)).atZone(CHICAGO).toLocalDate();
         WindowView v = windows.create(new WindowCommand(name, List.of(target), opens, closes, delivers,
                 "America/Chicago", name + " is open", "Fresh egusi delivered", "AfroTransact: pre-order open",
                 Set.of("Pantry", "Spices"), true, true, null, null, true, 20_000L, Set.of(CommKind.values()), null,
-                null, null));
+                null, null, minOrders));
         WindowView withHero = windows.setCreative(v.window().id(), CreativeSlot.HERO, upstreams.image(1920, 640),
                 v.window().version());
         return windows.publish(v.window().id(), withHero.window().version()).window();

@@ -54,6 +54,7 @@ class StripeEventHandlers {
     private final PayoutRepository payouts;
     private final PaymentStatusUpdater statuses;
     private final WalletSync wallet;
+    private final GiftCardService giftCards;
     private final StripeGateway stripe;
     private final LedgerPoster ledger;
     private final DomainEventPublisher events;
@@ -63,7 +64,7 @@ class StripeEventHandlers {
 
     StripeEventHandlers(PaymentRepository payments, DisputeRepository disputes, SettlementRepository settlements,
                         PayoutRepository payouts, PaymentStatusUpdater statuses, WalletSync wallet,
-                        StripeGateway stripe, LedgerPoster ledger,
+                        GiftCardService giftCards, StripeGateway stripe, LedgerPoster ledger,
                         DomainEventPublisher events, JsonMapper json, PaymentsSettings settings, Clock clock) {
         this.payments = payments;
         this.disputes = disputes;
@@ -71,6 +72,7 @@ class StripeEventHandlers {
         this.payouts = payouts;
         this.statuses = statuses;
         this.wallet = wallet;
+        this.giftCards = giftCards;
         this.stripe = stripe;
         this.ledger = ledger;
         this.events = events;
@@ -125,6 +127,8 @@ class StripeEventHandlers {
             if (reported == PaymentStatus.AUTHORIZED && "true".equals(text(pi.path("metadata"), "payment_link"))) {
                 cancelIfAuthorised(intentId, intentId + ":cancel-orphan",
                         "legacy hosted payment link, no longer accepted");
+            } else if ("gift_card".equals(text(pi.path("metadata"), "kind"))) {
+                giftCards.onPaymentIntent(intentId);
             } else {
                 LOG.info("PaymentIntent {} is not an AfroTransact order payment; ignored", intentId);
             }
@@ -181,18 +185,18 @@ class StripeEventHandlers {
         List<Refund> refunds = payments.refunds(payment.get().id()).stream()
                 .sorted(Comparator.comparing(Refund::createdAt)).toList();
         long settled = refunds.stream().filter(r -> r.status() == RefundStatus.SUCCEEDED)
-                .mapToLong(r -> r.amount().minor()).sum();
+                .mapToLong(r -> r.stripeAmount().minor()).sum();
         Instant now = Instant.now(clock);
         for (Refund r : refunds) {
-            if (r.status() != RefundStatus.PENDING || settled + r.amount().minor() > refundedByStripe) {
+            if (r.status() != RefundStatus.PENDING || settled + r.stripeAmount().minor() > refundedByStripe) {
                 continue;
             }
             ledger.post(Postings.refundSettled(Fingerprint.id("journal", "refund-settled", r.id().toString()), now,
                     "refund-settled:" + r.id(), r), SYSTEM);
             payments.updateRefund(r.settled(now));
-            settled += r.amount().minor();
+            settled += r.stripeAmount().minor();
         }
-        long ours = refunds.stream().mapToLong(r -> r.amount().minor()).sum();
+        long ours = refunds.stream().mapToLong(r -> r.stripeAmount().minor()).sum();
         if (refundedByStripe > ours) {
             LOG.warn("Charge {} has {} refunded but AfroTransact issued {}: refund made outside AfroTransact",
                     text(charge, "id"), refundedByStripe, ours);
@@ -342,7 +346,7 @@ class StripeEventHandlers {
         StripeGateway.PaymentMethodSnapshot pm = stripe.retrievePaymentMethod(pmId);
         String customer = pm.customer() != null ? pm.customer() : text(si, "customer");
         wallet.upsert(new StripeGateway.PaymentMethodSnapshot(pm.id(), pm.type(), customer, pm.brand(), pm.last4(),
-                pm.expMonth(), pm.expYear(), pm.bankName(), pm.accountType()), succeeded);
+                pm.expMonth(), pm.expYear(), pm.bankName(), pm.accountType(), pm.wallet()), succeeded);
     }
 
     /** Display data of a PaymentMethod object in a webhook payload. */
@@ -356,7 +360,8 @@ class StripeEventHandlers {
                 isCard && card.hasNonNull("exp_month") ? card.path("exp_month").asInt() : null,
                 isCard && card.hasNonNull("exp_year") ? card.path("exp_year").asInt() : null,
                 bank.isObject() ? text(bank, "bank_name") : null,
-                bank.isObject() ? text(bank, "account_type") : null);
+                bank.isObject() ? text(bank, "account_type") : null,
+                isCard ? text(card.path("wallet"), "type") : null);
     }
 
     private static String text(JsonNode node, String field) {

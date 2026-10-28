@@ -87,9 +87,19 @@ type AcceptedInvitation struct {
 	AlreadyMember bool   `json:"alreadyMember"`
 }
 
+// OrgSync is identity's copy of an organisation after POST /v1/orgs/{id}/sync.
+type OrgSync struct {
+	OrgID    string `json:"orgId"`
+	Status   string `json:"status"`
+	Repaired bool   `json:"repaired"`
+}
+
 // OrgAccessClient reads and changes organisation membership at identity.
 type OrgAccessClient interface {
 	Member(ctx context.Context, bearer string) (Member, error)
+	// SyncOrg asks identity to repair its copy of the organisation (status, the owners' memberships) from the seller
+	// service, the source of truth (POST /v1/orgs/{id}/sync): the caller saw the seller service approve it first.
+	SyncOrg(ctx context.Context, bearer, orgID string) (OrgSync, error)
 	SelectOrg(ctx context.Context, bearer, orgID string) (Member, error)
 	// ModuleMatrix reads GET /v1/admin/module-access?portal= (needs access:read; sellers usually get 403).
 	ModuleMatrix(ctx context.Context, bearer, portal string) (domain.ModuleMatrix, error)
@@ -150,6 +160,8 @@ type SellerApplication struct {
 	Documents       []SellerApplicationDocument  `json:"documents"`
 	SubmittedAt     *time.Time                   `json:"submittedAt"`
 	Timeline        []SellerApplicationEvent     `json:"timeline"`
+	// PlanFeeCollectionOption is what the Plan step offers (S298); nil from an older seller service.
+	PlanFeeCollectionOption *SellerPlanFeeOption `json:"planFeeCollectionOption"`
 }
 
 // SellerApplicationOwner is seller's OwnerView (and Owner when saving).
@@ -176,14 +188,13 @@ type SellerApplicationStripe struct {
 	DisabledReason   string   `json:"disabledReason"`
 }
 
-// SellerApplicationPayouts is seller's PayoutSection.
+// SellerApplicationPayouts is seller's PayoutSection: the payout bank account Stripe holds, mirrored read-only
+// (Stripe collects it in its embedded components; the account is Stripe-collected).
 type SellerApplicationPayouts struct {
-	AccountHolderName     string `json:"accountHolderName"`
-	AccountType           string `json:"accountType"`
 	BankName              string `json:"bankName"`
-	RoutingLast4          string `json:"routingLast4"`
 	AccountLast4          string `json:"accountLast4"`
 	ExternalAccountLinked bool   `json:"externalAccountLinked"`
+	BankStatus            string `json:"bankStatus"`
 }
 
 // SellerFirstCharge is seller's FirstCharge.
@@ -204,6 +215,14 @@ type SellerApplicationPlan struct {
 	CardExpMonth      *int               `json:"cardExpMonth"`
 	CardExpYear       *int               `json:"cardExpYear"`
 	FirstCharge       *SellerFirstCharge `json:"firstCharge"`
+	// PlanFeeCollection is the applicant's choice (S298): EARNINGS_FIRST, CARD or empty for the platform default.
+	PlanFeeCollection string `json:"planFeeCollection"`
+}
+
+// SellerPlanFeeOption is seller's PlanFeeCollectionOption: whether the Plan step offers paying the plan from sales.
+type SellerPlanFeeOption struct {
+	Available       bool   `json:"available"`
+	PlatformDefault string `json:"platformDefault"`
 }
 
 // SellerFoodPermit is seller's FoodPermit.
@@ -260,15 +279,6 @@ type SellerAccountSession struct {
 	LocalTest    bool       `json:"localTest"`
 }
 
-// SellerApplicationPayoutsStep is seller's PayoutsStep.
-type SellerApplicationPayoutsStep struct {
-	AccountHolderName         string `json:"accountHolderName,omitempty"`
-	AccountType               string `json:"accountType,omitempty"`
-	RoutingNumber             string `json:"routingNumber,omitempty"`
-	AccountNumber             string `json:"accountNumber,omitempty"`
-	AccountNumberConfirmation string `json:"accountNumberConfirmation,omitempty"`
-}
-
 // SellerApplicationPlanStep is seller's PlanStep.
 type SellerApplicationPlanStep struct {
 	PlanCode              string `json:"planCode,omitempty"`
@@ -279,6 +289,8 @@ type SellerApplicationPlanStep struct {
 	CardLast4             string `json:"cardLast4,omitempty"`
 	CardExpMonth          *int   `json:"cardExpMonth,omitempty"`
 	CardExpYear           *int   `json:"cardExpYear,omitempty"`
+	PromoCode             string `json:"promoCode,omitempty"`
+	PlanFeeCollection     string `json:"planFeeCollection,omitempty"`
 }
 
 // SellerApplicationBiz is seller's BusinessSection (step "business").
@@ -289,7 +301,16 @@ type SellerApplicationBiz struct {
 	StoreName    string `json:"storeName,omitempty"`
 	ContactEmail string `json:"contactEmail,omitempty"`
 	Phone        string `json:"phone,omitempty"`
-	Website      string `json:"website,omitempty"`
+	// Description, BrandColor and LogoURL are written flat (the seller service's BusinessStep) for the business's plain
+	// public page; the service answers them nested in Branding.
+	Description string `json:"description,omitempty"`
+	BrandColor  string `json:"brandColor,omitempty"`
+	LogoURL     string `json:"logoUrl,omitempty"`
+	Branding    *struct {
+		Description string `json:"description"`
+		BrandColor  string `json:"brandColor"`
+		LogoURL     string `json:"logoUrl"`
+	} `json:"branding,omitempty"`
 }
 
 // SellerApplicationDetails is seller's BusinessDetails (BusinessDetailsStep when saving: TaxID is write-only, empty
@@ -335,10 +356,20 @@ type AddressBook interface {
 	Addresses(ctx context.Context, bearer string) ([]IdentityAddress, error)
 }
 
-// AccountHealthRequirement is one open Stripe requirement.
+// AccountHealthRequirement is one open Stripe requirement and the embedded component that collects it.
 type AccountHealthRequirement struct {
 	Requirement string `json:"requirement"`
 	Bucket      string `json:"bucket"`
+	Form        *struct {
+		Component string `json:"component"`
+	} `json:"form"`
+}
+
+// AccountHealthBank is seller's PayoutBank: the payout bank account Stripe holds (never the numbers).
+type AccountHealthBank struct {
+	BankName string `json:"bankName"`
+	Last4    string `json:"last4"`
+	Status   string `json:"status"`
 }
 
 // AccountHealth is seller's AccountHealth.
@@ -350,6 +381,7 @@ type AccountHealth struct {
 	ListingsHidden  bool                       `json:"listingsHidden"`
 	OpenItems       int                        `json:"openItems"`
 	CurrentDeadline *time.Time                 `json:"currentDeadline"`
+	PayoutBank      *AccountHealthBank         `json:"payoutBank"`
 	Requirements    []AccountHealthRequirement `json:"requirements"`
 }
 
@@ -376,6 +408,12 @@ type SellerPlan struct {
 	TrialDays    int               `json:"trialDays"`
 	Features     []string          `json:"features"`
 	Prices       []SellerPlanPrice `json:"prices"`
+	// Visibility is PUBLIC, HIDDEN or INVITE_ONLY (invited organisations see the last).
+	Visibility string `json:"visibility"`
+	// Entitlements is what the plan allows (listing cap, AI listing writer, Lola tier).
+	Entitlements *SellerEntitlements `json:"entitlements"`
+	// ChargeTerms is what the plan charges in words (free months, conditions); empty when the seller service did not say.
+	ChargeTerms string `json:"chargeTerms"`
 }
 
 // SellerPaymentMethod is seller's PaymentMethod.
@@ -416,21 +454,89 @@ type SellerBilling struct {
 	} `json:"pendingChange"`
 	Dunning        string                `json:"dunning"`
 	PaymentMethods []SellerPaymentMethod `json:"paymentMethods"`
+	// S292–S297: the plan version paid, the platform credit balance and where the trial came from.
+	PlanVersion        int    `json:"planVersion"`
+	CreditBalanceCents int64  `json:"creditBalanceCents"`
+	TrialSource        string `json:"trialSource"`
+	// ChargeGate is a condition staff put on the plan charges (start after X sales, waive while X listings, waive
+	// until a date); nil when charges apply as normal.
+	ChargeGate *SellerChargeGate `json:"chargeGate"`
+	// Entitlements is what the plan allows (listing cap, AI listing writer, Lola tier).
+	Entitlements *SellerEntitlements `json:"entitlements"`
 }
 
-// SellerInvoice is seller's Invoice.
+// SellerChargeGate is seller's ChargeGate with the seller's progress.
+type SellerChargeGate struct {
+	Mode       string     `json:"mode"`
+	Metric     string     `json:"metric"`
+	Threshold  *int64     `json:"threshold"`
+	Progress   int64      `json:"progress"`
+	Since      *time.Time `json:"since"`
+	Until      *time.Time `json:"until"`
+	ReasonCode string     `json:"reasonCode"`
+	Note       string     `json:"note"`
+	SetAt      *time.Time `json:"setAt"`
+	MetAt      *time.Time `json:"metAt"`
+	Label      string     `json:"label"`
+}
+
+// SellerEntitlements is seller's PlanEntitlements: what a plan lets an organisation do. A capability that is off is not
+// offered to the plan's members at all.
+type SellerEntitlements struct {
+	Listings          *int64 `json:"listings"`
+	ListingsUnlimited bool   `json:"listingsUnlimited"`
+	AIListingWriter   bool   `json:"aiListingWriter"`
+	LolaTier          string `json:"lolaTier"`
+	BulkUpload        bool   `json:"bulkUpload"`
+	ImageLibrary      bool   `json:"imageLibrary"`
+	Coupons           bool   `json:"coupons"`
+}
+
+// SellerInvoice is seller's Invoice: a plan invoice AfroTransact issued itself.
 type SellerInvoice struct {
-	ID               string     `json:"id"`
-	Number           string     `json:"number"`
-	PeriodStart      *time.Time `json:"periodStart"`
-	PeriodEnd        *time.Time `json:"periodEnd"`
-	AmountDueCents   int64      `json:"amountDueCents"`
-	AmountPaidCents  int64      `json:"amountPaidCents"`
-	Currency         string     `json:"currency"`
-	Status           string     `json:"status"`
-	HostedInvoiceURL string     `json:"hostedInvoiceUrl"`
-	InvoicePDF       string     `json:"invoicePdf"`
-	CreatedAt        time.Time  `json:"createdAt"`
+	ID              string                 `json:"id"`
+	Number          string                 `json:"number"`
+	PeriodStart     *time.Time             `json:"periodStart"`
+	PeriodEnd       *time.Time             `json:"periodEnd"`
+	SubtotalCents   int64                  `json:"subtotalCents"`
+	DiscountCents   int64                  `json:"discountCents"`
+	AmountDueCents  int64                  `json:"amountDueCents"`
+	AmountPaidCents int64                  `json:"amountPaidCents"`
+	Currency        string                 `json:"currency"`
+	Status          string                 `json:"status"`
+	BillingReason   string                 `json:"billingReason"`
+	PlanCode        string                 `json:"planCode"`
+	Cadence         string                 `json:"cadence"`
+	DueAt           *time.Time             `json:"dueAt"`
+	PaidAt          *time.Time             `json:"paidAt"`
+	Attempts        int                    `json:"attempts"`
+	NextAttemptAt   *time.Time             `json:"nextAttemptAt"`
+	LastError       string                 `json:"lastError"`
+	CreatedAt       time.Time              `json:"createdAt"`
+	Lines           []SellerInvoiceLine    `json:"lines"`
+	Payments        []SellerInvoicePayment `json:"payments"`
+	// What settled it, in the order tried: platform credit, the seller's sales (only if chosen), the card, a waiver.
+	PaidFromCreditCents int64 `json:"paidFromCreditCents"`
+	PaidFromSalesCents  int64 `json:"paidFromSalesCents"`
+	PaidByCardCents     int64 `json:"paidByCardCents"`
+	WaivedCents         int64 `json:"waivedCents"`
+}
+
+// SellerInvoiceLine is seller's InvoiceLine.
+type SellerInvoiceLine struct {
+	Kind        string `json:"kind"`
+	Description string `json:"description"`
+	AmountCents int64  `json:"amountCents"`
+	Meter       string `json:"meter"`
+}
+
+// SellerInvoicePayment is seller's InvoicePayment.
+type SellerInvoicePayment struct {
+	Source      string    `json:"source"`
+	AmountCents int64     `json:"amountCents"`
+	Status      string    `json:"status"`
+	Note        string    `json:"note"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // ShipFromAddress is seller's ShipFromAddress.
@@ -504,10 +610,38 @@ type ShipFromClient interface {
 	SetPickup(ctx context.Context, bearer, orgID, id string, in PickupRequest) (ShipFromAddress, error)
 }
 
+// UpBusinessPageSettings is seller's BusinessPageSettings: how an organisation's public page looks.
+type UpBusinessPageSettings struct {
+	OrgID        string `json:"orgId"`
+	Slug         string `json:"slug"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	BrandColor   string `json:"brandColor"`
+	LogoURL      string `json:"logoUrl"`
+	ContactEmail string `json:"contactEmail"`
+	Approved     bool   `json:"approved"`
+}
+
+// BusinessPageSettingsInput is the PUT body (blank values clear them).
+type BusinessPageSettingsInput struct {
+	Description string `json:"description"`
+	BrandColor  string `json:"brandColor"`
+	LogoURL     string `json:"logoUrl"`
+}
+
+// BusinessPageSettingsClient reads and changes an organisation's public page (seller /v1/orgs/{orgId}/business-page).
+type BusinessPageSettingsClient interface {
+	BusinessPageSettings(ctx context.Context, bearer, orgID string) (UpBusinessPageSettings, error)
+	UpdateBusinessPageSettings(ctx context.Context, bearer, orgID string, in BusinessPageSettingsInput) (UpBusinessPageSettings, error)
+}
+
 // SellerServiceClient calls the seller service (organisations, onboarding, compliance, plans & billing, ship-from
 // addresses).
 type SellerServiceClient interface {
 	ShipFromClient
+	BusinessPageSettingsClient
+	SellerBillingClient
 	Org(ctx context.Context, bearer, orgID string) (SellerOrg, error)
 	Application(ctx context.Context, bearer string) (SellerApplication, error)
 	// StartApplication starts (created=true) or resumes the caller's application (seller POST /v1/applications/me).
@@ -515,8 +649,11 @@ type SellerServiceClient interface {
 	// SaveApplicationStep autosaves one wizard step (seller PUT /v1/applications/me/steps/{step}).
 	SaveApplicationStep(ctx context.Context, bearer, step string, body any) (SellerApplication, error)
 	// ApplicationStripeSession creates the connected account on first use and an Account Session for Stripe's
-	// embedded onboarding (seller POST /v1/applications/me/stripe/account-session).
+	// embedded components (seller POST /v1/applications/me/stripe/account-session).
 	ApplicationStripeSession(ctx context.Context, bearer string) (SellerAccountSession, error)
+	// OrgStripeSession is an Account Session for an organisation's owner or finance member (Account health: Stripe's
+	// components answer what Stripe needs and change the payout bank; seller POST /v1/orgs/{orgId}/stripe/account-session).
+	OrgStripeSession(ctx context.Context, bearer, orgID string) (SellerAccountSession, error)
 	// RefreshApplicationStripe re-reads the verification results from Stripe (POST …/stripe/refresh).
 	RefreshApplicationStripe(ctx context.Context, bearer string) (SellerApplication, error)
 	// SubmitApplication validates every step and sends the application to staff review (POST …/submit).
@@ -534,30 +671,60 @@ type SellerServiceClient interface {
 
 // CatalogProductVariant is catalog's Variant.
 type CatalogProductVariant struct {
-	ID         string            `json:"id"`
-	ATIN       string            `json:"atin"`
-	SellerSKU  string            `json:"sellerSku"`
-	GTIN       string            `json:"gtin"`
-	Options    map[string]string `json:"options"`
-	PriceMinor int64             `json:"priceMinor"`
-	Currency   string            `json:"currency"`
-	Quantity   int               `json:"quantity"`
+	ID             string                     `json:"id"`
+	ATIN           string                     `json:"atin"`
+	SellerSKU      string                     `json:"sellerSku"`
+	GTIN           string                     `json:"gtin"`
+	GTINExempt     bool                       `json:"gtinExempt"`
+	Options        map[string]string          `json:"options"`
+	PriceMinor     int64                      `json:"priceMinor"`
+	CompareAtMinor *int64                     `json:"compareAtMinor"`
+	Currency       string                     `json:"currency"`
+	Quantity       int                        `json:"quantity"`
+	Images         []domain.ProductImageInput `json:"images"`
+}
+
+// CatalogListing is catalog's ListingDetails (S307).
+type CatalogListing struct {
+	Description  string                    `json:"description"`
+	Condition    string                    `json:"condition"`
+	Keywords     []string                  `json:"keywords"`
+	Fulfilment   string                    `json:"fulfilment"`
+	Packaging    *domain.PackageDimensions `json:"packaging"`
+	HandlingDays int                       `json:"handlingDays"`
+	ShipFrom     *CatalogShipFrom          `json:"shipFrom"`
+}
+
+// CatalogShipFrom is catalog's ShipFrom snapshot of a seller ship-from address.
+type CatalogShipFrom struct {
+	LocationID string `json:"locationId,omitempty"`
+	Label      string `json:"label,omitempty"`
+	City       string `json:"city,omitempty"`
+	Region     string `json:"region,omitempty"`
+	Country    string `json:"country,omitempty"`
+	PostalCode string `json:"postalCode,omitempty"`
 }
 
 // CatalogOwnProduct is catalog's Product.
 type CatalogOwnProduct struct {
-	ID         string `json:"id"`
-	ATIN       string `json:"atin"`
-	OwnerKind  string `json:"ownerKind"`
-	OwnerOrgID string `json:"ownerOrgId"`
-	Title      string `json:"title"`
-	Images     []struct {
-		URL string `json:"url"`
-	} `json:"images"`
-	Variants       []CatalogProductVariant `json:"variants"`
-	Status         string                  `json:"status"`
-	ModerationNote string                  `json:"moderationNote"`
-	UpdatedAt      time.Time               `json:"updatedAt"`
+	ID                string                     `json:"id"`
+	ATIN              string                     `json:"atin"`
+	OwnerKind         string                     `json:"ownerKind"`
+	OwnerOrgID        string                     `json:"ownerOrgId"`
+	CategoryID        string                     `json:"categoryId"`
+	CategoryRequestID string                     `json:"categoryRequestId"`
+	ProductType       string                     `json:"productType"`
+	Title             string                     `json:"title"`
+	Attributes        map[string]string          `json:"attributes"`
+	Images            []domain.ProductImageInput `json:"images"`
+	VariationTheme    string                     `json:"variationTheme"`
+	Variants          []CatalogProductVariant    `json:"variants"`
+	Status            string                     `json:"status"`
+	ModerationNote    string                     `json:"moderationNote"`
+	UpdatedAt         time.Time                  `json:"updatedAt"`
+	Version           int64                      `json:"version"`
+	PreorderEligible  bool                       `json:"preorderEligible"`
+	Listing           *CatalogListing            `json:"listing"`
 }
 
 // CatalogProductPage is catalog's ProductPage.
@@ -589,8 +756,13 @@ type CatalogProductType struct {
 		Options   []string `json:"options"`
 		Required  bool     `json:"required"`
 		Multiline bool     `json:"multiline"`
+		Kind      string   `json:"kind"`
+		Units     []string `json:"units"`
+		Section   string   `json:"section"`
+		Help      string   `json:"help"`
 	} `json:"attributes"`
-	Themes []domain.VariationTheme `json:"themes"`
+	Themes []domain.VariationTheme  `json:"themes"`
+	Traits domain.ProductTypeTraits `json:"traits"`
 }
 
 // CatalogGtinCheck is catalog's GtinCheck.
@@ -646,6 +818,27 @@ type OffersClient interface {
 	List(ctx context.Context, bearer string, page, size int) (OfferPage, error)
 	// Update is PATCH /v1/offers/{id} (only the fields present change).
 	Update(ctx context.Context, bearer, id string, body map[string]any) (SellerOfferUp, error)
+	// ListCoupons is GET /v1/coupons (seller-funded for the token's organisation).
+	ListCoupons(ctx context.Context, bearer string) ([]SellerCouponUp, error)
+	CreateCoupon(ctx context.Context, bearer string, body map[string]any) (SellerCouponUp, error)
+	SetCouponStatus(ctx context.Context, bearer, id, status string) (SellerCouponUp, error)
+}
+
+// SellerCouponUp is offers-service CouponResponse.
+type SellerCouponUp struct {
+	ID            string `json:"id"`
+	Code          string `json:"code"`
+	Description   string `json:"description"`
+	Type          string `json:"type"`
+	Value         int64  `json:"value"`
+	Currency      string `json:"currency"`
+	Scope         string `json:"scope"`
+	ScopeRef      string `json:"scopeRef"`
+	MinSpendMinor int64  `json:"minSpendMinor"`
+	Status        string `json:"status"`
+	Funding       string `json:"funding"`
+	FundedByOrg   string `json:"fundedByOrg"`
+	Version       int64  `json:"version"`
 }
 
 // SellerOfferUp is offers' Offer as seller center sees it.
@@ -703,10 +896,38 @@ type MediaUpload struct {
 	} `json:"upload"`
 }
 
-// MediaClient signs and finalises uploads.
+// MediaLibraryImage is media's LibraryImage.
+type MediaLibraryImage struct {
+	AssetID   string    `json:"assetId"`
+	FileName  string    `json:"fileName"`
+	SKU       *string   `json:"sku"`
+	Slot      *string   `json:"slot"`
+	Status    string    `json:"status"`
+	URL       *string   `json:"url"`
+	Width     int       `json:"width"`
+	Height    int       `json:"height"`
+	Bytes     int64     `json:"bytes"`
+	Flags     []string  `json:"flags"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// MediaLibraryPage is media's LibraryPage.
+type MediaLibraryPage struct {
+	Items []MediaLibraryImage `json:"items"`
+	Total int64               `json:"total"`
+	Page  int                 `json:"page"`
+	Size  int                 `json:"size"`
+}
+
+// MediaClient signs and finalises uploads and reads the organisation's image library (S310).
 type MediaClient interface {
 	RequestUpload(ctx context.Context, bearer, purpose, fileName, contentType string, size int64) (MediaUpload, error)
+	// RequestLibraryUpload is RequestUpload of a product image that also goes into the image library.
+	RequestLibraryUpload(ctx context.Context, bearer, fileName, contentType string, size int64) (MediaUpload, error)
 	Complete(ctx context.Context, bearer, assetID string) (MediaAsset, error)
+	Library(ctx context.Context, bearer, q, status, matched string, page, size int) (MediaLibraryPage, error)
+	RemoveFromLibrary(ctx context.Context, bearer, assetID string) error
+	RenameLibraryImage(ctx context.Context, bearer, assetID, fileName string) (MediaLibraryImage, error)
 }
 
 // ---------------------------------------------------------------- orders (seller side)
@@ -751,9 +972,10 @@ type OrderShipmentView struct {
 		ItemsMinor     int64  `json:"itemsMinor"`
 	} `json:"lines"`
 	Timeline []struct {
-		To        string    `json:"to"`
-		ActorType string    `json:"actorType"`
-		At        time.Time `json:"at"`
+		To        string           `json:"to"`
+		ActorType string           `json:"actorType"`
+		At        time.Time        `json:"at"`
+		Proof     *UpDeliveryProof `json:"proof"`
 	} `json:"timeline"`
 }
 
@@ -771,6 +993,7 @@ type OrderView struct {
 
 // SellerShipmentRow is orders' SellerShipmentView.
 type SellerShipmentRow struct {
+	OrderID     string            `json:"orderId"`
 	OrderNumber string            `json:"orderNumber"`
 	OrderStatus string            `json:"orderStatus"`
 	PlacedAt    time.Time         `json:"placedAt"`
@@ -816,7 +1039,8 @@ type SalesAnalytics struct {
 type SellerOrdersClient interface {
 	Queue(ctx context.Context, bearer, status, cursor string, limit int) (ShipmentQueue, error)
 	Order(ctx context.Context, bearer, orderNumber string) (OrderView, error)
-	Transition(ctx context.Context, bearer, idempotencyKey, shipmentID, to string) (OrderView, error)
+	// Transition moves a shipment; handoverCode is the customer's 4-digit code for handing a pickup order over.
+	Transition(ctx context.Context, bearer, idempotencyKey, shipmentID, to, handoverCode string) (OrderView, error)
 	AttachTracking(ctx context.Context, bearer, shipmentID, carrier, trackingNumber string) (OrderView, error)
 	Analytics(ctx context.Context, bearer string, from, to time.Time) (SalesAnalytics, error)
 	// Split is GET /v1/orders/{number}/payment-split (a seller sees its own row).
@@ -903,8 +1127,11 @@ type CarrierLabel struct {
 
 // CarrierClient rate-shops and buys labels.
 type CarrierClient interface {
-	Rates(ctx context.Context, bearer string, s CarrierShipment) (CarrierRates, error)
+	Rates(ctx context.Context, bearer string, s CarrierShipment, carrier string) (CarrierRates, error)
 	BuyLabel(ctx context.Context, bearer, idempotencyKey, carrier, service string, s CarrierShipment) (CarrierLabel, error)
+	// LabelDocument is the printable document of the purchased label with this tracking number
+	// (GET /v1/labels/by-tracking/{carrier}/{trackingNumber}/document).
+	LabelDocument(ctx context.Context, bearer, carrier, trackingNumber string) (domain.FileDownload, error)
 	// ManagedPickupLocations lists the org's own pickup locations, inactive ones too (GET /v1/pickup-locations?includeInactive=true).
 	ManagedPickupLocations(ctx context.Context, bearer, ownerOrg string) ([]PickupLocation, error)
 	// SavePickupLocation creates or replaces a pickup location (PUT /v1/pickup-locations/{id}).
@@ -921,11 +1148,14 @@ type PayoutBalanceResponse struct {
 	RequestedOrInTransitMinor int64  `json:"requestedOrInTransitMinor"`
 	PaidMinor                 int64  `json:"paidMinor"`
 	ProviderFeesMinor         int64  `json:"providerFeesMinor"`
+	PlanFeesMinor             int64  `json:"planFeesMinor"`
 	MinimumPayoutMinor        int64  `json:"minimumPayoutMinor"`
 	CanRequestToday           bool   `json:"canRequestToday"`
 	PayoutsPaused             bool   `json:"payoutsPaused"`
 	PayoutsPausedReason       string `json:"payoutsPausedReason"`
-	OnHold                    []struct {
+	// ConnectedAccount is nil from a payments older than the field: treated as connected.
+	ConnectedAccount *bool `json:"connectedAccount"`
+	OnHold           []struct {
 		OrderID     string `json:"orderId"`
 		AmountMinor int64  `json:"amountMinor"`
 		ReleaseAt   string `json:"releaseAt"`
@@ -962,6 +1192,28 @@ type PayoutsClient interface {
 	ProviderFees(ctx context.Context, bearer, orgID string) ([]ProviderFeeResponse, error)
 	Requests(ctx context.Context, bearer, orgID string) ([]PayoutResponse, error)
 	RequestPayout(ctx context.Context, bearer, idempotencyKey string, amountMinor int64, all bool) (PayoutResponse, error)
+	// PlanFeeWithholdings is payments GET /v1/orgs/{orgId}/plan-fee-withholdings (S298): plan invoices paid from sales.
+	PlanFeeWithholdings(ctx context.Context, bearer, orgID string) ([]PlanFeeWithholding, error)
+}
+
+// PlanFeeWithholding is payments' PlanFeeWithholdingResponse.
+type PlanFeeWithholding struct {
+	ID               string    `json:"id"`
+	InvoiceID        string    `json:"invoiceId"`
+	InvoiceNumber    string    `json:"invoiceNumber"`
+	RequestedMinor   int64     `json:"requestedMinor"`
+	WithheldMinor    int64     `json:"withheldMinor"`
+	ReleasedMinor    int64     `json:"releasedMinor"`
+	OutstandingMinor int64     `json:"outstandingMinor"`
+	Status           string    `json:"status"`
+	Label            string    `json:"label"`
+	CreatedAt        time.Time `json:"createdAt"`
+	Deductions       []struct {
+		OrderID     string    `json:"orderId"`
+		AmountMinor int64     `json:"amountMinor"`
+		At          time.Time `json:"at"`
+		Label       string    `json:"label"`
+	} `json:"deductions"`
 }
 
 // ---------------------------------------------------------------- payments (fee schedules)
@@ -994,6 +1246,65 @@ type EffectiveFeesResponse struct {
 	CardFixedMinor            int64     `json:"cardFixedMinor"`
 	FbaPerUnitMinor           int64     `json:"fbaPerUnitMinor"`
 	ReverseCommissionOnRefund bool      `json:"reverseCommissionOnRefund"`
+	// Kind PRODUCT (commission) or SERVICE (connection fee); empty from a payments without connection fees.
+	Kind             string     `json:"kind"`
+	PlanCode         string     `json:"planCode"`
+	NegotiatedRateID string     `json:"negotiatedRateId"`
+	NegotiatedUntil  *time.Time `json:"negotiatedUntil"`
+}
+
+// AppliedRateResponse is payments' AppliedRate: one rate with where it comes from.
+type AppliedRateResponse struct {
+	Category         string     `json:"category"`
+	Bps              int        `json:"bps"`
+	Source           string     `json:"source"`
+	PlanCode         string     `json:"planCode"`
+	NegotiatedRateID string     `json:"negotiatedRateId"`
+	NegotiatedUntil  *time.Time `json:"negotiatedUntil"`
+}
+
+// NegotiatedRateResponse is payments' NegotiatedRate.
+type NegotiatedRateResponse struct {
+	ID           string     `json:"id"`
+	OrgID        string     `json:"orgId"`
+	Type         string     `json:"type"`
+	Category     string     `json:"category"`
+	RateBps      int        `json:"rateBps"`
+	AmountMinor  *int64     `json:"amountMinor"`
+	StartsAt     time.Time  `json:"startsAt"`
+	EndsAt       *time.Time `json:"endsAt"`
+	Status       string     `json:"status"`
+	Reason       string     `json:"reason"`
+	NegotiatedBy string     `json:"negotiatedBy"`
+	Reference    *string    `json:"reference"`
+	CreatedBy    string     `json:"createdBy"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	EndedAt      *time.Time `json:"endedAt"`
+	EndedBy      *string    `json:"endedBy"`
+	EndReason    *string    `json:"endReason"`
+	ExpiredAt    *time.Time `json:"expiredAt"`
+	Audit        []struct {
+		Action string    `json:"action"`
+		Actor  string    `json:"actor"`
+		Reason *string   `json:"reason"`
+		At     time.Time `json:"at"`
+	} `json:"audit"`
+}
+
+// RateCardResponse is payments' RateCard: every rate of one organisation and kind.
+type RateCardResponse struct {
+	OrgID          string                   `json:"orgId"`
+	Kind           string                   `json:"kind"`
+	Version        int                      `json:"version"`
+	EffectiveFrom  time.Time                `json:"effectiveFrom"`
+	Currency       string                   `json:"currency"`
+	PlanCode       string                   `json:"planCode"`
+	OtherRate      AppliedRateResponse      `json:"otherRate"`
+	Categories     []AppliedRateResponse    `json:"categories"`
+	Negotiated     []NegotiatedRateResponse `json:"negotiated"`
+	CardPctBps     int                      `json:"cardPctBps"`
+	CardFixedMinor int64                    `json:"cardFixedMinor"`
+	Retail         bool                     `json:"retail"`
 }
 
 // FeesClient reads payments' fee schedules. payments lets only staff and services (payments:service) read them, so
@@ -1002,18 +1313,10 @@ type FeesClient interface {
 	Schedules(ctx context.Context) ([]FeeScheduleSummary, error)
 	// Effective is GET /v1/fee-schedules/effective?category=&orgId=&at=.
 	Effective(ctx context.Context, category, orgID string, at time.Time) (EffectiveFeesResponse, error)
-}
-
-// ---------------------------------------------------------------- storefront
-
-// Storefront is the storefront service's Storefront document (kept whole so saves never drop fields).
-type Storefront map[string]any
-
-// StorefrontClient reads, saves and publishes the member's storefront draft.
-type StorefrontClient interface {
-	Draft(ctx context.Context, bearer string) (Storefront, error)
-	SaveDraft(ctx context.Context, bearer string, s Storefront) (Storefront, error)
-	Publish(ctx context.Context, bearer string) error
+	// EffectiveKind is the same for one kind (PRODUCT commission or SERVICE connection fee).
+	EffectiveKind(ctx context.Context, kind, category, orgID string, at time.Time) (EffectiveFeesResponse, error)
+	// RateCard is GET /v1/orgs/{orgId}/rate-card?kind=&at=.
+	RateCard(ctx context.Context, orgID, kind string, at time.Time) (RateCardResponse, error)
 }
 
 // ---------------------------------------------------------------- bookings (contracts/openapi/bookings.yaml)
@@ -1077,4 +1380,26 @@ type BookingsClient interface {
 	SavePolicy(ctx context.Context, bearer string, p ProviderRef, in domain.PolicyInput) (domain.PolicyInput, error)
 	Earnings(ctx context.Context, bearer string, p ProviderRef, from, to time.Time) (BookingsEarnings, error)
 	Analytics(ctx context.Context, bearer string, p ProviderRef, from, to time.Time) (BookingsAnalytics, error)
+}
+
+// TaxStatementClient reads the tax collected on a seller's behalf (tax-returns GET /v1/tax/sellers/{orgId}/statement).
+type TaxStatementClient interface {
+	Statement(ctx context.Context, bearer, orgID, month string) (TaxStatementResponse, error)
+	// StatementCSV is the same statement as the CSV tax-returns builds.
+	StatementCSV(ctx context.Context, bearer, orgID, month string) ([]byte, error)
+}
+
+// TaxStatementResponse is tax-returns' LiabilityReport for one seller.
+type TaxStatementResponse struct {
+	Month string `json:"month"`
+	Rows  []struct {
+		Jurisdiction      string `json:"jurisdiction"`
+		Currency          string `json:"currency"`
+		Orders            int64  `json:"orders"`
+		GrossSalesMinor   int64  `json:"grossSalesMinor"`
+		TaxableSalesMinor int64  `json:"taxableSalesMinor"`
+		TaxCollectedMinor int64  `json:"taxCollectedMinor"`
+		TaxRefundedMinor  int64  `json:"taxRefundedMinor"`
+		NetTaxMinor       int64  `json:"netTaxMinor"`
+	} `json:"rows"`
 }

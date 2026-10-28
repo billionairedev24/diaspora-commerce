@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpclient"
@@ -182,6 +183,25 @@ func (o *offersImpl) Update(ctx context.Context, bearer, id string, body map[str
 	return out, err
 }
 
+func (o *offersImpl) ListCoupons(ctx context.Context, bearer string) ([]port.SellerCouponUp, error) {
+	var out []port.SellerCouponUp
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/coupons", Bearer: bearer, Query: url.Values{"funding": {"SELLER"}}}, &out)
+	return out, err
+}
+
+func (o *offersImpl) CreateCoupon(ctx context.Context, bearer string, body map[string]any) (port.SellerCouponUp, error) {
+	var out port.SellerCouponUp
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/coupons", Bearer: bearer, JSON: body}, &out)
+	return out, err
+}
+
+func (o *offersImpl) SetCouponStatus(ctx context.Context, bearer, id, status string) (port.SellerCouponUp, error) {
+	var out port.SellerCouponUp
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/coupons/" + url.PathEscape(id) + "/status", Bearer: bearer,
+		JSON: map[string]any{"status": status}}, &out)
+	return out, err
+}
+
 // ---------------------------------------------------------------- media (contracts/openapi/media.yaml)
 
 type mediaImpl struct{ c httpclient.Client }
@@ -195,6 +215,41 @@ func (m *mediaImpl) RequestUpload(ctx context.Context, bearer, purpose, fileName
 	var out port.MediaUpload
 	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/uploads", Bearer: bearer,
 		JSON: map[string]any{"purpose": purpose, "fileName": fileName, "contentType": contentType, "size": size}}, &out)
+	return out, err
+}
+
+func (m *mediaImpl) RequestLibraryUpload(ctx context.Context, bearer, fileName, contentType string, size int64) (port.MediaUpload, error) {
+	var out port.MediaUpload
+	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/uploads", Bearer: bearer,
+		JSON: map[string]any{"purpose": "product-image", "fileName": fileName, "contentType": contentType, "size": size, "library": true}}, &out)
+	return out, err
+}
+
+func (m *mediaImpl) Library(ctx context.Context, bearer, q, status, matched string, page, size int) (port.MediaLibraryPage, error) {
+	v := url.Values{"page": {strconv.Itoa(page)}, "size": {strconv.Itoa(size)}}
+	if q != "" {
+		v.Set("q", q)
+	}
+	if status != "" {
+		v.Set("status", status)
+	}
+	if matched != "" {
+		v.Set("matched", matched)
+	}
+	var out port.MediaLibraryPage
+	_, err := call(ctx, m.c, httpclient.Request{Path: "/v1/library", Query: v, Bearer: bearer}, &out)
+	return out, err
+}
+
+func (m *mediaImpl) RemoveFromLibrary(ctx context.Context, bearer, assetID string) error {
+	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodDelete, Path: "/v1/library/" + url.PathEscape(assetID), Bearer: bearer}, nil)
+	return err
+}
+
+func (m *mediaImpl) RenameLibraryImage(ctx context.Context, bearer, assetID, fileName string) (port.MediaLibraryImage, error) {
+	var out port.MediaLibraryImage
+	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPatch, Path: "/v1/library/" + url.PathEscape(assetID), Bearer: bearer,
+		JSON: map[string]any{"fileName": fileName}}, &out)
 	return out, err
 }
 
@@ -233,12 +288,16 @@ func (o *sellerOrdersImpl) Order(ctx context.Context, bearer, number string) (po
 	return out, err
 }
 
-func (o *sellerOrdersImpl) Transition(ctx context.Context, bearer, key, shipmentID, to string) (port.OrderView, error) {
+func (o *sellerOrdersImpl) Transition(ctx context.Context, bearer, key, shipmentID, to, handoverCode string) (port.OrderView, error) {
 	var out struct {
 		Order port.OrderView `json:"order"`
 	}
+	body := map[string]string{"to": to}
+	if handoverCode != "" {
+		body["handoverCode"] = handoverCode
+	}
 	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/shipments/" + url.PathEscape(shipmentID) + "/transitions",
-		Bearer: bearer, Header: idem(key), RetryUnsafe: key != "", JSON: map[string]string{"to": to}}, &out)
+		Bearer: bearer, Header: idem(key), RetryUnsafe: key != "", JSON: body}, &out)
 	return out.Order, err
 }
 
@@ -271,9 +330,13 @@ var _ port.CarrierClient = (*carrierImpl)(nil)
 // NewCarrier returns the carrier-gateway client (rates and labels).
 func NewCarrier(c httpclient.Client) port.CarrierClient { return &carrierImpl{c: c} }
 
-func (k *carrierImpl) Rates(ctx context.Context, bearer string, s port.CarrierShipment) (port.CarrierRates, error) {
+func (k *carrierImpl) Rates(ctx context.Context, bearer string, s port.CarrierShipment, carrier string) (port.CarrierRates, error) {
 	var out port.CarrierRates
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/rates", Bearer: bearer, JSON: map[string]any{"shipment": s}}, &out)
+	payload := map[string]any{"shipment": s}
+	if carrier != "" {
+		payload["carriers"] = []string{carrier}
+	}
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/rates", Bearer: bearer, JSON: payload}, &out)
 	return out, err
 }
 
@@ -282,6 +345,23 @@ func (k *carrierImpl) BuyLabel(ctx context.Context, bearer, key, carrier, servic
 	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/labels", Bearer: bearer, Header: idem(key), RetryUnsafe: true,
 		JSON: map[string]any{"carrier": carrier, "service": service, "shipment": s}}, &out)
 	return out, err
+}
+
+func (k *carrierImpl) LabelDocument(ctx context.Context, bearer, carrier, trackingNumber string) (domain.FileDownload, error) {
+	res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/labels/by-tracking/" + url.PathEscape(carrier) + "/" + url.PathEscape(trackingNumber) + "/document",
+		Bearer: bearer, Header: http.Header{"Accept": {"*/*"}}}, nil)
+	if err != nil {
+		return domain.FileDownload{}, err
+	}
+	ct := res.Header.Get("Content-Type")
+	if ct == "" {
+		ct = "application/pdf"
+	}
+	ext := ".pdf"
+	if strings.Contains(ct, "zpl") {
+		ext = ".zpl"
+	}
+	return domain.FileDownload{FileName: "label-" + trackingNumber + ext, ContentType: ct, Content: res.Body}, nil
 }
 
 func (k *carrierImpl) ManagedPickupLocations(ctx context.Context, bearer, ownerOrg string) ([]port.PickupLocation, error) {
@@ -345,6 +425,16 @@ func (p *payoutsImpl) RequestPayout(ctx context.Context, bearer, key string, amo
 	return out, err
 }
 
+func (p *payoutsImpl) PlanFeeWithholdings(ctx context.Context, bearer, orgID string) ([]port.PlanFeeWithholding, error) {
+	res, err := call(ctx, p.c, httpclient.Request{Path: "/v1/orgs/" + esc(orgID) + "/plan-fee-withholdings", Query: url.Values{"limit": {"50"}},
+		Bearer: bearer}, nil)
+	if err != nil {
+		return nil, err
+	}
+	items, _, err := itemsOf[port.PlanFeeWithholding](res.Body)
+	return items, err
+}
+
 // ---------------------------------------------------------------- payments: fee schedules (contracts/openapi/payments.yaml)
 
 // FeesScope is the client-credentials scope payments accepts for reading fee schedules on behalf of a service.
@@ -384,11 +474,35 @@ func (f *feesImpl) Schedules(ctx context.Context) ([]port.FeeScheduleSummary, er
 }
 
 func (f *feesImpl) Effective(ctx context.Context, category, orgID string, at time.Time) (port.EffectiveFeesResponse, error) {
+	return f.EffectiveKind(ctx, "", category, orgID, at)
+}
+
+func (f *feesImpl) RateCard(ctx context.Context, orgID, kind string, at time.Time) (port.RateCardResponse, error) {
+	t, err := f.token(ctx)
+	if err != nil {
+		return port.RateCardResponse{}, err
+	}
+	q := url.Values{}
+	if kind != "" {
+		q.Set("kind", kind)
+	}
+	if !at.IsZero() {
+		q.Set("at", at.UTC().Format(time.RFC3339))
+	}
+	var out port.RateCardResponse
+	_, err = call(ctx, f.c, httpclient.Request{Path: "/v1/orgs/" + url.PathEscape(orgID) + "/rate-card", Query: q, Bearer: t}, &out)
+	return out, err
+}
+
+func (f *feesImpl) EffectiveKind(ctx context.Context, kind, category, orgID string, at time.Time) (port.EffectiveFeesResponse, error) {
 	t, err := f.token(ctx)
 	if err != nil {
 		return port.EffectiveFeesResponse{}, err
 	}
 	q := url.Values{"category": {category}, "orgId": {orgID}}
+	if kind != "" {
+		q.Set("kind", kind)
+	}
 	if !at.IsZero() {
 		q.Set("at", at.UTC().Format(time.RFC3339))
 	}
@@ -397,28 +511,3 @@ func (f *feesImpl) Effective(ctx context.Context, category, orgID string, at tim
 	return out, err
 }
 
-// ---------------------------------------------------------------- storefront (contracts/openapi/storefront.yaml)
-
-type storefrontImpl struct{ c httpclient.Client }
-
-var _ port.StorefrontClient = (*storefrontImpl)(nil)
-
-// NewStorefront returns the storefront-service client (draft, save, publish).
-func NewStorefront(c httpclient.Client) port.StorefrontClient { return &storefrontImpl{c: c} }
-
-func (s *storefrontImpl) Draft(ctx context.Context, bearer string) (port.Storefront, error) {
-	out := port.Storefront{}
-	_, err := call(ctx, s.c, httpclient.Request{Path: "/v1/storefronts/me/draft", Bearer: bearer}, &out)
-	return out, err
-}
-
-func (s *storefrontImpl) SaveDraft(ctx context.Context, bearer string, doc port.Storefront) (port.Storefront, error) {
-	out := port.Storefront{}
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/storefronts/me/draft", Bearer: bearer, JSON: doc}, &out)
-	return out, err
-}
-
-func (s *storefrontImpl) Publish(ctx context.Context, bearer string) error {
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/storefronts/me/publish", Bearer: bearer}, nil)
-	return err
-}

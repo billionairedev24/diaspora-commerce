@@ -274,5 +274,11 @@
   "hub.crumb": "Ipa ọ̀nà",
   "hub.securityTitle": "Wíwọlé àti ààbò",
   "common.showAll": "Fi gbogbo rẹ̀ hàn ({n})",
-  "common.showFewer": "Fi díẹ̀ hàn"
+  "common.showFewer": "Fi díẹ̀ hàn",
+  "hub.deliveryAlerts": "Àwọn ìkìlọ̀ ìfiránṣẹ́",
+  "hub.deliveryAlertsSub": "Àwọn ìrìn ìfiránṣẹ́ àti ìpàṣẹ ṣáájú àgbègbè rẹ, nípasẹ̀ ímeèlì, SMS, ohun èlò tàbí WhatsApp",
+  "hub.credit": "Owó ìdókòwò AfroTransact",
+  "hub.creditSub": "Ìwọ̀n, ìtàn àti káàdì ẹ̀bùn",
+  "hub.refer": "Pe ọ̀rẹ́ kan",
+  "hub.referSub": "Pín kóòdù rẹ, gba ẹ̀bùn"
 }

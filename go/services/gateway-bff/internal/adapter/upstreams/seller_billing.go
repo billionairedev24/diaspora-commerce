@@ -1,0 +1,77 @@
+package upstreams
+
+import (
+	"context"
+	"net/http"
+	"net/url"
+
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpclient"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
+)
+
+var _ port.SellerBillingClient = (*sellerServiceImpl)(nil)
+
+func (s *sellerServiceImpl) OrgPlans(ctx context.Context, bearer, orgID string) ([]port.SellerPlan, error) {
+	res, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/plans"), Bearer: bearer}, nil)
+	if err != nil {
+		return nil, err
+	}
+	items, _, err := itemsOf[port.SellerPlan](res.Body)
+	return items, err
+}
+
+func (s *sellerServiceImpl) Rewards(ctx context.Context, bearer, orgID string) (port.SellerRewards, error) {
+	var out port.SellerRewards
+	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/rewards"), Bearer: bearer}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) PreviewPlanChange(ctx context.Context, bearer, orgID, planCode, cadence string) (port.SellerPlanChangePreview, error) {
+	var out port.SellerPlanChangePreview
+	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/plan/preview"), Bearer: bearer,
+		Query: url.Values{"planCode": {planCode}, "cadence": {cadence}}}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) CreateSetupIntent(ctx context.Context, bearer, orgID string) (port.SellerSetupIntent, error) {
+	var out port.SellerSetupIntent
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/billing/setup-intents"),
+		Bearer: bearer}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) PlanFeeCollection(ctx context.Context, bearer, orgID string) (port.SellerPlanFeeCollection, error) {
+	var out port.SellerPlanFeeCollection
+	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/plan-fee-collection"), Bearer: bearer}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) SetPlanFeeCollection(ctx context.Context, bearer, orgID, mode string) (port.SellerPlanFeeCollection, error) {
+	var out port.SellerPlanFeeCollection
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: orgPath(orgID, "/billing/plan-fee-collection"),
+		Bearer: bearer, RetryUnsafe: true, JSON: map[string]string{"mode": mode}}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) AddPaymentMethod(ctx context.Context, bearer, orgID string, in port.SellerPaymentMethodInput) (port.SellerPaymentMethod, error) {
+	var out port.SellerPaymentMethod
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/billing/payment-methods"),
+		Bearer: bearer, JSON: in}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) RetryInvoice(ctx context.Context, bearer, orgID, invoiceID string) (port.SellerInvoice, error) {
+	var out port.SellerInvoice
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/billing/invoices/"+url.PathEscape(invoiceID)+"/retry"),
+		Bearer: bearer, RetryUnsafe: true}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) InvoiceDocument(ctx context.Context, bearer, orgID, invoiceID string) ([]byte, error) {
+	res, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/invoices/"+url.PathEscape(invoiceID)+"/document"), Bearer: bearer,
+		Header: http.Header{"Accept": {"text/html"}}}, nil)
+	if err != nil {
+		return nil, err
+	}
+	return res.Body, nil
+}

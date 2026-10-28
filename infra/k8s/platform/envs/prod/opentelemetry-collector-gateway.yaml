@@ -1,6 +1,25 @@
-# OTel gateway — prod: share of fast, successful traces kept (errors and > 500 ms are always kept).
-replicaCount: 3
+# OTel gateway - prod (lean): ONE replica (tail sampling needs every span of a trace on one replica) shipping traces,
+# metrics and logs to Grafana Cloud over OTLP/HTTP. Errors and traces slower than 500 ms are always kept, plus 10% of the rest.
+# Credentials: Secret grafana-cloud-otlp (infra/k8s/platform/lean/grafana-cloud.yaml).
+replicaCount: 1
+extraEnvsFrom:
+  - secretRef: {name: grafana-cloud-otlp}
+resources:
+  requests: {cpu: 50m, memory: 128Mi}
+  limits: {memory: 384Mi}
+podDisruptionBudget:
+  enabled: false
+serviceMonitor:
+  enabled: false
+autoscaling:
+  enabled: false
 config:
+  extensions:
+    health_check: {endpoint: "${env:MY_POD_IP}:13133"}
+    basicauth/grafana:
+      client_auth:
+        username: ${env:GRAFANA_INSTANCE_ID}
+        password: ${env:GRAFANA_API_TOKEN}
   processors:
     resource/env:
       attributes:
@@ -10,13 +29,13 @@ config:
         - {name: keep-errors, type: status_code, status_code: {status_codes: [ERROR]}}
         - {name: keep-slow, type: latency, latency: {threshold_ms: 500}}
         - {name: baseline, type: probabilistic, probabilistic: {sampling_percentage: 10}}
+  exporters:
+    otlphttp/grafana:
+      endpoint: ${env:GRAFANA_OTLP_ENDPOINT}
+      auth: {authenticator: basicauth/grafana}
   service:
+    extensions: [health_check, basicauth/grafana]
     pipelines:
-      traces: {processors: [memory_limiter, resource/env, tail_sampling, batch]}
-      metrics: {processors: [memory_limiter, resource/env, batch]}
-      logs: {processors: [memory_limiter, resource/env, batch]}
-# NOTE (prod, replicas > 1): tail sampling needs every span of a trace on one replica. Either keep the agent's
-# otlp/gateway exporter pointed at a headless service with the loadbalancing exporter (routing_key: traceID),
-# or run the tail-sampling tier as a StatefulSet behind it. See opentelemetry-collector-agent.yaml.
-autoscaling:
-  enabled: false
+      traces: {receivers: [otlp], processors: [memory_limiter, resource/env, tail_sampling, batch], exporters: [otlphttp/grafana]}
+      metrics: {receivers: [otlp], processors: [memory_limiter, resource/env, batch], exporters: [otlphttp/grafana]}
+      logs: {receivers: [otlp], processors: [memory_limiter, resource/env, batch], exporters: [otlphttp/grafana]}

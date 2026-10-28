@@ -21,7 +21,8 @@ final class OrderDrafts {
                 s.pickupLocationId(), s.preferences(), s.perishable(), s.handoverRequired(), s.handoverCodeHash(),
                 s.handoverCodeSealed(), ShipmentStatus.PENDING_PAYMENT, s.shippingMinor(), null, null,
                 s.promisedFrom(), s.promisedBy(), null, null, null, null, d.createdAt(),
-                s.lines().stream().map(OrderDrafts::line).toList(), 0, s.localDelivery(), s.preorder())).toList();
+                s.lines().stream().map(OrderDrafts::line).toList(), 0, s.localDelivery(), s.preorder(),
+                s.feeRule())).toList();
         return new Order(d.orderId(), d.orderNumber(), d.customerId(), d.currency(), OrderStatus.PENDING_PAYMENT,
                 OrderTotals.ofShipments(shipments), d.shipTo(), paymentId, d.workflowId(), null, null, d.createdAt(),
                 shipments, 0, d.origin());
@@ -30,6 +31,7 @@ final class OrderDrafts {
     private static OrderLine line(CheckoutPlan.Line l) {
         return new OrderLine(l.lineId(), l.lineNo(), l.variantAtin(), l.productAtin(), l.title(), l.imageUrl(),
                 l.quantity(), l.unitPriceMinor(), l.taxMinor(), l.discountMinor(), l.category(), l.perishable(),
-                l.taxJurisdiction(), l.productType(), l.localTaxJurisdiction(), l.shippingTaxMinor());
+                l.taxJurisdiction(), l.productType(), l.localTaxJurisdiction(), l.shippingTaxMinor(), l.sellerOrgId(),
+                l.sellerName());
     }
 }

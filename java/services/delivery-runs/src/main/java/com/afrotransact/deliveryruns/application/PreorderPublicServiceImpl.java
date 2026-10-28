@@ -10,7 +10,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.deliveryruns.domain.Coverage;
-import com.afrotransact.deliveryruns.domain.PaymentSettings;
 import com.afrotransact.deliveryruns.domain.PreorderResolver;
 import com.afrotransact.deliveryruns.domain.PreorderResolver.Eligibility;
 import com.afrotransact.deliveryruns.domain.PreorderResolver.ProductFacts;
@@ -61,11 +60,10 @@ class PreorderPublicServiceImpl implements PreorderPublicService {
     public List<OpenWindow> open() {
         Instant now = Instant.now(clock);
         Coverage coverage = support.coverage();
-        PaymentSettings payment = coverage.settings().payment();
         return resolver.openList(windows.findPublished(), coverage, now).stream()
                 .map(w -> new OpenWindow(w, w.status(now),
-                        w.details().door() ? w.doorFee(payment).orElse(null) : null,
-                        w.details().pickup() ? w.pickupFee(payment) : null))
+                        w.details().door() ? w.doorFee(coverage.fees()).orElse(null) : null,
+                        w.details().pickup() ? w.pickupFee(coverage.fees()) : null))
                 .toList();
     }
 

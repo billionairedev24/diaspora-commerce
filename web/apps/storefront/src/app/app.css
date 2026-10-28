@@ -20,3 +20,6 @@ h1, h2, h3 { text-wrap: balance; }
 @media (pointer: coarse) {
   .link-button { display: inline-flex; align-items: center; min-height: var(--at-size-touch); }
 }
+
+/* An element marked hidden stays hidden even when a component class sets its display. */
+[hidden] { display: none !important; }

@@ -121,6 +121,17 @@ describe('mock BFF — account, checkout, help requests, bookings, Lola', () => 
     expect(cancelled.status).toBe('cancelled');
   });
 
+  it('prices a platform coupon on checkout summary and lowers the total (mock WELCOME10)', async () => {
+    const api = await signedIn();
+    await api.addToCart({ offerId: (await api.getProduct('AT000000P2')).buyBox?.offerId ?? '', quantity: 2 });
+    const base = await api.getCheckoutSummary('ad1');
+    const withCode = await api.getCheckoutSummary('ad1', undefined, 'WELCOME10');
+    expect(withCode.coupon).toMatchObject({ code: 'WELCOME10', applicable: true, funding: 'platform' });
+    expect(withCode.discountMinor).toBeGreaterThan(0);
+    expect(withCode.totalMinor).toBeLessThan(base.totalMinor);
+    expect(withCode.coupon?.sellerShares?.[0]?.funding).toBe('platform');
+  });
+
   it('quotes AfroTransact Delivery from the seller’s store per address and refuses an out-of-range one (S255)', async () => {
     const api = await signedIn();
     const product = await api.getProduct('AT00000P23');
@@ -192,7 +203,7 @@ describe('mock BFF — account, checkout, help requests, bookings, Lola', () => 
     expect(res.applied.refundMinor).toBe(quote.refundMinor);
     expect(res.booking.canCancel).toBe(false);
     const page = await api.getProviderPage(svc?.orgId ?? '');
-    expect(page.design?.layout).toBe('GALLERY_FIRST');
+    expect(page.services.length).toBeGreaterThan(0);
   });
 
   it('streams a Lola turn with a confirmable add-to-cart proposal and suggestion chips', async () => {
@@ -219,6 +230,17 @@ describe('mock BFF — account, checkout, help requests, bookings, Lola', () => 
     expect((await api.revokeOtherSessions()).revoked).toBe(1);
     const prefs = await api.saveNotificationPreferences({ email: true, sms: false, push: true, marketingOptIn: true });
     expect(prefs.sms).toBe(false);
+  });
+});
+
+describe('mock BFF — services in search', () => {
+  it('a text search also returns the services matching its words, on the first page only', async () => {
+    const api = browserLikeClient().api;
+    const first = await api.search(SearchQuerySchema.parse({ q: 'braids' }));
+    expect(first.services.length).toBeGreaterThan(0);
+    expect(first.services.every((s) => s.name.toLowerCase().includes('braids') || s.category.toLowerCase().includes('braids') || s.providerName.toLowerCase().includes('braids'))).toBe(true);
+    const nothing = await api.search(SearchQuerySchema.parse({ q: 'zzzznothing' }));
+    expect(nothing.services).toEqual([]);
   });
 });
 

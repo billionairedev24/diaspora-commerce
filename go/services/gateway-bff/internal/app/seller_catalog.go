@@ -11,8 +11,8 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
-// SellerCatalogService serves the listings table, the 4-step product builder (category tree, product-type schema,
-// GTIN checks, category requests, uploads, submit) and stock (FBA positions, seller stock adjustments).
+// SellerCatalogService serves the listings table, the product form's reference data (category tree, product-type
+// schema, GTIN checks, category requests, uploads) and stock (FBA positions, seller stock adjustments).
 type SellerCatalogService interface {
 	// Listings is the listings table: one search over every column, any sort, status (links), page and size.
 	Listings(ctx context.Context, c *domain.Caller, q SellerTableQuery) (domain.ListingPage, error)
@@ -23,7 +23,8 @@ type SellerCatalogService interface {
 	CheckGTIN(ctx context.Context, c *domain.Caller, code string, isbn bool) (domain.GtinCheck, error)
 	CategoryRequests(ctx context.Context, c *domain.Caller) ([]domain.CategoryRequest, error)
 	RequestCategory(ctx context.Context, c *domain.Caller, in domain.CategoryRequestInput) (domain.CategoryRequest, error)
-	Upload(ctx context.Context, c *domain.Caller, purpose, fileName, contentType string, size int64) (domain.UploadTicket, error)
+	// Upload signs a direct image upload; library adds a product image to the image library (S310).
+	Upload(ctx context.Context, c *domain.Caller, purpose, fileName, contentType string, size int64, library bool) (domain.UploadTicket, error)
 	CompleteUpload(ctx context.Context, c *domain.Caller, assetID string) (domain.Asset, error)
 	Inventory(ctx context.Context, c *domain.Caller, lowStock bool) (domain.InventoryView, error)
 	AdjustStock(ctx context.Context, c *domain.Caller, idempotencyKey, sku string, quantity int, reason string) (domain.StockAdjustment, error)
@@ -39,12 +40,22 @@ var _ SellerCatalogService = (*sellerCatalogImpl)(nil)
 // NewSellerCatalogService returns the SellerCatalogService.
 func NewSellerCatalogService(d SellerDeps) SellerCatalogService {
 	r := newResolver(d)
-	return &sellerCatalogImpl{r: r, cache: newScanCache[domain.ListingRow](r.d.clock())}
+	return &sellerCatalogImpl{r: r, cache: d.listingCache()}
 }
 
 func listingOf(p port.CatalogOwnProduct) domain.ListingRow {
 	row := domain.ListingRow{ProductID: p.ID, ATIN: strPtr(p.ATIN), Title: p.Title, VariantCount: len(p.Variants), Currency: domain.Currency,
 		Fulfilment: domain.ShipsFromSeller, Status: strings.ToUpper(p.Status), ModerationNote: strPtr(p.ModerationNote), UpdatedAt: p.UpdatedAt}
+	if p.Listing != nil {
+		switch {
+		case strings.EqualFold(p.Listing.Fulfilment, domain.FulfilledByAfroTransact):
+			row.Fulfilment = domain.FulfilledByAfroTransact
+		case strings.EqualFold(p.Listing.Fulfilment, domain.AfroTransactDelivery):
+			row.Fulfilment = domain.AfroTransactDelivery
+		case strings.EqualFold(p.Listing.Fulfilment, domain.ShipsFromSeller):
+			row.Fulfilment = domain.ShipsFromSeller
+		}
+	}
 	row.StatusLabel = domain.ListingStatusLabel(row.Status)
 	for i, v := range p.Variants {
 		if i == 0 || (v.PriceMinor > 0 && v.PriceMinor < row.PriceMinor) {
@@ -98,11 +109,16 @@ func (s *sellerCatalogImpl) Listings(ctx context.Context, c *domain.Caller, q Se
 		for _, it := range p.Items {
 			out.Items = append(out.Items, listingOf(it))
 		}
+		s.sellableStock(ctx, c.BearerToken, out.Items)
 		return out, nil
 	}
 	// Search over every column and any sort: the BFF reads the organisation's listings and pages them.
 	rows, partial, err := s.cache.load(sc.member.ID+"@"+sc.org.ID, "listings", q.Status, func() ([]domain.ListingRow, bool, error) {
-		return s.scanListings(ctx, c.BearerToken, q.Status, domain.TableScanMaxRows)
+		rows, partial, err := s.scanListings(ctx, c.BearerToken, q.Status, domain.TableScanMaxRows)
+		if err == nil {
+			s.sellableStock(ctx, c.BearerToken, rows)
+		}
+		return rows, partial, err
 	})
 	if err != nil {
 		return domain.ListingPage{}, err
@@ -110,6 +126,100 @@ func (s *sellerCatalogImpl) Listings(ctx context.Context, c *domain.Caller, q Se
 	picked := pickRows(rows, SellerListingColumns, sellerListingRowCells, q.Q, nil, sort)
 	items, _ := pageSlice(picked, q.Page*q.Size, q.Size)
 	return domain.ListingPage{Items: items, Total: int64(len(picked)), Page: q.Page, Size: q.Size, Sort: domain.SortStrings(sort), Partial: partial}, nil
+}
+
+// sellableStock replaces each listing's stock with what shoppers can buy: the offers' available units (the seller's
+// declared quantity for seller-fulfilled offers, warehouse stock for Fulfilled by AfroTransact, 0 while the listing is
+// not live). The catalog quantity alone made a listing look "29 in stock" while the storefront showed it unavailable.
+// Listings offers does not know keep the catalog quantity; offers being down leaves every row as it is.
+func (s *sellerCatalogImpl) sellableStock(ctx context.Context, bearer string, rows []domain.ListingRow) {
+	if s.r.d.Offers == nil || len(rows) == 0 {
+		return
+	}
+	byProduct := map[string]int{}
+	byProductID := map[string]int{}
+	ffByProduct := map[string][]string{}
+	ffByProductID := map[string][]string{}
+	for page := 0; page < 25; page++ {
+		p, err := s.r.d.Offers.List(ctx, bearer, page, 200)
+		if err != nil {
+			return
+		}
+		for _, o := range p.Items {
+			if strings.EqualFold(o.Status, "WITHDRAWN") {
+				continue
+			}
+			atin := strings.ToUpper(o.ProductATIN)
+			if atin != "" {
+				byProduct[atin] += max(0, o.AvailableQty)
+				if o.Fulfilment != "" {
+					ffByProduct[atin] = append(ffByProduct[atin], strings.ToUpper(o.Fulfilment))
+				}
+			}
+			if o.ProductID != "" {
+				byProductID[o.ProductID] += max(0, o.AvailableQty)
+				if o.Fulfilment != "" {
+					ffByProductID[o.ProductID] = append(ffByProductID[o.ProductID], strings.ToUpper(o.Fulfilment))
+				}
+			}
+		}
+		if len(p.Items) == 0 || int64((page+1)*200) >= p.Total {
+			break
+		}
+	}
+	for i := range rows {
+		var ffs []string
+		qty := 0
+		hasQty := false
+		if rows[i].ATIN != nil {
+			atin := strings.ToUpper(*rows[i].ATIN)
+			if q, ok := byProduct[atin]; ok {
+				qty = q
+				hasQty = true
+			}
+			if f, ok := ffByProduct[atin]; ok {
+				ffs = f
+			}
+		}
+		if len(ffs) == 0 && rows[i].ProductID != "" {
+			if q, ok := byProductID[rows[i].ProductID]; ok {
+				qty = q
+				hasQty = true
+			}
+			if f, ok := ffByProductID[rows[i].ProductID]; ok {
+				ffs = f
+			}
+		}
+		if len(ffs) > 0 {
+			firstFF := ffs[0]
+			allSame := true
+			for _, ff := range ffs[1:] {
+				if ff != firstFF {
+					allSame = false
+					break
+				}
+			}
+			if allSame {
+				switch firstFF {
+				case domain.FulfilledByAfroTransact:
+					rows[i].Fulfilment = domain.FulfilledByAfroTransact
+				case domain.AfroTransactDelivery:
+					rows[i].Fulfilment = domain.AfroTransactDelivery
+				case domain.ShipsFromSeller:
+					rows[i].Fulfilment = domain.ShipsFromSeller
+				}
+			}
+		}
+		if hasQty {
+			if rows[i].Fulfilment == domain.FulfilledByAfroTransact {
+				rows[i].Stock = qty
+			} else if rows[i].Status != "LIVE" && qty == 0 {
+				rows[i].Stock = 0
+			} else if qty > rows[i].Stock || rows[i].Stock == 0 {
+				rows[i].Stock = qty
+			}
+		}
+	}
 }
 
 // scanListings reads up to limit of the organisation's listings.
@@ -224,13 +334,29 @@ func (s *sellerCatalogImpl) ProductType(ctx context.Context, c *domain.Caller, c
 	if rule != "gtin" && rule != "isbn" {
 		rule = "none"
 	}
-	out := domain.ProductTypeSchema{Code: t.Code, Label: t.Label, IdentifierRule: rule, Attributes: []domain.AttributeDef{}, Themes: []domain.VariationTheme{}}
+	out := domain.ProductTypeSchema{Code: t.Code, Label: t.Label, IdentifierRule: rule, Attributes: []domain.AttributeDef{},
+		Themes: []domain.VariationTheme{}, Traits: t.Traits}
 	for _, a := range t.Attributes {
 		opts := a.Options
 		if opts == nil {
 			opts = []string{}
 		}
-		out.Attributes = append(out.Attributes, domain.AttributeDef{Key: a.Key, Label: a.Label, Options: opts, Required: a.Required, Multiline: a.Multiline})
+		units := a.Units
+		if units == nil {
+			units = []string{}
+		}
+		kind := strings.ToUpper(a.Kind)
+		switch {
+		case kind != "":
+		case len(opts) > 0:
+			kind = "ENUM"
+		case a.Multiline:
+			kind = "MULTILINE"
+		default:
+			kind = "TEXT"
+		}
+		out.Attributes = append(out.Attributes, domain.AttributeDef{Key: a.Key, Label: a.Label, Options: opts, Required: a.Required,
+			Multiline: a.Multiline, Kind: kind, Units: units, Section: firstNonEmpty(strings.ToUpper(a.Section), "DETAILS"), Help: strPtr(a.Help)})
 	}
 	for _, th := range t.Themes {
 		if th.Dimensions == nil {
@@ -304,10 +430,12 @@ func (s *sellerCatalogImpl) RequestCategory(ctx context.Context, c *domain.Calle
 
 var imageTypes = []string{"image/jpeg", "image/png", "image/webp"}
 
-func (s *sellerCatalogImpl) Upload(ctx context.Context, c *domain.Caller, purpose, fileName, contentType string, size int64) (domain.UploadTicket, error) {
+func (s *sellerCatalogImpl) Upload(ctx context.Context, c *domain.Caller, purpose, fileName, contentType string, size int64, library bool) (domain.UploadTicket, error) {
 	errs := map[string]string{}
 	if purpose != "product-image" && purpose != "storefront" {
 		errs["purpose"] = "Unknown purpose"
+	} else if library && purpose != "product-image" {
+		errs["library"] = "Only product images go into the image library"
 	}
 	if strings.TrimSpace(fileName) == "" {
 		errs["fileName"] = "Required"
@@ -324,7 +452,13 @@ func (s *sellerCatalogImpl) Upload(ctx context.Context, c *domain.Caller, purpos
 	if err := requireCustomer(c); err != nil {
 		return domain.UploadTicket{}, err
 	}
-	u, err := s.r.d.Media.RequestUpload(ctx, c.BearerToken, purpose, fileName, contentType, size)
+	var u port.MediaUpload
+	var err error
+	if library {
+		u, err = s.r.d.Media.RequestLibraryUpload(ctx, c.BearerToken, fileName, contentType, size)
+	} else {
+		u, err = s.r.d.Media.RequestUpload(ctx, c.BearerToken, purpose, fileName, contentType, size)
+	}
 	if err != nil {
 		return domain.UploadTicket{}, mapErr("media", err)
 	}
@@ -371,6 +505,9 @@ func (s *sellerCatalogImpl) Inventory(ctx context.Context, c *domain.Caller, low
 }
 
 func (s *sellerCatalogImpl) AdjustStock(ctx context.Context, c *domain.Caller, key, sku string, quantity int, reason string) (domain.StockAdjustment, error) {
+	if s.cache != nil {
+		defer s.cache.drop("listings")
+	}
 	errs := map[string]string{}
 	if strings.TrimSpace(sku) == "" {
 		errs["sku"] = "Required"

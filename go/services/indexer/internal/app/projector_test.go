@@ -107,6 +107,7 @@ func productEnvelope(t *testing.T) events.Envelope {
 		ProductID: "p1", ATIN: "AT00000001", OwnerKind: "PLATFORM", OwnerOrgID: "org_afrotransact_retail",
 		Status: "LIVE", Title: "Jollof Seasoning Blend", CategoryID: "c1", Brand: "AfroTransact Brand",
 		ImageURL: "http://localhost:9000/media/product-image/jollof.jpg", Communities: []string{"Nigerian", "Ghanaian"},
+		Description: "Smoky party jollof seasoning.", Keywords: []string{"party rice", "jollof spice"},
 		Variants: []domain.VariantPayload{
 			{ATIN: "AT0000000A", PriceMinor: 1299, Currency: "usd"},
 			{ATIN: "AT0000000B", PriceMinor: 899, Currency: "usd"},
@@ -129,6 +130,9 @@ func TestProductEventBecomesDocument(t *testing.T) {
 	if d.ImageURL != "http://localhost:9000/media/product-image/jollof.jpg" || d.Brand != "AfroTransact Brand" ||
 		len(d.Communities) != 2 || d.Communities[0] != "Nigerian" {
 		t.Fatalf("product card fields not projected: %+v", d)
+	}
+	if d.Description != "Smoky party jollof seasoning." || len(d.Keywords) != 2 || d.Keywords[0] != "party rice" {
+		t.Fatalf("description and the seller's keywords must reach the index: %+v", d)
 	}
 }
 

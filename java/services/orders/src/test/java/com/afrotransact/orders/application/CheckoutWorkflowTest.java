@@ -150,6 +150,52 @@ class CheckoutWorkflowTest {
     }
 
     @Test
+    void anOrderOnADeliveryRunTakesItsSlotBeforePaymentAndGivesItBackWhenPaymentFails() {
+        activities.runId = "run-1";
+        CheckoutInput in = input(UUID.randomUUID().toString());
+        CheckoutWorkflow wf = start(in);
+        awaitPhase(wf, CheckoutProgress.Phase.AWAITING_PAYMENT);
+        assertThat(activities.count("reserveRunSlot")).isEqualTo(1);
+        assertThat(activities.count("releaseRunSlot:run-1")).isZero();
+        wf.paymentFailed("Your card was declined");
+        CheckoutProgress done = result(in, client);
+
+        assertThat(done.failureCode()).isEqualTo(CheckoutCodes.PAYMENT_FAILED);
+        assertThat(activities.count("releaseRunSlot:run-1")).isEqualTo(1);
+        assertThat(activities.count("releaseReservation")).isEqualTo(1);
+        assertThat(activities.count("cancelPayment:pay-1")).isEqualTo(1);
+    }
+
+    @Test
+    void anOrderOnADeliveryRunKeepsItsSlotWhenPaymentSucceeds() {
+        activities.runId = "run-1";
+        CheckoutInput in = input(UUID.randomUUID().toString());
+        CheckoutWorkflow wf = start(in);
+        awaitPhase(wf, CheckoutProgress.Phase.AWAITING_PAYMENT);
+        wf.paymentAuthorized();
+        CheckoutProgress done = result(in, client);
+
+        assertThat(done.phase()).isEqualTo(CheckoutProgress.Phase.PLACED);
+        assertThat(activities.count("reserveRunSlot")).isEqualTo(1);
+        assertThat(activities.calls.keySet()).noneMatch(k -> k.startsWith("releaseRunSlot"));
+    }
+
+    @Test
+    void aRunThatClosedFailsBeforeAnyPaymentGivesTheStockBackAndHasNoSlotToRelease() {
+        activities.runId = "run-1";
+        activities.failRunSlotWith = CheckoutCodes.RUN_CLOSED;
+        CheckoutInput in = input(UUID.randomUUID().toString());
+        start(in);
+        CheckoutProgress done = result(in, client);
+
+        assertThat(done.failureCode()).isEqualTo(CheckoutCodes.RUN_CLOSED);
+        assertThat(activities.count("createPayment")).isZero();
+        assertThat(activities.count("releaseReservation")).isEqualTo(1);
+        assertThat(activities.calls.keySet()).noneMatch(k -> k.startsWith("releaseRunSlot"));
+        assertThat(activities.count("abandon:" + CheckoutCodes.RUN_CLOSED)).isEqualTo(1);
+    }
+
+    @Test
     void noPaymentWithinFifteenMinutesRunsEveryCompensation() {
         CheckoutInput in = input(UUID.randomUUID().toString());
         long startedAt = env.currentTimeMillis();

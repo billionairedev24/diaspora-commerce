@@ -19,12 +19,11 @@
 | mcp-server | Spring Boot + Spring AI MCP | 8114 | MCP tools for shoppers, sellers, staff | — |
 | delivery-runs | Spring Boot | 8115 | community delivery runs: locations, runs (cutoff, minimum, capacity), run slots, subscriptions, run economics; pre-order windows, coverage, waitlist, late adds | Postgres `deliveryruns` |
 | gateway-bff | Go | 8200 | screen-shaped APIs for web/mobile, token relay | Redis |
-| search | Go | 8201 | query, facets, autocomplete, hybrid retrieval | Elasticsearch |
-| indexer | Go | 8202 | Kafka → Elasticsearch projection | Elasticsearch |
+| search | Go | 8201 | query, facets, autocomplete, hybrid retrieval | Elasticsearch or Meilisearch (`SEARCH_PROVIDER`) |
+| indexer | Go | 8202 | Kafka → search index projection | Elasticsearch or Meilisearch (`SEARCH_PROVIDER`) |
 | cart | Go | 8203 | carts, save-for-later, merge on login | Redis + Postgres `cart` |
 | promise | Go | 8204 | delivery promises per ZIP | Redis |
 | geo | Go | 8205 | address autocomplete (Google Places / OSM Nominatim), validation | Postgres/PostGIS `geo` |
-| storefront | Go | 8206 | seller/provider storefront themes & layouts | Postgres `storefront` |
 | media | Go | 8207 | upload signing (UploadThing / S3-compatible), image metadata | Postgres `media` |
 | notifications | Go | 8208 | email (Resend, SendGrid, SES), SMS (Twilio, Vonage), push, WhatsApp | Postgres `notifications` |
 | carrier-gateway | Go | 8209 | USPS, UPS, FedEx, DHL rates/labels/tracking | Postgres `carriers` |
@@ -42,6 +41,7 @@ identity's local clients (`application-local.yml`), whose secrets default to the
 | cart | `DELIVERY_RUNS_URL` (`deliveryRuns.url`) | `http://localhost:8115` | `cart-service` (`CART_CLIENT_SECRET`, `local-cart-service-secret`) | `delivery-runs:reserve` |
 | notifications | `deliveryRuns.baseUrl` | `http://localhost:8115` | `notifications-service` | `delivery-runs:audience.read` |
 | delivery-runs → media / orders / geo | `MEDIA_URL` / `ORDERS_URL` / `GEO_URL` | `:8207` / `:8104` / `:8205` | `delivery-runs-service` (`DELIVERY_RUNS_CLIENT_SECRET`, `local-delivery-runs-service-secret`) | `media:read`, `orders:on-behalf`, `geo:zones:write` |
+| catalog → media (bulk-upload images, S308) | `MEDIA_URL` (`at.catalog.media.base-url`) | `http://localhost:8207` | `catalog-service` (`CATALOG_CLIENT_SECRET`, `local-catalog-service-secret`) | `media:import` |
 
 The web apps need none of this with `API_MOCKS=1` (storefront and staff console serve the BFF from MSW mocks).
 
@@ -73,6 +73,7 @@ remembered in `.local/web-ports`.
 | Kafka (KRaft) | 9092 |
 | Kafka UI | 8090 |
 | Elasticsearch 9 | 9200 |
+| Meilisearch (`SEARCH_PROVIDER=meilisearch`, instead of Elasticsearch) | 7700 |
 | Kibana | 5601 |
 | Temporal / UI | 7233 / 8088 |
 | OTel Collector (gRPC/HTTP) | 4317 / 4318 |

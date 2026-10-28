@@ -25,6 +25,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/exportfiles"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpapi"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpclient"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/memcache"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/upstreams"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -53,9 +54,9 @@ func TestEmbeddedStaffContractIsIdentical(t *testing.T) {
 var supportPerms = []string{"bookings:read", "catalog:moderate", "delivery:dispatch", "disputes:manage", "inventory:read", "notifications:read", "orders:read",
 	"orders:update-status", "orgs:read", "payments:read", "refunds:issue", "reports:read", "returns:manage", "support:respond", "users:read"}
 
-var adminPerms = []string{"access:admin", "access:read", "applications:approve", "applications:review", "audit:read", "catalog:moderate", "content:legal.edit",
+var adminPerms = []string{"access:admin", "access:read", "applications:approve", "applications:review", "audit:read", "catalog:moderate", "identity:admin", "content:legal.edit",
 	"content:markets.edit", "content:placements.approve", "content:placements.edit", "content:site.edit", "delivery:dispatch", "disputes:manage",
-	"inventory:adjust", "inventory:read", "notifications:manage", "notifications:read", "notifications:templates:write", "orders:manage", "orders:read", "payments:configure", "payouts:approve", "payouts:read",
+	"inventory:adjust", "inventory:read", "notifications:manage", "notifications:read", "notifications:templates:write", "orders:manage", "orders:read", "ledger:adjust", "ledger:approve", "payments:configure", "payments:read", "payouts:approve", "payouts:read",
 	"refunds:issue", "reports:read", "retail:po:approve", "retail:po:write", "returns:manage", "support:respond", "tax:configure", "users:read"}
 
 type fakePlatform struct {
@@ -65,6 +66,10 @@ type fakePlatform struct {
 	payoutSt  string
 	bigOrders bool
 	fees      []map[string]any
+	// idAdmin is identity's admin console API (S291), see staff_identity_test.go.
+	idAdmin fakeIdentityAdmin
+	// override answers a request before the defaults when it returns true (scenario tests).
+	override func(w http.ResponseWriter, r *http.Request, body map[string]any) bool
 }
 
 // feeSchedules fakes payments' fee-schedule routes: v1 in force, v2 scheduled (with overrides), v3 cancelled.
@@ -223,6 +228,33 @@ func (f *fakePlatform) called(call string) bool {
 	return false
 }
 
+// giftCardFake is payments' staff view of a gift card.
+func giftCardFake(now string) map[string]any {
+	return map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000c1", "status": "ACTIVE", "origin": "PURCHASE", "amountMinor": 5000, "currency": "USD", "codeLast4": "K3M9",
+		"purchaserId": "cus-1", "senderName": "Kofi", "recipientEmail": "ama@example.com", "recipientName": "Ama", "message": "Happy birthday", "locale": "en", "sendAt": now,
+		"deliveryStatus": "SENT", "deliveryCount": 1, "sentAt": now, "refundedToCard": false, "createdAt": now}
+}
+
+func referralFake(now string, status string) map[string]any {
+	return map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f1", "referrerId": "cus-1", "referredId": "cus-2", "referredName": "Kofi B.", "status": status,
+		"flags": []any{"SAME_DEVICE"}, "signedUpAt": now, "expiresAt": now, "qualifyingOrderId": "AT-000042", "qualifyingMinor": 4000, "deliveredAt": now, "eligibleAt": now,
+		"decision": nil, "decisionReason": nil, "decidedBy": nil, "decidedAt": nil, "costMinor": 0, "createdAt": now,
+		"rewards": []any{
+			map[string]any{"side": "REFERRER", "customerId": "cus-1", "terms": map[string]any{"type": "CREDIT", "creditMinor": 1000, "membershipDays": 0}, "currency": "USD", "status": "PENDING", "grantedAt": nil},
+			map[string]any{"side": "REFERRED", "customerId": "cus-2", "terms": map[string]any{"type": "MEMBERSHIP_DAYS", "creditMinor": 0, "membershipDays": 14}, "currency": "USD", "status": "DEFERRED", "grantedAt": nil}}}
+}
+
+func referralSettingsFake(now string) map[string]any {
+	return map[string]any{"enabled": true, "referrer": map[string]any{"type": "CREDIT", "creditMinor": 1000, "membershipDays": 0},
+		"referred": map[string]any{"type": "CREDIT", "creditMinor": 1000, "membershipDays": 0}, "qualifyingEvent": "FIRST_ORDER_DELIVERED", "minOrderMinor": 3000,
+		"returnWindowDays": 30, "maxRewardedPerReferrer": 20, "maxCreditPerCustomerMinor": 50000, "validityDays": 90, "updatedBy": "stf-1", "updatedAt": now, "version": 3}
+}
+
+func moneySettingsFake(now string) map[string]any {
+	return map[string]any{"giftCardMinMinor": 1000, "giftCardMaxMinor": 50000, "giftCardPresets": []any{2500, 5000, 10000}, "giftCardTerms": map[string]any{"en": "Gift cards never expire."},
+		"creditApprovalLimitMinor": 10000, "updatedBy": "stf-1", "updatedAt": now, "version": 3}
+}
+
 func writeJ(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -245,12 +277,15 @@ func order(n int) map[string]any {
 		"shippingMinor": 599, "taxMinor": 165, "discountMinor": 0, "totalMinor": 2764, "shipTo": "Houston, TX 77042", "paymentId": "pay-1",
 		"shippingAddress": map[string]any{"fullName": "Amara Nwosu"},
 		"shipments": []any{map[string]any{"id": "shp-1", "shipmentId": "shp-1", "label": "Package 1", "sellerName": "Kente Naturals", "status": "PLACED",
-			"cancellable": true, "totalMinor": 2764, "timeline": []any{map[string]any{"to": "PLACED", "at": time.Now().UTC().Format(time.RFC3339), "source": "checkout"}},
+			"nextActions": []any{"CONFIRMED", "CANCELLED"}, "cancellable": true, "totalMinor": 2764, "timeline": []any{map[string]any{"to": "PLACED", "at": time.Now().UTC().Format(time.RFC3339), "source": "checkout"}},
 			"lines": []any{map[string]any{"id": "ln-1", "title": "Shea butter", "category": "BEAUTY", "quantity": 1, "itemsMinor": 2000, "discountMinor": 0}}}}}
 }
 
 func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body := f.record(r)
+	if f.override != nil && f.override(w, r, body) {
+		return
+	}
 	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	p := r.URL.Path
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -283,6 +318,8 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"at": now, "actorId": "stf-1", "action": "ROLE_ASSIGNED", "targetRole": "platform.finance"}}})
 	case p == "/v1/admin/roles":
 		writeJ(w, 200, []any{map[string]any{"key": "platform.finance", "portal": "PLATFORM", "name": "Finance", "description": "Money", "permissions": []string{"payouts:approve"}}})
+	case strings.HasPrefix(p, "/v1/admin/identity/"):
+		f.idAdmin.serve(w, r, p, body)
 	case strings.HasPrefix(p, "/v1/admin/identity-providers"):
 		writeJ(w, 200, []any{map[string]any{"id": "google", "displayName": "Google", "enabled": false, "configured": true}})
 	// seller
@@ -294,6 +331,24 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(p, "/v1/applications/"):
 		writeJ(w, 200, map[string]any{"id": "app-1", "reference": "APP-1", "kind": "SELLER", "status": "AWAITING_FINAL_APPROVAL", "reviewerId": "stf-1",
 			"business": map[string]any{"storeName": "Kente Naturals", "entityType": "SINGLE_MEMBER_LLC"}, "steps": []string{"business", "bank"}})
+	// seller: the organisation directory mirror and Stripe Connect compliance
+	case p == "/v1/orgs/mirror":
+		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"orgId": "org-1", "displayName": "Kente Naturals", "legalName": "Kente Naturals LLC", "kind": "SELLER", "offering": "PRODUCTS", "country": "US", "status": "APPROVED"}}, "total": 1})
+	case strings.HasPrefix(p, "/v1/orgs/") && strings.HasSuffix(p, "/mirror"):
+		writeJ(w, 200, map[string]any{"orgId": "org-1", "displayName": "Kente Naturals", "legalName": "Kente Naturals LLC", "kind": "SELLER", "offering": "PRODUCTS", "country": "US", "status": "APPROVED"})
+	case p == "/v1/compliance/accounts":
+		writeJ(w, 200, []any{map[string]any{"orgId": "org-1", "orgName": "Kente Naturals", "accountId": "acct_1Kente", "status": "VERIFIED", "payoutsPaused": false, "listingsHidden": false}})
+	case strings.HasPrefix(p, "/v1/compliance/accounts/"):
+		writeJ(w, 200, map[string]any{"orgId": "org-1", "orgName": "Kente Naturals", "accountId": "acct_1Kente", "status": "VERIFIED", "payoutsPaused": false, "listingsHidden": false})
+	// offers: platform coupons
+	case p == "/v1/coupons":
+		writeJ(w, 200, []any{map[string]any{"id": "cp-1", "code": "WELCOME5", "description": "$5 off a first order", "type": "FIXED", "value": 500, "currency": "USD",
+			"scope": "CART", "status": "ACTIVE", "funding": "PLATFORM", "redeemedCount": 12, "version": 2}})
+	// carrier-gateway: customer pickup points
+	case p == "/v1/pickup-locations":
+		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"id": "pl-1", "name": "Houston counter", "kind": "PLATFORM_COUNTER", "active": true,
+			"address": map[string]any{"line1": "100 Main St", "city": "Houston", "state": "TX", "postalCode": "77002"},
+			"hours":   []any{map[string]any{"weekday": 1, "open": "09:00", "close": "17:00"}}, "readyHours": 2}}})
 	// orders
 	case p == "/v1/admin/orders":
 		if f.bigOrders && r.URL.Query().Get("customer") == "" && r.URL.Query().Get("from") == "" {
@@ -367,6 +422,16 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	case p == "/v1/refunds":
 		writeJ(w, 201, map[string]any{"id": "ref-1", "status": "PENDING"})
+	case p == "/v1/tax/codes":
+		writeJ(w, 200, []any{map[string]any{"code": "GENERAL_GOODS", "label": "General taxable goods", "category": "GENERAL", "providerCode": "txcd_99999999", "active": true, "taxable": true, "exemptStates": ""},
+			map[string]any{"code": "NON_TAXABLE", "label": "Not taxable", "category": "GENERAL", "providerCode": nil, "active": true, "taxable": false, "exemptStates": ""},
+			map[string]any{"code": "FRESH_PRODUCE", "label": "Fresh produce", "category": "GROCERY", "providerCode": nil, "active": true, "taxable": true, "exemptStates": "NJ,TX"}})
+	case p == "/v1/tax/classification-rules":
+		writeJ(w, 200, []any{map[string]any{"id": 1, "productType": "dress", "attrKey": nil, "attrValue": nil, "taxCode": "CLOTHING", "note": "Clothing"},
+			map[string]any{"id": 2, "productType": "grocery", "attrKey": "tax_class", "attrValue": "Hot or ready-to-eat", "taxCode": "PREPARED_FOOD", "note": "Prepared food"}})
+	case p == "/v1/tax/review-queue":
+		writeJ(w, 200, []any{map[string]any{"productType": "grocery", "attributes": map[string]any{}, "attrHash": "abc123", "taxCode": "GENERAL_GOODS", "basis": "DEFAULT",
+			"sampleAtin": "AT1", "count": 4, "firstSeen": "2026-10-20T10:00:00Z", "lastSeen": "2026-10-21T10:00:00Z", "reviewedAt": nil, "reviewedBy": nil, "reviewNote": nil}})
 	case p == "/v1/tax/rates":
 		writeJ(w, 200, map[string]any{"states": []any{map[string]any{"country": "US", "state": "TX", "name": "Texas", "generalRate": 0.0625, "groceryRate": 0, "preparedFoodRate": 0.0625, "version": 3}},
 			"locals": []any{map[string]any{"state": "TX", "zipPrefix": "770", "name": "Houston", "rate": 0.02}}})
@@ -382,6 +447,130 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			f.mu.Unlock()
 		}
 		writeJ(w, 200, map[string]any{"id": "pay-1", "orgId": "org-1", "amountMinor": 50000, "status": f.payoutSt, "requestedAt": now})
+	case p == "/v1/reconciliation/items":
+		writeJ(w, 200, []any{map[string]any{"id": "rec-1", "runId": "run-1", "windowStart": now, "stripeRef": "ch_123456", "currency": "USD", "ledgerMinor": 10000, "stripeMinor": 9750,
+			"differenceMinor": 250, "status": "OPEN", "createdAt": now}})
+	case strings.HasPrefix(p, "/v1/reconciliation/items/"):
+		writeJ(w, 200, map[string]any{"item": map[string]any{"id": "rec-1", "runId": "run-1", "windowStart": now, "stripeRef": "ch_123456", "currency": "USD", "ledgerMinor": 10000,
+			"stripeMinor": 9750, "differenceMinor": 250, "status": "OPEN", "createdAt": now},
+			"stripe":      map[string]any{"ref": "ch_123456", "object": map[string]any{"id": "ch_123456", "kind": "Charge", "status": "succeeded", "amountMinor": 10000, "links": map[string]any{"paymentIntent": "pi_123456"}}, "journals": []any{}},
+			"journals":    []any{map[string]any{"id": "j-1", "type": "CAPTURE", "description": "Capture of order 1", "occurredAt": now, "lines": []any{map[string]any{"account": "1000", "side": "DEBIT", "amountMinor": 10000}}}},
+			"adjustments": []any{}})
+	case p == "/v1/reconciliation/runs":
+		writeJ(w, 200, []any{map[string]any{"id": "run-1", "windowStart": now, "windowEnd": now, "currency": "USD", "ledgerNetMinor": 10000, "stripeNetMinor": 9750, "driftMinor": 250,
+			"drifts": []any{map[string]any{"stripeRef": "ch_123456", "ledgerMinor": 10000, "stripeMinor": 9750}}, "createdAt": now}})
+	case p == "/v1/ledger/adjustments":
+		writeJ(w, 200, []any{map[string]any{"id": "adj-1", "stripeRef": "ch_123456", "currency": "USD", "reason": "Stripe fee booked twice for the charge", "status": "PROPOSED",
+			"proposedBy": "u-1", "proposedAt": now, "lines": []any{map[string]any{"account": "1000", "title": "Stripe clearing", "side": "CREDIT", "amountMinor": 250}, map[string]any{"account": "5000", "title": "Stripe processing fees", "side": "DEBIT", "amountMinor": 250}}}})
+	case strings.HasPrefix(p, "/v1/ledger/adjustments/"):
+		writeJ(w, 200, map[string]any{"id": "adj-1", "stripeRef": "ch_123456", "currency": "USD", "reason": "Stripe fee booked twice for the charge", "status": "PROPOSED",
+			"proposedBy": "u-1", "proposedAt": now, "lines": []any{map[string]any{"account": "1000", "title": "Stripe clearing", "side": "CREDIT", "amountMinor": 250}, map[string]any{"account": "5000", "title": "Stripe processing fees", "side": "DEBIT", "amountMinor": 250}}})
+	// payments: AfroTransact credit, gift cards and their limits (S320, S321)
+	case p == "/v1/credit/adjustments" && r.Method == http.MethodGet:
+		writeJ(w, 200, []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000a1", "customerId": "cus-1", "amountMinor": 25000, "currency": "USD", "source": "STAFF",
+			"reason": "Goodwill for a late order", "status": "PROPOSED", "proposedBy": "stf-2", "proposedAt": now},
+			map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000a2", "customerId": "cus-1", "amountMinor": -1250, "currency": "USD", "source": "STAFF",
+				"reason": "Credited twice by mistake", "status": "POSTED", "proposedBy": "stf-1", "proposedAt": now, "decidedBy": "stf-1", "decidedAt": now}})
+	case p == "/v1/credit/adjustments" && r.Method == http.MethodPost:
+		writeJ(w, 201, map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000a2", "customerId": "cus-1", "amountMinor": body["amountMinor"], "currency": "USD", "source": body["source"],
+			"reason": body["reason"], "status": "PROPOSED", "proposedBy": "stf-1", "proposedAt": now})
+	case strings.HasPrefix(p, "/v1/credit/adjustments/"):
+		writeJ(w, 200, map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000a1", "customerId": "cus-1", "amountMinor": 25000, "currency": "USD", "source": "STAFF",
+			"reason": "Goodwill for a late order", "status": "POSTED", "proposedBy": "stf-2", "proposedAt": now, "decidedBy": "stf-1", "decidedAt": now})
+	case strings.HasPrefix(p, "/v1/credit/customers/"):
+		writeJ(w, 200, map[string]any{"balance": map[string]any{"customerId": "cus-1", "balanceMinor": 2500, "currency": "USD"}, "adjustments": []any{},
+			"entries": []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000e1", "customerId": "cus-1", "kind": "GRANT", "amountMinor": 2500, "currency": "USD", "source": "REFERRAL",
+				"reason": "Referral reward", "actor": "service", "balanceAfterMinor": 2500, "createdAt": now}}})
+	case p == "/v1/credit/liabilities":
+		writeJ(w, 200, map[string]any{"currency": "USD", "creditOutstandingMinor": 12500, "accountsWithCredit": 4, "flowsMinor": map[string]any{"GRANT/REFERRAL": 20000, "SPEND/ORDER": -7500},
+			"giftCardsOutstandingMinor": 10000, "giftCardsOutstandingCount": 2, "giftCardsRedeemedMinor": 5000, "giftCardsVoidedMinor": 2500, "ledgerCreditMinor": 15000,
+			"ledgerGiftCardsMinor": 10000, "creditOnOpenOrdersMinor": 2500})
+	case p == "/v1/gift-cards" && r.Method == http.MethodGet:
+		writeJ(w, 200, []any{giftCardFake(now)})
+	case p == "/v1/gift-cards" && r.Method == http.MethodPost:
+		card := giftCardFake(now)
+		card["origin"], card["amountMinor"], card["recipientEmail"], card["issueReason"] = "STAFF", body["amountMinor"], body["recipientEmail"], body["reason"]
+		writeJ(w, 201, card)
+	case strings.HasPrefix(p, "/v1/gift-cards/"):
+		card := giftCardFake(now)
+		if strings.HasSuffix(p, "/void") {
+			card["status"], card["voidReason"] = "VOID", body["reason"]
+		}
+		writeJ(w, 200, card)
+	case p == "/v1/money/settings" && r.Method == http.MethodGet:
+		writeJ(w, 200, moneySettingsFake(now))
+	case p == "/v1/money/settings" && r.Method == http.MethodPut:
+		writeJ(w, 200, moneySettingsFake(now))
+	case p == "/v1/money/settings/history":
+		writeJ(w, 200, []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000b1", "changedBy": "stf-1", "changedAt": now, "reason": "Raise the gift card ceiling for the holidays",
+			"before": "{}", "after": "{}"}})
+	// payments: the referral program (S322)
+	case p == "/v1/referrals" && r.Method == http.MethodGet:
+		writeJ(w, 200, []any{referralFake(now, "IN_REVIEW"), referralFake(now, "REWARDED")})
+	case p == "/v1/referrals/summary":
+		writeJ(w, 200, map[string]any{"costMinor": 2000, "membershipDays": 0, "pendingMinor": 2000, "currency": "USD", "enabled": true,
+			"byStatus": map[string]any{"IN_REVIEW": 1, "REWARDED": 1, "PENDING": 0}})
+	case strings.HasPrefix(p, "/v1/referrals/"):
+		ref := referralFake(now, "IN_REVIEW")
+		if strings.HasSuffix(p, "/approve") {
+			ref["status"], ref["decision"], ref["decisionReason"] = "WAITING", "APPROVED", body["reason"]
+		}
+		if strings.HasSuffix(p, "/reject") {
+			ref["status"], ref["decision"], ref["decisionReason"] = "REJECTED", "REJECTED", body["reason"]
+		}
+		writeJ(w, 200, ref)
+	case p == "/v1/referral-settings" && (r.Method == http.MethodGet || r.Method == http.MethodPut):
+		writeJ(w, 200, referralSettingsFake(now))
+	case p == "/v1/referral-settings/history":
+		writeJ(w, 200, []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000d1", "changedBy": "stf-1", "changedAt": now, "reason": "Launch offer for the autumn",
+			"before": "{}", "after": "{}"}})
+	case p == "/v1/settings/summary":
+		writeJ(w, 200, []any{map[string]any{"key": "settlement.hold", "label": "Hold before a seller can be paid", "value": "7 days after delivery", "help": "Protects against returns.", "source": "SETTLEMENT_HOLD"},
+			map[string]any{"key": "payout.minimum", "label": "Smallest payout a seller can request", "value": "$25.00", "help": "Requests below it are refused.", "source": "PAYOUT_MINIMUM_MINOR"}})
+	case p == "/v1/tax/nexus":
+		writeJ(w, 200, map[string]any{"through": "2026-10", "windowMonths": 12, "defaultSalesThresholdMinor": 10000000, "states": []any{
+			map[string]any{"jurisdiction": "US-TX", "name": "Texas", "facilitator": true, "salesMinor": 12000000, "orders": 340, "salesThresholdMinor": 10000000, "percent": 120, "status": "EXCEEDED", "registered": false, "customised": false},
+			map[string]any{"jurisdiction": "US-GA", "name": "Georgia", "facilitator": true, "salesMinor": 2000000, "orders": 40, "salesThresholdMinor": 10000000, "transactionsThreshold": 200, "percent": 20, "status": "BELOW", "registered": false, "customised": true, "updatedBy": "u-1", "updatedAt": now}}})
+	case strings.HasPrefix(p, "/v1/tax/nexus/") && r.Method == http.MethodPut:
+		writeJ(w, 200, body)
+	case strings.HasPrefix(p, "/v1/tax/nexus/"):
+		writeJ(w, 200, map[string]any{"jurisdiction": strings.TrimPrefix(p, "/v1/tax/nexus/"), "name": "Texas", "facilitator": true, "salesMinor": 12000000, "orders": 340, "salesThresholdMinor": 10000000, "percent": 120,
+			"status": "EXCEEDED", "registered": false, "customised": false})
+	case p == "/v1/tax/remittances" && r.Method == http.MethodGet:
+		writeJ(w, 200, map[string]any{"obligations": []any{
+			map[string]any{"month": "2026-09", "jurisdiction": "US-TX", "currency": "USD", "dueMinor": 133600, "status": "NOT_FILED", "outstandingMinor": 133600, "changedSinceFilingMinor": 0},
+			map[string]any{"month": "2026-08", "jurisdiction": "US-TX", "currency": "USD", "dueMinor": 100000, "status": "SETTLED", "outstandingMinor": 0, "changedSinceFilingMinor": 0,
+				"remittance": map[string]any{"id": "rem-1", "jurisdiction": "US-TX", "month": "2026-08", "currency": "USD", "dueMinor": 100000, "paidMinor": 100000, "filedOn": "2026-09-15", "paidOn": "2026-09-15",
+					"confirmationRef": "TX-CONF-1", "recordedBy": "u-1", "recordedAt": now, "active": true}}}})
+	case p == "/v1/tax/remittances" && r.Method == http.MethodPost:
+		writeJ(w, 201, body)
+	case strings.HasPrefix(p, "/v1/tax/remittances/") && strings.HasSuffix(p, "/history"):
+		writeJ(w, 200, []any{map[string]any{"id": "rem-1", "jurisdiction": "US-TX", "month": "2026-08", "currency": "USD", "dueMinor": 100000, "paidMinor": 100000, "filedOn": "2026-09-15",
+			"paidOn": "2026-09-15", "recordedBy": "u-1", "recordedAt": now, "active": true}})
+	case strings.HasSuffix(p, "/void") && strings.HasPrefix(p, "/v1/tax/remittances/"):
+		writeJ(w, 200, map[string]any{"id": "rem-1", "active": false})
+	case strings.HasPrefix(p, "/v1/tax/remittances/"):
+		parts := strings.Split(strings.TrimPrefix(p, "/v1/tax/remittances/"), "/")
+		if parts[0] == "2026-08" {
+			writeJ(w, 200, map[string]any{"month": "2026-08", "jurisdiction": parts[1], "currency": "USD", "dueMinor": 100000, "status": "SETTLED", "outstandingMinor": 0, "changedSinceFilingMinor": 0,
+				"remittance": map[string]any{"id": "rem-1", "jurisdiction": parts[1], "month": "2026-08", "currency": "USD", "dueMinor": 100000, "paidMinor": 100000, "filedOn": "2026-09-15",
+					"paidOn": "2026-09-15", "recordedBy": "u-1", "recordedAt": now, "active": true}})
+		} else {
+			writeJ(w, 200, map[string]any{"month": parts[0], "jurisdiction": parts[1], "currency": "USD", "dueMinor": 133600, "status": "NOT_FILED", "outstandingMinor": 133600, "changedSinceFilingMinor": 0})
+		}
+	case p == "/v1/tax/settings":
+		if r.Method == http.MethodPut {
+			writeJ(w, 200, body)
+		} else {
+			writeJ(w, 200, map[string]any{"method": "RULES", "configuredDefault": "RULES", "stripeAvailable": false, "changedBy": "u-1", "changedAt": now,
+				"history": []any{map[string]any{"from": nil, "to": "RULES", "reason": "Our own rules until Stripe Tax is set up", "changedBy": "u-1", "changedAt": now}}})
+		}
+	case p == "/v1/settlement/transfers":
+		writeJ(w, 200, []any{map[string]any{"id": "t-1", "orderId": "ord-1", "orgId": "org-1", "stripeTransferId": "tr_1ABC123", "amountMinor": 50000, "reversedMinor": 0, "currency": "USD", "createdAt": now,
+			"dashboardUrl": "https://dashboard.stripe.com/test/connect/transfers/tr_1ABC123"}})
+	case p == "/v1/stripe/lookup":
+		writeJ(w, 200, map[string]any{"ref": r.URL.Query().Get("ref"), "object": map[string]any{"id": r.URL.Query().Get("ref"), "kind": "Payout", "status": "in_transit", "amountMinor": 50000, "links": map[string]any{}},
+			"journals": []any{}, "connectedAccount": "acct_1", "balance": map[string]any{"account": "acct_1", "currency": "USD", "availableMinor": 1000, "pendingMinor": 2000}})
 	case p == "/v1/fee-schedules" || strings.HasPrefix(p, "/v1/fee-schedules/"):
 		f.feeSchedules(w, r, p, body)
 	// catalog taxonomy and seller's organisation directory (fee editor)
@@ -394,8 +583,11 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			map[string]any{"id": "org-2", "displayName": "Ade's Kitchen", "kind": "SELLER", "status": "APPROVED"},
 			map[string]any{"id": "org-retail", "displayName": "AfroTransact Retail", "kind": "SELLER", "status": "APPROVED"}}, "page": 0, "size": 200, "total": 3})
 	// inventory, retail, fulfilment
+	case p == "/v1/exchange-rates" || p == "/v1/exchange-rates/history":
+		writeJ(w, 200, page(map[string]any{"currency": "MXN", "rateDate": "2026-10-20", "rateToUsd": 0.0577, "updatedBy": "ops", "updatedAt": now, "version": 0}))
 	case p == "/v1/lots" || strings.HasPrefix(p, "/v1/lots/"):
-		lot := map[string]any{"id": "lot-1", "sku": "AT-SHEA", "lotNo": "L1", "nodeId": "HOU", "qtyOnHand": 10, "qtyReserved": 2, "qtyAvailable": 8, "status": "SELLABLE", "version": 4}
+		lot := map[string]any{"id": "lot-1", "sku": "AT-SHEA", "lotNo": "L1", "nodeId": "HOU", "qtyOnHand": 10, "qtyReserved": 2, "qtyAvailable": 8, "status": "SELLABLE", "version": 4,
+			"unitLandedCostMinor": 192, "currency": "USD", "fxRateToUsd": 1, "unitCostUsdMinor": 192}
 		if p == "/v1/lots" {
 			writeJ(w, 200, page(lot))
 		} else {
@@ -561,6 +753,13 @@ func (staffSessions) Resolve(_ context.Context, in app.ResolveInput) (*domain.Ca
 
 func staffBFF(t *testing.T, f *fakePlatform) func(token, method, path string, body any, headers ...string) *httptest.ResponseRecorder {
 	t.Helper()
+	return staffBFFWith(t, f)
+}
+
+// staffBFFWith builds the staff BFF against the fake platform; options add services (for example Lola) that need the
+// deps the shell, tables and dashboard use.
+func staffBFFWith(t *testing.T, f *fakePlatform, opts ...func(d app.StaffDeps, staff *httpapi.StaffServices)) func(token, method, path string, body any, headers ...string) *httptest.ResponseRecorder {
+	t.Helper()
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
 	metrics := httpclient.NewMetrics(prometheus.NewRegistry())
@@ -574,12 +773,15 @@ func staffBFF(t *testing.T, f *fakePlatform) func(token, method, path string, bo
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	d := app.StaffDeps{Up: port.StaffUpstreams{Identity: up("identity"), Seller: up("seller"), Orders: up("orders"), Catalog: up("catalog"), TrustOps: up("trust-ops"),
 		TaxReturns: up("tax-returns"), Payments: up("payments"), Inventory: up("inventory"), Retail: up("retail"), Fulfilment: up("fulfilment"),
-		Content: up("content"), Notifications: up("notifications"), Bookings: up("bookings")},
+		Content: up("content"), Notifications: up("notifications"), Bookings: up("bookings"), Carrier: up("carrier-gateway"), Offers: up("offers")},
 		Matrix: upstreams.NewOrgAccess(httpclient.New(httpclient.Options{Name: "identity", BaseURL: srv.URL, Metrics: metrics, Transport: http.DefaultTransport})),
-		Jobs:   exportfiles.NewMemoryJobs(), Blobs: files, Renderer: exportfiles.NewRenderer(), ExportBasePath: "/api/bff", Log: log, Background: func(fn func()) { fn() }, RetailOrgID: "org-retail"}
+		Jobs:   exportfiles.NewMemoryJobs(), Maintenance: app.NewMaintenanceService(memcache.NewMaintenance(), nil, nil), Blobs: files, Renderer: exportfiles.NewRenderer(), ExportBasePath: "/api/bff", Log: log, Background: func(fn func()) { fn() }, RetailOrgID: "org-retail"}
 	staff := httpapi.StaffServices{Shell: app.NewStaffShellService(d), Records: app.NewStaffRecordsService(d), Dashboard: app.NewStaffDashboardService(d),
 		Exports: app.NewStaffExportsService(d), Support: app.NewStaffSupportService(d), Fees: app.NewStaffFeesService(d), Files: files,
 		Dispatch: app.NewStaffDispatchService(d), Notifications: app.NewStaffNotificationsService(d)}
+	for _, o := range opts {
+		o(d, &staff)
+	}
 	mux := http.NewServeMux()
 	httpapi.New(httpapi.Services{Sessions: staffSessions{}, Staff: staff}, nil, httpapi.SecurityOptions{AllowedOrigins: []string{"http://localhost:3002"}}, log).Register(mux)
 	do := func(token, method, path string, body any, headers ...string) *httptest.ResponseRecorder {
@@ -697,6 +899,9 @@ func TestStaffContractConformance(t *testing.T) {
 
 	// Every table and its first sheet.
 	for _, res := range domain.ResourceKeys {
+		if res == "stripe-lookup" {
+			continue // a lookup shows nothing until an id is searched for; checked below
+		}
 		pg := do("admin", "GET", "/v1/staff/resources/"+res+"?size=10", nil, 200)
 		rows := pg["rows"].([]any)
 		if len(rows) == 0 {
@@ -705,7 +910,141 @@ func TestStaffContractConformance(t *testing.T) {
 		id := rows[0].(map[string]any)["id"].(string)
 		do("admin", "GET", "/v1/staff/resources/"+res+"/"+id, nil, 200)
 	}
+	// AfroTransact credit and gift cards (S320, S321): names, not ids; the reason travels; nothing pays credit out.
+	adj := do("admin", "GET", "/v1/staff/resources/credit-adjustments/0f0f0f0f-0000-4000-8000-0000000000a1", nil, 200)
+	if adj["title"] != "Credit added for Amara Nwosu" {
+		t.Fatalf("credit adjustment sheet = %v", adj["title"])
+	}
+	do("admin", "POST", "/v1/staff/resources/credit-adjustments/0f0f0f0f-0000-4000-8000-0000000000a1/actions/approve", nil, 200)
+	do("support", "POST", "/v1/staff/resources/credit-adjustments", map[string]any{"values": map[string]any{"customerEmail": "amara@example.com", "change": "ADD", "amount": 5, "source": "STAFF", "reason": "Goodwill for a late order"}}, 403)
+	do("admin", "POST", "/v1/staff/resources/credit-adjustments", map[string]any{"values": map[string]any{"customerEmail": "nobody@example.com", "change": "ADD", "amount": 5, "source": "STAFF", "reason": "Goodwill for a late order"}}, 422)
+	do("admin", "POST", "/v1/staff/resources/credit-adjustments", map[string]any{"values": map[string]any{"customerEmail": "amara@example.com", "change": "TAKE_BACK", "amount": 12.5, "source": "STAFF", "reason": "Credited twice by mistake"}}, 201)
+	if sent := f.bodies["POST /v1/credit/adjustments"]; sent["customerId"] != "cus-1" || sent["amountMinor"] != float64(-1250) || sent["reason"] != "Credited twice by mistake" || sent["source"] != "STAFF" {
+		t.Fatalf("payments credit adjustment body = %v", sent)
+	}
+	card := do("admin", "GET", "/v1/staff/resources/gift-cards/0f0f0f0f-0000-4000-8000-0000000000c1", nil, 200)
+	if card["title"] != "Gift card •••• K3M9" {
+		t.Fatalf("gift card sheet = %v", card["title"])
+	}
+	do("admin", "POST", "/v1/staff/resources/gift-cards/0f0f0f0f-0000-4000-8000-0000000000c1/actions/void", map[string]any{"values": map[string]any{"reason": "Bought by mistake, buyer asked"}}, 200)
+	if sent := f.bodies["POST /v1/gift-cards/0f0f0f0f-0000-4000-8000-0000000000c1/void"]; sent["reason"] != "Bought by mistake, buyer asked" {
+		t.Fatalf("void body = %v", sent)
+	}
+	do("support", "POST", "/v1/staff/resources/gift-cards/0f0f0f0f-0000-4000-8000-0000000000c1/actions/void", map[string]any{"values": map[string]any{"reason": "Bought by mistake, buyer asked"}}, 403)
+	do("admin", "POST", "/v1/staff/resources/gift-cards", map[string]any{"values": map[string]any{"amount": 25, "recipientEmail": "ama@example.com", "locale": "en", "sendAt": "2026-12-01", "reason": "Goodwill after a lost parcel"}}, 201)
+	if sent := f.bodies["POST /v1/gift-cards"]; sent["amountMinor"] != float64(2500) || sent["sendAt"] != "2026-12-01T09:00:00Z" || sent["reason"] != "Goodwill after a lost parcel" {
+		t.Fatalf("issue body = %v", sent)
+	}
+	liab := do("admin", "GET", "/v1/staff/resources/credit-liabilities", nil, 200)
+	if len(liab["rows"].([]any)) != 9 {
+		t.Fatalf("liability rows = %v", liab["rows"])
+	}
+	do("admin", "PATCH", "/v1/staff/resources/money-settings/money", map[string]any{"values": map[string]any{"giftCardMin": 10, "giftCardMax": 600, "presets": "25, 50, 100", "creditApprovalLimit": 150,
+		"terms.en": "Gift cards never expire.", "reason": "Raise the ceiling for the holidays"}}, 200)
+	if sent := f.bodies["PUT /v1/money/settings"]; sent["giftCardMaxMinor"] != float64(60000) || sent["creditApprovalLimitMinor"] != float64(15000) || sent["version"] != float64(3) ||
+		sent["reason"] != "Raise the ceiling for the holidays" || len(sent["giftCardPresets"].([]any)) != 3 {
+		t.Fatalf("money settings body = %v", sent)
+	}
+	do("admin", "PATCH", "/v1/staff/resources/money-settings/money", map[string]any{"values": map[string]any{"giftCardMin": 10, "giftCardMax": 600, "presets": "lots", "creditApprovalLimit": 150, "reason": "Raise the ceiling for the holidays"}}, 422)
+	do("support", "PATCH", "/v1/staff/resources/money-settings/money", map[string]any{"values": map[string]any{"giftCardMin": 10, "giftCardMax": 600, "presets": "25", "creditApprovalLimit": 150, "reason": "Raise the ceiling for the holidays"}}, 403)
+	// The referral program (S322): referrals by name with their rewards and cost, the review queue, each side's reward.
+	refs := do("admin", "GET", "/v1/staff/resources/referrals?status=IN_REVIEW", nil, 200)
+	if cols := refs["columns"].([]any); cols[0].(map[string]any)["label"] != "Referrer" || cols[1].(map[string]any)["label"] != "Friend" {
+		t.Fatalf("referral columns = %v", cols)
+	}
+	if facets := refs["facets"].([]any); facets[0].(map[string]any)["value"] != "IN_REVIEW" {
+		t.Fatalf("the review queue comes first: %v", facets)
+	}
+	row := refs["rows"].([]any)[0].(map[string]any)["cells"].(map[string]any)
+	if strings.Contains(fmt.Sprint(row), "cus-") || row["referrerName"] != "Amara Nwosu" || row["flagsText"] != "Same device" ||
+		row["rewardsText"] != "Referrer $10.00 credit (pending) · Friend 14 membership days (deferred)" {
+		t.Fatalf("referral row = %v", row)
+	}
+	refSheet := do("admin", "GET", "/v1/staff/resources/referrals/0f0f0f0f-0000-4000-8000-0000000000f1", nil, 200)
+	// the title and the sections speak of names; the ids are only in the closing "IDs" section, copyable
+	if refSheet["title"] != "Amara Nwosu referred Kofi B." || strings.Contains(fmt.Sprint(refSheet["sections"].([]any)[:3]), "cus-") ||
+		!strings.Contains(fmt.Sprint(refSheet["actions"]), "approve") {
+		t.Fatalf("referral sheet = %v", refSheet)
+	}
+	do("support", "POST", "/v1/staff/resources/referrals/0f0f0f0f-0000-4000-8000-0000000000f1/actions/approve", map[string]any{"values": map[string]any{"reason": "Two housemates, checked by phone"}}, 403)
+	do("admin", "POST", "/v1/staff/resources/referrals/0f0f0f0f-0000-4000-8000-0000000000f1/actions/approve", map[string]any{"values": map[string]any{"reason": "Two housemates, checked by phone"}}, 200)
+	if sent := f.bodies["POST /v1/referrals/0f0f0f0f-0000-4000-8000-0000000000f1/approve"]; sent["reason"] != "Two housemates, checked by phone" {
+		t.Fatalf("approve body = %v", sent)
+	}
+	do("admin", "POST", "/v1/staff/resources/referrals/0f0f0f0f-0000-4000-8000-0000000000f1/actions/reject", map[string]any{"values": map[string]any{"reason": "The same household made a second account"}}, 200)
+	if sent := f.bodies["POST /v1/referrals/0f0f0f0f-0000-4000-8000-0000000000f1/reject"]; sent["reason"] != "The same household made a second account" {
+		t.Fatalf("reject body = %v", sent)
+	}
+	rset := do("admin", "GET", "/v1/staff/resources/referral-settings/referral", nil, 200)
+	form := rset["editForm"].(map[string]any)
+	sections := map[string]bool{}
+	for _, fld := range form["fields"].([]any) {
+		sections[fld.(map[string]any)["section"].(string)] = true
+	}
+	if !sections["What the customer who shares earns"] || !sections["What the friend who joins earns"] || len(form["changeKeys"].([]any)) < 10 {
+		t.Fatalf("settings form = %v", form)
+	}
+	if !strings.Contains(fmt.Sprint(rset["sections"]), "2000") {
+		t.Fatalf("the program cost is on the settings sheet: %v", rset["sections"])
+	}
+	same := map[string]any{"enabled": true, "referrerType": "CREDIT", "referrerCredit": 10, "referrerDays": 0, "referredType": "CREDIT", "referredCredit": 10, "referredDays": 0,
+		"qualifyingEvent": "FIRST_ORDER_DELIVERED", "minOrder": 30, "returnWindowDays": 30, "validityDays": 90, "maxRewarded": 20, "maxCredit": 500, "reason": "Nothing really changes here"}
+	do("admin", "PATCH", "/v1/staff/resources/referral-settings/referral", map[string]any{"values": same}, 422) // Save is refused until something changed
+	changed := map[string]any{}
+	for k, v := range same {
+		changed[k] = v
+	}
+	changed["referrerType"], changed["referrerDays"], changed["referredCredit"], changed["reason"] = "MEMBERSHIP_DAYS", 14, 12.5, "Membership for sharers, 12.50 for friends"
+	do("support", "PATCH", "/v1/staff/resources/referral-settings/referral", map[string]any{"values": changed}, 403)
+	do("admin", "PATCH", "/v1/staff/resources/referral-settings/referral", map[string]any{"values": changed}, 200)
+	refSent := f.bodies["PUT /v1/referral-settings"]
+	rr, rd := refSent["referrer"].(map[string]any), refSent["referred"].(map[string]any)
+	if rr["type"] != "MEMBERSHIP_DAYS" || rr["membershipDays"] != float64(14) || rr["creditMinor"] != float64(0) || rd["type"] != "CREDIT" || rd["creditMinor"] != float64(1250) ||
+		refSent["minOrderMinor"] != float64(3000) || refSent["maxCreditPerCustomerMinor"] != float64(50000) || refSent["version"] != float64(3) || refSent["reason"] != "Membership for sharers, 12.50 for friends" {
+		t.Fatalf("referral settings body = %v", refSent)
+	}
+	made := do("admin", "POST", "/v1/staff/resources/stripe-lookup", map[string]any{"values": map[string]any{"ref": "po_123456", "orgId": "org-1"}}, 201)
+	if made["id"] != "po_123456 org-1" {
+		t.Fatalf("stripe lookup id = %v", made["id"])
+	}
 	do("admin", "GET", "/v1/staff/resources/nope", nil, 404)
+
+	// Names, not ids: the Seller of a product is the organisation's name, search finds the name and the id, and the
+	// sheet keeps the id as a secondary ID field.
+	prods := do("admin", "GET", "/v1/staff/resources/products", nil, 200)
+	sellerKey := ""
+	for _, c := range prods["columns"].([]any) {
+		if c.(map[string]any)["label"] == "Seller" {
+			sellerKey = c.(map[string]any)["key"].(string)
+		}
+	}
+	if sellerKey == "" || sellerKey == "ownerOrgId" || prods["rows"].([]any)[0].(map[string]any)["cells"].(map[string]any)[sellerKey] != "Kente Naturals" {
+		t.Fatalf("products table = %v", prods)
+	}
+	for _, q := range []string{"kente", "org-1"} {
+		if found := do("admin", "GET", "/v1/staff/resources/products?q="+q, nil, 200)["rows"].([]any); len(found) != 1 {
+			t.Fatalf("search %q found %d products, want 1", q, len(found))
+		}
+	}
+	psheet := do("admin", "GET", "/v1/staff/resources/products/prd-1", nil, 200)
+	if !strings.Contains(psheet["subtitle"].(string), "Kente Naturals") || strings.Contains(psheet["subtitle"].(string), "org-1") {
+		t.Fatalf("product subtitle = %v", psheet["subtitle"])
+	}
+	idsShown := false
+	for _, sec := range psheet["sections"].([]any) {
+		for _, f := range sec.(map[string]any)["fields"].([]any) {
+			fm := f.(map[string]any)
+			if fm["value"] == "org-1" {
+				idsShown = sec.(map[string]any)["title"] == "IDs" && fm["label"] == "Seller ID" && fm["kind"] == "mono"
+				if !idsShown {
+					t.Fatalf("the raw id appears outside the IDs section: %v", fm)
+				}
+			}
+		}
+	}
+	if !idsShown {
+		t.Fatalf("no Seller ID field in %v", psheet["sections"])
+	}
 	do("admin", "GET", "/v1/staff/resources/claims?status=NOPE", nil, 422)
 	do("support", "GET", "/v1/staff/resources/users", nil, 403)
 
@@ -728,7 +1067,8 @@ func TestStaffContractConformance(t *testing.T) {
 		}
 	}
 	do("admin", "POST", "/v1/staff/resources/applications/app-1/actions/final-approve", map[string]any{"values": map[string]any{"reasonCode": "DOCUMENTS_VERIFIED"}}, 409)
-	do("admin", "POST", "/v1/staff/resources/applications/app-1/actions/send-back", map[string]any{"values": map[string]any{"reasonCode": "DOCUMENTS_VERIFIED", "note": "Check the EIN"}}, 200)
+	// Seller refuses every step-2 decision by the step-one reviewer, sending back included.
+	do("admin", "POST", "/v1/staff/resources/applications/app-1/actions/send-back", map[string]any{"values": map[string]any{"reasonCode": "DOCUMENTS_VERIFIED", "note": "Check the EIN"}}, 409)
 	// Claim refunds above the role's limit are refused; forms are validated.
 	do("support", "POST", "/v1/staff/resources/claims/clm-1/actions/refund", map[string]any{"values": map[string]any{"note": "ok"}}, 409)
 	do("admin", "POST", "/v1/staff/resources/claims/clm-1/actions/refund", map[string]any{"values": map[string]any{}}, 422)
@@ -737,7 +1077,7 @@ func TestStaffContractConformance(t *testing.T) {
 		t.Fatalf("decision body = %v", f.bodies["POST /v1/claims/clm-1/decision"])
 	}
 	do("admin", "POST", "/v1/staff/resources/purchase-orders/po-1/actions/approve", map[string]any{"values": map[string]any{"note": "ok"}}, 200)
-	do("admin", "POST", "/v1/staff/resources/orders/AT-000001/actions/shipment-status", map[string]any{"values": map[string]any{"shipmentId": "shp-1", "to": "CANCELLED", "reason": "Customer asked"}}, 200)
+	do("admin", "POST", "/v1/staff/resources/orders/AT-000001/actions/shipment-status", map[string]any{"values": map[string]any{"step": "shp-1|CANCELLED", "reason": "Customer asked"}}, 200)
 	do("admin", "POST", "/v1/staff/resources/orders/AT-000001/actions/nope", nil, 404)
 	// Create and edit with validation.
 	do("admin", "POST", "/v1/staff/resources/tax-rates", map[string]any{"values": map[string]any{"state": "Texas", "zipPrefix": "77", "name": "X", "rate": 0.5}}, 422)
@@ -1043,7 +1383,7 @@ func TestStaffContractConformance(t *testing.T) {
 	// Notifications → Templates (S268): list, detail with sample, previews, new versions, test-send; edits need templates:write.
 	tl := do("admin", "GET", "/v1/staff/notifications/templates", nil, 200)
 	if items := tl["items"].([]any); len(items) != 2 || tl["canEdit"] != true || items[1].(map[string]any)["key"] != "order.confirmed" ||
-		items[1].(map[string]any)["latestVersion"] != float64(2) || items[1].(map[string]any)["updatedBy"] != "stf-1" ||
+		items[1].(map[string]any)["latestVersion"] != float64(2) || items[1].(map[string]any)["updatedBy"] != "Amara Nwosu" ||
 		fmt.Sprint(items[1].(map[string]any)["channels"]) != "[email sms]" {
 		t.Fatalf("templates = %v", tl)
 	}
@@ -1092,7 +1432,7 @@ func TestStaffContractConformance(t *testing.T) {
 		t.Fatalf("email needs subject and html = %v", e)
 	}
 	tplCreated := do("admin", "POST", "/v1/staff/notifications/templates/order.confirmed/versions", tplDraft, 201)
-	if tplCreated["version"] != float64(3) || tplCreated["channel"] != "email" || tplCreated["createdBy"] != "stf-1" {
+	if tplCreated["version"] != float64(3) || tplCreated["channel"] != "email" || tplCreated["createdBy"] != "Amara Nwosu" {
 		t.Fatalf("created = %v", tplCreated)
 	}
 	if b := f.bodies["POST /v1/templates"]; b["key"] != "order.confirmed" || b["subject"] != "Order {{.orderNumber}} is in" {

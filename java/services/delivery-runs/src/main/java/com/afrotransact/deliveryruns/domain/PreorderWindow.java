@@ -21,13 +21,22 @@ import java.util.UUID;
  * @param draft     not published yet
  * @param active    false while paused
  * @param runId     the run the window's orders were handed to at close
+ * @param outcome   what became of the window beyond its dates: waiting for a staff decision below the minimum,
+ *                  proceeded below it, or cancelled (null = it follows its dates)
  * @param createdAt created
  * @param updatedAt last change
  * @param version   optimistic lock
  */
 public record PreorderWindow(UUID id, String code, WindowDetails details, Map<CreativeSlot, CreativeRef> creatives,
-                             boolean draft, boolean active, UUID runId, Instant createdAt, Instant updatedAt,
-                             long version) {
+                             boolean draft, boolean active, UUID runId, WindowOutcome outcome,
+                             Instant createdAt, Instant updatedAt, long version) {
+
+    /** A window without an outcome. */
+    public PreorderWindow(UUID id, String code, WindowDetails details, Map<CreativeSlot, CreativeRef> creatives,
+                          boolean draft, boolean active, UUID runId, Instant createdAt, Instant updatedAt,
+                          long version) {
+        this(id, code, details, creatives, draft, active, runId, null, createdAt, updatedAt, version);
+    }
 
     /** Placeholder in the SMS copy that notifications replaces with the tracked link. */
     public static final String SMS_LINK = "{link}";
@@ -44,7 +53,7 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
 
     /** A new draft. */
     public static PreorderWindow draft(UUID id, String code, WindowDetails details, Instant now) {
-        return new PreorderWindow(id, code, details, Map.of(), true, true, null, now, now, 0);
+        return new PreorderWindow(id, code, details, Map.of(), true, true, null, null, now, now, 0);
     }
 
     /** {@code LBK} for {@code US/TX/Lubbock}: letters of the first target's city (or region), three, upper case. */
@@ -64,6 +73,12 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
     public PreorderStatus status(Instant now) {
         if (draft) {
             return PreorderStatus.DRAFT;
+        }
+        if (outcome == WindowOutcome.CANCELLED) {
+            return PreorderStatus.CANCELLED;
+        }
+        if (outcome == WindowOutcome.AWAITING_DECISION) {
+            return PreorderStatus.AWAITING_DECISION;
         }
         if (!active) {
             return PreorderStatus.PAUSED;
@@ -137,12 +152,12 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
         return failed;
     }
 
-    /** The design's checks plus the payment setup: a door window needs a door fee in its currency. */
-    public List<RuleViolation> publishChecks(PaymentSettings payment) {
+    /** The design's checks plus the delivery fees: a door window needs a fee rule (or its own fee) in its currency. */
+    public List<RuleViolation> publishChecks(DeliveryFees fees) {
         List<RuleViolation> failed = publishChecks();
-        if (details.door() && doorFee(payment).isEmpty()) {
+        if (details.door() && details.doorFeeOverride() == null && !fees.offersDoor(details.currency())) {
             failed.add(new RuleViolation("delivery-runs.preorder-fee-missing",
-                    "Door delivery fee set for " + details.currency()));
+                    "AfroTransact delivery fee set for " + details.currency() + " (Delivery fees)"));
         }
         return failed;
     }
@@ -154,9 +169,9 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
         return details.smsCopy().replace(SMS_LINK, pageUrl + "?src=sms&po=" + code + "&cr=announce");
     }
 
-    /** As {@link #publishChecks(PaymentSettings)}, plus: the announcement SMS fits one message with its tracked link. */
-    public List<RuleViolation> publishChecks(PaymentSettings payment, String pageUrl) {
-        List<RuleViolation> failed = publishChecks(payment);
+    /** As {@link #publishChecks(DeliveryFees)}, plus: the announcement SMS fits one message with its tracked link. */
+    public List<RuleViolation> publishChecks(DeliveryFees fees, String pageUrl) {
+        List<RuleViolation> failed = publishChecks(fees);
         if (pageUrl != null && !Gsm7.fitsOneSegment(smsAsSent(pageUrl))) {
             failed.add(new RuleViolation("delivery-runs.preorder-sms-too-long",
                     "Announcement SMS fits one message with its tracked link"));
@@ -166,45 +181,44 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
 
     // ---- fees ------------------------------------------------------------------------------------------------
 
-    /** Effective door fee: the window override, else the platform fee in the window's currency. */
-    public Optional<Money> doorFee(PaymentSettings payment) {
-        if (details.doorFeeOverride() != null) {
-            return Optional.of(details.doorFeeOverride());
-        }
-        return payment.doorFee(details.currency());
+    /**
+     * The door fee a shopper pays and the rule behind it: the window's own fee, else the AfroTransact delivery rule's
+     * band for how far the window delivers. Empty when no door delivery is possible (no rule, or beyond the last band).
+     */
+    public Optional<FeeSnapshot> doorFee(DeliveryFees fees) {
+        return fees.door(this);
     }
 
-    /** Effective pickup fee: the window override, else the platform fee (free by default). */
-    public Money pickupFee(PaymentSettings payment) {
-        return details.pickupFeeOverride() != null ? details.pickupFeeOverride()
-                : payment.pickupFee(details.currency());
+    /** The pickup fee a shopper pays and the rule behind it: the window's own fee, else the pickup rule (free if none). */
+    public FeeSnapshot pickupFee(DeliveryFees fees) {
+        return fees.pickup(this);
     }
 
     // ---- lifecycle -------------------------------------------------------------------------------------------
 
     /** DRAFT → published (active). Every check must pass. */
-    public PreorderWindow publish(PaymentSettings payment, Instant now) {
-        return publish(payment, null, now);
+    public PreorderWindow publish(DeliveryFees fees, Instant now) {
+        return publish(fees, null, now);
     }
 
     /** DRAFT → published, also checking the announcement SMS with its link under {@code pageUrl} (null skips it). */
-    public PreorderWindow publish(PaymentSettings payment, String pageUrl, Instant now) {
+    public PreorderWindow publish(DeliveryFees fees, String pageUrl, Instant now) {
         if (!draft) {
             throw new InvalidTransitionException(status(now).name(), "PUBLISHED");
         }
-        List<RuleViolation> failed = publishChecks(payment, pageUrl);
+        List<RuleViolation> failed = publishChecks(fees, pageUrl);
         if (!failed.isEmpty()) {
             throw new PublishBlockedException(failed);
         }
-        return new PreorderWindow(id, code, details, creatives, false, true, runId, createdAt, now, version);
+        return new PreorderWindow(id, code, details, creatives, false, true, runId, outcome, createdAt, now, version);
     }
 
     public PreorderWindow pause(Instant now) {
         PreorderStatus s = status(now);
-        if (draft || !active || s == PreorderStatus.DELIVERED) {
+        if (draft || !active || !closeCleared() || s == PreorderStatus.DELIVERED) {
             throw new InvalidTransitionException(s.name(), PreorderStatus.PAUSED.name());
         }
-        return new PreorderWindow(id, code, details, creatives, false, false, runId, createdAt, now, version);
+        return new PreorderWindow(id, code, details, creatives, false, false, runId, outcome, createdAt, now, version);
     }
 
     public PreorderWindow resume(Instant now) {
@@ -212,56 +226,56 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
         if (draft || active) {
             throw new InvalidTransitionException(s.name(), "ACTIVE");
         }
-        return new PreorderWindow(id, code, details, creatives, false, true, runId, createdAt, now, version);
+        return new PreorderWindow(id, code, details, creatives, false, true, runId, outcome, createdAt, now, version);
     }
 
     /**
      * Resume, re-running the publish checks first: a window only goes back on the storefront when it would still be
      * allowed to publish (e.g. its currency still has a door fee).
      */
-    public PreorderWindow resume(PaymentSettings payment, String pageUrl, Instant now) {
+    public PreorderWindow resume(DeliveryFees fees, String pageUrl, Instant now) {
         PreorderStatus s = status(now);
         if (draft || active || timeStatus(now) == PreorderStatus.DELIVERED) {
             throw new InvalidTransitionException(s.name(), "ACTIVE");
         }
-        List<RuleViolation> failed = publishChecks(payment, pageUrl);
+        List<RuleViolation> failed = publishChecks(fees, pageUrl);
         if (!failed.isEmpty()) {
             throw new PublishBlockedException(failed);
         }
-        return new PreorderWindow(id, code, details, creatives, false, true, runId, createdAt, now, version);
+        return new PreorderWindow(id, code, details, creatives, false, true, runId, outcome, createdAt, now, version);
     }
 
     /** A published window that is not delivered yet has its own on/off switch (drafts and delivered ones do not). */
     public boolean switchable(Instant now) {
-        return !draft && timeStatus(now) != PreorderStatus.DELIVERED;
+        return !draft && closeCleared() && timeStatus(now) != PreorderStatus.DELIVERED;
     }
 
     /**
      * Sets this window's own switch (idempotent: the same state returns this window unchanged). Switching on runs the
-     * publish checks ({@link #resume(PaymentSettings, String, Instant)}); drafts and delivered windows refuse.
+     * publish checks ({@link #resume(DeliveryFees, String, Instant)}); drafts and delivered windows refuse.
      */
-    public PreorderWindow switchTo(boolean on, PaymentSettings payment, String pageUrl, Instant now) {
+    public PreorderWindow switchTo(boolean on, DeliveryFees fees, String pageUrl, Instant now) {
         if (!switchable(now)) {
             throw new InvalidTransitionException(status(now).name(), on ? "ACTIVE" : PreorderStatus.PAUSED.name());
         }
         if (on == active) {
             return this;
         }
-        return on ? resume(payment, pageUrl, now) : pause(now);
+        return on ? resume(fees, pageUrl, now) : pause(now);
     }
 
     /** Changes the details; a published window must still pass its checks, a delivered one is read-only. */
-    public PreorderWindow edit(WindowDetails changed, PaymentSettings payment, Instant now) {
-        return edit(changed, payment, null, now);
+    public PreorderWindow edit(WindowDetails changed, DeliveryFees fees, Instant now) {
+        return edit(changed, fees, null, now);
     }
 
-    /** As {@link #edit(WindowDetails, PaymentSettings, Instant)}, checking the SMS link under {@code pageUrl}. */
-    public PreorderWindow edit(WindowDetails changed, PaymentSettings payment, String pageUrl, Instant now) {
+    /** As {@link #edit(WindowDetails, DeliveryFees, Instant)}, checking the SMS link under {@code pageUrl}. */
+    public PreorderWindow edit(WindowDetails changed, DeliveryFees fees, String pageUrl, Instant now) {
         requireEditable(now);
-        PreorderWindow next = new PreorderWindow(id, code, changed, creatives, draft, active, runId, createdAt, now,
+        PreorderWindow next = new PreorderWindow(id, code, changed, creatives, draft, active, runId, outcome, createdAt, now,
                 version);
         if (!draft) {
-            List<RuleViolation> failed = next.publishChecks(payment, pageUrl);
+            List<RuleViolation> failed = next.publishChecks(fees, pageUrl);
             if (!failed.isEmpty()) {
                 throw new PublishBlockedException(failed);
             }
@@ -274,7 +288,7 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
         Map<CreativeSlot, CreativeRef> next = new EnumMap<>(CreativeSlot.class);
         next.putAll(creatives);
         next.put(slot, ref);
-        return new PreorderWindow(id, code, details, next, draft, active, runId, createdAt, now, version);
+        return new PreorderWindow(id, code, details, next, draft, active, runId, outcome, createdAt, now, version);
     }
 
     public PreorderWindow withoutCreative(CreativeSlot slot, Instant now) {
@@ -286,17 +300,91 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
         Map<CreativeSlot, CreativeRef> next = new EnumMap<>(CreativeSlot.class);
         next.putAll(creatives);
         next.remove(slot);
-        return new PreorderWindow(id, code, details, next, draft, active, runId, createdAt, now, version);
+        return new PreorderWindow(id, code, details, next, draft, active, runId, outcome, createdAt, now, version);
     }
 
     /** The window's orders were handed to {@code run}. */
     public PreorderWindow handedTo(UUID run, Instant now) {
-        return new PreorderWindow(id, code, details, creatives, draft, active, run, createdAt, now, version);
+        return new PreorderWindow(id, code, details, creatives, draft, active, run, outcome, createdAt, now, version);
     }
 
     private void requireEditable(Instant now) {
         if (!draft && timeStatus(now) == PreorderStatus.DELIVERED) {
             throw new RuleViolation("delivery-runs.preorder-not-editable", "A delivered pre-order cannot be changed");
         }
+        if (outcome == WindowOutcome.CANCELLED) {
+            throw new RuleViolation("delivery-runs.preorder-not-editable", "A cancelled pre-order cannot be changed");
+        }
+        if (outcome == WindowOutcome.AWAITING_DECISION) {
+            throw new RuleViolation("delivery-runs.preorder-not-editable",
+                    "This pre-order is waiting for a decision; cancel or proceed first");
+        }
+    }
+
+    // ---- minimum, decision, cancellation ---------------------------------------------------------------------
+
+    /** Whether {@code orders} counted orders are fewer than the window's minimum (always false without a minimum). */
+    public boolean belowMinimum(int orders) {
+        return details.minOrders() > 0 && orders < details.minOrders();
+    }
+
+    /** Whether the close step may run: no decision pending and not cancelled. */
+    public boolean closeCleared() {
+        return outcome == null || outcome == WindowOutcome.PROCEEDED;
+    }
+
+    /**
+     * The close date has passed below the minimum: the window waits for staff (no auto-cancel). Idempotent.
+     */
+    public PreorderWindow awaitingDecision(Instant now) {
+        if (outcome == WindowOutcome.AWAITING_DECISION) {
+            return this;
+        }
+        if (draft || outcome != null || !now.isAfter(details.closesAt())) {
+            throw new InvalidTransitionException(status(now).name(), PreorderStatus.AWAITING_DECISION.name());
+        }
+        return new PreorderWindow(id, code, details, creatives, draft, active, runId, WindowOutcome.AWAITING_DECISION,
+                createdAt, now, version);
+    }
+
+    /** Staff go ahead below the minimum: only from AWAITING_DECISION. */
+    public PreorderWindow proceed(Instant now) {
+        if (outcome != WindowOutcome.AWAITING_DECISION) {
+            throw new InvalidTransitionException(status(now).name(), "PROCEEDED");
+        }
+        return new PreorderWindow(id, code, details, creatives, draft, active, runId, WindowOutcome.PROCEEDED,
+                createdAt, now, version);
+    }
+
+    /**
+     * Cancels the window: any published window that is not delivered and not cancelled already (an OPEN window with
+     * orders, a closed one waiting for a decision, one handed to a run that has not left yet).
+     */
+    public PreorderWindow cancel(Instant now) {
+        if (draft || outcome == WindowOutcome.CANCELLED || timeStatus(now) == PreorderStatus.DELIVERED) {
+            throw new InvalidTransitionException(status(now).name(), PreorderStatus.CANCELLED.name());
+        }
+        return new PreorderWindow(id, code, details, creatives, draft, active, runId, WindowOutcome.CANCELLED,
+                createdAt, now, version);
+    }
+
+    /**
+     * Closes the window now because it reached its minimum before the close date (the close date becomes just before
+     * {@code now}). Only an OPEN, live window with a minimum that has been met.
+     */
+    public PreorderWindow closeEarly(int orders, Instant now) {
+        PreorderStatus s = status(now);
+        if (s != PreorderStatus.OPEN) {
+            throw new InvalidTransitionException(s.name(), "CLOSED");
+        }
+        if (details.minOrders() < 1 || orders < details.minOrders()) {
+            throw new RuleViolation("delivery-runs.preorder-minimum-not-met",
+                    "The minimum of " + details.minOrders() + " orders has not been reached (" + orders + ")");
+        }
+        // One millisecond ago, so the window reads CLOSED at once and the scheduler's next tick closes it.
+        Instant justBefore = now.minusMillis(1);
+        Instant closes = justBefore.isAfter(details.opensAt()) ? justBefore : details.opensAt().plusMillis(1);
+        return new PreorderWindow(id, code, details.withClosesAt(closes), creatives, draft, active, runId, outcome,
+                createdAt, now, version);
     }
 }

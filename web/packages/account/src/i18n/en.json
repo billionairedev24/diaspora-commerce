@@ -267,5 +267,11 @@
   "hub.crumb": "Breadcrumb",
   "hub.securityTitle": "Login & security",
   "common.showAll": "Show all ({n})",
-  "common.showFewer": "Show fewer"
+  "common.showFewer": "Show fewer",
+  "hub.deliveryAlerts": "Delivery alerts",
+  "hub.deliveryAlertsSub": "Delivery runs and pre-orders for your area, by email, text, app or WhatsApp",
+  "hub.credit": "AfroTransact credit",
+  "hub.creditSub": "Balance, history and gift cards",
+  "hub.refer": "Refer a friend",
+  "hub.referSub": "Share your code, earn rewards"
 }

@@ -41,6 +41,7 @@ const config: Config = {
       title: 'AfroTransact Developers',
       logo: { alt: 'AfroTransact', src: 'img/logo-mark.svg' },
       items: [
+        { to: '/user-guide', label: 'User guide', position: 'left' },
         { to: '/getting-started', label: 'Get started', position: 'left' },
         { to: '/services', label: 'Services', position: 'left' },
         { to: '/api', label: 'API reference', position: 'left' },

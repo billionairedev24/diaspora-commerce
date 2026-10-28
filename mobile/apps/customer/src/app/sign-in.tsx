@@ -1,5 +1,7 @@
-/* S163 launch screen: the app opens on sign-in (no guest mode). Credentials, MFA, passkeys and social sign-in run on
-   identity's hosted pages via OIDC authorization code + PKCE; the email typed here is passed as login_hint.
+/* S163 launch screen: the app opens on sign-in (no guest mode). Email, password and the 2-step code are entered right
+   here (BFF → identity first-party sign-in, then this app's own authorization-code + PKCE tokens); only social
+   providers, passkeys and creating an account open identity's secure page. A first sign-in on the phone continues into
+   setup (Face ID, passcode, notifications).
    Welcome: full-bleed brand imagery (photo from assets/hero or the drawn Sunday-table art) fading to black, with the
    sign-in form on a white sheet below it. */
 import { StatusBar } from 'expo-status-bar';
@@ -15,10 +17,13 @@ import { CustomerHeroArt } from '@/brand/CustomerHeroArt';
 import { Hero } from '@/brand/Hero';
 import heroPhoto from '@/brand/heroPhoto';
 import { env } from '@/config/env';
+import { type Factors, signInMessage } from '@/domain/nativeSignIn';
+import { SecondFactorView } from '@/features/auth/SecondFactorView';
 import { useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { Logo } from '@/ui/Logo';
 import { AppText, Banner, Button, Field, MAX_FONT_SCALE } from '@/ui/primitives';
+import { useKeyboardHeight } from '@/ui/useKeyboardHeight';
 
 const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
 
@@ -30,8 +35,12 @@ const SOCIALS: Array<{ provider: 'google' | 'apple' | 'facebook'; label: string;
 
 export default function SignIn() {
   const tr = useT();
-  const { signIn, flash } = useAuth();
+  const { signIn, signInWithPassword, cancelSignIn, flash } = useAuth();
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [factors, setFactors] = useState<Factors | null>(null);
+  const [notice, setNotice] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -47,16 +56,36 @@ export default function SignIn() {
     }
   };
 
-  const submit = () => {
+  const submit = async () => {
     const e = email.trim().toLowerCase();
-    if (e && !RE_EMAIL.test(e)) return setErr(tr('cu.signIn.invalidEmail'));
-    void run('email', { kind: 'sign-in', ...(e ? { loginHint: e } : {}) });
+    if (!RE_EMAIL.test(e)) return setErr(tr('cu.signIn.invalidEmail'));
+    if (!password) return setErr(tr('cu.signIn.enterPassword'));
+    setErr('');
+    setNotice('');
+    setBusy('email');
+    try {
+      const step = await signInWithPassword(e, password);
+      if (step.kind === 'second-factor') setFactors(step.factors);
+    } catch (x) {
+      setErr(signInMessage(x, tr('cu.signIn.failed')));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const backToPassword = (message?: string) => {
+    cancelSignIn();
+    setFactors(null);
+    setPassword('');
+    setNotice(message ?? '');
   };
 
   const open = (path: string) => void WebBrowser.openBrowserAsync(`${env.webUrl}${path}`);
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const heroHeight = Math.max(280, Math.round(height * 0.46));
+  const keyboard = useKeyboardHeight();
+  // With the keyboard up the picture gives way to the form, and the form lifts above the keyboard.
+  const heroHeight = keyboard > 0 ? insets.top + 96 : Math.max(280, Math.round(height * 0.46));
 
   return (
     <View style={styles.root}>
@@ -71,16 +100,25 @@ export default function SignIn() {
           </View>
         </Hero>
       </View>
-      <ScrollView style={styles.sheet} contentContainerStyle={[styles.sheetBody, { paddingBottom: insets.bottom + sp['6'] }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      <ScrollView style={styles.sheet} contentContainerStyle={[styles.sheetBody, { paddingBottom: Math.max(insets.bottom, keyboard) + sp['6'] }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      {factors ? <SecondFactorView factors={factors} onBack={backToPassword} /> : (<>
       <AppText variant="display">{tr('cu.signIn.signIn')}</AppText>
       {flash ? <Banner tone="info" icon={Info}>{flash}</Banner> : null}
-      <Field label={tr('cu.signIn.email')} value={email} onChangeText={(v) => { setEmail(v); setErr(''); }} placeholder={tr('cu.signIn.youExampleCom')} keyboardType="email-address" autoCapitalize="none" autoComplete="email" textContentType="emailAddress" returnKeyType="go" onSubmitEditing={submit} />
-      <AppText variant="small" color={c.textMuted}>{tr('cu.signIn.youLlEnterYourPassword')}</AppText>
-      <Pressable accessibilityRole="link" onPress={() => open('/signin?reset=1')}>
-        <AppText variant="small" style={{ textDecorationLine: 'underline' }}>{tr('cu.signIn.forgotPassword')}</AppText>
-      </Pressable>
+      {notice ? <Banner tone="info" icon={Info}>{notice}</Banner> : null}
+      <Field label={tr('cu.signIn.email')} value={email} onChangeText={(v) => { setEmail(v); setErr(''); }} placeholder={tr('cu.signIn.youExampleCom')} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" textContentType="username" returnKeyType="next" />
+      <View style={{ gap: sp['1'] }}>
+        <Field label={tr('cu.signIn.password')} value={password} onChangeText={(v) => { setPassword(v); setErr(''); }} secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} autoComplete="current-password" textContentType="password" returnKeyType="go" onSubmitEditing={() => void submit()} />
+        <View style={styles.passwordRow}>
+          <Pressable accessibilityRole="button" onPress={() => setShowPassword((v) => !v)} hitSlop={10}>
+            <AppText variant="small" style={{ textDecorationLine: 'underline' }}>{showPassword ? tr('cu.signIn.hidePassword') : tr('cu.signIn.showPassword')}</AppText>
+          </Pressable>
+          <Pressable accessibilityRole="link" onPress={() => open('/signin?reset=1')} hitSlop={10}>
+            <AppText variant="small" style={{ textDecorationLine: 'underline' }}>{tr('cu.signIn.forgotPassword')}</AppText>
+          </Pressable>
+        </View>
+      </View>
       {err ? <Banner tone="danger" icon={WarningCircle}>{err}</Banner> : null}
-      <Button label={tr('cu.signIn.signIn')} onPress={submit} loading={busy === 'email'} disabled={!!busy && busy !== 'email'} />
+      <Button label={tr('cu.signIn.signIn')} onPress={() => void submit()} loading={busy === 'email'} disabled={!!busy && busy !== 'email'} />
       <Button kind="outline" icon={Fingerprint} label={tr('cu.signIn.signInWithAPasskey')} onPress={() => void run('passkey', { kind: 'sign-in' })} loading={busy === 'passkey'} disabled={!!busy && busy !== 'passkey'} />
       <View style={styles.divider}>
         <View style={styles.rule} />
@@ -105,6 +143,7 @@ export default function SignIn() {
         <AppText variant="caption" style={{ textDecorationLine: 'underline' }} onPress={() => open('/legal/privacy')}>{tr('cu.signIn.privacyNotice')}</AppText>.
       </AppText>
       {env.mocks ? <AppText variant="caption" color={c.textSubtle}>{tr('cu.signIn.devMocksAreOnSign')}</AppText> : null}
+      </>)}
       </ScrollView>
     </View>
   );
@@ -117,6 +156,7 @@ const styles = StyleSheet.create({
   headline: { fontSize: t.fontSize['3xl'], lineHeight: t.fontSize['3xl'] * t.leading.tight, fontWeight: t.fontWeight.black, letterSpacing: -0.45 },
   sheet: { flex: 1, marginTop: -sp['6'], backgroundColor: c.canvas, borderTopLeftRadius: t.radius.lg * 2, borderTopRightRadius: t.radius.lg * 2 },
   sheetBody: { paddingHorizontal: sp['4'], paddingTop: sp['6'], gap: sp['4'] },
+  passwordRow: { flexDirection: 'row', justifyContent: 'space-between' },
   divider: { flexDirection: 'row', alignItems: 'center', gap: sp['3'] },
   rule: { flex: 1, height: 1, backgroundColor: c.border },
   socials: { flexDirection: 'row', gap: sp['2'] },

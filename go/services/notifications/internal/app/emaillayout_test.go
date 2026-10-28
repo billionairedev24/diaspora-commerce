@@ -88,7 +88,11 @@ func TestEveryEmailRendersOnTheBrandedLayout(t *testing.T) {
 		check(strings.Contains(h, "tel:&#43;18335550199") && strings.Contains(h, "1001 Texas Ave"), "no phone or address in the footer")
 		check(strings.Contains(h, "/legal/privacy") && strings.Contains(h, "/account/security"), "no legal or preferences links")
 		check(strings.Contains(h, "app-store.png") && strings.Contains(h, "google-play.png"), "no app store badges")
-		check(strings.Contains(h, `name="color-scheme"`) && strings.Contains(h, "prefers-color-scheme: dark"), "no dark-mode support")
+		// Light only in every client: a white body between the black header and footer, never a dark-grey variant.
+		check(strings.Contains(h, `<meta name="color-scheme" content="light only">`) && strings.Contains(h, `<meta name="supported-color-schemes" content="light">`),
+			"not declared light-only")
+		check(!strings.Contains(h, "prefers-color-scheme") && !strings.Contains(h, "data-ogsc"), "a dark-mode variant")
+		check(strings.Contains(h, `class="at-card at-pad" style="background-color:#FFFFFF;`), "the body is not white")
 		check(strings.Contains(h, "max-width:600px") && strings.Contains(h, "@media only screen and (max-width: 620px)"), "not 600px / responsive")
 		check(strings.Contains(h, "display:none;font-size:1px"), "no hidden preheader")
 		check(!linkCSS.MatchString(h) && !scriptTag.MatchString(h), "external CSS or a script")
@@ -120,7 +124,12 @@ func TestEveryEmailRendersOnTheBrandedLayout(t *testing.T) {
 			check(!adSectionRe.MatchString(h), "advertorial in an email the policy does not allow")
 		}
 		check(strings.Contains(out.Text, "Help Center: https://afrotransact.com/help"), "text part without the footer")
-		golden := filepath.Join(dir, tpl.Key+".html")
+		// One golden file per key; other languages (gift cards are sent in the buyer's language) keep their own.
+		goldenName := tpl.Key
+		if tpl.Locale != "" && tpl.Locale != "en" {
+			goldenName += "." + tpl.Locale
+		}
+		golden := filepath.Join(dir, goldenName+".html")
 		if *updateGolden {
 			if err := os.WriteFile(golden, []byte(h), 0o644); err != nil {
 				t.Fatal(err)
@@ -214,8 +223,17 @@ func TestFullDocumentsAreSentAsIs(t *testing.T) {
 	}
 }
 
+// maxSmsSegments is one GSM-7 segment for every text, two for delivery run alerts: their link carries the UTM
+// attribution (source, medium, campaign, content) that makes every announcement visible in analytics.
+func maxSmsSegments(key string) int {
+	if strings.HasPrefix(key, "run.") {
+		return 2
+	}
+	return 1
+}
+
 // TestSmsTemplatesAreShortAndCompliant: every SMS starts with the brand, non-security texts carry STOP, and each
-// renders as one GSM-7 segment with its sample data.
+// renders as one GSM-7 segment (two for run alerts) with its sample data.
 func TestSmsTemplatesAreShortAndCompliant(t *testing.T) {
 	samples, _ := app.NewTemplateSamples(context.Background(), sampleLinks)
 	r := brandedRenderer()
@@ -235,7 +253,7 @@ func TestSmsTemplatesAreShortAndCompliant(t *testing.T) {
 		if tpl.Category != domain.CategorySecurity && !strings.Contains(out.Text, "STOP") {
 			t.Errorf("%s: no STOP: %q", tpl.Key, out.Text)
 		}
-		if seg := domain.CountSmsSegments(out.Text); seg.Encoding != domain.EncodingGSM7 || seg.Segments != 1 {
+		if seg := domain.CountSmsSegments(out.Text); seg.Encoding != domain.EncodingGSM7 || seg.Segments > maxSmsSegments(tpl.Key) {
 			t.Errorf("%s: %s, %d segments (%d units): %q", tpl.Key, seg.Encoding, seg.Segments, seg.Units, out.Text)
 		}
 	}

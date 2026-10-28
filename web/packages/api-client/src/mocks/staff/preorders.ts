@@ -8,6 +8,16 @@ import { z } from 'zod';
 
 import { type AccessLevel } from '../../schemas/seller';
 import {
+  type DeliveryFeeChange,
+  type DeliveryFeeRule,
+  FeeMethodSchema,
+  feeRuleOf,
+  resolveCarrierFee,
+  resolveDoorFee,
+  resolvePickupFee,
+  ruleInputProblems
+} from '../../staff-delivery-fees';
+import {
   areaFromKey,
   type AreaLevel,
   areaOn,
@@ -17,6 +27,7 @@ import {
   type CreativeSlot,
   CreativeSlotSchema,
   currencyOfTargets,
+  decisionReasonProblem,
   DEFAULT_PAYMENT,
   effectiveFees,
   keyWithin,
@@ -31,12 +42,16 @@ import {
   type PreorderChannel,
   PreorderChannelSchema,
   preorderChecks,
+  PreorderChoiceSchema,
   type PreorderCreative,
+  type PreorderDecision,
   type PreorderList,
   type PreorderListRow,
   type PreorderOrder,
   type PreorderOrderPage,
   PreorderOrderStatusSchema,
+  type PreorderOutcome,
+  type PreorderRefunds,
   type PreorderRegion,
   type PreorderSettings,
   PreorderSettingsSchema,
@@ -91,15 +106,21 @@ const LAST = ['Okafor', 'Mensah', 'Diallo', 'Eze', 'Bello', 'Adeyemi', 'Owusu', 
 interface SeedWindow {
   id: string; targets: string[]; name: string; opens: string; closes: string; delivers: string; ribbon: string; headline: string; cats: string[];
   door: boolean; pickup: boolean; showCount: boolean; active: boolean; draft?: boolean; seedN: number;
+  /** Fewest orders the window needs (default {@link MIN_ORDERS_DEFAULT}); `outcome` is set for the seeded decision states. */
+  min?: number; outcome?: PreorderOutcome;
 }
+/** The platform default a new window starts with (delivery-runs `PREORDERS_DEFAULT_MIN_ORDERS`). */
+const MIN_ORDERS_DEFAULT = 10;
 /* design/at-preorder.js SEED, plus a paused window and a window whose only area is switched off (both spec states). */
 const SEED: SeedWindow[] = [
-  { id: 'lbk-7', targets: ['US/TX/Lubbock'], name: 'Lubbock Pre-order #7', opens: '2026-10-06T09:00', closes: '2026-10-22T23:59', delivers: '2026-10-25', ribbon: 'Lubbock pre-order is open', headline: 'Fresh egusi, garri and palm oil, delivered to Lubbock on Sunday, Oct 25.', cats: ['Pantry', 'Spices', 'Snacks', 'Oils'], door: true, pickup: true, showCount: true, active: true, seedN: 142 },
-  { id: 'ama-4', targets: ['US/TX/Amarillo'], name: 'Amarillo Pre-order #4', opens: '2026-09-26T09:00', closes: '2026-10-09T23:59', delivers: '2026-10-12', ribbon: 'Amarillo pre-order', headline: 'Amarillo deliveries go out Monday, Oct 12.', cats: ['Pantry', 'Spices'], door: true, pickup: false, showCount: false, active: true, seedN: 96 },
+  { id: 'lbk-7', targets: ['US/TX/Lubbock'], name: 'Lubbock Pre-order #7', opens: '2026-10-06T09:00', closes: '2026-10-22T23:59', delivers: '2026-10-25', ribbon: 'Lubbock pre-order is open', headline: 'Fresh egusi, garri and palm oil, delivered to Lubbock on Sunday, Oct 25.', cats: ['Pantry', 'Spices', 'Snacks', 'Oils'], door: true, pickup: true, showCount: true, active: true, seedN: 142, min: 100 },
+  { id: 'ama-4', targets: ['US/TX/Amarillo'], name: 'Amarillo Pre-order #4', opens: '2026-09-26T09:00', closes: '2026-10-09T23:59', delivers: '2026-10-12', ribbon: 'Amarillo pre-order', headline: 'Amarillo deliveries go out Monday, Oct 12.', cats: ['Pantry', 'Spices'], door: true, pickup: false, showCount: false, active: true, seedN: 96, min: 50 },
   { id: 'elp-3', targets: ['US/TX/El Paso'], name: 'El Paso Pre-order #3', opens: '2026-10-15T09:00', closes: '2026-10-30T23:59', delivers: '2026-11-03', ribbon: 'El Paso pre-order opens Oct 15', headline: 'El Paso, your next pre-order opens Thursday, Oct 15.', cats: ['Pantry', 'Spices', 'Snacks'], door: true, pickup: true, showCount: true, active: true, seedN: 0 },
   { id: 'mid-2', targets: ['US/TX/Midland', 'US/TX/Odessa'], name: 'Midland–Odessa Pre-order #2', opens: '2026-10-27T09:00', closes: '2026-11-07T23:59', delivers: '2026-11-11', ribbon: 'Midland–Odessa pre-order', headline: 'Midland and Odessa, one pre-order for both cities.', cats: ['Pantry'], door: true, pickup: false, showCount: true, active: true, draft: true, seedN: 0 },
   { id: 'tor-1', targets: ['CA/ON/Toronto', 'CA/ON/Mississauga', 'CA/ON/Brampton'], name: 'Greater Toronto Pre-order #1', opens: '2026-11-02T09:00', closes: '2026-11-14T23:59', delivers: '2026-11-18', ribbon: 'Toronto pre-order', headline: 'First AfroTransact pre-order for the Greater Toronto Area.', cats: ['Pantry', 'Spices'], door: true, pickup: true, showCount: true, active: true, seedN: 0 },
-  { id: 'lbk-6', targets: ['US/TX/Lubbock'], name: 'Lubbock Pre-order #6', opens: '2026-09-08T09:00', closes: '2026-09-24T23:59', delivers: '2026-09-27', ribbon: 'Lubbock pre-order', headline: 'Lubbock #6', cats: ['Pantry'], door: true, pickup: true, showCount: true, active: true, seedN: 178 },
+  /* Closed on Oct 8 with 7 of the 10 orders it needs: waiting for a staff decision (ADR 0005 §4). */
+  { id: 'ode-1', targets: ['US/TX/Odessa'], name: 'Odessa Pre-order #1', opens: '2026-09-28T09:00', closes: '2026-10-08T23:59', delivers: '2026-10-13', ribbon: 'Odessa pre-order', headline: 'Odessa, your first pre-order.', cats: ['Pantry'], door: true, pickup: false, showCount: true, active: true, seedN: 7, min: 10, outcome: 'AWAITING_DECISION' },
+  { id: 'lbk-6', targets: ['US/TX/Lubbock'], name: 'Lubbock Pre-order #6', opens: '2026-09-08T09:00', closes: '2026-09-24T23:59', delivers: '2026-09-27', ribbon: 'Lubbock pre-order', headline: 'Lubbock #6', cats: ['Pantry'], door: true, pickup: true, showCount: true, active: true, seedN: 178, min: 100 },
   { id: 'ama-5', targets: ['US/TX/Amarillo'], name: 'Amarillo Pre-order #5', opens: '2026-10-13T09:00', closes: '2026-10-27T23:59', delivers: '2026-10-30', ribbon: 'Amarillo pre-order', headline: 'Amarillo, the next pre-order is on hold.', cats: ['Pantry', 'Spices'], door: true, pickup: false, showCount: true, active: false, seedN: 0 },
   { id: 'lrd-1', targets: ['US/TX/Laredo'], name: 'Laredo Pre-order #1', opens: '2026-10-20T09:00', closes: '2026-11-01T23:59', delivers: '2026-11-04', ribbon: 'Laredo pre-order', headline: 'Laredo, your first pre-order.', cats: ['Pantry'], door: true, pickup: false, showCount: true, active: true, seedN: 0 }
 ];
@@ -131,8 +152,11 @@ const pick = <T>(r: () => number, a: readonly T[]): T => a[Math.floor(r() * a.le
 
 /** Late adds by Idempotency-Key, per mock state (replays answer the same order). */
 const LATE_ADD_REPLAYS = new WeakMap<object, Map<string, PreorderOrder>>();
-export interface MockPreorderWindow extends PreorderWindowInput {
+export interface MockPreorderWindow extends Omit<PreorderWindowInput, 'minOrders'> {
   id: string;
+  minOrders: number;
+  outcome: PreorderOutcome | null;
+  decisions: PreorderDecision[];
   code: string;
   draft: boolean;
   active: boolean;
@@ -147,8 +171,13 @@ export interface MockPreorderState {
   windows: MockPreorderWindow[];
   orders: PreorderOrder[];
   settings: PreorderSettings;
+  /** Delivery fee rules (ADR 0005 §3) and their audit trail, newest first. */
+  feeRules: DeliveryFeeRule[];
+  feeChanges: DeliveryFeeChange[];
   areas: CoverageArea[];
   assets: Record<string, { url: string | null; width: number; height: number; contentType: string }>;
+  /** Real-clock time each order of a cancelled window started refunding (the mock settles refunds a few seconds later). */
+  refunds: Record<string, number>;
   seq: number;
 }
 
@@ -169,7 +198,7 @@ export const locName = (targets: string[]): string => {
 
 /** A placeholder creative (SVG data URL at the asset's size) for seeded slots. */
 function placeholderCreative(slot: CreativeSlot, width: number, height: number, label: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#067457"/><circle cx="${width * 0.82}" cy="${height * 0.3}" r="${Math.min(width, height) * 0.35}" fill="#FFD400"/><text x="6%" y="55%" font-family="Figtree, sans-serif" font-size="${Math.round(Math.min(width, height) / 7)}" font-weight="900" fill="#FFFFFF">${label}</text><text x="6%" y="72%" font-family="Figtree, sans-serif" font-size="${Math.round(Math.min(width, height) / 16)}" fill="#FFF4BF">${slot} · ${width}×${height}</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#067457"/><circle cx="${width * 0.82}" cy="${height * 0.3}" r="${Math.min(width, height) * 0.35}" fill="#FFD400"/><text x="6%" y="55%" font-family="Inter, sans-serif" font-size="${Math.round(Math.min(width, height) / 7)}" font-weight="900" fill="#FFFFFF">${label}</text><text x="6%" y="72%" font-family="Inter, sans-serif" font-size="${Math.round(Math.min(width, height) / 16)}" fill="#FFF4BF">${slot} · ${width}×${height}</text></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
@@ -203,7 +232,8 @@ function genOrders(w: MockPreorderWindow, now: number, doorFee: number): Preorde
       orderId: `ord-${w.id}-${number}`, number, windowId: w.id, customerName: customer, phone: f.phone, email: '', addressLine: f.line1, city: f.city, region: f.region, zip: f.zip,
       deliveryNote: f.note, placedAt: new Date(placed).toISOString(), channel, trackingTag: `src=${TAG[channel]}&po=${w.code}`,
       lines: lines.map((l) => { const p = CATALOG.find((x) => x.id === l.id); return { atin: atinOf(l.id), name: p?.name ?? l.id, sellerName: p?.seller ?? 'Marketplace seller', qty: l.qty }; }),
-      units: lines.reduce((a, l) => a + l.qty, 0), fulfilment: door ? 'DOOR' : 'PICKUP', total: sub + (door ? doorFee : 0), status, note
+      units: lines.reduce((a, l) => a + l.qty, 0), fulfilment: door ? 'DOOR' : 'PICKUP', total: sub + (door ? doorFee : 0), status, note,
+      refundStatus: null, refundAmount: null, refundUpdatedAt: null, refundError: null
     };
   };
   for (let i = 0; i < (span ? seedN : 0); i++) {
@@ -236,6 +266,27 @@ function genOrders(w: MockPreorderWindow, now: number, doorFee: number): Preorde
 }
 const SEED_N: Record<string, number> = Object.fromEntries(SEED.map((s) => [s.id, s.seedN]));
 
+/**
+ * The rules delivery-runs starts with (its migration of the old per-currency fee maps): $7.99 within 100 miles in USD and
+ * $9.99 in CAD, free pickup, and the flat carrier rate orders-service used ($5.99, free over $35).
+ */
+export function seedFeeRules(base: number): { rules: DeliveryFeeRule[]; changes: DeliveryFeeChange[] } {
+  const at0 = new Date(base - 14 * DAY).toISOString();
+  const rule = (id: string, method: DeliveryFeeRule['method'], currency: string, extra: Partial<DeliveryFeeRule>): DeliveryFeeRule => ({
+    id: `fee-${id}`, method, currency, version: 1, bands: [], feeMinor: 0, handlingMinor: 0, fallbackMinor: 0, freeAboveMinor: null, coverageMiles: 0, updatedAt: at0, updatedBy: 'migration',
+    reason: 'Carried over from the pre-order payment settings', ...extra
+  });
+  const rules = [
+    rule('door-usd', 'AFROTRANSACT_DELIVERY', 'USD', { bands: [{ fromMiles: 0, toMiles: 100, feeMinor: 799 }], coverageMiles: 100 }),
+    rule('door-cad', 'AFROTRANSACT_DELIVERY', 'CAD', { bands: [{ fromMiles: 0, toMiles: 100, feeMinor: 999 }], coverageMiles: 100 }),
+    rule('carrier-usd', 'CARRIER', 'USD', { fallbackMinor: 599, freeAboveMinor: 3500, reason: 'The flat carrier rate orders-service used before fee rules' }),
+    rule('pickup-usd', 'PICKUP', 'USD', {}),
+    rule('pickup-cad', 'PICKUP', 'CAD', {})
+  ];
+  const changes = rules.map((r): DeliveryFeeChange => ({ id: `chg-${r.id}-1`, method: r.method, currency: r.currency, version: 1, before: null, after: r, actor: 'migration', reason: r.reason ?? '', at: at0 }));
+  return { rules, changes: changes.reverse() };
+}
+
 export function seedPreorders(now: Date): MockPreorderState {
   const base = now.getTime();
   const shift = Math.round((base - DESIGN_TODAY) / DAY) * DAY;
@@ -243,9 +294,11 @@ export function seedPreorders(now: Date): MockPreorderState {
     id: s.id, code: s.id.toUpperCase(), name: s.name, targets: s.targets, opensAt: at(s.opens, shift), closesAt: at(s.closes, shift), deliversOn: dateShift(s.delivers, shift),
     ribbon: s.ribbon, headline: s.headline, smsCopy: `AfroTransact: ${s.name.replace(/ #\d+$/, '')} is open. {link} Reply STOP to opt out`, categories: s.cats,
     door: s.door, pickup: s.pickup, pickupPoint: s.pickup ? `${areaFromKey(s.targets[0] ?? '').city ?? ''} community hall, 10am–2pm` : null, doorFeeOverride: null, pickupFeeOverride: null,
-    showCount: s.showCount, socialBudget: 20_000, comms: [...ALL_COMMS], draft: !!s.draft, active: s.active, version: 1, creatives: []
+    showCount: s.showCount, socialBudget: 20_000, comms: [...ALL_COMMS], draft: !!s.draft, active: s.active, version: 1, creatives: [],
+    minOrders: s.min ?? MIN_ORDERS_DEFAULT, outcome: s.outcome ?? null, decisions: []
   }));
   const settings: PreorderSettings = { enabled: true, fallback: 'SHIP', placements: { ribbon: true, hero: true, badge: true, pdp: true, cart: true, family: true }, payment: structuredClone(DEFAULT_PAYMENT), version: 1 };
+  const { rules: feeRules, changes: feeChanges } = seedFeeRules(base);
   const lbk = windows.find((w) => w.id === 'lbk-7');
   const lbk6 = windows.find((w) => w.id === 'lbk-6');
   const assets: MockPreorderState['assets'] = {};
@@ -261,8 +314,12 @@ export function seedPreorders(now: Date): MockPreorderState {
   seedCreative(lbk, 'FEED', 1080, 1350); // 4:5, flagged "Ratio off"
   seedCreative(lbk6, 'HERO', 1920, 640);
   windows.filter((w) => !w.draft && w.id !== 'lbk-7' && w.id !== 'lbk-6').forEach((w) => seedCreative(w, 'HERO', 1920, 640));
-  const orders = windows.flatMap((w) => genOrders(w, base, effectiveFees(w, settings.payment, currencyOfTargets(w.targets)).door));
-  return { seededAt: Date.now(), base, windows, orders, settings, areas: DEF_AREAS.map((a) => ({ ...a })), assets, seq: 0 };
+  const orders = windows.flatMap((w) => genOrders(w, base, effectiveFees(w, feeRules, currencyOfTargets(w.targets)).door));
+  const awaiting = windows.find((w) => w.outcome === 'AWAITING_DECISION');
+  if (awaiting) {
+    awaiting.decisions.push({ id: `dec-${awaiting.id}-1`, kind: 'AWAITING', reason: `Closed with ${orders.filter((o) => o.windowId === awaiting.id && o.status !== 'CANCELLED').length} of ${awaiting.minOrders} orders`, actor: 'system', orders: orders.filter((o) => o.windowId === awaiting.id && o.status !== 'CANCELLED').length, minimum: awaiting.minOrders, at: awaiting.closesAt });
+  }
+  return { seededAt: Date.now(), base, windows, orders, settings, feeRules, feeChanges, areas: DEF_AREAS.map((a) => ({ ...a })), assets, refunds: {}, seq: 0 };
 }
 
 /* ── Views ── */
@@ -270,7 +327,36 @@ export function seedPreorders(now: Date): MockPreorderState {
 const nowOf = (s: MockPreorderState) => s.base + (Date.now() - s.seededAt);
 const statusOf = (s: MockPreorderState, w: MockPreorderWindow) => preorderStatus(w, nowOf(s));
 const live = (o: PreorderOrder) => o.status !== 'CANCELLED';
-export const ordersOf = (s: MockPreorderState, w: MockPreorderWindow) => s.orders.filter((o) => o.windowId === w.id).sort((a, b) => b.placedAt.localeCompare(a.placedAt));
+/** How far an order's refund has got: refunding for a few seconds, then released (nothing was captured yet) or refunded. */
+function withRefund(s: MockPreorderState, o: PreorderOrder): PreorderOrder {
+  const started = s.refunds[o.orderId];
+  if (started === undefined) return o;
+  const settled = Date.now() - started >= 4000;
+  const refunded = [...o.orderId].reduce((a, c) => a + c.charCodeAt(0), 0) % 5 === 0;
+  return {
+    ...o,
+    refundStatus: !settled ? 'PENDING' : refunded ? 'REFUNDED' : 'VOIDED',
+    refundAmount: settled ? o.total : null,
+    refundUpdatedAt: new Date(settled ? started + 4000 : started).toISOString(),
+    refundError: null
+  };
+}
+
+export const ordersOf = (s: MockPreorderState, w: MockPreorderWindow) =>
+  s.orders.filter((o) => o.windowId === w.id).map((o) => withRefund(s, o)).sort((a, b) => b.placedAt.localeCompare(a.placedAt));
+
+/** The scheduler's job in delivery-runs: a window that closed below its minimum waits for staff (no auto-cancel). */
+function settleWindows(s: MockPreorderState): void {
+  const now = nowOf(s);
+  s.windows.forEach((w) => {
+    if (w.draft || w.outcome || w.minOrders < 1 || now <= Date.parse(w.closesAt)) return;
+    const counted = s.orders.filter((o) => o.windowId === w.id && o.status !== 'CANCELLED').length;
+    if (counted >= w.minOrders) return;
+    w.outcome = 'AWAITING_DECISION';
+    w.version += 1;
+    w.decisions.push({ id: `dec-${w.id}-${w.decisions.length + 1}`, kind: 'AWAITING', reason: `Closed with ${counted} of ${w.minOrders} orders`, actor: 'system', orders: counted, minimum: w.minOrders, at: new Date(now).toISOString() });
+  });
+}
 
 function areaOffOf(s: MockPreorderState, w: MockPreorderWindow): boolean {
   const st = statusOf(s, w);
@@ -281,7 +367,7 @@ function areaOffOf(s: MockPreorderState, w: MockPreorderWindow): boolean {
 export function windowView(s: MockPreorderState, w: MockPreorderWindow): PreorderWindow {
   const paid = ordersOf(s, w).filter(live);
   const currency = currencyOfTargets(w.targets);
-  const fees = effectiveFees(w, s.settings.payment, currency);
+  const fees = effectiveFees(w, s.feeRules, currency);
   return {
     ...w,
     targets: w.targets.map((key) => ({ key, label: areaLabel(key) })),
@@ -289,13 +375,18 @@ export function windowView(s: MockPreorderState, w: MockPreorderWindow): Preorde
     currency,
     effectiveDoorFee: fees.door,
     effectivePickupFee: fees.pickup,
+    doorFeeRule: w.door ? fees.doorRule : null,
+    pickupFeeRule: w.pickup ? fees.pickupRule : null,
     status: statusOf(s, w),
     areaOff: areaOffOf(s, w),
     switchState: switchStateOf({ draft: w.draft, active: w.active, status: statusOf(s, w) }, s.settings.enabled, windowAreaOn(s.areas, w.targets)),
     switchable: switchStateOf({ draft: w.draft, active: w.active, status: statusOf(s, w) }, true, true) !== 'NOT_LIVE',
     orderCount: paid.length,
     revenue: paid.reduce((a, o) => a + o.total, 0),
-    creatives: CREATIVE_SLOTS.flatMap((sl) => w.creatives.filter((c) => c.slot === sl.slot))
+    creatives: CREATIVE_SLOTS.flatMap((sl) => w.creatives.filter((c) => c.slot === sl.slot)),
+    minimumMet: w.minOrders > 0 && paid.length >= w.minOrders,
+    canCloseEarly: statusOf(s, w) === 'OPEN' && w.minOrders > 0 && paid.length >= w.minOrders,
+    decisionNeeded: statusOf(s, w) === 'AWAITING_DECISION'
   };
 }
 
@@ -303,7 +394,8 @@ const rowOf = (s: MockPreorderState, w: MockPreorderWindow): PreorderListRow => 
   const v = windowView(s, w);
   return {
     id: v.id, code: v.code, name: v.name, where: v.where, opensAt: v.opensAt, closesAt: v.closesAt, deliversOn: v.deliversOn, status: v.status, areaOff: v.areaOff,
-    orderCount: v.orderCount, revenue: v.revenue, currency: v.currency, active: v.active, switchable: v.switchable, switchState: v.switchState, version: v.version
+    orderCount: v.orderCount, revenue: v.revenue, currency: v.currency, active: v.active, switchable: v.switchable, switchState: v.switchState, version: v.version,
+    minOrders: v.minOrders, decisionNeeded: v.decisionNeeded
   };
 };
 
@@ -373,7 +465,7 @@ export const PREORDER_ORDER_COLUMNS: TableColumnLike[] = [
   { key: 'number', kind: 'mono' }, { key: 'customerName', kind: 'strong' }, { key: 'phone', kind: 'text' }, { key: 'email', kind: 'text' },
   { key: 'addressLine', kind: 'text' }, { key: 'city', kind: 'text' }, { key: 'zip', kind: 'mono' }, { key: 'deliveryNote', kind: 'text' },
   { key: 'placedAt', kind: 'datetime' }, { key: 'channel', kind: 'status' }, { key: 'trackingTag', kind: 'mono' }, { key: 'units', kind: 'number' },
-  { key: 'fulfilment', kind: 'status' }, { key: 'total', kind: 'money' }, { key: 'status', kind: 'status' }
+  { key: 'fulfilment', kind: 'status' }, { key: 'total', kind: 'money' }, { key: 'status', kind: 'status' }, { key: 'refundStatus', kind: 'status' }
 ];
 export const preorderOrderRow = (o: PreorderOrder) => ({
   id: o.orderId,
@@ -538,13 +630,35 @@ export interface PreorderHandlerDeps {
   problem: (status: number, code: string, title: string, detail: string, errors?: Record<string, string>) => Error;
 }
 
+/** What the preview route takes. */
+const FeePreviewBodySchema = z.object({
+  method: FeeMethodSchema,
+  currency: z.string().regex(/^[A-Za-z]{3}$/),
+  distanceMiles: z.number().min(0).max(500).nullish(),
+  windowId: z.string().nullish(),
+  carrierQuoteMinor: z.number().int().min(0).nullish(),
+  itemsMinor: z.number().int().min(0).nullish()
+});
+/** What the rule route takes (the numbers are checked by ruleInputProblems, like the BFF does). */
+const FeeInputBodySchema = z.object({
+  bands: z.array(z.object({ fromMiles: z.number(), toMiles: z.number(), feeMinor: z.number() })).optional(),
+  feeMinor: z.number().optional(),
+  handlingMinor: z.number().optional(),
+  fallbackMinor: z.number().optional(),
+  freeAboveMinor: z.number().nullish(),
+  reason: z.string()
+});
+
 const RANK: Record<AccessLevel, number> = { VIEW: 1, EDIT: 2, APPROVE: 3, FULL: 4 };
 
 export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
   const { route, json, problem } = deps;
   const forbidden = (detail: string) => problem(403, 'FORBIDDEN', 'Forbidden', detail);
   const notFound = (detail: string) => problem(404, 'NOT_FOUND', 'Not found', detail);
-  const st = (ctx: PreorderCtx) => ctx.db.preorders;
+  const st = (ctx: PreorderCtx) => {
+    settleWindows(ctx.db.preorders);
+    return ctx.db.preorders;
+  };
   const view = (ctx: PreorderCtx) => {
     if (!allows(ctx.roles, 'preorders')) throw forbidden('Your roles can’t open pre-orders.');
   };
@@ -552,6 +666,10 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
     view(ctx);
     const lv = levelOf(ctx.roles, 'preorders');
     if (!ctx.permissions.includes('preorders:manage') || !lv || RANK[lv] < RANK.EDIT) throw forbidden('Only pre-order managers can open, edit, pause or publish pre-orders and upload creatives.');
+  };
+  const canManage = (ctx: PreorderCtx) => {
+    const lv = levelOf(ctx.roles, 'preorders');
+    return ctx.permissions.includes('preorders:manage') && !!lv && RANK[lv] >= RANK.EDIT;
   };
   const full = (ctx: PreorderCtx) => {
     view(ctx);
@@ -593,7 +711,7 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
   /** Sets one window's own switch (never the master switch): switched, unchanged, or skipped (draft / delivered). */
   const switchOne = (ctx: PreorderCtx, w: MockPreorderWindow, active: boolean): 'switched' | 'unchanged' | 'skipped' => {
     const st0 = statusOf(st(ctx), w);
-    if (w.draft || st0 === 'DELIVERED') return 'skipped';
+    if (w.draft || st0 === 'DELIVERED' || st0 === 'CANCELLED' || st0 === 'AWAITING_DECISION') return 'skipped';
     if (w.active === active) return 'unchanged';
     w.active = active;
     w.version += 1;
@@ -610,6 +728,30 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
   };
   const csv = (fileName: string, text: string) =>
     new HttpResponse(text, { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${fileName}"` } });
+  /** A reason is required for every decision (it is logged with who and when). */
+  const reasonRequired = (reason: string) => {
+    const bad = decisionReasonProblem(reason);
+    if (bad) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Say why.', { reason: bad === 'required' ? 'Say why: the reason is logged with your name' : 'At most 500 characters' });
+  };
+  const record = (ctx: PreorderCtx, w: MockPreorderWindow, kind: PreorderDecision['kind'], reason: string) => {
+    const s = st(ctx);
+    w.decisions.push({ id: `dec-${w.id}-${w.decisions.length + 1}`, kind, reason: reason.trim(), actor: ctx.action.actorId, orders: ordersOf(s, w).filter(live).length, minimum: w.minOrders, at: new Date(nowOf(s)).toISOString() });
+  };
+  /** Cancels the window: every counting order is cancelled and starts refunding (settled a few seconds later). */
+  const cancelWindow = (ctx: PreorderCtx, w: MockPreorderWindow, reason: string, kind: PreorderDecision['kind']): PreorderWindow => {
+    const s = st(ctx);
+    const status = statusOf(s, w);
+    if (w.draft || status === 'DELIVERED' || w.outcome === 'CANCELLED') throw problem(409, 'delivery-runs.invalid-transition', 'Invalid transition', `Cannot move from ${status} to CANCELLED`);
+    record(ctx, w, kind, reason);
+    s.orders.filter((o) => o.windowId === w.id && live(o)).forEach((o) => {
+      o.status = 'CANCELLED';
+      s.refunds[o.orderId] = Date.now();
+    });
+    w.outcome = 'CANCELLED';
+    w.version += 1;
+    audit(ctx, 'preorder.window.cancelled', w.id, `Cancelled ${w.name} and refunded its orders: ${reason.trim()}`);
+    return windowView(s, w);
+  };
 
   return [
     http.get(
@@ -622,14 +764,14 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
         const q = (qs.get('q') ?? '').trim().toLowerCase();
         const page = Math.max(0, Number(qs.get('page') ?? 0) || 0);
         const rows = s.windows.map((w) => rowOf(s, w));
-        const counts = { all: rows.length, open: 0, upcoming: 0, closed: 0, draft: 0 };
+        const counts = { all: rows.length, open: 0, upcoming: 0, decision: 0, closed: 0, draft: 0 };
         rows.forEach((r) => {
           const t = tabOf(r.status);
           if (t && t !== 'all') counts[t] += 1;
         });
         const items = rows.filter((r) => (tab === 'all' || tabOf(r.status) === tab) && (!q || `${r.name} ${r.where} ${r.code}`.toLowerCase().includes(q)));
         const size = 50;
-        return { items: items.slice(page * size, page * size + size), counts, total: items.length, page, size, enabled: s.settings.enabled };
+        return { items: items.slice(page * size, page * size + size), counts, total: items.length, page, size, enabled: s.settings.enabled, defaultMinOrders: MIN_ORDERS_DEFAULT };
       })
     ),
     http.post(
@@ -644,7 +786,7 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
         const n = s.windows.filter((w) => w.code.startsWith(`${slug}-`)).length + 1;
         let code = `${slug}-${n}`;
         while (s.windows.some((w) => w.code === code)) code = `${code}X`;
-        const w: MockPreorderWindow = { ...b, id: `pre-${Date.now().toString(36)}${s.seq}`, code, draft: true, active: true, version: 1, creatives: [] };
+        const w: MockPreorderWindow = { ...b, minOrders: b.minOrders ?? MIN_ORDERS_DEFAULT, outcome: null, decisions: [], id: `pre-${Date.now().toString(36)}${s.seq}`, code, draft: true, active: true, version: 1, creatives: [] };
         s.windows.unshift(w);
         rememberAreas(ctx, b.targets);
         audit(ctx, 'preorder.window.created', w.id, `Opened draft ${w.name}`);
@@ -665,8 +807,6 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
         full(ctx);
         const s = st(ctx);
         ifMatch(ctx, s.settings.version);
-        const fees = [...Object.entries(b.payment.doorFee), ...Object.entries(b.payment.pickupFee)];
-        if (fees.some(([c]) => !/^[A-Z]{3}$/.test(c))) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Fees are keyed by ISO 4217 currency.', { 'payment.doorFee': 'Use a 3-letter currency code' });
         if (!b.payment.allowedMethods.length) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Allow at least one payment method.', { 'payment.allowedMethods': 'Allow at least one payment method' });
         if (!b.payment.lateAdd.savedCard && !b.payment.lateAdd.paymentLink) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Late adds need a way to pay.', { 'payment.lateAdd': 'Keep saved card or payment link on' });
         if (!b.payment.missedDelivery.offerRefund && !b.payment.missedDelivery.offerNewDate) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Shoppers need a choice when a delivery is missed.', { 'payment.missedDelivery': 'Offer a refund or a new date' });
@@ -832,7 +972,9 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
         const w = windowOf(ctx, p.id);
         ifMatch(ctx, w.version);
         validateInput(b);
-        Object.assign(w, b, { version: w.version + 1 });
+        if (w.outcome) throw problem(422, 'delivery-runs.preorder-not-editable', 'Not editable', w.outcome === 'CANCELLED' ? 'A cancelled pre-order cannot be changed.' : 'This pre-order is waiting for a decision; cancel or proceed first.');
+        const minOrders = b.minOrders ?? w.minOrders;
+        Object.assign(w, b, { minOrders, version: w.version + 1 });
         rememberAreas(ctx, b.targets);
         audit(ctx, 'preorder.window.updated', w.id, `Edited ${w.name}`);
         return withEtag(windowView(st(ctx), w));
@@ -899,6 +1041,70 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
         const w = windowOf(ctx, p.id);
         w.creatives = w.creatives.filter((c) => c.slot !== p.slot);
         return windowView(st(ctx), w);
+      })
+    ),
+    http.post(
+      `${W}/preorders/:id/decision`,
+      route(async (ctx, p): Promise<PreorderWindow> => {
+        const b = await json(ctx.request, z.object({ decision: PreorderChoiceSchema, reason: z.string() }));
+        manage(ctx);
+        const w = windowOf(ctx, p.id);
+        if (ctx.request.headers.get('if-match')) ifMatch(ctx, w.version);
+        reasonRequired(b.reason);
+        if (w.outcome !== 'AWAITING_DECISION') throw problem(409, 'delivery-runs.invalid-transition', 'Invalid transition', `Cannot move from ${statusOf(st(ctx), w)} to ${b.decision}`);
+        if (b.decision === 'CANCEL') return cancelWindow(ctx, w, b.reason, 'CANCEL');
+        record(ctx, w, 'PROCEED', b.reason);
+        w.outcome = 'PROCEEDED';
+        w.version += 1;
+        audit(ctx, 'preorder.window.decided', w.id, `Proceeded with ${w.name} below its minimum: ${b.reason.trim()}`);
+        return windowView(st(ctx), w);
+      })
+    ),
+    http.post(
+      `${W}/preorders/:id/cancel`,
+      route(async (ctx, p): Promise<PreorderWindow> => {
+        const b = await json(ctx.request, z.object({ reason: z.string() }));
+        manage(ctx);
+        const w = windowOf(ctx, p.id);
+        if (ctx.request.headers.get('if-match')) ifMatch(ctx, w.version);
+        reasonRequired(b.reason);
+        return cancelWindow(ctx, w, b.reason, 'CANCEL');
+      })
+    ),
+    http.post(
+      `${W}/preorders/:id/close-early`,
+      route(async (ctx, p): Promise<PreorderWindow> => {
+        const b = await json(ctx.request, z.object({ reason: z.string() }));
+        manage(ctx);
+        const s = st(ctx);
+        const w = windowOf(ctx, p.id);
+        if (ctx.request.headers.get('if-match')) ifMatch(ctx, w.version);
+        reasonRequired(b.reason);
+        if (statusOf(s, w) !== 'OPEN') throw problem(409, 'delivery-runs.invalid-transition', 'Invalid transition', `Cannot move from ${statusOf(s, w)} to CLOSED`);
+        const counted = ordersOf(s, w).filter(live).length;
+        if (w.minOrders < 1 || counted < w.minOrders) throw problem(422, 'delivery-runs.preorder-minimum-not-met', 'Minimum not met', `The minimum of ${w.minOrders} orders has not been reached (${counted})`);
+        record(ctx, w, 'EARLY_CLOSE', b.reason);
+        w.closesAt = new Date(nowOf(s) - 1).toISOString();
+        w.version += 1;
+        audit(ctx, 'preorder.window.decided', w.id, `Closed ${w.name} early: ${b.reason.trim()}`);
+        return windowView(s, w);
+      })
+    ),
+    http.get(
+      `${W}/preorders/:id/decisions`,
+      route((ctx, p) => {
+        view(ctx);
+        return { items: windowOf(ctx, p.id).decisions };
+      })
+    ),
+    http.get(
+      `${W}/preorders/:id/refunds`,
+      route((ctx, p): PreorderRefunds => {
+        view(ctx);
+        const s = st(ctx);
+        const mine = ordersOf(s, windowOf(ctx, p.id)).filter((o) => o.refundStatus);
+        const n = (status: string) => mine.filter((o) => o.refundStatus === status).length;
+        return { total: mine.length, pending: n('PENDING'), refunded: n('REFUNDED'), voided: n('VOIDED'), failed: n('FAILED'), done: n('PENDING') === 0 && n('FAILED') === 0 };
       })
     ),
     http.get(
@@ -1015,13 +1221,15 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
           return { atin: i.atin, name: prod.name, sellerName: prod.seller, qty: i.qty, price: prod.price };
         });
         s.seq += 1;
-        const fee = effectiveFees(w, s.settings.payment, currencyOfTargets(w.targets)).door;
+        const fee = effectiveFees(w, s.feeRules, currencyOfTargets(w.targets)).door;
         const order: PreorderOrder = {
           orderId: `ord-${w.id}-late-${s.seq}`, number: `${slugOf(w.targets)}-L${90 + s.orders.filter((o) => o.windowId === w.id && o.number.includes('-L9')).length}`, windowId: w.id,
           customerName: cust.name, phone: cust.phone, email: cust.email, addressLine: addr.line1, city: addr.city, region: addr.region, zip: addr.zip, deliveryNote: b.note,
           placedAt: new Date(nowOf(s)).toISOString(), channel: 'AGENT_LATE', trackingTag: `src=agent&po=${w.code}`, lines: lines.map(({ price: _p, ...l }) => l),
           units: lines.reduce((a, l) => a + l.qty, 0), fulfilment: 'DOOR', total: lines.reduce((a, l) => a + l.price * l.qty, 0) + fee, status: 'LATE_ADD',
           note: `${LATE_ADD_REASON_LABEL[b.reason]} · ${b.payment === 'PAYMENT_LINK' ? `pay-now link sent by SMS (expires in ${pay.linkExpiryHours} h)` : 'saved card charged'} · by ${ctx.action.actor}`
+       ,
+          refundStatus: null, refundAmount: null, refundUpdatedAt: null, refundError: null
         };
         s.orders.push(order);
         replays.set(key, order);
@@ -1038,6 +1246,80 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
         const w = s.windows.find((x) => x.id === qs.get('windowId')) ?? s.windows[0];
         const q = (qs.get('q') ?? '').trim().toLowerCase();
         return { items: w ? directory(w).filter((c) => !q || `${c.name} ${c.phone} ${c.email}`.toLowerCase().includes(q)) : [] };
+      })
+    ),
+    http.get(
+      `${W}/delivery-fees`,
+      route((ctx) => {
+        view(ctx);
+        const can = { manage: canManage(ctx), settings: levelOf(ctx.roles, 'preorders') === 'FULL', export: ctx.permissions.includes('preorders:export'), lateAdd: ctx.permissions.includes('preorders:late-add') };
+        return { items: st(ctx).feeRules, can };
+      })
+    ),
+    http.get(
+      `${W}/delivery-fees/changes`,
+      route((ctx) => {
+        view(ctx);
+        const qs = new URL(ctx.request.url).searchParams;
+        const method = qs.get('method');
+        const currency = qs.get('currency')?.toUpperCase();
+        const limit = Math.min(Math.max(Number(qs.get('limit') ?? 50) || 50, 1), 200);
+        return { items: st(ctx).feeChanges.filter((c) => (!method || c.method === method) && (!currency || c.currency === currency)).slice(0, limit) };
+      })
+    ),
+    http.post(
+      `${W}/delivery-fees/preview`,
+      route(async (ctx) => {
+        view(ctx);
+        const b = await json(ctx.request, FeePreviewBodySchema);
+        const s = st(ctx);
+        const currency = b.currency.toUpperCase();
+        const w = b.windowId ? s.windows.find((x) => x.id === b.windowId) : undefined;
+        if (b.windowId && !w) throw notFound('No such pre-order.');
+        const fee =
+          b.method === 'AFROTRANSACT_DELIVERY'
+            ? resolveDoorFee(s.feeRules, currency, b.distanceMiles ?? null, w?.doorFeeOverride ?? null)
+            : b.method === 'PICKUP'
+              ? resolvePickupFee(s.feeRules, currency, w?.pickupFeeOverride ?? null)
+              : resolveCarrierFee(s.feeRules, currency, b.carrierQuoteMinor ?? null, b.itemsMinor ?? 0);
+        return { applies: fee !== null, fee };
+      })
+    ),
+    http.put(
+      `${W}/delivery-fees/:method/:currency`,
+      route(async (ctx, params) => {
+        const method = FeeMethodSchema.safeParse(String(params.method ?? '').toUpperCase());
+        const currency = String(params.currency ?? '').toUpperCase();
+        if (!method.success || !/^[A-Z]{3}$/.test(currency)) throw notFound('No such delivery fee.');
+        manage(ctx);
+        const b = await json(ctx.request, FeeInputBodySchema);
+        const errors = ruleInputProblems(method.data, b);
+        if (Object.keys(errors).length) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', errors);
+        const s = st(ctx);
+        const current = feeRuleOf(s.feeRules, method.data, currency);
+        ifMatch(ctx, current?.version ?? 0);
+        const bands = [...(b.bands ?? [])].sort((x, y) => x.fromMiles - y.fromMiles);
+        const next: DeliveryFeeRule = {
+          id: current?.id ?? `fee-${method.data.toLowerCase()}-${currency.toLowerCase()}`,
+          method: method.data,
+          currency,
+          version: (current?.version ?? 0) + 1,
+          bands: method.data === 'AFROTRANSACT_DELIVERY' ? bands : [],
+          feeMinor: method.data === 'PICKUP' ? (b.feeMinor ?? 0) : 0,
+          handlingMinor: method.data === 'CARRIER' ? (b.handlingMinor ?? 0) : 0,
+          fallbackMinor: method.data === 'CARRIER' ? (b.fallbackMinor ?? 0) : 0,
+          freeAboveMinor: method.data === 'CARRIER' ? (b.freeAboveMinor ?? null) : null,
+          coverageMiles: method.data === 'AFROTRANSACT_DELIVERY' ? (bands[bands.length - 1]?.toMiles ?? 0) : 0,
+          updatedAt: ctx.now.toISOString(),
+          updatedBy: ctx.action.actor,
+          reason: b.reason.trim()
+        };
+        const same = current && JSON.stringify({ ...current, version: 0, updatedAt: '', updatedBy: '', reason: '' }) === JSON.stringify({ ...next, version: 0, updatedAt: '', updatedBy: '', reason: '' });
+        if (same) return withEtag(current);
+        s.feeRules = current ? s.feeRules.map((r) => (r === current ? next : r)) : [...s.feeRules, next];
+        s.feeChanges.unshift({ id: `chg-${next.id}-${next.version}`, method: next.method, currency, version: next.version, before: current ?? null, after: next, actor: ctx.action.actor, reason: next.reason ?? '', at: next.updatedAt });
+        audit(ctx, 'delivery-fee.changed', next.id, `Set the ${next.method} delivery fee in ${currency} (version ${next.version}): ${next.reason}`);
+        return withEtag(next);
       })
     )
   ];

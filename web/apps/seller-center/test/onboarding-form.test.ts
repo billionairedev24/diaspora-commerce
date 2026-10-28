@@ -18,17 +18,16 @@ import {
   ownershipTotal,
   type OwnerValues,
   ownerValues,
+  payoutAccountLabel,
   prefillNote,
+  toBusinessInput,
   toComplianceInput,
   toDetailsInput,
-  toPayoutsInput,
   validateAddress,
   validateBusiness,
   validateCompliance,
   validateDetails,
   validateOwners,
-  validatePayouts,
-  validRouting,
   validTaxId
 } from '@/lib/onboarding-form';
 
@@ -49,7 +48,9 @@ const form = (over: Partial<OnboardingForm> = {}): OnboardingForm => ({
     storeName: null,
     contactEmail: 'ada@example.com',
     phone: '+17132490142',
-    website: null
+    description: null,
+    brandColor: null,
+    logoUrl: null
   },
   details: {
     legalFirstName: 'Adaeze',
@@ -74,11 +75,10 @@ const form = (over: Partial<OnboardingForm> = {}): OnboardingForm => ({
   },
   owners: [],
   payouts: {
-    accountHolderName: 'Adaeze Okafor',
-    accountType: null,
+    status: 'NOT_STARTED',
     bankName: null,
-    routingLast4: null,
     accountLast4: null,
+    bankStatus: null,
     linked: false
   },
   plan: {
@@ -90,7 +90,10 @@ const form = (over: Partial<OnboardingForm> = {}): OnboardingForm => ({
     cardLast4: null,
     cardExpMonth: null,
     cardExpYear: null,
-    firstCharge: null
+    firstCharge: null,
+    planFeeCollection: null,
+    planFeeCollectionAvailable: false,
+    planFeeCollectionDefault: 'CARD'
   },
   compliance: {
     categories: [],
@@ -121,16 +124,18 @@ describe('Your business', () => {
     expect(displayPhone('+447700900123')).toBe('+447700900123');
   });
 
-  it('needs offering, business type, store name, email and a US mobile; website must be a full URL', () => {
+  it('needs offering, business type, store name, email and a US mobile; the brand colour must be #rrggbb', () => {
     const v: BusinessValues = {
       offering: '',
       entityType: '',
       storeName: 'A',
       contactEmail: 'nope',
       phone: '713',
-      website: 'adeskitchen.com'
+      description: '',
+      brandColor: 'green',
+      logoUrl: ''
     };
-    expect(Object.keys(validateBusiness(v, 'SELLER')).sort()).toEqual(['contactEmail', 'entityType', 'offering', 'phone', 'storeName', 'website']);
+    expect(Object.keys(validateBusiness(v, 'SELLER')).sort()).toEqual(['brandColor', 'contactEmail', 'entityType', 'offering', 'phone', 'storeName']);
     expect(
       validateBusiness(
         {
@@ -140,13 +145,19 @@ describe('Your business', () => {
           storeName: 'Ade’s Kitchen',
           contactEmail: 'a@b.co',
           phone: '(713) 249-0142',
-          website: ''
+          brandColor: '#1a7f4b'
         },
         'SELLER'
       )
     ).toEqual({
       offering: 'Seller accounts sell products (choose products or both)'
     });
+  });
+
+  it('sends the uploaded logo URL and leaves it out when there is none', () => {
+    const v: BusinessValues = { ...businessValues(form(), 'SELLER'), logoUrl: 'https://img.afrotransact.dev/a1.webp' };
+    expect(toBusinessInput(v).logoUrl).toBe('https://img.afrotransact.dev/a1.webp');
+    expect(toBusinessInput({ ...v, logoUrl: '' }).logoUrl).toBeUndefined();
   });
 });
 
@@ -284,36 +295,12 @@ describe('Owners', () => {
 });
 
 describe('Payouts', () => {
-  it('checks the routing checksum and matching account numbers; sends digits only', () => {
-    expect(validRouting('021000021')).toBe(true);
-    expect(validRouting('021000022')).toBe(false);
-    expect(
-      validatePayouts({
-        accountHolderName: 'Ada',
-        accountType: 'checking',
-        routingNumber: '021000022',
-        accountNumber: '000123456789',
-        accountNumberConfirmation: '000123456780'
-      })
-    ).toEqual({
-      routingNumber: 'Not a valid ABA routing number',
-      accountNumberConfirmation: 'Account numbers don’t match'
-    });
-    expect(
-      toPayoutsInput({
-        accountHolderName: ' Ada ',
-        accountType: 'savings',
-        routingNumber: '021 000 021',
-        accountNumber: '0001-2345',
-        accountNumberConfirmation: '00012345'
-      })
-    ).toEqual({
-      accountHolderName: 'Ada',
-      accountType: 'savings',
-      routingNumber: '021000021',
-      accountNumber: '00012345',
-      accountNumberConfirmation: '00012345'
-    });
+  it('shows only what Stripe holds: bank name and last 4 (Stripe collects the account)', () => {
+    expect(payoutAccountLabel({ status: 'READY', bankName: 'STRIPE TEST BANK', accountLast4: '6789', bankStatus: 'new', linked: true })).toBe(
+      'STRIPE TEST BANK ••6789'
+    );
+    expect(payoutAccountLabel({ status: 'VERIFYING', bankName: null, accountLast4: '4417', bankStatus: 'new', linked: true })).toBe('Bank account ••4417');
+    expect(payoutAccountLabel({ status: 'NEEDS_BANK', bankName: null, accountLast4: null, bankStatus: null, linked: false })).toBe('Not added yet');
   });
 });
 

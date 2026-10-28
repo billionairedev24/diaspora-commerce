@@ -36,6 +36,8 @@ monitoring:
 #   - STRIPE_SECRET_KEY
 #   - STRIPE_WEBHOOK_SECRET
 #   - FGA_API_TOKEN            (one of OpenFGA's pre-shared keys, afrotransact/openfga preshared-keys; S248)
+#   - PAYMENTS_CLIENT_SECRET   (identity's payments-service client, scope seller:billing: reads an organisation's plan
+#                               from the seller service until seller.subscription.changed arrives; optional)
 secrets:
   enabled: true
   store: platform-secrets
@@ -45,6 +47,7 @@ workloadIdentity:
   gcp: {serviceAccount: ""}
   azure: {clientId: ""}
 extraEnv:
+  SELLER_URL: http://seller:8080
   RETAIL_ORG_ID: org_afrotransact_retail
   SETTLEMENT_HOLD: 7d
   PAYMENTS_ZONE: America/New_York

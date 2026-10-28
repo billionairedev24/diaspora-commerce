@@ -24,7 +24,9 @@ type StaffDeps struct {
 	Cache     port.Cache
 	MatrixTTL time.Duration
 	Jobs      port.ExportJobStore
-	Blobs     port.ExportBlobStore
+	// Maintenance is the platform maintenance switch (Settings → General).
+	Maintenance MaintenanceService
+	Blobs       port.ExportBlobStore
 	// Renderer writes export files (CSV, XLSX with native charts, PDF).
 	Renderer port.ExportRenderer
 	// ExportBasePath prefixes download links handed to the console (its same-origin BFF proxy, e.g. /api/bff).
@@ -70,8 +72,23 @@ type staffCtx struct {
 	bearer string
 	up     port.StaffUpstreams
 	now    time.Time
+	maint  MaintenanceService
+	// names turns ids into display names (nil in unit tests: ids are then named "Unknown …").
+	names *staffNames
+	// nameWho names the people and organisations in every document relayed as-is (pass-through screens set it).
+	nameWho bool
 	// idem is the request's Idempotency-Key (relayed to upstreams that accept one).
 	idem string
+	// reveal collects a secret an action or creation wants to show once (see showOnce); nil elsewhere.
+	reveal *domain.OneTimeSecret
+}
+
+// showOnce puts a secret in the answer of the current action or creation, and nowhere else: it is not cached, logged
+// or kept, and the upstream cannot return it again.
+func (s staffCtx) showOnce(label, value, note string) {
+	if s.reveal != nil {
+		*s.reveal = domain.OneTimeSecret{Label: label, Value: value, Note: note}
+	}
 }
 
 // call runs one upstream call with the staff member's token.
@@ -81,6 +98,9 @@ func (s staffCtx) call(ctx context.Context, up port.StaffUpstream, c port.StaffC
 	}
 	if err := up.Call(ctx, s.bearer, c, out); err != nil {
 		return mapErr(up.Name(), err)
+	}
+	if doc, ok := out.(*any); ok && s.nameWho && *doc != nil {
+		s.names.nameWho(ctx, s, *doc)
 	}
 	return nil
 }
@@ -95,12 +115,13 @@ func (s staffCtx) post(ctx context.Context, up port.StaffUpstream, path string, 
 
 // staffResolver resolves the staff member for every staff route.
 type staffResolver struct {
-	d StaffDeps
+	d     StaffDeps
+	names *staffNames
 }
 
 func newStaffResolver(d StaffDeps) *staffResolver {
 	d.defaults()
-	return &staffResolver{d: d}
+	return &staffResolver{d: d, names: newStaffNames(d.Clock, d.RetailOrgID)}
 }
 
 // matrix reads identity's PLATFORM matrix; staff without access:read (403) and an unavailable identity fall back to
@@ -139,7 +160,7 @@ func (r *staffResolver) resolve(ctx context.Context, c *domain.Caller) (staffCtx
 	if err := requireCustomer(c); err != nil {
 		return staffCtx{}, err
 	}
-	sc := staffCtx{bearer: c.BearerToken, up: r.d.Up, now: r.d.Clock()}
+	sc := staffCtx{bearer: c.BearerToken, up: r.d.Up, now: r.d.Clock(), maint: r.d.Maintenance, names: r.names}
 	if err := sc.get(ctx, r.d.Up.Identity, "/v1/me", nil, &sc.me); err != nil {
 		return staffCtx{}, err
 	}

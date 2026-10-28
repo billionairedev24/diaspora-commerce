@@ -1,0 +1,70 @@
+.wrap { display: flex; flex-direction: column; gap: var(--at-space-2); min-width: 0; max-width: 22rem; }
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--at-space-3);
+  aspect-ratio: 1.586;
+  max-width: 100%;
+  padding: var(--at-space-4);
+  border: 1px solid var(--at-color-border);
+  border-radius: var(--at-radius-md);
+  background: linear-gradient(135deg, var(--at-ink-25) 0%, var(--at-color-surface) 55%, var(--at-ink-50) 100%);
+  box-shadow: var(--at-shadow-sm);
+  color: var(--at-color-text);
+  overflow: hidden;
+}
+.card[data-kind='card'] { background: linear-gradient(135deg, var(--at-ink-900) 0%, var(--at-ink-1000) 100%); color: var(--at-ink-0); border-color: var(--at-ink-900); }
+.selected { outline: 2px solid var(--at-gold-500); outline-offset: 2px; }
+.isDefault { border-color: var(--at-gold-500); }
+
+.top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--at-space-2); }
+.mark { flex: none; border-radius: var(--at-radius-xs); }
+.chip {
+  width: 2.25rem;
+  height: 1.6rem;
+  border-radius: var(--at-radius-xs);
+  background: linear-gradient(135deg, var(--at-gold-300), var(--at-gold-500));
+  opacity: 0.9;
+}
+
+.number {
+  font-family: var(--at-font-mono);
+  font-size: var(--at-text-lg);
+  font-weight: var(--at-weight-semibold);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--at-space-3); min-width: 0; }
+.holder { display: flex; flex-direction: column; min-width: 0; }
+.name { font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail { font-size: var(--at-text-xs); opacity: 0.75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exp { flex: none; font-size: var(--at-text-xs); font-variant-numeric: tabular-nums; opacity: 0.85; }
+.expired { color: var(--at-color-danger); opacity: 1; font-weight: var(--at-weight-semibold); }
+.card[data-kind='card'] .expired { color: var(--at-red-100); }
+
+.defaultTag {
+  position: absolute;
+  top: var(--at-space-2);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px var(--at-space-2);
+  border-radius: var(--at-radius-pill);
+  background: var(--at-gold-500);
+  color: var(--at-ink-1000);
+  font-size: var(--at-text-2xs);
+  font-weight: var(--at-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--at-space-2); font-size: var(--at-text-xs); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--at-space-2); }
+
+@media (max-width: 22rem) {
+  .groups { display: none; }
+}

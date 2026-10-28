@@ -1,0 +1,18 @@
+# Merged LAST into every service chart on the single OVHcloud server (deploy.sh), like infra/argocd/envs/<env>/platform-values.yaml
+# does for Argo CD. See infra/ovh-vps/README.md.
+cloud: none
+
+# The Secret <service>-secrets is created by secrets.sh, not by External Secrets Operator.
+secrets:
+  enabled: true
+  plain: true
+
+imagePullSecrets: []   # deploy.sh passes [{name: ghcr}] when GHCR_USER/GHCR_TOKEN are set
+
+# No Prometheus Operator, no spot pool, no OpenTelemetry collector on this server.
+monitoring:
+  serviceMonitor: false
+tolerations: []
+telemetry:
+  otlpEndpoint: "localhost:4318"
+  sampling: "0"

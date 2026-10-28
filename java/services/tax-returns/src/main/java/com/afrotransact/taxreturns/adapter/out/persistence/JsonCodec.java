@@ -1,6 +1,7 @@
 package com.afrotransact.taxreturns.adapter.out.persistence;
 
 import java.util.List;
+import java.util.Map;
 
 import com.afrotransact.taxreturns.domain.returns.ReturnAddress;
 import org.springframework.stereotype.Component;
@@ -12,6 +13,7 @@ import tools.jackson.databind.json.JsonMapper;
 class JsonCodec {
 
     private static final TypeReference<List<String>> STRINGS = new TypeReference<>() { };
+    private static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() { };
 
     private final JsonMapper mapper;
 
@@ -25,6 +27,10 @@ class JsonCodec {
 
     List<String> strings(String json) {
         return json == null ? List.of() : mapper.readValue(json, STRINGS);
+    }
+
+    Map<String, String> readStringMap(String json) {
+        return json == null ? Map.of() : mapper.readValue(json, STRING_MAP);
     }
 
     ReturnAddress address(String json) {

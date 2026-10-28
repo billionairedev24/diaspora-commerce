@@ -10,7 +10,7 @@ const refresh = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push, refresh, replace: vi.fn(), back: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => '/',
-  useSearchParams: () => new URLSearchParams()
+  useSearchParams: vi.fn(() => new URLSearchParams())
 }));
 
 // Radix menus measure elements; jsdom lacks these APIs.

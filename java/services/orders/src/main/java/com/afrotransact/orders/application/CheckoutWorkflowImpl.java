@@ -47,6 +47,9 @@ class CheckoutWorkflowImpl implements CheckoutWorkflow {
     /** Change id of the coupon steps: histories recorded before them replay without coupons. */
     static final String COUPONS_CHANGE = "coupons-v1";
 
+    /** Change id of the delivery-run slot step (S261): histories recorded before it replay without it. */
+    static final String RUN_SLOTS_CHANGE = "run-slots-v1";
+
     private CheckoutProgress progress;
     private Boolean authorized;
     private String paymentFailure;
@@ -63,6 +66,9 @@ class CheckoutWorkflowImpl implements CheckoutWorkflow {
         String redemptionId = null;
         boolean coupons = input.hasCoupon()
                 && Workflow.getVersion(COUPONS_CHANGE, Workflow.DEFAULT_VERSION, 1) >= 1;
+        boolean runSlots = Workflow.getVersion(RUN_SLOTS_CHANGE, Workflow.DEFAULT_VERSION, 1) >= 1;
+        boolean runSlotMayExist = false;
+        String runId = null;
         try {
             CheckoutPlan plan = steps.prepare(input);
             if (coupons) {
@@ -79,6 +85,21 @@ class CheckoutWorkflowImpl implements CheckoutWorkflow {
             }
             reserved = draft.reserved();
             reservationMayExist = reserved;
+            if (runSlots) {
+                // S261: an order on a staff-scheduled run takes its slot before anything is charged; a run that
+                // closed or filled meanwhile fails the checkout here, with the stock given back.
+                try {
+                    runSlotMayExist = true;
+                    runId = steps.reserveRunSlot(input, draft);
+                    runSlotMayExist = runId != null;
+                } catch (ActivityFailure e) {
+                    String failed = code(e);
+                    runSlotMayExist = !CheckoutCodes.RUN_CLOSED.equals(failed) && !CheckoutCodes.RUN_FULL.equals(failed)
+                            && draftRunId(draft) != null;
+                    runId = draftRunId(draft);
+                    throw e;
+                }
+            }
             if (coupons) {
                 beforeCoupon = draft;
                 try {
@@ -108,13 +129,13 @@ class CheckoutWorkflowImpl implements CheckoutWorkflow {
             boolean decided = Workflow.await(timeout, () -> authorized != null);
             if (!decided) {
                 Undo undo = new Undo(reservationMayExist, paymentMayExist, paymentId, couponMayExist,
-                        beforeCoupon, redemptionId);
+                        beforeCoupon, redemptionId, runSlotMayExist ? runId : null);
                 return fail(input, undo, CheckoutCodes.PAYMENT_TIMEOUT,
                         "The payment was not completed within " + timeout.toMinutes() + " minutes", List.of());
             }
             if (!authorized) {
                 Undo undo = new Undo(reservationMayExist, paymentMayExist, paymentId, couponMayExist,
-                        beforeCoupon, redemptionId);
+                        beforeCoupon, redemptionId, runSlotMayExist ? runId : null);
                 return fail(input, undo, CheckoutCodes.PAYMENT_FAILED,
                         paymentFailure == null ? "The payment failed" : paymentFailure, List.of());
             }
@@ -131,14 +152,20 @@ class CheckoutWorkflowImpl implements CheckoutWorkflow {
             return progress;
         } catch (ActivityFailure e) {
             Undo undo = new Undo(reservationMayExist, paymentMayExist, paymentId, couponMayExist, beforeCoupon,
-                    redemptionId);
+                    redemptionId, runSlotMayExist ? runId : null);
             return fail(input, undo, code(e), message(e), details(e));
         }
     }
 
     /** What may need undoing when the saga fails. */
     private record Undo(boolean releaseStock, boolean cancelPayment, String paymentId, boolean releaseCoupon,
-                        OrderDraft beforeCoupon, String redemptionId) {
+                        OrderDraft beforeCoupon, String redemptionId, String releaseRunSlot) {
+    }
+
+    /** The run the draft's pre-order package was priced for, or null. */
+    private static String draftRunId(OrderDraft draft) {
+        return draft.shipments().stream().map(OrderDraft.DraftShipment::preorder).filter(p -> p != null && p.run())
+                .map(p -> p.runId()).findFirst().orElse(null);
     }
 
     private CheckoutProgress fail(CheckoutInput input, Undo undo, String code, String message, List<String> details) {
@@ -149,6 +176,9 @@ class CheckoutWorkflowImpl implements CheckoutWorkflow {
         }
         if (undo.releaseCoupon() && undo.beforeCoupon() != null) {
             runCompensation(() -> compensations.releaseCoupon(input, undo.beforeCoupon(), undo.redemptionId()));
+        }
+        if (undo.releaseRunSlot() != null) {
+            runCompensation(() -> compensations.releaseRunSlot(input.orderId(), undo.releaseRunSlot()));
         }
         if (undo.releaseStock()) {
             runCompensation(() -> compensations.releaseReservation(input.orderId(), reason));

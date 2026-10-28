@@ -21,17 +21,17 @@
     "@mdx-js/react": "^3.1.0",
     "clsx": "^2.1.1",
     "prism-react-renderer": "^2.4.1",
-    "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
-    "@asyncapi/parser": "^3.6.3",
+    "@asyncapi/parser": "^3.6.4",
     "@docusaurus/module-type-aliases": "3.10.2",
     "@docusaurus/tsconfig": "3.10.2",
     "@docusaurus/types": "3.10.2",
-    "@redocly/openapi-core": "^2.60.0",
+    "@redocly/openapi-core": "^2.64.0",
     "@types/react": "19.3.0",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "yaml": "^2.9.1"
   },
   "browserslist": {

@@ -133,13 +133,15 @@ class JdbcApplicationRepository implements ApplicationRepository {
     public void appendTimeline(TimelineEntry t) {
         jdbc.sql("""
                 insert into application_event (id, application_id, action, from_status, to_status, actor_id,
-                                               reason_code, note, items, occurred_at)
-                values (:id, :app, :action, :from, :to, :actor, :reason, :note, cast(:items as jsonb), :at)
+                                               reason_code, note, items, occurred_at, actor_name, request_key)
+                values (:id, :app, :action, :from, :to, :actor, :reason, :note, cast(:items as jsonb), :at,
+                        :actorName, :requestKey)
                 """)
                 .param("id", t.id()).param("app", t.applicationId()).param("action", t.action().name())
                 .param("from", t.fromStatus() == null ? null : t.fromStatus().name())
                 .param("to", t.toStatus().name()).param("actor", t.actorId()).param("reason", t.reasonCode())
                 .param("note", t.note()).param("items", json.write(t.items())).param("at", Sql.ts(t.occurredAt()))
+                .param("actorName", t.actorName()).param("requestKey", t.requestKey())
                 .update();
     }
 
@@ -147,14 +149,16 @@ class JdbcApplicationRepository implements ApplicationRepository {
     public List<TimelineEntry> timeline(String applicationId) {
         return jdbc.sql("select * from application_event where application_id = :a order by occurred_at, id")
                 .param("a", applicationId)
-                .query((rs, n) -> new TimelineEntry(rs.getObject("id", UUID.class), rs.getString("application_id"),
-                        ReviewAction.valueOf(rs.getString("action")),
-                        rs.getString("from_status") == null ? null : ApplicationStatus.valueOf(rs.getString(
-                                "from_status")),
-                        ApplicationStatus.valueOf(rs.getString("to_status")), rs.getString("actor_id"),
-                        rs.getString("reason_code"), rs.getString("note"), json.strings(rs.getString("items")),
-                        Sql.instant(rs, "occurred_at")))
+                .query(this::timelineEntry)
                 .list();
+    }
+
+    @Override
+    public Optional<TimelineEntry> timelineEntry(String applicationId, String requestKey) {
+        return jdbc.sql("select * from application_event where application_id = :a and request_key = :k")
+                .param("a", applicationId).param("k", requestKey)
+                .query(this::timelineEntry)
+                .optional();
     }
 
     @Override
@@ -176,6 +180,15 @@ class JdbcApplicationRepository implements ApplicationRepository {
                         rs.getString("asset_id"), rs.getString("kind"), rs.getString("viewer_id"),
                         Sql.instant(rs, "accessed_at")))
                 .list();
+    }
+
+    private TimelineEntry timelineEntry(ResultSet rs, int n) throws SQLException {
+        String from = rs.getString("from_status");
+        return new TimelineEntry(rs.getObject("id", UUID.class), rs.getString("application_id"),
+                ReviewAction.valueOf(rs.getString("action")), from == null ? null : ApplicationStatus.valueOf(from),
+                ApplicationStatus.valueOf(rs.getString("to_status")), rs.getString("actor_id"),
+                rs.getString("reason_code"), rs.getString("note"), json.strings(rs.getString("items")),
+                Sql.instant(rs, "occurred_at"), rs.getString("actor_name"), rs.getString("request_key"));
     }
 
     private Application map(ResultSet rs, int n) throws SQLException {

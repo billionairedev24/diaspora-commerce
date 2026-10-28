@@ -13,8 +13,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 
 /**
  * The authorization server's sign-in page (email + password, passkey, the social providers that are configured and
- * enabled), the "forgot password" help page and the home redirect. Apps never collect passwords themselves: they send
- * the browser here through {@code /oauth2/authorize}, so this is the single place credentials are entered (SSO).
+ * enabled) and the home redirect; the "forgot password" pages are {@link PasswordResetPageController}. Apps never
+ * collect passwords themselves: they send the browser here through {@code /oauth2/authorize}, so this is the single
+ * place credentials are entered (SSO).
  */
 @Hidden
 @Controller
@@ -43,18 +44,18 @@ class LoginPageController {
                 default -> "auth.error.credentials";
             };
             model.addAttribute("error", messages.getMessage(key, null, locale));
-        }
-        if (request.getParameter("logout") != null) {
+        } else if (request.getParameter("reset") != null) {
+            // Password reset (S300): signed out everywhere; staff still verify their second factor next.
+            String key = "staff".equals(request.getParameter("reset")) ? "auth.reset.doneStaff" : "auth.reset.done";
+            model.addAttribute("success", messages.getMessage(key, null, locale));
+        } else if (request.getParameter("logout") != null || ctx.signedOut()) {
             model.addAttribute("notice", messages.getMessage("auth.signedOut", null, locale));
         }
-        model.addAttribute("email", ctx.loginHint());
+        // After a reset the email comes as a flash attribute; otherwise the app's login_hint.
+        if (!model.containsAttribute("email")) {
+            model.addAttribute("email", ctx.loginHint());
+        }
         return "login";
-    }
-
-    @GetMapping("/login/forgot")
-    String forgot(HttpServletRequest request, HttpServletResponse response, Model model) {
-        pages.apply(model, request, response, HostedPageModel.SIGN_IN);
-        return "forgot";
     }
 
     @GetMapping("/")

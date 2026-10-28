@@ -32,7 +32,8 @@ export function capabilitiesFor(runtime: Runtime, os: string): Capabilities {
   return {
     runtime,
     remotePush: native,
-    localNotifications: runtime !== 'web',
+    // Expo Go on Android (SDK 53+) throws while expo-notifications loads, so even local notifications need our build.
+    localNotifications: native || (runtime === 'expo-go' && os === 'ios'),
     biometrics: native || (runtime === 'expo-go' && os === 'android'),
     walletPay: native
   };

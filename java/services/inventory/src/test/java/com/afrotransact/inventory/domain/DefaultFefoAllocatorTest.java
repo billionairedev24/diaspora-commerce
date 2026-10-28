@@ -25,6 +25,23 @@ class DefaultFefoAllocatorTest {
     }
 
     @Test
+    void allocationsCarryTheLotsCostInItsCurrencyAndInUsd() {
+        Lot pesos = Lots.pesoLot("L-MX", Lots.TODAY.plusDays(120), 4);
+        Lot dollars = Lots.sellable("L-US", Lots.TODAY.plusDays(300), 10);
+
+        FefoAllocator.Result r = fefo.allocate(List.of(dollars, pesos), 6, Lots.TODAY, 7);
+
+        LotAllocation mx = r.picks().getFirst();
+        assertThat(mx.lotNo()).isEqualTo("L-MX");
+        assertThat(mx.currency()).isEqualTo("MXN");
+        assertThat(mx.unitLandedCostMinor()).isEqualTo(12_000);
+        assertThat(mx.unitCostUsdMinor()).isEqualTo(692);
+        assertThat(mx.costMinor()).isEqualTo(48_000);
+        assertThat(mx.costUsdMinor()).isEqualTo(2_768);
+        assertThat(r.picks().stream().mapToLong(LotAllocation::costUsdMinor).sum()).isEqualTo(4 * 692 + 2 * 192);
+    }
+
+    @Test
     void skipsLotsExpiringWithinMinimumRemainingDays() {
         Lot soon = Lots.sellable("L-SOON", Lots.TODAY.plusDays(6), 50);
         Lot ok = Lots.sellable("L-OK", Lots.TODAY.plusDays(7), 4);

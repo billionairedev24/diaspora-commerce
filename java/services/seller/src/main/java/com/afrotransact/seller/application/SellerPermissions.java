@@ -22,6 +22,10 @@ public final class SellerPermissions {
     public static final String BILLING = "seller:billing";
     /** Staff: every organisation's metered usage statements, and re-running metering for a period (S206). */
     public static final String USAGE = "billing:usage";
+    /** Staff: plan catalogue (create, version, publish, retire, sync with Stripe), trial campaigns, reward rules. */
+    public static final String PLANS_MANAGE = "plans:manage";
+    /** Staff: manual credits, free days, waived invoices and trial overrides for an organisation (audited). */
+    public static final String BILLING_ADJUST = "billing:adjust";
 
     private SellerPermissions() {
     }

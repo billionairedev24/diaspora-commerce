@@ -90,6 +90,11 @@ func TestPlatformEnvOverrides(t *testing.T) {
 		!slices.Equal(c.Web.Origins, []string{"https://shop.example.test", "https://seller.example.test", "https://admin.example.test"}) {
 		t.Fatalf("platform env not applied: %+v %+v", c.Web, c.OIDC)
 	}
+	// The apps' signed-out landings (identity's post-logout redirect URIs) follow the same variables.
+	if apps := c.AppOrigins(); apps[config.AppStorefront] != "https://shop.example.test" ||
+		apps[config.AppSellerCenter] != "https://seller.example.test" || apps[config.AppStaffConsole] != "https://admin.example.test" {
+		t.Fatalf("app origins = %v", apps)
+	}
 
 	c = load(t, "dev", map[string]string{
 		pkgconfig.EnvPublicWebURL: "https://shop.example.test",

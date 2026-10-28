@@ -39,6 +39,20 @@ public record FxRate(String currency, String baseCurrency, BigDecimal unitsPerBa
         return Currencies.toMinor(base, baseCurrency);
     }
 
+    /** Base-currency minor units to minor units of {@code currency} (the other way of {@link #toBase}). */
+    public long fromBase(long baseMinor) {
+        if (currency.equals(baseCurrency)) {
+            return baseMinor;
+        }
+        BigDecimal foreign = Currencies.toMajor(baseMinor, baseCurrency).multiply(unitsPerBase, PRECISION);
+        return Currencies.toMinor(foreign, currency);
+    }
+
+    /** Base-currency units per unit of {@code currency} (1 / unitsPerBase), to 10 decimals. */
+    public BigDecimal baseUnitsPerUnit() {
+        return BigDecimal.ONE.divide(unitsPerBase, 10, RoundingMode.HALF_UP);
+    }
+
     /** Exact (unrounded) base-currency minor units, for allocations that must not round twice. */
     public BigDecimal toBaseExact(long minor) {
         if (currency.equals(baseCurrency)) {

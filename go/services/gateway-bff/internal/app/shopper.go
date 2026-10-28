@@ -19,20 +19,27 @@ import (
 type ShopperDeps struct {
 	Wallet port.WalletClient
 	Orders port.CustomerOrdersClient
+	// Returns is tax-returns (checkout tax estimates).
+	Returns port.ReturnsClient
 	// Payments reads an order's charged and refunded amounts (optional).
 	Payments port.OrderPaymentsClient
 	Security port.SecurityClient
 	Bookings port.CustomerBookingsClient
-	Pages    port.PublishedPagesClient
 	Lola     port.LolaClient
 	Delivery port.DeliveryFactsClient
+	// ProofLinks signs the links to a delivery's proof photo and signature (media-service; optional: no pictures without it).
+	ProofLinks port.ProofLinks
 	// LocalDelivery and Offers price AfroTransact Delivery from the seller's store on the checkout page (S255; optional).
 	LocalDelivery port.LocalDeliveryClient
 	Offers        port.StorefrontOffersClient
-	Identity      port.IdentityClient
-	Checkout      CheckoutService
-	Carts         CartService
-	Location      LocationService
+	// Coupons validates checkout coupon codes (offers-service; optional).
+	Coupons port.CheckoutCouponsClient
+	// Credit reads the shopper's AfroTransact credit for the checkout page and the credit screens (optional).
+	Credit   port.CreditClient
+	Identity port.IdentityClient
+	Checkout CheckoutService
+	Carts    CartService
+	Location LocationService
 	// PublishableKey is the Stripe publishable key handed to Stripe.js / PaymentSheet.
 	PublishableKey string
 	// IdentityPublicURL is where the browser reaches identity (hosted passkey registration page).
@@ -106,6 +113,8 @@ func toPaymentMethod(m port.WalletMethod) domain.PaymentMethod {
 		pm.Label = "Cash App Pay"
 	case "link":
 		pm.Label = "Link"
+	case "amazon_pay":
+		pm.Label = "Amazon Pay"
 	default:
 		pm.Type = "card"
 		pm.Label = brandName(m.Brand) + " ending in " + m.Last4
@@ -133,12 +142,12 @@ func (s *walletServiceImpl) List(ctx context.Context, c *domain.Caller) (domain.
 	if err := requireCustomer(c); err != nil {
 		return domain.Page[domain.PaymentMethod]{}, err
 	}
-	list, err := s.d.Wallet.List(ctx, c.BearerToken)
+	wallet, err := s.d.Wallet.List(ctx, c.BearerToken)
 	if err != nil {
 		return domain.Page[domain.PaymentMethod]{}, walletErr(err)
 	}
-	out := make([]domain.PaymentMethod, 0, len(list))
-	for _, m := range list {
+	out := make([]domain.PaymentMethod, 0, len(wallet.Items))
+	for _, m := range wallet.Items {
 		out = append(out, toPaymentMethod(m))
 	}
 	return domain.Page[domain.PaymentMethod]{Items: out}, nil
@@ -255,8 +264,13 @@ func toOrderSummary(o port.UpOrder) domain.OrderSummary {
 		out.ShipTo = strings.TrimSpace(o.ShippingAddress.Line1 + ", " + o.ShippingAddress.City)
 	}
 	for _, s := range o.Shipments {
+		lines := make([]domain.OrderShipmentLine, 0, len(s.Lines))
+		for _, l := range s.Lines {
+			lines = append(lines, domain.OrderShipmentLine{Title: l.Title, Quantity: l.Quantity, ImageURL: optStr(l.ImageURL), ProductATIN: l.ProductATIN})
+		}
 		out.Shipments = append(out.Shipments, domain.OrderShipment{ShipmentID: firstNonEmpty(s.ShipmentID, s.ID), Label: s.Label,
-			Status: statusLabel(s.Status), Items: s.Items, Cancellable: s.Cancellable, Carrier: optStr(s.Carrier),
+			SellerName: s.SellerName, Lines: lines,
+			Status: statusLabel(s.Status), Items: s.Items, Cancellable: s.Cancellable, CancellableUntil: optStr(s.CancellableUntil), Carrier: optStr(s.Carrier),
 			TrackingNumber: optStr(s.TrackingNumber), PromisedBy: optStr(s.PromisedBy), DeliveredAt: optStr(s.DeliveredAt),
 			DeliveryCode: optStr(s.HandoverCode), Returnable: s.Returnable, ReturnWindowEndsAt: optStr(s.ReturnWindowEndsAt),
 			ProblemReportOnly: s.ProblemReportOnly})
@@ -315,20 +329,30 @@ func (s *customerOrdersServiceImpl) Detail(ctx context.Context, c *domain.Caller
 	for _, sh := range o.Shipments {
 		d := domain.ShipmentDetail{ShipmentID: firstNonEmpty(sh.ShipmentID, sh.ID), Label: sh.Label, Status: strings.ToLower(sh.Status),
 			StatusLabel: statusLabel(sh.Status), Items: sh.Items, SellerName: sh.SellerName, DeliveryMethod: methodKey(sh.DeliveryMethod, sh.ServiceLevel),
-			Cancellable: sh.Cancellable, Carrier: optStr(sh.Carrier), TrackingNumber: optStr(sh.TrackingNumber), PromisedFrom: optStr(sh.PromisedFrom),
+			Cancellable: sh.Cancellable, CancellableUntil: optStr(sh.CancellableUntil), Carrier: optStr(sh.Carrier), TrackingNumber: optStr(sh.TrackingNumber), PromisedFrom: optStr(sh.PromisedFrom),
 			PromisedBy: optStr(sh.PromisedBy), DeliveredAt: optStr(sh.DeliveredAt), DeliveryCode: optStr(sh.HandoverCode),
 			Lines: []domain.OrderLineView{}, Timeline: timeline(sh.Timeline), Returnable: sh.Returnable,
-			ReturnWindowEndsAt: optStr(sh.ReturnWindowEndsAt), ProblemReportOnly: sh.ProblemReportOnly}
+			ReturnWindowEndsAt: optStr(sh.ReturnWindowEndsAt), ProblemReportOnly: sh.ProblemReportOnly, DeliveryFeeRule: sh.DeliveryFeeRule}
 		if ld := sh.LocalDelivery; ld != nil {
 			d.LocalDelivery = &domain.OrderLocalDelivery{RoadMiles: ld.RoadMiles, DurationMinutes: ld.DurationMinutes, ChargeMinor: ld.CustomerChargeMinor}
 		}
 		d.Pickup = s.pickupOf(ctx, sh)
+		entries := make([]proofEntry, 0, len(sh.Timeline))
+		for _, t := range sh.Timeline {
+			entries = append(entries, proofEntry{to: t.To, at: t.At, proof: t.Proof})
+		}
+		d.Proof = deliveredProof(entries)
 		for _, l := range sh.Lines {
 			d.Lines = append(d.Lines, domain.OrderLineView{LineID: firstNonEmpty(l.ID, l.VariantATIN), ATIN: l.VariantATIN, Title: l.Title,
 				ImageURL: optStr(l.ImageURL), Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor, ItemsMinor: l.ItemsMinor})
 		}
 		out.Shipments = append(out.Shipments, d)
 	}
+	proofs := make([]*domain.DeliveryProof, 0, len(out.Shipments))
+	for _, sh := range out.Shipments {
+		proofs = append(proofs, sh.Proof)
+	}
+	attachProofLinks(ctx, s.d.ProofLinks, proofs)
 	s.withPayment(ctx, c, o.ID, &out)
 	return out, nil
 }
@@ -358,7 +382,8 @@ func (s *customerOrdersServiceImpl) withPayment(ctx context.Context, c *domain.C
 		s.d.log().WarnContext(ctx, "order payment unavailable", "error", err)
 		return
 	}
-	sum := domain.OrderPayment{Status: strings.ToLower(p.Status), CapturedMinor: p.CapturedMinor, RefundedMinor: p.RefundedMinor}
+	sum := domain.OrderPayment{Status: strings.ToLower(p.Status), CapturedMinor: p.CapturedMinor, RefundedMinor: p.RefundedMinor,
+		CreditMinor: p.CreditMinor, CardRefundsAsCredit: p.CardRefundsAsCredit}
 	refunded := map[string]int64{}
 	for _, l := range p.Lines {
 		sum.RefundableMinor += max(0, l.RefundableMinor)
@@ -435,19 +460,27 @@ func (s *customerOrdersServiceImpl) Cancel(ctx context.Context, c *domain.Caller
 // (always), then confirms or polls the payment; the summary adds promise dates, pickup points and AfroTransact
 // Delivery eligibility per package (S047/S048, S238).
 type CheckoutPaymentService interface {
-	Summary(ctx context.Context, c *domain.Caller, addressID string) (domain.CheckoutSummary, error)
+	Summary(ctx context.Context, c *domain.Caller, addressID string, packageDelivery map[string]string, couponCode string) (domain.CheckoutSummary, error)
 	Place(ctx context.Context, c *domain.Caller, key string, req domain.PlaceOrderRequest) (port.PlaceOrderResult, error)
 	Status(ctx context.Context, c *domain.Caller, number string) (domain.OrderConfirmation, error)
 	Confirm(ctx context.Context, c *domain.Caller, number string) (domain.OrderConfirmation, error)
 }
 
-type checkoutPaymentServiceImpl struct{ d ShopperDeps }
+type checkoutPaymentServiceImpl struct {
+	d     ShopperDeps
+	merch CheckoutMerch
+}
 
 var _ CheckoutPaymentService = (*checkoutPaymentServiceImpl)(nil)
 
+// CheckoutMerch resolves optional checkout merchandising (content placements).
+type CheckoutMerch interface {
+	CheckoutCrossSell(ctx context.Context, c *domain.Caller) (*domain.Rail, error)
+}
+
 // NewCheckoutPaymentService returns the CheckoutPaymentService.
-func NewCheckoutPaymentService(d ShopperDeps) CheckoutPaymentService {
-	return &checkoutPaymentServiceImpl{d: d}
+func NewCheckoutPaymentService(d ShopperDeps, merch CheckoutMerch) CheckoutPaymentService {
+	return &checkoutPaymentServiceImpl{d: d, merch: merch}
 }
 
 func toConfirmation(v port.UpCheckout) domain.OrderConfirmation {
@@ -463,6 +496,7 @@ func toConfirmation(v port.UpCheckout) domain.OrderConfirmation {
 			ETA: firstNonEmpty(s.ETA, s.PromisedBy), DeliveryCode: strPtr(s.DeliveryCode)})
 	}
 	out.Preorder = preorderBlock(v.Preorder)
+	out.CreditMinor = v.CreditMinor
 	return out
 }
 
@@ -529,6 +563,8 @@ func (s *checkoutPaymentServiceImpl) Place(ctx context.Context, c *domain.Caller
 		}
 	}
 	switch {
+	// An order that credit pays in full has no card: payments decides, so a payment source is optional with credit.
+	case sources == 0 && req.UseCredit:
 	case req.Wallet != "" && !walletKinds[req.Wallet]:
 		errs["wallet"] = "Choose Apple Pay, Google Pay or Link"
 	case sources == 0:
@@ -566,7 +602,7 @@ func (s *checkoutPaymentServiceImpl) Place(ctx context.Context, c *domain.Caller
 	}
 	v, status, err := s.d.Orders.Checkout(ctx, c.BearerToken, key, port.UpCheckoutRequest{AddressID: req.AddressID, DeliverySelections: sels,
 		Lines: lines, PaymentMethodID: req.PaymentMethodID, Wallet: req.Wallet, Gift: req.Gift, CouponCode: strings.TrimSpace(req.CouponCode),
-		SavePaymentMethod: req.SavePaymentMethod, Attribution: req.Attribution.Clean()})
+		SavePaymentMethod: req.SavePaymentMethod, UseCredit: req.UseCredit, Attribution: req.Attribution.Clean()})
 	if err != nil {
 		return port.PlaceOrderResult{}, orderErr(err)
 	}

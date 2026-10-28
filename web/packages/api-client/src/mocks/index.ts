@@ -1,6 +1,7 @@
 export { suggestAddresses } from './addresses';
+export { MOCK_GIFT_AMOUNT_MINOR, MOCK_GIFT_CODE, MOCK_RATE_LIMITED_CODE } from './credit';
 export { getDb, resetDb } from './db';
-export { addBusinessDays, dayLabel, etaDays, locationForZip } from './delivery';
+export { addBusinessDays, dayLabel, etaDays, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, type PlatformDeliveryConfig, platformDeliveryConfig, type PlatformDeliveryPricingMode, setPlatformDeliveryPricing } from './delivery';
 export { atinOf, COMMUNITIES, DEPARTMENTS, type FixtureProduct, PLATFORM_SELLER, PRODUCTS } from './fixtures/catalog';
 export { DEMO_ACCOUNTS, DEMO_CODE, JOBS, PLACEMENTS, SITE_CONFIG } from './fixtures/content';
 export { ADDRESSES, STREETS, US_STATES } from './fixtures/geo';

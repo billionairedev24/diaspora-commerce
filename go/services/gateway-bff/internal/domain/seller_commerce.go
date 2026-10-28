@@ -85,8 +85,25 @@ func ShipmentStatusLabel(s string) string {
 // IsShipmentStatus reports whether s is a known shipment status.
 func IsShipmentStatus(s string) bool { _, ok := shipmentLabels[s]; return ok }
 
-// SellerStatuses are the only statuses a seller may set (orders enforces the same rule).
-var SellerStatuses = []string{"CONFIRMED", "PACKED", "READY"}
+// SellerStatuses are the only statuses a seller may set (orders enforces the same rule). DELIVERED is the handover of
+// a pickup order at the seller's own shop, with the customer's code; orders offers it only for those.
+var SellerStatuses = []string{"CONFIRMED", "PACKED", "READY", "PICKED_UP", "DELIVERED"}
+
+// labelStatuses are the shipment statuses a label can still be bought in.
+var labelStatuses = []string{"CONFIRMED", "PACKED", "READY"}
+
+// IsHandoverCode reports whether v is a 4-digit handover code.
+func IsHandoverCode(v string) bool {
+	if len(v) != 4 {
+		return false
+	}
+	for _, r := range v {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
 
 // IsSellerStatus reports whether a seller may set status s.
 func IsSellerStatus(s string) bool { return slices.Contains(SellerStatuses, s) }
@@ -113,7 +130,7 @@ func CanBuyLabel(fulfilment, deliveryMethod, status, tracking string) bool {
 	if dm := strings.ToUpper(deliveryMethod); dm == "PICKUP" || dm == "AFROTRANSACT_DELIVERY" {
 		return false
 	}
-	return IsSellerStatus(status)
+	return slices.Contains(labelStatuses, status)
 }
 
 // SellerOrderRow is one row of the orders table.
@@ -192,8 +209,22 @@ type SellerShipment struct {
 	TrackingNumber *string              `json:"trackingNumber"`
 	NextActions    []string             `json:"nextActions"`
 	CanBuyLabel    bool                 `json:"canBuyLabel"`
-	Timeline       []TimelineEntry      `json:"timeline"`
-	LocalDelivery  *SellerLocalDelivery `json:"localDelivery"`
+	// HasLabel: a label was bought for this shipment and can be downloaded again.
+	HasLabel bool `json:"hasLabel"`
+	// SuggestedParcel is the package size and weight the products were listed with (nil when unknown).
+	SuggestedParcel *SuggestedParcel     `json:"suggestedParcel"`
+	Timeline        []TimelineEntry      `json:"timeline"`
+	LocalDelivery   *SellerLocalDelivery `json:"localDelivery"`
+	// Proof is how our driver handed it over (photo, who received it); nil for carrier, pickup and manual deliveries.
+	Proof *DeliveryProof `json:"proof"`
+}
+
+// SuggestedParcel is the package of a shipment worked out from its products' listed package (inches, pounds).
+type SuggestedParcel struct {
+	WeightLb float64 `json:"weightLb"`
+	LengthIn float64 `json:"lengthIn"`
+	WidthIn  float64 `json:"widthIn"`
+	HeightIn float64 `json:"heightIn"`
 }
 
 // SellerOrderDetail is GET /v1/seller/orders/{orderNumber}.
@@ -313,13 +344,26 @@ type CategoryNode struct {
 	Children    []CategoryNode `json:"children"`
 }
 
-// AttributeDef is a product-type attribute.
+// AttributeDef is a product-type attribute: its kind (TEXT, MULTILINE, ENUM, NUMBER), units for numbers, the form
+// section it belongs to (DETAILS, FOOD, REGULATED) and a help line.
 type AttributeDef struct {
 	Key       string   `json:"key"`
 	Label     string   `json:"label"`
 	Options   []string `json:"options"`
 	Required  bool     `json:"required"`
 	Multiline bool     `json:"multiline"`
+	Kind      string   `json:"kind"`
+	Units     []string `json:"units"`
+	Section   string   `json:"section"`
+	Help      *string  `json:"help"`
+}
+
+// ProductTypeTraits decide the one-step form's conditional sections.
+type ProductTypeTraits struct {
+	Food       bool `json:"food"`
+	Perishable bool `json:"perishable"`
+	Regulated  bool `json:"regulated"`
+	Preorder   bool `json:"preorder"`
 }
 
 // VariationDimension is one variation axis.
@@ -334,13 +378,14 @@ type VariationTheme struct {
 	Dimensions []VariationDimension `json:"dimensions"`
 }
 
-// ProductTypeSchema drives steps 3 and 4 of the builder.
+// ProductTypeSchema drives the attribute fields, variant axes and conditional sections of the product form.
 type ProductTypeSchema struct {
-	Code           string           `json:"code"`
-	Label          string           `json:"label"`
-	IdentifierRule string           `json:"identifierRule"`
-	Attributes     []AttributeDef   `json:"attributes"`
-	Themes         []VariationTheme `json:"themes"`
+	Code           string            `json:"code"`
+	Label          string            `json:"label"`
+	IdentifierRule string            `json:"identifierRule"`
+	Attributes     []AttributeDef    `json:"attributes"`
+	Themes         []VariationTheme  `json:"themes"`
+	Traits         ProductTypeTraits `json:"traits"`
 }
 
 // GtinCheck is the identifier check.
@@ -377,35 +422,83 @@ type ProductImageInput struct {
 	Height      int    `json:"height,omitempty"`
 	Bytes       int64  `json:"bytes,omitempty"`
 	ContentType string `json:"contentType"`
+	// Alt is the optional alternative text stored with the image.
+	Alt string `json:"alt,omitempty"`
 }
 
-// VariantInput is one variant row of step 4.
+// VariantInput is one variant row (the variant matrix, or the single row of a product without variations).
 type VariantInput struct {
-	Options    map[string]string `json:"options"`
-	SellerSKU  string            `json:"sellerSku"`
-	GTIN       string            `json:"gtin,omitempty"`
-	GTINExempt bool              `json:"gtinExempt,omitempty"`
-	PriceMinor int64             `json:"priceMinor"`
-	Quantity   int               `json:"quantity"`
+	Options        map[string]string   `json:"options"`
+	SellerSKU      string              `json:"sellerSku"`
+	GTIN           string              `json:"gtin,omitempty"`
+	GTINExempt     bool                `json:"gtinExempt,omitempty"`
+	PriceMinor     int64               `json:"priceMinor"`
+	CompareAtMinor *int64              `json:"compareAtMinor,omitempty"`
+	Quantity       int                 `json:"quantity"`
+	Images         []ProductImageInput `json:"images,omitempty"`
 }
 
-// ProductDraft is the builder's submission.
+// Item conditions and fulfilment modes of a listing.
+var (
+	ItemConditions     = []string{"NEW", "RENEWED", "USED_LIKE_NEW", "USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE"}
+	ListingFulfilments = []string{"SELLER", "AFROTRANSACT"}
+)
+
+// PackageDimensions is the packed size (inches) and weight (pounds).
+type PackageDimensions struct {
+	LengthIn float64 `json:"lengthIn"`
+	WidthIn  float64 `json:"widthIn"`
+	HeightIn float64 `json:"heightIn"`
+	WeightLb float64 `json:"weightLb"`
+}
+
+// ListingDetailsInput is the form's description, condition, keywords, fulfilment, package, handling and ship-from.
+type ListingDetailsInput struct {
+	Description  string             `json:"description,omitempty"`
+	Condition    string             `json:"condition,omitempty"`
+	Keywords     []string           `json:"keywords,omitempty"`
+	Fulfilment   string             `json:"fulfilment,omitempty"`
+	Packaging    *PackageDimensions `json:"packaging,omitempty"`
+	HandlingDays int                `json:"handlingDays,omitempty"`
+	ShipFromID   *string            `json:"shipFromId,omitempty"`
+}
+
+// ProductDraft is the one-step product form's submission (POST /v1/seller/products, PUT /v1/seller/products/{id}).
 type ProductDraft struct {
-	CategoryID        string              `json:"categoryId,omitempty"`
-	CategoryRequestID string              `json:"categoryRequestId,omitempty"`
-	Title             string              `json:"title"`
-	Attributes        map[string]string   `json:"attributes"`
-	Images            []ProductImageInput `json:"images"`
-	VariationTheme    string              `json:"variationTheme"`
-	Variants          []VariantInput      `json:"variants"`
+	CategoryID        string               `json:"categoryId,omitempty"`
+	CategoryRequestID string               `json:"categoryRequestId,omitempty"`
+	Title             string               `json:"title"`
+	Attributes        map[string]string    `json:"attributes"`
+	Images            []ProductImageInput  `json:"images"`
+	VariationTheme    string               `json:"variationTheme"`
+	Variants          []VariantInput       `json:"variants"`
+	PreorderEligible  *bool                `json:"preorderEligible,omitempty"`
+	Listing           *ListingDetailsInput `json:"listing,omitempty"`
+	DraftID           string               `json:"draftId,omitempty"`
+	// Version is the product version an edit is based on (PUT only).
+	Version *int64 `json:"version,omitempty"`
 }
 
-// Validate applies the builder's rules (the same ones catalog enforces).
+// Validate applies the form's rules (the same ones catalog enforces) to a new product.
 func (d ProductDraft) Validate() map[string]string {
-	errs := map[string]string{}
+	errs := d.validateContent()
 	if (d.CategoryID == "") == (d.CategoryRequestID == "") {
 		errs["categoryId"] = "Choose a category, or request a new one."
 	}
+	return errs
+}
+
+// ValidateEdit applies the form's rules to an edit (the category may be omitted: it is kept).
+func (d ProductDraft) ValidateEdit() map[string]string {
+	errs := d.validateContent()
+	if d.CategoryRequestID != "" {
+		errs["categoryRequestId"] = "A product's category request can't change."
+	}
+	return errs
+}
+
+func (d ProductDraft) validateContent() map[string]string {
+	errs := map[string]string{}
 	if n := len([]rune(strings.TrimSpace(d.Title))); n < 10 || n > 200 {
 		errs["title"] = "At least 10 characters"
 	}
@@ -414,11 +507,13 @@ func (d ProductDraft) Validate() map[string]string {
 	} else if len(d.Images) > 10 {
 		errs["images"] = "Up to 10 images."
 	}
-	if strings.TrimSpace(d.VariationTheme) == "" {
-		errs["variationTheme"] = "Choose how this product varies."
+	if strings.TrimSpace(d.VariationTheme) == "" && len(d.Variants) > 1 {
+		errs["variationTheme"] = "Choose how this product varies to list several variants."
 	}
 	if len(d.Variants) == 0 {
-		errs["variants"] = "Add at least one variation."
+		errs["variants"] = "Add the price and quantity."
+	} else if len(d.Variants) > 200 {
+		errs["variants"] = "Up to 200 variants."
 	}
 	skus := map[string]bool{}
 	for _, v := range d.Variants {
@@ -432,10 +527,37 @@ func (d ProductDraft) Validate() map[string]string {
 			errs["variants"] = "Every variation needs a price."
 		case v.Quantity < 0:
 			errs["variants"] = "Quantities can't be negative."
+		case v.Quantity > 100000:
+			errs["variants"] = "Quantities go up to 100,000."
+		case v.CompareAtMinor != nil && *v.CompareAtMinor <= v.PriceMinor:
+			errs["variants"] = "A compare-at price must be higher than the price."
 		case !v.GTINExempt && v.GTIN == "":
-			errs["variants"] = "Enter a barcode for every variation, or request a GTIN exemption."
+			errs["variants"] = "Enter a barcode for every variation, or say it has none."
 		}
 		skus[sku] = true
+	}
+	if l := d.Listing; l != nil {
+		if len([]rune(l.Description)) > 5000 {
+			errs["listing.description"] = "At most 5,000 characters"
+		}
+		if l.Condition != "" && !slices.Contains(ItemConditions, l.Condition) {
+			errs["listing.condition"] = "Unknown condition"
+		}
+		if l.Fulfilment != "" && !slices.Contains(ListingFulfilments, l.Fulfilment) {
+			errs["listing.fulfilment"] = "Unknown fulfilment"
+		}
+		if len(l.Keywords) > 20 {
+			errs["listing.keywords"] = "Up to 20 keywords"
+		}
+		if l.HandlingDays < 0 || l.HandlingDays > 30 {
+			errs["listing.handlingDays"] = "Between 1 and 30 days"
+		}
+		if p := l.Packaging; p != nil && (p.LengthIn <= 0 || p.WidthIn <= 0 || p.HeightIn <= 0 || p.WeightLb <= 0) {
+			errs["listing.packaging"] = "Give the package length, width, height and weight"
+		}
+		if l.Fulfilment == "AFROTRANSACT" && l.Packaging == nil {
+			errs["listing.packaging"] = "Package size and weight are required for Fulfilled by AfroTransact"
+		}
 	}
 	return errs
 }
@@ -502,25 +624,30 @@ var StockReasons = []string{"STOCK_TAKE", "DAMAGED", "FOUND", "RETURNED", "OTHER
 
 // PayoutHold is net on settlement hold for one order.
 type PayoutHold struct {
-	OrderID     string  `json:"orderId"`
+	OrderID string `json:"orderId"`
+	// OrderNumber is what the screens show; nil when the order is not in the seller's recent shipments.
+	OrderNumber *string `json:"orderNumber"`
 	AmountMinor int64   `json:"amountMinor"`
 	ReleaseAt   *string `json:"releaseAt"`
 }
 
 // PayoutBalance is the balance card.
 type PayoutBalance struct {
-	Currency                  string       `json:"currency"`
-	AvailableMinor            int64        `json:"availableMinor"`
-	OnHoldMinor               int64        `json:"onHoldMinor"`
-	RequestedOrInTransitMinor int64        `json:"requestedOrInTransitMinor"`
-	PaidMinor                 int64        `json:"paidMinor"`
-	ProviderFeesMinor         int64        `json:"providerFeesMinor"`
-	MinimumPayoutMinor        int64        `json:"minimumPayoutMinor"`
-	CanRequestToday           bool         `json:"canRequestToday"`
-	PayoutsPaused             bool         `json:"payoutsPaused"`
-	PayoutsPausedReason       *string      `json:"payoutsPausedReason"`
-	PayoutsPausedMessage      *string      `json:"payoutsPausedMessage"`
-	Holds                     []PayoutHold `json:"holds"`
+	Currency                  string  `json:"currency"`
+	AvailableMinor            int64   `json:"availableMinor"`
+	OnHoldMinor               int64   `json:"onHoldMinor"`
+	RequestedOrInTransitMinor int64   `json:"requestedOrInTransitMinor"`
+	PaidMinor                 int64   `json:"paidMinor"`
+	ProviderFeesMinor         int64   `json:"providerFeesMinor"`
+	PlanFeesMinor             int64   `json:"planFeesMinor"`
+	MinimumPayoutMinor        int64   `json:"minimumPayoutMinor"`
+	CanRequestToday           bool    `json:"canRequestToday"`
+	PayoutsPaused             bool    `json:"payoutsPaused"`
+	PayoutsPausedReason       *string `json:"payoutsPausedReason"`
+	PayoutsPausedMessage      *string `json:"payoutsPausedMessage"`
+	// PayoutAccountMissing: payments has no Stripe Connect account for the organisation, so earnings stay on hold.
+	PayoutAccountMissing bool         `json:"payoutAccountMissing"`
+	Holds                []PayoutHold `json:"holds"`
 }
 
 var pausedMessages = map[string]string{
@@ -557,6 +684,51 @@ type PayoutsView struct {
 	Balance          PayoutBalance `json:"balance"`
 	Payouts          []Payout      `json:"payouts"`
 	HistoryAvailable bool          `json:"historyAvailable"`
+	// PlanFeeDeductions are plan invoices paid from sales (S298), newest first.
+	PlanFeeDeductions []PlanFeeDeduction `json:"planFeeDeductions"`
+}
+
+// PlanFeeTransfer is part of a plan fee deducted from (or, negative, paid back with) one order's settlement.
+type PlanFeeTransfer struct {
+	OrderID     string    `json:"orderId"`
+	OrderNumber *string   `json:"orderNumber"`
+	AmountMinor int64     `json:"amountMinor"`
+	At          time.Time `json:"at"`
+	Label       string    `json:"label"`
+}
+
+// PlanFeeDeduction is a plan invoice paid from sales: "Plan fee (invoice …)" (S298).
+type PlanFeeDeduction struct {
+	InvoiceID        string            `json:"invoiceId"`
+	InvoiceNumber    *string           `json:"invoiceNumber"`
+	Label            string            `json:"label"`
+	Status           string            `json:"status"`
+	RequestedMinor   int64             `json:"requestedMinor"`
+	WithheldMinor    int64             `json:"withheldMinor"`
+	ReleasedMinor    int64             `json:"releasedMinor"`
+	OutstandingMinor int64             `json:"outstandingMinor"`
+	CreatedAt        time.Time         `json:"createdAt"`
+	Transfers        []PlanFeeTransfer `json:"transfers"`
+}
+
+// Plan fee collection modes (S298).
+const (
+	PlanFeeEarningsFirst = "EARNINGS_FIRST"
+	PlanFeeCard          = "CARD"
+)
+
+// PlanFeeCollectionView is how the organisation pays its plan (S298).
+type PlanFeeCollectionView struct {
+	Available            bool       `json:"available"`
+	Mode                 string     `json:"mode"`
+	Effective            string     `json:"effective"`
+	Source               string     `json:"source"`
+	PlatformDefault      string     `json:"platformDefault"`
+	AppliesFromInvoiceAt *time.Time `json:"appliesFromInvoiceAt"`
+	AppliesFromLabel     string     `json:"appliesFromLabel"`
+	InProgressInvoiceID  *string    `json:"inProgressInvoiceId"`
+	ChangedAt            *time.Time `json:"changedAt"`
+	CanChange            bool       `json:"canChange"`
 }
 
 // Cadences of a subscription.
@@ -584,6 +756,10 @@ type Plan struct {
 	Features     []string    `json:"features"`
 	Prices       []PlanPrice `json:"prices"`
 	Current      bool        `json:"current"`
+	// Entitlements is what the plan allows: the live-listing cap, the AI listing writer and Lola's tier.
+	Entitlements *PlanEntitlementsView `json:"entitlements"`
+	// ChargeTerms is what the plan charges, in words: "First 3 months free, then $39/mo", or commission only.
+	ChargeTerms string `json:"chargeTerms"`
 }
 
 // BillingPaymentMethod is a card or bank account the plan is charged to.
@@ -608,13 +784,33 @@ type Invoice struct {
 	Number          string     `json:"number"`
 	PeriodStart     *time.Time `json:"periodStart"`
 	PeriodEnd       *time.Time `json:"periodEnd"`
+	SubtotalMinor   int64      `json:"subtotalMinor"`
+	DiscountMinor   int64      `json:"discountMinor"`
 	AmountDueMinor  int64      `json:"amountDueMinor"`
 	AmountPaidMinor int64      `json:"amountPaidMinor"`
 	Currency        string     `json:"currency"`
 	Status          string     `json:"status"`
-	PDFURL          *string    `json:"pdfUrl"`
-	HostedURL       *string    `json:"hostedUrl"`
 	CreatedAt       time.Time  `json:"createdAt"`
+	// PaidAt is when it was settled; NextAttemptAt and LastError describe an unpaid one (a declined card is retried).
+	PaidAt        *time.Time    `json:"paidAt"`
+	NextAttemptAt *time.Time    `json:"nextAttemptAt"`
+	LastError     *string       `json:"lastError"`
+	Lines         []InvoiceLine `json:"lines"`
+	// What settled it, in the order tried: platform credit and coupons first, then the seller's sales (only when they
+	// chose that), then the card or bank account; a waiver is staff forgiving the rest.
+	PaidFromCreditMinor int64 `json:"paidFromCreditMinor"`
+	PaidFromSalesMinor  int64 `json:"paidFromSalesMinor"`
+	PaidByCardMinor     int64 `json:"paidByCardMinor"`
+	WaivedMinor         int64 `json:"waivedMinor"`
+	// CanRetry is true for an invoice that failed every attempt: the seller can fix the payment method and retry.
+	CanRetry bool `json:"canRetry"`
+}
+
+// InvoiceLine is one line of an invoice: the plan, usage, a coupon or what a charge condition waived.
+type InvoiceLine struct {
+	Kind        string `json:"kind"`
+	Description string `json:"description"`
+	AmountMinor int64  `json:"amountMinor"`
 }
 
 // PendingPlanChange is a downgrade or cadence change applied at renewal.
@@ -641,6 +837,81 @@ type Subscription struct {
 	CancelAtPeriodEnd bool               `json:"cancelAtPeriodEnd"`
 	PendingChange     *PendingPlanChange `json:"pendingChange"`
 	Dunning           *string            `json:"dunning"`
+	// PlanVersion is the plan version (prices) the organisation pays; it changes only by a plan change or a staff
+	// migration (S292).
+	PlanVersion int `json:"planVersion"`
+	// CreditBalanceMinor is the platform credit the next invoices use first (rewards, staff credits).
+	CreditBalanceMinor int64 `json:"creditBalanceMinor"`
+	// TrialSource is PLAN, CAMPAIGN, OVERRIDE or NONE once the subscription started.
+	TrialSource *string `json:"trialSource"`
+	// ChargeGate is a condition staff put on the plan charges, with the seller's progress; nil when charges apply.
+	ChargeGate *ChargeGateView `json:"chargeGate"`
+	// Entitlements is what the plan allows.
+	Entitlements *PlanEntitlementsView `json:"entitlements"`
+}
+
+// ChargeGateView explains a condition on the plan charges to the seller: "Charging starts after $1,000 in sales — you're
+// at $420".
+type ChargeGateView struct {
+	Mode      string     `json:"mode"`
+	Metric    *string    `json:"metric"`
+	Threshold *int64     `json:"threshold"`
+	Progress  int64      `json:"progress"`
+	Until     *time.Time `json:"until"`
+	MetAt     *time.Time `json:"metAt"`
+	Label     string     `json:"label"`
+}
+
+// PlanEntitlementsView is what a plan lets an organisation do. A capability that is off is not offered to the plan's
+// members: the BFF refuses it (403 PLAN_FEATURE_REQUIRED) and Seller Center does not show it.
+type PlanEntitlementsView struct {
+	Listings          *int64 `json:"listings"`
+	ListingsUnlimited bool   `json:"listingsUnlimited"`
+	AIListingWriter   bool   `json:"aiListingWriter"`
+	LolaTier          string `json:"lolaTier"`
+	BulkUpload        bool   `json:"bulkUpload"`
+	ImageLibrary      bool   `json:"imageLibrary"`
+	Coupons           bool   `json:"coupons"`
+}
+
+// Plan capabilities: the keys of PlanEntitlementsView and of the session's capabilities list.
+const (
+	CapBulkUpload   = "bulkUpload"
+	CapImageLibrary = "imageLibrary"
+	CapCoupons      = "coupons"
+	CapAIWriter     = "aiListingWriter"
+	CapLola         = "lola"
+)
+
+// Allows reports whether the plan includes a capability.
+func (e *PlanEntitlementsView) Allows(capability string) bool {
+	if e == nil {
+		return false
+	}
+	switch capability {
+	case CapBulkUpload:
+		return e.BulkUpload
+	case CapImageLibrary:
+		return e.ImageLibrary
+	case CapCoupons:
+		return e.Coupons
+	case CapAIWriter:
+		return e.AIListingWriter
+	case CapLola:
+		return !strings.EqualFold(e.LolaTier, "NONE")
+	}
+	return false
+}
+
+// Capabilities lists the keys the plan includes (what Seller Center may show).
+func (e *PlanEntitlementsView) Capabilities() []string {
+	out := []string{}
+	for _, c := range []string{CapBulkUpload, CapImageLibrary, CapCoupons, CapAIWriter, CapLola} {
+		if e.Allows(c) {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // BillingView is GET /v1/seller/billing.
@@ -650,6 +921,90 @@ type BillingView struct {
 	PaymentMethods []BillingPaymentMethod `json:"paymentMethods"`
 	Invoices       []Invoice              `json:"invoices"`
 	CanManage      bool                   `json:"canManage"`
+	// PlanFeeCollection is how the plan is paid (S298); nil when it can't be read.
+	PlanFeeCollection *PlanFeeCollectionView `json:"planFeeCollection"`
+}
+
+// RewardProgress is a reward the organisation can still earn: "$640 of $1,000 in sales → 1 month free".
+type RewardProgress struct {
+	RuleID         string     `json:"ruleId"`
+	Name           string     `json:"name"`
+	Description    *string    `json:"description"`
+	Metric         string     `json:"metric"`
+	Value          int64      `json:"value"`
+	Threshold      int64      `json:"threshold"`
+	Percent        int        `json:"percent"`
+	Qualifies      bool       `json:"qualifies"`
+	Label          string     `json:"label"`
+	RewardLabel    string     `json:"rewardLabel"`
+	ConditionLabel string     `json:"conditionLabel"`
+	EndsAt         *time.Time `json:"endsAt"`
+	// Comparison is AT_LEAST (progress towards the threshold) or LESS_THAN (low-sales relief, S299: no progress bar,
+	// decided once at CheckAt).
+	Comparison     string     `json:"comparison"`
+	WindowAnchor   string     `json:"windowAnchor"`
+	WindowDays     *int       `json:"windowDays"`
+	Pending        bool       `json:"pending"`
+	CheckAt        *time.Time `json:"checkAt"`
+	WindowClosesAt *time.Time `json:"windowClosesAt"`
+}
+
+// EarnedReward is a reward or credit the organisation received.
+type EarnedReward struct {
+	ID          string     `json:"id"`
+	Source      string     `json:"source"`
+	Type        string     `json:"type"`
+	Summary     string     `json:"summary"`
+	Reason      *string    `json:"reason"`
+	Status      string     `json:"status"`
+	CreditMinor *int64     `json:"creditMinor"`
+	FreeDays    *int       `json:"freeDays"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	AppliedAt   *time.Time `json:"appliedAt"`
+	// Comparison is the reward rule's comparison: LESS_THAN is low-sales relief (S299).
+	Comparison *string `json:"comparison"`
+	// NextChargeAt is the new trial end for free days: when Stripe charges next.
+	NextChargeAt *time.Time `json:"nextChargeAt"`
+}
+
+// SellerRewardsView is GET /v1/seller/billing/rewards.
+type SellerRewardsView struct {
+	Available []RewardProgress `json:"available"`
+	Earned    []EarnedReward   `json:"earned"`
+}
+
+// PlanChangePreview is what a plan or cadence change would do (nothing changes).
+type PlanChangePreview struct {
+	Change            string     `json:"change"`
+	PlanCode          string     `json:"planCode"`
+	PlanName          string     `json:"planName"`
+	Cadence           string     `json:"cadence"`
+	EffectiveAt       *time.Time `json:"effectiveAt"`
+	AmountDueNowMinor int64      `json:"amountDueNowMinor"`
+	NextChargeMinor   int64      `json:"nextChargeMinor"`
+	NextChargeAt      *time.Time `json:"nextChargeAt"`
+	Trialing          bool       `json:"trialing"`
+}
+
+// BillingSetupIntent starts adding a card or bank account (Payment Element); LocalTest: no Stripe key locally.
+type BillingSetupIntent struct {
+	SetupIntentID  string `json:"setupIntentId"`
+	ClientSecret   string `json:"clientSecret"`
+	PublishableKey string `json:"publishableKey"`
+	LocalTest      bool   `json:"localTest"`
+}
+
+// AddBillingPaymentMethod registers a SetupIntent's confirmed payment method.
+type AddBillingPaymentMethod struct {
+	StripePaymentMethodID string `json:"stripePaymentMethodId"`
+	Kind                  string `json:"kind"`
+	Brand                 string `json:"brand"`
+	Last4                 string `json:"last4"`
+	ExpMonth              int    `json:"expMonth"`
+	ExpYear               int    `json:"expYear"`
+	BankName              string `json:"bankName"`
+	AccountType           string `json:"accountType"`
+	MakeDefault           bool   `json:"makeDefault"`
 }
 
 // ChangePlanResult is the plan change outcome.
@@ -924,4 +1279,35 @@ func (in ShipFromInput) Validate() map[string]string {
 		req("postalCode", in.PostalCode, 12)
 	}
 	return errs
+}
+
+// SellerTaxStatement is Seller Center's monthly statement of the sales tax AfroTransact collected on the seller's behalf.
+type SellerTaxStatement struct {
+	Month    string               `json:"month"`
+	Currency string               `json:"currency"`
+	Rows     []SellerTaxStateRow  `json:"rows"`
+	Totals   SellerTaxStateTotals `json:"totals"`
+	Months   []string             `json:"months"`
+}
+
+// SellerTaxStateRow is one state's line of the statement.
+type SellerTaxStateRow struct {
+	Jurisdiction      string `json:"jurisdiction"`
+	State             string `json:"state"`
+	Orders            int64  `json:"orders"`
+	GrossSalesMinor   int64  `json:"grossSalesMinor"`
+	TaxableSalesMinor int64  `json:"taxableSalesMinor"`
+	TaxCollectedMinor int64  `json:"taxCollectedMinor"`
+	TaxRefundedMinor  int64  `json:"taxRefundedMinor"`
+	NetTaxMinor       int64  `json:"netTaxMinor"`
+}
+
+// SellerTaxStateTotals sums the rows.
+type SellerTaxStateTotals struct {
+	Orders            int64 `json:"orders"`
+	GrossSalesMinor   int64 `json:"grossSalesMinor"`
+	TaxableSalesMinor int64 `json:"taxableSalesMinor"`
+	TaxCollectedMinor int64 `json:"taxCollectedMinor"`
+	TaxRefundedMinor  int64 `json:"taxRefundedMinor"`
+	NetTaxMinor       int64 `json:"netTaxMinor"`
 }

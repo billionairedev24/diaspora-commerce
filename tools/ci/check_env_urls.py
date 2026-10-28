@@ -33,7 +33,7 @@ fixtures/), as are generated clients (*/generated/*) and build output.
 
     python3 tools/ci/check_env_urls.py                     # whole repository
     python3 tools/ci/check_env_urls.py java go/pkg infra   # only these paths
-    python3 tools/ci/check_env_urls.py --exclude infra/terraform  # skip a path prefix (repeatable)
+    python3 tools/ci/check_env_urls.py --exclude infra/tofu  # skip a path prefix (repeatable)
     python3 tools/ci/check_env_urls.py --format github     # ::error annotations for GitHub Actions
 
 Exit status: 0 clean, 1 violations found, 2 usage error.

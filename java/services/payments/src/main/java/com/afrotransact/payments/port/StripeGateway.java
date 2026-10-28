@@ -3,6 +3,7 @@ package com.afrotransact.payments.port;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import com.afrotransact.payments.domain.Money;
 
@@ -80,6 +81,16 @@ public interface StripeGateway {
     /** Platform balance transactions created in [from, to) (all pages). */
     List<BalanceTxn> balanceTransactions(Instant from, Instant to);
 
+    /**
+     * Reads one Stripe object by its id (po_, tr_, pi_, ch_, re_, txn_, dp_, acct_) for Finance's lookups.
+     * {@code connectedAccount} is where a payout ({@code po_}) lives; null means the platform account. Empty when
+     * Stripe has no such object or the id is of a kind this does not read.
+     */
+    Optional<ObjectSnapshot> lookup(String ref, String connectedAccount);
+
+    /** Available and pending balance of a connected account. */
+    ConnectedBalanceSnapshot connectedBalance(String connectedAccount);
+
     /** Creates the Stripe Customer of an AfroTransact customer (idempotent per customer). Returns cus_…. */
     String createCustomer(String afroCustomerId, String idempotencyKey);
 
@@ -89,6 +100,14 @@ public interface StripeGateway {
                                           String idempotencyKey);
 
     PaymentMethodSnapshot retrievePaymentMethod(String paymentMethodId);
+
+    /**
+     * The payment methods attached to a Stripe Customer now (every page) and its
+     * {@code invoice_settings.default_payment_method}. The shopper's saved methods are read from here, so a method
+     * saved at checkout ({@code setup_future_usage}) or on Your Payments shows at once, whether or not the
+     * {@code payment_method.attached} / {@code setup_intent.succeeded} webhooks were delivered.
+     */
+    CustomerWalletSnapshot customerWallet(String stripeCustomerId);
 
     void detachPaymentMethod(String paymentMethodId, String idempotencyKey);
 
@@ -110,9 +129,30 @@ public interface StripeGateway {
     record SetupIntentSnapshot(String id, String clientSecret, String status) {
     }
 
-    /** Display data of a payment method (never the full number). */
+    /**
+     * Display data of a payment method (never the full number).
+     *
+     * @param wallet the wallet a card came from ({@code card.wallet.type}: apple_pay, google_pay, link, samsung_pay
+     *               …), null for a card typed in
+     */
     record PaymentMethodSnapshot(String id, String type, String customer, String brand, String last4,
-                                 Integer expMonth, Integer expYear, String bankName, String accountType) {
+                                 Integer expMonth, Integer expYear, String bankName, String accountType,
+                                 String wallet) {
+    }
+
+    /**
+     * A Stripe Customer's payment methods.
+     *
+     * @param authoritative true when {@code methods} is everything the customer has (Stripe): a saved method missing
+     *                      from it was detached. False for the local stand-in, which keeps methods in memory only:
+     *                      what it lists is added, nothing is removed
+     */
+    record CustomerWalletSnapshot(String defaultPaymentMethodId, List<PaymentMethodSnapshot> methods,
+                                  boolean authoritative) {
+
+        public CustomerWalletSnapshot {
+            methods = methods == null ? List.of() : List.copyOf(methods);
+        }
     }
 
     /**
@@ -177,6 +217,17 @@ public interface StripeGateway {
     }
 
     record ReversalSnapshot(String id, String transferId, long amount) {
+    }
+
+    /**
+     * One Stripe object as Finance reads it: {@code kind} is a label ("Payout", "Transfer"), {@code links} the ids it
+     * relates to and other facts worth showing (arrival date, destination, charge, balance transaction).
+     */
+    record ObjectSnapshot(String id, String kind, String status, long amountMinor, String currency, Instant created,
+                          String description, String failure, Map<String, String> links) {
+    }
+
+    record ConnectedBalanceSnapshot(String account, String currency, long availableMinor, long pendingMinor) {
     }
 
     record PayoutSnapshot(String id, String status, long amount) {

@@ -52,6 +52,12 @@ public interface OrderRepository {
      */
     List<String> preorderShipmentsPastDue(LocalDate today, int limit);
 
+    /**
+     * ADR 0005: ids of every PREORDER shipment of a pre-order window (any status), oldest first. Used to cancel a
+     * window: cancellation is idempotent per shipment, so already cancelled ones are skipped by the caller.
+     */
+    List<String> preorderShipmentsOfWindow(String windowId);
+
     /** S272: ids of late pre-order adds still waiting for their payment (payment link or customer authentication). */
     List<String> lateAddsAwaitingPayment(int limit);
 

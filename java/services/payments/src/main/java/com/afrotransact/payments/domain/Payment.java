@@ -1,5 +1,6 @@
 package com.afrotransact.payments.domain;
 
+import java.math.BigInteger;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,6 +12,11 @@ import java.util.UUID;
 /**
  * The payment of one order: one Stripe PaymentIntent (manual capture) that settles to many recipients.
  *
+ * @param credit       the part of {@code amount} paid with AfroTransact credit (S320); the PaymentIntent is for
+ *                     {@code amount - credit}, and there is none when credit pays everything
+ * @param shopperId    the customer whose credit paid it (token subject), null without credit
+ * @param cardRefundsAsCredit the shopper (or staff, with a reason) chose credit for the card part of every refund of
+ *                     this order: one way, never turned back into a card refund (S320)
  * @param multicapture the PaymentIntent allows several partial captures (Stripe multicapture). A single-capture
  *                     intent's first capture is final: Stripe releases whatever is not captured with it
  */
@@ -18,7 +24,8 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
                       String stripePaymentIntentId, String clientSecret, UUID feeScheduleId, Instant placedAt,
                       Money captured, Money refunded, Instant authorizedAt, String failureMessage,
                       Map<String, String> metadata, List<PaymentLine> lines, Instant createdAt, Instant updatedAt,
-                      long version, UUID parentPaymentId, boolean multicapture) {
+                      long version, UUID parentPaymentId, boolean multicapture, Money credit,
+                      String shopperId, boolean cardRefundsAsCredit) {
 
     /** Metadata of payments whose captures follow shipments (orders): {@code capture_plan=per_shipment}. */
     public static final String CAPTURE_PLAN = "capture_plan";
@@ -55,7 +62,7 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         }
         return new Payment(id, orderId, customerId, amount, PaymentStatus.REQUIRES_PAYMENT_METHOD, null, null,
                 feeScheduleId, placedAt, Money.zero(amount.currency()), Money.zero(amount.currency()), null, null,
-                metadata, pls, now, now, 0, null, true);
+                metadata, pls, now, now, 0, null, true, Money.zero(amount.currency()), null, false);
     }
 
     /**
@@ -71,11 +78,69 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         Payment p = create(id, parent.orderId(), stripeCustomerId, total, parent.feeScheduleId(), parent.placedAt(),
                 metadata, lines, now);
         return new Payment(p.id, p.orderId, p.customerId, p.amount, p.status, null, null, p.feeScheduleId,
-                p.placedAt, p.captured, p.refunded, null, null, p.metadata, p.lines, now, now, 0, parent.id(), true);
+                p.placedAt, p.captured, p.refunded, null, null, p.metadata, p.lines, now, now, 0, parent.id(), true, p.credit, null, false);
     }
 
     public String currency() {
         return amount.currency();
+    }
+
+    /** What the card pays: the order minus the credit applied. */
+    public Money cardAmount() {
+        return amount.minus(credit);
+    }
+
+    /** Credit pays for the whole order: no PaymentIntent, nothing to capture at Stripe. */
+    public boolean paidWithCreditOnly() {
+        return credit.isPositive() && credit.equals(amount);
+    }
+
+    /** The order is paid partly (or wholly) with credit {@code spent} of {@code shopper}. */
+    public Payment withCredit(Money spent, String shopper) {
+        return new Payment(id, orderId, customerId, amount, status, stripePaymentIntentId, clientSecret,
+                feeScheduleId, placedAt, captured, refunded, authorizedAt, failureMessage, metadata, lines, createdAt,
+                updatedAt, version, parentPaymentId, multicapture, spent, shopper, cardRefundsAsCredit);
+    }
+
+    /** Credit paid everything, so there is no card to authorise: the payment is authorised from the start. */
+    public Payment authorisedByCredit(Instant now) {
+        return new Payment(id, orderId, customerId, amount, PaymentStatus.AUTHORIZED, null, null, feeScheduleId,
+                placedAt, captured, refunded, now, null, metadata, lines, createdAt, now, version, parentPaymentId,
+                multicapture, credit, shopperId, cardRefundsAsCredit);
+    }
+
+    /**
+     * The credit share of a capture of {@code capture}, given the credit that earlier captures took: proportional to
+     * the order, and the rest of the credit with the capture that completes the order, so the shares add up exactly.
+     */
+    public Money creditShareOf(Money capture, Money creditAlreadyCaptured) {
+        if (!credit.isPositive()) {
+            return Money.zero(amount.currency());
+        }
+        Money left = credit.minus(creditAlreadyCaptured);
+        if (captured.plus(capture).equals(amount)) {
+            return left;
+        }
+        long share = BigInteger.valueOf(capture.minor()).multiply(BigInteger.valueOf(
+                credit.minor())).divide(BigInteger.valueOf(amount.minor())).longValueExact();
+        return Money.of(Math.min(share, left.minor()), amount.currency());
+    }
+
+    /**
+     * The credit part of a refund of {@code refund} (the amount of this refund), given the credit earlier refunds
+     * gave back. Proportional to the order and exact on the last: each part goes back to what paid it.
+     */
+    public Money creditPartOf(Money refund, Money creditAlreadyRefunded) {
+        if (!credit.isPositive()) {
+            return Money.zero(amount.currency());
+        }
+        Money left = credit.minus(creditAlreadyRefunded);
+        if (refunded.plus(refund).equals(amount)) {
+            return left;
+        }
+        long share = BigInteger.valueOf(refund.minor()).multiply(BigInteger.valueOf(
+                credit.minor())).divide(BigInteger.valueOf(amount.minor())).longValueExact();
+        return Money.of(Math.min(share, left.minor()), amount.currency());
     }
 
     /** A follow-up off-session charge (has a parent payment of the same order). */
@@ -114,14 +179,14 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         }
         return new Payment(id, orderId, customerId, amount, PaymentStatus.CAPTURED, stripePaymentIntentId,
                 clientSecret, feeScheduleId, placedAt, captured, refunded, authorizedAt, failureMessage, metadata,
-                lines, createdAt, now, version, parentPaymentId, multicapture);
+                lines, createdAt, now, version, parentPaymentId, multicapture, credit, shopperId, cardRefundsAsCredit);
     }
 
     /** Off-session confirmation needs the customer (3-D Secure / SCA): the intent waits for them on-session. */
     public Payment awaitingCustomer(String reason, Instant now) {
         return new Payment(id, orderId, customerId, amount, PaymentStatus.REQUIRES_ACTION, stripePaymentIntentId,
                 clientSecret, feeScheduleId, placedAt, captured, refunded, authorizedAt, reason, metadata, lines,
-                createdAt, now, version, parentPaymentId, multicapture);
+                createdAt, now, version, parentPaymentId, multicapture, credit, shopperId, cardRefundsAsCredit);
     }
 
     public Optional<PaymentLine> line(String lineId) {
@@ -140,7 +205,7 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
     public Payment withIntent(String intentId, String secret, PaymentStatus newStatus, boolean multi, Instant now) {
         return new Payment(id, orderId, customerId, amount, newStatus, intentId, secret, feeScheduleId, placedAt,
                 captured, refunded, authorizedAt, failureMessage, metadata, lines, createdAt, now, version,
-                parentPaymentId, multi);
+                parentPaymentId, multi, credit, shopperId, cardRefundsAsCredit);
     }
 
     /** Captures follow the order's shipments ({@link #CAPTURE_PLAN} = {@link #PER_SHIPMENT}, set by orders). */
@@ -170,7 +235,7 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         String failureText = reported == PaymentStatus.FAILED ? failure : null;
         return new Payment(id, orderId, customerId, amount, next, stripePaymentIntentId, clientSecret, feeScheduleId,
                 placedAt, captured, refunded, authorised, failureText, metadata, lines, createdAt, now, version,
-                parentPaymentId, multicapture);
+                parentPaymentId, multicapture, credit, shopperId, cardRefundsAsCredit);
     }
 
     /**
@@ -205,7 +270,7 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
                 : PaymentStatus.PARTIALLY_CAPTURED;
         return new Payment(id, orderId, customerId, amount, next, stripePaymentIntentId, clientSecret, feeScheduleId,
                 placedAt, total, refunded, authorizedAt, failureMessage, metadata, updated, createdAt, now, version,
-                parentPaymentId, multicapture);
+                parentPaymentId, multicapture, credit, shopperId, cardRefundsAsCredit);
     }
 
     public Payment cancel(Instant now) {
@@ -219,7 +284,7 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         }
         return new Payment(id, orderId, customerId, amount, PaymentStatus.CANCELED, stripePaymentIntentId,
                 clientSecret, feeScheduleId, placedAt, captured, refunded, authorizedAt, failureMessage, metadata,
-                lines, createdAt, now, version, parentPaymentId, multicapture);
+                lines, createdAt, now, version, parentPaymentId, multicapture, credit, shopperId, cardRefundsAsCredit);
     }
 
     public Payment refund(Refund refund, Instant now) {
@@ -235,6 +300,6 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         }
         return new Payment(id, orderId, customerId, amount, status, stripePaymentIntentId, clientSecret,
                 feeScheduleId, placedAt, captured, refunded.plus(refund.amount()), authorizedAt, failureMessage,
-                metadata, updated, createdAt, now, version, parentPaymentId, multicapture);
+                metadata, updated, createdAt, now, version, parentPaymentId, multicapture, credit, shopperId, cardRefundsAsCredit);
     }
 }

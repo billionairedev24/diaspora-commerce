@@ -29,11 +29,11 @@ final class Stubs {
                 .withRequestBody(WireMock.containing("grant_type=client_credentials"))
                 .willReturn(json(200, "{\"access_token\":\"" + TOKEN + "\",\"token_type\":\"Bearer\","
                         + "\"expires_in\":300}")));
-        wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/public/variants/ATP[0-9A-Z]{7}"))
+        wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/variants/ATP[0-9A-Z]{7}"))
                 .willReturn(json(200, variant(null, "PLATFORM", "AfroTransact Brand Jollof Seasoning, 6 oz"))));
-        wm.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/public/variants/" + SELLER_ATIN))
+        wm.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/variants/" + SELLER_ATIN))
                 .willReturn(json(200, variant(SELLER_ATIN, "SELLER", "Marketplace Jollof"))));
-        wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/public/variants/.*")).atPriority(10)
+        wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/variants/.*")).atPriority(10)
                 .willReturn(json(404, "{\"code\":\"catalog.product-not-found\"}")));
         // S226: warehouse time zones for receipt date rules.
         wm.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/nodes")).willReturn(json(200,

@@ -13,9 +13,16 @@ package com.afrotransact.identity.adapter.in.web;
  * @param intent     Seller Center entry point ({@code intent} parameter): {@code sell} ("Start selling") or
  *                   {@code provide} ("Offer your services"); null otherwise. Brands the pages and decides which
  *                   applicant role an account created here gets.
+ * @param signedOut  the app sent the browser here right after signing out ({@code notice=signed_out}): the sign-in
+ *                   page says "You've been signed out."
+ * @param referral   referral code from a friend's share link ({@code referral} parameter, S322): prefilled in the
+ *                   sign-up form; null otherwise
  */
 record HostedPageContext(HostedApp app, String clientId, String appUrl, String loginHint, String invitation,
-                         boolean pending, String intent) {
+                         boolean pending, String intent, boolean signedOut, String referral) {
+
+    /** {@code notice} value an app sends on the sign-in it starts right after signing out. */
+    static final String SIGNED_OUT = "signed_out";
 
     /** Accepted {@code intent} values. */
     static final String SELL = "sell";

@@ -30,6 +30,8 @@ import {
   type BookingRequest,
   type BookingReview,
   BookingReviewSchema,
+  type BusinessPage,
+  BusinessPageSchema,
   type CancellationQuote,
   CancellationQuoteSchema,
   type CheckoutSummary,
@@ -149,8 +151,8 @@ export function shopperMethods(request: Requester, options: ApiClientOptions) {
       request('/v1/account/notification-preferences', NotificationPreferencesSchema, { method: 'PUT', body }),
 
     /* Checkout (orders saga + Stripe) */
-    getCheckoutSummary: (addressId?: string, signal?: AbortSignal): Promise<CheckoutSummary> =>
-      request('/v1/checkout/summary', CheckoutSummarySchema, { query: { addressId }, signal }),
+    getCheckoutSummary: (addressId?: string, packageDelivery?: string, couponCode?: string, signal?: AbortSignal): Promise<CheckoutSummary> =>
+      request('/v1/checkout/summary', CheckoutSummarySchema, { query: { addressId, packageDelivery, couponCode }, signal }),
     placeOrder: (body: PlaceOrderRequest, idempotencyKey: string): Promise<OrderConfirmation> =>
       request('/v1/checkout/orders', OrderConfirmationSchema, { method: 'POST', body, headers: { 'Idempotency-Key': idempotencyKey } }),
     getCheckoutStatus: (orderNumber: string): Promise<OrderConfirmation> => request(`/v1/checkout/orders/${enc(orderNumber)}`, OrderConfirmationSchema),
@@ -173,8 +175,8 @@ export function shopperMethods(request: Requester, options: ApiClientOptions) {
       (await request(`/v1/services/${enc(id)}/slots`, z.object({ slots: z.array(AvailableSlotSchema) }), { query: slotQuery(q), signal })).slots,
     getBookingQuote: (id: string, q: SlotQuery = {}, signal?: AbortSignal): Promise<BookingQuote> =>
       request(`/v1/services/${enc(id)}/summary`, BookingQuoteSchema, { query: slotQuery(q), signal }),
-    getProviderPage: (orgId: string, slug?: string, signal?: AbortSignal): Promise<ProviderPage> =>
-      request(`/v1/service-providers/${enc(orgId)}`, ProviderPageSchema, { query: { slug }, signal }),
+    getProviderPage: (orgId: string, signal?: AbortSignal): Promise<ProviderPage> => request(`/v1/service-providers/${enc(orgId)}`, ProviderPageSchema, { signal }),
+    getBusinessPage: (slug: string, signal?: AbortSignal): Promise<BusinessPage> => request(`/v1/business-pages/${enc(slug)}`, BusinessPageSchema, { signal }),
     bookService: (body: BookingRequest, idempotencyKey?: string): Promise<BookingCreated> =>
       request('/v1/services/bookings', BookingCreatedSchema, { method: 'POST', body, headers: idem(idempotencyKey) }),
     getMyBookings: async (signal?: AbortSignal): Promise<CustomerBooking[]> =>

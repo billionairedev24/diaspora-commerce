@@ -2,7 +2,6 @@
 
 import { type InboundReceiptResult, type InboundShipment, inventoryHubQueries, receiptVariance, type ReceiveLineInput } from '@afrotransact/api-client';
 import { Button, Checkbox, cx, parseGs1, TextField } from '@afrotransact/ui';
-import { Barcode as BarcodeIcon } from '@phosphor-icons/react/ssr';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -10,8 +9,10 @@ import { RetailReceiptScreen } from '@/components/retail/ReceiptScreen';
 import { Card } from '@/components/ui/Card';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
-import { idempotencyKey, shortDate } from '@/lib/format';
+import { useT } from '@/i18n/t';
+import { idempotencyKey, money, shortDate } from '@/lib/format';
 
+import { checkCost, type CostDraft, CostFields, emptyCost } from './CostFields';
 import { Timeline, useRetailItems } from './InboundPanel';
 import { smallButton, todayIso, toneOf, useHub, useHubAccess, useHubMutation, useParam } from './shared';
 
@@ -23,6 +24,7 @@ interface Count {
   expDate: string;
   bin: string;
   hold: boolean;
+  cost: CostDraft;
 }
 
 /** A scanned GS1 element string as AI → value, or null when it is not one. */
@@ -44,11 +46,15 @@ const VARIANCE: Record<string, [string, string]> = {
 /** Counting one inbound shipment at the dock: scan, count good and damaged per line, confirm the batch, post. */
 function InboundReceiving({ shipment }: { shipment: InboundShipment }) {
   const api = useHub();
+  const t = useT();
   const items = useRetailItems();
   const { inventoryEdit } = useHubAccess();
   const s = shipment;
+  // AfroTransact-owned stock (a retail ASN counted here) can be costed in the currency paid; seller (FBA) units carry no cost.
+  const costed = s.source === 'RETAIL_ASN';
+  const rates = useQuery({ ...inventoryHubQueries.currentRates(api), enabled: costed });
   const fresh = (): Record<number, Count> =>
-    Object.fromEntries(s.lines.map((l) => [l.lineNo, { good: '', damaged: '', lotNo: l.lotNo ?? '', mfgDate: l.mfgDate ?? '', expDate: l.expDate ?? '', bin: '', hold: false }]));
+    Object.fromEntries(s.lines.map((l) => [l.lineNo, { good: '', damaged: '', lotNo: l.lotNo ?? '', mfgDate: l.mfgDate ?? '', expDate: l.expDate ?? '', bin: '', hold: false, cost: emptyCost() }]));
   const [counts, setCounts] = useState<Record<number, Count>>(fresh);
   const [boxes, setBoxes] = useState<string[]>([]);
   const [scan, setScan] = useState('');
@@ -104,11 +110,17 @@ function InboundReceiving({ shipment }: { shipment: InboundShipment }) {
     if (c.damaged && !/^\d+$/.test(c.damaged)) errors[`${l.lineNo}.damaged`] = 'Whole units';
     if ((c.good || c.damaged) && c.expDate && c.expDate < todayIso()) errors[`${l.lineNo}.expDate`] = 'This batch has expired: do not receive it';
   });
+  const checks = Object.fromEntries(s.lines.map((l) => [l.lineNo, checkCost(counts[l.lineNo]?.cost ?? emptyCost(), rates.data ?? [], t)]));
+  s.lines.forEach((l) => {
+    const c = counts[l.lineNo];
+    if (costed && c && (c.good || c.damaged)) Object.entries(checks[l.lineNo]?.errors ?? {}).forEach(([k, v]) => (errors[`${l.lineNo}.cost.${k}`] = v));
+  });
   const lines: ReceiveLineInput[] = s.lines
     .map((l) => ({ l, c: counts[l.lineNo] }))
     .filter(({ c }) => c && (Number(c.good) > 0 || Number(c.damaged) > 0))
     .map(({ l, c }) => ({
       sku: l.sku,
+      ...(costed && checks[l.lineNo]?.input ? { cost: checks[l.lineNo]?.input } : {}),
       qtyGood: Number(c?.good || 0),
       qtyDamaged: Number(c?.damaged || 0),
       lotNo: c?.lotNo.trim() || undefined,
@@ -135,21 +147,25 @@ function InboundReceiving({ shipment }: { shipment: InboundShipment }) {
         <strong>{s.number}</strong>
         <StatusPill tone={toneOf(s.status)}>{s.status === 'SHIPPED' ? 'Arriving' : 'Receiving'}</StatusPill>
         <span className="text-sm text-muted">
-          {s.ownerOrg} → {s.nodeId} · {s.receivedUnits} of {s.expectedUnits} received
+          {s.ownerOrgName ?? ''} → {s.nodeId} · {s.receivedUnits} of {s.expectedUnits} received
         </span>
       </div>
       <Timeline shipment={s} />
       <form
-        className="flex flex-wrap items-end gap-2"
+        className="w-full"
         onSubmit={(e) => {
           e.preventDefault();
           onScan();
         }}
       >
-        <TextField label="Scan a box (LPN), a case (GS1-128) or a unit label" value={scan} onChange={(e) => setScan(e.target.value)} placeholder="LPN… · (01)…(17)…(10)… · ATF…" className="min-w-[260px] flex-1" autoComplete="off" />
-        <Button type="submit" variant="neutral" icon={<BarcodeIcon size={16} aria-hidden />}>
-          Scan
-        </Button>
+        <TextField
+          label="Barcode, LPN, GS1-128 or unit label (press Enter)"
+          value={scan}
+          onChange={(e) => setScan(e.target.value)}
+          placeholder="Enter LPN, GS1-128, or SKU/unit label… (e.g. ATF…)"
+          className="w-full"
+          autoComplete="off"
+        />
       </form>
       {scanMsg ? <span role="status" className="text-sm">{scanMsg}</span> : null}
       {boxes.length ? <span className="text-xs text-muted">Boxes scanned: {boxes.join(', ')}</span> : null}
@@ -176,6 +192,15 @@ function InboundReceiving({ shipment }: { shipment: InboundShipment }) {
               <TextField label="Expires on" type="date" value={c.expDate} onChange={(e) => set(l.lineNo, { expDate: e.target.value })} error={errors[`${l.lineNo}.expDate`]} />
               <TextField label="Bin" value={c.bin} onChange={(e) => set(l.lineNo, { bin: e.target.value })} placeholder="A-01-02" />
             </div>
+            {costed ? (
+              <CostFields
+                draft={c.cost}
+                onChange={(patch) => set(l.lineNo, { cost: { ...c.cost, ...patch } })}
+                check={checks[l.lineNo] ?? checkCost(c.cost, [], t)}
+                units={Number(c.good || 0) + Number(c.damaged || 0)}
+                lineLabel={l.sku}
+              />
+            ) : null}
             <div className="flex flex-wrap items-center gap-3">
               <Checkbox label="QC hold (receive into quarantine)" checked={c.hold} onChange={(e) => set(l.lineNo, { hold: e.target.checked })} />
               {touched ? (
@@ -209,6 +234,7 @@ function InboundReceiving({ shipment }: { shipment: InboundShipment }) {
                 <span>{l.sku}</span>
                 <span>{l.qtyOnHand} units</span>
                 <span>exp {shortDate(l.expDate)}</span>
+                {l.unitLandedCostMinor > 0 ? <span>{t('st.cost.lotCost', { paid: money(l.unitLandedCostMinor, l.currency), usd: money(l.unitCostUsdMinor), rate: String(l.fxRateToUsd) })}</span> : null}
                 <StatusPill tone={toneOf(l.status)}>{l.status === 'SELLABLE' ? 'Available' : l.status.toLowerCase()}</StatusPill>
                 <a className="text-link" href={`/inventory?tab=stock&lot=${l.id}`}>Open lot</a>
               </li>

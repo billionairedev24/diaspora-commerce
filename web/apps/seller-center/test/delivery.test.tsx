@@ -78,13 +78,13 @@ describe('AfroTransact pickup and delivery fee', () => {
     expect(await within(nowhere).findByRole('alert')).toHaveTextContent('couldn’t locate this address at street level');
   });
 
-  it('sets an offer to “AfroTransact picks up from my store” with a pickup location', async () => {
+  it('sets an offer to “AfroTransact picks up from my location” with a pickup location', async () => {
     const user = userEvent.setup();
     const listing = (await mockApi().listListings({ page: 0, size: 10 })).items.find((l) => l.fulfilment === 'SELLER' && l.atin);
     if (!listing) throw new Error('no listing');
     await renderScreen(<FulfilmentSheet listing={listing} onClose={() => undefined} />);
     const form = (await screen.findAllByTestId('offer-fulfilment'))[0] as HTMLElement;
-    await user.click(within(form).getByLabelText('AfroTransact picks up from my store'));
+    await user.click(within(form).getByLabelText('AfroTransact picks up from my location'));
     const location = within(form).getByLabelText('Pickup location');
     expect(within(location).getAllByRole('option')).toHaveLength(2); // only the address with pickup on
     await user.selectOptions(location, 'sfa-store');

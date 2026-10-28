@@ -1,7 +1,11 @@
 import { type z } from 'zod';
 
+import { type AddressSearchOptions } from './address-lookup';
+import { creditMethods } from './credit-client';
+import { deliveryRunMethods } from './delivery-runs';
 import { type ApiClientOptions, createRequester, joinUrl } from './http';
 import { type PreorderFulfilmentRequest, preorderMethods } from './preorders';
+import { referralMethods } from './referral-client';
 import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema } from './schemas/account';
 import { type Me, MeSchema, type PhoneCodeSent, PhoneCodeSentSchema, type PhoneVerification, PhoneVerificationSchema, type SignOutResult, SignOutResultSchema } from './schemas/auth';
 import {
@@ -33,7 +37,7 @@ import {
   type PrivacyRequestReceipt,
   PrivacyRequestReceiptSchema
 } from './schemas/legal';
-import { type AddressSuggestions, AddressSuggestionsSchema, type DeliveryLocation, DeliveryLocationSchema } from './schemas/location';
+import { type AddressSuggestions, AddressSuggestionsSchema, type DeliveryLocation, DeliveryLocationSchema, type PostalAddress, PostalAddressSchema } from './schemas/location';
 import { type SearchPage, SearchPageSchema, type SearchQuery, type Suggestions, SuggestionsSchema } from './schemas/search';
 import { NewsletterResponseSchema, type SiteConfig, SiteConfigSchema } from './schemas/site';
 import { toApiSearchParams } from './search-params';
@@ -77,8 +81,12 @@ export function createApiClient(options: ApiClientOptions) {
     /** Set the deliver-to location by ZIP or by device coordinates ("Use my current location"). */
     setDeliveryLocation: (input: { zip: string } | { lat: number; lon: number }): Promise<DeliveryLocation> =>
       request('/v1/delivery-location', DeliveryLocationSchema, { method: 'PUT', body: input }),
-    searchAddresses: (q: string, signal?: AbortSignal): Promise<AddressSuggestions> =>
-      request('/v1/geo/address-suggestions', AddressSuggestionsSchema, { query: { q }, signal }),
+    /** One keystroke of an address field; pass the entry's session token (Google Places bills the entry as one session). */
+    searchAddresses: (q: string, signal?: AbortSignal, options: AddressSearchOptions = {}): Promise<AddressSuggestions> =>
+      request('/v1/geo/address-suggestions', AddressSuggestionsSchema, { query: { q, sessionToken: options.sessionToken, country: options.country }, signal }),
+    /** Structured address of a picked suggestion (Google Place Details, closing the session). */
+    resolveAddressSuggestion: (id: string, sessionToken?: string, signal?: AbortSignal): Promise<PostalAddress> =>
+      request(`/v1/geo/address-suggestions/${encodeURIComponent(id)}`, PostalAddressSchema, { query: { sessionToken }, signal }),
 
     /* Search */
     search: (query: SearchQuery, signal?: AbortSignal): Promise<SearchPage> => request('/v1/search', SearchPageSchema, { query: toApiSearchParams(query), signal }),
@@ -104,6 +112,9 @@ export function createApiClient(options: ApiClientOptions) {
 
     /* Pre-orders (S273) */
     ...preorderMethods(request),
+    ...deliveryRunMethods(request),
+    ...creditMethods(request),
+    ...referralMethods(request),
 
     /* Auth: sign-in and sign-up run on identity's hosted pages (single sign-on), started with a full-page navigation to
        loginUrl(); the BFF keeps the tokens (OIDC authorization code + PKCE). */
@@ -111,8 +122,13 @@ export function createApiClient(options: ApiClientOptions) {
     startPhoneVerification: (): Promise<PhoneCodeSent> => request('/v1/account/phone/verification', PhoneCodeSentSchema, { method: 'POST' }),
     confirmPhoneVerification: (code: string): Promise<PhoneVerification> =>
       request('/v1/account/phone/verification/confirm', PhoneVerificationSchema, { method: 'POST', body: { code } }),
-    /** Ends the BFF session; navigate to redirectTo (when set) to end the identity session too (single sign-out). */
-    signOut: (): Promise<SignOutResult> => request('/v1/auth/sign-out', SignOutResultSchema, { method: 'POST' }),
+    /**
+     * Ends the BFF session; navigate to redirectTo (when set) to end the identity session too (single sign-out), after
+     * which identity returns to this app's signed-out landing. returnTo is the page to come back to (storefront: only
+     * pages a guest may see).
+     */
+    signOut: (input: { returnTo?: string } = {}): Promise<SignOutResult> =>
+      request('/v1/auth/sign-out', SignOutResultSchema, { method: 'POST', body: input.returnTo ? { returnTo: input.returnTo } : {} }),
     /**
      * URL of the BFF's hosted sign-in start (identity's sign-in page, or its sign-up page with prompt 'create').
      * returnTo is a storefront path or an absolute URL on another AfroTransact web app.

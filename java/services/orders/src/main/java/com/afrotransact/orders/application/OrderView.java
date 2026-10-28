@@ -1,5 +1,6 @@
 package com.afrotransact.orders.application;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -51,6 +52,8 @@ public record OrderView(String id, String orderNumber, String status, String cus
      *                         "Return or replace items"; tax-returns decides per line)
      * @param returnWindowEndsAt end of the return window (null when not delivered or nothing is returnable)
      * @param problemReportOnly delivered with only perishable / non-returnable lines ("Report a problem")
+     * @param cancellableUntil  when the customer's Cancel stops being offered (the cancellation window's end, or a
+     *                          pre-order window's close); null when the shipment can no longer be cancelled by the customer
      * @param returns          where the apps read eligibility and returns (tax-returns, through gateway-bff)
      */
     public record ShipmentView(String id, String shipmentId, int seq, String label, String sellerOrgId,
@@ -59,10 +62,28 @@ public record OrderView(String id, String orderNumber, String status, String cus
                                boolean perishable, boolean handoverRequired, String handoverCode, String status,
                                String items, long itemsMinor, long shippingMinor, long taxMinor, long totalMinor,
                                String carrier, String trackingNumber, LocalDate promisedFrom, LocalDate promisedBy,
-                               Instant deliveredAt, boolean captured, boolean cancellable, List<String> nextActions,
+                               Instant deliveredAt, boolean captured, boolean cancellable, Instant cancellableUntil,
+                               List<String> nextActions,
                                List<LineView> lines, List<TimelineEntry> timeline, boolean returnable,
                                Instant returnWindowEndsAt, boolean problemReportOnly, ReturnLinks returns,
-                               LocalDeliveryView localDelivery, PreorderView preorder) {
+                               LocalDeliveryView localDelivery, PreorderView preorder,
+                               DeliveryFeeRuleView deliveryFeeRule) {
+    }
+
+    /**
+     * The staff delivery fee rule that priced this shipment's shipping (ADR 0005 §3), as it was at checkout: later
+     * edits of the rule never change it.
+     *
+     * @param method        AFROTRANSACT_DELIVERY, CARRIER or PICKUP
+     * @param ruleId        the rule (null when staff set the fee on the window and no rule existed)
+     * @param ruleVersion   the version applied
+     * @param amountMinor   the fee that applied (a pre-order's fee is shared by its sellers' shipments)
+     * @param source        RULE, WINDOW_OVERRIDE, CARRIER_QUOTE or CARRIER_FALLBACK
+     * @param band          the distance band applied ("10–40 mi"), or the free-over threshold
+     * @param distanceMiles the distance the band was chosen by
+     */
+    public record DeliveryFeeRuleView(String method, String ruleId, long ruleVersion, String currency,
+                                      long amountMinor, String source, String band, BigDecimal distanceMiles) {
     }
 
     /**
@@ -72,10 +93,12 @@ public record OrderView(String id, String orderNumber, String status, String cus
      * @param cancellableUntil the customer may cancel for a full refund (delivery fee included) until then
      * @param deliveryMissed   the delivery date passed undelivered: the customer may choose REFUND or WAIT
      * @param missedChoice     the customer's answer (null until answered)
+     * @param kind             WINDOW, or RUN for a delivery run staff scheduled (then {@code windowId} is the run's id
+     *                         and {@code cancellableUntil} its cutoff)
      */
     public record PreorderView(String windowId, String windowCode, String windowName, LocalDate deliversOn,
                                String fulfilment, Instant cancellableUntil, boolean deliveryMissed,
-                               String missedChoice) {
+                               String missedChoice, String kind) {
     }
 
     /**
@@ -105,6 +128,15 @@ public record OrderView(String id, String orderNumber, String status, String cus
 
     /** One status change. */
     public record TimelineEntry(String from, String to, String actorType, String source, String reason,
-                                Instant at) {
+                                Instant at, DeliveryProof proof) {
+    }
+
+    /**
+     * What the driver app recorded when it handed a parcel over (or failed to): how, to whom, where it was left, and
+     * whether the photo and the signature exist. The assets themselves are fetched from media with their ids.
+     */
+    public record DeliveryProof(String handoverMethod, String recipientName, String relationship, String safePlace,
+                                String failureReason, String photoAssetId, String signatureAssetId, Double latitude,
+                                Double longitude) {
     }
 }

@@ -28,6 +28,13 @@ func (o *orgAccessImpl) Member(ctx context.Context, bearer string) (port.Member,
 	return m, err
 }
 
+func (o *orgAccessImpl) SyncOrg(ctx context.Context, bearer, orgID string) (port.OrgSync, error) {
+	var out port.OrgSync
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/orgs/" + url.PathEscape(orgID) + "/sync",
+		Bearer: bearer, RetryUnsafe: true}, &out)
+	return out, err
+}
+
 func (o *orgAccessImpl) BecomeApplicant(ctx context.Context, bearer, kind string) error {
 	path := "/v1/me/roles/seller-applicant"
 	if kind == "PROVIDER" {
@@ -165,6 +172,12 @@ func (s *sellerServiceImpl) ApplicationStripeSession(ctx context.Context, bearer
 	return out, err
 }
 
+func (s *sellerServiceImpl) OrgStripeSession(ctx context.Context, bearer, orgID string) (port.SellerAccountSession, error) {
+	var out port.SellerAccountSession
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/stripe/account-session"), Bearer: bearer}, &out)
+	return out, err
+}
+
 func (s *sellerServiceImpl) RefreshApplicationStripe(ctx context.Context, bearer string) (port.SellerApplication, error) {
 	var a port.SellerApplication
 	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me/stripe/refresh", Bearer: bearer}, &a)
@@ -279,5 +292,19 @@ func (s *sellerServiceImpl) SetPickup(ctx context.Context, bearer, orgID, id str
 	var out port.ShipFromAddress
 	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: shipFromPath(orgID, "/"+url.PathEscape(id)+"/afrotransact-pickup"),
 		Bearer: bearer, JSON: in}, &out)
+	return out, err
+}
+
+// ---------------------------------------------------------------- seller: business page settings
+
+func (s *sellerServiceImpl) BusinessPageSettings(ctx context.Context, bearer, orgID string) (port.UpBusinessPageSettings, error) {
+	var out port.UpBusinessPageSettings
+	_, err := call(ctx, s.c, httpclient.Request{Path: "/v1/orgs/" + url.PathEscape(orgID) + "/business-page", Bearer: bearer}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) UpdateBusinessPageSettings(ctx context.Context, bearer, orgID string, in port.BusinessPageSettingsInput) (port.UpBusinessPageSettings, error) {
+	var out port.UpBusinessPageSettings
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/orgs/" + url.PathEscape(orgID) + "/business-page", Bearer: bearer, JSON: in}, &out)
 	return out, err
 }

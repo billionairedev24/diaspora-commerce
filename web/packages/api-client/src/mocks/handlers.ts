@@ -11,15 +11,18 @@ import { StockAlertRequestSchema } from '../schemas/catalog';
 import { ZipSchema } from '../schemas/location';
 import { NewsletterRequestSchema } from '../schemas/site';
 import { fromApiSearchParams } from '../search-params';
-import { suggestAddresses } from './addresses';
+import { mockAddressSuggestions, mockResolveAddress } from './addresses';
+import { creditHandlers } from './credit';
 import { getDb, type MockChallenge, nextId, userById } from './db';
 import { locationForZip, nearestZip } from './delivery';
+import { deliveryRunHandlers } from './delivery-run-handlers';
 import { DEMO_CODE, JOBS, SITE_CONFIG } from './fixtures/content';
 import { helpHandlers } from './help-handlers';
 import { helpRequestHandlers } from './help-requests';
 import { body, type Ctx, json, requireUser, route } from './http-kit';
 import { legalHandlers } from './legal-handlers';
 import { preorderHandlers } from './preorder-handlers';
+import { referralHandlers } from './referral';
 import {
   addToCart,
   buildCart,
@@ -47,9 +50,20 @@ function me(ctx: Ctx) {
   return {
     authenticated: true,
     user: { id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email, initials: (u.firstName[0] ?? '') + (u.lastName[0] ?? ''), roles: u.roles,
-      ...(u.phone ? { phone: '•••• ' + u.phone.slice(-4) } : {}), phoneVerified: phoneVerified.has(u.id) },
+      ...(u.phone ? { phone: '•••• ' + u.phone.slice(-4) } : {}), phoneVerified: phoneVerified.has(u.id), backOffices: mockBackOffices(u.roles) },
     counts: accountCounts(u.id)
   };
+}
+
+/** The account menu's back offices for a mock user's roles (the real BFF reads identity's organisations). */
+function mockBackOffices(roles: readonly string[]) {
+  const out: { app: 'seller-center' | 'provider-hub' | 'staff-console'; state: 'active' | 'application' }[] = [];
+  if (roles.some((r) => r.startsWith('seller.'))) out.push({ app: 'seller-center', state: 'active' });
+  else if (roles.includes('account.seller_applicant')) out.push({ app: 'seller-center', state: 'application' });
+  if (roles.some((r) => r.startsWith('provider.'))) out.push({ app: 'provider-hub', state: 'active' });
+  else if (roles.includes('account.provider_applicant')) out.push({ app: 'provider-hub', state: 'application' });
+  if (roles.some((r) => r.startsWith('platform.') && r !== 'platform.driver')) out.push({ app: 'staff-console', state: 'active' });
+  return out;
 }
 
 const safeReturn = (v: string | null | undefined): string => (v && v.startsWith('/') && !v.startsWith('//') ? v : '/');
@@ -97,8 +111,13 @@ export const handlers = [
     return json(loc);
   })),
   http.get('*/v1/geo/address-suggestions', route((ctx) => {
-    const q = new URL(ctx.request.url).searchParams.get('q') ?? '';
-    return json({ suggestions: suggestAddresses(q), attribution: 'Sample addresses (geo service: Google Places / OpenStreetMap Nominatim in production)' });
+    const p = new URL(ctx.request.url).searchParams;
+    return json(mockAddressSuggestions(p.get('q') ?? '', p.get('sessionToken')));
+  })),
+  http.get('*/v1/geo/address-suggestions/:id', route((_ctx, params) => {
+    const a = mockResolveAddress(decodeURIComponent(params.id ?? ''));
+    if (!a) throw new MockProblem(404, 'NOT_FOUND', 'Not found', 'That suggestion is no longer available.');
+    return json(a);
   })),
 
   /* Search */
@@ -176,10 +195,23 @@ export const handlers = [
     ctx.session.userId = 'u_adaeze';
     return new HttpResponse(null, { status: 302, headers: { Location: new URL(safeReturn(url.searchParams.get('returnTo')), url.origin).toString() } });
   })),
-  http.post('*/v1/auth/sign-out', route((ctx) => {
+  // Single sign-out: the real BFF sends the browser through identity's /connect/logout, which returns to the app's
+  // signed-out landing; the mock goes to the landing straight away.
+  http.post('*/v1/auth/sign-out', route(async (ctx) => {
     ctx.session.userId = null;
-    return json({ redirectTo: null });
+    const url = new URL(ctx.request.url);
+    const body = (await ctx.request.json().catch(() => ({}))) as { returnTo?: string };
+    const back = safeReturn(body.returnTo);
+    const landing = new URL(url.pathname.replace(/\/v1\/auth\/sign-out$/, '/v1/auth/signed-out/storefront'), url.origin);
+    if (back !== '/') landing.searchParams.set('state', back);
+    return json({ redirectTo: landing.toString() });
   })),
+  http.get('*/v1/auth/signed-out/storefront', ({ request }) => {
+    const url = new URL(request.url);
+    const back = new URL(safeReturn(url.searchParams.get('state')), url.origin);
+    back.searchParams.set('signedOut', '1');
+    return new HttpResponse(null, { status: 302, headers: { Location: back.toString() } });
+  }),
   http.get('*/v1/auth/oidc/:provider/authorize', route((ctx, p) => {
     const provider = p.provider ?? '';
     const idp = SITE_CONFIG.identityProviders.find((x) => x.id === provider && x.enabled);
@@ -236,7 +268,10 @@ export const handlers = [
   /* Addresses, payments, orders, help requests, checkout, services & bookings, Lola */
   ...shopperHandlers,
   ...helpRequestHandlers,
+  ...creditHandlers,
+  ...referralHandlers,
   ...preorderHandlers,
+  ...deliveryRunHandlers,
   ...legalHandlers,
   ...helpHandlers
 ];

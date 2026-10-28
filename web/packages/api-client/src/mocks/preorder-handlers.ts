@@ -12,7 +12,8 @@ const PreviewSchema = z.object({
   place: PreorderPlaceSchema.nullable().optional(),
   stage: PreorderStageSchema.nullable().optional(),
   enabled: z.boolean().nullable().optional(),
-  fallback: PreorderFallbackSchema.nullable().optional()
+  fallback: PreorderFallbackSchema.nullable().optional(),
+  run: z.object({ minOrders: z.number().int().min(0), ordersSoFar: z.number().int().min(0) }).nullable().optional()
 });
 
 export const preorderHandlers = [
@@ -60,7 +61,8 @@ export const preorderHandlers = [
       ...(p.place ? { place: p.place } : {}),
       ...(p.stage ? { stage: p.stage } : {}),
       ...(typeof p.enabled === 'boolean' ? { enabled: p.enabled } : {}),
-      ...(p.fallback ? { fallback: p.fallback } : {})
+      ...(p.fallback ? { fallback: p.fallback } : {}),
+      ...(p.run ? { run: p.run } : {})
     };
     return json(ctx.session.preorderPreview);
   }))

@@ -57,17 +57,18 @@ class JdbcWalletRepository implements WalletRepository {
     public void upsertMethod(SavedPaymentMethod m) {
         jdbc.sql("""
                 insert into customer_payment_method (id, customer_id, type, brand, last4, exp_month, exp_year,
-                    bank_name, account_type, verified, created_at)
-                values (:id, :c, :type, :brand, :last4, :em, :ey, :bank, :acct, :verified, :at)
+                    bank_name, account_type, wallet, verified, created_at)
+                values (:id, :c, :type, :brand, :last4, :em, :ey, :bank, :acct, :wallet, :verified, :at)
                 on conflict (id) do update set brand = excluded.brand, last4 = excluded.last4,
                     exp_month = excluded.exp_month, exp_year = excluded.exp_year, bank_name = excluded.bank_name,
                     account_type = excluded.account_type,
+                    wallet = coalesce(excluded.wallet, customer_payment_method.wallet),
                     verified = customer_payment_method.verified or excluded.verified, detached_at = null
                 """)
                 .param("id", m.id()).param("c", m.customerId()).param("type", m.type().name())
                 .param("brand", m.brand()).param("last4", m.last4()).param("em", m.expMonth())
                 .param("ey", m.expYear()).param("bank", m.bankName()).param("acct", m.accountType())
-                .param("verified", m.verified()).param("at", Sql.ts(m.createdAt()))
+                .param("wallet", m.wallet()).param("verified", m.verified()).param("at", Sql.ts(m.createdAt()))
                 .update();
     }
 
@@ -99,7 +100,8 @@ class JdbcWalletRepository implements WalletRepository {
         return new SavedPaymentMethod(rs.getString("id"), rs.getString("customer_id"),
                 PaymentMethodType.valueOf(rs.getString("type")), rs.getString("brand"), rs.getString("last4"),
                 rs.getObject("exp_month", Integer.class), rs.getObject("exp_year", Integer.class),
-                rs.getString("bank_name"), rs.getString("account_type"), rs.getBoolean("verified"),
+                rs.getString("bank_name"), rs.getString("account_type"), rs.getString("wallet"),
+                rs.getBoolean("verified"),
                 Sql.instant(rs, "created_at"));
     }
 }

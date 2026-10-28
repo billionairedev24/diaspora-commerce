@@ -3,10 +3,8 @@ package com.afrotransact.seller.application;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,19 +14,14 @@ import com.afrotransact.seller.domain.ComplianceUpdate;
 import com.afrotransact.seller.domain.ConnectAccount;
 import com.afrotransact.seller.domain.Enforcement;
 import com.afrotransact.seller.domain.Organisation;
+import com.afrotransact.seller.domain.PayoutBank;
 import com.afrotransact.seller.domain.ReminderSchedule;
-import com.afrotransact.seller.domain.RequirementAnswer;
 import com.afrotransact.seller.domain.RequirementCatalog;
 import com.afrotransact.seller.domain.RequirementError;
 import com.afrotransact.seller.domain.RequirementsSnapshot;
-import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.SellerStateConflict;
-import com.afrotransact.seller.domain.Validated;
 import com.afrotransact.seller.port.ConnectAccountRepository;
-import com.afrotransact.seller.port.MediaClient;
 import com.afrotransact.seller.port.OrganisationRepository;
-import com.afrotransact.seller.port.RequirementSubmission;
-import com.afrotransact.seller.port.StripeConnectGateway;
 import com.afrotransact.seller.port.StripeEvent;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
@@ -48,8 +41,6 @@ class ComplianceServiceImpl implements ComplianceService {
 
     private final ConnectAccountRepository accounts;
     private final OrganisationRepository orgs;
-    private final StripeConnectGateway stripe;
-    private final MediaClient media;
     private final ComplianceSync sync;
     private final AccessGuard access;
     private final DomainEventPublisher events;
@@ -57,12 +48,10 @@ class ComplianceServiceImpl implements ComplianceService {
     private final Clock clock;
 
     ComplianceServiceImpl(ConnectAccountRepository accounts, OrganisationRepository orgs,
-                          StripeConnectGateway stripe, MediaClient media, ComplianceSync sync, AccessGuard access,
+                          ComplianceSync sync, AccessGuard access,
                           DomainEventPublisher events, TransactionOperations tx, Clock clock) {
         this.accounts = accounts;
         this.orgs = orgs;
-        this.stripe = stripe;
-        this.media = media;
         this.sync = sync;
         this.access = access;
         this.events = events;
@@ -103,15 +92,27 @@ class ComplianceServiceImpl implements ComplianceService {
                 history(saved, "STRIPE_WEBHOOK", e, "Person " + e.person().id() + " verification "
                         + e.person().verificationStatus(), null);
             }
-            case "account.external_account.updated" -> {
-                ConnectAccount saved = accounts.update(a.withExternalAccountStatus(e.externalAccount().status(),
-                        now));
-                history(saved, "STRIPE_WEBHOOK", e, "Bank " + e.externalAccount().bankName() + " ••"
-                        + e.externalAccount().last4() + " is " + e.externalAccount().status(), null);
-                String status = e.externalAccount().status();
-                if ("errored".equals(status) || "verification_failed".equals(status)) {
-                    changed(saved, "external_account." + status, now);
+            case "account.external_account.created", "account.external_account.updated" -> {
+                if (e.externalAccount() == null) {
+                    return "ignored-not-a-bank-account";
                 }
+                StripeEvent.ExternalAccount x = e.externalAccount();
+                PayoutBank bank = new PayoutBank(x.id(), x.bankName(), x.last4(), x.status());
+                ConnectAccount saved = accounts.update(a.withPayoutBank(bank, now));
+                history(saved, "STRIPE_WEBHOOK", e, "Bank " + x.bankName() + " ••" + x.last4() + " is " + x.status(),
+                        null);
+                sync.refreshApplication(saved, now);
+                if (bank.failed()) {
+                    changed(saved, "external_account." + x.status(), now);
+                }
+            }
+            case "account.external_account.deleted" -> {
+                if (e.externalAccount() == null) {
+                    return "ignored-not-a-bank-account";
+                }
+                ConnectAccount saved = accounts.update(a.withoutPayoutBank(e.externalAccount().id(), now));
+                history(saved, "STRIPE_WEBHOOK", e, "Bank ••" + e.externalAccount().last4() + " removed", null);
+                sync.refreshApplication(saved, now);
             }
             case "payout.failed" -> {
                 history(a, "STRIPE_WEBHOOK", e, "Payout " + e.payout().id() + " failed: "
@@ -136,39 +137,6 @@ class ComplianceServiceImpl implements ComplianceService {
                 SellerPermissions.COMPLIANCE_HOLD, SellerPermissions.SELLERS_ENFORCE);
         ConnectAccount a = accounts.findByOrg(orgId).orElseThrow(() -> noAccount(orgId));
         return view(a, false);
-    }
-
-    @Override
-    @Transactional
-    public AccountHealthView answer(String orgId, String requirement, Map<String, String> values, String ip,
-                                    String userAgent) {
-        Actor actor = access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, null);
-        ConnectAccount found = accounts.findByOrg(orgId).orElseThrow(() -> noAccount(orgId));
-        ConnectAccount a = accounts.lock(found.accountId()).orElseThrow();
-        RequirementsSnapshot r = a.requirements();
-        if (!r.open().contains(requirement) && !r.eventuallyDue().contains(requirement)) {
-            throw new NotFoundException("seller.requirement-not-open",
-                    "Stripe isn't asking for " + requirement + " right now");
-        }
-        Validated<RequirementAnswer> v = RequirementCatalog.answer(requirement, values == null ? Map.of() : values,
-                LocalDate.now(clock));
-        if (!v.ok()) {
-            throw new SellerRuleViolation("seller.invalid-answer", "Check the highlighted fields", v.errors());
-        }
-        RequirementAnswer answer = v.value();
-        String front = answer.frontAssetId() == null ? null
-                : stripe.uploadRequirementFile(a.accountId(), media.fetch(answer.frontAssetId()));
-        String back = answer.backAssetId() == null ? null
-                : stripe.uploadRequirementFile(a.accountId(), media.fetch(answer.backAssetId()));
-        Instant now = Instant.now(clock);
-        stripe.submitRequirement(a.accountId(), new RequirementSubmission(answer, front, back, ip, userAgent, now));
-        ConnectAccount saved = accounts.update(a.answered(requirement, now));
-        accounts.appendHistory(new ComplianceHistoryEntry(UUID.randomUUID(), saved.accountId(), "SELLER", null,
-                "requirement.answered", saved.status(), "Answered " + requirement + " — verifying with Stripe",
-                saved.requirements(), actor.subject(), now));
-        events.publish(SellerEvents.COMPLIANCE_CHANGED, SellerEvents.AGGREGATE_COMPLIANCE, orgId,
-                ComplianceEventPayload.of(saved, a.status().name(), List.of(), "answer", now));
-        return view(saved, false);
     }
 
     @Override

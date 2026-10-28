@@ -190,6 +190,14 @@ func (m *MemStore) Remember(_ context.Context, key, value string, _ time.Duratio
 	return nil
 }
 
+// Add is the daily counter: it counts per key (the day is ignored in tests).
+func (m *MemStore) Add(_ context.Context, key string, n int) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.counters["dc:"+key] += n
+	return m.counters["dc:"+key], nil
+}
+
 // Allow counts calls per key (window ignored).
 func (m *MemStore) Allow(_ context.Context, key string, limit int, window time.Duration) (bool, time.Duration, error) {
 	m.mu.Lock()

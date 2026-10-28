@@ -3,7 +3,10 @@ import { z } from 'zod';
 import { PreorderAttributionSchema, PreorderConfirmationSchema } from '../preorders';
 import { AddressSchema, PaymentMethodSchema } from './account';
 import { CartPackageSchema } from './cart';
-import { MinorSchema } from './common';
+import { ProductSummarySchema } from './catalog';
+import { DeliveryFeeRuleRefSchema, MinorSchema } from './common';
+import { CheckoutCreditSchema } from './credit';
+import { RailSchema } from './home';
 
 /* Storefront account (address input, order detail & tracking, login & security), checkout, services &
    bookings and Lola — contracts/openapi/gateway-bff.yaml. */
@@ -58,6 +61,18 @@ export type OrderLineView = z.infer<typeof OrderLineViewSchema>;
 export const OrderPickupSchema = z.object({ id: z.string(), name: z.string(), address: z.string(), hours: z.string(), ready: z.string(), setBy: z.enum(['platform', 'seller']) });
 export type OrderPickup = z.infer<typeof OrderPickupSchema>;
 
+/** How our driver handed a parcel over (photo, who received it); the links last about five minutes. */
+export const DeliveryProofSchema = z.object({
+  method: z.enum(['CUSTOMER', 'SOMEONE_ELSE', 'SAFE_PLACE']),
+  recipientName: nullableString,
+  relationship: nullableString,
+  safePlace: nullableString,
+  photoUrl: nullableString,
+  signatureUrl: nullableString,
+  at: z.string()
+});
+export type DeliveryProof = z.infer<typeof DeliveryProofSchema>;
+
 export const ShipmentDetailSchema = z.object({
   shipmentId: z.string(),
   label: z.string(),
@@ -67,11 +82,15 @@ export const ShipmentDetailSchema = z.object({
   sellerName: z.string(),
   deliveryMethod: DeliveryMethodSchema,
   cancellable: z.boolean(),
+  /** When Cancel stops being offered (before packing, inside the cancellation window); null when it is not offered. */
+  cancellableUntil: z.string().nullable().optional(),
   carrier: nullableString,
   trackingNumber: nullableString,
   promisedFrom: nullableString,
   promisedBy: nullableString,
   deliveredAt: nullableString,
+  /** How our driver handed it over; null for carrier, pickup and by-hand deliveries. */
+  proof: DeliveryProofSchema.nullable().optional(),
   deliveryCode: nullableString,
   lines: z.array(OrderLineViewSchema),
   timeline: z.array(TimelineEventSchema),
@@ -81,6 +100,8 @@ export const ShipmentDetailSchema = z.object({
   problemReportOnly: z.boolean().optional(),
   /** AfroTransact Delivery from the seller's store (S255), as charged at checkout. */
   localDelivery: z.object({ roadMiles: z.number().nullable(), durationMinutes: z.number().nullable(), chargeMinor: MinorSchema }).nullable().optional(),
+  /** The delivery fee rule the shipping was charged by when the order was placed (later edits never change it). */
+  deliveryFeeRule: DeliveryFeeRuleRefSchema.nullable().optional(),
   /** Pickup shipments: where to collect it. */
   pickup: OrderPickupSchema.nullable().optional()
 });
@@ -101,7 +122,11 @@ export const OrderDetailSchema = z.object({
   shipments: z.array(ShipmentDetailSchema),
   /** What was charged and refunded (payments); absent when payments cannot answer. */
   payment: z
-    .object({ status: z.string(), capturedMinor: MinorSchema, refundedMinor: MinorSchema, refundableMinor: MinorSchema, shippingTaxMinor: MinorSchema })
+    .object({ status: z.string(), capturedMinor: MinorSchema, refundedMinor: MinorSchema, refundableMinor: MinorSchema, shippingTaxMinor: MinorSchema,
+      /** The part paid with AfroTransact credit; the card paid the rest (S320). */
+      creditMinor: MinorSchema.default(0),
+      /** The card part of this order's refunds comes back as credit (the shopper's one-way choice). */
+      cardRefundsAsCredit: z.boolean().default(false) })
     .optional()
 });
 export type OrderDetail = z.infer<typeof OrderDetailSchema>;
@@ -184,18 +209,49 @@ export const CheckoutPackageSchema = CartPackageSchema.extend({
 });
 export type CheckoutPackage = z.infer<typeof CheckoutPackageSchema>;
 
+export const CheckoutCouponSellerShareSchema = z.object({
+  sellerOrgId: z.string(),
+  sellerName: z.string().optional(),
+  discountMinor: MinorSchema,
+  funding: z.enum(['platform', 'seller'])
+});
+export type CheckoutCouponSellerShare = z.infer<typeof CheckoutCouponSellerShareSchema>;
+
+export const CheckoutCouponSchema = z.object({
+  code: z.string(),
+  applicable: z.boolean(),
+  rejection: z.string().nullable().optional(),
+  message: z.string().optional(),
+  discountMinor: MinorSchema,
+  shippingDiscountMinor: MinorSchema,
+  funding: z.enum(['platform', 'seller']).optional(),
+  fundedByOrg: z.string().optional(),
+  offerDiscounts: z
+    .array(z.object({ offerId: z.string(), sellerOrgId: z.string().optional(), discountMinor: MinorSchema }))
+    .optional(),
+  sellerShares: z.array(CheckoutCouponSellerShareSchema).optional()
+});
+export type CheckoutCoupon = z.infer<typeof CheckoutCouponSchema>;
+
 export const CheckoutSummarySchema = z.object({
   packages: z.array(CheckoutPackageSchema),
   addresses: z.array(AddressSchema),
   paymentMethods: z.array(PaymentMethodSchema),
   subtotalMinor: MinorSchema,
   shippingMinor: MinorSchema,
+  discountMinor: MinorSchema.default(0),
+  shippingDiscountMinor: MinorSchema.default(0),
+  coupon: CheckoutCouponSchema.nullish(),
   taxMinor: MinorSchema,
   taxRateLabel: z.string(),
   totalMinor: MinorSchema,
   currency: z.string(),
   sellerCount: z.number().int(),
-  publishableKey: z.string().optional()
+  publishableKey: z.string().optional(),
+  stripeCustomerId: z.string().optional(),
+  crossSell: RailSchema.nullish(),
+  /** What the shopper's AfroTransact credit would pay of this order; absent without credit (S320). */
+  credit: CheckoutCreditSchema.nullish()
 });
 export type CheckoutSummary = z.infer<typeof CheckoutSummarySchema>;
 
@@ -226,6 +282,8 @@ export const PlaceOrderRequestSchema = z.object({
   newPaymentMethod: z.boolean().optional(),
   /** With newPaymentMethod: keep it on the shopper's Stripe Customer (setup_future_usage=off_session). */
   savePaymentMethod: z.boolean().optional(),
+  /** Pay with AfroTransact credit first; with enough credit no payment method is needed (S320). */
+  useCredit: z.boolean().optional(),
   gift: z.boolean().optional(),
   couponCode: z.string().max(20).optional(),
   deliverySelections: z.array(DeliverySelectionSchema),
@@ -238,6 +296,8 @@ export const OrderConfirmationSchema = z.object({
   orderNumber: z.string(),
   status: z.enum(['placed', 'awaiting_payment', 'processing', 'requires_action']),
   paymentClientSecret: nullableString.optional(),
+  /** The part of the total paid with credit (S320). */
+  creditMinor: MinorSchema.optional(),
   totalMinor: MinorSchema,
   currency: z.string(),
   shipments: z.array(z.object({ shipmentId: z.string(), label: z.string(), eta: z.string(), deliveryCode: nullableString.optional() })),
@@ -349,23 +409,27 @@ export const ProviderPageSchema = z.object({
   policy: ServicePolicySchema,
   instantBooking: z.boolean(),
   team: z.array(ServiceMemberSchema),
-  services: z.array(ServiceDetailSchema),
-  design: z
-    .object({
-      slug: z.string(),
-      tagline: z.string(),
-      layout: z.enum(['CLASSIC', 'GALLERY_FIRST', 'STORY']),
-      header: z.enum(['COVER', 'BAND']),
-      buttonShape: z.enum(['ROUNDED', 'SQUARE']),
-      coverUrl: nullableString,
-      tokens: z.record(z.string(), z.string()),
-      social: z.array(z.object({ network: z.string(), url: z.string() })),
-      gallery: z.array(z.object({ url: z.string(), caption: z.string() })),
-      featured: z.array(z.object({ id: z.string(), headline: z.string(), body: z.string(), url: nullableString, serviceId: nullableString }))
-    })
-    .nullable()
+  services: z.array(ServiceDetailSchema)
 });
 export type ProviderPage = z.infer<typeof ProviderPageSchema>;
+
+/** A business's plain public page: made from its application, never edited as a page. */
+export const BusinessPageSchema = z.object({
+  slug: z.string(),
+  kind: z.enum(['SELLER', 'PROVIDER']),
+  name: z.string(),
+  description: nullableString,
+  /** #rrggbb, or null for the platform colour. */
+  brandColor: nullableString,
+  logoUrl: nullableString,
+  contactEmail: nullableString,
+  /** False until the business is approved: keep the page out of search engines. */
+  indexable: z.boolean(),
+  services: z.array(z.object({ serviceId: z.string(), name: z.string(), durationMinutes: z.number().int(), priceMinor: z.number().int(), currency: z.string() })),
+  /** A seller's live products (at most twelve); empty for providers. */
+  products: z.array(ProductSummarySchema)
+});
+export type BusinessPage = z.infer<typeof BusinessPageSchema>;
 
 export const CancellationQuoteSchema = z.object({
   refundSharePercent: z.number().int(),

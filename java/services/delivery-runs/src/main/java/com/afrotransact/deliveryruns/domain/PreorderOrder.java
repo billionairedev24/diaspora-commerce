@@ -29,12 +29,25 @@ import java.util.UUID;
  * @param createdAt     projected
  * @param updatedAt     last change
  * @param version       optimistic lock
+ * @param refund        refund progress once the order was cancelled by a window or run cancellation (else null)
  */
 public record PreorderOrder(String orderId, String number, UUID windowId, String customerId, String customerName,
                             String phone, String email, Address address, String deliveryNote, Instant placedAt,
                             AttributionChannel channel, String trackingTag, List<PreorderPackage> packages,
                             PreorderFulfilment fulfilment, String currency, PreorderOrderStatus status, String note,
-                            Instant createdAt, Instant updatedAt, long version) {
+                            Instant createdAt, Instant updatedAt, long version,
+                            OrderRefund refund) {
+
+    /** An order without refund progress. */
+    public PreorderOrder(String orderId, String number, UUID windowId, String customerId, String customerName,
+                         String phone, String email, Address address, String deliveryNote, Instant placedAt,
+                         AttributionChannel channel, String trackingTag, List<PreorderPackage> packages,
+                         PreorderFulfilment fulfilment, String currency, PreorderOrderStatus status, String note,
+                         Instant createdAt, Instant updatedAt, long version) {
+        this(orderId, number, windowId, customerId, customerName, phone, email, address, deliveryNote, placedAt,
+                channel, trackingTag, packages, fulfilment, currency, status, note, createdAt, updatedAt, version,
+                null);
+    }
 
     /**
      * Delivery address.
@@ -99,14 +112,14 @@ public record PreorderOrder(String orderId, String number, UUID windowId, String
         boolean none = next.stream().allMatch(PreorderPackage::cancelled);
         return new PreorderOrder(orderId, number, windowId, customerId, customerName, phone, email, address,
                 deliveryNote, placedAt, channel, trackingTag, next, fulfilment, currency,
-                none ? PreorderOrderStatus.CANCELLED : status, note, createdAt, now, version);
+                none ? PreorderOrderStatus.CANCELLED : status, note, createdAt, now, version, refund);
     }
 
     public PreorderOrder cancel(Instant now) {
         List<PreorderPackage> next = packages.stream().map(PreorderPackage::cancel).toList();
         return new PreorderOrder(orderId, number, windowId, customerId, customerName, phone, email, address,
                 deliveryNote, placedAt, channel, trackingTag, next, fulfilment, currency, PreorderOrderStatus.CANCELLED,
-                note, createdAt, now, version);
+                note, createdAt, now, version, refund);
     }
 
     /**
@@ -118,7 +131,7 @@ public record PreorderOrder(String orderId, String number, UUID windowId, String
                 pick(placed.customerName, customerName), pick(placed.phone, phone), pick(placed.email, email),
                 placed.address.line() != null ? placed.address : address, pick(placed.deliveryNote, deliveryNote),
                 placedAt, channel, trackingTag, placed.packages.isEmpty() ? packages : placed.packages,
-                placed.fulfilment, placed.currency, status, note, createdAt, now, version);
+                placed.fulfilment, placed.currency, status, note, createdAt, now, version, refund);
     }
 
     private static String pick(String preferred, String other) {

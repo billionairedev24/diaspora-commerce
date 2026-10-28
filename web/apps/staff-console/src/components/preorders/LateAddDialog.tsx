@@ -1,6 +1,6 @@
 'use client';
 
-import { keepIdempotencyKey, staffPreorderKeys, staffPreorderQueries } from '@afrotransact/api-client';
+import { addressLookup, keepIdempotencyKey, staffPreorderKeys, staffPreorderQueries } from '@afrotransact/api-client';
 import {
   LATE_ADD_REASON_LABEL,
   lateAddAddressSnapshot,
@@ -13,15 +13,19 @@ import {
   type PreorderOrder,
   type PreorderWindow
 } from '@afrotransact/api-client/staff-preorders';
-import { Dialog, useToast } from '@afrotransact/ui';
+import { AddressAutocomplete, Dialog, type SearchAddresses, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
 import { problemMessage } from '@/components/ui/States';
+import { staffApi } from '@/lib/api';
 import { useDebounced } from '@/lib/use-debounced';
 
 import { money2, PAY_NOW_LINK_LABEL } from './model';
 import { Chip, controlClass, labelClass, selectClass, usePreordersApi } from './primitives';
+
+/** Street suggestions (geo: Google Places with session tokens, else OSM), as in the storefront. */
+const staffAddressSearch: SearchAddresses = (q, options) => addressLookup(staffApi())(q, options);
 
 const EMPTY: LateAddDraft = { customerId: '', addressId: '', newAddress: null, phoneConfirmed: false, items: [], payment: 'SAVED_CARD', reason: 'CUSTOMER_CALLED', note: '' };
 
@@ -199,15 +203,14 @@ export function LateAddDialog({ w, open, onOpenChange, onAdded }: { w: PreorderW
             </label>
             {d.newAddress ? (
               <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] items-end gap-2">
-                <label className={labelClass}>
-                  Street
-                  <input
-                    value={d.newAddress.line1}
-                    onChange={(e) => up({ newAddress: { line1: e.currentTarget.value, zip: d.newAddress?.zip ?? '', placeId: null } })}
-                    placeholder="Street and number"
-                    className={`${controlClass} min-w-0`}
-                  />
-                </label>
+                <AddressAutocomplete
+                  label="Street"
+                  value={d.newAddress.line1}
+                  onChange={(line1) => up({ newAddress: { line1, zip: d.newAddress?.zip ?? '', placeId: null } })}
+                  onSelect={(sug) => up({ newAddress: { line1: sug.address.line1 || sug.label, zip: sug.address.zip || (d.newAddress?.zip ?? ''), placeId: null } })}
+                  searchAddresses={staffAddressSearch}
+                  placeholder="Start typing the street address"
+                />
                 <label className={labelClass}>
                   Postal code
                   <input

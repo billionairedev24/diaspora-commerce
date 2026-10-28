@@ -7,7 +7,7 @@ and `java/services/fulfilment/README.md` → "Driver app integration". Types are
 
 | Story | Client behaviour |
 |---|---|
-| S081 Sign-in + access | OIDC code + PKCE with identity (public client `driver-app`; password, 6-digit code or passkey on the hosted page). `GET /v1/driver/me` decides: 200 → work; 403 `fulfilment.no-driver-access` → "No driver access" with the grant hint; 403 `fulfilment.driver-access-revoked` or `signOut: true` on a sync → a last sync with the current token, then sign-out — **the SQLite outbox is kept** and syncs later (events captured before `revokedAt` are accepted). Access is re-checked on resume and every 5 min. |
+| S081 Sign-in + access | In-app form (email, password, 6-digit code): `POST /v1/auth/native/*` on gateway-bff checks them with identity and returns an authorization code for the app's own PKCE request, which the app exchanges at identity (public client `driver-app`); no hosted page or browser. A refresh token that identity refuses ends the session ("Your session ended"); an unreachable identity does not. `GET /v1/driver/me` decides: 200 → work; 403 `fulfilment.no-driver-access` → "No driver access" with the grant hint; 403 `fulfilment.driver-access-revoked` or `signOut: true` on a sync → a last sync with the current token, then sign-out — **the SQLite outbox is kept** and syncs later (events captured before `revokedAt` are accepted). Access is re-checked on resume and every 5 min. |
 | S082 Inspection | 10 checks (tyres, brakes, lights critical → route blocked + defect to dispatch), odometer ≥ last, fuel 0–100, cold box 33–40 °F when perishables are on the route, 4 photos from the **live camera only** (`expo-camera`; no picker in the app, media-library permissions blocked on Android), defect note, certification and signature. |
 | S083 Load-out | Code 128 scanning (`expo-camera` barcode scanner) + manual entry (sent as `method: MANUAL`, flagged in the list). Unknown / already-scanned labels are rejected locally and by the server. |
 | S084 Seller pickups | Arrive, scan each package, "handed over by", missing-package reason; problems: not ready (wait/skip), closed, wrong count (partial/skip, photo), damaged (photo). |
@@ -41,13 +41,14 @@ and SQLite; the web preview uses a `localStorage` outbox and the browser camera.
 
 The URLs come from the EAS build profile (`eas.json`: `development` = dev, `preview` = uat, `production` = prod;
 `development-mocks` = local on mocks); hosts per environment are in `docs/engineering/environments.md`. The code names
-no deployed host: `src/config/env.ts` falls back to the local stack on `EXPO_PUBLIC_DEV_HOST` (default `localhost`; the
+no deployed host: `src/config/env.ts` falls back to the local stack on `EXPO_PUBLIC_DEV_HOST` (when that is unset, a development phone uses the address Metro serves its JS from, `src/config/devHost.ts`, so `localhost` — the phone itself — is never tried by accident; otherwise `localhost`; the
 dev machine's LAN IP for a physical device, `10.0.2.2` for the Android emulator), and `app.config.ts` fails a dev, uat or
 prod build that leaves one of the URL variables unset.
 
 | Variable | local | dev | uat | prod |
 |---|---|---|---|---|
 | `EXPO_PUBLIC_APP_ENV` | `local` | `dev` | `uat` | `prod` |
+| `EXPO_PUBLIC_BFF_URL` | `http://localhost:8200` | `https://api.dev.afrotransact.com/bff` | `…uat…/bff` | `https://api.afrotransact.com/bff` |
 | `EXPO_PUBLIC_FULFILMENT_URL` | `http://localhost:8108` | `https://api.dev.afrotransact.com/fulfilment` | `…uat…/fulfilment` | `https://api.afrotransact.com/fulfilment` |
 | `EXPO_PUBLIC_MEDIA_URL` | `http://localhost:8207` | `https://api.dev.afrotransact.com/media` | `…uat…/media` | `https://api.afrotransact.com/media` |
 | `EXPO_PUBLIC_OIDC_ISSUER` | `http://localhost:8100` | `https://auth.dev.afrotransact.com` | `https://auth.uat.afrotransact.com` | `https://auth.afrotransact.com` |

@@ -11,7 +11,8 @@ Checks every service against the environment rules in docs/engineering/environme
                (literal or the ${TRACE_SAMPLING:<default>} default), Go telemetry.sampleRatio, Helm telemetry.sampling
                (injected as TRACE_SAMPLING, so it wins over the profile default).
   sizing       (S182) dev: 1 replica, no HPA, tolerates the spot pool; uat: tolerates the spot pool; prod: no spot
-               toleration, at least 2 replicas or an HPA with min >= 2; every env sets CPU/memory requests and a
+               toleration, at least 2 replicas or an HPA with min >= 2 (1 when prod's sizing is the lean single-node
+               profile, infra/tofu/envs/prod/sizing.tf node_size = "lean", docs/engineering/cloud-cost.md); every env sets CPU/memory requests and a
                memory limit.
   image        no `latest` tag in any values file.
   stripe       (S282) Stripe keys come only from the environment / secret store: gateway-bff's stripe.publishableKey is
@@ -19,6 +20,10 @@ Checks every service against the environment rules in docs/engineering/environme
                in dev/uat or a pk_live_ key in prod, so the storefront's dev-only Stripe stand-in is local-only);
                payments' at.payments.stripe.secret-key / webhook-secret have no default outside local and
                require-live-key is true in prod only; the Helm charts list the Stripe keys their secret store must hold.
+  plan fees    (S298) seller's kill switch at.seller.billing.collect-from-earnings (COLLECT_PLAN_FEES_FROM_EARNINGS) is on
+               in local and dev (profile default and Helm values-dev), and wherever it can be on, the seller-service client
+               at identity holds the payments:plan-fees scope and the Helm chart sets PAYMENTS_URL (otherwise every
+               withholding fails and the card pays).
   timeouts     (payments idempotency) gateway-bff's upstreams.orders.slowTimeout is above orders'
                at.orders.checkout-response-timeout in every environment, and upstreams.deliveryRuns.slowTimeout above
                delivery-runs' orders timeout: the BFF never reports a failure for a checkout or late add that still
@@ -168,6 +173,16 @@ def check_go(svc_dir: pathlib.Path, rep: Report) -> None:
 
 
 # ------------------------------------------------------------------------------------------------ Helm
+def prod_min_replicas() -> int:
+    """2 for the HA profile; 1 when prod runs the lean single-node profile (one node cannot spread two replicas)."""
+    sizing = pathlib.Path(__file__).resolve().parents[2] / "infra" / "tofu" / "envs" / "prod" / "sizing.tf"
+    try:
+        lean = re.search(r'^\s*node_size\s*=\s*"lean"', sizing.read_text(), re.M) is not None
+    except OSError:
+        lean = False
+    return 1 if lean else 2
+
+
 def tolerates_spot(values: dict) -> bool:
     return any(isinstance(t, dict) and t.get("key") == SPOT_KEY for t in values.get("tolerations") or [])
 
@@ -214,8 +229,9 @@ def check_helm(chart: pathlib.Path, rep: Report) -> None:
             if tolerates_spot(v):
                 rep.error(f, f"prod must not tolerate the spot pool ({SPOT_KEY}); spot capacity is for dev/uat")
             floor = int(hpa.get("min") or 0) if hpa.get("enabled") else replicas
-            if floor < 2:
-                rep.error(f, f"prod needs at least 2 replicas (HPA min or replicas; found {floor})")
+            need = prod_min_replicas()
+            if floor < need:
+                rep.error(f, f"prod needs at least {need} replicas (HPA min or replicas; found {floor})")
 
 
 # ------------------------------------------------------------------------------------------------ Stripe (S282)
@@ -310,6 +326,40 @@ def check_timeouts(rep: Report) -> None:
                                               f"({limit:g}s)")
 
 
+def check_plan_fees(rep: Report) -> None:
+    seller = ROOT / "java/services/seller"
+    identity = ROOT / "java/services/identity/src/main/resources"
+    res = seller / "src/main/resources"
+    helm = seller / "deploy/helm"
+    if not (res.is_dir() and identity.is_dir() and helm.is_dir()):
+        return
+    base = load(res / "application.yml")
+    values = load(helm / "values.yaml")
+    for env in ENVS:
+        env_file = res / f"application-{env}.yml"
+        profile = deep_merge(base, load(env_file)) if env_file.exists() else base
+        on = as_bool(get(profile, "at.seller.billing.collect-from-earnings"))
+        helm_on = None
+        if env in DEPLOYED:
+            merged = deep_merge(values, load(helm / f"values-{env}.yaml"))
+            env_vars = merged.get("extraEnv") or {}
+            helm_on = as_bool(str(env_vars.get("COLLECT_PLAN_FEES_FROM_EARNINGS", "")).lower() or None)
+            if helm_on is not False and not env_vars.get("PAYMENTS_URL"):
+                rep.error(helm / f"values-{env}.yaml", "plan fees from earnings can be on but extraEnv.PAYMENTS_URL is not set")
+        if env in ("local", "dev") and on is not True:
+            rep.error(env_file if env_file.exists() else res / "application.yml",
+                      "at.seller.billing.collect-from-earnings must default to true in the " + env + " profile (S298)")
+        if env == "dev" and helm_on is not True:
+            rep.error(helm / "values-dev.yaml", "extraEnv.COLLECT_PLAN_FEES_FROM_EARNINGS must be \"true\" in dev (S298)")
+        if on or helm_on:
+            id_cfg = load(identity / f"application-{env}.yml")
+            clients = get(id_cfg, "at.identity.clients") or get(id_cfg, "identity.clients") or []
+            scopes = next((c.get("scopes") or [] for c in clients if isinstance(c, dict) and c.get("client-id") == "seller-service"), None)
+            if scopes is None or "payments:plan-fees" not in scopes:
+                rep.error(identity / f"application-{env}.yml",
+                          "the seller-service client needs the payments:plan-fees scope while plan fees may be paid from earnings")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--format", choices=["text", "github"], default="text")
@@ -331,6 +381,7 @@ def main() -> int:
             rep.error(svc_dir, "missing deploy/helm chart")
     if not args.service:
         check_timeouts(rep)
+        check_plan_fees(rep)
     if args.service and rep.checked == 0:
         print(f"no such service: {', '.join(args.service)}", file=sys.stderr)
         return 2

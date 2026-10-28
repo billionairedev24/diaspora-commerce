@@ -71,8 +71,8 @@ updates:
 
   - package-ecosystem: terraform
     directories:
-      - /infra/terraform/envs/*
-      - /infra/terraform/bootstrap/*
+      - /infra/tofu/envs/*
+      - /infra/tofu/bootstrap/*
       - /infra/cloudflare
     schedule:
       interval: weekly

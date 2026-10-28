@@ -15,13 +15,16 @@ import {
 import { cx, useToast } from '@afrotransact/ui';
 import { ListChecks, Package } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useState } from 'react';
 
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
+import { settingsHref } from '@/lib/settings-sections';
 
-import { amountText, NO_SETTINGS_TITLE, parseAmount, PAY_NOW_LINK_LABEL } from './model';
+import { NO_SETTINGS_TITLE, PAY_NOW_LINK_LABEL } from './model';
 import { PreorderAreasTree } from './PreorderAreasTree';
-import { controlClass, labelClass, smallButton, Toggle, usePreorderAccess, usePreordersApi } from './primitives';
+import { controlClass, labelClass, Toggle, usePreorderAccess, usePreordersApi } from './primitives';
 
 const FALLBACKS: [PreorderFallback, typeof Package, string, string][] = [
   ['SHIP', Package, 'Ship by UPS Ground', 'Shoppers can still buy, at the quoted rate (3–5 days).'],
@@ -40,7 +43,6 @@ const METHODS: [PaymentMethod, string, string][] = [
   ['WALLET', 'Apple Pay, Google Pay, Link', 'Wallets on supported devices'],
   ['ACH', 'ACH bank debit', 'US bank accounts (settles in 3–5 days)']
 ];
-const CURRENCIES = ['USD', 'CAD', 'GBP', 'EUR', 'NGN', 'GHS', 'KES', 'ZAR', 'JMD'];
 
 function useSaveSettings() {
   const api = usePreordersApi();
@@ -80,36 +82,20 @@ function Areas({ canEdit }: { canEdit: boolean }) {
 
 /** Payment & fees (Full level): door / pickup fees per currency, pickup window, methods, late-add payment, missed delivery. */
 function PaymentFees({ s, canEdit }: { s: PreorderSettings; canEdit: boolean }) {
+  const t = useT();
   const save = useSaveSettings();
   const [p, setP] = useState<PreorderPaymentSettings>(s.payment);
-  const [text, setText] = useState<Record<string, { door: string; pickup: string }>>(() =>
-    Object.fromEntries([...new Set([...Object.keys(s.payment.doorFee), ...Object.keys(s.payment.pickupFee)])].map((c) => [c, { door: amountText(s.payment.doorFee[c] ?? 0), pickup: amountText(s.payment.pickupFee[c] ?? 0) }]))
-  );
-  const [addCur, setAddCur] = useState('');
   const [hours, setHours] = useState(String(s.payment.lateAdd.linkExpiryHours));
   const hoursProblem = linkExpiryProblem(hours.trim() === '' ? Number.NaN : Number(hours));
   const [error, setError] = useState<string | null>(null);
-  const currencies = Object.keys(text);
   const toggleMethod = (m: PaymentMethod) => setP((cur) => ({ ...cur, allowedMethods: cur.allowedMethods.includes(m) ? cur.allowedMethods.filter((x) => x !== m) : [...cur.allowedMethods, m] }));
   const submit = () => {
-    const doorFee: Record<string, number> = {};
-    const pickupFee: Record<string, number> = {};
-    for (const [c, v] of Object.entries(text)) {
-      const d = parseAmount(v.door);
-      const k = parseAmount(v.pickup);
-      if (d === null || Number.isNaN(d) || (k !== null && Number.isNaN(k))) {
-        setError(`Enter the ${c} fees as amounts like 7.99.`);
-        return;
-      }
-      doorFee[c] = d;
-      pickupFee[c] = k ?? 0;
-    }
     if (!p.allowedMethods.length) return setError('Allow at least one payment method.');
     if (!p.lateAdd.savedCard && !p.lateAdd.paymentLink) return setError('Keep the saved card or the pay-now link on for late adds.');
     if (!p.missedDelivery.offerRefund && !p.missedDelivery.offerNewDate) return setError('Offer a refund or a new date when a delivery is missed.');
     if (hoursProblem) return setError(`${hoursProblem} (${LINK_EXPIRY_MIN_HOURS}–${LINK_EXPIRY_MAX_HOURS}).`);
     setError(null);
-    save.mutate({ current: s, patch: { payment: { ...p, doorFee, pickupFee, lateAdd: { ...p.lateAdd, linkExpiryHours: Number(hours) } } }, message: 'Payment & fees saved' });
+    save.mutate({ current: s, patch: { payment: { ...p, lateAdd: { ...p.lateAdd, linkExpiryHours: Number(hours) } } }, message: 'Payment settings saved' });
   };
   const row = 'flex items-center gap-3 border-b border-border py-2';
   return (
@@ -119,58 +105,13 @@ function PaymentFees({ s, canEdit }: { s: PreorderSettings; canEdit: boolean }) 
           Payment &amp; fees
         </h3>
         <span className="text-xs text-muted">
-          {canEdit ? 'Platform defaults for every pre-order; a pre-order can override its door and pickup fee.' : 'Only full Pre-orders access can change these.'}
+          {canEdit ? 'Delivery, carrier and pickup fees are set in Delivery fees; a pre-order can override its door and pickup fee.' : 'Only full Pre-orders access can change these.'}
         </span>
       </div>
       <fieldset disabled={!canEdit} className="m-0 flex flex-col gap-4 border-0 p-0">
-        <div className="overflow-auto rounded-md border border-border">
-          <table className="w-full min-w-[420px] border-collapse text-sm" aria-label="Delivery fees by currency">
-            <thead className="bg-surface-muted text-left text-2xs font-bold tracking-[0.06em] text-muted uppercase">
-              <tr>
-                <th scope="col" className="px-3 py-2">Currency</th>
-                <th scope="col" className="px-3 py-2">Door delivery</th>
-                <th scope="col" className="px-3 py-2">Pickup</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currencies.map((c) => (
-                <tr key={c} className="border-t border-border">
-                  <th scope="row" className="px-3 py-2 text-left font-mono text-xs">{c}</th>
-                  <td className="px-3 py-2">
-                    <input aria-label={`${c} door delivery fee`} inputMode="decimal" value={text[c]?.door ?? ''} onChange={(e) => setText({ ...text, [c]: { door: e.currentTarget.value, pickup: text[c]?.pickup ?? '' } })} className={`${controlClass} h-8 w-28`} />
-                  </td>
-                  <td className="px-3 py-2">
-                    <input aria-label={`${c} pickup fee`} inputMode="decimal" value={text[c]?.pickup ?? ''} onChange={(e) => setText({ ...text, [c]: { door: text[c]?.door ?? '', pickup: e.currentTarget.value } })} className={`${controlClass} h-8 w-28`} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
-            Add a currency
-            <select value={addCur} onChange={(e) => setAddCur(e.currentTarget.value)} className="h-8 rounded-sm border border-border-strong bg-ink-0 px-2 text-sm">
-              <option value="">Choose…</option>
-              {CURRENCIES.filter((c) => !currencies.includes(c)).map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            disabled={!addCur}
-            onClick={() => {
-              setText({ ...text, [addCur]: { door: '', pickup: '0.00' } });
-              setAddCur('');
-            }}
-            className={smallButton}
-          >
-            Add
-          </button>
-        </div>
+        <p className="m-0 rounded-md bg-ink-50 px-3 py-2 text-xs text-muted" data-testid="fees-moved">
+          {t('st.deliveryFees.preorders.feesMoved')} <Link href={settingsHref('delivery-fees')}>{t('st.deliveryFees.preorders.open')}</Link>
+        </p>
         <label className={`${labelClass} max-w-sm`}>
           Pickup window
           <input value={p.pickupWindow} onChange={(e) => setP({ ...p, pickupWindow: e.currentTarget.value })} maxLength={40} className={controlClass} />

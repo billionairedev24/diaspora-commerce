@@ -4,9 +4,13 @@ import { type ExportJob } from '../../schemas/exports';
 import { type ActivityEntry, type ResourceKey } from '../../schemas/staff';
 import { HELP_ARTICLES } from '../fixtures/help';
 import { type MockDispatch, seedDispatch } from './dispatch';
+import { seedExchangeRates } from './exchange-rates';
+import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
+import { seedIdentityAdmin } from './identity';
 import { type MockMarketsState, seedMarkets } from './markets';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
+import { type MockPlansState, seedPlans } from './plans';
 import { type MockPreorderState, seedPreorders } from './preorders';
 
 export type Scalar = string | number | boolean | null;
@@ -32,6 +36,8 @@ export interface MockNotification {
 
 export interface MockStaffDb {
   now: Date;
+  /** Messages sent to Lola today. */
+  lolaUsed: number;
   user: { id: string; firstName: string; lastName: string; email: string };
   records: Record<ResourceKey, MockRecord[]>;
   notifications: MockNotification[];
@@ -47,6 +53,10 @@ export interface MockStaffDb {
   preorders: MockPreorderState;
   /** content's draft markets: countries → states → cities (Markets & locations). */
   markets: MockMarketsState;
+  /** seller's plan catalogue, trial campaigns, reward rules, grants and per-seller billing (S292–S297). */
+  plans: MockPlansState;
+  /** payments' negotiated commission / connection-fee rates and organisations' plans. */
+  feeRates: MockFeeRatesState;
   seq: number;
 }
 
@@ -115,6 +125,7 @@ function seed(now: Date): MockStaffDb {
         status,
         reviewStep: status === 'AWAITING_FINAL_APPROVAL' ? 2 : 1,
         reviewerId: status === 'AWAITING_FINAL_APPROVAL' ? 'stf-2' : null,
+        reviewerName: status === 'AWAITING_FINAL_APPROVAL' ? 'Sara Tesfaye' : null,
         failedChecks: status === 'FLAGGED' ? 'TIN_MISMATCH' : null,
         taxIdMasked: `***-**-${String(1000 + i * 37).slice(-4)}`,
         contactEmail: `owner${i}@example.com`,
@@ -229,7 +240,7 @@ function seed(now: Date): MockStaffDb {
       currency: 'USD',
       status: (['REQUESTED', 'REQUESTED', 'ON_HOLD', 'APPROVED', 'PAID', 'PAID', 'PAID', 'FAILED', 'REQUESTED', 'PAID'] as const)[i] ?? 'PAID',
       holdReason: i === 2 ? 'Stripe requirement past due' : null,
-      requestedBy: 'Owner',
+      requestedBy: ['Ada Obi', 'Kofi Mensah', 'Zainab Bello'][i % 3] ?? 'Ada Obi',
       requestedAt: ago(i * 2)
     })
   );
@@ -247,7 +258,10 @@ function seed(now: Date): MockStaffDb {
       qtyAvailable: onHand - reserved,
       expDate: day(-90 + i * 9),
       status: i === 3 ? 'QUARANTINED' : 'SELLABLE',
-      unitLandedCostMinor: 180 + i * 35
+      // Every fourth lot was sourced in Mexico and paid in pesos: the cost as paid, the rate and the USD value.
+      ...(i % 4 === 1
+        ? { unitLandedCostMinor: 12_000, currency: 'MXN', fxRateToUsd: 0.0577, unitCostUsdMinor: 692, costPaid: 'MXN 120.00 @ 0.0577' }
+        : { unitLandedCostMinor: 180 + i * 35, currency: 'USD', fxRateToUsd: 1, unitCostUsdMinor: 180 + i * 35, costPaid: `USD ${((180 + i * 35) / 100).toFixed(2)}` })
     });
   });
 
@@ -301,15 +315,15 @@ function seed(now: Date): MockStaffDb {
     })
   );
   const sosAlerts = [
-    rec('sos-1', { kind: 'Breakdown', driverId: 'drv-1', routeId: 'rte-1000', where: '29.70510, -95.55120', note: 'Flat tyre on Bellaire Blvd', raisedAt: ago(0, 1), status: 'ALERT' }),
-    rec('sos-2', { kind: 'Unsafe', driverId: 'drv-2', routeId: 'rte-1001', where: '29.61980, -95.63540', note: 'Aggressive dog at stop 4', raisedAt: ago(0, 3), status: 'ACKNOWLEDGED' })
+    rec('sos-1', { kind: 'Breakdown', driverId: 'drv-1', driverName: 'Tunde Adeyemi', routeId: 'rte-1000', routeName: 'HOU West AM', where: '29.70510, -95.55120', note: 'Flat tyre on Bellaire Blvd', raisedAt: ago(0, 1), status: 'ALERT' }),
+    rec('sos-2', { kind: 'Unsafe', driverId: 'drv-2', driverName: 'Chinedu Okafor', routeId: 'rte-1001', routeName: 'HOU Southwest PM', where: '29.61980, -95.63540', note: 'Aggressive dog at stop 4', raisedAt: ago(0, 3), status: 'ACKNOWLEDGED' })
   ];
   const vehicleDefects = [
-    rec('def-1', { vehicleId: 'VAN-12', driverId: 'drv-2', routeId: 'rte-1002', failed: 'Brakes', note: 'Soft brake pedal at pre-trip', reportedAt: ago(0, 2), status: 'BLOCKED' }),
-    rec('def-2', { vehicleId: 'VAN-14', driverId: 'drv-1', routeId: 'rte-1003', failed: 'Wipers', note: 'Passenger wiper torn', reportedAt: ago(1), status: 'OPEN' })
+    rec('def-1', { vehicleId: 'VAN-12', driverId: 'drv-2', driverName: 'Chinedu Okafor', routeId: 'rte-1002', routeName: 'HOU Central AM', failed: 'Brakes', note: 'Soft brake pedal at pre-trip', reportedAt: ago(0, 2), status: 'BLOCKED' }),
+    rec('def-2', { vehicleId: 'VAN-14', driverId: 'drv-1', driverName: 'Tunde Adeyemi', routeId: 'rte-1003', routeName: 'HOU North PM', failed: 'Wipers', note: 'Passenger wiper torn', reportedAt: ago(1), status: 'OPEN' })
   ];
   const driverEvents = ['session signed in', 'inspection submitted', 'loadout completed', 'route started', 'stop arrived', 'delivery completed', 'delivery problem', 'pickup confirmed'].map((type, i) =>
-    rec(`ev-${100 + i}`, { capturedAt: ago(0, 8 - i), type: type.charAt(0).toUpperCase() + type.slice(1), driverId: i % 2 ? 'drv-2' : 'drv-1', routeId: `rte-${1000 + (i % 2)}`, stopId: i > 3 ? `st-${i}` : null, message: type === 'delivery problem' ? 'Customer not home: left a card' : null, outcome: type === 'delivery problem' ? 'REJECTED' : 'APPLIED' })
+    rec(`ev-${100 + i}`, { capturedAt: ago(0, 8 - i), type: type.charAt(0).toUpperCase() + type.slice(1), driverId: i % 2 ? 'drv-2' : 'drv-1', driverName: i % 2 ? 'Chinedu Okafor' : 'Tunde Adeyemi', routeId: `rte-${1000 + (i % 2)}`, routeName: i % 2 ? 'HOU Southwest PM' : 'HOU West AM', stopId: i > 3 ? `st-${i}` : null, stopName: i > 3 ? `Stop ${i} · Bellaire Blvd` : null, message: type === 'delivery problem' ? 'Customer not home: left a card' : null, outcome: type === 'delivery problem' ? 'REJECTED' : 'APPLIED' })
   );
 
   const supportCases = Array.from({ length: 6 }, (_, i) => {
@@ -424,11 +438,111 @@ function seed(now: Date): MockStaffDb {
   const feeSchedules = seedFeeSchedules(now);
   const fees = feeRecords(feeSchedules, now);
 
+  const coupons = [
+    rec('cp-welcome10', { code: 'WELCOME10', description: '10% off first order', type: 'PERCENT', value: 10, scope: 'CART', status: 'ACTIVE', funding: 'PLATFORM', redeemedCount: 128, version: 2 }),
+    rec('cp-freeship', { code: 'FREESHIP', description: 'Free shipping over $35', type: 'FREE_SHIPPING', value: 0, scope: 'CART', status: 'ACTIVE', funding: 'PLATFORM', redeemedCount: 44, version: 1 }),
+    rec('cp-pause', { code: 'SUMMER24', description: 'Summer sale (paused)', type: 'PERCENT', value: 15, scope: 'CART', status: 'PAUSED', funding: 'PLATFORM', redeemedCount: 902, version: 4 })
+  ];
+
   const taxRates = [
-    rec('state:TX', { kind: 'STATE', state: 'TX', zipPrefix: null, name: 'Texas', generalRate: 0.0625, groceryRate: 0, preparedFoodRate: 0.0625, shippingTaxable: true, facilitator: true, version: 3 }),
-    rec('state:NJ', { kind: 'STATE', state: 'NJ', zipPrefix: null, name: 'New Jersey', generalRate: 0.06625, groceryRate: 0, preparedFoodRate: 0.06625, shippingTaxable: true, facilitator: true, version: 2 }),
-    rec('state:GA', { kind: 'STATE', state: 'GA', zipPrefix: null, name: 'Georgia', generalRate: 0.04, groceryRate: 0, preparedFoodRate: 0.04, shippingTaxable: true, facilitator: true, version: 1 }),
-    rec('local:TX:770', { kind: 'LOCAL', state: 'TX', zipPrefix: '770', name: 'Houston', generalRate: 0.02, groceryRate: null, preparedFoodRate: null, shippingTaxable: null, facilitator: null, version: null })
+    rec('state:TX', { kind: 'STATE', country: 'US', state: 'TX', zipPrefix: null, name: 'Texas', generalRate: 0.0625, groceryRate: 0, preparedFoodRate: 0.0625, shippingTaxable: true, facilitator: true, version: 3 }),
+    rec('state:NJ', { kind: 'STATE', country: 'US', state: 'NJ', zipPrefix: null, name: 'New Jersey', generalRate: 0.06625, groceryRate: 0, preparedFoodRate: 0.06625, shippingTaxable: true, facilitator: true, version: 2 }),
+    rec('state:GA', { kind: 'STATE', country: 'US', state: 'GA', zipPrefix: null, name: 'Georgia', generalRate: 0.04, groceryRate: 0, preparedFoodRate: 0.04, shippingTaxable: true, facilitator: true, version: 1 }),
+    rec('local:TX:770', { kind: 'LOCAL', country: 'US', state: 'TX', zipPrefix: '770', name: 'Houston', generalRate: 0.02, groceryRate: null, preparedFoodRate: null, shippingTaxable: null, facilitator: null, version: null })
+  ];
+
+  const taxCodes = [
+    rec('GENERAL_GOODS', { code: 'GENERAL_GOODS', label: 'General taxable goods', category: 'GENERAL', providerCode: 'txcd_99999999', taxableLabel: 'Yes', exemptStates: '', state: 'ACTIVE' }),
+    rec('CLOTHING', { code: 'CLOTHING', label: 'Clothing and accessories', category: 'GENERAL', providerCode: null, taxableLabel: 'Yes', exemptStates: '', state: 'ACTIVE' }),
+    rec('NON_TAXABLE', { code: 'NON_TAXABLE', label: 'Not taxable (gift cards, donations, exempt items)', category: 'GENERAL', providerCode: null, taxableLabel: 'Never', exemptStates: '', state: 'ACTIVE' }),
+    rec('PACKAGED_FOOD', { code: 'PACKAGED_FOOD', label: 'Packaged food (shelf-stable)', category: 'GROCERY', providerCode: null, taxableLabel: 'Yes', exemptStates: 'NJ,TX', state: 'ACTIVE' }),
+    rec('PREPARED_FOOD', { code: 'PREPARED_FOOD', label: 'Hot or ready-to-eat food', category: 'PREPARED_FOOD', providerCode: null, taxableLabel: 'Yes', exemptStates: '', state: 'ACTIVE' })
+  ];
+  const taxRules = [
+    rec('dress||', { rowId: 'dress||', productType: 'dress', attrKey: null, attrValue: null, taxCode: 'CLOTHING', kind: 'TYPE', note: 'Clothing' }),
+    rec('grocery|tax_class|Packaged, shelf-stable', { rowId: 'grocery|tax_class|Packaged, shelf-stable', productType: 'grocery', attrKey: 'tax_class', attrValue: 'Packaged, shelf-stable', taxCode: 'PACKAGED_FOOD', kind: 'ANSWER', note: 'Food for home consumption' }),
+    rec('grocery|tax_class|Hot or ready-to-eat', { rowId: 'grocery|tax_class|Hot or ready-to-eat', productType: 'grocery', attrKey: 'tax_class', attrValue: 'Hot or ready-to-eat', taxCode: 'PREPARED_FOOD', kind: 'ANSWER', note: 'Prepared food' })
+  ];
+  const reconciliation = [
+    rec('rec-1', { stripeRef: 'ch_3Q8xK2', windowStart: ago(1, 0), ledgerMinor: 10_000, stripeMinor: 9_750, differenceMinor: 250, status: 'OPEN', note: null, resolvedByName: null, resolvedAt: null,
+      meaning: 'The ledger shows $2.50 more than Stripe reports for this object.' }),
+    rec('rec-2', { stripeRef: 're_3Q8yL4', windowStart: ago(1, 0), ledgerMinor: -4_200, stripeMinor: -4_200 - 120, differenceMinor: 120, status: 'EXPLAINED', note: 'Stripe settles this fee the next day (timing)', resolvedByName: 'Platform Admin', resolvedAt: ago(0, 5),
+      meaning: 'The ledger shows $1.20 more than Stripe reports for this object.' }),
+    rec('rec-3', { stripeRef: 'tr_1Q9aB7', windowStart: ago(2, 0), ledgerMinor: 55_000, stripeMinor: 55_000, differenceMinor: 0, status: 'ADJUSTED', note: null, resolvedByName: 'Finance Lead', resolvedAt: ago(1, 2),
+      meaning: 'The ledger and Stripe agree.' })
+  ];
+  const reconciliationRuns = [
+    rec('run-1', { windowStart: ago(1, 0), ledgerNetMinor: 5_830_000, stripeNetMinor: 5_829_630, driftMinor: 370, differences: 2, state: 'DIFFERENCES', createdAt: ago(0, 8) }),
+    rec('run-2', { windowStart: ago(2, 0), ledgerNetMinor: 4_411_000, stripeNetMinor: 4_411_000, driftMinor: 0, differences: 0, state: 'RECONCILED', createdAt: ago(1, 8) })
+  ];
+  const ledgerAdjustments = [
+    rec('adj-1', { reason: 'Stripe fee booked twice for the charge', amountMinor: 250, stripeRef: 'ch_3Q8xK2', proposedByName: 'Finance Lead', decidedByName: null, status: 'PROPOSED', proposedAt: ago(0, 4), decidedAt: null, decisionNote: null, journalId: null }),
+    rec('adj-2', { reason: 'Reclass a mis-booked chargeback fee to chargeback losses', amountMinor: 1_500, stripeRef: 'dp_1Q7cD9', proposedByName: 'Finance Lead', decidedByName: 'Platform Admin', status: 'POSTED', proposedAt: ago(3, 0), decidedAt: ago(2, 6), decisionNote: 'Checked against the Stripe dispute', journalId: 'a1b2c3d4' })
+  ];
+  const stripeLookup: MockRecord[] = [];
+  const creditAdjustments = [
+    rec('cadj-1', { customerId: customers[0]?.id ?? 'cus-1000', customerName: customers[0]?.name ?? 'Amara Nwosu', amountMinor: 25_000, source: 'STAFF', reason: 'Goodwill for a parcel that arrived a week late', proposedByName: 'Finance Lead', decidedByName: null, status: 'PROPOSED', proposedAt: ago(0, 3), decidedAt: null, decisionNote: null, balanceMinor: 2_500 }),
+    rec('cadj-2', { customerId: customers[1]?.id ?? 'cus-1001', customerName: customers[1]?.name ?? 'Kofi Mensah', amountMinor: 1_500, source: 'PROMO', reason: 'Apology for a delayed pre-order delivery', proposedByName: 'Finance Lead', decidedByName: 'Finance Lead', status: 'POSTED', proposedAt: ago(4, 0), decidedAt: ago(4, 0), decisionNote: null, balanceMinor: 1_500 })
+  ];
+  const giftCards = [
+    rec('gc-1', { code: '•••• K3M9', codeLast4: 'K3M9', amountMinor: 5_000, status: 'ACTIVE', origin: 'PURCHASE', purchaserId: customers[0]?.id ?? 'cus-1000', purchaserName: customers[0]?.name ?? 'Amara Nwosu', recipient: 'Ama Boateng', recipientName: 'Ama Boateng', recipientEmail: 'ama@example.com', senderName: 'Amara', message: 'Happy birthday!', locale: 'en', sendAt: ago(2, 0), deliveryStatus: 'SENT', deliveryCount: 1, sentAt: ago(2, 0), issueReason: null, issuedByName: null, redeemedByName: null, redeemedAt: null, voidedByName: null, voidedAt: null, voidReason: null, refundedToCard: 'No', createdAt: ago(3, 0) }),
+    rec('gc-2', { code: '•••• P7QX', codeLast4: 'P7QX', amountMinor: 2_500, status: 'REDEEMED', origin: 'STAFF', purchaserId: null, purchaserName: null, recipient: 'kwame@example.com', recipientName: null, recipientEmail: 'kwame@example.com', senderName: null, message: null, locale: 'en', sendAt: ago(9, 0), deliveryStatus: 'SENT', deliveryCount: 1, sentAt: ago(9, 0), issueReason: 'Goodwill after a lost parcel', issuedByName: 'Finance Lead', redeemedByName: customers[2]?.name ?? 'Kwame Asante', redeemedAt: ago(8, 0), voidedByName: null, voidedAt: null, voidReason: null, refundedToCard: 'No', createdAt: ago(10, 0) }),
+    rec('gc-3', { code: '•••• D2ZR', codeLast4: 'D2ZR', amountMinor: 10_000, status: 'ACTIVE', origin: 'PURCHASE', purchaserId: customers[1]?.id ?? 'cus-1001', purchaserName: customers[1]?.name ?? 'Kofi Mensah', recipient: 'Efua Owusu', recipientName: 'Efua Owusu', recipientEmail: 'efua@example.com', senderName: 'Kofi', message: 'Congratulations!', locale: 'en', sendAt: ahead(14), deliveryStatus: 'SCHEDULED', deliveryCount: 0, sentAt: null, issueReason: null, issuedByName: null, redeemedByName: null, redeemedAt: null, voidedByName: null, voidedAt: null, voidReason: null, refundedToCard: 'No', createdAt: ago(1, 0) })
+  ];
+  const creditLiabilities = [
+    rec('credit-outstanding', { item: 'Credit owed to customers', amountMinor: 12_500, count: 4, account: '2600', note: 'Customer balances today. Credit never expires and cannot be paid out.' }),
+    rec('credit-open-orders', { item: 'Credit spent on orders not shipped yet', amountMinor: 2_500, count: null, account: '2600', note: 'Held in 2600 until each order ships, then it becomes revenue.' }),
+    rec('giftcards-outstanding', { item: 'Gift cards sold or issued, not yet redeemed', amountMinor: 15_000, count: 2, account: '2650', note: 'Owed until the recipient redeems the card into credit.' }),
+    rec('giftcards-redeemed', { item: 'Gift cards redeemed (all time)', amountMinor: 2_500, count: null, account: '', note: "Moved into customers' credit." }),
+    rec('giftcards-voided', { item: 'Gift cards voided (all time)', amountMinor: 0, count: null, account: '', note: 'Ended by staff; purchased cards were refunded to the buyer\'s card.' }),
+    rec('ledger-2600', { item: 'Ledger: customer credit', amountMinor: 15_000, count: null, account: '2600', note: 'Customer balances plus credit spent on orders not shipped yet.' }),
+    rec('ledger-2650', { item: 'Ledger: gift card liability', amountMinor: 15_000, count: null, account: '2650', note: 'Should equal the gift cards not yet redeemed.' })
+  ];
+  const moneySettings = [
+    rec('money', { giftCardMinMinor: 1_000, giftCardMaxMinor: 50_000, creditApprovalLimitMinor: 10_000, presetsText: '$25.00, $50.00, $100.00, $200.00', updatedByName: 'Platform Admin', updatedAt: ago(20, 0), version: 3, termsEn: 'Gift cards never expire.', termsFr: '', termsEs: '', termsAr: '', termsYo: '' }, [], [
+      { id: 'mh-1', changedAt: ago(20, 0), changedByName: 'Platform Admin', reason: 'Launch limits: $10 to $500' }
+    ])
+  ];
+  const referrals = [
+    rec('ref-1', { referrerId: customers[0]?.id ?? 'cus-1000', referrerName: customers[0]?.name ?? 'Amara Nwosu', referredId: customers[1]?.id ?? 'cus-1001', referredName: customers[1]?.name ?? 'Kofi Mensah', status: 'IN_REVIEW', flagsText: 'Same device', rewardsText: 'Referrer $10.00 credit (pending) · Friend $10.00 credit (pending)', costMinor: 0, signedUpAt: ago(20, 0), expiresAt: ahead(70), qualifyingOrderId: 'AT-000412', qualifyingMinor: 4_200, deliveredAt: ago(5, 0), eligibleAt: ahead(25), decision: null, decisionReason: null, decidedByName: null, decidedAt: null }, [], [
+      { id: 'REFERRER', who: customers[0]?.name ?? 'Amara Nwosu', side: 'Referrer', reward: '$10.00 credit', status: 'PENDING', grantedAt: null },
+      { id: 'REFERRED', who: customers[1]?.name ?? 'Kofi Mensah', side: 'Referred', reward: '$10.00 credit', status: 'PENDING', grantedAt: null }
+    ]),
+    rec('ref-2', { referrerId: customers[0]?.id ?? 'cus-1000', referrerName: customers[0]?.name ?? 'Amara Nwosu', referredId: customers[2]?.id ?? 'cus-1002', referredName: customers[2]?.name ?? 'Kwame Asante', status: 'REWARDED', flagsText: '', rewardsText: 'Referrer $10.00 credit · Friend $10.00 credit', costMinor: 2_000, signedUpAt: ago(60, 0), expiresAt: ahead(30), qualifyingOrderId: 'AT-000377', qualifyingMinor: 5_500, deliveredAt: ago(45, 0), eligibleAt: ago(15, 0), decision: null, decisionReason: null, decidedByName: null, decidedAt: null }, [], [
+      { id: 'REFERRER', who: customers[0]?.name ?? 'Amara Nwosu', side: 'Referrer', reward: '$10.00 credit', status: 'GRANTED', grantedAt: ago(15, 0) },
+      { id: 'REFERRED', who: customers[2]?.name ?? 'Kwame Asante', side: 'Referred', reward: '$10.00 credit', status: 'GRANTED', grantedAt: ago(15, 0) }
+    ]),
+    rec('ref-3', { referrerId: customers[1]?.id ?? 'cus-1001', referrerName: customers[1]?.name ?? 'Kofi Mensah', referredId: customers[3]?.id ?? 'cus-1003', referredName: customers[3]?.name ?? 'Efua Owusu', status: 'WAITING', flagsText: '', rewardsText: 'Referrer $10.00 credit (pending) · Friend 14 membership days (deferred)', costMinor: 0, signedUpAt: ago(12, 0), expiresAt: ahead(78), qualifyingOrderId: 'AT-000430', qualifyingMinor: 3_600, deliveredAt: ago(3, 0), eligibleAt: ahead(27), decision: null, decisionReason: null, decidedByName: null, decidedAt: null }, [], [
+      { id: 'REFERRER', who: customers[1]?.name ?? 'Kofi Mensah', side: 'Referrer', reward: '$10.00 credit', status: 'PENDING', grantedAt: null },
+      { id: 'REFERRED', who: customers[3]?.name ?? 'Efua Owusu', side: 'Referred', reward: '14 membership days', status: 'DEFERRED', grantedAt: null }
+    ])
+  ];
+  const referralSettings = [
+    rec('referral', { stateText: 'On', enabled: true, referrerType: 'CREDIT', referrerCreditMinor: 1_000, referrerDays: 0, referredType: 'CREDIT', referredCreditMinor: 1_000, referredDays: 0, referrerText: '$10.00 credit', referredText: '$10.00 credit', qualifyingEvent: 'FIRST_ORDER_DELIVERED', minOrderMinor: 3_000, returnWindowDays: 30, maxRewardedPerReferrer: 20, maxCreditPerCustomerMinor: 50_000, validityDays: 90, costMinor: 2_000, pendingMinor: 2_000, membershipDaysGranted: 0, countsText: 'In review: 1 · Rewarded: 1 · Waiting: 1', updatedByName: 'Platform Admin', updatedAt: ago(14, 0), version: 2 }, [], [
+      { id: 'rh-1', changedAt: ago(14, 0), changedByName: 'Platform Admin', reason: 'Launch offer: $10 each after a $30 first order' }
+    ])
+  ];
+  const paymentSettings = [
+    rec('stripe.mode', { label: 'Stripe', value: 'Test (Stripe test mode)', source: 'STRIPE_SECRET_KEY', help: 'Which Stripe account money moves through. Test mode never moves real money.' }),
+    rec('settlement.hold', { label: 'Hold before a seller can be paid', value: '7 days after delivery', source: 'SETTLEMENT_HOLD', help: "A seller's net for an order is held until this long after it is delivered, then transferred to their Stripe account." }),
+    rec('payout.minimum', { label: 'Smallest payout a seller can request', value: '$25.00', source: 'PAYOUT_MINIMUM_MINOR', help: 'Requests below this are refused.' }),
+    rec('payout.daily', { label: 'Payout requests', value: 'One per seller per day (America/Chicago time), then approved by Finance', source: 'built in', help: 'Each request is approved, held or released by Finance staff.' })
+  ];
+  const taxSettings = [rec('method', { setting: 'Who calculates sales tax', method: 'RULES', methodLabel: 'Our own rules', stripeLabel: 'Not set up yet', changedByName: 'Platform Admin', changedAt: ago(3, 0), configuredDefault: 'RULES' })];
+  const maintenance = [rec('mode', { setting: 'Maintenance mode', state: 'OFF', stateLabel: 'Off: the platform is open', scope: 'SHOPPERS', title: '', message: '', updatedByName: 'Platform Admin', updatedAt: ago(9, 0) })];
+  const taxFilings = [
+    rec('2026-09|US-TX|USD', { month: '2026-09', jurisdiction: 'US-TX', currency: 'USD', dueMinor: 133_600, paidMinor: null, outstandingMinor: 133_600, filedOn: null, confirmationRef: null, state: 'NOT_FILED', statusLabel: 'Not filed', remittanceId: null }),
+    rec('2026-08|US-TX|USD', { month: '2026-08', jurisdiction: 'US-TX', currency: 'USD', dueMinor: 100_000, paidMinor: 100_000, outstandingMinor: 0, filedOn: '2026-09-15', confirmationRef: 'TX-CONF-1', state: 'SETTLED', statusLabel: 'Settled', remittanceId: 'rem-1' }),
+    rec('2026-07|US-TX|USD', { month: '2026-07', jurisdiction: 'US-TX', currency: 'USD', dueMinor: 80_000, paidMinor: 85_000, outstandingMinor: -5_000, filedOn: '2026-08-14', confirmationRef: 'TX-CONF-0', state: 'OVERPAID', statusLabel: 'Overpaid', remittanceId: 'rem-0' })
+  ];
+  const taxNexus = [
+    rec('US-TX', { jurisdiction: 'US-TX', name: 'Texas', facilitator: true, facilitatorLabel: 'Yes', salesMinor: 12_000_000, salesThresholdMinor: 10_000_000, orders: 340, percent: 120, percentLabel: '120%', status: 'EXCEEDED', registered: false, registrationNumber: null }),
+    rec('US-NY', { jurisdiction: 'US-NY', name: 'New York', facilitator: true, facilitatorLabel: 'Yes', salesMinor: 8_500_000, salesThresholdMinor: 10_000_000, orders: 210, percent: 85, percentLabel: '85%', status: 'APPROACHING', registered: false, registrationNumber: null }),
+    rec('US-GA', { jurisdiction: 'US-GA', name: 'Georgia', facilitator: true, facilitatorLabel: 'Yes', salesMinor: 11_000_000, salesThresholdMinor: 10_000_000, orders: 300, percent: 110, percentLabel: '110%', status: 'REGISTERED', registered: true, registrationNumber: 'GA-4411-22' }),
+    rec('US-NJ', { jurisdiction: 'US-NJ', name: 'New Jersey', facilitator: true, facilitatorLabel: 'Yes', salesMinor: 900_000, salesThresholdMinor: 10_000_000, orders: 30, percent: 9, percentLabel: '9%', status: 'BELOW', registered: false, registrationNumber: null })
+  ];
+  const taxReview = [
+    rec('grocery|abc123', { rowId: 'grocery|abc123', productType: 'grocery', attrHash: 'abc123', answer: null, taxCode: 'GENERAL_GOODS', count: 4, sampleAtin: 'AT10000001', lastSeen: ago(0, 3), state: 'OPEN', reviewedBy: null, reviewNote: null })
   ];
 
   const notifications: MockNotification[] = customers.flatMap((c, i) => [
@@ -448,13 +562,15 @@ function seed(now: Date): MockStaffDb {
 
   return {
     now,
+    lolaUsed: 0,
     user: { id: 'stf-1', firstName: 'Ifeoma', lastName: 'Okafor', email: 'ifeoma@afrotransact.com' },
     records: {
-      users, roles, applications, orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
+      users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
-      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates,
+      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
-      'pickup-locations': pickupLocations
+      'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now),
+      ...seedIdentityAdmin(now)
     },
     notifications,
     exports: [],
@@ -464,6 +580,8 @@ function seed(now: Date): MockStaffDb {
     templates: { rows: seedTemplateRows(), samples: seedTemplateSamples() },
     preorders: seedPreorders(now),
     markets: seedMarkets(),
+    plans: seedPlans(now),
+    feeRates: seedFeeRates(now),
     seq: 1
   };
 }
@@ -474,6 +592,8 @@ export function getStaffDb(): MockStaffDb {
   // A database seeded before pre-orders existed (dev server kept across reloads) gets them on first use.
   g[KEY].preorders ??= seedPreorders(g[KEY].now);
   g[KEY].markets ??= seedMarkets();
+  g[KEY].plans ??= seedPlans(g[KEY].now);
+  g[KEY].feeRates ??= seedFeeRates(g[KEY].now);
   return g[KEY];
 }
 

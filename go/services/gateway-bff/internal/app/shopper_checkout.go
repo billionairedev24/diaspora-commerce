@@ -72,12 +72,34 @@ func pickupPoint(l port.PickupLocation, addr *port.IdentityAddress) domain.Picku
 	return p
 }
 
-// nearby: within pickupRadiusMiles of the address when both are located, else in the address's 3-digit ZIP area.
+// platformPickupLocations lists AfroTransact counters and lockers near the destination ZIP. A 2-digit prefix covers the
+// metro; when that returns nothing (e.g. seed not yet run), all platform points are loaded and filtered by distance.
+func platformPickupLocations(ctx context.Context, d port.DeliveryFactsClient, zip string) ([]port.PickupLocation, error) {
+	if d == nil {
+		return nil, nil
+	}
+	if len(zip) >= 2 {
+		pts, err := d.PickupLocations(ctx, "", zip[:2])
+		if err != nil {
+			return nil, err
+		}
+		if len(pts) > 0 {
+			return pts, nil
+		}
+	}
+	return d.PickupLocations(ctx, "", "")
+}
+
+// nearby: within pickupRadiusMiles of the address when both are located, else same 5- or 3-digit ZIP prefix.
 func nearby(p domain.PickupPoint, l port.PickupLocation, zip string) bool {
 	if p.DistanceMiles != nil {
 		return *p.DistanceMiles <= pickupRadiusMiles
 	}
-	return len(zip) >= 3 && strings.HasPrefix(l.Address.PostalCode, zip[:3])
+	locZip := strings.TrimSpace(l.Address.PostalCode)
+	if len(zip) >= 5 && len(locZip) >= 5 && strings.HasPrefix(locZip, zip[:5]) {
+		return true
+	}
+	return len(zip) >= 3 && len(locZip) >= 3 && strings.HasPrefix(locZip, zip[:3])
 }
 
 // maxPickupPoints is how many pickup points one package lists (nearest first).
@@ -134,7 +156,8 @@ func hasOption(p domain.CheckoutPackage, key string) bool {
 // Summary is the checkout page: the selected cart (checkout service) plus, per package, pickup points
 // (carrier-gateway), AfroTransact Delivery where a delivery zone of the package's origin covers the address (geo),
 // and promise dates for every option (promise). Each fact is best effort: without it the cart's estimate stays.
-func (s *checkoutPaymentServiceImpl) Summary(ctx context.Context, c *domain.Caller, addressID string) (domain.CheckoutSummary, error) {
+func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Caller, addressID string,
+	packageDelivery map[string]string, couponCode string) (domain.CheckoutSummary, error) {
 	sum, err := s.d.Checkout.Summary(ctx, c, addressID)
 	if err != nil {
 		return sum, fmt.Errorf("checkout summary: %w", err)
@@ -170,7 +193,7 @@ func (s *checkoutPaymentServiceImpl) Summary(ctx context.Context, c *domain.Call
 			atd = atd || z.OwnerID == fc
 		}
 	}
-	platformPoints, err := s.d.Delivery.PickupLocations(ctx, "", zip[:2])
+	platformPoints, err := platformPickupLocations(ctx, s.d.Delivery, zip)
 	if err != nil {
 		log.WarnContext(ctx, "pickup locations unavailable", "error", err)
 	}
@@ -249,6 +272,17 @@ func (s *checkoutPaymentServiceImpl) Summary(ctx context.Context, c *domain.Call
 			}
 		}
 	}
+	if s.merch != nil {
+		if rail, err := s.merch.CheckoutCrossSell(ctx, c); err == nil && rail != nil {
+			sum.CrossSell = rail
+		} else if err != nil {
+			s.d.log().InfoContext(ctx, "checkout cross-sell unavailable", "error", err)
+		}
+	}
+	applyCheckoutShipping(&sum, packageDelivery)
+	s.priceCoupon(ctx, c, &sum, packageDelivery, couponCode)
+	s.priceTax(ctx, &sum, addr, packageDelivery)
+	recalcCheckoutTotal(&sum)
 	return sum, nil
 }
 
@@ -304,6 +338,83 @@ func (s *checkoutPaymentServiceImpl) priceLocalDelivery(ctx context.Context, sum
 		}
 	}
 	sum.TotalMinor = sum.SubtotalMinor + sum.ShippingMinor + sum.TaxMinor
+}
+
+// applyCheckoutShipping sets shippingMinor from the shopper's per-package delivery choices (or each package's first
+// option when a choice is omitted).
+func applyCheckoutShipping(sum *domain.CheckoutSummary, packageDelivery map[string]string) {
+	sum.ShippingMinor = 0
+	for _, p := range sum.Packages {
+		sum.ShippingMinor += packageShippingFee(p, packageDelivery)
+	}
+}
+
+func packageShippingFee(p domain.CheckoutPackage, packageDelivery map[string]string) int64 {
+	key := packageDelivery[p.PackageID]
+	if key == "" && len(p.DeliveryOptions) > 0 {
+		key = p.DeliveryOptions[0].Key
+	}
+	for _, o := range p.DeliveryOptions {
+		if o.Key == key {
+			return o.FeeMinor
+		}
+	}
+	if len(p.DeliveryOptions) > 0 {
+		return p.DeliveryOptions[0].FeeMinor
+	}
+	return 0
+}
+
+// priceTax estimates sales tax for the checkout total via tax-returns (best effort; the order saga re-quotes at place).
+func (s *checkoutPaymentServiceImpl) priceTax(ctx context.Context, sum *domain.CheckoutSummary, addr *port.IdentityAddress,
+	packageDelivery map[string]string) {
+	if s.d.Returns == nil || addr == nil || strings.TrimSpace(addr.State) == "" || strings.TrimSpace(addr.PostalCode) == "" {
+		return
+	}
+	byOffer := offerDiscounts(sum.Coupon)
+	shipDiscLeft := sum.ShippingDiscountMinor
+	lines := make([]port.UpTaxQuoteLine, 0)
+	for _, p := range sum.Packages {
+		ship := packageShippingFee(p, packageDelivery)
+		if off := min(shipDiscLeft, ship); off > 0 {
+			ship -= off
+			shipDiscLeft -= off
+		}
+		for i, l := range p.Lines {
+			sh := int64(0)
+			if i == 0 {
+				sh = ship
+			}
+			lines = append(lines, port.UpTaxQuoteLine{LineID: l.LineID, ATIN: l.ATIN, SellerOrgID: p.Seller.ID, ProductType: l.ProductType,
+				Quantity: l.Quantity, UnitPriceMinor: l.PriceMinor, DiscountMinor: byOffer[l.OfferID], ShippingMinor: sh})
+		}
+	}
+	if len(lines) == 0 {
+		return
+	}
+	cur := strings.ToUpper(firstNonEmpty(sum.Currency, domain.Currency))
+	req := port.UpTaxQuoteRequest{Currency: cur, ShipTo: port.UpTaxShipTo{Country: firstNonEmpty(addr.Country, "US"),
+		State: addr.State, PostalCode: addr.PostalCode, City: addr.City}, Lines: lines}
+	q, err := s.d.Returns.TaxQuote(ctx, req)
+	if err != nil {
+		s.d.log().WarnContext(ctx, "tax quote unavailable; tax shown at order time", "error", err)
+		return
+	}
+	sum.TaxMinor = q.TotalTaxMinor
+	if sum.TaxMinor == 0 {
+		for _, l := range q.Lines {
+			sum.TaxMinor += l.TaxMinor
+		}
+	}
+	if q.Jurisdiction != "" {
+		sum.TaxRateLabel = q.Jurisdiction
+	}
+	for _, l := range q.Lines {
+		if l.Rate > 0 {
+			sum.TaxRateLabel = fmt.Sprintf("%.2f%%", l.Rate*100)
+			break
+		}
+	}
 }
 
 func localUnavailable(ld *domain.CheckoutLocalDelivery, reason, message string) *domain.CheckoutLocalDelivery {

@@ -55,6 +55,9 @@ class HttpPaymentsClient implements PaymentsClient {
         if (r.saveForOffSession()) {
             body.put("saveForOffSession", true);
         }
+        if (r.useCredit()) {
+            body.put("useCredit", true);
+        }
         body.put("lines", r.lines().stream().map(l -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("lineId", l.lineId());
@@ -210,7 +213,7 @@ class HttpPaymentsClient implements PaymentsClient {
         }
         return new Intent(p.path("id").asString(), p.path("status").asString(null),
                 p.path("clientSecret").asString(null), p.path("amountMinor").asLong(),
-                p.path("failureMessage").asString(null));
+                p.path("failureMessage").asString(null), p.path("creditMinor").asLong());
     }
 
     private static String truncate(String s) {

@@ -110,7 +110,8 @@ spec:
 {{- end -}}
 
 {{- define "at-service.externalSecret" -}}
-{{- if .Values.secrets.enabled }}
+{{- /* secrets.plain: the Secret <service>-secrets is created by hand (infra/ovh-vps/secrets.sh); no External Secrets Operator. */}}
+{{- if and .Values.secrets.enabled (not .Values.secrets.plain) }}
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:

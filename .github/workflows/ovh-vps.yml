@@ -1,0 +1,238 @@
+# Provision and deploy the single-server OVHcloud test environment (docs/runbooks/ovh-vps.md). MANUAL ONLY: Actions > ovh-vps >
+# Run workflow. Never add push, pull_request or schedule triggers: every run touches an account that bills by the hour.
+#
+# Everything it needs lives in the GitHub Environment `ovh-vps`, created by `make ovh-gh-setup` (you are the required reviewer,
+# so each run waits for your approval).
+#
+# Actions
+#   plan                  tofu plan (what would be created)
+#   apply                 create the server (a Public Cloud instance, billed by the hour from now) and the A records
+#   deploy                install k3s if needed, then every platform component and service on the existing server
+#   provision-and-deploy  apply, then deploy: the usual first run
+#   services              only the service charts (a new image-tag, changed secrets)
+#   edge | status         Traefik/cert-manager/routes | pods, certificates, URLs
+#   down | up             scale every service to 0 / 1 (the server keeps billing)
+#   destroy               delete the server (and a Postgres running on it), the state bucket and the state user.
+#                         Type ovh-vps in confirm-destroy.
+name: ovh-vps
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: What to do
+        type: choice
+        default: plan
+        options: [plan, apply, deploy, provision-and-deploy, services, edge, observability, backup, status, down, up, destroy]
+      image-tag:
+        description: "Full git sha of the images in GHCR (empty = this run's commit; every service must have been built at it)"
+        type: string
+        default: ""
+      confirm-destroy:
+        description: "destroy only: type ovh-vps"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ovh-vps
+  cancel-in-progress: false # never cancel a run half-way through an apply
+
+env:
+  TF_IN_AUTOMATION: "1"
+  TF_INPUT: "0"
+  ACTION: ${{ inputs.action }}
+
+jobs:
+  run:
+    name: ${{ inputs.action }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    environment: ovh-vps
+    env:
+      OVH_LOCATION: ${{ vars.OVH_LOCATION }}
+      OVH_SERVICE_NAME: ${{ vars.OVH_SERVICE_NAME }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_STATE_ACCESS_KEY: ${{ secrets.TF_STATE_ACCESS_KEY }}
+      TF_STATE_SECRET_KEY: ${{ secrets.TF_STATE_SECRET_KEY }}
+      OVH_APPLICATION_KEY: ${{ secrets.OVH_APPLICATION_KEY }}
+      OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+      OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+      TF_VAR_service_name: ${{ vars.OVH_SERVICE_NAME }}
+      TF_VAR_ovh_location: ${{ vars.OVH_LOCATION }}
+      TF_VAR_instance_flavor: ${{ vars.OVH_INSTANCE_FLAVOR || 'b3-32' }}
+      TF_VAR_ssh_public_key: ${{ vars.OVH_SSH_PUBLIC_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check the inputs
+        env:
+          CONFIRM: ${{ inputs.confirm-destroy }}
+          TAG_INPUT: ${{ inputs.image-tag }}
+        run: |
+          for v in OVH_LOCATION OVH_SERVICE_NAME TF_STATE_BUCKET OVH_APPLICATION_KEY OVH_APPLICATION_SECRET OVH_CONSUMER_KEY TF_VAR_ssh_public_key; do
+            [[ -n "${!v}" ]] || { echo "::error::$v is empty: run make ovh-gh-setup (docs/runbooks/ovh-vps.md, step 4)"; exit 1; }
+          done
+          if [[ "$ACTION" == destroy && "$CONFIRM" != ovh-vps ]]; then
+            echo "::error::destroy needs confirm-destroy = ovh-vps"; exit 1
+          fi
+          tag="${TAG_INPUT:-$GITHUB_SHA}"
+          [[ "$tag" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::image-tag must be a full 40-character git sha"; exit 1; }
+          echo "IMAGE_TAG=$tag" >> "$GITHUB_ENV"
+          echo "IMAGE_REGISTRY=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_version: 1.10.6
+
+      # ---- state: the S3 user and key (found or made through the OVHcloud API), the bucket, the backend ---------------------
+      - name: State keys and bucket
+        run: |
+          tools/ovh/tf-state.sh keys
+          tools/ovh/tf-state.sh ensure
+          tools/ovh/tf-state.sh init
+          tools/ovh/tf-state.sh backup-bucket
+
+      - name: Plan
+        if: inputs.action == 'plan'
+        run: |
+          tofu -chdir=infra/ovh-vps/terraform plan -input=false -no-color | tee /tmp/plan.txt
+          { echo '### ovh-vps plan'; echo '```'; tail -n 60 /tmp/plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      # ---- the server -----------------------------------------------------------------------------------------------------------------
+      - name: Apply (creates the server, billing starts)
+        if: inputs.action == 'apply' || inputs.action == 'provision-and-deploy'
+        run: tofu -chdir=infra/ovh-vps/terraform apply -input=false -auto-approve -no-color
+
+      - name: Destroy (deletes the server and its disk)
+        if: inputs.action == 'destroy'
+        run: |
+          tofu -chdir=infra/ovh-vps/terraform destroy -input=false -auto-approve -no-color
+          tools/ovh/tf-state.sh teardown
+          echo "### ovh-vps destroyed. The server, its disk and the state are deleted; billing for them stopped. Remove the DNS records if you made them by hand." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Server address and DNS
+        if: inputs.action != 'plan' && inputs.action != 'destroy'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE: ${{ vars.CLOUDFLARE_ZONE }}
+          OVH_DOMAIN: ${{ vars.OVH_DOMAIN }}
+        run: |
+          ip=$(tofu -chdir=infra/ovh-vps/terraform output -raw ipv4 2>/dev/null) || { echo "::error::no server in the state: run apply (or provision-and-deploy) first"; exit 1; }
+          echo "SERVER_IP=$ip" >> "$GITHUB_ENV"
+          echo "server: $ip"
+          if [[ "$ACTION" =~ ^(apply|provision-and-deploy)$ ]]; then
+            tools/ovh/dns.sh "$OVH_DOMAIN" "$ip" | tee -a /tmp/dns.txt
+            { echo "### Server $ip"; echo '```'; cat /tmp/dns.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # ---- the images must exist before anything is installed ---------------------------------------------------------
+      - name: Check that every image exists
+        if: inputs.action == 'deploy' || inputs.action == 'provision-and-deploy' || inputs.action == 'services'
+        run: |
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin >/dev/null
+          missing=()
+          while read -r svc _; do
+            docker manifest inspect "$IMAGE_REGISTRY/$svc:$IMAGE_TAG" >/dev/null 2>&1 || missing+=("$svc")
+          done < <(grep -Ev '^\s*(#|$)' infra/ovh-vps/services.conf)
+          if ((${#missing[@]})); then
+            echo "::error::no image at $IMAGE_TAG for: ${missing[*]}. Every service pipeline publishes on a push to main that touches the service; use the sha of a commit where all of them ran (docs/runbooks/ovh-vps.md, step 3)."
+            exit 1
+          fi
+          echo "all 26 images exist at $IMAGE_TAG"
+
+      # ---- the server side ---------------------------------------------------------------------------------------------------
+      - name: SSH setup, wait for the server
+        if: inputs.action != 'plan' && inputs.action != 'apply' && inputs.action != 'destroy'
+        env:
+          SSH_KEY: ${{ secrets.OVH_VPS_SSH_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          for i in $(seq 1 60); do
+            if ssh-keyscan -T 5 -t ed25519 "$SERVER_IP" > ~/.ssh/known_hosts.new 2>/dev/null && [[ -s ~/.ssh/known_hosts.new ]]; then break; fi
+            sleep 10
+          done
+          [[ -s ~/.ssh/known_hosts.new ]] || { echo "::error::the server does not answer on port 22 after 10 minutes"; exit 1; }
+          mv ~/.ssh/known_hosts.new ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<CFG
+          Host server
+            HostName $SERVER_IP
+            User ubuntu
+            IdentityFile ~/.ssh/id_deploy
+            ServerAliveInterval 30
+            ConnectTimeout 15
+          CFG
+          for i in $(seq 1 30); do ssh server true 2>/dev/null && break; sleep 10; done
+          ssh server true || { echo "::error::cannot log in to ubuntu@$SERVER_IP with the pipeline key"; exit 1; }
+
+      - name: Copy the deployment files and the configuration
+        if: inputs.action != 'plan' && inputs.action != 'apply' && inputs.action != 'destroy'
+        env:
+          OVH_DOMAIN: ${{ vars.OVH_DOMAIN }}
+          ACME_EMAIL: ${{ vars.ACME_EMAIL }}
+          GHCR_USER: ${{ vars.REGISTRY_PULL_USERNAME || github.actor }}
+          GHCR_TOKEN: ${{ secrets.REGISTRY_PULL_TOKEN || github.token }}
+          DB_MODE: ${{ vars.DB_MODE }}
+          EXTERNAL_PG_HOST: ${{ vars.EXTERNAL_PG_HOST }}
+          EXTERNAL_PG_ADMIN_USER: ${{ vars.EXTERNAL_PG_ADMIN_USER }}
+          EXTERNAL_PG_ADMIN_PASSWORD: ${{ secrets.EXTERNAL_PG_ADMIN_PASSWORD }}
+          EXTERNAL_PG_SSLMODE: ${{ vars.EXTERNAL_PG_SSLMODE }}
+          ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          ADMIN_PHONE: ${{ vars.ADMIN_PHONE }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_CONNECT_WEBHOOK_SECRET: ${{ secrets.STRIPE_CONNECT_WEBHOOK_SECRET }}
+          STRIPE_BILLING_WEBHOOK_SECRET: ${{ secrets.STRIPE_BILLING_WEBHOOK_SECRET }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GOOGLE_PLACES_API_KEY: ${{ secrets.GOOGLE_PLACES_API_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          UPLOADTHING_API_KEY: ${{ secrets.UPLOADTHING_API_KEY }}
+          USPS_CLIENT_ID: ${{ secrets.USPS_CLIENT_ID }}
+          USPS_CLIENT_SECRET: ${{ secrets.USPS_CLIENT_SECRET }}
+          UPS_CLIENT_ID: ${{ secrets.UPS_CLIENT_ID }}
+          UPS_CLIENT_SECRET: ${{ secrets.UPS_CLIENT_SECRET }}
+          FEDEX_CLIENT_ID: ${{ secrets.FEDEX_CLIENT_ID }}
+          FEDEX_CLIENT_SECRET: ${{ secrets.FEDEX_CLIENT_SECRET }}
+        run: |
+          mkdir -p /tmp/cfg && tools/ovh/render-config.sh /tmp/cfg
+          tar czf /tmp/kit.tgz infra/ovh-vps/*.sh infra/ovh-vps/*.conf infra/ovh-vps/*.yaml infra/ovh-vps/overrides infra/helm infra/k8s/platform/lean \
+            infra/k8s/platform/openfga $(ls -d java/services/*/deploy/helm go/services/*/deploy/helm)
+          ssh server 'sudo install -d -m 755 -o ubuntu -g ubuntu /opt/afrotransact && cd /opt/afrotransact && rm -rf infra java go'
+          scp -q /tmp/kit.tgz server:/tmp/kit.tgz
+          ssh server 'cd /opt/afrotransact && tar xzf /tmp/kit.tgz && rm /tmp/kit.tgz'
+          scp -q /tmp/cfg/config.env /tmp/cfg/secrets.local.env server:/opt/afrotransact/infra/ovh-vps/
+          ssh server 'chmod 600 /opt/afrotransact/infra/ovh-vps/config.env /opt/afrotransact/infra/ovh-vps/secrets.local.env'
+          rm -rf /tmp/cfg
+
+      - name: Install k3s (once)
+        if: inputs.action == 'deploy' || inputs.action == 'provision-and-deploy'
+        run: ssh server 'sudo bash /opt/afrotransact/infra/ovh-vps/bootstrap.sh'
+
+      - name: Deploy
+        if: inputs.action == 'deploy' || inputs.action == 'provision-and-deploy'
+        run: ssh server 'sudo bash /opt/afrotransact/infra/ovh-vps/deploy.sh all'
+
+      - name: Run ${{ inputs.action }}
+        if: inputs.action == 'services' || inputs.action == 'edge' || inputs.action == 'observability' || inputs.action == 'backup' || inputs.action == 'status' || inputs.action == 'down' || inputs.action == 'up'
+        run: ssh server "sudo bash /opt/afrotransact/infra/ovh-vps/deploy.sh $ACTION"
+
+      - name: Summary
+        if: always() && inputs.action != 'plan' && inputs.action != 'destroy'
+        env:
+          OVH_DOMAIN: ${{ vars.OVH_DOMAIN }}
+        run: |
+          {
+            echo "### ovh-vps: $ACTION  (${{ job.status }})"
+            echo "Images: \`$IMAGE_TAG\`"
+            [[ -z "${SERVER_IP:-}" ]] || echo "Server: \`$SERVER_IP\` · \`ssh -i .ovh/ovh-vps-deploy-key ubuntu@$SERVER_IP\`"
+            echo "API: https://api.$OVH_DOMAIN/bff · Auth: https://auth.$OVH_DOMAIN · MCP: https://mcp.$OVH_DOMAIN"
+            echo "**Billing: the server is billed by the hour until you run destroy, even when stopped or scaled down.**"
+          } >> "$GITHUB_STEP_SUMMARY"

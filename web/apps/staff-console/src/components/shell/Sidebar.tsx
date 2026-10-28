@@ -2,12 +2,36 @@
 
 import { type StaffModuleKey, type StaffNavGroup, type StaffSession } from '@afrotransact/api-client';
 import { cx } from '@afrotransact/ui';
-import { CaretDown, CaretUp } from '@phosphor-icons/react/ssr';
+import { CaretDown, CaretUp, Gear } from '@phosphor-icons/react/ssr';
 import Link from 'next/link';
 import { useState } from 'react';
 
 import { useT } from '@/i18n/t';
 import { hrefOf, MODULE_ICONS } from '@/lib/modules';
+import { SETTINGS_HOSTED, visibleSections } from '@/lib/settings-sections';
+
+/** The groups without the modules that moved into Settings (the Settings group itself becomes one link). */
+function visibleGroups(session: StaffSession): StaffNavGroup[] {
+  return session.navGroups
+    .map((g) => ({ ...g, modules: g.modules.filter((m) => !SETTINGS_HOSTED.includes(m.key)) }))
+    .filter((g) => g.modules.length > 0);
+}
+
+function SettingsLink({ current }: { current: boolean }) {
+  return (
+    <Link
+      href="/settings"
+      aria-current={current ? 'page' : undefined}
+      className={cx(
+        'flex h-[34px] items-center gap-3 rounded-sm px-2 text-md text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline pointer-coarse:h-11',
+        current ? 'bg-gold-100 font-bold hover:bg-gold-100' : 'font-semibold'
+      )}
+    >
+      <Gear size={18} aria-hidden weight={current ? 'fill' : 'regular'} />
+      <span className="flex-1 truncate">Settings</span>
+    </Link>
+  );
+}
 
 function NavGroupSection({ group, active }: { group: StaffNavGroup; active: StaffModuleKey | null }) {
   const t = useT();
@@ -57,7 +81,7 @@ function NavGroupSection({ group, active }: { group: StaffNavGroup; active: Staf
 }
 
 /** Grouped sidebar filtered by the staff member's roles (the BFF returns only the modules they may open). */
-export function Sidebar({ session, active }: { session: StaffSession; active: StaffModuleKey | null }) {
+export function Sidebar({ session, active, settingsActive = false }: { session: StaffSession; active: StaffModuleKey | null; settingsActive?: boolean }) {
   const t = useT();
   return (
     <nav aria-label={t('st.sidebar.staffConsole')} className="flex h-full flex-col gap-0.5 px-3 py-4">
@@ -65,9 +89,10 @@ export function Sidebar({ session, active }: { session: StaffSession; active: St
         <strong className="block text-md">{t('st.sidebar.afrotransactInc')}</strong>
         <span className="text-xs text-muted">{t('st.sidebar.staffUsaMarket')}</span>
       </div>
-      {session.navGroups.map((g) => (
+      {visibleGroups(session).map((g) => (
         <NavGroupSection key={g.key} group={g} active={active} />
       ))}
+      {visibleSections(session).length > 0 ? <SettingsLink current={settingsActive} /> : null}
       <p className="mt-auto px-2 pt-3 text-2xs leading-normal text-subtle">
         {t('st.sidebar.access')} <strong>{session.roleLabel || '—'}</strong>
         <br />
@@ -78,11 +103,11 @@ export function Sidebar({ session, active }: { session: StaffSession; active: St
 }
 
 /** Icon rail (tablets): every module the staff member may open, one icon each, grouped by a rule; names as tooltips. */
-export function SidebarRail({ session, active }: { session: StaffSession; active: StaffModuleKey | null }) {
+export function SidebarRail({ session, active, settingsActive = false }: { session: StaffSession; active: StaffModuleKey | null; settingsActive?: boolean }) {
   const t = useT();
   return (
     <nav aria-label={t('st.sidebar.staffConsole')} className="flex flex-col gap-2 px-2 py-3">
-      {session.navGroups.map((g, gi) => (
+      {visibleGroups(session).map((g, gi) => (
         <ul key={g.key} aria-label={g.label} className={cx('m-0 flex list-none flex-col items-center gap-1 p-0', gi > 0 && 'border-t border-border pt-2')}>
           {g.modules.map((m) => {
             const Icon = MODULE_ICONS[m.key];
@@ -104,6 +129,19 @@ export function SidebarRail({ session, active }: { session: StaffSession; active
           })}
         </ul>
       ))}
+      {visibleSections(session).length > 0 ? (
+        <div className="flex flex-col items-center border-t border-border pt-2">
+          <Link
+            href="/settings"
+            aria-current={settingsActive ? 'page' : undefined}
+            title="Settings"
+            className={cx('relative flex size-11 items-center justify-center rounded-sm text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline', settingsActive && 'bg-gold-100 hover:bg-gold-100')}
+          >
+            <Gear size={20} aria-hidden weight={settingsActive ? 'fill' : 'regular'} />
+            <span className="at-visually-hidden">Settings</span>
+          </Link>
+        </div>
+      ) : null}
     </nav>
   );
 }

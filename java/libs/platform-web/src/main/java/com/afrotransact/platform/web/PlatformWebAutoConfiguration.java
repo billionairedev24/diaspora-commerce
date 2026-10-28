@@ -9,6 +9,8 @@ import com.afrotransact.platform.web.docs.RedocApiReferencePage;
 import com.afrotransact.platform.web.docs.ScalarApiReferencePage;
 import com.afrotransact.platform.web.error.ProblemDetailsAdvice;
 import com.afrotransact.platform.web.trace.CorrelationIdFilter;
+import com.afrotransact.platform.web.trace.CorrelationIdRestClientCustomizer;
+import org.springframework.boot.restclient.RestClientCustomizer;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
@@ -39,6 +41,12 @@ public class PlatformWebAutoConfiguration {
         FilterRegistrationBean<CorrelationIdFilter> bean = new FilterRegistrationBean<>(new CorrelationIdFilter());
         bean.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return bean;
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public RestClientCustomizer correlationIdRestClientCustomizer() {
+        return new CorrelationIdRestClientCustomizer();
     }
 
     @Bean

@@ -16,7 +16,7 @@
     <description>Spring Authorization Server (OAuth 2.1 / OIDC), accounts, RBAC, MFA, passkeys and social login.</description>
 
     <properties>
-        <libphonenumber.version>9.0.41</libphonenumber.version>
+        <libphonenumber.version>9.0.42</libphonenumber.version>
     </properties>
 
     <dependencies>
@@ -99,6 +99,12 @@
         <dependency>
             <groupId>com.afrotransact</groupId>
             <artifactId>platform-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- SellerOrgSyncIT consumes seller.org.* events from a real broker (local apache/kafka image). -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-kafka</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

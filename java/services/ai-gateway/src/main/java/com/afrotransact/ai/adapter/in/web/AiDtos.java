@@ -6,6 +6,7 @@ import java.util.Map;
 import com.afrotransact.ai.application.LolaRequest;
 import com.afrotransact.ai.domain.lola.LolaEvent;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Pattern;
@@ -110,5 +111,29 @@ final class AiDtos {
     record TriageRequest(@NotBlank @Schema(example = "APPLICATION") String subjectType,
                          @NotBlank String subjectId,
                          @NotEmpty Map<String, String> fields) {
+    }
+
+    @Schema(description = "One model turn for Lola in Seller Center")
+    record AssistantRequest(@NotEmpty @Size(max = 48) List<@Valid AssistantMessage> messages,
+                            @Size(max = 12) List<@Valid AssistantTool> tools,
+                            @Schema(description = "Completion limit (default 900, capped at 1500)") Integer maxTokens) {
+    }
+
+    record AssistantMessage(@NotBlank @Schema(allowableValues = {"system", "user", "assistant", "tool"}) String role,
+                            @Size(max = 24000) String content, List<AssistantToolCall> toolCalls, String toolCallId,
+                            String toolName) {
+    }
+
+    record AssistantToolCall(@NotBlank String id, @NotBlank String name,
+                             @Schema(description = "JSON object as text") String arguments) {
+    }
+
+    record AssistantTool(@NotBlank @Pattern(regexp = "[a-z][a-z0-9_]{1,40}") String name, @Size(max = 1000) String description,
+                         @NotBlank @Schema(description = "JSON schema as text") String inputSchema) {
+    }
+
+    @Schema(description = "Either text or tool calls for the caller to run")
+    record AssistantReply(String text, List<AssistantToolCall> toolCalls, long promptTokens, long completionTokens,
+                          String model) {
     }
 }

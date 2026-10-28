@@ -1,6 +1,10 @@
+import { type AddressSearchOptions } from './address-lookup';
+import { createStaffFeeRatesApi } from './fee-rates';
 import { type ApiClientOptions, createRequester } from './http';
 import { createInventoryHubApi } from './inventory-hub';
 import { type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema } from './schemas/exports';
+import { type AddressSuggestions, AddressSuggestionsSchema, type PostalAddress, PostalAddressSchema } from './schemas/location';
+import { type LookupKind, type LookupResult, LookupResultSchema } from './schemas/staff';
 import {
   type Customer360,
   Customer360Schema,
@@ -19,6 +23,10 @@ import {
   FeeScheduleViewSchema,
   type FeesOverview,
   FeesOverviewSchema,
+  type IdentityDocuments,
+  IdentityDocumentsSchema,
+  type IdentityTokenInspection,
+  IdentityTokenInspectionSchema,
   type NotificationPreview,
   type NotificationPreviewRequest,
   NotificationPreviewSchema,
@@ -44,18 +52,33 @@ import {
   type ResourceKey,
   type ResourcePage,
   ResourcePageSchema,
+  type RunAdvanceRequest,
+  type RunDispatch,
+  type RunDispatchList,
+  RunDispatchListSchema,
+  RunDispatchSchema,
+  type RunDispatchStatus,
   type ShipFromLocation,
   ShipFromLocationSchema,
+  type StaffAssistantChatRequest,
+  type StaffAssistantReply,
+  StaffAssistantReplySchema,
+  type StaffAssistantStatus,
+  StaffAssistantStatusSchema,
   type StaffDashboard,
   StaffDashboardSchema,
   type StaffSession,
   StaffSessionSchema,
   type SupportActionResult,
   SupportActionResultSchema,
-  type SupportRefundRequest
-} from './schemas/staff';
+  type SupportRefundRequest,
+  type TaxRatesImportResult,
+  TaxRatesImportResultSchema} from './schemas/staff';
+import { createStaffDeliveryFeesApi } from './staff-delivery-fees';
 import { createStaffMarketsApi } from './staff-markets';
+import { createStaffPlansApi } from './staff-plans';
 import { createStaffPreordersApi } from './staff-preorders';
+import { createStaffRunsApi } from './staff-runs';
 import { tableSearchParams } from './table-query';
 
 /** Server-driven table query: one search over every column, the sort (`<column>,asc|desc`), page or cursor, size. */
@@ -77,10 +100,20 @@ export function createStaffApiClient(options: ApiClientOptions) {
   const record = (resource: ResourceKey, id: string) => `/v1/staff/resources/${enc(resource)}/${enc(id)}`;
 
   return {
+    /** Address suggestions (geo service: Google Places / OSM), the same search the storefront uses. */
+    searchAddresses: (q: string, signal?: AbortSignal, options: AddressSearchOptions = {}): Promise<AddressSuggestions> =>
+      request('/v1/geo/address-suggestions', AddressSuggestionsSchema, { query: { q, sessionToken: options.sessionToken, country: options.country }, signal }),
+    resolveAddressSuggestion: (id: string, sessionToken?: string, signal?: AbortSignal): Promise<PostalAddress> =>
+      request(`/v1/geo/address-suggestions/${encodeURIComponent(id)}`, PostalAddressSchema, { query: { sessionToken }, signal }),
     /* Shell & dashboard */
     getSession: (signal?: AbortSignal): Promise<StaffSession> => request('/v1/staff/session', StaffSessionSchema, { signal }),
     getDashboard: (rangeDays: number, signal?: AbortSignal): Promise<StaffDashboard> =>
       request('/v1/staff/dashboard', StaffDashboardSchema, { query: { rangeDays: String(rangeDays) }, signal }),
+
+    /* Lola (read-only) */
+    getAssistantStatus: (signal?: AbortSignal): Promise<StaffAssistantStatus> => request('/v1/staff/assistant', StaffAssistantStatusSchema, { signal }),
+    askAssistant: (body: StaffAssistantChatRequest): Promise<StaffAssistantReply> =>
+      request('/v1/staff/assistant/chat', StaffAssistantReplySchema, { method: 'POST', body }),
 
     /* Resources */
     listResource: (resource: ResourceKey, q: ResourceQuery, signal?: AbortSignal): Promise<ResourcePage> =>
@@ -97,6 +130,12 @@ export function createStaffApiClient(options: ApiClientOptions) {
       request(`${record(resource, id)}/actions/${enc(action)}`, RecordDetailSchema, { method: 'POST', body: { values }, headers: idem(key) }),
     addNote: (resource: ResourceKey, id: string, text: string): Promise<RecordDetail> =>
       request(`${record(resource, id)}/notes`, RecordDetailSchema, { method: 'POST', body: { text } }),
+
+    /* Identity & access (S291): the module's tables are Resources; the token inspector and the OIDC documents are routes of their own.
+       The pasted token goes in the request body only and is not part of the answer. */
+    inspectIdentityToken: (token: string): Promise<IdentityTokenInspection> =>
+      request('/v1/staff/identity/token-inspector', IdentityTokenInspectionSchema, { method: 'POST', body: { token } }),
+    getIdentityDocuments: (signal?: AbortSignal): Promise<IdentityDocuments> => request('/v1/staff/identity/documents', IdentityDocumentsSchema, { signal }),
 
     /* Exports */
     listExports: (signal?: AbortSignal): Promise<ExportJobList> => request('/v1/staff/exports', ExportJobListSchema, { signal }),
@@ -117,6 +156,8 @@ export function createStaffApiClient(options: ApiClientOptions) {
 
     /* Fees & commissions */
     getFees: (signal?: AbortSignal): Promise<FeesOverview> => request('/v1/staff/fees', FeesOverviewSchema, { signal }),
+    /** Drivers or sellers by name for a form's picker (the id is what the form sends). */
+    lookup: (kind: LookupKind, q: string, signal?: AbortSignal): Promise<LookupResult> => request(`/v1/staff/lookups/${enc(kind)}`, LookupResultSchema, { query: { q: q || undefined }, signal }),
     searchFeeOrgs: (q: string, signal?: AbortSignal): Promise<FeeOrgSearch> => request('/v1/staff/fees/orgs', FeeOrgSearchSchema, { query: { q }, signal }),
     createFeeSchedule: (body: FeeScheduleDraft, key?: string): Promise<FeeScheduleView> =>
       request('/v1/staff/fees/schedules', FeeScheduleViewSchema, { method: 'POST', body, headers: idem(key) }),
@@ -124,6 +165,8 @@ export function createStaffApiClient(options: ApiClientOptions) {
       request(`/v1/staff/fees/schedules/${enc(id)}/cancel`, FeeScheduleViewSchema, { method: 'POST', body: { reason } }),
     quoteDelivery: (body: DeliveryQuoteRequest, signal?: AbortSignal): Promise<DeliveryQuote> =>
       request('/v1/staff/fees/delivery-quote', DeliveryQuoteSchema, { method: 'POST', body, signal }),
+    importTaxRates: (csv: string): Promise<TaxRatesImportResult> =>
+      request('/v1/staff/tax-rates/import', TaxRatesImportResultSchema, { method: 'POST', body: { csv } }),
 
     /* Dispatch: seller pickups (S255) */
     listPickups: (nodeId?: string, signal?: AbortSignal): Promise<PickupList> =>
@@ -134,6 +177,13 @@ export function createStaffApiClient(options: ApiClientOptions) {
       request(`/v1/staff/dispatch/pickups/${enc(shipmentId)}/assign`, PickupAssignResultSchema, { method: 'POST', body }),
     getPickupAssignments: (shipmentId: string, signal?: AbortSignal): Promise<PickupAssignmentList> =>
       request(`/v1/staff/dispatch/pickups/${enc(shipmentId)}/assignments`, PickupAssignmentListSchema, { signal }),
+    /* Dispatch: delivery runs (S264) */
+    listRuns: (status?: RunDispatchStatus, signal?: AbortSignal): Promise<RunDispatchList> =>
+      request('/v1/staff/dispatch/runs', RunDispatchListSchema, { query: { status: status || undefined }, signal }),
+    getRun: (runId: string, signal?: AbortSignal): Promise<RunDispatch> => request(`/v1/staff/dispatch/runs/${enc(runId)}`, RunDispatchSchema, { signal }),
+    planRun: (runId: string): Promise<RunDispatch> => request(`/v1/staff/dispatch/runs/${enc(runId)}/plan`, RunDispatchSchema, { method: 'POST' }),
+    advanceRun: (runId: string, body: RunAdvanceRequest): Promise<RunDispatch> =>
+      request(`/v1/staff/dispatch/runs/${enc(runId)}/advance`, RunDispatchSchema, { method: 'POST', body }),
     getShipFromLocation: (locationId: string, signal?: AbortSignal): Promise<ShipFromLocation> =>
       request(`/v1/staff/ship-from-locations/${enc(locationId)}`, ShipFromLocationSchema, { signal }),
 
@@ -152,8 +202,16 @@ export function createStaffApiClient(options: ApiClientOptions) {
     /* Settings → Markets & locations: /v1/staff/markets/** (location tree) and /v1/staff/places (gazetteer) */
     markets: createStaffMarketsApi(request),
 
+    /* Plans & billing (S292–S297): /v1/staff/billing/** (catalogue, trials, rewards, grants, per-seller panel) */
+    plans: createStaffPlansApi(request),
+    feeRates: createStaffFeeRatesApi(request),
+
     /* Pre-orders (S274): /v1/staff/preorders/** mirrors delivery-runs' staff API */
     preorders: createStaffPreordersApi(request, options),
+    /* Delivery fees (ADR 0005 §3): /v1/staff/delivery-fees/** mirrors delivery-runs' fee rules */
+    deliveryFees: createStaffDeliveryFeesApi(request, options),
+    /* Run economics and advertorials (S263, S265): the cost model, P&L, break-even, location history, advertorials */
+    runs: createStaffRunsApi(request, options),
 
     /* Inventory hub and AfroTransact Retail (1P) (S281): /v1/staff/inventory/** and /v1/staff/retail/** */
     inventory: createInventoryHubApi(request, options)

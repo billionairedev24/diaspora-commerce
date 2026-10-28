@@ -1,6 +1,7 @@
 package com.afrotransact.payments.adapter.in.web;
 
 import com.afrotransact.payments.domain.PaymentsForbidden;
+import com.afrotransact.payments.domain.PaymentsRateLimited;
 import com.afrotransact.payments.domain.PaymentsRuleViolation;
 import com.afrotransact.payments.domain.PaymentsStateConflict;
 import com.afrotransact.payments.port.StripeGatewayException;
@@ -10,8 +11,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -38,6 +41,15 @@ class PaymentsErrorAdvice {
     @ExceptionHandler(PaymentsForbidden.class)
     ProblemDetail forbidden(PaymentsForbidden ex) {
         return problem(HttpStatus.FORBIDDEN, ex.code(), "Not allowed", ex.getMessage());
+    }
+
+    /** Too many tries (gift card codes): 429 with Retry-After. */
+    @ExceptionHandler(PaymentsRateLimited.class)
+    ResponseEntity<ProblemDetail> rateLimited(PaymentsRateLimited ex) {
+        ProblemDetail pd = problem(HttpStatus.TOO_MANY_REQUESTS, ex.code(), "Too many attempts", ex.getMessage());
+        pd.setProperty("retryAfterSeconds", ex.retryAfterSeconds());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(ex.retryAfterSeconds())).body(pd);
     }
 
     @ExceptionHandler(InvalidWebhookSignatureException.class)

@@ -4,34 +4,29 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 /**
- * Metered plan add-ons billed on Stripe Billing meters (S206). Quantities are whole <em>meter units</em> (Stripe meter
- * events take integers); {@link #unitsPerDisplayUnit()} converts them to what statements show. Prices are estimates
- * for the usage statement: the invoice amount comes from the Stripe price behind {@link #priceLookupKey()}.
+ * Metered plan add-ons billed on the next plan invoice (S206). Quantities are whole <em>meter units</em>;
+ * {@link #unitsPerDisplayUnit()} converts them to what statements show, and {@link #estimatedCents(long)} prices them
+ * (the same figure the invoice line carries).
  */
 public enum UsageMeter {
     /** FBA storage: hundredths of a cubic-foot-day; $0.87 per cubic foot per 30-day month = $0.029 per ft³-day. */
-    FBA_STORAGE("FBA storage", "cubic-foot-day", 100, "fba_storage_cubic_feet_days", "metered_fba_storage", 29_000L),
+    FBA_STORAGE("FBA storage", "cubic-foot-day", 100, 29_000L),
     /** Sponsored products: cents of charged clicks, passed through at cost. */
-    ADS_SPEND("Sponsored products", "USD", 100, "ads_spend_cents", "metered_ads_spend", 1_000_000L),
+    ADS_SPEND("Sponsored products", "USD", 100, 1_000_000L),
     /** AI credits: one credit = one US cent of model cost (ai-gateway). */
-    AI_CREDITS("AI credits", "credit", 1, "ai_credits", "metered_ai_credits", 10_000L);
+    AI_CREDITS("AI credits", "credit", 1, 10_000L);
 
     private static final BigDecimal MICROS_PER_CENT = BigDecimal.valueOf(10_000);
 
     private final String label;
     private final String displayUnit;
     private final int unitsPerDisplayUnit;
-    private final String stripeEventName;
-    private final String priceLookupKey;
     private final long microsPerDisplayUnit;
 
-    UsageMeter(String label, String displayUnit, int unitsPerDisplayUnit, String stripeEventName,
-               String priceLookupKey, long microsPerDisplayUnit) {
+    UsageMeter(String label, String displayUnit, int unitsPerDisplayUnit, long microsPerDisplayUnit) {
         this.label = label;
         this.displayUnit = displayUnit;
         this.unitsPerDisplayUnit = unitsPerDisplayUnit;
-        this.stripeEventName = stripeEventName;
-        this.priceLookupKey = priceLookupKey;
         this.microsPerDisplayUnit = microsPerDisplayUnit;
     }
 
@@ -45,16 +40,6 @@ public enum UsageMeter {
 
     public int unitsPerDisplayUnit() {
         return unitsPerDisplayUnit;
-    }
-
-    /** Stripe Billing meter {@code event_name}. */
-    public String stripeEventName() {
-        return stripeEventName;
-    }
-
-    /** Lookup key of the metered Stripe price added to subscriptions. */
-    public String priceLookupKey() {
-        return priceLookupKey;
     }
 
     /** Estimated price of one display unit in micro-dollars. */

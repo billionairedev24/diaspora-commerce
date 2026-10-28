@@ -1,7 +1,6 @@
 package com.afrotransact.seller.domain;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -9,12 +8,16 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 
-/** What Stripe reports for a connected account (requirements.*, flags, capabilities). */
+/**
+ * What Stripe reports for a connected account (requirements.*, flags, capabilities) and the payout bank account
+ * Stripe holds ({@code payoutBank}, null when none is on file or the payload did not include it).
+ */
 public record RequirementsSnapshot(List<String> currentlyDue, List<String> eventuallyDue, List<String> pastDue,
                                    List<String> pendingVerification, List<RequirementError> errors,
                                    Instant currentDeadline, String disabledReason, boolean chargesEnabled,
                                    boolean payoutsEnabled, boolean detailsSubmitted,
-                                   String individualVerificationStatus, Map<String, String> capabilities) {
+                                   String individualVerificationStatus, Map<String, String> capabilities,
+                                   PayoutBank payoutBank) {
 
     public RequirementsSnapshot {
         currentlyDue = currentlyDue == null ? List.of() : List.copyOf(currentlyDue);
@@ -23,6 +26,16 @@ public record RequirementsSnapshot(List<String> currentlyDue, List<String> event
         pendingVerification = pendingVerification == null ? List.of() : List.copyOf(pendingVerification);
         errors = errors == null ? List.of() : List.copyOf(errors);
         capabilities = capabilities == null ? Map.of() : Map.copyOf(capabilities);
+    }
+
+    /** A snapshot without the payout bank account (requirements and flags only). */
+    public RequirementsSnapshot(List<String> currentlyDue, List<String> eventuallyDue, List<String> pastDue,
+                                List<String> pendingVerification, List<RequirementError> errors,
+                                Instant currentDeadline, String disabledReason, boolean chargesEnabled,
+                                boolean payoutsEnabled, boolean detailsSubmitted,
+                                String individualVerificationStatus, Map<String, String> capabilities) {
+        this(currentlyDue, eventuallyDue, pastDue, pendingVerification, errors, currentDeadline, disabledReason,
+                chargesEnabled, payoutsEnabled, detailsSubmitted, individualVerificationStatus, capabilities, null);
     }
 
     public static RequirementsSnapshot empty() {
@@ -45,16 +58,11 @@ public record RequirementsSnapshot(List<String> currentlyDue, List<String> event
         return out;
     }
 
-    /** The seller answered {@code key}: it waits for Stripe (pending verification) until the next account.updated. */
-    public RequirementsSnapshot markPending(String key) {
-        List<String> pending = new ArrayList<>(pendingVerification);
-        if (!pending.contains(key)) {
-            pending.add(key);
-        }
-        return new RequirementsSnapshot(without(currentlyDue, key), without(eventuallyDue, key),
-                without(pastDue, key), pending, errors.stream().filter(e -> !key.equals(e.requirement())).toList(),
+    /** The same requirements with the payout bank account Stripe reported (null: none on file). */
+    public RequirementsSnapshot withPayoutBank(PayoutBank bank) {
+        return new RequirementsSnapshot(currentlyDue, eventuallyDue, pastDue, pendingVerification, errors,
                 currentDeadline, disabledReason, chargesEnabled, payoutsEnabled, detailsSubmitted,
-                individualVerificationStatus, capabilities);
+                individualVerificationStatus, capabilities, bank);
     }
 
     public RequirementsSnapshot withCapability(String capability, String status) {
@@ -62,7 +70,7 @@ public record RequirementsSnapshot(List<String> currentlyDue, List<String> event
         caps.put(capability, status);
         return new RequirementsSnapshot(currentlyDue, eventuallyDue, pastDue, pendingVerification, errors,
                 currentDeadline, disabledReason, chargesEnabled, payoutsEnabled, detailsSubmitted,
-                individualVerificationStatus, caps);
+                individualVerificationStatus, caps, payoutBank);
     }
 
     public boolean sameRequirements(RequirementsSnapshot o) {
@@ -73,9 +81,5 @@ public record RequirementsSnapshot(List<String> currentlyDue, List<String> event
                 && Objects.equals(currentDeadline, o.currentDeadline)
                 && Objects.equals(disabledReason, o.disabledReason)
                 && chargesEnabled == o.chargesEnabled && payoutsEnabled == o.payoutsEnabled;
-    }
-
-    private static List<String> without(List<String> list, String key) {
-        return list.stream().filter(k -> !k.equals(key)).toList();
     }
 }
