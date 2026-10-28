@@ -226,13 +226,13 @@ func TestFullDocumentsAreSentAsIs(t *testing.T) {
 // maxSmsSegments is one GSM-7 segment for every text, two for delivery run alerts: their link carries the UTM
 // attribution (source, medium, campaign, content) that makes every announcement visible in analytics.
 //
-// Arabic and Yoruba (S262) cannot be GSM-7: their scripts and tone marks force UCS-2 (70 characters a segment), so
+// Arabic and Yoruba (S262) cannot be GSM-7: their scripts and tone marks force UCS-2 (70 characters a segment, 67 once concatenated; a run link alone is ~150), so
 // they get a larger allowance and the encoding check applies to the GSM-7 languages only.
 func maxSmsSegments(key, locale string) int {
 	ucs2 := locale == "ar" || locale == "yo"
 	switch {
 	case strings.HasPrefix(key, "run.") && ucs2:
-		return 4
+		return 5
 	case ucs2:
 		return 3
 	case strings.HasPrefix(key, "run."):

@@ -544,4 +544,299 @@ Confirmar mis alertas: {{.confirmUrl}}
  'Hola {{.firstName}}, te avisaremos por {{.channelList}} cuando abra una ruta de entrega a {{.town}}, cuando esté por cerrar y cuando vayamos en camino.
 Ver próximas rutas: {{.locationUrl}}{{if .hasWhatsappCommunity}}
 Unirme a la comunidad de WhatsApp de {{.town}}: {{.whatsappInviteUrl}}{{end}}
-Darte de baja cuando quieras: {{.unsubscribeUrl}}');
+Darte de baja cuando quieras: {{.unsubscribeUrl}}'),
+('preorder.announce', 'ar', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.announce' AND t.locale = 'ar' AND t.channel = 'email'), 'reminder',
+ '{{.name}} مفتوح: اطلب قبل {{.closesDisplay}}',
+ '{{define "preheader"}}اطلب قبل {{.closesDisplay}}، والتوصيل في {{.deliversDisplay}}.{{end}}
+<div dir="rtl">
+{{badge "warning" "الطلب المسبق مفتوح"}}
+<h1>{{if .headline}}{{.headline}}{{else}}الطلب المسبق مفتوح في {{.where}}{{end}}</h1>
+<p>مرحبًا {{.firstName}}، <strong>{{.name}}</strong> مفتوح الآن. اطلب مع جيرانك ونوصّل كل شيء في يوم واحد.</p>
+{{facts "اطلب قبل" .closesDisplay "التوصيل" .deliversDisplay "التوصيل إلى الباب" .doorFee "الاستلام" .pickupFee "موعد الاستلام" .pickupWindow}}
+{{button .emailUrl "اطلب مسبقًا الآن"}}
+<p><small>يتم الدفع عند إتمام الطلب، ويمكنك تعديل عناصر الطلب المسبق أو إلغاؤها مع استرداد كامل المبلغ حتى إغلاق الطلب المسبق.</small></p>
+</div>',
+ 'مرحبًا {{.firstName}}، {{.name}} مفتوح الآن. اطلب قبل {{.closesDisplay}} ونوصّل في {{.deliversDisplay}}.
+{{if .doorFee}}التوصيل إلى الباب: {{.doorFee}} رسم ثابت.
+{{end}}{{if .pickupFee}}الاستلام: {{.pickupFee}}{{if .pickupWindow}}، {{.pickupWindow}}{{end}}.
+{{end}}يتم الدفع عند إتمام الطلب، ويمكنك تعديل عناصر الطلب المسبق أو إلغاؤها مع استرداد كامل المبلغ حتى إغلاق الطلب المسبق.
+اطلب مسبقًا الآن: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+إلغاء الاشتراك في تنبيهات الطلب المسبق في {{.where}}: {{.unsubscribeUrl}}{{end}}'),
+('preorder.announce', 'ar', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.announce' AND t.locale = 'ar' AND t.channel = 'push'), 'reminder',
+ 'الطلب المسبق مفتوح في {{.where}}',
+ '',
+ 'اطلب قبل {{.closesDisplay}}، والتوصيل في {{.deliversDisplay}}.{{if .doorFee}} التوصيل إلى الباب {{.doorFee}}.{{end}}'),
+('preorder.announce', 'ar', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.announce' AND t.locale = 'ar' AND t.channel = 'sms'), 'reminder',
+ '',
+ '',
+ '{{.smsCopy}}'),
+('preorder.closed', 'ar', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.closed' AND t.locale = 'ar' AND t.channel = 'email'), 'transactional',
+ '{{.name}} أُغلق: التوصيل في {{.deliversDisplay}}',
+ '{{define "preheader"}}طلبك المسبق مؤكد للتوصيل في {{.deliversDisplay}}.{{end}}
+<div dir="rtl">
+{{badge "success" "تم التأكيد"}}
+<h1>طلبك المسبق مؤكد</h1>
+<p>مرحبًا {{.firstName}}، تم إغلاق <strong>{{.name}}</strong>. سنوصّل طلبك المسبق في <strong>{{.deliversDisplay}}</strong>{{if .pickupWindow}} (الاستلام {{.pickupWindow}}){{end}}.</p>
+{{button .emailUrl "عرض طلبك المسبق"}}
+<p><small>إذا وافقت على الرسائل النصية، سنراسلك عندما يخرج طلبك للتوصيل.</small></p>
+</div>',
+ 'مرحبًا {{.firstName}}، تم إغلاق {{.name}}. سنوصّل طلبك المسبق في {{.deliversDisplay}}{{if .pickupWindow}} (الاستلام {{.pickupWindow}}){{end}}. إذا وافقت على الرسائل النصية، سنراسلك عندما يخرج طلبك للتوصيل. {{.emailUrl}}'),
+('preorder.confirmed', 'ar', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.confirmed' AND t.locale = 'ar' AND t.channel = 'email'), 'transactional',
+ 'تم تسجيلك: {{.name}}',
+ '{{define "preheader"}}الطلب المسبق {{.preorderNumber}}، التوصيل في {{.deliversDisplay}}. المبلغ المحصّل: {{.total}}.{{end}}
+<div dir="rtl">
+{{badge "success" "تم تسجيلك"}}
+<h1>تم تسجيلك: {{.name}}</h1>
+<p>مرحبًا {{.firstName}}، شكرًا على طلبك المسبق. سنوصّله مع طلبات المجتمع في <strong>{{.deliversDisplay}}</strong>.</p>
+{{facts "رقم الطلب المسبق" .preorderNumber "التوصيل" .deliversDisplay .fulfilmentText (or .doorFee .pickupFee) "المبلغ المحصّل" .total}}
+{{button .emailUrl "عرض طلبك المسبق"}}
+{{template "packages" (index . "packages")}}
+{{template "totals" (index . "totals")}}
+{{template "address" (index . "shipTo")}}
+{{callout "info" (printf "%sيمكن تعديل عناصر الطلب المسبق أو إلغاؤها مع استرداد كامل المبلغ حتى %s." (or .nowNote "") .cancelUntil)}}
+{{with index . "helpUrl"}}<p><small>هل تحتاج إلى مساعدة بخصوص هذا الطلب؟ زر <a href="{{.}}">مركز المساعدة</a> أو رد على هذه الرسالة.</small></p>{{end}}
+</div>',
+ 'مرحبًا {{.firstName}}، تم تسجيلك: {{.name}}.
+رقم الطلب المسبق: {{.preorderNumber}}
+التوصيل: {{.deliversDisplay}}
+{{.fulfilmentText}}: {{if .doorFee}}{{.doorFee}}{{else}}{{.pickupFee}}{{if .pickupWindow}}، {{.pickupWindow}}{{end}}{{end}}
+المبلغ المحصّل: {{.total}}
+{{if .nowNote}}{{.nowNote}} {{end}}يمكن تعديل عناصر الطلب المسبق أو إلغاؤها مع استرداد كامل المبلغ حتى {{.cancelUntil}}. إذا وافقت على الرسائل النصية، سنراسلك يوم التوصيل.
+{{.emailUrl}}'),
+('preorder.delivery_missed', 'ar', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.delivery_missed' AND t.locale = 'ar' AND t.channel = 'email'), 'transactional',
+ 'فاتنا توصيل طلبك: {{.name}}',
+ '{{define "preheader"}}نعتذر. اختر موعدًا جديدًا أو استردادًا كاملًا للمبلغ.{{end}}
+<div dir="rtl">
+{{badge "danger" "فاتنا التوصيل"}}
+<h1>نعتذر، فاتنا توصيل طلبك</h1>
+<p>مرحبًا {{.firstName}}، لم نتمكن من توصيل <strong>{{.name}}</strong> (الطلب {{.orderNumber}}) في {{.missedDisplay}}. اختر ما يناسبك:</p>
+{{if .newDateUrl}}{{button .newDateUrl (printf "وصّله في %s" .newDateDisplay)}}{{end}}
+{{if .refundUrl}}{{secondaryButton .refundUrl (printf "استرداد كامل المبلغ %s" .total)}}{{end}}
+{{template "packages" (index . "packages")}}
+{{with index . "helpUrl"}}<p><small>هل تحتاج إلى مساعدة بخصوص هذا الطلب؟ زر <a href="{{.}}">مركز المساعدة</a> أو رد على هذه الرسالة.</small></p>{{end}}
+</div>',
+ 'مرحبًا {{.firstName}}، نعتذر: لم نتمكن من توصيل {{.name}} (الطلب {{.orderNumber}}) في {{.missedDisplay}}. اختر ما يناسبك:
+{{if .newDateUrl}}وصّله في {{.newDateDisplay}}: {{.newDateUrl}}
+{{end}}{{if .refundUrl}}استرداد كامل المبلغ {{.total}}: {{.refundUrl}}
+{{end}}طلباتك: {{.orderUrl}}'),
+('preorder.last_call', 'ar', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.last_call' AND t.locale = 'ar' AND t.channel = 'push'), 'reminder',
+ 'النداء الأخير: {{.name}}',
+ '',
+ 'يُغلق الطلب المسبق في {{.closesDisplay}}. التوصيل في {{.deliversDisplay}}.'),
+('preorder.last_call', 'ar', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.last_call' AND t.locale = 'ar' AND t.channel = 'sms'), 'reminder',
+ '',
+ '',
+ 'AfroTransact: النداء الأخير! يُغلق {{.name}} في {{.closesDisplay}}. {{.smsUrl}} للإلغاء أرسل STOP'),
+('preorder.late_order.payment_link', 'ar', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.late_order.payment_link' AND t.locale = 'ar' AND t.channel = 'sms'), 'transactional',
+ '',
+ '',
+ 'AfroTransact: ادفع {{.total}} لطلبك المسبق: {{.paymentUrl}} للإلغاء أرسل STOP'),
+('preorder.out_for_delivery', 'ar', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.out_for_delivery' AND t.locale = 'ar' AND t.channel = 'push'), 'transactional',
+ 'طلبك المسبق خرج للتوصيل',
+ '',
+ 'يصل {{.name}} اليوم{{if .deliveryWindow}}، {{.deliveryWindow}}{{end}}.'),
+('preorder.out_for_delivery', 'ar', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.out_for_delivery' AND t.locale = 'ar' AND t.channel = 'sms'), 'transactional',
+ '',
+ '',
+ 'AfroTransact: خرج {{.name}} للتوصيل اليوم{{if .deliveryWindow}}، {{.deliveryWindow}}{{end}}. {{.smsUrl}} للإلغاء أرسل STOP'),
+('preorder.reminder', 'ar', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.reminder' AND t.locale = 'ar' AND t.channel = 'email'), 'reminder',
+ 'بقيت 48 ساعة: يُغلق {{.name}} في {{.closesDisplay}}',
+ '{{define "preheader"}}اطلب قبل {{.closesDisplay}} لتستلم في {{.deliversDisplay}}.{{end}}
+<div dir="rtl">
+{{badge "warning" "بقيت 48 ساعة"}}
+<h1>بقيت 48 ساعة للطلب المسبق</h1>
+<p>مرحبًا {{.firstName}}، يُغلق <strong>{{.name}}</strong> في <strong>{{.closesDisplay}}</strong>. كل ما تطلبه حتى ذلك الوقت يصلك في <strong>{{.deliversDisplay}}</strong>.</p>
+{{facts "اطلب قبل" .closesDisplay "التوصيل" .deliversDisplay "التوصيل إلى الباب" .doorFee "الاستلام" .pickupFee "موعد الاستلام" .pickupWindow}}
+{{button .emailUrl "أكمل طلبك المسبق"}}
+</div>',
+ 'مرحبًا {{.firstName}}، يُغلق {{.name}} في {{.closesDisplay}}. كل ما تطلبه حتى ذلك الوقت يصلك في {{.deliversDisplay}}{{if .doorFee}} مع توصيل إلى الباب بـ {{.doorFee}}{{end}}{{if .pickupFee}}{{if .doorFee}} أو{{else}} مع{{end}} استلام ({{.pickupFee}}){{end}}.
+أكمل طلبك المسبق: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+إلغاء الاشتراك: {{.unsubscribeUrl}}{{end}}'),
+('preorder.reminder', 'ar', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.reminder' AND t.locale = 'ar' AND t.channel = 'push'), 'reminder',
+ 'بقيت 48 ساعة للطلب المسبق',
+ '',
+ 'يُغلق {{.name}} في {{.closesDisplay}}. التوصيل في {{.deliversDisplay}}.'),
+('preorder.waitlist.opened', 'ar', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.waitlist.opened' AND t.locale = 'ar' AND t.channel = 'email'), 'reminder',
+ 'الطلب المسبق مفتوح في {{.where}}',
+ '{{define "preheader"}}{{.name}} مفتوح حتى {{.closesDisplay}}.{{end}}
+<div dir="rtl">
+{{badge "warning" "طلبت منا ذلك وها نحن"}}
+<h1>نوصّل إلى {{.where}}</h1>
+<p>مرحبًا {{.firstName}}، طلبت منا إبلاغك عند فتح طلب مسبق في {{.where}}. <strong>{{.name}}</strong> مفتوح الآن.</p>
+{{facts "اطلب قبل" .closesDisplay "التوصيل" .deliversDisplay "التوصيل إلى الباب" .doorFee "الاستلام" .pickupFee "موعد الاستلام" .pickupWindow}}
+{{button .emailUrl "شاهد ما في الطلب المسبق"}}
+</div>',
+ 'مرحبًا {{.firstName}}، طلبت منا إبلاغك عند فتح طلب مسبق في {{.where}}. {{.name}} مفتوح حتى {{.closesDisplay}}، والتوصيل في {{.deliversDisplay}}.{{if .doorFee}} التوصيل إلى الباب {{.doorFee}} رسم ثابت.{{end}}{{if .pickupFee}} الاستلام {{.pickupFee}}{{if .pickupWindow}}، {{.pickupWindow}}{{end}}.{{end}}
+شاهد ما في الطلب المسبق: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+مغادرة قائمة الانتظار: {{.unsubscribeUrl}}{{end}}'),
+('run.announced', 'ar', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.announced' AND t.locale = 'ar' AND t.channel = 'email'), 'reminder',
+ 'جولة توصيل إلى {{.town}} في {{.deliveryDay}}',
+ '{{define "preheader"}}نحن في طريقنا إلى {{.town}} في {{.deliveryDay}}. يبدأ استقبال الطلبات قريبًا.{{end}}
+<div dir="rtl">
+{{badge "info" "تم الإعلان عن جولة توصيل"}}
+<h1>نحن قادمون إلى {{.town}}</h1>
+<p>مرحبًا {{.firstName}}، هناك جولة توصيل من أفروترانزاكت إلى <strong>{{.town}}</strong> مقررة في <strong>{{.deliveryDay}}</strong>. سنبلغك فور فتح باب الطلبات.</p>
+{{facts "يوم التوصيل" .deliveryDay "موعد التوصيل" .windowDisplay "اطلب قبل" .cutoffDisplay "رسوم التوصيل" .feeDisplay "الطريقة" .dropText}}
+{{button .emailUrl "شاهد الجولة"}}
+{{if .whatsappInviteUrl}}<p><small>انضم إلى مجتمع واتساب في {{.town}} لتصلك أخبار الجيران وسائقينا: <a href="{{.whatsappInviteUrl}}">انضم</a>.</small></p>{{end}}
+</div>',
+ 'مرحبًا {{.firstName}}، هناك جولة توصيل من أفروترانزاكت إلى {{.town}} مقررة في {{.deliveryDay}} ({{.windowDisplay}}). اطلب قبل {{.cutoffDisplay}}؛ رسوم التوصيل {{.feeDisplay}}. {{.dropText}}.
+سنبلغك فور فتح باب الطلبات.
+شاهد الجولة: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+إلغاء الاشتراك في تنبيهات جولات {{.town}}: {{.unsubscribeUrl}}{{end}}'),
+('run.announced', 'ar', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.announced' AND t.locale = 'ar' AND t.channel = 'push'), 'reminder',
+ 'جولة توصيل إلى {{.town}}',
+ '',
+ 'نحن قادمون إلى {{.town}} في {{.deliveryDay}}. يبدأ استقبال الطلبات قريبًا.'),
+('run.cancelled', 'ar', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cancelled' AND t.locale = 'ar' AND t.channel = 'email'), 'transactional',
+ 'أُلغيت جولة التوصيل إلى {{.town}} في {{.deliveryDay}}',
+ '{{define "preheader"}}يُرد لك المبلغ كاملًا، شاملًا رسوم التوصيل.{{end}}
+<div dir="rtl">
+{{badge "danger" "أُلغيت الجولة"}}
+<h1>ألغينا جولة {{.town}}</h1>
+<p>مرحبًا {{.firstName}}، نعتذر: جولة التوصيل إلى {{.town}} المقررة في <strong>{{.deliveryDay}}</strong> لن تتم. {{.reasonText}}</p>
+{{callout "info" .refundNote}}
+{{button .locationUrl "شاهد الجولة القادمة"}}
+</div>',
+ 'مرحبًا {{.firstName}}، نعتذر: جولة التوصيل إلى {{.town}} المقررة في {{.deliveryDay}} لن تتم. {{.reasonText}}
+{{.refundNote}}
+شاهد الجولة القادمة: {{.locationUrl}}'),
+('run.cancelled', 'ar', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cancelled' AND t.locale = 'ar' AND t.channel = 'push'), 'transactional',
+ 'أُلغيت جولة {{.town}}',
+ '',
+ 'يُرد لك المبلغ كاملًا، شاملًا رسوم التوصيل.'),
+('run.cancelled', 'ar', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cancelled' AND t.locale = 'ar' AND t.channel = 'sms'), 'transactional',
+ '',
+ '',
+ 'AfroTransact: ألغينا جولة {{.town}} المقررة في {{.deliveryDay}}. يُرد لك مبلغ طلبك كاملًا شاملًا رسوم التوصيل. للإلغاء أرسل STOP'),
+('run.confirmed', 'ar', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.confirmed' AND t.locale = 'ar' AND t.channel = 'email'), 'transactional',
+ 'جولة {{.town}} مؤكدة: التوصيل في {{.deliveryDay}}',
+ '{{define "preheader"}}طلبك مؤكد في {{.deliveryDay}}، {{.windowText}}.{{end}}
+<div dir="rtl">
+{{badge "success" "تأكدت الجولة"}}
+<h1>جولة {{.town}} ستتم</h1>
+<p>مرحبًا {{.firstName}}، وصل عدد كافٍ من الطلبات، لذلك ستتم جولة {{.town}}. طلبك مؤكد في <strong>{{.deliveryDay}}</strong>.</p>
+{{facts "يوم التوصيل" .deliveryDay "موعد التوصيل" .windowDisplay "الطريقة" .dropText "رمز التسليم" .handoverCode}}
+{{button .emailUrl "شاهد الجولة"}}
+</div>',
+ 'مرحبًا {{.firstName}}، ستتم جولة {{.town}}. طلبك مؤكد في {{.deliveryDay}} ({{.windowDisplay}}). {{.dropText}}.{{if .handoverCode}} رمز التسليم: {{.handoverCode}}.{{end}}
+شاهد الجولة: {{.emailUrl}}'),
+('run.confirmed', 'ar', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.confirmed' AND t.locale = 'ar' AND t.channel = 'push'), 'transactional',
+ 'جولة {{.town}} ستتم',
+ '',
+ 'طلبك مؤكد في {{.deliveryDay}}، {{.windowText}}.'),
+('run.cutoff_reminder', 'ar', 'chat', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cutoff_reminder' AND t.locale = 'ar' AND t.channel = 'chat'), 'reminder',
+ 'afrotransact_run_cutoff_reminder',
+ '',
+ '{{.town}}
+{{.deliveryDay}}
+{{.cutoffText}}
+{{.feeDisplay}}
+{{.whatsappUrl}}'),
+('run.cutoff_reminder', 'ar', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cutoff_reminder' AND t.locale = 'ar' AND t.channel = 'email'), 'reminder',
+ 'الفرصة الأخيرة لجولة {{.town}}: اطلب قبل {{.cutoffText}}',
+ '{{define "preheader"}}تُغلق جولة {{.town}} في {{.cutoffText}}. نوصّل في {{.deliveryDay}}.{{end}}
+<div dir="rtl">
+{{badge "warning" "تُغلق قريبًا"}}
+<h1>جولة {{.town}} تُغلق قريبًا</h1>
+<p>مرحبًا {{.firstName}}، يُغلق باب الطلبات لجولة التوصيل إلى {{.town}} في <strong>{{.cutoffDisplay}}</strong>. نوصّل في <strong>{{.deliveryDay}}</strong>.</p>
+{{facts "اطلب قبل" .cutoffDisplay "يوم التوصيل" .deliveryDay "موعد التوصيل" .windowDisplay "رسوم التوصيل" .feeDisplay "الطريقة" .dropText "الطلبات حتى الآن" .minimumText}}
+{{button .emailUrl "شاهد الجولة"}}
+</div>',
+ 'مرحبًا {{.firstName}}، يُغلق باب الطلبات لجولة التوصيل إلى {{.town}} في {{.cutoffDisplay}}. نوصّل في {{.deliveryDay}} ({{.windowDisplay}})؛ رسوم التوصيل {{.feeDisplay}}.
+شاهد الجولة: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+إلغاء الاشتراك في تنبيهات جولات {{.town}}: {{.unsubscribeUrl}}{{end}}'),
+('run.cutoff_reminder', 'ar', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cutoff_reminder' AND t.locale = 'ar' AND t.channel = 'push'), 'reminder',
+ 'الفرصة الأخيرة لجولة {{.town}}',
+ '',
+ 'اطلب قبل {{.cutoffText}}. التوصيل في {{.deliveryDay}}.'),
+('run.cutoff_reminder', 'ar', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cutoff_reminder' AND t.locale = 'ar' AND t.channel = 'sms'), 'reminder',
+ '',
+ '',
+ 'AfroTransact: الفرصة الأخيرة لجولة {{.town}}. اطلب قبل {{.cutoffText}}. التوصيل {{.deliveryDay}}. {{.smsUrl}} للإلغاء أرسل STOP'),
+('run.opened', 'ar', 'chat', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.opened' AND t.locale = 'ar' AND t.channel = 'chat'), 'reminder',
+ 'afrotransact_run_opened',
+ '',
+ '{{.town}}
+{{.deliveryDay}}
+{{.cutoffText}}
+{{.feeDisplay}}
+{{.whatsappUrl}}'),
+('run.opened', 'ar', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.opened' AND t.locale = 'ar' AND t.channel = 'email'), 'reminder',
+ 'جولة التوصيل إلى {{.town}} مفتوحة: اطلب قبل {{.cutoffText}}',
+ '{{define "preheader"}}اطلب قبل {{.cutoffText}}. نوصّل في {{.deliveryDay}}، {{.windowText}}.{{end}}
+<div dir="rtl">
+{{badge "warning" "الجولة مفتوحة"}}
+<h1>جولة التوصيل إلى {{.town}} مفتوحة</h1>
+<p>مرحبًا {{.firstName}}، نحمل طلبات أفروترانزاكت إلى {{.town}} في <strong>{{.deliveryDay}}</strong>. اطلب قبل الإغلاق ويسافر طلبك في الرحلة نفسها.</p>
+{{facts "يوم التوصيل" .deliveryDay "موعد التوصيل" .windowDisplay "اطلب قبل" .cutoffDisplay "رسوم التوصيل" .feeDisplay "الطريقة" .dropText "الطلبات حتى الآن" .minimumText}}
+{{button .emailUrl "شاهد الجولة"}}
+{{if .whatsappInviteUrl}}<p><small>انضم إلى مجتمع واتساب في {{.town}} لتصلك أخبار الجيران وسائقينا: <a href="{{.whatsappInviteUrl}}">انضم</a>.</small></p>{{end}}
+</div>',
+ 'مرحبًا {{.firstName}}، جولة التوصيل إلى {{.town}} مفتوحة. نوصّل في {{.deliveryDay}} ({{.windowDisplay}}). اطلب قبل {{.cutoffDisplay}}؛ رسوم التوصيل {{.feeDisplay}}. {{.dropText}}.
+شاهد الجولة: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+إلغاء الاشتراك في تنبيهات جولات {{.town}}: {{.unsubscribeUrl}}{{end}}'),
+('run.opened', 'ar', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.opened' AND t.locale = 'ar' AND t.channel = 'push'), 'reminder',
+ 'جولة التوصيل إلى {{.town}} مفتوحة',
+ '',
+ 'اطلب قبل {{.cutoffText}}. التوصيل في {{.deliveryDay}}.{{if .feeDisplay}} رسوم التوصيل {{.feeDisplay}}.{{end}}'),
+('run.opened', 'ar', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.opened' AND t.locale = 'ar' AND t.channel = 'sms'), 'reminder',
+ '',
+ '',
+ 'AfroTransact: جولة {{.town}} مفتوحة. التوصيل {{.deliveryDay}}. اطلب قبل {{.cutoffText}}. {{.smsUrl}} للإلغاء أرسل STOP'),
+('run.out_for_delivery', 'ar', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.out_for_delivery' AND t.locale = 'ar' AND t.channel = 'email'), 'transactional',
+ 'توصيلك في {{.town}} في الطريق اليوم',
+ '{{define "preheader"}}انطلقنا إلى {{.town}}. موعد التوصيل {{.windowText}}.{{end}}
+<div dir="rtl">
+{{badge "success" "في الطريق"}}
+<h1>نحن في طريقنا إلى {{.town}}</h1>
+<p>مرحبًا {{.firstName}}، انطلقت جولة التوصيل إلى {{.town}}. يصل طلبك اليوم، {{.windowDisplay}}.</p>
+{{facts "موعد التوصيل" .windowDisplay "الطريقة" .dropText "رمز التسليم" .handoverCode}}
+{{if .handoverCode}}<p>أظهر هذا الرمز عند استلام طلبك: <strong>{{.handoverCode}}</strong>.</p>{{end}}
+{{button .emailUrl "تابع الجولة"}}
+</div>',
+ 'مرحبًا {{.firstName}}، انطلقت جولة التوصيل إلى {{.town}}. يصل طلبك اليوم، {{.windowDisplay}}. {{.dropText}}.{{if .handoverCode}} رمز التسليم: {{.handoverCode}}.{{end}}
+تابع الجولة: {{.emailUrl}}'),
+('run.out_for_delivery', 'ar', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.out_for_delivery' AND t.locale = 'ar' AND t.channel = 'push'), 'transactional',
+ 'طلبك إلى {{.town}} في الطريق',
+ '',
+ 'يصل اليوم، {{.windowText}}.{{if .handoverCode}} رمز التسليم {{.handoverCode}}.{{end}}'),
+('run.out_for_delivery', 'ar', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.out_for_delivery' AND t.locale = 'ar' AND t.channel = 'sms'), 'transactional',
+ '',
+ '',
+ 'AfroTransact: طلبك إلى {{.town}} خرج للتوصيل اليوم، {{.windowText}}.{{if .handoverCode}} رمز التسليم {{.handoverCode}}.{{end}} للإلغاء أرسل STOP'),
+('run.subscription.confirm', 'ar', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.subscription.confirm' AND t.locale = 'ar' AND t.channel = 'email'), 'transactional',
+ 'أكّد تنبيهات جولات التوصيل إلى {{.town}}',
+ '{{define "preheader"}}بنقرة واحدة نبلغك عند فتح جولة إلى {{.town}}.{{end}}
+<div dir="rtl">
+<h1>خطوة واحدة فقط</h1>
+<p>أكّد بريدك الإلكتروني لتكون أول من يعلم عندما تفتح أفروترانزاكت جولة توصيل إلى <strong>{{.town}}</strong>: عند فتح الطلبات، وقبيل إغلاقها، وعندما نكون في الطريق. لن نرسل شيئًا قبل أن تؤكد.</p>
+{{button .confirmUrl "تأكيد تنبيهاتي"}}
+<p><small>لم تطلب ذلك؟ تجاهل هذه الرسالة ولن يُرسل أي شيء.</small></p>
+</div>',
+ 'أكّد بريدك الإلكتروني لتكون أول من يعلم عندما تفتح أفروترانزاكت جولة توصيل إلى {{.town}}: عند فتح الطلبات، وقبيل إغلاقها، وعندما نكون في الطريق. لن نرسل شيئًا قبل أن تؤكد.
+
+تأكيد تنبيهاتي: {{.confirmUrl}}
+
+لم تطلب ذلك؟ تجاهل هذه الرسالة ولن يُرسل أي شيء.'),
+('run.subscription.welcome', 'ar', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.subscription.welcome' AND t.locale = 'ar' AND t.channel = 'email'), 'transactional',
+ 'ستكون أول من يعلم بجولات التوصيل إلى {{.town}}',
+ '{{define "preheader"}}أنت مشترك في تنبيهات جولات {{.town}} عبر {{.channelList}}.{{end}}
+<div dir="rtl">
+{{badge "success" "تم الاشتراك"}}
+<h1>أنت في قائمة {{.town}}</h1>
+<p>مرحبًا {{.firstName}}، سنبلغك عبر {{.channelList}} عندما تفتح جولة توصيل إلى <strong>{{.town}}</strong>، وقبيل إغلاقها، وعندما نكون في الطريق.</p>
+{{button .locationUrl "شاهد الجولات القادمة"}}
+{{if .hasWhatsappCommunity}}<p>يتبادل الجيران وسائقونا الأخبار في مجتمع واتساب في {{.town}}: <a href="{{.whatsappInviteUrl}}">انضم إلى المجتمع</a>.</p>{{end}}
+<p><small>يمكنك تغيير ذلك أو إيقافه في أي وقت من حسابك، أو عبر رابط إلغاء الاشتراك في كل رسالة.</small></p>
+</div>',
+ 'مرحبًا {{.firstName}}، سنبلغك عبر {{.channelList}} عندما تفتح جولة توصيل إلى {{.town}}، وقبيل إغلاقها، وعندما نكون في الطريق.
+شاهد الجولات القادمة: {{.locationUrl}}{{if .hasWhatsappCommunity}}
+انضم إلى مجتمع واتساب في {{.town}}: {{.whatsappInviteUrl}}{{end}}
+إلغاء الاشتراك في أي وقت: {{.unsubscribeUrl}}');
