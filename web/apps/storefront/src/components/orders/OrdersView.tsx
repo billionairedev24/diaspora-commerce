@@ -146,17 +146,11 @@ function OrderCard({ order }: { order: OrderSummary }) {
               </Link>
             )}
             <CancelShipment shipment={s} block onCancel={() => cancel.mutate(s.shipmentId)} loading={cancel.isPending && cancel.variables === s.shipmentId} />
-            {(s.returnable ?? Boolean(s.deliveredAt)) && (
-              <Link href={`/account/returns/new?order=${encodeURIComponent(order.orderNumber)}`} className={buttonClassName({ variant: 'neutral', size: 'sm', block: true })}>
-                {t('ord.returnItems')}
+            {s.deliveredAt && (
+              <Link href={`/account/help/new?order=${encodeURIComponent(order.orderNumber)}`} className={buttonClassName({ variant: 'neutral', size: 'sm', block: true })}>
+                {t('ord.getHelp')}
               </Link>
             )}
-            {s.problemReportOnly && !s.returnable && (
-              <Link href={`/account/returns/new?order=${encodeURIComponent(order.orderNumber)}`} className={buttonClassName({ variant: 'neutral', size: 'sm', block: true })}>
-                {t('ord.reportProblem')}
-              </Link>
-            )}
-            {s.returnable && s.returnWindowEndsAt && <span className={pageStyles.muted}>{t('ord.returnBy', { date: new Date(s.returnWindowEndsAt).toLocaleDateString(fmt.tag, { month: 'short', day: 'numeric' }) })}</span>}
           </div>
         </div>
       ))}
