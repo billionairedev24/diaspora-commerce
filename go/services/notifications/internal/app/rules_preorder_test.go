@@ -30,7 +30,7 @@ func TestEverySeededSmsFitsOneGsm7Segment(t *testing.T) {
 			t.Errorf("%s: %v", tpl.Key, err)
 			continue
 		}
-		if seg := domain.CountSmsSegments(r.Text); seg.Encoding != domain.EncodingGSM7 || seg.Segments > maxSmsSegments(tpl.Key) {
+		if seg := domain.CountSmsSegments(r.Text); (seg.Encoding != domain.EncodingGSM7 && tpl.Locale != "ar" && tpl.Locale != "yo") || seg.Segments > maxSmsSegments(tpl.Key, tpl.Locale) {
 			t.Errorf("%s: %s, %d units, %d segments: %q", tpl.Key, seg.Encoding, seg.Units, seg.Segments, r.Text)
 		}
 	}
