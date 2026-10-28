@@ -1,4 +1,4 @@
-import { keepPreviousData, queryOptions } from '@tanstack/react-query';
+import { infiniteQueryOptions, keepPreviousData, queryOptions } from '@tanstack/react-query';
 
 import { type ApiClient } from '../client';
 import { type SlotQuery } from '../shopper-client';
@@ -68,8 +68,15 @@ export const shopperQueries = {
   orders: (api: ApiClient) => queryOptions({ queryKey: orderKeys.lists(), queryFn: ({ signal }) => api.getOrderPage(undefined, signal), staleTime: 30_000 }),
   order: (api: ApiClient, orderNumber: string) =>
     queryOptions({ queryKey: orderKeys.detail(orderNumber), queryFn: ({ signal }) => api.getOrder(orderNumber, signal), staleTime: 30_000 }),
+  /** My help requests, newest first; `fetchNextPage` follows nextCursor. */
   helpRequests: (api: ApiClient) =>
-    queryOptions({ queryKey: helpRequestKeys.lists(), queryFn: ({ signal }) => api.getHelpRequests(undefined, signal), staleTime: 30_000 }),
+    infiniteQueryOptions({
+      queryKey: helpRequestKeys.lists(),
+      queryFn: ({ pageParam, signal }) => api.getHelpRequests(pageParam, signal),
+      initialPageParam: undefined as string | undefined,
+      getNextPageParam: (last) => last.nextCursor ?? undefined,
+      staleTime: 30_000
+    }),
   helpRequest: (api: ApiClient, id: string) =>
     queryOptions({ queryKey: helpRequestKeys.detail(id), queryFn: ({ signal }) => api.getHelpRequest(id, signal), staleTime: 30_000 }),
   security: (api: ApiClient) => queryOptions({ queryKey: securityKeys.overview(), queryFn: ({ signal }) => api.getSecurity(signal), staleTime: 0 }),

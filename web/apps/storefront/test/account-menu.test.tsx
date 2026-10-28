@@ -11,7 +11,7 @@ const guest: Me = { authenticated: false, user: null, counts: null };
 const ada: Me = {
   authenticated: true,
   user: { id: 'u1', firstName: 'Adaeze', lastName: 'Nwosu', email: 'adaeze@example.com', initials: 'AN', roles: ['customer'] },
-  counts: { orders: 2, returns: 1, addresses: 2, paymentMethods: 3 }
+  counts: { orders: 2, addresses: 2, paymentMethods: 3 }
 };
 
 describe('avatar menu variants', () => {
@@ -34,7 +34,7 @@ describe('avatar menu variants', () => {
     expect(labels).toEqual([
       'Your account',
       'Your orders2',
-      'Returns & refunds1',
+      'Get help with an order',
       'Addresses2',
       'Payment methods3',
       'Login & security',
