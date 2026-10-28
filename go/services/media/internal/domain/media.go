@@ -29,6 +29,7 @@ const (
 // Content types beyond images.
 const (
 	ContentTypePDF  = "application/pdf"
+	ContentTypeHEIC = "image/heic"
 	ContentTypeCSV  = "text/csv"
 	ContentTypeXLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
@@ -91,8 +92,11 @@ func RulesFor(p Purpose) (Rules, error) {
 		return Rules{MaxBytes: 8 << 20, ContentTypes: images, Public: true, MinEdge: 500}, nil
 	case PurposeStorefront:
 		return Rules{MaxBytes: 8 << 20, ContentTypes: images, Public: true}, nil
-	case PurposeProofPhoto, PurposeReturnPhoto:
+	case PurposeProofPhoto:
 		return Rules{MaxBytes: 10 << 20, ContentTypes: images}, nil
+	case PurposeReturnPhoto:
+		// Evidence photos of a help request come straight from phones, which shoot HEIC.
+		return Rules{MaxBytes: 10 << 20, ContentTypes: append(slices.Clone(images), ContentTypeHEIC)}, nil
 	case PurposeKYCDocument:
 		return Rules{MaxBytes: 15 << 20, ContentTypes: append(images, ContentTypePDF)}, nil
 	case PurposePurchaseOrder:
