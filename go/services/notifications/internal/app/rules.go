@@ -332,6 +332,10 @@ var DefaultEventRules = map[string][]EventRule{
 	"payments.gift_card.deliver": {{Topic: TopicPayments, Template: "payment.gift_card.delivered", Channels: chEmail,
 		Recipient: RecipientPayload, Enrich: enrichGiftCard}},
 
+	// ---- referrals (at.payment.events), S322: AfroTransact pays both sides; each is told in their own language ----
+	"payments.referral.rewarded": {{Topic: TopicPayments, Template: "payment.referral.rewarded", Channels: chEmail,
+		Recipient: RecipientUser, IDField: "customerId", Enrich: enrichReferralRewarded}},
+
 	// ---- trust & safety (at.trustops.events), S230 ----
 	"trustops.claim.opened": {
 		{Topic: TopicTrustOps, Template: "claim.opened", Channels: chEmailPush, Recipient: RecipientUser,
@@ -591,6 +595,23 @@ func enrichGiftCard(d map[string]any, l Links) {
 	d["amount"] = moneyField(d, "amountMinor")
 	nullable(d, "recipientName", "senderName", "message", "code")
 	d["redeemUrl"] = join(l.Storefront, "/account/credit")
+}
+
+// enrichReferralRewarded words one side's reward: credit as an amount, membership as days. The friend's name arrives as
+// first name and last initial; the button goes to the credit page, or to the referrals page for membership days.
+func enrichReferralRewarded(d map[string]any, l Links) {
+	nullable(d, "friendName")
+	setDefault(d, "friendName", "your friend")
+	d["isReferrer"] = str(d, "side") == "REFERRER"
+	d["isCredit"] = str(d, "rewardType") != "MEMBERSHIP_DAYS"
+	d["amount"] = moneyField(d, "creditMinor")
+	if n, ok := integer(d, "membershipDays"); ok {
+		d["days"] = n
+	} else {
+		d["days"] = 0
+	}
+	d["creditUrl"] = join(l.Storefront, "/account/credit")
+	d["referUrl"] = join(l.Storefront, "/account/refer")
 }
 
 func enrichPayout(d map[string]any, l Links) {
