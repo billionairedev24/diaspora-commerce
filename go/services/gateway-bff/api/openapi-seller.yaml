@@ -59,6 +59,12 @@ tags:
     description: The organisation's product image library (files, folders, ZIPs) matched to listings by SKU file names (S310)
   - name: Returns & disputes
     description: Customer returns and their refunds (tax-returns) and disputes or A-to-z claims against the organisation (trust-ops), read only
+  - name: Reviews
+    description: |
+      Verified-purchase reviews of the organisation's products (S324, catalog): the published reviews with the star
+      rating, photos and first name and last initial of the reviewer (the customer is never identified), one public
+      reply per review, and reports. Sellers cannot edit, hide or remove a review: only Trust & Safety can, after a
+      report or when a review fails the automatic checks.
   - name: Money
     description: Payouts, plan and billing
   - name: Team
@@ -836,6 +842,75 @@ paths:
         '200': {description: Disputes, content: {application/json: {schema: {$ref: '#/components/schemas/SellerDisputeList'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/reviews:
+    get:
+      tags: [Reviews]
+      operationId: listSellerReviews
+      security: [{sessionCookie: []}]
+      summary: Published reviews of the organisation's products, newest first
+      description: |
+        catalog `GET /v1/seller/reviews` with the member's token (module Reviews). Only published reviews are listed; the
+        customer is never identified. `unanswered=true` lists the reviews that still wait for a reply.
+      parameters:
+        - {name: unanswered, in: query, required: false, schema: {type: boolean, default: false}}
+        - {name: page, in: query, required: false, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200': {description: One page of reviews, content: {application/json: {schema: {$ref: '#/components/schemas/SellerReviewPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/reviews/{reviewId}/reply:
+    post:
+      tags: [Reviews]
+      operationId: replyToSellerReview
+      security: [{sessionCookie: []}]
+      summary: Reply to a published review, once
+      description: |
+        The reply is public next to the review and cannot be edited or deleted. 409 `ALREADY_DONE` when the review already
+        has a reply, 409 `CONFLICT` while it is not published.
+      parameters:
+        - {name: reviewId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: {type: string, minLength: 1, maxLength: 1000}
+      responses:
+        '200': {description: The review with the reply, content: {application/json: {schema: {$ref: '#/components/schemas/SellerReview'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/reviews/{reviewId}/reports:
+    post:
+      tags: [Reviews]
+      operationId: reportSellerReview
+      security: [{sessionCookie: []}]
+      summary: Report a review to Trust & Safety
+      description: "One report per member and review (a repeat answers 200 with `created: false`). The review stays public until Trust & Safety decide."
+      parameters:
+        - {name: reviewId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SellerReviewReportRequest'}
+      responses:
+        '200': {description: Already reported, content: {application/json: {schema: {$ref: '#/components/schemas/SellerReviewReportResult'}}}}
+        '201': {description: Reported, content: {application/json: {schema: {$ref: '#/components/schemas/SellerReviewReportResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/coupons:
     get:
@@ -2527,7 +2602,7 @@ components:
     AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
     ModuleKey:
       type: string
-      enum: [onboarding, home, orders, returns, disputes, listings, inventory, coupons, calendar, requests, hours, services, policy, earnings, payouts, fees, billing, account-health, team]
+      enum: [onboarding, home, orders, returns, disputes, listings, reviews, inventory, coupons, calendar, requests, hours, services, policy, earnings, payouts, fees, billing, account-health, team]
     SellerUser:
       type: object
       required: [id, firstName, lastName, email, initials]
@@ -3353,6 +3428,53 @@ components:
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/SellerDispute'}}
         total: {type: integer}
+    SellerReviewPhoto:
+      type: object
+      required: [url]
+      properties:
+        url: {type: string, format: uri}
+    SellerReviewReply:
+      type: object
+      required: [text, at]
+      properties:
+        text: {type: string}
+        at: {type: string, format: date-time}
+    SellerReview:
+      type: object
+      description: A published, verified-purchase review of one of the organisation's products. The customer is never identified.
+      required: [id, atin, productTitle, reviewerName, rating, title, text, photos, verifiedPurchase, createdAt, reportCount, reply]
+      properties:
+        id: {type: string, format: uuid}
+        atin: {type: string}
+        productTitle: {type: string}
+        reviewerName: {type: string, examples: [Adaeze N.]}
+        rating: {type: integer, minimum: 1, maximum: 5}
+        title: {type: [string, 'null']}
+        text: {type: [string, 'null']}
+        photos: {type: array, items: {$ref: '#/components/schemas/SellerReviewPhoto'}}
+        verifiedPurchase: {type: boolean}
+        createdAt: {type: string, format: date-time}
+        reportCount: {type: integer, minimum: 0}
+        reply: {oneOf: [{$ref: '#/components/schemas/SellerReviewReply'}, {type: 'null'}]}
+    SellerReviewPage:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/SellerReview'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+    SellerReviewReportRequest:
+      type: object
+      required: [reasonCode]
+      properties:
+        reasonCode: {type: string, enum: [ABUSIVE, PERSONAL_INFORMATION, SPAM, OFF_TOPIC, CONFLICT_OF_INTEREST, OTHER]}
+        details: {type: string, maxLength: 500, description: Required for OTHER}
+    SellerReviewReportResult:
+      type: object
+      required: [created]
+      properties:
+        created: {type: boolean}
     SellerCouponList:
       type: object
       required: [items]
