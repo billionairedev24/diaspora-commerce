@@ -38,5 +38,9 @@ public enum JournalType {
     /** A gift card redeemed into credit: Dr 2650 / Cr 2600. */
     GIFT_CARD_REDEEMED,
     /** An unredeemed gift card voided: Dr 2650 / Cr 1000 (bought, refunded to the card) or Cr 5200 (issued). */
-    GIFT_CARD_VOIDED
+    GIFT_CARD_VOIDED,
+    /** A membership fee charged to a shopper's card: Dr 1000, Dr 5000 / Cr 4700 (S323). */
+    MEMBERSHIP_CHARGE,
+    /** A membership fee refunded to the card: Dr 4700 / Cr 1000 (S323). */
+    MEMBERSHIP_REFUND
 }

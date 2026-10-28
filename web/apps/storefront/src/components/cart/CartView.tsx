@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 
+import { CartMembershipUpsell } from '@/components/membership/MembershipUpsell';
 import { CartPreorderHeader, CartPreorderSummary, CartShipsNowHeader, FulfilmentChoice, RunNote } from '@/components/preorder/CartPreorder';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
@@ -280,6 +281,7 @@ export function CartView() {
           <span style={{ fontSize: 'var(--at-text-lg)' }}>
             {subtotal} <strong data-testid="cart-subtotal">{fmt.money(cart.subtotalMinor, cart.currency)}</strong>
           </span>
+          {cart.selectedCount > 0 && <CartMembershipUpsell subtotalMinor={cart.subtotalMinor} selectedCount={cart.selectedCount} />}
           <label className={styles.gift}>
             <input type="checkbox" checked={gift} onChange={(e) => setGift(e.target.checked)} />
             {t('cart.gift')}

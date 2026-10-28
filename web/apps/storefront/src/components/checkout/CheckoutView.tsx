@@ -147,7 +147,8 @@ export function CheckoutView() {
   /** Optimistic total: shipping follows UI choices immediately; tax and coupon discounts follow the BFF summary. */
   const total = useMemo(() => {
     if (!s) return 0;
-    const ship = Math.max(0, selectedShipping - (s.shippingDiscountMinor ?? 0));
+    // The membership's waiver (S323) comes from the summary: it follows the delivery options the BFF last priced.
+    const ship = Math.max(0, selectedShipping - (s.shippingDiscountMinor ?? 0) - (s.membershipWaivedMinor ?? 0));
     return s.subtotalMinor - (s.discountMinor ?? 0) + ship + s.taxMinor;
   }, [s, selectedShipping]);
   // Credit first, never more than the balance, at least 0.50 left for the card (the rule payments applies).

@@ -483,13 +483,11 @@ type OrderLine struct {
 	PackageID   string `json:"packageId"`
 }
 
-// OrdersClient calls the orders service (orders, shipment cancel, returns).
+// OrdersClient calls the orders service (orders, shipment cancel).
 type OrdersClient interface {
 	List(ctx context.Context, bearer, cursor string, limit int) (domain.Page[domain.OrderSummary], error)
 	Place(ctx context.Context, bearer, idempotencyKey string, req domain.PlaceOrderRequest, lines []OrderLine) (PlaceOrderResult, error)
 	CancelShipment(ctx context.Context, bearer, orderNumber, shipmentID string) (domain.OrderSummary, error)
-	Returns(ctx context.Context, bearer string) (domain.Page[domain.ReturnSummary], error)
-	StartReturn(ctx context.Context, bearer string, r domain.StartReturn) (domain.ReturnSummary, error)
 }
 
 // StockAlertInput arms a back-in-stock alert (notifications POST /v1/stock-alerts).

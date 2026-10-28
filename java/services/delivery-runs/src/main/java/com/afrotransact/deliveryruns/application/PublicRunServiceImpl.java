@@ -1,6 +1,7 @@
 package com.afrotransact.deliveryruns.application;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
@@ -60,6 +61,12 @@ class PublicRunServiceImpl implements PublicRunService {
     @Override
     @Transactional(readOnly = true)
     public List<AvailableRun> available(String zip, Double lat, Double lng) {
+        return available(zip, lat, lng, 0);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AvailableRun> available(String zip, Double lat, Double lng, int earlyAccessHours) {
         Optional<GeoPoint> point = point(zip, lat, lng);
         if (point.isEmpty()) {
             return List.of();
@@ -88,7 +95,12 @@ class PublicRunServiceImpl implements PublicRunService {
         Instant now = Instant.now(clock);
         List<AvailableRun> out = new ArrayList<>();
         Map<UUID, Optional<FeeSnapshot>> doorRules = new HashMap<>();
-        for (Run run : runs.findAccepting(covering.keySet(), now)) {
+        List<Run> takingOrders = new ArrayList<>(runs.findAccepting(covering.keySet(), now));
+        if (earlyAccessHours > 0) {
+            takingOrders.addAll(runs.findAnnouncedOpeningBy(covering.keySet(), now,
+                    now.plus(Duration.ofHours(earlyAccessHours))));
+        }
+        for (Run run : takingOrders) {
             Location location = covering.get(run.locationId());
             Optional<FeeSnapshot> doorRule = doorRules.computeIfAbsent(run.locationId(),
                     id -> fees.doorFeeAt(location, run.terms().currency()));

@@ -15,7 +15,7 @@ type creditImpl struct{ c httpclient.Client }
 
 var _ port.CreditClient = (*creditImpl)(nil)
 
-// NewCredit returns the payments client for the shopper's credit, gift cards and card-refund choice (customer token).
+// NewCredit returns the payments client for the shopper's credit, gift cards (customer token).
 func NewCredit(c httpclient.Client) port.CreditClient { return &creditImpl{c: c} }
 
 func (p *creditImpl) Balance(ctx context.Context, bearer string) (port.UpCreditBalance, error) {
@@ -68,12 +68,5 @@ func (p *creditImpl) Redeem(ctx context.Context, bearer, code, clientAddress str
 	}
 	_, err := call(ctx, p.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/gift-cards/redeem", Bearer: bearer,
 		JSON: map[string]string{"code": code}, Header: h}, &out)
-	return out, err
-}
-
-func (p *creditImpl) ChooseCreditRefunds(ctx context.Context, bearer, orderID string) (port.UpCreditRefundChoice, error) {
-	var out port.UpCreditRefundChoice
-	_, err := call(ctx, p.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/customers/me/orders/" + url.PathEscape(orderID) + "/credit-refunds",
-		Bearer: bearer, RetryUnsafe: true}, &out)
 	return out, err
 }

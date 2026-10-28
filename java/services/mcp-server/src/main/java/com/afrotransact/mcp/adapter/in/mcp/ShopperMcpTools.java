@@ -95,9 +95,10 @@ class ShopperMcpTools {
         return shopper.myOrderHistory(McpCallerExtractor.caller(context), cursor);
     }
 
-    @McpTool(name = ToolCatalog.START_RETURN_PROPOSAL, title = "Propose a return",
-            description = "Prepare (do not perform) a return request for an order. Returns a PROPOSED action the user "
-                    + "must confirm.",
+    @McpTool(name = ToolCatalog.START_RETURN_PROPOSAL, title = "Propose reporting a problem",
+            description = "Prepare (do not perform) a help request about an order: there is no self-service return, so the "
+                    + "user describes the problem and adds photos and staff resolve it. Returns a PROPOSED action that "
+                    + "opens that form.",
             annotations = @McpTool.McpAnnotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true))
     ToolResult startReturnProposal(McpTransportContext context,
                                    @McpToolParam(description = "Order number") String orderId,

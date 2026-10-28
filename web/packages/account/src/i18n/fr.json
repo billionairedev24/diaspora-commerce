@@ -257,8 +257,8 @@
   "hub.securitySub": "Clés d'accès, validation en deux étapes, comptes liés",
   "hub.orders": "Vos commandes",
   "hub.ordersSub": "Suivre, annuler ou racheter",
-  "hub.returns": "Retours et remboursements",
-  "hub.returnsSub": "Retourner des articles, suivre un remboursement",
+  "hub.help": "Aide pour une commande",
+  "hub.helpSub": "Signalez un problème et suivez notre décision",
   "hub.addresses": "Vos adresses",
   "hub.addressesSub": "Modifier les adresses de livraison",
   "hub.payments": "Vos paiements",
@@ -270,7 +270,7 @@
   "hub.bookings": "Vos rendez-vous",
   "hub.bookingsSub": "Réservations de tresseuses, traiteurs et plus",
   "hub.lola": "Demander à Lola",
-  "hub.lolaSub": "Acheter, suivre et retourner avec l'IA",
+  "hub.lolaSub": "Achetez, suivez et obtenez de l’aide avec l’IA",
   "hub.crumb": "Fil d'Ariane",
   "hub.securityTitle": "Connexion et sécurité",
   "common.showAll": "Tout afficher ({n})",
@@ -280,5 +280,7 @@
   "hub.credit": "Crédit AfroTransact",
   "hub.creditSub": "Solde, historique et cartes cadeaux",
   "hub.refer": "Parrainer un ami",
-  "hub.referSub": "Partagez votre code, gagnez des récompenses"
+  "hub.referSub": "Partagez votre code, gagnez des récompenses",
+  "hub.membership": "Abonnement",
+  "hub.membershipSub": "Formule, avantages et facturation"
 }

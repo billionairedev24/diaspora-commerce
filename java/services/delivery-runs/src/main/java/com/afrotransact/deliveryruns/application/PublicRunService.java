@@ -14,6 +14,12 @@ public interface PublicRunService {
      */
     List<AvailableRun> available(String zip, Double lat, Double lng);
 
+    /**
+     * The same for a member with early access (S323): announced runs opening within {@code earlyAccessHours} are listed
+     * too. The run itself only takes the member's order when the reservation names the same hours.
+     */
+    List<AvailableRun> available(String zip, Double lat, Double lng, int earlyAccessHours);
+
     /** Active locations, by name. */
     List<Location> locations();
 

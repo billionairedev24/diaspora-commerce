@@ -9,7 +9,6 @@ export type CheckoutSummary = Bff['schemas']['CheckoutSummary'];
 export type PlaceOrderRequest = Bff['schemas']['PlaceOrderRequest'];
 export type OrderConfirmation = Bff['schemas']['OrderConfirmation'];
 export type SetupIntent = { clientSecret: string; publishableKey: string };
-export type { ReturnableLine, ReturnEligibility, ReturnMethod, ReturnReason, ReturnSummary, StartReturnRequest } from '@afrotransact/api-client';
 
 export type Booking = Bookings['schemas']['Booking'];
 export type BookingActivity = Bookings['schemas']['BookingActivity'];

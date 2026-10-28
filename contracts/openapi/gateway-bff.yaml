@@ -76,9 +76,13 @@ tags:
   - name: Auth
     description: Session, first-party sign-in/sign-up steps, passkeys and OIDC redirects
   - name: Account
-    description: Addresses, payment methods, orders and returns
+    description: Addresses, payment methods and orders
   - name: Checkout
     description: Checkout summary and order placement
+  - name: Help requests
+    description: >-
+      A delivered order has no self-service refund or return. A customer with a problem describes it and uploads photos;
+      staff resolve it in the disputes and claims tooling and the customer follows the outcome here.
   - name: Referral
     description: |
       Refer a friend (S322, ADR 0006). Every customer has a code and a share link. When a friend signs up with it and
@@ -90,6 +94,13 @@ tags:
       before the card and gets from refunds, gift cards, referrals and staff. It only buys products and services:
       nothing in this API pays it out, refunds it to a card or transfers it. A gift card is bought with the normal
       card payment (Stripe Elements), emailed on a chosen date and redeemed once into the recipient's credit.
+  - name: Membership
+    description: |
+      AfroTransact membership (S323, ADR 0006): tiers staff configure (price, trial, benefits), joined on a saved card,
+      upgraded now or changed at the end of the period, canceled with the benefits to the end of the paid period.
+      Benefits: free AfroTransact delivery and shipping (order minimum, per-order cap), cashback as credit, member
+      prices, early access, priority support, bigger referral and gift rewards, a monthly credit. Credit a
+      membership grants only buys products and services; nothing here pays it out. Names, never ids.
   - name: Careers
     description: Open roles and applications
   - name: Services
@@ -1234,46 +1245,6 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
-  /v1/account/returns:
-    get:
-      tags: [Account]
-      operationId: listReturns
-      summary: Returns of the signed-in customer (all, or one order's)
-      security: [{sessionCookie: []}, {bearer: []}]
-      parameters:
-        - {name: orderNumber, in: query, schema: {type: string}, description: Only this order's returns}
-      responses:
-        '200':
-          description: Returns
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ReturnPage'}
-        '401': {$ref: '#/components/responses/Problem'}
-        '404': {$ref: '#/components/responses/Problem'}
-        '503': {$ref: '#/components/responses/Problem'}
-    post:
-      tags: [Account]
-      operationId: startReturn
-      summary: Start a return for delivered items (tax-returns RMA with label / QR, handover code or refund without return)
-      security: [{sessionCookie: []}, {bearer: []}]
-      parameters:
-        - $ref: '#/components/parameters/OptionalIdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/StartReturnRequest'}
-      responses:
-        '201':
-          description: Return started
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ReturnSummary'}
-        '401': {$ref: '#/components/responses/Problem'}
-        '404': {$ref: '#/components/responses/Problem'}
-        '409': {$ref: '#/components/responses/Problem'}
-        '422': {$ref: '#/components/responses/ValidationProblem'}
-        '503': {$ref: '#/components/responses/Problem'}
   /v1/account/stock-alerts:
     get:
       tags: [Account]
@@ -1639,28 +1610,169 @@ paths:
               schema: {$ref: '#/components/schemas/AccountReferral'}
         '401': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
-  /v1/account/orders/{orderNumber}/credit-refunds:
-    post:
-      tags: [Credit]
-      operationId: chooseCreditRefunds
-      summary: Take the card part of my order's refunds as credit (one way)
-      description: |
-        A refund goes back to what paid each part: the part paid with credit comes back as credit and the part paid
-        with the card to the card. This chooses credit for the card part of every later refund of the order. It is one
-        way: credit never goes back to a card or to cash, and refunds already sent to the card stay there.
-        409 `NO_CARD_PORTION` when the order was paid with credit only.
-      security: [{sessionCookie: []}, {bearer: []}]
-      parameters:
-        - {name: orderNumber, in: path, required: true, schema: {type: string}}
+  /v1/membership/tiers:
+    get:
+      tags: [Membership]
+      operationId: getMembershipOffer
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: The membership tiers a shopper can join (public)
+      description: payments `GET /v1/memberships/tiers`; only published tiers, entry tier first.
       responses:
         '200':
-          description: Chosen
+          description: Tiers
           content:
             application/json:
-              schema: {$ref: '#/components/schemas/CreditRefundChoice'}
+              schema: {$ref: '#/components/schemas/MembershipOffer'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/membership:
+    get:
+      tags: [Membership]
+      operationId: getAccountMembership
+      summary: My membership, what it gives, what I used and the refund rule
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: My membership (`member` false and `membership` null when I am not a member)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MembershipAccount'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Membership]
+      operationId: joinAccountMembership
+      summary: Join a tier on a saved card (a trial first when I am eligible)
+      description: |
+        Requires `Idempotency-Key` (16 to 64 characters); replaying it returns the original result. A first-time member
+        on a card that never had a trial starts the tier's trial and pays nothing now; otherwise the first period is
+        charged. 409 `MEMBERSHIP_EXISTS` when already a member, `MEMBERSHIP_TIER_UNAVAILABLE`; 422 `MEMBERSHIP_NO_CARD`,
+        `MEMBERSHIP_CHARGE_FAILED` (nothing was charged).
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 16, maxLength: 64}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MembershipPlanRequest'}
+      responses:
+        '201':
+          description: Joined
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MembershipAccount'}
         '401': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Membership]
+      operationId: changeAccountMembership
+      summary: Change my plan (upgrade now with proration; a lower tier or another interval at the end of the period)
+      description: |
+        Requires `Idempotency-Key`. Naming my current plan takes a scheduled change back. 404 `MEMBERSHIP_NOT_FOUND`;
+        409 `MEMBERSHIP_PAST_DUE`, `MEMBERSHIP_NO_CHANGE`, `MEMBERSHIP_COMPLIMENTARY`.
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 16, maxLength: 64}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MembershipPlanRequest'}
+      responses:
+        '200':
+          description: Changed or scheduled
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MembershipAccount'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/membership/cancel:
+    post:
+      tags: [Membership]
+      operationId: cancelAccountMembership
+      summary: Cancel my membership (benefits run to the end of the period) or cancel with a refund
+      description: |
+        The refund rule: a full refund to the card when canceling within the window after a charge and before any benefit
+        was used (the account's `refund` says whether it applies); the membership then ends now. Otherwise 409
+        `MEMBERSHIP_REFUND_NOT_ELIGIBLE` and nothing changes. Without `refund` the membership stops renewing and the
+        benefits last to the end of the paid period.
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/MembershipCancelRequest'}
+      responses:
+        '200':
+          description: Canceled
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MembershipAccount'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/membership/resume:
+    post:
+      tags: [Membership]
+      operationId: resumeAccountMembership
+      summary: Take back a cancellation or a scheduled change
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Resumed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MembershipAccount'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/membership/benefits:
+    get:
+      tags: [Membership]
+      operationId: listAccountMembershipBenefits
+      summary: The benefits I used (fees waived, cashback, monthly credit), newest first
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: Benefits used
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MembershipBenefitUsePage'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/cart/membership:
+    get:
+      tags: [Membership]
+      operationId: getCartMembershipSavings
+      summary: What membership does for my cart; if I am not a member, "Join Plus to save $X on this order"
+      description: |
+        Priced by payments with the delivery options the shopper would get. Delivery fees are waived by the tier's rules
+        (order minimum, per-order cap); pickup and express never are. Best effort: without an answer `waivers` is empty
+        and there is no `upsell`.
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Savings
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MembershipSavings'}
+        '401': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/gift-cards/config:
     get:
@@ -2041,58 +2153,6 @@ paths:
               schema: {$ref: '#/components/schemas/OrderTracking'}
         '401': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
-        '503': {$ref: '#/components/responses/Problem'}
-  /v1/account/orders/{orderNumber}/returnable:
-    get:
-      tags: [Account]
-      operationId: getReturnEligibility
-      summary: What can be returned from a delivered order (tax-returns eligibility per shipment and line)
-      security: [{sessionCookie: []}, {bearer: []}]
-      parameters:
-        - {name: orderNumber, in: path, required: true, schema: {type: string}}
-      responses:
-        '200':
-          description: Eligibility
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ReturnEligibility'}
-        '401': {$ref: '#/components/responses/Problem'}
-        '404': {$ref: '#/components/responses/Problem'}
-        '503': {$ref: '#/components/responses/Problem'}
-  /v1/account/returns/{rmaId}:
-    get:
-      tags: [Account]
-      operationId: getReturn
-      summary: One of my returns with its lines and the refund estimate (tax-returns refund quote)
-      security: [{sessionCookie: []}, {bearer: []}]
-      parameters:
-        - {name: rmaId, in: path, required: true, schema: {type: string}, description: 'The return id, or its number (RMA-XXXXXXXX, e.g. scanned from the QR code)'}
-      responses:
-        '200':
-          description: Return
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ReturnDetail'}
-        '401': {$ref: '#/components/responses/Problem'}
-        '404': {$ref: '#/components/responses/Problem'}
-        '503': {$ref: '#/components/responses/Problem'}
-  /v1/account/returns/{rmaId}/cancel:
-    post:
-      tags: [Account]
-      operationId: cancelReturn
-      summary: Cancel a return before drop-off or pickup
-      security: [{sessionCookie: []}, {bearer: []}]
-      parameters:
-        - {name: rmaId, in: path, required: true, schema: {type: string}}
-      responses:
-        '200':
-          description: Cancelled
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ReturnSummary'}
-        '401': {$ref: '#/components/responses/Problem'}
-        '404': {$ref: '#/components/responses/Problem'}
-        '409': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/account/security:
     get:
@@ -3093,6 +3153,122 @@ paths:
               schema: {$ref: '#/components/schemas/ApplicationReceipt'}
         '404': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+  /v1/me/help-requests/uploads:
+    post:
+      tags: [Help requests]
+      operationId: requestHelpEvidenceUpload
+      summary: Signed direct upload for one evidence photo (JPEG, PNG, WebP or HEIC, at most 10 MB)
+      description: |
+        Returns a short-lived URL from the media service (private storage). PUT the photo there with the given
+        headers, then call `…/uploads/{assetId}/complete` and send `assetId` in `evidenceAssetIds` when opening the
+        request (at most 5 photos per request).
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName, contentType, size]
+              properties:
+                fileName: {type: string, maxLength: 200}
+                contentType: {type: string, enum: [image/jpeg, image/png, image/webp, image/heic]}
+                size: {type: integer, format: int64, minimum: 1, maximum: 10485760}
+      responses:
+        '201':
+          description: Upload instructions
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HelpEvidenceUpload'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/me/help-requests/uploads/{assetId}/complete:
+    post:
+      tags: [Help requests]
+      operationId: completeHelpEvidenceUpload
+      summary: Check the uploaded photo (real type and size) and finalise it
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: assetId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Photo ready; use assetId in evidenceAssetIds
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HelpEvidenceAsset'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/me/help-requests:
+    post:
+      tags: [Help requests]
+      operationId: createHelpRequest
+      summary: Report a problem with an order of mine
+      description: |
+        Opens a dispute for staff to resolve; there is no automatic refund or return. The order must be the signed-in
+        customer's (anything else is 404). Amount, currency and seller come from the order, never from the request;
+        with `shipmentId` the claim covers that shipment's items, otherwise the order. Replaying an `Idempotency-Key`
+        returns the request it already created.
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 16, maxLength: 64}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateHelpRequest'}
+      responses:
+        '201':
+          description: Request received
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HelpRequest'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    get:
+      tags: [Help requests]
+      operationId: listHelpRequests
+      summary: My help requests, newest first
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 50, default: 20}}
+      responses:
+        '200':
+          description: Help requests
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HelpRequestPage'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/me/help-requests/{id}:
+    get:
+      tags: [Help requests]
+      operationId: getHelpRequest
+      summary: One of my help requests with its status and the outcome staff recorded
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Help request
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HelpRequest'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     sessionCookie:
@@ -3749,6 +3925,79 @@ components:
         contentType: {type: string}
         bytes: {type: integer, format: int64}
         status: {type: string, enum: [READY]}
+    HelpEvidenceUpload:
+      type: object
+      required: [assetId, upload, maxBytes]
+      properties:
+        assetId: {type: string}
+        maxBytes: {type: integer, format: int64}
+        upload:
+          type: object
+          required: [method, url, headers]
+          properties:
+            method: {type: string}
+            url: {type: string}
+            headers: {type: object, additionalProperties: {type: string}}
+            expiresAt: {type: [string, 'null'], format: date-time}
+    HelpEvidenceAsset:
+      type: object
+      required: [assetId, contentType, bytes, status]
+      properties:
+        assetId: {type: string}
+        contentType: {type: string}
+        bytes: {type: integer, format: int64}
+        status: {type: string, enum: [READY]}
+    HelpRequestType:
+      type: string
+      enum: [ITEM_NOT_RECEIVED, DAMAGED_ITEM, WRONG_ITEM, NOT_AS_DESCRIBED, OTHER]
+    CreateHelpRequest:
+      type: object
+      required: [orderNumber, type, description]
+      properties:
+        orderNumber: {type: string, description: An order of the signed-in customer}
+        shipmentId: {type: string, description: 'The shipment (package) the problem is about; omit for the whole order'}
+        type: {$ref: '#/components/schemas/HelpRequestType'}
+        description: {type: string, minLength: 10, maxLength: 4000}
+        evidenceAssetIds:
+          type: array
+          maxItems: 5
+          items: {type: string}
+          description: Photos uploaded and completed through `/v1/me/help-requests/uploads`
+    HelpRequest:
+      type: object
+      description: A help request in the customer's words. Never carries internal ids, seller identities or staff names.
+      required: [id, reference, orderNumber, type, status, statusLabel, description, evidenceCount, claimedMinor, currency, resolution, createdAt, updatedAt]
+      properties:
+        id: {type: string, description: Use in the URL of this request; show `reference` to people}
+        reference: {type: string, examples: [CLM-0001]}
+        orderNumber: {type: string}
+        type: {$ref: '#/components/schemas/HelpRequestType'}
+        status:
+          type: string
+          enum: [RECEIVED, IN_REVIEW, RESOLVED, CLOSED, WITHDRAWN]
+          description: 'RECEIVED (we have it), IN_REVIEW (our team is looking into it), RESOLVED (refunded), CLOSED (reviewed, no refund), WITHDRAWN'
+        statusLabel: {type: string, description: The status in plain English}
+        description: {type: string}
+        evidenceCount: {type: integer, minimum: 0}
+        claimedMinor: {type: integer, format: int64}
+        currency: {type: string}
+        resolution:
+          type: [object, 'null']
+          description: Set once staff have decided
+          required: [outcome, note, refundMinor, decidedAt]
+          properties:
+            outcome: {type: string, enum: [REFUNDED, NOT_REFUNDED]}
+            note: {type: string, description: What staff told the customer}
+            refundMinor: {type: [integer, 'null'], format: int64, description: 'Goes back to whoever paid, in the same way they paid'}
+            decidedAt: {type: [string, 'null'], format: date-time}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    HelpRequestPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/HelpRequest'}}
+        nextCursor: {type: [string, 'null']}
     FacetBucket:
       type: object
       required: [value, label, count]
@@ -4327,10 +4576,9 @@ components:
         counts:
           type: [object, 'null']
           description: Badges for the account menu.
-          required: [orders, returns, addresses, paymentMethods]
+          required: [orders, addresses, paymentMethods]
           properties:
             orders: {type: integer}
-            returns: {type: integer}
             addresses: {type: integer}
             paymentMethods: {type: integer}
     SignOutRequest:
@@ -4454,42 +4702,14 @@ components:
               promisedBy: {type: [string, 'null']}
               deliveredAt: {type: [string, 'null']}
               deliveryCode: {type: [string, 'null'], description: One-time handover code (hand delivery or perishables)}
-              returnable: {type: boolean, description: A return can be started (show "Return items")}
+              returnable: {type: boolean, description: A problem can be reported with this shipment (there is no self-service return; link to `/account/help/new`)}
               returnWindowEndsAt: {type: [string, 'null'], format: date-time}
-              problemReportOnly: {type: boolean, description: 'Only "Report a problem" is possible (e.g. perishables, window closed)'}
+              problemReportOnly: {type: boolean, description: 'Report a problem is the only route (e.g. perishables, window closed)'}
     OrderPage:
       type: object
       required: [items, nextCursor]
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/OrderSummary'}}
-        nextCursor: {type: [string, 'null']}
-    ReturnSummary:
-      type: object
-      required: [rmaId, orderNumber, title, status, refundMinor]
-      properties:
-        rmaId: {type: string}
-        orderNumber: {type: string}
-        title: {type: string}
-        status: {type: string, description: 'requested, approved, auto_approved, label_issued, in_transit, received, inspected, refunded, rejected, cancelled'}
-        refundMinor: {type: integer, description: 'Refund estimate (tax-returns), then the refunded amount'}
-        number: {type: string, examples: [RMA-0000ABCD]}
-        method: {$ref: '#/components/schemas/ReturnMethod'}
-        reason: {type: string}
-        refundState: {type: string}
-        currency: {type: string}
-        cancellable: {type: boolean}
-        createdAt: {type: [string, 'null']}
-        labelUrl: {type: [string, 'null'], description: Drop-off return label}
-        qrPayload: {type: [string, 'null'], description: Render as the drop-off QR code}
-        handoverCode: {type: [string, 'null'], description: Driver pickup code (DRIVER_PICKUP)}
-        dropOffBy: {type: [string, 'null']}
-        carrier: {type: [string, 'null']}
-        trackingNumber: {type: [string, 'null']}
-    ReturnPage:
-      type: object
-      required: [items, nextCursor]
-      properties:
-        items: {type: array, items: {$ref: '#/components/schemas/ReturnSummary'}}
         nextCursor: {type: [string, 'null']}
     CheckoutCouponSellerShare:
       type: object
@@ -4525,7 +4745,7 @@ components:
           description: Per-seller discount totals for settlement preview
     CheckoutSummary:
       type: object
-      required: [packages, addresses, paymentMethods, subtotalMinor, shippingMinor, discountMinor, shippingDiscountMinor, taxMinor, taxRateLabel, totalMinor, currency, sellerCount]
+      required: [packages, addresses, paymentMethods, subtotalMinor, shippingMinor, discountMinor, shippingDiscountMinor, taxMinor, taxRateLabel, totalMinor, currency, sellerCount, membershipWaivedMinor]
       properties:
         packages:
           type: array
@@ -4533,7 +4753,9 @@ components:
             allOf:
               - $ref: '#/components/schemas/CartPackage'
               - type: object
+                required: [membershipWaivedMinor]
                 properties:
+                  membershipWaivedMinor: {type: integer, format: int64, description: The part of this package's delivery fee the membership waives (S323)}
                   localDelivery:
                     $ref: '#/components/schemas/CheckoutLocalDelivery'
                   pickupPoints:
@@ -4571,6 +4793,11 @@ components:
           allOf:
             - $ref: '#/components/schemas/CheckoutCredit'
           description: What my AfroTransact credit would pay of this order (S320); absent when I have no credit
+        membershipWaivedMinor: {type: integer, format: int64, description: 'The delivery fee my membership waives on this order (S323): shippingMinor stays the fees as priced and totalMinor is lower by this amount'}
+        membership:
+          allOf:
+            - $ref: '#/components/schemas/MembershipSavings'
+          description: 'Which fees were waived ("fee waived: membership") or, when I am not a member, the upsell "Join Plus to save $X on this order"; absent when there is nothing to say'
     CheckoutLocalDelivery:
       type: object
       description: |
@@ -4801,6 +5028,174 @@ components:
         currency: {type: string}
         entries: {type: array, items: {$ref: '#/components/schemas/CreditEntry'}}
         nextBefore: {type: [string, 'null'], description: Pass as `before` for older entries; null on the last page}
+    MembershipBenefit:
+      type: object
+      description: One benefit of a tier. Only the numbers the benefit takes are set.
+      required: [code, minOrderMinor, capMinor, percentBps, hours, amountMinor]
+      properties:
+        code: {type: string, enum: [FREE_DELIVERY, FREE_SHIPPING, CASHBACK, MEMBER_PRICES, EARLY_ACCESS, PRIORITY_SUPPORT, BOOSTED_REWARDS, MONTHLY_CREDIT]}
+        minOrderMinor: {type: [integer, 'null'], format: int64, description: Goods subtotal an order needs (free delivery, free shipping, cashback)}
+        capMinor: {type: [integer, 'null'], format: int64, description: The most the benefit is worth on one order; null for no cap}
+        percentBps: {type: [integer, 'null'], description: Hundredths of a percent (cashback share, or the extra on referral and gift rewards)}
+        hours: {type: [integer, 'null'], description: Hours before everyone else a member can order from pre-order windows and delivery runs}
+        amountMinor: {type: [integer, 'null'], format: int64, description: Credit granted each month}
+    MembershipTier:
+      type: object
+      required: [code, name, description, sortOrder, currency, monthlyPriceMinor, yearlyPriceMinor, trialDays, benefits]
+      properties:
+        code: {type: string}
+        name: {type: string, examples: [Plus]}
+        description: {type: string}
+        sortOrder: {type: integer, description: Lower is the entry tier; a higher order is an upgrade}
+        currency: {type: string}
+        monthlyPriceMinor: {type: integer, format: int64}
+        yearlyPriceMinor: {type: integer, format: int64}
+        trialDays: {type: integer}
+        benefits: {type: array, items: {$ref: '#/components/schemas/MembershipBenefit'}}
+    MembershipOffer:
+      type: object
+      required: [tiers]
+      properties:
+        tiers: {type: array, items: {$ref: '#/components/schemas/MembershipTier'}}
+    MembershipSummary:
+      type: object
+      required: [status, source, tierCode, tierName, interval, priceMinor, currency, startedAt, periodEnd, trialEnd, cancelAtPeriodEnd, endedAt, pendingTierCode, pendingTierName, pendingInterval, nextRetryAt, freeDaysGranted]
+      properties:
+        status: {type: string, enum: [TRIALING, ACTIVE, PAST_DUE, CANCELED, LAPSED, EXPIRED], description: 'PAST_DUE: a renewal failed and retries run; the benefits stay until it lapses'}
+        source: {type: string, enum: [PAID, COMPLIMENTARY]}
+        tierCode: {type: string}
+        tierName: {type: string}
+        interval: {type: string, enum: [MONTHLY, YEARLY]}
+        priceMinor: {type: integer, format: int64, description: What I pay each period, locked at sign-up or the last plan change}
+        currency: {type: string}
+        startedAt: {type: string, format: date-time}
+        periodEnd: {type: string, format: date-time, description: The renewal date, or when the benefits end for a canceled or complimentary membership}
+        trialEnd: {type: [string, 'null'], format: date-time}
+        cancelAtPeriodEnd: {type: boolean}
+        endedAt: {type: [string, 'null'], format: date-time}
+        pendingTierCode: {type: [string, 'null']}
+        pendingTierName: {type: [string, 'null']}
+        pendingInterval: {type: [string, 'null'], enum: [MONTHLY, YEARLY, null]}
+        nextRetryAt: {type: [string, 'null'], format: date-time}
+        freeDaysGranted: {type: integer}
+    MembershipCharge:
+      type: object
+      required: [kind, amountMinor, currency, status, refundedMinor, periodEnd, createdAt]
+      properties:
+        kind: {type: string, enum: [JOIN, RENEWAL, UPGRADE]}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        status: {type: string, enum: [SUCCEEDED, FAILED, REFUNDED]}
+        refundedMinor: {type: integer, format: int64}
+        periodEnd: {type: [string, 'null'], format: date-time}
+        createdAt: {type: string, format: date-time}
+    MembershipUsage:
+      type: object
+      required: [benefit, uses, amountMinor, currency]
+      properties:
+        benefit: {type: string}
+        uses: {type: integer, format: int64}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+    MembershipRefundRule:
+      type: object
+      description: A full refund to the card when canceling within the window after a charge and before any benefit was used
+      required: [eligible, reason, amountMinor, currency, until, windowDays]
+      properties:
+        eligible: {type: boolean}
+        reason: {type: string, enum: [OK, NOT_PAID, WINDOW_PASSED, BENEFIT_USED, DISABLED]}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        until: {type: [string, 'null'], format: date-time}
+        windowDays: {type: integer}
+    MembershipCard:
+      type: object
+      description: The saved card that is billed (display data only)
+      required: [brand, last4, expMonth, expYear]
+      properties:
+        brand: {type: [string, 'null']}
+        last4: {type: [string, 'null']}
+        expMonth: {type: [integer, 'null']}
+        expYear: {type: [integer, 'null']}
+    MembershipAccount:
+      type: object
+      required: [member, membership, tier, pendingTier, charges, usage, refund, trialAvailable, card, tiers]
+      properties:
+        member: {type: boolean, description: I have the benefits now (trialing, active or past due)}
+        membership: {oneOf: [{$ref: '#/components/schemas/MembershipSummary'}, {type: 'null'}]}
+        tier: {oneOf: [{$ref: '#/components/schemas/MembershipTier'}, {type: 'null'}]}
+        pendingTier: {oneOf: [{$ref: '#/components/schemas/MembershipTier'}, {type: 'null'}], description: The tier a scheduled change moves to at the end of the period}
+        charges: {type: array, items: {$ref: '#/components/schemas/MembershipCharge'}}
+        usage: {type: array, items: {$ref: '#/components/schemas/MembershipUsage'}}
+        refund: {$ref: '#/components/schemas/MembershipRefundRule'}
+        trialAvailable: {type: boolean, description: Joining a tier with a trial starts one}
+        card: {oneOf: [{$ref: '#/components/schemas/MembershipCard'}, {type: 'null'}]}
+        tiers: {type: array, items: {$ref: '#/components/schemas/MembershipTier'}, description: The tiers I can join or move to}
+    MembershipPlanRequest:
+      type: object
+      required: [tierCode, interval]
+      properties:
+        tierCode: {type: string, maxLength: 40}
+        interval: {type: string, enum: [MONTHLY, YEARLY]}
+        paymentMethodId: {type: string, maxLength: 120, description: The saved card to bill; the default card when absent}
+    MembershipCancelRequest:
+      type: object
+      properties:
+        refund: {type: boolean, description: Also refund the latest fee and end the membership now (only when the refund rule allows it)}
+    MembershipBenefitUse:
+      type: object
+      required: [benefit, tierName, amountMinor, currency, createdAt]
+      properties:
+        benefit: {type: string}
+        tierName: {type: string}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        createdAt: {type: string, format: date-time}
+    MembershipBenefitUsePage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/MembershipBenefitUse'}}
+        nextCursor: {type: [string, 'null']}
+    MembershipWaiver:
+      type: object
+      description: 'A delivery fee the membership waived on one package ("fee waived: membership")'
+      required: [packageId, seller, benefit, waivedMinor]
+      properties:
+        packageId: {type: string}
+        seller: {type: string}
+        benefit: {type: string, enum: [FREE_DELIVERY, FREE_SHIPPING]}
+        waivedMinor: {type: integer, format: int64}
+    MembershipUpsell:
+      type: object
+      description: '"Join Plus to save $X on this order"'
+      required: [tierCode, tierName, monthlyPriceMinor, yearlyPriceMinor, trialDays, savingMinor, currency]
+      properties:
+        tierCode: {type: string}
+        tierName: {type: string}
+        monthlyPriceMinor: {type: integer, format: int64}
+        yearlyPriceMinor: {type: integer, format: int64}
+        trialDays: {type: integer}
+        savingMinor: {type: integer, format: int64}
+        currency: {type: string}
+    MembershipSavings:
+      type: object
+      required: [member, tierName, waivers, totalWaivedMinor, cashbackMinor, upsell]
+      properties:
+        member: {type: boolean}
+        tierName: {type: [string, 'null']}
+        waivers: {type: array, items: {$ref: '#/components/schemas/MembershipWaiver'}}
+        totalWaivedMinor: {type: integer, format: int64}
+        cashbackMinor: {type: integer, format: int64, description: 'The credit I earn on this order once it is delivered (cashback); 0 without cashback or during a trial. Credit only buys products and services.'}
+        upsell: {oneOf: [{$ref: '#/components/schemas/MembershipUpsell'}, {type: 'null'}]}
+    OrderMembershipWaiver:
+      type: object
+      description: The shipping fee the shopper's membership waived on this shipment, with the tier and benefit
+      required: [tierName, benefit, waivedMinor]
+      properties:
+        tierName: {type: string}
+        benefit: {type: string}
+        waivedMinor: {type: integer, format: int64}
     CheckoutCredit:
       type: object
       description: What the shopper's credit would pay of this order if used (payments decides when the order is placed)
@@ -4870,14 +5265,6 @@ components:
         friends: {type: array, items: {$ref: '#/components/schemas/ReferralFriend'}}
         asFriend:
           oneOf: [{$ref: '#/components/schemas/ReferralFriend'}, {type: 'null'}]
-    CreditRefundChoice:
-      type: object
-      required: [orderNumber, cardRefundsAsCredit, cardPartMinor, currency]
-      properties:
-        orderNumber: {type: string}
-        cardRefundsAsCredit: {type: boolean}
-        cardPartMinor: {type: integer, format: int64, description: What the card paid for the order}
-        currency: {type: string}
     GiftCardConfig:
       type: object
       required: [minMinor, maxMinor, currency, presetsMinor, terms, publishableKey]
@@ -5061,7 +5448,7 @@ components:
         refundableMinor: {type: integer}
         shippingTaxMinor: {type: integer}
         creditMinor: {type: integer, format: int64, description: The part of the order paid with AfroTransact credit (S320); the card paid the rest}
-        cardRefundsAsCredit: {type: boolean, description: The card part of this order's refunds comes back as credit (the shopper's one-way choice)}
+        cardRefundsAsCredit: {type: boolean, description: "Staff chose credit, with a reason, for the card part of this order's refunds (customers cannot choose); otherwise the card part goes back to the card"}
     OrderDetail:
       type: object
       required: [orderNumber, placedAt, status, currency, itemsMinor, shippingMinor, taxMinor, discountMinor, totalMinor, shipTo, shippingAddress, shipments]
@@ -5110,9 +5497,9 @@ components:
               deliveryCode: {type: [string, 'null'], description: One-time handover code (hand delivery or perishables)}
               lines: {type: array, items: {$ref: '#/components/schemas/OrderLineView'}}
               timeline: {type: array, items: {$ref: '#/components/schemas/TimelineEvent'}}
-              returnable: {type: boolean, description: A return can be started (show "Return items")}
+              returnable: {type: boolean, description: A problem can be reported with this shipment (there is no self-service return; link to `/account/help/new`)}
               returnWindowEndsAt: {type: [string, 'null'], format: date-time}
-              problemReportOnly: {type: boolean, description: Only "Report a problem" is possible}
+              problemReportOnly: {type: boolean, description: Report a problem is the only route}
               localDelivery:
                 oneOf: [{$ref: '#/components/schemas/OrderLocalDelivery'}, {type: 'null'}]
                 description: AfroTransact Delivery from the seller's store (S255); null for other shipments
@@ -5122,6 +5509,9 @@ components:
                   later edits of the rule never change it. Null for flat rates and for AfroTransact Delivery from a
                   seller's store (see localDelivery).
                 oneOf: [{$ref: '#/components/schemas/DeliveryFeeRuleRef'}, {type: 'null'}]
+              membershipWaiver:
+                description: The shipping fee the shopper's membership waived on this shipment, with tier and benefit (S323); null when none
+                oneOf: [{$ref: '#/components/schemas/OrderMembershipWaiver'}, {type: 'null'}]
               pickup:
                 description: Where a pickup shipment is collected (carrier-gateway pickup location); null for other shipments
                 oneOf:
@@ -5178,98 +5568,6 @@ components:
                     priceMinor: {type: integer}
                     returnable: {type: boolean}
               timeline: {type: array, items: {$ref: '#/components/schemas/TimelineEvent'}}
-    ReturnReason:
-      type: string
-      enum: [DAMAGED, DEFECTIVE, WRONG_ITEM, NOT_AS_DESCRIBED, MISSING_PARTS, EXPIRED_OR_SPOILED, ARRIVED_LATE, NO_LONGER_NEEDED, ORDERED_BY_MISTAKE, BETTER_PRICE_AVAILABLE]
-      description: 'Seller fault (photos required for the first four): DAMAGED, DEFECTIVE, WRONG_ITEM, EXPIRED_OR_SPOILED, NOT_AS_DESCRIBED, MISSING_PARTS, ARRIVED_LATE. No fault: the rest.'
-    ReturnMethod:
-      type: string
-      enum: [DROP_OFF, DRIVER_PICKUP, NO_RETURN]
-    StartReturnRequest:
-      type: object
-      description: |
-        One delivered shipment, a method and a reason per line (`shipmentId`, `method`, `lines`). The customer app's
-        short form `{orderNumber, atin, reason}` returns one unit of that item with its first allowed method.
-        Send an `Idempotency-Key` header to make retries safe (one is derived otherwise).
-      required: [orderNumber]
-      properties:
-        orderNumber: {type: string}
-        shipmentId: {type: string}
-        method: {$ref: '#/components/schemas/ReturnMethod'}
-        lines:
-          type: array
-          maxItems: 100
-          items:
-            type: object
-            required: [lineId, quantity, reason]
-            properties:
-              lineId: {type: string}
-              quantity: {type: integer, minimum: 1}
-              reason: {$ref: '#/components/schemas/ReturnReason'}
-              comment: {type: string, maxLength: 500}
-        atin: {$ref: '#/components/schemas/Atin'}
-        reason: {$ref: '#/components/schemas/ReturnReason'}
-    ReturnEligibility:
-      type: object
-      required: [orderNumber, currency, shipments]
-      properties:
-        orderNumber: {type: string}
-        currency: {type: string}
-        shipments:
-          type: array
-          items:
-            type: object
-            required: [shipmentId, sellerName, deliveredAt, lines]
-            properties:
-              shipmentId: {type: string}
-              sellerName: {type: string}
-              deliveredAt: {type: [string, 'null']}
-              lines:
-                type: array
-                items:
-                  type: object
-                  required: [lineId, atin, title, quantity, maxQuantity, unitPriceMinor, eligible, reportProblemOnly, sellerFaultOnly, windowEndsAt, methods, ineligibleReason]
-                  properties:
-                    lineId: {type: string}
-                    atin: {type: string}
-                    title: {type: string}
-                    quantity: {type: integer}
-                    maxQuantity: {type: integer}
-                    unitPriceMinor: {type: integer}
-                    eligible: {type: boolean}
-                    reportProblemOnly: {type: boolean, description: 'Food / perishables: report a problem (seller-fault reasons, refund without return)'}
-                    sellerFaultOnly: {type: boolean}
-                    windowEndsAt: {type: [string, 'null']}
-                    methods: {type: array, items: {$ref: '#/components/schemas/ReturnMethod'}}
-                    ineligibleReason: {type: [string, 'null']}
-    ReturnDetail:
-      allOf:
-        - $ref: '#/components/schemas/ReturnSummary'
-        - type: object
-          required: [lines, quote]
-          properties:
-            lines:
-              type: array
-              items:
-                type: object
-                required: [lineId, atin, title, quantity, unitPriceMinor, reason, outcome]
-                properties:
-                  lineId: {type: string}
-                  atin: {type: string}
-                  title: {type: string}
-                  quantity: {type: integer}
-                  unitPriceMinor: {type: integer}
-                  reason: {type: string}
-                  outcome: {type: [string, 'null']}
-            quote:
-              type: [object, 'null']
-              required: [itemsMinor, shippingMinor, taxMinor, restockingFeeMinor, totalMinor]
-              properties:
-                itemsMinor: {type: integer}
-                shippingMinor: {type: integer}
-                taxMinor: {type: integer}
-                restockingFeeMinor: {type: integer}
-                totalMinor: {type: integer}
     CodeInput:
       type: object
       required: [code]

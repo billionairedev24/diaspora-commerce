@@ -927,6 +927,21 @@ components:
         distanceMiles:
           type: number
           description: The distance the band was chosen by
+    MembershipWaiverView:
+      type: object
+      description: 'A shipping fee the customer''s membership waived (S323): the tier and the benefit that did it and the
+        fee that was not charged. shippingMinor of the shipment is what was charged after it. Not shown to sellers.'
+      properties:
+        tierCode:
+          type: string
+        tierName:
+          type: string
+        benefit:
+          type: string
+          description: FREE_DELIVERY or FREE_SHIPPING
+        waivedMinor:
+          type: integer
+          format: int64
     LocalDeliveryView:
       type: object
       properties:
@@ -1378,6 +1393,8 @@ components:
           $ref: '#/components/schemas/PreorderView'
         deliveryFeeRule:
           $ref: '#/components/schemas/DeliveryFeeRuleView'
+        membershipWaiver:
+          $ref: '#/components/schemas/MembershipWaiverView'
     TimelineEntry:
       type: object
       properties:

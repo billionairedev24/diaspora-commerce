@@ -336,6 +336,16 @@ var DefaultEventRules = map[string][]EventRule{
 	"payments.referral.rewarded": {{Topic: TopicPayments, Template: "payment.referral.rewarded", Channels: chEmail,
 		Recipient: RecipientUser, IDField: "customerId", Enrich: enrichReferralRewarded}},
 
+	// ---- membership (at.payment.events), S323: renewals, failed payments and trials about to end, in the member's language ----
+	"payments.membership.changed": {
+		{Topic: TopicPayments, Template: "payment.membership.renewed", Channels: chEmail, Recipient: RecipientUser, IDField: "customerId",
+			When: fieldIs("event", "RENEWED", "TRIAL_CONVERTED"), Enrich: enrichMembership},
+		{Topic: TopicPayments, Template: "payment.membership.payment_failed", Channels: chEmail, Recipient: RecipientUser, IDField: "customerId",
+			When: fieldIs("event", "RENEWAL_FAILED"), Enrich: enrichMembership},
+		{Topic: TopicPayments, Template: "payment.membership.trial_ending", Channels: chEmail, Recipient: RecipientUser, IDField: "customerId",
+			When: fieldIs("event", "TRIAL_ENDING"), Enrich: enrichMembership},
+	},
+
 	// ---- trust & safety (at.trustops.events), S230 ----
 	"trustops.claim.opened": {
 		{Topic: TopicTrustOps, Template: "claim.opened", Channels: chEmailPush, Recipient: RecipientUser,
@@ -612,6 +622,23 @@ func enrichReferralRewarded(d map[string]any, l Links) {
 	}
 	d["creditUrl"] = join(l.Storefront, "/account/credit")
 	d["referUrl"] = join(l.Storefront, "/account/refer")
+}
+
+// enrichMembership words a membership email: the fee as an amount, the date benefits run to (or the trial ends), whether the
+// plan is yearly, and whether a failed renewal was the last try. Buttons go to the account's membership page, or to the
+// saved cards while a payment is being retried.
+func enrichMembership(d map[string]any, l Links) {
+	d["amount"] = moneyField(d, "amountMinor")
+	d["date"] = friendlyDate(str(d, "periodEnd"))
+	d["isYearly"] = str(d, "interval") == "YEARLY"
+	d["isLapsed"] = str(d, "status") == "LAPSED"
+	d["isTrialConverted"] = str(d, "event") == "TRIAL_CONVERTED"
+	d["manageUrl"] = join(l.Storefront, "/account/membership")
+	if d["isLapsed"] == true {
+		d["actionUrl"] = join(l.Storefront, "/membership")
+	} else {
+		d["actionUrl"] = join(l.Storefront, "/account/payments")
+	}
 }
 
 func enrichPayout(d map[string]any, l Links) {

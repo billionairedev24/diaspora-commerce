@@ -175,7 +175,9 @@ final class RunDtos {
     record ReserveRequest(@NotBlank @Size(max = 80) String orderId, @NotBlank @Size(max = 120) String customerId,
                           @Min(1) @Max(50) @Schema(description = "Default 1") Integer packages,
                           @Schema(description = "Roll over to the location's next open run when this one is full or "
-                                  + "closed (default true)") Boolean allowNextRun) {
+                                  + "closed (default true)") Boolean allowNextRun,
+                          @Min(0) @Max(720) @Schema(description = "S323: the customer's membership lets them take a "
+                                  + "slot on an announced run that opens within this many hours") Integer earlyAccessHours) {
     }
 
     @Schema(name = "SlotReservation")

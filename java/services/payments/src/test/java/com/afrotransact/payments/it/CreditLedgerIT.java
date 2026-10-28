@@ -352,11 +352,11 @@ class CreditLedgerIT extends PaymentsIntegrationTest {
         assertEveryJournalBalances();
         assertThat(balance(order, "2200", "")).isZero();
 
-        // the rest, with the card part taken as credit by the shopper's choice: one way, no card refund
+        // the rest, with the card part taken as credit by staff's choice (with a reason): one way, no card refund
         TestSupport.as(TestSupport.ORDERS_SERVICE);
         JsonNode rest = ok(send("POST", "/v1/payments/" + paymentId + "/refunds", Map.of("lines", List.of(Map.of(
                 "lineId", "L1", "itemsMinor", 2500)), "reason", "The rest was returned", "cardAsCredit", true,
-                "chosenBy", customer), "refund2-" + order), 201);
+                "chosenBy", "fin-maker"), "refund2-" + order), 201);
         assertThat(rest.path("creditMinor").asLong()).isEqualTo(2500);
         assertThat(rest.path("cardMinor").asLong()).isZero();
         assertThat(WIREMOCK.findAll(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/refunds"))
@@ -396,7 +396,7 @@ class CreditLedgerIT extends PaymentsIntegrationTest {
     }
 
     @Test
-    void theShopperOrStaffCanChooseCreditForTheCardPartOfAnOrdersRefundsAndItIsOneWay() {
+    void onlyStaffWithAReasonCanChooseCreditForTheCardPartOfAnOrdersRefundsAndItIsOneWay() {
         String customer = id("cust");
         String order = id("ORD");
         grant(customer, 2000, "PROMO", "promo-" + customer);
@@ -404,10 +404,16 @@ class CreditLedgerIT extends PaymentsIntegrationTest {
         String paymentId = payment.path("id").asString();
         captureOrder(paymentId, order, 5000, 3000, 117);
 
-        // another shopper cannot choose for this order, a missing reason stops staff
-        TestSupport.as(TestSupport.customer(id("other")));
-        problem(send("POST", "/v1/customers/me/orders/" + order + "/credit-refunds", null, null), 403,
-                "payments.not-your-order");
+        // a delivered order has no self-service refund: neither the owner nor another shopper can choose credit,
+        // there is no such route; a missing reason stops staff
+        for (String shopper : List.of(customer, id("other"))) {
+            TestSupport.as(TestSupport.customer(shopper));
+            assertThat(send("POST", "/v1/customers/me/orders/" + order + "/credit-refunds", null, null).statusCode())
+                    .as("no shopper route").isIn(404, 405);
+            assertThat(send("POST", "/v1/orders/" + order + "/credit-refunds", Map.of("reason",
+                    "The customer asked us to refund to credit"), null).statusCode()).as("not a shopper permission")
+                    .isEqualTo(403);
+        }
         TestSupport.as(MAKER);
         problem(send("POST", "/v1/orders/" + order + "/credit-refunds", Map.of("reason", "short"), null), 422,
                 "payments.reason-required");
@@ -415,16 +421,14 @@ class CreditLedgerIT extends PaymentsIntegrationTest {
         problem(send("POST", "/v1/orders/" + order + "/credit-refunds", Map.of("reason",
                 "Finance without the adjust permission"), null), 403, "auth.missing-permission");
 
-        TestSupport.as(TestSupport.customer(customer));
-        JsonNode choice = ok(send("POST", "/v1/customers/me/orders/" + order + "/credit-refunds", null, null));
+        TestSupport.as(MAKER);
+        JsonNode choice = ok(send("POST", "/v1/orders/" + order + "/credit-refunds", Map.of("reason",
+                "Support resolution: refund the card part to credit"), null));
         assertThat(choice.path("cardRefundsAsCredit").asBoolean()).isTrue();
         assertThat(choice.path("cardPartMinor").asLong()).isEqualTo(3000);
-        assertThat(choice.path("chosenBy").asString()).isEqualTo(customer);
-        TestSupport.as(MAKER);
-        ok(send("POST", "/v1/orders/" + order + "/credit-refunds", Map.of("reason",
-                "The customer asked us to refund to credit"), null));
+        assertThat(choice.path("chosenBy").asString()).isEqualTo("fin-maker");
         assertThat(jdbc.sql("select card_as_credit_by from payment where order_id = :o").param("o", order)
-                .query(String.class).single()).isEqualTo(customer);
+                .query(String.class).single()).isEqualTo("fin-maker");
 
         // a refund made later by anyone (a cancelled shipment, a claim) now returns everything as credit
         TestSupport.as(TestSupport.ORDERS_SERVICE);
@@ -445,8 +449,9 @@ class CreditLedgerIT extends PaymentsIntegrationTest {
         String creditOnly = id("ORD");
         grant(customer, 9000, "PROMO", "promo2-" + customer);
         ok(createOrder(creditOnly, customer, 4000, true), 201);
-        TestSupport.as(TestSupport.customer(customer));
-        problem(send("POST", "/v1/customers/me/orders/" + creditOnly + "/credit-refunds", null, null), 409,
+        TestSupport.as(MAKER);
+        problem(send("POST", "/v1/orders/" + creditOnly + "/credit-refunds", Map.of("reason",
+                "Support resolution: refund the card part to credit"), null), 409,
                 "payments.no-card-portion");
     }
 

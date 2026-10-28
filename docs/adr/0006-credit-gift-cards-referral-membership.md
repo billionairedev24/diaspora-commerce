@@ -18,8 +18,10 @@ One shopper **credit ledger** is the base of everything; the other three program
    adjustment). The balance is the sum of entries; nothing is updated in place. Spending is atomic and idempotent per order.
    **Store credit can never be converted to cash**: it can only buy products and services. No cash-out, payout, card refund of
    credit or transfer exists in the product or the API; credit does not expire. A refund returns each part to what paid it
-   (credit portion as credit, card portion to the card); the customer, or staff with a reason, may choose credit for the card
-   portion, which is one way.
+   (credit portion as credit, card portion to the card). Customers cannot choose: a delivered order has no self-service
+   refund, so there is no customer-facing "refund the card part as credit" option. Only staff, with a reason (at least 15
+   characters, kept in the audit trail) and inside a support resolution, may send the card portion to credit instead, which
+   is one way.
 2. **Gift cards** are bought with the normal payment, delivered by email on a chosen date, and redeemed into the recipient's
    credit (one redemption, hashed codes, rate limits). Amounts $10–$500, no expiry. Unredeemed cards are a liability, not
    revenue.
@@ -31,7 +33,7 @@ One shopper **credit ledger** is the base of everything; the other three program
 4. **Membership works like Amazon Prime, with configurable tiers.** Staff define tiers (for example Plus and Premium) in
    Settings: monthly and yearly price, trial days and which benefits the tier has, from a menu: free AfroTransact delivery and
    carrier shipping (order minimum and cap), a percent of spend returned as credit, member prices or deals, early access to
-   pre-order windows and runs, priority support, free returns, bigger referral or gift rewards, a monthly credit grant. Defaults
+   pre-order windows and runs, priority support, bigger referral or gift rewards, a monthly credit grant. Defaults
    to seed: Plus $9.99 a month or $99 a year with 14-day trial and free delivery and shipping on orders of at least $25.
    Benefits are applied through the fee rule resolution of ADR 0005 and the credit ledger and recorded on every order. Cancel
    any time; the benefit runs to period end; failed renewals retry, then lapse.
@@ -44,3 +46,8 @@ One shopper **credit ledger** is the base of everything; the other three program
 - One ledger gives finance a single liability figure and gives every program one audit trail.
 - Maker-checker applies to staff grants above a limit, as for ledger adjustments.
 - Numbers (rewards, limits, prices, minimums, tier benefits) live in staff settings, not code.
+
+## Implementation notes
+
+- Membership (S323) is built in payments; see [docs/engineering/membership.md](../engineering/membership.md) for the model, the refund rule, billing and retries, what is not built (member prices, free returns hook, annual fee deferral).
+- There is no "free returns" benefit: the self-service return flow was replaced by customer help requests with evidence, and staff can waive things inside a support resolution.

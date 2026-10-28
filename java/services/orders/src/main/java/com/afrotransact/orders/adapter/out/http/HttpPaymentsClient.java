@@ -58,6 +58,10 @@ class HttpPaymentsClient implements PaymentsClient {
         if (r.useCredit()) {
             body.put("useCredit", true);
         }
+        if (!r.membershipWaivers().isEmpty()) {
+            body.put("membershipWaivers", r.membershipWaivers().stream().map(w -> Map.of("ref", w.ref(), "benefit",
+                    w.benefit(), "amountMinor", w.amountMinor(), "tierCode", w.tierCode())).toList());
+        }
         body.put("lines", r.lines().stream().map(l -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("lineId", l.lineId());

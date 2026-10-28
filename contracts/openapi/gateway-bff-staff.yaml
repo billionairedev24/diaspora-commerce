@@ -6433,7 +6433,7 @@ components:
       enum: [users, roles, applications, organisations, connect-accounts, orders, products, moderation, product-reviews, claims, returns, payouts, inventory, purchase-orders,
         routes, support-cases, audit, markets, site-settings, legal-documents, help-articles, privacy-requests, announcements,
         placements, identity-providers, fee-schedules, tax-rates, tax-codes, tax-rules, tax-review, dispatch-shipments, sos-alerts, vehicle-defects,
-        driver-events, pickup-locations, coupons, reconciliation, reconciliation-runs, ledger-adjustments, credit-adjustments, gift-cards, credit-liabilities, money-settings, referrals, referral-settings, stripe-lookup, payment-settings, tax-settings, maintenance, tax-filings, tax-nexus,
+        driver-events, pickup-locations, coupons, reconciliation, reconciliation-runs, ledger-adjustments, credit-adjustments, gift-cards, credit-liabilities, money-settings, membership-tiers, memberships, membership-settings, membership-report, referrals, referral-settings, stripe-lookup, payment-settings, tax-settings, maintenance, tax-filings, tax-nexus,
         oauth-clients, identity-sessions, signing-keys, auth-settings, exchange-rates]
     Tone: {type: string, enum: [good, warn, bad, info, brand]}
     CellValue:
@@ -6820,11 +6820,21 @@ components:
         refund: {type: boolean}
         resend: {type: boolean}
         cancelShipment: {type: boolean}
+    SupportMembership:
+      type: object
+      required: [tierName, status, prioritySupport]
+      properties:
+        tierName: {type: string, examples: [Plus]}
+        status: {type: string, enum: [TRIALING, ACTIVE, PAST_DUE]}
+        prioritySupport: {type: boolean, description: Handle this customer's cases first}
     Customer360:
       type: object
-      required: [customer, orders, bookings, claims, returns, notifications, cases, audit, refundLimitMinor, can, unavailable]
+      required: [customer, membership, orders, bookings, claims, returns, notifications, cases, audit, refundLimitMinor, can, unavailable]
       properties:
         customer: {$ref: '#/components/schemas/SupportCustomer'}
+        membership:
+          oneOf: [{$ref: '#/components/schemas/SupportMembership'}, {type: 'null'}]
+          description: 'The customer''s membership (S323): the priority-support flag; null when the customer is not a member'
         orders: {type: array, items: {$ref: '#/components/schemas/SupportOrder'}}
         bookings: {type: array, items: {$ref: '#/components/schemas/SupportBooking'}}
         claims: {type: array, items: {$ref: '#/components/schemas/SupportClaim'}}

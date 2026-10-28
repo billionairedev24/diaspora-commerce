@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 
 import com.afrotransact.payments.application.GiftCardService;
+import com.afrotransact.payments.application.MembershipBillingService;
 import com.afrotransact.payments.application.NegotiatedRateService;
 import com.afrotransact.payments.application.ProviderFeeService;
 import com.afrotransact.payments.application.ReferralProgram;
@@ -34,6 +35,7 @@ class PaymentsJobs {
     private final ReconciliationService reconciliation;
     private final NegotiatedRateService negotiatedRates;
     private final GiftCardService giftCards;
+    private final MembershipBillingService membership;
     private final ReferralProgram referrals;
     private final Clock clock;
     private final int webhookBatch;
@@ -43,7 +45,7 @@ class PaymentsJobs {
 
     PaymentsJobs(WebhookService webhooks, SettlementService settlements, ProviderFeeService providerFees,
                  ReconciliationService reconciliation, NegotiatedRateService negotiatedRates, GiftCardService giftCards,
-                 ReferralProgram referrals, Clock clock,
+                 MembershipBillingService membership, ReferralProgram referrals, Clock clock,
                  @Value("${at.payments.jobs.webhook-batch:100}") int webhookBatch,
                  @Value("${at.payments.jobs.settlement-batch:200}") int settlementBatch,
                  @Value("${at.payments.jobs.referral-batch:100}") int referralBatch,
@@ -54,6 +56,7 @@ class PaymentsJobs {
         this.reconciliation = reconciliation;
         this.negotiatedRates = negotiatedRates;
         this.giftCards = giftCards;
+        this.membership = membership;
         this.referrals = referrals;
         this.clock = clock;
         this.webhookBatch = webhookBatch;
@@ -126,6 +129,30 @@ class PaymentsJobs {
                 LOG.info("Referrals: {} settled, {} expired", settled, expired);
             }
         });
+    }
+
+    /** Charges memberships whose period ended: renewals, trial conversions, retries, lapses (S323). */
+    @Scheduled(cron = "${at.payments.jobs.membership-renewal-cron:0 */5 * * * *}")
+    void renewMemberships() {
+        run("membership-renewals", () -> {
+            int processed = membership.renewDue(settlementBatch);
+            if (processed > 0) {
+                LOG.info("Processed {} membership renewals", processed);
+            }
+        });
+    }
+
+    /** The monthly credit of tiers that have one, and any cashback the delivery hook missed (S323). */
+    @Scheduled(cron = "${at.payments.jobs.membership-credit-cron:0 20 * * * *}")
+    void grantMembershipCredits() {
+        run("membership-monthly-credit", () -> {
+            int granted = membership.grantMonthlyCredits(settlementBatch);
+            if (granted > 0) {
+                LOG.info("Granted {} membership monthly credits", granted);
+            }
+        });
+        run("membership-cashback-sweep", () -> membership.grantDueCashback(settlementBatch));
+        run("membership-trial-reminders", () -> membership.remindTrialsEnding(settlementBatch));
     }
 
     private static void run(String job, Runnable body) {

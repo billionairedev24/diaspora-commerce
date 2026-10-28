@@ -186,3 +186,6 @@
   visibility: hidden;
   animation: at-shell-reveal 0s linear 10s forwards;
 }
+
+/* An element marked hidden stays hidden even when a component class sets its display. */
+[hidden] { display: none; }

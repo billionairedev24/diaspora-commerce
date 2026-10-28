@@ -2,11 +2,11 @@
 
 import { accountKeys, cartKeys, type Me } from '@afrotransact/api-client';
 import {
-  ArrowUUpLeft,
   CalendarCheck,
   CaretDown,
   CreditCard,
   Desktop,
+  Headset,
   MapPin,
   Menu,
   MenuGroup,
@@ -36,7 +36,7 @@ import { type AccountMenuIcon, accountMenuModel, signOutReturnTo } from './accou
 const ICONS: Record<AccountMenuIcon, ReactNode> = {
   user: <UserCircle aria-hidden />,
   package: <Package aria-hidden />,
-  returns: <ArrowUUpLeft aria-hidden />,
+  help: <Headset aria-hidden />,
   pin: <MapPin aria-hidden />,
   card: <CreditCard aria-hidden />,
   shield: <ShieldCheck aria-hidden />,
@@ -51,13 +51,15 @@ const ICONS: Record<AccountMenuIcon, ReactNode> = {
 export interface AccountMenuProps {
   me: Me | undefined;
   onAskLola: () => void;
+  /** The tier name of a member ("Plus"), shown as a badge under the name. */
+  memberTier?: string | null;
   /** Render the menu inline (tests). */
   inline?: boolean;
   defaultOpen?: boolean;
 }
 
 /** Circular avatar with a dropdown: "Welcome, Guest" (sign in / create account) or the signed-in account menu. */
-export function AccountMenu({ me, onAskLola, inline, defaultOpen }: AccountMenuProps) {
+export function AccountMenu({ me, onAskLola, inline, defaultOpen, memberTier }: AccountMenuProps) {
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
@@ -105,6 +107,11 @@ export function AccountMenu({ me, onAskLola, inline, defaultOpen }: AccountMenuP
         <span className={styles.headText}>
           <strong>{title}</strong>
           <span className={styles.headSub}>{subtitle}</span>
+          {isUser && memberTier && (
+            <span className={styles.memberBadge} data-testid="member-badge">
+              {t('mem.badge', { tier: memberTier })}
+            </span>
+          )}
         </span>
       </div>
       <MenuGroup>

@@ -1,14 +1,15 @@
 import { z } from 'zod';
 
 import { PreorderAttributionSchema, PreorderConfirmationSchema } from '../preorders';
-import { AddressSchema, PaymentMethodSchema, ReturnSummarySchema } from './account';
+import { AddressSchema, PaymentMethodSchema } from './account';
 import { CartPackageSchema } from './cart';
 import { ProductSummarySchema } from './catalog';
 import { DeliveryFeeRuleRefSchema, MinorSchema } from './common';
 import { CheckoutCreditSchema } from './credit';
 import { RailSchema } from './home';
+import { MembershipSavingsSchema, OrderMembershipWaiverSchema } from './membership';
 
-/* Storefront account (address input, order detail & tracking, returns, login & security), checkout, services &
+/* Storefront account (address input, order detail & tracking, login & security), checkout, services &
    bookings and Lola — contracts/openapi/gateway-bff.yaml. */
 
 const nullableString = z.string().nullable();
@@ -96,7 +97,7 @@ export const ShipmentDetailSchema = z.object({
   deliveryCode: nullableString,
   lines: z.array(OrderLineViewSchema),
   timeline: z.array(TimelineEventSchema),
-  /** Returns (S148/S166): "Return items" when returnable; "Report a problem" when only that is possible. */
+  /** A problem can be reported (there is no self-service return); problemReportOnly: reporting is the only route. */
   returnable: z.boolean().optional(),
   returnWindowEndsAt: z.string().nullable().optional(),
   problemReportOnly: z.boolean().optional(),
@@ -104,6 +105,8 @@ export const ShipmentDetailSchema = z.object({
   localDelivery: z.object({ roadMiles: z.number().nullable(), durationMinutes: z.number().nullable(), chargeMinor: MinorSchema }).nullable().optional(),
   /** The delivery fee rule the shipping was charged by when the order was placed (later edits never change it). */
   deliveryFeeRule: DeliveryFeeRuleRefSchema.nullable().optional(),
+  /** The shipping fee the shopper's membership waived on this shipment, with the tier and benefit (S323). */
+  membershipWaiver: OrderMembershipWaiverSchema.nullable().optional(),
   /** Pickup shipments: where to collect it. */
   pickup: OrderPickupSchema.nullable().optional()
 });
@@ -127,83 +130,11 @@ export const OrderDetailSchema = z.object({
     .object({ status: z.string(), capturedMinor: MinorSchema, refundedMinor: MinorSchema, refundableMinor: MinorSchema, shippingTaxMinor: MinorSchema,
       /** The part paid with AfroTransact credit; the card paid the rest (S320). */
       creditMinor: MinorSchema.default(0),
-      /** The card part of this order's refunds comes back as credit (the shopper's one-way choice). */
+      /** The card part of this order's refunds comes back as credit (staff chose it, with a reason; customers cannot choose). */
       cardRefundsAsCredit: z.boolean().default(false) })
     .optional()
 });
 export type OrderDetail = z.infer<typeof OrderDetailSchema>;
-
-/* ── Returns ───────────────────────────────────────────────────── */
-
-export const RETURN_REASONS = [
-  'DAMAGED',
-  'DEFECTIVE',
-  'WRONG_ITEM',
-  'NOT_AS_DESCRIBED',
-  'MISSING_PARTS',
-  'EXPIRED_OR_SPOILED',
-  'ARRIVED_LATE',
-  'NO_LONGER_NEEDED',
-  'ORDERED_BY_MISTAKE',
-  'BETTER_PRICE_AVAILABLE'
-] as const;
-export const ReturnReasonSchema = z.enum(RETURN_REASONS);
-export type ReturnReason = z.infer<typeof ReturnReasonSchema>;
-/** Reasons the seller is at fault for (food/perishables can only be reported with these). */
-export const SELLER_FAULT_REASONS: readonly ReturnReason[] = ['DAMAGED', 'DEFECTIVE', 'WRONG_ITEM', 'EXPIRED_OR_SPOILED', 'NOT_AS_DESCRIBED', 'MISSING_PARTS', 'ARRIVED_LATE'];
-
-export const ReturnMethodSchema = z.enum(['DROP_OFF', 'DRIVER_PICKUP', 'NO_RETURN']);
-export type ReturnMethod = z.infer<typeof ReturnMethodSchema>;
-
-export const ReturnableLineSchema = z.object({
-  lineId: z.string(),
-  atin: z.string(),
-  title: z.string(),
-  quantity: z.number().int(),
-  maxQuantity: z.number().int(),
-  unitPriceMinor: MinorSchema,
-  eligible: z.boolean(),
-  reportProblemOnly: z.boolean(),
-  sellerFaultOnly: z.boolean(),
-  windowEndsAt: nullableString,
-  methods: z.array(ReturnMethodSchema),
-  ineligibleReason: nullableString
-});
-export type ReturnableLine = z.infer<typeof ReturnableLineSchema>;
-
-export const ReturnEligibilitySchema = z.object({
-  orderNumber: z.string(),
-  currency: z.string(),
-  shipments: z.array(z.object({ shipmentId: z.string(), sellerName: z.string(), deliveredAt: nullableString, lines: z.array(ReturnableLineSchema) }))
-});
-export type ReturnEligibility = z.infer<typeof ReturnEligibilitySchema>;
-
-export const StartReturnRequestSchema = z.object({
-  orderNumber: z.string().min(1),
-  shipmentId: z.string().min(1),
-  method: ReturnMethodSchema,
-  lines: z
-    .array(z.object({ lineId: z.string().min(1), quantity: z.number().int().min(1), reason: ReturnReasonSchema, comment: z.string().max(500).optional() }))
-    .min(1, 'Choose at least one item')
-});
-export type StartReturnRequest = z.infer<typeof StartReturnRequestSchema>;
-
-export const RefundQuoteSchema = z.object({
-  itemsMinor: MinorSchema,
-  shippingMinor: MinorSchema,
-  taxMinor: MinorSchema,
-  restockingFeeMinor: MinorSchema,
-  totalMinor: MinorSchema
-});
-export type RefundQuote = z.infer<typeof RefundQuoteSchema>;
-
-export const ReturnDetailSchema = ReturnSummarySchema.extend({
-  lines: z.array(
-    z.object({ lineId: z.string(), atin: z.string(), title: z.string(), quantity: z.number().int(), unitPriceMinor: MinorSchema, reason: z.string(), outcome: nullableString })
-  ),
-  quote: RefundQuoteSchema.nullable()
-});
-export type ReturnDetail = z.infer<typeof ReturnDetailSchema>;
 
 /* ── Login & security ──────────────────────────────────────────── */
 
@@ -279,7 +210,9 @@ export type CheckoutLocalDelivery = z.infer<typeof CheckoutLocalDeliverySchema>;
 
 export const CheckoutPackageSchema = CartPackageSchema.extend({
   pickupPoints: z.array(PickupPointSchema).optional(),
-  localDelivery: CheckoutLocalDeliverySchema.optional()
+  localDelivery: CheckoutLocalDeliverySchema.optional(),
+  /** The part of this package's delivery fee the shopper's membership waives (S323); 0 or absent for none. */
+  membershipWaivedMinor: MinorSchema.optional()
 });
 export type CheckoutPackage = z.infer<typeof CheckoutPackageSchema>;
 
@@ -325,7 +258,11 @@ export const CheckoutSummarySchema = z.object({
   stripeCustomerId: z.string().optional(),
   crossSell: RailSchema.nullish(),
   /** What the shopper's AfroTransact credit would pay of this order; absent without credit (S320). */
-  credit: CheckoutCreditSchema.nullish()
+  credit: CheckoutCreditSchema.nullish(),
+  /** The delivery fee the membership waives on this order: shippingMinor stays as priced, totalMinor is lower by this (S323). */
+  membershipWaivedMinor: MinorSchema.default(0),
+  /** "Fee waived: membership", or for a shopper who is not a member "Join Plus to save $X on this order"; absent when there is nothing to say. */
+  membership: MembershipSavingsSchema.nullish()
 });
 export type CheckoutSummary = z.infer<typeof CheckoutSummarySchema>;
 

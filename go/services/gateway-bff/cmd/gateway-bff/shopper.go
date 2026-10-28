@@ -19,6 +19,8 @@ type shopperClients struct {
 	offers                     port.StorefrontOffersClient
 	serviceTokens              port.ServiceTokens
 	proofLinks                 port.ProofLinks
+	media                      port.MediaClient
+	receipts                   port.ReceiptStore
 }
 
 // shopperServices wires the storefront's account, checkout payment, services & bookings and Lola use cases.
@@ -38,18 +40,22 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 		ProofLinks:    sc.proofLinks,
 		Coupons:       upstreams.NewCheckoutCoupons(client("offers", up.Offers)),
 		Credit:        upstreams.NewCredit(sc.payments),
+		Membership:    upstreams.NewMembership(sc.payments),
 		Identity:      sc.identityAPI, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
 		PublishableKey: cfg.Stripe.PublishableKey, IdentityPublicURL: cfg.OIDC.PublicURL, Log: log,
 	}
 	settings := app.NewAccountSettingsService(app.AccountSettingsDeps{Identity: upstreams.NewAccountSettings(sc.identity),
 		Alerts: upstreams.NewAlertPreferences(client("notifications", up.Notifications))})
-	return httpapi.ShopperServices{Wallet: app.NewWalletService(d), Orders: app.NewCustomerOrdersService(d),
-		Checkout: app.NewCheckoutPaymentService(d, s.Site), Returns: app.NewReturnsService(d), Security: app.NewSecurityService(d), Settings: settings,
+	help := app.NewHelpRequestsService(app.HelpRequestsDeps{Orders: d.Orders, Claims: upstreams.NewHelpRequests(client("trust-ops", up.TrustOps)),
+		Media: sc.media, Receipts: sc.receipts})
+	return httpapi.ShopperServices{HelpRequests: help, Wallet: app.NewWalletService(d), Orders: app.NewCustomerOrdersService(d),
+		Checkout: app.NewCheckoutPaymentService(d, s.Site), Security: app.NewSecurityService(d), Settings: settings,
 		Services: app.NewServicesService(d), Lola: app.NewLolaService(d),
 		SearchClicks:  app.NewSearchClickService(upstreams.NewSearchClicks(client("search", up.Search)), cfg.Market),
 		PayLinks:      app.NewPayLinkService(upstreams.NewPayLinks(sc.orders, sc.serviceTokens), cfg.Stripe.PublishableKey),
 		BusinessPages: app.NewBusinessPageService(upstreams.NewBusinessPages(client("seller", up.Seller)), d.Bookings, s.Search),
 		Credit:        app.NewCreditService(d.Credit, d.Orders, cfg.Stripe.PublishableKey),
+		Membership:    app.NewMembershipService(d.Membership, sc.serviceTokens, s.Cart),
 		Referral:      app.NewReferralService(upstreams.NewReferral(sc.payments), cfg.Web.PublicOrigin),
 		Reviews: app.NewProductReviewService(upstreams.NewReviews(client("catalog", up.Catalog)), upstreams.NewMedia(client("media", up.Media)),
 			upstreams.NewAccountSettings(sc.identity))}

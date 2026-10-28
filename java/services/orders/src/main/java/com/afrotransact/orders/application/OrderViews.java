@@ -106,7 +106,11 @@ class OrderViews {
                 s.feeRule() == null ? null : new OrderView.DeliveryFeeRuleView(s.feeRule().method(),
                         s.feeRule().ruleId(), s.feeRule().ruleVersion(), s.feeRule().currency(),
                         s.feeRule().amountMinor(), s.feeRule().source(), s.feeRule().band(),
-                        s.feeRule().distanceMiles()));
+                        s.feeRule().distanceMiles()),
+                s.membershipWaiver() == null || viewer.kind() == Viewer.Kind.SELLER ? null
+                        : new OrderView.MembershipWaiverView(
+                        s.membershipWaiver().tierCode(), s.membershipWaiver().tierName(),
+                        s.membershipWaiver().benefit(), s.membershipWaiver().waivedMinor()));
     }
 
     /**

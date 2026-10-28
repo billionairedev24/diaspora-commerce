@@ -107,11 +107,3 @@ type GiftCardRedemption struct {
 	BalanceMinor  int64  `json:"balanceMinor"`
 	Currency      string `json:"currency"`
 }
-
-// CreditRefundChoice is the shopper's one-way choice to take the card part of an order's refunds as credit.
-type CreditRefundChoice struct {
-	OrderNumber         string `json:"orderNumber"`
-	CardRefundsAsCredit bool   `json:"cardRefundsAsCredit"`
-	CardPartMinor       int64  `json:"cardPartMinor"`
-	Currency            string `json:"currency"`
-}

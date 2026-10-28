@@ -57,6 +57,13 @@ tags:
 - name: Referral settings
   description: 'Staff-configurable referral program (Settings, Money or Growth): each side''s reward, the qualifying event,
     minimum order, return-window delay, caps, validity and on/off. Each change has a reason and is kept in a history.'
+- name: Membership administration
+  description: 'Staff: define tiers and billing rules in Settings, list members, refund a fee, and read churn, benefit cost
+    and recurring revenue (S323). Every change has a reason and an audit trail.'
+- name: Membership
+  description: 'AfroTransact membership (S323, ADR 0006): configurable tiers with a menu of benefits, billed on a saved card.
+    The shopper''s own membership, the fee waivers checkout applies, entitlements for other services and the free days programs
+    grant.'
 paths:
   /v1/connected-accounts/{orgId}:
     get:
@@ -2010,7 +2017,10 @@ paths:
       tags:
       - Credit
       summary: Take the card part of an order's refunds as credit, for the customer, with a reason (ledger:adjust)
-      description: The same one-way choice made by staff; the reason and the staff member are kept.
+      description: 'A support resolution may send the card part of an order''s refunds back as credit instead of to the card.
+        Staff only, with a reason (at least 15 characters); customers cannot choose. One way: credit never goes back to a card
+        or to cash. The reason and the staff member are kept. 409 payments.no-card-portion when the order was paid with credit
+        only.'
       operationId: chooseCreditRefundsAsStaff
       parameters:
       - name: orderId
@@ -2223,28 +2233,6 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/GiftCardPurchase'
-  /v1/customers/me/orders/{orderId}/credit-refunds:
-    post:
-      tags:
-      - Credit
-      summary: Take the card part of this order's refunds as credit (the shopper's own order)
-      description: 'One way: credit never goes back to a card or to cash. Refunds already sent to the card stay there. 409 payments.no-card-portion
-        when the order was paid with credit only (its refunds already come back as credit); 403 payments.not-your-order for
-        another shopper''s order.'
-      operationId: chooseCreditRefundsAsShopper
-      parameters:
-      - name: orderId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: OK
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/CreditRefundChoice'
   /v1/credit/grants:
     post:
       tags:
@@ -2777,6 +2765,550 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ReferralSettingsChange'
+  /v1/memberships/admin/charges/{chargeId}/refund:
+    post:
+      tags:
+      - Membership administration
+      summary: Refund a membership fee to the card (payments:configure)
+      description: The whole fee goes back to the card it was charged on, with a reason. When the charge paid the current period
+        of a live membership, the membership ends now. This is a card refund of the fee; AfroTransact credit is never refunded
+        to a card.
+      operationId: refundMembershipCharge
+      parameters:
+      - name: chargeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembershipRefundRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MembershipCharge'
+  /v1/memberships/admin/members:
+    get:
+      tags:
+      - Membership administration
+      summary: Members, newest first (payments:read)
+      description: Filter by tier and status; before pages backwards (the startedAt of the last member seen).
+      operationId: listMembershipMembers
+      parameters:
+      - name: tier
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - TRIALING
+          - ACTIVE
+          - PAST_DUE
+          - CANCELED
+          - LAPSED
+          - EXPIRED
+      - name: before
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Membership'
+  /v1/memberships/admin/members/{membershipId}/events:
+    get:
+      tags:
+      - Membership administration
+      summary: The timeline of a membership, oldest first (payments:read)
+      operationId: listMembershipEvents
+      parameters:
+      - name: membershipId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MembershipEvent'
+  /v1/memberships/admin/report:
+    get:
+      tags:
+      - Membership administration
+      summary: Members per tier, churn, benefit cost, recurring revenue and credit granted (payments:read)
+      description: For the period from (inclusive) to to (inclusive), UTC dates; default the last 30 days. mrrMinor is paying
+        members' price per month (a yearly fee divided by twelve).
+      operationId: membershipReport
+      parameters:
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MembershipReport'
+  /v1/memberships/admin/settings:
+    get:
+      tags:
+      - Membership administration
+      summary: The membership billing rules (payments:read)
+      operationId: getMembershipSettings
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MembershipSettings'
+    put:
+      tags:
+      - Membership administration
+      summary: Change the refund window and the retry schedule (payments:configure)
+      description: A reason is required, and the version the editor loaded.
+      operationId: updateMembershipSettings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembershipSettingsUpdate'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MembershipSettings'
+  /v1/memberships/admin/settings/changes:
+    get:
+      tags:
+      - Membership administration
+      summary: History of the billing rules, newest first (payments:read)
+      operationId: listMembershipSettingsChanges
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MembershipSettingsChange'
+  /v1/memberships/admin/tiers:
+    get:
+      tags:
+      - Membership administration
+      summary: Every tier with its members (payments:read)
+      operationId: listMembershipTiersAdmin
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MembershipTierOverview'
+    post:
+      tags:
+      - Membership administration
+      summary: Define a new tier (payments:configure)
+      description: A reason is required. A tier starts as a draft or is published at once; the benefits come from the menu (free
+        delivery, free shipping, cashback, member prices, early access, priority support, boosted rewards, monthly
+        credit).
+      operationId: createMembershipTier
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembershipTierRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MembershipTier'
+  /v1/memberships/admin/tiers/{code}:
+    put:
+      tags:
+      - Membership administration
+      summary: Change a tier, publish it or retire it (payments:configure)
+      description: Needs a reason and the version the editor loaded (409 when someone changed it). A published tier never goes
+        back to draft; retiring stops new sign-ups and keeps current members. Members keep the price they signed up at.
+      operationId: updateMembershipTier
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembershipTierRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MembershipTier'
+  /v1/memberships/admin/tiers/{code}/changes:
+    get:
+      tags:
+      - Membership administration
+      summary: The audit history of a tier, newest first (payments:read)
+      operationId: listMembershipTierChanges
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MembershipTierChange'
+  /v1/memberships/customers/{customerId}:
+    get:
+      tags:
+      - Membership
+      summary: A customer's membership as they see it (staff with payments:read)
+      operationId: getCustomerMembership
+      parameters:
+      - name: customerId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MyMembership'
+  /v1/memberships/customers/{customerId}/entitlements:
+    get:
+      tags:
+      - Membership
+      summary: What a customer's membership gives now (calling services, or staff with payments:read)
+      description: Early access hours for pre-order windows and runs, priority support for support tools, the
+        reward boost for the referral program.
+      operationId: getCustomerMembershipEntitlements
+      parameters:
+      - name: customerId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MembershipEntitlements'
+  /v1/memberships/grants:
+    post:
+      tags:
+      - Membership
+      summary: Grant free membership days for a program (payments:credit.grant)
+      description: The referral program grants days instead of credit when staff configure it so. A customer without a membership
+        gets a complimentary one; a member has the days added to the period. Idempotent per Idempotency-Key.
+      operationId: grantMembershipDays
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembershipGrantRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MembershipGrant'
+  /v1/memberships/me:
+    get:
+      tags:
+      - Membership
+      summary: The signed-in shopper's membership
+      description: The live membership, else the latest that ended; membership is absent for a shopper who never joined. Includes
+        the renewal date, the benefits used, the charges and the refund rule.
+      operationId: getMyMembership
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MyMembership'
+  /v1/memberships/me/cancel:
+    post:
+      tags:
+      - Membership
+      summary: Cancel the membership
+      description: No more charges; the benefits run to the end of the paid period. With refund=true the latest fee goes back
+        to the card and the membership ends now, which the refund rule allows within the staff-set window and before any benefit
+        was used (409 otherwise).
+      operationId: cancelMembership
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembershipCancelRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MyMembership'
+  /v1/memberships/me/change:
+    post:
+      tags:
+      - Membership
+      summary: Upgrade, downgrade or switch between monthly and yearly
+      description: A higher tier is effective now and charges the difference for the rest of the period; a lower tier or another
+        interval is scheduled for the end of the paid period. Naming the current plan cancels a scheduled change.
+      operationId: changeMembership
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembershipJoinRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MyMembership'
+  /v1/memberships/me/entitlements:
+    get:
+      tags:
+      - Membership
+      summary: What the signed-in shopper's membership gives now
+      description: For the member badge and the places that show a benefit.
+      operationId: getMyMembershipEntitlements
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MembershipEntitlements'
+  /v1/memberships/me/join:
+    post:
+      tags:
+      - Membership
+      summary: Join a tier on a saved card
+      description: A first-time member gets the tier's free trial (one per customer and per card); otherwise the first period
+        is charged now. Idempotent per Idempotency-Key.
+      operationId: joinMembership
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembershipJoinRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MyMembership'
+  /v1/memberships/me/resume:
+    post:
+      tags:
+      - Membership
+      summary: Take back a cancellation or a scheduled plan change
+      operationId: resumeMembership
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MyMembership'
+  /v1/memberships/me/savings:
+    post:
+      tags:
+      - Membership
+      summary: Which fees of an order the membership waives
+      description: For the cart and checkout. A member sees each fee waived; a shopper who is not a member sees what joining
+        would save on this order (upsell).
+      operationId: quoteMembershipSavings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembershipSavingsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MembershipWaiverQuote'
+  /v1/memberships/me/uses:
+    get:
+      tags:
+      - Membership
+      summary: The benefits the signed-in member used, newest first
+      operationId: listMyMembershipUses
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MembershipBenefitUse'
+  /v1/memberships/tiers:
+    get:
+      tags:
+      - Membership
+      summary: The tiers a shopper can join, entry tier first
+      description: Published tiers only, with their prices, trial and benefits.
+      operationId: listMembershipTiers
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MembershipTier'
+  /v1/memberships/waivers:
+    post:
+      tags:
+      - Membership
+      summary: Fees a customer's membership waives on an order (payments:service)
+      description: 'The one place the delivery benefits are resolved (ADR 0005 section 3): the order''s goods subtotal must
+        reach the benefit''s minimum and the waived amount stays within its per-order cap. Pure; nothing is recorded until the
+        payment is created with the waivers.'
+      operationId: resolveMembershipWaivers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembershipWaiversRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MembershipWaiverQuote'
 components:
   schemas:
     PaymentsSetting:
@@ -3259,6 +3791,14 @@ components:
           description: 'S320: pay with the shopper''s AfroTransact credit first (shopperId required). The PaymentIntent is for
             amountMinor minus the credit applied, and there is none when credit pays everything (the payment is AUTHORIZED at
             once). Credit leaves at least 0.50 for the card or pays the whole order'
+        membershipWaivers:
+          type: array
+          description: 'S323: the delivery fees the shopper''s membership waived on this order, recorded as the benefits used
+            (and counted in the cost of the membership benefits). Needs shopperId'
+          items:
+            $ref: '#/components/schemas/PaymentMembershipWaiver'
+          maxItems: 50
+          minItems: 0
       required:
       - amountMinor
       - currency
@@ -3496,7 +4036,8 @@ components:
             when it is all of it)
         cardRefundsAsCredit:
           type: boolean
-          description: The shopper or staff chose credit for the card part of this order's refunds (one way)
+          description: 'Staff chose credit, with a reason, for the card part of this order''s refunds (one way); customers cannot
+            choose. Otherwise the card part goes to the card'
     ReleaseRequest:
       type: object
       description: Release the uncaptured rest of the authorisation (e.g. booking cancelled or no-show after the deposit capture)
@@ -3548,12 +4089,12 @@ components:
           - CUSTOMER
         cardAsCredit:
           type: boolean
-          description: 'S320: take the part that was paid with the card as AfroTransact credit instead of a card refund. One way:
-            credit never goes back to a card or to cash. The credit part of an order always comes back as credit'
+          description: 'S320: take the part that was paid with the card as AfroTransact credit instead of a card refund (staff,
+            with a reason, inside a support resolution; customers cannot choose). One way: credit never goes back to a card
+            or to cash. The credit part of an order always comes back as credit'
         chosenBy:
           type: string
-          description: Who chose credit (the customer, or the staff member who did so for them with a reason); kept on the credit
-            entry
+          description: The staff member who chose credit, with a reason; kept on the credit entry
           maxLength: 120
           minLength: 0
       required:
@@ -3625,8 +4166,8 @@ components:
         creditMinor:
           type: integer
           format: int64
-          description: 'S320: the part returned as AfroTransact credit (the credit the order used, plus the card part when the
-            shopper or staff chose credit)'
+          description: 'S320: the part returned as AfroTransact credit (the credit the order used, plus the card part when
+            staff chose credit)'
         cardMinor:
           type: integer
           format: int64
@@ -5214,7 +5755,7 @@ components:
           type: string
         cardRefundsAsCredit:
           type: boolean
-          description: From now on the card part of every refund of this order comes back as AfroTransact credit
+          description: Staff chose, with a reason, that the card part of every refund of this order comes back as AfroTransact credit
         cardPartMinor:
           type: integer
           format: int64
@@ -5939,6 +6480,944 @@ components:
             format: int32
         enabled:
           type: boolean
+    Membership:
+      type: object
+      description: A shopper's membership
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+        tierCode:
+          type: string
+        interval:
+          type: string
+          enum:
+          - MONTHLY
+          - YEARLY
+        source:
+          type: string
+          enum:
+          - PAID
+          - COMPLIMENTARY
+        status:
+          type: string
+          enum:
+          - TRIALING
+          - ACTIVE
+          - PAST_DUE
+          - CANCELED
+          - LAPSED
+          - EXPIRED
+        priceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+        trialEnd:
+          type: string
+          format: date-time
+        cancelAtPeriodEnd:
+          type: boolean
+        canceledAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+        endReason:
+          type: string
+        pendingTierCode:
+          type: string
+        pendingInterval:
+          type: string
+        paymentMethodId:
+          type: string
+        retryCount:
+          type: integer
+          format: int32
+        nextRetryAt:
+          type: string
+          format: date-time
+        freeDaysGranted:
+          type: integer
+          format: int32
+    MembershipBenefit:
+      type: object
+      description: 'One benefit of a tier; which numbers apply depends on the code: FREE_DELIVERY and FREE_SHIPPING take minOrderMinor
+        and capMinor, CASHBACK takes percentBps (and optionally minOrderMinor and capMinor), EARLY_ACCESS takes hours, BOOSTED_REWARDS
+        takes percentBps, MONTHLY_CREDIT takes amountMinor; MEMBER_PRICES and PRIORITY_SUPPORT take none'
+      properties:
+        code:
+          type: string
+          enum:
+          - FREE_DELIVERY
+          - FREE_SHIPPING
+          - CASHBACK
+          - MEMBER_PRICES
+          - EARLY_ACCESS
+          - PRIORITY_SUPPORT
+          - BOOSTED_REWARDS
+          - MONTHLY_CREDIT
+        minOrderMinor:
+          type: integer
+          format: int64
+          description: Goods subtotal the order needs for the benefit
+          minimum: 0
+        capMinor:
+          type: integer
+          format: int64
+          description: Most the benefit is worth on one order; absent for no cap
+          minimum: 1
+        percentBps:
+          type: integer
+          format: int32
+          description: Hundredths of a percent (200 = 2%)
+          maximum: 10000
+          minimum: 1
+        hours:
+          type: integer
+          format: int32
+          description: Hours before the public opening
+          maximum: 720
+          minimum: 1
+        amountMinor:
+          type: integer
+          format: int64
+          description: Credit granted each month
+          minimum: 1
+      required:
+      - code
+    MembershipBenefitCost:
+      type: object
+      description: What one benefit cost in the period
+      properties:
+        benefit:
+          type: string
+          enum:
+          - FREE_DELIVERY
+          - FREE_SHIPPING
+          - CASHBACK
+          - MEMBER_PRICES
+          - EARLY_ACCESS
+          - PRIORITY_SUPPORT
+          - BOOSTED_REWARDS
+          - MONTHLY_CREDIT
+        uses:
+          type: integer
+          format: int64
+        amountMinor:
+          type: integer
+          format: int64
+    MembershipBenefitUsage:
+      type: object
+      description: Uses of one benefit, summed
+      properties:
+        benefit:
+          type: string
+          enum:
+          - FREE_DELIVERY
+          - FREE_SHIPPING
+          - CASHBACK
+          - MEMBER_PRICES
+          - EARLY_ACCESS
+          - PRIORITY_SUPPORT
+          - BOOSTED_REWARDS
+          - MONTHLY_CREDIT
+        uses:
+          type: integer
+          format: int64
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+    MembershipBenefitUse:
+      type: object
+      description: 'A benefit used: a fee waived on an order, cashback or monthly credit'
+      properties:
+        id:
+          type: string
+          format: uuid
+        tierCode:
+          type: string
+        benefit:
+          type: string
+          enum:
+          - FREE_DELIVERY
+          - FREE_SHIPPING
+          - CASHBACK
+          - MEMBER_PRICES
+          - EARLY_ACCESS
+          - PRIORITY_SUPPORT
+          - BOOSTED_REWARDS
+          - MONTHLY_CREDIT
+        orderId:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        note:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    MembershipCancelRequest:
+      type: object
+      properties:
+        refund:
+          type: boolean
+          description: Also refund the latest fee and end the membership now; allowed only by the refund rule
+    MembershipCard:
+      type: object
+      description: The saved card billed (display data only)
+      properties:
+        paymentMethodId:
+          type: string
+        brand:
+          type: string
+        last4:
+          type: string
+        expMonth:
+          type: integer
+          format: int32
+        expYear:
+          type: integer
+          format: int32
+    MembershipCharge:
+      type: object
+      description: One charge of the membership fee and what became of it
+      properties:
+        id:
+          type: string
+          format: uuid
+        membershipId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+        tierCode:
+          type: string
+        kind:
+          type: string
+          enum:
+          - JOIN
+          - RENEWAL
+          - UPGRADE
+        attempt:
+          type: integer
+          format: int32
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        status:
+          type: string
+          enum:
+          - SUCCEEDED
+          - FAILED
+          - REFUNDED
+        failureCode:
+          type: string
+        failureMessage:
+          type: string
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+        refundedMinor:
+          type: integer
+          format: int64
+        refundReason:
+          type: string
+        refundedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    MembershipEntitlements:
+      type: object
+      description: What a customer's membership gives right now
+      properties:
+        member:
+          type: boolean
+        customerId:
+          type: string
+        tierCode:
+          type: string
+        tierName:
+          type: string
+        status:
+          type: string
+        benefits:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipBenefit'
+        prioritySupport:
+          type: boolean
+        memberPrices:
+          type: boolean
+        earlyAccessHours:
+          type: integer
+          format: int32
+        rewardBoostBps:
+          type: integer
+          format: int32
+    MembershipEvent:
+      type: object
+      description: A step in a membership's life
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        tierCode:
+          type: string
+        actor:
+          type: string
+        detail:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+    MembershipFee:
+      type: object
+      description: A delivery fee the fee rules produced for the order
+      properties:
+        key:
+          type: string
+          description: The caller's id for the fee (a shipment)
+          maxLength: 120
+          minLength: 0
+        kind:
+          type: string
+          enum:
+          - AFROTRANSACT_DELIVERY
+          - CARRIER
+          - PICKUP
+          - EXPRESS
+        feeMinor:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - feeMinor
+      - key
+      - kind
+    MembershipGrant:
+      type: object
+      description: Free membership days granted by a program
+      properties:
+        membershipId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+        tierCode:
+          type: string
+        days:
+          type: integer
+          format: int32
+        replay:
+          type: boolean
+        benefitsUntil:
+          type: string
+          format: date-time
+        newMembership:
+          type: boolean
+    MembershipGrantRequest:
+      type: object
+      properties:
+        customerId:
+          type: string
+          maxLength: 120
+          minLength: 0
+        tierCode:
+          type: string
+          maxLength: 40
+          minLength: 0
+        days:
+          type: integer
+          format: int32
+          maximum: 365
+          minimum: 1
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - customerId
+      - days
+      - reason
+      - tierCode
+    MembershipJoinRequest:
+      type: object
+      properties:
+        tierCode:
+          type: string
+          maxLength: 40
+          minLength: 0
+        interval:
+          type: string
+          enum:
+          - MONTHLY
+          - YEARLY
+        paymentMethodId:
+          type: string
+          description: The saved card to bill; absent for the default card
+          maxLength: 120
+          minLength: 0
+      required:
+      - interval
+      - tierCode
+    MembershipRefundRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: At least 15 characters
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    MembershipRefundRule:
+      type: object
+      description: 'What the fee refund rule allows now: a full refund to the card when canceling within the window after a charge
+        and before any benefit was used'
+      properties:
+        eligible:
+          type: boolean
+        reason:
+          type: string
+          enum:
+          - OK
+          - NOT_PAID
+          - WINDOW_PASSED
+          - BENEFIT_USED
+          - DISABLED
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        until:
+          type: string
+          format: date-time
+    MembershipReport:
+      type: object
+      description: Members per tier, churn, what the benefits cost, recurring revenue and credit granted for [from, to)
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        currency:
+          type: string
+        liveMembers:
+          type: integer
+          format: int64
+        trialing:
+          type: integer
+          format: int64
+        mrrMinor:
+          type: integer
+          format: int64
+        arrMinor:
+          type: integer
+          format: int64
+        chargedMinor:
+          type: integer
+          format: int64
+        refundedMinor:
+          type: integer
+          format: int64
+        netRevenueMinor:
+          type: integer
+          format: int64
+        benefitCostMinor:
+          type: integer
+          format: int64
+        creditGrantedMinor:
+          type: integer
+          format: int64
+        feesWaivedMinor:
+          type: integer
+          format: int64
+        membersAtStart:
+          type: integer
+          format: int64
+        joined:
+          type: integer
+          format: int64
+        ended:
+          type: integer
+          format: int64
+        lapsed:
+          type: integer
+          format: int64
+        canceled:
+          type: integer
+          format: int64
+        refunded:
+          type: integer
+          format: int64
+        churnBps:
+          type: integer
+          format: int32
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipTierFigures'
+        costs:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipBenefitCost'
+    MembershipSavingsRequest:
+      type: object
+      description: The fees of an order, to see which the membership waives
+      properties:
+        itemsMinor:
+          type: integer
+          format: int64
+          description: Goods subtotal of the whole order
+          minimum: 0
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 3
+        fees:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipFee'
+          maxItems: 50
+          minItems: 0
+      required:
+      - currency
+      - fees
+      - itemsMinor
+    MembershipSettings:
+      type: object
+      description: Billing rules staff set
+      properties:
+        refundWindowDays:
+          type: integer
+          format: int32
+        retryDays:
+          type: array
+          items:
+            type: integer
+            format: int32
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    MembershipSettingsChange:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        changedBy:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        beforeJson:
+          type: string
+        afterJson:
+          type: string
+    MembershipSettingsUpdate:
+      type: object
+      properties:
+        refundWindowDays:
+          type: integer
+          format: int32
+          maximum: 60
+          minimum: 0
+        retryDays:
+          type: array
+          items:
+            type: integer
+            format: int32
+            maximum: 30
+            minimum: 1
+          maxItems: 6
+          minItems: 0
+        reason:
+          type: string
+          description: At least 15 characters
+          maxLength: 500
+          minLength: 0
+        expectedVersion:
+          type: integer
+          format: int64
+      required:
+      - reason
+      - retryDays
+    MembershipTier:
+      type: object
+      description: A membership tier staff define in Settings. Members keep the price they signed up at; benefit changes apply
+        to every member at once.
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - RETIRED
+        sortOrder:
+          type: integer
+          format: int32
+          description: Lower is the entry tier; a higher order is an upgrade
+        currency:
+          type: string
+        monthlyPriceMinor:
+          type: integer
+          format: int64
+        yearlyPriceMinor:
+          type: integer
+          format: int64
+        trialDays:
+          type: integer
+          format: int32
+        benefits:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipBenefit'
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+        version:
+          type: integer
+          format: int64
+    MembershipTierChange:
+      type: object
+      description: One audited change of a tier
+      properties:
+        id:
+          type: string
+          format: uuid
+        tierCode:
+          type: string
+        action:
+          type: string
+          enum:
+          - CREATED
+          - UPDATED
+          - PUBLISHED
+          - RETIRED
+        changedBy:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        beforeJson:
+          type: string
+        afterJson:
+          type: string
+    MembershipTierFigures:
+      type: object
+      description: One tier's members, churn and revenue
+      properties:
+        tierCode:
+          type: string
+        tierName:
+          type: string
+        status:
+          type: string
+        members:
+          type: integer
+          format: int64
+        trialing:
+          type: integer
+          format: int64
+        active:
+          type: integer
+          format: int64
+        pastDue:
+          type: integer
+          format: int64
+        cancelling:
+          type: integer
+          format: int64
+        mrrMinor:
+          type: integer
+          format: int64
+        joined:
+          type: integer
+          format: int64
+        canceled:
+          type: integer
+          format: int64
+        lapsed:
+          type: integer
+          format: int64
+        refunded:
+          type: integer
+          format: int64
+        membersAtStart:
+          type: integer
+          format: int64
+        churnBps:
+          type: integer
+          format: int32
+        chargedMinor:
+          type: integer
+          format: int64
+        refundedMinor:
+          type: integer
+          format: int64
+    MembershipTierOverview:
+      type: object
+      description: A tier with its members (staff)
+      properties:
+        tier:
+          $ref: '#/components/schemas/MembershipTier'
+        members:
+          type: integer
+          format: int64
+        trialing:
+          type: integer
+          format: int64
+    MembershipTierRequest:
+      type: object
+      description: Create or change a tier. A change needs the version the editor loaded and a reason (at least 15 characters);
+        the code is fixed once created.
+      properties:
+        code:
+          type: string
+          maxLength: 40
+          minLength: 0
+        name:
+          type: string
+          maxLength: 80
+          minLength: 0
+        description:
+          type: string
+          maxLength: 500
+          minLength: 0
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - RETIRED
+        sortOrder:
+          type: integer
+          format: int32
+        monthlyPriceMinor:
+          type: integer
+          format: int64
+          minimum: 1
+        yearlyPriceMinor:
+          type: integer
+          format: int64
+          minimum: 1
+        trialDays:
+          type: integer
+          format: int32
+          maximum: 90
+          minimum: 0
+        benefits:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipBenefit'
+          maxItems: 12
+          minItems: 0
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+        expectedVersion:
+          type: integer
+          format: int64
+          description: Required when changing a tier, absent when creating
+      required:
+      - benefits
+      - code
+      - monthlyPriceMinor
+      - name
+      - reason
+      - status
+      - yearlyPriceMinor
+    MembershipUpsell:
+      type: object
+      description: 'What joining would save on this order: ''Join Plus to save $X'''
+      properties:
+        tierCode:
+          type: string
+        tierName:
+          type: string
+        monthlyPriceMinor:
+          type: integer
+          format: int64
+        yearlyPriceMinor:
+          type: integer
+          format: int64
+        trialDays:
+          type: integer
+          format: int32
+        savingMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+    MembershipWaiver:
+      type: object
+      description: A fee waived because of the membership
+      properties:
+        key:
+          type: string
+        benefit:
+          type: string
+          enum:
+          - FREE_DELIVERY
+          - FREE_SHIPPING
+        waivedMinor:
+          type: integer
+          format: int64
+    MembershipWaiverQuote:
+      type: object
+      description: The fees the membership waives on an order; upsell is present for a shopper who is not a member and would save
+        by joining
+      properties:
+        member:
+          type: boolean
+        tierCode:
+          type: string
+        tierName:
+          type: string
+        waivers:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipWaiver'
+        totalWaivedMinor:
+          type: integer
+          format: int64
+        cashbackMinor:
+          type: integer
+          format: int64
+          description: The credit the member earns on this order once it is delivered; 0 without cashback, under its minimum
+            or during a trial
+        upsell:
+          $ref: '#/components/schemas/MembershipUpsell'
+    MembershipWaiversRequest:
+      type: object
+      description: The fees of a customer's order (checkout, payments:service)
+      properties:
+        customerId:
+          type: string
+          maxLength: 120
+          minLength: 0
+        itemsMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 3
+        fees:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipFee'
+          maxItems: 50
+          minItems: 0
+      required:
+      - currency
+      - customerId
+      - fees
+      - itemsMinor
+    MyMembership:
+      type: object
+      description: 'A membership as its owner sees it: the tier and its benefits, the renewal date, charges, benefits used and
+        the refund rule. membership is absent when the customer never joined.'
+      properties:
+        membership:
+          $ref: '#/components/schemas/Membership'
+        tier:
+          $ref: '#/components/schemas/MembershipTier'
+        pendingTier:
+          $ref: '#/components/schemas/MembershipTier'
+        charges:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipCharge'
+        usage:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipBenefitUsage'
+        refund:
+          $ref: '#/components/schemas/MembershipRefundRule'
+        trialAvailable:
+          type: boolean
+        card:
+          $ref: '#/components/schemas/MembershipCard'
+        refundWindowDays:
+          type: integer
+          format: int32
+    PaymentMembershipWaiver:
+      type: object
+      description: A delivery fee the shopper's membership waived on one shipment of the order
+      properties:
+        ref:
+          type: string
+          description: The shipment (or other part of the order) the fee belonged to
+          maxLength: 120
+          minLength: 0
+        benefit:
+          type: string
+          enum:
+          - FREE_DELIVERY
+          - FREE_SHIPPING
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 1
+        tierCode:
+          type: string
+          maxLength: 40
+          minLength: 0
+      required:
+      - amountMinor
+      - benefit
+      - ref
+      - tierCode
   securitySchemes:
     bearer:
       type: http

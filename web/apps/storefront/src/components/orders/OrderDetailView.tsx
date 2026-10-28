@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 
 import pageStyles from '@/components/account/Pages.module.css';
+import { benefitName } from '@/components/membership/memberText';
 import { RateItemButton } from '@/components/reviews/ReviewSheet';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
@@ -65,6 +66,11 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                     {s.label} · {t('ord.soldBy', { seller: s.sellerName })}
                   </p>
                   {s.status.toLowerCase() !== 'cancelled' && s.promisedBy && !s.deliveredAt && <p className={pageStyles.success}>{t('ord.arriving', { date: day(fmt.tag, s.promisedBy) ?? '' })}</p>}
+                  {s.membershipWaiver && (
+                    <p className={pageStyles.muted} data-testid="order-membership-waiver">
+                      {t('ord.mem.waived', { tier: s.membershipWaiver.tierName, benefit: benefitName(t, fmt, s.membershipWaiver.benefit), amount: fmt.money(s.membershipWaiver.waivedMinor) })}
+                    </p>
+                  )}
                   {s.pickup && <PickupDetails pickup={s.pickup} />}
                   {s.status.toLowerCase() !== 'cancelled' && s.carrier && s.trackingNumber && (
                     <p className={pageStyles.muted}>

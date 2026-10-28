@@ -8,6 +8,7 @@ import com.afrotransact.payments.domain.CreditKind;
 import com.afrotransact.payments.domain.CreditSource;
 import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.domain.Referral;
+import com.afrotransact.payments.domain.ReferralReward;
 import com.afrotransact.payments.domain.ReferralRewardGrant;
 import com.afrotransact.payments.domain.ReferralSettings;
 import com.afrotransact.payments.domain.ReferralSide;
@@ -30,16 +31,18 @@ class ReferralRewarderImpl implements ReferralRewarder {
     private final ReferralSettingsRepository settings;
     private final CreditLedger ledger;
     private final MembershipGrants membership;
+    private final MembershipBenefitsService benefits;
     private final DomainEventPublisher events;
 
     ReferralRewarderImpl(ReferralRepository referrals, ReferralTrackingRepository tracking,
                          ReferralSettingsRepository settings, CreditLedger ledger, MembershipGrants membership,
-                         DomainEventPublisher events) {
+                         MembershipBenefitsService benefits, DomainEventPublisher events) {
         this.referrals = referrals;
         this.tracking = tracking;
         this.settings = settings;
         this.ledger = ledger;
         this.membership = membership;
+        this.benefits = benefits;
         this.events = events;
     }
 
@@ -75,9 +78,29 @@ class ReferralRewarderImpl implements ReferralRewarder {
         return referrals.update(r.settled(ReferralStatus.REWARDED, now));
     }
 
-    private ReferralRewardGrant tryGrant(Referral r, ReferralRewardGrant g, ReferralSettings program, Instant now) {
+    /**
+     * A member's reward is bigger by the boost of the tier (the BOOSTED_REWARDS benefit, S323): credit and days are both
+     * raised, within the sanity bounds of a reward. The grant keeps the terms it was really given.
+     */
+    private ReferralRewardGrant boosted(ReferralRewardGrant g) {
+        int bps = benefits.rewardBoostBps(g.customerId());
+        ReferralReward base = g.reward();
+        if (bps <= 0 || base.isEmpty()) {
+            return g;
+        }
+        if (base.type() == RewardType.CREDIT) {
+            long credit = base.creditMinor() + Math.multiplyExact(base.creditMinor(), (long) bps) / 10_000L;
+            return g.withReward(ReferralReward.credit(Math.min(credit, ReferralReward.MAX_CREDIT_MINOR)));
+        }
+        long days = base.membershipDays() + Math.multiplyExact((long) base.membershipDays(), (long) bps) / 10_000L;
+        return g.withReward(ReferralReward.days((int) Math.min(days, ReferralReward.MAX_DAYS)));
+    }
+
+    private ReferralRewardGrant tryGrant(Referral r, ReferralRewardGrant offered, ReferralSettings program,
+                                         Instant now) {
+        ReferralRewardGrant g = boosted(offered);
         if (capped(g, program)) {
-            ReferralRewardGrant capped = g.with(ReferralRewardGrant.Status.CAPPED);
+            ReferralRewardGrant capped = offered.with(ReferralRewardGrant.Status.CAPPED);
             referrals.updateReward(capped);
             return capped;
         }
@@ -91,7 +114,7 @@ class ReferralRewarderImpl implements ReferralRewarder {
             MembershipGrants.Outcome outcome = membership.grant(g.customerId(), g.reward().membershipDays(),
                     reason(g), g.idempotencyKey());
             result = outcome == MembershipGrants.Outcome.GRANTED ? g.granted(null, now)
-                    : g.with(ReferralRewardGrant.Status.DEFERRED);
+                    : offered.with(ReferralRewardGrant.Status.DEFERRED);
         }
         referrals.updateReward(result);
         if (result.status() == ReferralRewardGrant.Status.GRANTED) {

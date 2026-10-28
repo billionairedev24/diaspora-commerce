@@ -2,11 +2,13 @@
    buy again. Refreshes every 30 s; pushes for this order deep-link here. */
 import { formatMoney } from '@afrotransact/api-client';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { CheckCircleIcon as CheckCircle, KeyIcon as Key } from 'phosphor-react-native';
 import { StyleSheet, View } from 'react-native';
 
 import { useTracking } from '@/api/queries';
 import { useAuth } from '@/auth/AuthProvider';
+import { env } from '@/config/env';
 import { canRate } from '@/domain/reviews';
 import { headline, showDeliveryCode, stepIndex, TRACKING_STEPS } from '@/domain/tracking';
 import { RateItem } from '@/features/reviews/RateItem';
@@ -75,7 +77,7 @@ export default function Tracking() {
                 <BuyAgain atin={it.atin} />
               </View>
             ))}
-            {s.items.some((i) => i.returnable) ? <Button kind="outline" label="Return items" onPress={() => router.push(`/returns/${d.orderNumber}`)} /> : null}
+            {s.items.some((i) => i.returnable) ? <Button kind="outline" label="Get help with this order" onPress={() => void WebBrowser.openBrowserAsync(`${env.webUrl}/account/help/new?order=${encodeURIComponent(d.orderNumber)}`)} /> : null}
           </View>
         );
       })}

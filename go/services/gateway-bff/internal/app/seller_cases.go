@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
 // SellerCasesService is Returns and Disputes in Seller Center: what customers sent back or contested on the organisation's
@@ -95,4 +97,21 @@ func (s *sellerCasesImpl) Disputes(ctx context.Context, c *domain.Caller, status
 		out = append(out, d)
 	}
 	return out, nil
+}
+
+// toReturnSummary shows a tax-returns RMA in Seller Center's Returns and Disputes.
+func toReturnSummary(r port.UpRma) domain.ReturnSummary {
+	title := "Return"
+	reason := ""
+	if len(r.Lines) > 0 {
+		title = r.Lines[0].Title
+		reason = r.Lines[0].Reason
+		if n := len(r.Lines) - 1; n > 0 {
+			title += " and " + map[bool]string{true: "1 more item", false: strconv.Itoa(n) + " more items"}[n == 1]
+		}
+	}
+	return domain.ReturnSummary{RMAID: r.ID, OrderNumber: r.OrderNumber, Title: title, Status: strings.ToLower(r.Status), RefundMinor: r.EstimateMinor,
+		Number: r.Number, Method: r.Method, Reason: reason, RefundState: r.RefundState, Currency: firstNonEmpty(r.Currency, domain.Currency),
+		Cancellable: r.Cancellable, CreatedAt: optStr(r.CreatedAt), LabelURL: optStr(r.LabelURL), QRPayload: optStr(r.QRPayload),
+		HandoverCode: optStr(r.HandoverCode), DropOffBy: optStr(r.DropOffBy), Carrier: optStr(r.Carrier), Tracking: optStr(r.Tracking)}
 }

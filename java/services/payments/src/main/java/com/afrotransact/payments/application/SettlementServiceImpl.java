@@ -54,13 +54,14 @@ class SettlementServiceImpl implements SettlementService {
     private final PaymentsMetrics metrics;
     private final PaymentsSettings settings;
     private final PlanFeeWithholdingRepository planFees;
+    private final MembershipBenefitsService membership;
     private final Clock clock;
 
     SettlementServiceImpl(SettlementRepository settlements, PaymentRepository payments, LedgerRepository ledgerReader,
                           ConnectedAccountRepository accounts, StripeGateway stripe, LedgerPoster ledger,
                           MoneyTransactions tx, PaymentsAccess access, DomainEventPublisher events,
                           PaymentsMetrics metrics, PaymentsSettings settings, PlanFeeWithholdingRepository planFees,
-                          Clock clock) {
+                          MembershipBenefitsService membership, Clock clock) {
         this.settlements = settlements;
         this.payments = payments;
         this.ledgerReader = ledgerReader;
@@ -73,13 +74,14 @@ class SettlementServiceImpl implements SettlementService {
         this.metrics = metrics;
         this.settings = settings;
         this.planFees = planFees;
+        this.membership = membership;
         this.clock = clock;
     }
 
     @Override
     public Settlement markDelivered(String orderId, Instant deliveredAt, SettlementKind kind) {
         access.service();
-        return tx.serializable(() -> {
+        Settlement settlement = tx.serializable(() -> {
             payments.findByOrderId(orderId).orElseThrow(() -> new NotFoundException("payments.payment-not-found",
                     "No payment for order " + orderId));
             Instant now = Instant.now(clock);
@@ -90,6 +92,9 @@ class SettlementServiceImpl implements SettlementService {
             }
             return s;
         });
+        // a member's cashback on the delivered order (S323): once per order, after the settlement committed
+        membership.onOrderDelivered(orderId);
+        return settlement;
     }
 
     @Override

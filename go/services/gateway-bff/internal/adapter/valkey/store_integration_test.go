@@ -125,6 +125,22 @@ func TestValkeyStore(t *testing.T) {
 		}
 	})
 
+	t.Run("receipts are remembered until they expire", func(t *testing.T) {
+		if _, ok, err := store.Recall(ctx, "help-key:u1:k"); err != nil || ok {
+			t.Fatalf("unknown receipt = %v %v", ok, err)
+		}
+		if err := store.Remember(ctx, "help-key:u1:k", "claim-1", time.Second); err != nil {
+			t.Fatal(err)
+		}
+		if v, ok, err := store.Recall(ctx, "help-key:u1:k"); err != nil || !ok || v != "claim-1" {
+			t.Fatalf("receipt = %q %v %v", v, ok, err)
+		}
+		time.Sleep(1500 * time.Millisecond)
+		if _, ok, _ := store.Recall(ctx, "help-key:u1:k"); ok {
+			t.Fatal("receipt did not expire")
+		}
+	})
+
 	t.Run("selection and rate limits", func(t *testing.T) {
 		_ = store.SetSelected(ctx, "guest:g", []string{"A", "B"}, false)
 		_ = store.SetSelected(ctx, "guest:g", []string{"A"}, true)

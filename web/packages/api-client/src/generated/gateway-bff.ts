@@ -978,24 +978,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/account/returns": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Returns of the signed-in customer (all, or one order's) */
-        get: operations["listReturns"];
-        put?: never;
-        /** Start a return for delivered items (tax-returns RMA with label / QR, handover code or refund without return) */
-        post: operations["startReturn"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/account/stock-alerts": {
         parameters: {
             query?: never;
@@ -1298,7 +1280,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/account/orders/{orderNumber}/credit-refunds": {
+    "/v1/membership/tiers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The membership tiers a shopper can join (public)
+         * @description payments `GET /v1/memberships/tiers`; only published tiers, entry tier first.
+         */
+        get: operations["getMembershipOffer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/membership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My membership, what it gives, what I used and the refund rule */
+        get: operations["getAccountMembership"];
+        /**
+         * Change my plan (upgrade now with proration; a lower tier or another interval at the end of the period)
+         * @description Requires `Idempotency-Key`. Naming my current plan takes a scheduled change back. 404 `MEMBERSHIP_NOT_FOUND`;
+         *     409 `MEMBERSHIP_PAST_DUE`, `MEMBERSHIP_NO_CHANGE`, `MEMBERSHIP_COMPLIMENTARY`.
+         */
+        put: operations["changeAccountMembership"];
+        /**
+         * Join a tier on a saved card (a trial first when I am eligible)
+         * @description Requires `Idempotency-Key` (16 to 64 characters); replaying it returns the original result. A first-time member
+         *     on a card that never had a trial starts the tier's trial and pays nothing now; otherwise the first period is
+         *     charged. 409 `MEMBERSHIP_EXISTS` when already a member, `MEMBERSHIP_TIER_UNAVAILABLE`; 422 `MEMBERSHIP_NO_CARD`,
+         *     `MEMBERSHIP_CHARGE_FAILED` (nothing was charged).
+         */
+        post: operations["joinAccountMembership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/membership/cancel": {
         parameters: {
             query?: never;
             header?: never;
@@ -1308,13 +1339,69 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Take the card part of my order's refunds as credit (one way)
-         * @description A refund goes back to what paid each part: the part paid with credit comes back as credit and the part paid
-         *     with the card to the card. This chooses credit for the card part of every later refund of the order. It is one
-         *     way: credit never goes back to a card or to cash, and refunds already sent to the card stay there.
-         *     409 `NO_CARD_PORTION` when the order was paid with credit only.
+         * Cancel my membership (benefits run to the end of the period) or cancel with a refund
+         * @description The refund rule: a full refund to the card when canceling within the window after a charge and before any benefit
+         *     was used (the account's `refund` says whether it applies); the membership then ends now. Otherwise 409
+         *     `MEMBERSHIP_REFUND_NOT_ELIGIBLE` and nothing changes. Without `refund` the membership stops renewing and the
+         *     benefits last to the end of the paid period.
          */
-        post: operations["chooseCreditRefunds"];
+        post: operations["cancelAccountMembership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/membership/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take back a cancellation or a scheduled change */
+        post: operations["resumeAccountMembership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/membership/benefits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The benefits I used (fees waived, cashback, monthly credit), newest first */
+        get: operations["listAccountMembershipBenefits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cart/membership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What membership does for my cart; if I am not a member, "Join Plus to save $X on this order"
+         * @description Priced by payments with the delivery options the shopper would get. Delivery fees are waived by the tier's rules
+         *     (order minimum, per-order cap); pickup and express never are. Best effort: without an answer `waivers` is empty
+         *     and there is no `upsell`.
+         */
+        get: operations["getCartMembershipSavings"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1628,57 +1715,6 @@ export interface paths {
         get: operations["trackOrder"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/account/orders/{orderNumber}/returnable": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** What can be returned from a delivered order (tax-returns eligibility per shipment and line) */
-        get: operations["getReturnEligibility"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/account/returns/{rmaId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** One of my returns with its lines and the refund estimate (tax-returns refund quote) */
-        get: operations["getReturn"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/account/returns/{rmaId}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Cancel a return before drop-off or pickup */
-        post: operations["cancelReturn"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2506,6 +2542,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/help-requests/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Signed direct upload for one evidence photo (JPEG, PNG, WebP or HEIC, at most 10 MB)
+         * @description Returns a short-lived URL from the media service (private storage). PUT the photo there with the given
+         *     headers, then call `…/uploads/{assetId}/complete` and send `assetId` in `evidenceAssetIds` when opening the
+         *     request (at most 5 photos per request).
+         */
+        post: operations["requestHelpEvidenceUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/help-requests/uploads/{assetId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check the uploaded photo (real type and size) and finalise it */
+        post: operations["completeHelpEvidenceUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/help-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My help requests, newest first */
+        get: operations["listHelpRequests"];
+        put?: never;
+        /**
+         * Report a problem with an order of mine
+         * @description Opens a dispute for staff to resolve; there is no automatic refund or return. The order must be the signed-in
+         *     customer's (anything else is 404). Amount, currency and seller come from the order, never from the request;
+         *     with `shipmentId` the claim covers that shipment's items, otherwise the order. Replaying an `Idempotency-Key`
+         *     returns the request it already created.
+         */
+        post: operations["createHelpRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/help-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of my help requests with its status and the outcome staff recorded */
+        get: operations["getHelpRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3089,6 +3205,83 @@ export interface components {
             /** @enum {string} */
             status: "READY";
         };
+        HelpEvidenceUpload: {
+            assetId: string;
+            /** Format: int64 */
+            maxBytes: number;
+            upload: {
+                method: string;
+                url: string;
+                headers: {
+                    [key: string]: string;
+                };
+                /** Format: date-time */
+                expiresAt?: string | null;
+            };
+        };
+        HelpEvidenceAsset: {
+            assetId: string;
+            contentType: string;
+            /** Format: int64 */
+            bytes: number;
+            /** @enum {string} */
+            status: "READY";
+        };
+        /** @enum {string} */
+        HelpRequestType: "ITEM_NOT_RECEIVED" | "DAMAGED_ITEM" | "WRONG_ITEM" | "NOT_AS_DESCRIBED" | "OTHER";
+        CreateHelpRequest: {
+            /** @description An order of the signed-in customer */
+            orderNumber: string;
+            /** @description The shipment (package) the problem is about; omit for the whole order */
+            shipmentId?: string;
+            type: components["schemas"]["HelpRequestType"];
+            description: string;
+            /** @description Photos uploaded and completed through `/v1/me/help-requests/uploads` */
+            evidenceAssetIds?: string[];
+        };
+        /** @description A help request in the customer's words. Never carries internal ids, seller identities or staff names. */
+        HelpRequest: {
+            /** @description Use in the URL of this request; show `reference` to people */
+            id: string;
+            /** @example CLM-0001 */
+            reference: string;
+            orderNumber: string;
+            type: components["schemas"]["HelpRequestType"];
+            /**
+             * @description RECEIVED (we have it), IN_REVIEW (our team is looking into it), RESOLVED (refunded), CLOSED (reviewed, no refund), WITHDRAWN
+             * @enum {string}
+             */
+            status: "RECEIVED" | "IN_REVIEW" | "RESOLVED" | "CLOSED" | "WITHDRAWN";
+            /** @description The status in plain English */
+            statusLabel: string;
+            description: string;
+            evidenceCount: number;
+            /** Format: int64 */
+            claimedMinor: number;
+            currency: string;
+            /** @description Set once staff have decided */
+            resolution: {
+                /** @enum {string} */
+                outcome: "REFUNDED" | "NOT_REFUNDED";
+                /** @description What staff told the customer */
+                note: string;
+                /**
+                 * Format: int64
+                 * @description Goes back to whoever paid, in the same way they paid
+                 */
+                refundMinor: number | null;
+                /** Format: date-time */
+                decidedAt: string | null;
+            } | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        HelpRequestPage: {
+            items: components["schemas"]["HelpRequest"][];
+            nextCursor: string | null;
+        };
         FacetBucket: {
             value: string;
             label: string;
@@ -3616,7 +3809,6 @@ export interface components {
             /** @description Badges for the account menu. */
             counts: {
                 orders: number;
-                returns: number;
                 addresses: number;
                 paymentMethods: number;
             } | null;
@@ -3716,46 +3908,16 @@ export interface components {
                 deliveredAt?: string | null;
                 /** @description One-time handover code (hand delivery or perishables) */
                 deliveryCode?: string | null;
-                /** @description A return can be started (show "Return items") */
+                /** @description A problem can be reported with this shipment (there is no self-service return; link to `/account/help/new`) */
                 returnable?: boolean;
                 /** Format: date-time */
                 returnWindowEndsAt?: string | null;
-                /** @description Only "Report a problem" is possible (e.g. perishables, window closed) */
+                /** @description Report a problem is the only route (e.g. perishables, window closed) */
                 problemReportOnly?: boolean;
             }[];
         };
         OrderPage: {
             items: components["schemas"]["OrderSummary"][];
-            nextCursor: string | null;
-        };
-        ReturnSummary: {
-            rmaId: string;
-            orderNumber: string;
-            title: string;
-            /** @description requested, approved, auto_approved, label_issued, in_transit, received, inspected, refunded, rejected, cancelled */
-            status: string;
-            /** @description Refund estimate (tax-returns), then the refunded amount */
-            refundMinor: number;
-            /** @example RMA-0000ABCD */
-            number?: string;
-            method?: components["schemas"]["ReturnMethod"];
-            reason?: string;
-            refundState?: string;
-            currency?: string;
-            cancellable?: boolean;
-            createdAt?: string | null;
-            /** @description Drop-off return label */
-            labelUrl?: string | null;
-            /** @description Render as the drop-off QR code */
-            qrPayload?: string | null;
-            /** @description Driver pickup code (DRIVER_PICKUP) */
-            handoverCode?: string | null;
-            dropOffBy?: string | null;
-            carrier?: string | null;
-            trackingNumber?: string | null;
-        };
-        ReturnPage: {
-            items: components["schemas"]["ReturnSummary"][];
             nextCursor: string | null;
         };
         CheckoutCouponSellerShare: {
@@ -3790,6 +3952,11 @@ export interface components {
         };
         CheckoutSummary: {
             packages: (components["schemas"]["CartPackage"] & {
+                /**
+                 * Format: int64
+                 * @description The part of this package's delivery fee the membership waives (S323)
+                 */
+                membershipWaivedMinor: number;
                 localDelivery?: components["schemas"]["CheckoutLocalDelivery"];
                 pickupPoints?: {
                     id: string;
@@ -3829,6 +3996,13 @@ export interface components {
             crossSell?: components["schemas"]["Rail"];
             /** @description What my AfroTransact credit would pay of this order (S320); absent when I have no credit */
             credit?: components["schemas"]["CheckoutCredit"];
+            /**
+             * Format: int64
+             * @description The delivery fee my membership waives on this order (S323): shippingMinor stays the fees as priced and totalMinor is lower by this amount
+             */
+            membershipWaivedMinor: number;
+            /** @description Which fees were waived ("fee waived: membership") or, when I am not a member, the upsell "Join Plus to save $X on this order"; absent when there is nothing to say */
+            membership?: components["schemas"]["MembershipSavings"];
         };
         /**
          * @description AfroTransact Delivery from the seller's store (S255), quoted for the chosen address: geo road distance from the
@@ -4088,6 +4262,210 @@ export interface components {
             /** @description Pass as `before` for older entries; null on the last page */
             nextBefore: string | null;
         };
+        /** @description One benefit of a tier. Only the numbers the benefit takes are set. */
+        MembershipBenefit: {
+            /** @enum {string} */
+            code: "FREE_DELIVERY" | "FREE_SHIPPING" | "CASHBACK" | "MEMBER_PRICES" | "EARLY_ACCESS" | "PRIORITY_SUPPORT" | "BOOSTED_REWARDS" | "MONTHLY_CREDIT";
+            /**
+             * Format: int64
+             * @description Goods subtotal an order needs (free delivery
+             */
+            minOrderMinor: number | null;
+            /**
+             * Format: int64
+             * @description The most the benefit is worth on one order; null for no cap
+             */
+            capMinor: number | null;
+            /** @description Hundredths of a percent (cashback share */
+            percentBps: number | null;
+            /** @description Hours before everyone else a member can order from pre-order windows and delivery runs */
+            hours: number | null;
+            /**
+             * Format: int64
+             * @description Credit granted each month
+             */
+            amountMinor: number | null;
+        };
+        MembershipTier: {
+            code: string;
+            /** @example Plus */
+            name: string;
+            description: string;
+            /** @description Lower is the entry tier; a higher order is an upgrade */
+            sortOrder: number;
+            currency: string;
+            /** Format: int64 */
+            monthlyPriceMinor: number;
+            /** Format: int64 */
+            yearlyPriceMinor: number;
+            trialDays: number;
+            benefits: components["schemas"]["MembershipBenefit"][];
+        };
+        MembershipOffer: {
+            tiers: components["schemas"]["MembershipTier"][];
+        };
+        MembershipSummary: {
+            /**
+             * @description PAST_DUE: a renewal failed and retries run; the benefits stay until it lapses
+             * @enum {string}
+             */
+            status: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "LAPSED" | "EXPIRED";
+            /** @enum {string} */
+            source: "PAID" | "COMPLIMENTARY";
+            tierCode: string;
+            tierName: string;
+            /** @enum {string} */
+            interval: "MONTHLY" | "YEARLY";
+            /**
+             * Format: int64
+             * @description What I pay each period
+             */
+            priceMinor: number;
+            currency: string;
+            /** Format: date-time */
+            startedAt: string;
+            /**
+             * Format: date-time
+             * @description The renewal date
+             */
+            periodEnd: string;
+            /** Format: date-time */
+            trialEnd: string | null;
+            cancelAtPeriodEnd: boolean;
+            /** Format: date-time */
+            endedAt: string | null;
+            pendingTierCode: string | null;
+            pendingTierName: string | null;
+            /** @enum {string|null} */
+            pendingInterval: "MONTHLY" | "YEARLY" | null;
+            /** Format: date-time */
+            nextRetryAt: string | null;
+            freeDaysGranted: number;
+        };
+        MembershipCharge: {
+            /** @enum {string} */
+            kind: "JOIN" | "RENEWAL" | "UPGRADE";
+            /** Format: int64 */
+            amountMinor: number;
+            currency: string;
+            /** @enum {string} */
+            status: "SUCCEEDED" | "FAILED" | "REFUNDED";
+            /** Format: int64 */
+            refundedMinor: number;
+            /** Format: date-time */
+            periodEnd: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        MembershipUsage: {
+            benefit: string;
+            /** Format: int64 */
+            uses: number;
+            /** Format: int64 */
+            amountMinor: number;
+            currency: string;
+        };
+        /** @description A full refund to the card when canceling within the window after a charge and before any benefit was used */
+        MembershipRefundRule: {
+            eligible: boolean;
+            /** @enum {string} */
+            reason: "OK" | "NOT_PAID" | "WINDOW_PASSED" | "BENEFIT_USED" | "DISABLED";
+            /** Format: int64 */
+            amountMinor: number;
+            currency: string;
+            /** Format: date-time */
+            until: string | null;
+            windowDays: number;
+        };
+        /** @description The saved card that is billed (display data only) */
+        MembershipCard: {
+            brand: string | null;
+            last4: string | null;
+            expMonth: number | null;
+            expYear: number | null;
+        };
+        MembershipAccount: {
+            /** @description I have the benefits now (trialing */
+            member: boolean;
+            membership: components["schemas"]["MembershipSummary"] | null;
+            tier: components["schemas"]["MembershipTier"] | null;
+            /** @description The tier a scheduled change moves to at the end of the period */
+            pendingTier: components["schemas"]["MembershipTier"] | null;
+            charges: components["schemas"]["MembershipCharge"][];
+            usage: components["schemas"]["MembershipUsage"][];
+            refund: components["schemas"]["MembershipRefundRule"];
+            /** @description Joining a tier with a trial starts one */
+            trialAvailable: boolean;
+            card: components["schemas"]["MembershipCard"] | null;
+            /** @description The tiers I can join or move to */
+            tiers: components["schemas"]["MembershipTier"][];
+        };
+        MembershipPlanRequest: {
+            tierCode: string;
+            /** @enum {string} */
+            interval: "MONTHLY" | "YEARLY";
+            /** @description The saved card to bill; the default card when absent */
+            paymentMethodId?: string;
+        };
+        MembershipCancelRequest: {
+            /** @description Also refund the latest fee and end the membership now (only when the refund rule allows it) */
+            refund?: boolean;
+        };
+        MembershipBenefitUse: {
+            benefit: string;
+            tierName: string;
+            /** Format: int64 */
+            amountMinor: number;
+            currency: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        MembershipBenefitUsePage: {
+            items: components["schemas"]["MembershipBenefitUse"][];
+            nextCursor: string | null;
+        };
+        /** @description A delivery fee the membership waived on one package ("fee waived: membership") */
+        MembershipWaiver: {
+            packageId: string;
+            seller: string;
+            /** @enum {string} */
+            benefit: "FREE_DELIVERY" | "FREE_SHIPPING";
+            /** Format: int64 */
+            waivedMinor: number;
+        };
+        /** @description "Join Plus to save $X on this order" */
+        MembershipUpsell: {
+            tierCode: string;
+            tierName: string;
+            /** Format: int64 */
+            monthlyPriceMinor: number;
+            /** Format: int64 */
+            yearlyPriceMinor: number;
+            trialDays: number;
+            /** Format: int64 */
+            savingMinor: number;
+            currency: string;
+        };
+        MembershipSavings: {
+            member: boolean;
+            tierName: string | null;
+            waivers: components["schemas"]["MembershipWaiver"][];
+            /** Format: int64 */
+            totalWaivedMinor: number;
+            /**
+             * Format: int64
+             * @description The credit I earn on this order once it is delivered (cashback); 0 without cashback or during a trial. Credit only buys products and services.
+             */
+            cashbackMinor: number;
+            upsell: components["schemas"]["MembershipUpsell"] | null;
+        };
+        /** @description The shipping fee the shopper's membership waived on this shipment, with the tier and benefit */
+        OrderMembershipWaiver: {
+            tierName: string;
+            benefit: string;
+            /** Format: int64 */
+            waivedMinor: number;
+        };
         /** @description What the shopper's credit would pay of this order if used (payments decides when the order is placed) */
         CheckoutCredit: {
             /** Format: int64 */
@@ -4193,16 +4571,6 @@ export interface components {
             earnings: components["schemas"]["ReferralEarnings"];
             friends: components["schemas"]["ReferralFriend"][];
             asFriend: components["schemas"]["ReferralFriend"] | null;
-        };
-        CreditRefundChoice: {
-            orderNumber: string;
-            cardRefundsAsCredit: boolean;
-            /**
-             * Format: int64
-             * @description What the card paid for the order
-             */
-            cardPartMinor: number;
-            currency: string;
         };
         GiftCardConfig: {
             /** Format: int64 */
@@ -4423,7 +4791,7 @@ export interface components {
              * @description The part of the order paid with AfroTransact credit (S320); the card paid the rest
              */
             creditMinor: number;
-            /** @description The card part of this order's refunds comes back as credit (the shopper's one-way choice) */
+            /** @description Staff chose credit, with a reason, for the card part of this order's refunds (customers cannot choose); otherwise the card part goes back to the card */
             cardRefundsAsCredit: boolean;
         };
         OrderDetail: {
@@ -4472,11 +4840,11 @@ export interface components {
                 deliveryCode: string | null;
                 lines: components["schemas"]["OrderLineView"][];
                 timeline: components["schemas"]["TimelineEvent"][];
-                /** @description A return can be started (show "Return items") */
+                /** @description A problem can be reported with this shipment (there is no self-service return; link to `/account/help/new`) */
                 returnable?: boolean;
                 /** Format: date-time */
                 returnWindowEndsAt?: string | null;
-                /** @description Only "Report a problem" is possible */
+                /** @description Report a problem is the only route */
                 problemReportOnly?: boolean;
                 /** @description AfroTransact Delivery from the seller's store (S255); null for other shipments */
                 localDelivery?: components["schemas"]["OrderLocalDelivery"] | null;
@@ -4486,6 +4854,8 @@ export interface components {
                  *     seller's store (see localDelivery).
                  */
                 deliveryFeeRule?: components["schemas"]["DeliveryFeeRuleRef"] | null;
+                /** @description The shipping fee the shopper's membership waived on this shipment, with tier and benefit (S323); null when none */
+                membershipWaiver?: components["schemas"]["OrderMembershipWaiver"] | null;
                 /** @description Where a pickup shipment is collected (carrier-gateway pickup location); null for other shipments */
                 pickup?: null | {
                     id: string;
@@ -4530,73 +4900,6 @@ export interface components {
                 }[];
                 timeline: components["schemas"]["TimelineEvent"][];
             }[];
-        };
-        /**
-         * @description Seller fault (photos required for the first four): DAMAGED, DEFECTIVE, WRONG_ITEM, EXPIRED_OR_SPOILED, NOT_AS_DESCRIBED, MISSING_PARTS, ARRIVED_LATE. No fault: the rest.
-         * @enum {string}
-         */
-        ReturnReason: "DAMAGED" | "DEFECTIVE" | "WRONG_ITEM" | "NOT_AS_DESCRIBED" | "MISSING_PARTS" | "EXPIRED_OR_SPOILED" | "ARRIVED_LATE" | "NO_LONGER_NEEDED" | "ORDERED_BY_MISTAKE" | "BETTER_PRICE_AVAILABLE";
-        /** @enum {string} */
-        ReturnMethod: "DROP_OFF" | "DRIVER_PICKUP" | "NO_RETURN";
-        /**
-         * @description One delivered shipment, a method and a reason per line (`shipmentId`, `method`, `lines`). The customer app's
-         *     short form `{orderNumber, atin, reason}` returns one unit of that item with its first allowed method.
-         *     Send an `Idempotency-Key` header to make retries safe (one is derived otherwise).
-         */
-        StartReturnRequest: {
-            orderNumber: string;
-            shipmentId?: string;
-            method?: components["schemas"]["ReturnMethod"];
-            lines?: {
-                lineId: string;
-                quantity: number;
-                reason: components["schemas"]["ReturnReason"];
-                comment?: string;
-            }[];
-            atin?: components["schemas"]["Atin"];
-            reason?: components["schemas"]["ReturnReason"];
-        };
-        ReturnEligibility: {
-            orderNumber: string;
-            currency: string;
-            shipments: {
-                shipmentId: string;
-                sellerName: string;
-                deliveredAt: string | null;
-                lines: {
-                    lineId: string;
-                    atin: string;
-                    title: string;
-                    quantity: number;
-                    maxQuantity: number;
-                    unitPriceMinor: number;
-                    eligible: boolean;
-                    /** @description Food / perishables: report a problem (seller-fault reasons, refund without return) */
-                    reportProblemOnly: boolean;
-                    sellerFaultOnly: boolean;
-                    windowEndsAt: string | null;
-                    methods: components["schemas"]["ReturnMethod"][];
-                    ineligibleReason: string | null;
-                }[];
-            }[];
-        };
-        ReturnDetail: components["schemas"]["ReturnSummary"] & {
-            lines: {
-                lineId: string;
-                atin: string;
-                title: string;
-                quantity: number;
-                unitPriceMinor: number;
-                reason: string;
-                outcome: string | null;
-            }[];
-            quote: {
-                itemsMinor: number;
-                shippingMinor: number;
-                taxMinor: number;
-                restockingFeeMinor: number;
-                totalMinor: number;
-            } | null;
         };
         CodeInput: {
             code: string;
@@ -6498,64 +6801,6 @@ export interface operations {
             409: components["responses"]["Problem"];
         };
     };
-    listReturns: {
-        parameters: {
-            query?: {
-                /** @description Only this order's returns */
-                orderNumber?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Returns */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReturnPage"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    startReturn: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description Makes retries safe (the same key replays the same result); derived per customer and minute when omitted. */
-                "Idempotency-Key"?: components["parameters"]["OptionalIdempotencyKey"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StartReturnRequest"];
-            };
-        };
-        responses: {
-            /** @description Return started */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReturnSummary"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-            422: components["responses"]["ValidationProblem"];
-            503: components["responses"]["Problem"];
-        };
-    };
     listStockAlerts: {
         parameters: {
             query?: never;
@@ -6991,29 +7236,206 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
-    chooseCreditRefunds: {
+    getMembershipOffer: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                orderNumber: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Chosen */
+            /** @description Tiers */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CreditRefundChoice"];
+                    "application/json": components["schemas"]["MembershipOffer"];
+                };
+            };
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccountMembership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description My membership (`member` false and `membership` null when I am not a member) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipAccount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    changeAccountMembership: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MembershipPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Changed or scheduled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipAccount"];
                 };
             };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    joinAccountMembership: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MembershipPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Joined */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipAccount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    cancelAccountMembership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MembershipCancelRequest"];
+            };
+        };
+        responses: {
+            /** @description Canceled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipAccount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    resumeAccountMembership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipAccount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listAccountMembershipBenefits: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Benefits used */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipBenefitUsePage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getCartMembershipSavings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Savings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipSavings"];
+                };
+            };
+            401: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };
@@ -7458,83 +7880,6 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    getReturnEligibility: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                orderNumber: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Eligibility */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReturnEligibility"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    getReturn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The return id, or its number (RMA-XXXXXXXX, e.g. scanned from the QR code) */
-                rmaId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Return */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReturnDetail"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    cancelReturn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                rmaId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Cancelled */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReturnSummary"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };
@@ -8936,6 +9281,149 @@ export interface operations {
             };
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+        };
+    };
+    requestHelpEvidenceUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    fileName: string;
+                    /** @enum {string} */
+                    contentType: "image/jpeg" | "image/png" | "image/webp" | "image/heic";
+                    /** Format: int64 */
+                    size: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Upload instructions */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpEvidenceUpload"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    completeHelpEvidenceUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Photo ready; use assetId in evidenceAssetIds */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpEvidenceAsset"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listHelpRequests: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Help requests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpRequestPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createHelpRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateHelpRequest"];
+            };
+        };
+        responses: {
+            /** @description Request received */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpRequest"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getHelpRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Help request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpRequest"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
 }

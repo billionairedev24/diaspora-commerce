@@ -29,6 +29,15 @@ public interface PreorderEligibility {
     Map<String, Line> eligibility(String country, String region, String city, Collection<String> variantAtins);
 
     /**
+     * The same for a member with early access (S323): a window opening within {@code earlyAccessHours} answers OPEN.
+     * Implementations that cannot pass the hours answer as without them.
+     */
+    default Map<String, Line> eligibility(String country, String region, String city,
+                                          Collection<String> variantAtins, int earlyAccessHours) {
+        return eligibility(country, region, city, variantAtins);
+    }
+
+    /**
      * One product's answer.
      *
      * @param preorder       sold as a pre-order here (category in the window, not flagged shipsNow)

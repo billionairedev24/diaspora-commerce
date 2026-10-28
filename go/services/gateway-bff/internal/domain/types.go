@@ -356,10 +356,32 @@ type PhoneVerification struct {
 	VerifiedAt    *time.Time `json:"verifiedAt,omitempty"`
 }
 
+// ReturnSummary is one return (RMA).
+type ReturnSummary struct {
+	RMAID       string `json:"rmaId"`
+	OrderNumber string `json:"orderNumber"`
+	Title       string `json:"title"`
+	Status      string `json:"status"`
+	RefundMinor int64  `json:"refundMinor"`
+	// Optional facts from tax-returns (drop-off label / QR, driver handover code, cancel button).
+	Number       string  `json:"number,omitempty"`
+	Method       string  `json:"method,omitempty"`
+	Reason       string  `json:"reason,omitempty"`
+	RefundState  string  `json:"refundState,omitempty"`
+	Currency     string  `json:"currency,omitempty"`
+	Cancellable  bool    `json:"cancellable,omitempty"`
+	CreatedAt    *string `json:"createdAt,omitempty"`
+	LabelURL     *string `json:"labelUrl,omitempty"`
+	QRPayload    *string `json:"qrPayload,omitempty"`
+	HandoverCode *string `json:"handoverCode,omitempty"`
+	DropOffBy    *string `json:"dropOffBy,omitempty"`
+	Carrier      *string `json:"carrier,omitempty"`
+	Tracking     *string `json:"trackingNumber,omitempty"`
+}
+
 // MeCounts are the account menu badges.
 type MeCounts struct {
 	Orders         int `json:"orders"`
-	Returns        int `json:"returns"`
 	Addresses      int `json:"addresses"`
 	PaymentMethods int `json:"paymentMethods"`
 }
@@ -464,48 +486,6 @@ type OrderSummary struct {
 	Shipments   []OrderShipment `json:"shipments"`
 }
 
-// ReturnSummary is one return (RMA).
-type ReturnSummary struct {
-	RMAID       string `json:"rmaId"`
-	OrderNumber string `json:"orderNumber"`
-	Title       string `json:"title"`
-	Status      string `json:"status"`
-	RefundMinor int64  `json:"refundMinor"`
-	// Optional facts from tax-returns (drop-off label / QR, driver handover code, cancel button).
-	Number       string  `json:"number,omitempty"`
-	Method       string  `json:"method,omitempty"`
-	Reason       string  `json:"reason,omitempty"`
-	RefundState  string  `json:"refundState,omitempty"`
-	Currency     string  `json:"currency,omitempty"`
-	Cancellable  bool    `json:"cancellable,omitempty"`
-	CreatedAt    *string `json:"createdAt,omitempty"`
-	LabelURL     *string `json:"labelUrl,omitempty"`
-	QRPayload    *string `json:"qrPayload,omitempty"`
-	HandoverCode *string `json:"handoverCode,omitempty"`
-	DropOffBy    *string `json:"dropOffBy,omitempty"`
-	Carrier      *string `json:"carrier,omitempty"`
-	Tracking     *string `json:"trackingNumber,omitempty"`
-}
-
-// StartReturn starts a return: one delivered shipment, a method and a reason per line. The legacy shape
-// (orderNumber + atin + reason, used by the customer app) returns one unit of that item with the first allowed method.
-type StartReturn struct {
-	OrderNumber string            `json:"orderNumber"`
-	ShipmentID  string            `json:"shipmentId"`
-	Method      string            `json:"method"`
-	Lines       []StartReturnLine `json:"lines"`
-	ATIN        string            `json:"atin"`
-	Reason      string            `json:"reason"`
-}
-
-// StartReturnLine is one returned order line.
-type StartReturnLine struct {
-	LineID   string `json:"lineId"`
-	Quantity int    `json:"quantity"`
-	Reason   string `json:"reason"`
-	Comment  string `json:"comment,omitempty"`
-}
-
 // PickupPoint is a pickup location offered for a package at checkout.
 type PickupPoint struct {
 	ID      string `json:"id"`
@@ -532,6 +512,8 @@ func HaversineMiles(lat1, lng1, lat2, lng2 float64) float64 {
 // CheckoutPackage is a cart package with pickup points.
 type CheckoutPackage struct {
 	CartPackage
+	// MembershipWaivedMinor is the part of this package's delivery fee the shopper's membership waives (S323).
+	MembershipWaivedMinor int64 `json:"membershipWaivedMinor"`
 	// LocalDelivery is the quote of AfroTransact Delivery from the seller's store (S255); AFROTRANSACT_DELIVERY packages only.
 	LocalDelivery *CheckoutLocalDelivery `json:"localDelivery,omitempty"`
 	PickupPoints  []PickupPoint          `json:"pickupPoints"`
@@ -621,6 +603,12 @@ type CheckoutSummary struct {
 	CrossSell *Rail `json:"crossSell,omitempty"`
 	// Credit is what the shopper's AfroTransact credit would pay of this order (S320); absent without credit.
 	Credit *CheckoutCredit `json:"credit,omitempty"`
+	// MembershipWaivedMinor is the delivery fee the shopper's membership waives on this order (S323): ShippingMinor
+	// stays the fees as priced, the total is lower by this amount.
+	MembershipWaivedMinor int64 `json:"membershipWaivedMinor"`
+	// Membership says which fees were waived ("fee waived: membership") or, for a shopper who is not a member, what
+	// joining would save on this order; absent when there is nothing to say.
+	Membership *MembershipSavings `json:"membership,omitempty"`
 }
 
 // PlaceOrderRequest is the checkout submission (forwarded to orders as-is plus the selected lines).

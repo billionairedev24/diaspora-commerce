@@ -63,7 +63,7 @@ test.describe('storefront · a11y smoke @a11y', () => {
     ['addresses', '/account/addresses'],
     ['payments', '/account/payments'],
     ['security', '/account/security'],
-    ['returns', '/account/returns'],
+    ['help with an order', '/account/help'],
     ['services', '/services'],
     ['service detail', '/services/svc-braids-cornrows'],
     ['about', '/about'],

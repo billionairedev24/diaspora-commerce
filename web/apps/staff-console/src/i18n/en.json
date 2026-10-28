@@ -1553,5 +1553,11 @@
   "st.settings.referrals.description": "What the customer who shares and the friend who joins each earn, when it is earned, the limits, and every referral with the ones held for review. Every change is kept with its reason.",
   "st.settings.referrals.intro": "AfroTransact pays the rewards: credit (never cash) or free membership days, set separately for the customer who shares and the friend who joins. A friend qualifies when their first order of at least the minimum is delivered, and the rewards are granted once the return window has passed. Referrals that share a device, network, delivery address or card wait here for review.",
   "st.settings.referrals.listTitle": "Referrals and the review queue",
-  "st.resourceTable.allStatuses": "All"
+  "st.resourceTable.allStatuses": "All",
+  "st.settings.membership.label": "Membership",
+  "st.settings.membership.description": "The tiers shoppers can join: price, free trial and the benefits each gives, plus the refund and retry rules. Every change is kept with its reason.",
+  "st.settings.membership.intro": "Define each tier here: monthly and yearly price, free trial, publish or retire, and which benefits it gives from the menu. Members keep the price they signed up at. Credit a membership grants only buys products and services.",
+  "st.settings.membership.reportLink": "Members, churn, the cost of the benefits and recurring revenue",
+  "st.settings.membership.tiers": "Tiers",
+  "st.settings.membership.rules": "Billing rules"
 }

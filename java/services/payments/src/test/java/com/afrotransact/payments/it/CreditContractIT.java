@@ -24,6 +24,8 @@ class CreditContractIT extends PaymentsIntegrationTest {
     private static final Path CONTRACT = Path.of("../../../contracts/openapi/payments.yaml");
     private static final List<String> PREFIXES = List.of("/v1/credit", "/v1/gift-cards", "/v1/money",
             "/v1/orders/{orderId}/credit-refunds", "/v1/customers/me/orders/{orderId}/credit-refunds");
+    // The last prefix stays so that a shopper-facing choice can never come back unnoticed: a delivered order has no
+    // self-service refund, so neither the served API nor the contract may have it (only staff choose credit).
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> contract() throws IOException {
@@ -47,6 +49,18 @@ class CreditContractIT extends PaymentsIntegrationTest {
             }
         });
         return out;
+    }
+
+    @Test
+    void customersCannotChooseCreditForARefundAndOnlyTheStaffRouteExists() throws IOException {
+        String shopperPath = "/v1/customers/me/orders/{orderId}/credit-refunds";
+        @SuppressWarnings("unchecked")
+        Map<String, Object> documented = (Map<String, Object>) contract().get("paths");
+        assertThat(documented).doesNotContainKey(shopperPath).containsKey("/v1/orders/{orderId}/credit-refunds");
+        JsonNode served = ok(send("GET", "/v3/api-docs", null, null)).path("paths");
+        assertThat(served.has(shopperPath)).isFalse();
+        assertThat(served.path("/v1/orders/{orderId}/credit-refunds").path("post").path("operationId").asString())
+                .isEqualTo("chooseCreditRefundsAsStaff");
     }
 
     @Test

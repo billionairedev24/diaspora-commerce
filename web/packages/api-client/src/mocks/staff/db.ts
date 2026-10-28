@@ -9,6 +9,7 @@ import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
 import { seedIdentityAdmin } from './identity';
 import { type MockMarketsState, seedMarkets } from './markets';
+import { tierBenefitDetails } from './membership-tiers';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
 import { type MockPlansState, seedPlans } from './plans';
 import { type MockPreorderState, seedPreorders } from './preorders';
@@ -538,6 +539,47 @@ function seed(now: Date): MockStaffDb {
       { id: 'rh-1', changedAt: ago(14, 0), changedByName: 'Platform Admin', reason: 'Launch offer: $10 each after a $30 first order' }
     ])
   ];
+  const benefitFlags = { freeDelivery: false, freeDeliveryMin: 0, freeDeliveryCap: 0, freeShipping: false, freeShippingMin: 0, freeShippingCap: 0, cashback: false, cashbackPercent: 0, cashbackMin: 0, cashbackCap: 0,
+    memberPrices: false, earlyAccess: false, earlyAccessHours: 0, prioritySupport: false, boostedRewards: false, boostedPercent: 0, monthlyCredit: false, monthlyCreditAmount: 0 };
+  const membershipTiers = [
+    rec('plus', { code: 'plus', name: 'Plus', description: 'Free delivery and shipping on orders from $25.00, cashback and priority support.', status: 'PUBLISHED', sortOrder: 10, monthlyPriceMinor: 999, yearlyPriceMinor: 9900, trialDays: 14, members: 12, trialing: 3,
+      ...benefitFlags, freeDelivery: true, freeDeliveryMin: 25, freeShipping: true, freeShippingMin: 25, freeShippingCap: 15, cashback: true, cashbackPercent: 2, prioritySupport: true,
+      benefitsText: 'Free AfroTransact delivery, Free carrier shipping, Cashback as credit, Priority support', updatedByName: 'Platform Admin', updatedAt: ago(10, 0), version: 4 }, [], [
+      { id: 'th-2', changedAt: ago(10, 0), changedByName: 'Platform Admin', action: 'Published', reason: 'Open Plus to every shopper' },
+      { id: 'th-1', changedAt: ago(14, 0), changedByName: 'Platform Admin', action: 'Created', reason: 'The first membership tier' }
+    ]),
+    rec('premium', { code: 'premium', name: 'Premium', description: 'Everything on every order, bigger cashback and early access.', status: 'DRAFT', sortOrder: 20, monthlyPriceMinor: 1999, yearlyPriceMinor: 19_900, trialDays: 14, members: 0, trialing: 0,
+      ...benefitFlags, freeDelivery: true, freeShipping: true, cashback: true, cashbackPercent: 5, earlyAccess: true, earlyAccessHours: 24, prioritySupport: true,
+      benefitsText: 'Free AfroTransact delivery, Free carrier shipping, Cashback as credit, Early access to pre-orders and runs, Priority support', updatedByName: 'Platform Admin', updatedAt: ago(2, 0), version: 1 }, [], [
+      { id: 'th-3', changedAt: ago(2, 0), changedByName: 'Platform Admin', action: 'Created', reason: 'A bigger tier for large households' }
+    ])
+  ];
+  membershipTiers.forEach((r) => { r.fields.benefitDetails = tierBenefitDetails(r.fields); });
+  const memberships = [
+    rec('mem-1', { customerId: customers[0]?.id ?? 'cus-1000', customerName: customers[0]?.name ?? 'Amara Nwosu', tierCode: 'plus', tierName: 'Plus', status: 'ACTIVE', interval: 'Monthly', priceMinor: 999, source: 'Paid', startedAt: ago(40, 0), periodEnd: ago(-5, 0), cancelAtPeriodEnd: 'No', refundPossible: 'No', refundWhy: 'Window passed' }, [], [
+      { id: 'mc-1', createdAt: ago(40, 0), kind: 'Join', amountMinor: 999, status: 'SUCCEEDED', refundedMinor: 0 },
+      { id: 'mc-2', createdAt: ago(10, 0), kind: 'Renewal', amountMinor: 999, status: 'SUCCEEDED', refundedMinor: 0 }
+    ]),
+    rec('mem-2', { customerId: customers[1]?.id ?? 'cus-1001', customerName: customers[1]?.name ?? 'Kofi Mensah', tierCode: 'plus', tierName: 'Plus', status: 'TRIALING', interval: 'Yearly', priceMinor: 9900, source: 'Paid', startedAt: ago(3, 0), periodEnd: ago(-11, 0), cancelAtPeriodEnd: 'No', refundPossible: 'No', refundWhy: 'Not paid' }, [], [])
+  ];
+  const membershipSettings = [
+    rec('membership', { refundWindowDays: 7, retryText: '1, 3, 5', updatedByName: 'Platform Admin', updatedAt: ago(20, 0), version: 2 }, [], [
+      { id: 'sh-1', changedAt: ago(20, 0), changedByName: 'Platform Admin', reason: 'Launch rules: seven day refund window' }
+    ])
+  ];
+  const membershipReport = [
+    rec('members', { item: 'Members now', amountMinor: 0, count: 15, note: 'Trialing, active or past due.' }),
+    rec('trialing', { item: 'On a free trial', amountMinor: 0, count: 3, note: 'They pay nothing until the trial ends and get no credit benefits.' }),
+    rec('mrr', { item: 'Monthly recurring revenue', amountMinor: 11_988, count: null, note: 'What paying members pay per month (a yearly fee divided by twelve).' }),
+    rec('arr', { item: 'Annual recurring revenue', amountMinor: 143_856, count: null, note: 'Monthly recurring revenue times twelve.' }),
+    rec('charged', { item: 'Fees charged', amountMinor: 21_978, count: null, note: 'Last 30 days. Joining, renewals and upgrades.' }),
+    rec('refunded', { item: 'Fees refunded', amountMinor: 999, count: 1, note: 'Last 30 days. Refunded to the card.' }),
+    rec('benefit-cost', { item: 'Cost of the benefits', amountMinor: 5_400, count: null, note: 'Last 30 days. Credit granted plus delivery and shipping fees waived.' }),
+    rec('credit-granted', { item: 'Credit granted to members', amountMinor: 1_200, count: null, note: 'Last 30 days. Cashback and monthly credit; store credit only buys products and services.' }),
+    rec('fees-waived', { item: 'Delivery and shipping fees waived', amountMinor: 4_200, count: null, note: 'Last 30 days. Fees AfroTransact did not charge members.' }),
+    rec('churn', { item: 'Churn', amountMinor: 0, count: null, note: 'Last 30 days. 30% of the 10 members at the start left (3 memberships ended).' }),
+    rec('tier-plus', { item: 'Plus tier', amountMinor: 11_988, count: 15, note: '3 trialing, 11 active, 1 past due, 2 canceling. Joined 8, canceled 2, lapsed 1. Churn 30%. Monthly recurring revenue shown.' })
+  ];
   const paymentSettings = [
     rec('stripe.mode', { label: 'Stripe', value: 'Test (Stripe test mode)', source: 'STRIPE_SECRET_KEY', help: 'Which Stripe account money moves through. Test mode never moves real money.' }),
     rec('settlement.hold', { label: 'Hold before a seller can be paid', value: '7 days after delivery', source: 'SETTLEMENT_HOLD', help: "A seller's net for an order is held until this long after it is delivered, then transferred to their Stripe account." }),
@@ -583,7 +625,7 @@ function seed(now: Date): MockStaffDb {
     records: {
       users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, 'product-reviews': productReviews, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
-      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
+      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now),
       ...seedIdentityAdmin(now)

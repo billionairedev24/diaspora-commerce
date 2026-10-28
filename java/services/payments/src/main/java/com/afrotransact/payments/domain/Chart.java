@@ -77,6 +77,11 @@ public enum Chart {
      * Plan fees paid by card never reach this ledger (Stripe Billing collects them on the platform account).
      */
     PLAN_FEE_REVENUE("4600", "Seller plan fees collected from earnings", AccountType.REVENUE, Scope.NONE),
+    /**
+     * Shopper membership fees (S323), taken to revenue when the card is charged and back out when refunded. (Deferring an
+     * annual fee over its twelve months is a finance policy that is not built; MRR is reported from the memberships.)
+     */
+    MEMBERSHIP_REVENUE("4700", "Shopper membership fees", AccountType.REVENUE, Scope.NONE),
     STRIPE_FEES("5000", "Stripe processing fees", AccountType.EXPENSE, Scope.NONE),
     CHARGEBACK_LOSSES("5100", "Chargeback losses", AccountType.EXPENSE, Scope.NONE),
     /** Credit and gift cards AfroTransact gives away (staff, promotions, referral, membership): the program's cost. */

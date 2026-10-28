@@ -27,8 +27,9 @@ need a second remote call, retry and reconciliation for the same guarantee.
 4. **Return window, then grant.** `eligibleAt` is the last delivery plus the return-window days. The job
    (`at.payments.jobs.referral-interval`, 5 min) re-checks that the order was not refunded below the minimum
    (payments' own refund total), applies the caps per side, and grants. A membership reward goes through the
-   `MembershipGrants` port; until S323 lands the stand-in answers "unavailable", the reward stays `DEFERRED` and is
-   retried (TODO(S323): replace `UnavailableMembershipGrants`).
+   `MembershipGrants` port, whose adapter (`MembershipProgramGrants`, S323) grants free days of the entry membership tier;
+   with no published tier it answers "unavailable", the reward stays `DEFERRED` and is retried. A member whose tier has
+   the bigger-rewards benefit earns that much more on either kind of reward (see membership.md).
 5. **Abuse checks.** Referrer and friend sharing a sign-up **device**, **network (/24 or /64)**, a **delivery address**
    (HMAC of the normalised street, unit, postal code and country) or a saved **card** (brand, last four, expiry; Stripe's
    card fingerprint is not stored) hold the referral in `IN_REVIEW`. Staff (ledger:adjust) approve or reject with a reason

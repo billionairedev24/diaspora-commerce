@@ -43,9 +43,10 @@ class ReferralRewarderImplTest {
     private final ReferralSettingsRepository settingsRepo = mock(ReferralSettingsRepository.class);
     private final CreditLedger ledger = mock(CreditLedger.class);
     private final MembershipGrants membership = mock(MembershipGrants.class);
+    private final MembershipBenefitsService benefits = mock(MembershipBenefitsService.class);
     private final DomainEventPublisher events = mock(DomainEventPublisher.class);
     private final ReferralRewarderImpl rewarder = new ReferralRewarderImpl(referrals, tracking, settingsRepo, ledger,
-            membership, events);
+            membership, benefits, events);
 
     private Referral waiting;
     private ReferralSettings program;
@@ -92,6 +93,27 @@ class ReferralRewarderImplTest {
                 && a.idempotencyKey().equals("referral:" + waiting.id() + ":referred")));
         verify(events).publish(eq(PaymentsEvents.REFERRAL_REWARDED), anyString(),
                 eq("ref"), any());
+    }
+
+    @Test
+    void aMembersRewardIsBiggerByTheBoostOfTheirTierAndOnlyTheirs() {
+        when(benefits.rewardBoostBps("ref")).thenReturn(5000);
+        rewards(credit(ReferralSide.REFERRER, "ref", 1000), credit(ReferralSide.REFERRED, "friend", 1000));
+        rewarder.settle(waiting, AFTER_WINDOW);
+        verify(ledger).add(argThat(a -> a.customerId().equals("ref") && a.amount().minor() == 1500
+                && a.idempotencyKey().equals("referral:" + waiting.id() + ":referrer")));
+        verify(ledger).add(argThat(a -> a.customerId().equals("friend") && a.amount().minor() == 1000));
+    }
+
+    @Test
+    void aBoostedRewardStaysWithinTheSanityBoundOfAReward() {
+        when(benefits.rewardBoostBps("ref")).thenReturn(10_000);
+        when(settingsRepo.get()).thenReturn(settings(true, ReferralReward.credit(ReferralReward.MAX_CREDIT_MINOR),
+                ReferralReward.credit(1000), 20, 0));
+        rewards(credit(ReferralSide.REFERRER, "ref", ReferralReward.MAX_CREDIT_MINOR));
+        rewarder.settle(waiting, AFTER_WINDOW);
+        verify(ledger).add(argThat(a -> a.customerId().equals("ref")
+                && a.amount().minor() == ReferralReward.MAX_CREDIT_MINOR));
     }
 
     @Test

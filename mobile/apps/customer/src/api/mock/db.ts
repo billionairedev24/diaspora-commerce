@@ -20,7 +20,6 @@ export interface MockShipment {
 }
 export interface MockReview { id: string; rating: number; title: string | null; text: string | null; status: 'PUBLISHED' | 'PENDING'; createdAt: string; updatedAt: string }
 export interface MockOrder { orderNumber: string; placedAt: string; totalMinor: number; shipTo: string; status: string; shipments: MockShipment[] }
-export interface MockReturn { rmaId: string; orderNumber: string; title: string; status: string; refundMinor: number; atin: string; number?: string; method?: 'DROP_OFF' | 'DRIVER_PICKUP' | 'NO_RETURN'; cancellable?: boolean; qrPayload?: string | null; dropOffBy?: string | null }
 
 const daysFromNow = (d: number, h = 10) => { const x = new Date(); x.setDate(x.getDate() + d); x.setHours(h, 0, 0, 0); return x; };
 
@@ -64,7 +63,6 @@ function seed() {
     addresses: ADDRESSES.map((a) => ({ ...a })),
     paymentMethods: PAYMENT_METHODS.map((m): PaymentMethod => ({ ...m })),
     orders: seedOrders(),
-    returns: [] as MockReturn[],
     bookings: seedBookings(),
     bookingHistory: {} as Record<string, Array<{ at: string; by: string; action: string }>>,
     devices: [] as Array<{ id: string; token: string; app: string; platform: string; provider: string }>,

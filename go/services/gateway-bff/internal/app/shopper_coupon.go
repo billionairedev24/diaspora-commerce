@@ -32,7 +32,7 @@ func (s *checkoutPaymentServiceImpl) priceCoupon(ctx context.Context, c *domain.
 	}
 	shipping := int64(0)
 	for _, p := range sum.Packages {
-		shipping += packageShippingFee(p, packageDelivery)
+		shipping += max(0, packageShippingFee(p, packageDelivery)-p.MembershipWaivedMinor)
 	}
 	req := port.CouponValidateRequest{
 		Code: code, CustomerID: c.Subject, Currency: strings.ToUpper(firstNonEmpty(sum.Currency, domain.Currency)),
@@ -116,7 +116,7 @@ func offerDiscounts(c *domain.CheckoutCoupon) map[string]int64 {
 }
 
 func recalcCheckoutTotal(sum *domain.CheckoutSummary) {
-	ship := sum.ShippingMinor - sum.ShippingDiscountMinor
+	ship := sum.ShippingMinor - sum.MembershipWaivedMinor - sum.ShippingDiscountMinor
 	if ship < 0 {
 		ship = 0
 	}

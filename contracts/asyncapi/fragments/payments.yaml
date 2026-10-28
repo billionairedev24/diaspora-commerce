@@ -25,6 +25,8 @@ channels:
       paymentsGiftCardVoided: {$ref: '#/components/messages/paymentsGiftCardVoided'}
       paymentsGiftCardResent: {$ref: '#/components/messages/paymentsGiftCardResent'}
       paymentsCreditAdjusted: {$ref: '#/components/messages/paymentsCreditAdjusted'}
+      paymentsMembershipChanged: {$ref: '#/components/messages/paymentsMembershipChanged'}
+      paymentsMembershipTierChanged: {$ref: '#/components/messages/paymentsMembershipTierChanged'}
       paymentsReferralRewarded: {$ref: '#/components/messages/paymentsReferralRewarded'}
       paymentsReferralFlagged: {$ref: '#/components/messages/paymentsReferralFlagged'}
       paymentsReferralDecided: {$ref: '#/components/messages/paymentsReferralDecided'}
@@ -220,6 +222,16 @@ components:
       title: 'A staff grant or correction of a customer''s credit was posted (audit; key = customer id)'
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/PaymentsCreditAdjusted'}
+    paymentsMembershipChanged:
+      name: payments.membership.changed
+      title: 'A shopper''s membership started, renewed, failed to renew, lapsed, ended, changed or got free days (key = customer id)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsMembershipChanged'}
+    paymentsMembershipTierChanged:
+      name: payments.membership.tier_changed
+      title: 'Staff created, edited, published or retired a membership tier (audit; key = tier code)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsMembershipTierChanged'}
     paymentsReferralRewarded:
       name: payments.referral.rewarded
       title: 'A referral reward was granted to one side, as credit or membership days (S322; key = customer id)'
@@ -344,6 +356,32 @@ components:
         reason: {type: string}
         proposedBy: {type: string}
         decidedBy: {type: string, description: 'The approver, or the proposer when it was within the staff-set limit'}
+    PaymentsMembershipChanged:
+      type: object
+      required: [membershipId, customerId, event, tierCode, tierName, status, interval, currency]
+      properties:
+        membershipId: {type: string, format: uuid}
+        customerId: {type: string}
+        event:
+          type: string
+          enum: [JOINED, TRIAL_STARTED, TRIAL_CONVERTED, RENEWED, RENEWAL_FAILED, PAST_DUE, LAPSED, CANCEL_SCHEDULED, CANCEL_RESUMED, UPGRADED, TRIAL_ENDING, DOWNGRADE_SCHEDULED, DOWNGRADED, ENDED, FREE_DAYS_GRANTED, REFUNDED, CONVERTED_TO_PAID]
+        tierCode: {type: string}
+        tierName: {type: string}
+        status: {type: string, enum: [TRIALING, ACTIVE, PAST_DUE, CANCELED, LAPSED, EXPIRED]}
+        interval: {type: string, enum: [MONTHLY, YEARLY]}
+        periodEnd: {type: [string, 'null'], format: date-time, description: 'The end of the paid (or trial, or free) period'}
+        amountMinor: {type: integer, format: int64, description: 'The fee charged or refunded by this step, if any'}
+        currency: {type: string}
+        detail: {type: [string, 'null']}
+    PaymentsMembershipTierChanged:
+      type: object
+      required: [tierCode, action, status, reason, changedBy]
+      properties:
+        tierCode: {type: string}
+        action: {type: string, enum: [CREATED, UPDATED, PUBLISHED, RETIRED]}
+        status: {type: string, enum: [DRAFT, PUBLISHED, RETIRED]}
+        reason: {type: string}
+        changedBy: {type: string}
     PaymentsReferralRewarded:
       type: object
       required: [referralId, customerId, side, rewardType, creditMinor, currency, membershipDays]

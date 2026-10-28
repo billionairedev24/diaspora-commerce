@@ -73,6 +73,8 @@ type ShipmentDetail struct {
 	// DeliveryFeeRule is the delivery fee rule the shipping was charged by, as it was when the order was placed: later
 	// edits of the rule never change it. Null for flat rates and AfroTransact Delivery from a seller's store.
 	DeliveryFeeRule *FeeRuleRef `json:"deliveryFeeRule"`
+	// MembershipWaiver is the shipping fee the shopper's membership waived on this shipment (S323); null when none.
+	MembershipWaiver *OrderMembershipWaiver `json:"membershipWaiver"`
 }
 
 // OrderPickup is the pickup point of a pickup shipment as the order page shows it.
@@ -117,64 +119,6 @@ type OrderPayment struct {
 }
 
 // ---------------------------------------------------------------- returns
-
-// ReturnableLine is one delivered line and whether (and how) it can go back.
-type ReturnableLine struct {
-	LineID            string   `json:"lineId"`
-	ATIN              string   `json:"atin"`
-	Title             string   `json:"title"`
-	Quantity          int      `json:"quantity"`
-	MaxQuantity       int      `json:"maxQuantity"`
-	UnitPriceMinor    int64    `json:"unitPriceMinor"`
-	Eligible          bool     `json:"eligible"`
-	ReportProblemOnly bool     `json:"reportProblemOnly"`
-	SellerFaultOnly   bool     `json:"sellerFaultOnly"`
-	WindowEndsAt      *string  `json:"windowEndsAt"`
-	Methods           []string `json:"methods"`
-	IneligibleReason  *string  `json:"ineligibleReason"`
-}
-
-// ReturnableShipment is one delivered shipment of an order.
-type ReturnableShipment struct {
-	ShipmentID  string           `json:"shipmentId"`
-	SellerName  string           `json:"sellerName"`
-	DeliveredAt *string          `json:"deliveredAt"`
-	Lines       []ReturnableLine `json:"lines"`
-}
-
-// ReturnEligibility is what can be returned from an order.
-type ReturnEligibility struct {
-	OrderNumber string               `json:"orderNumber"`
-	Currency    string               `json:"currency"`
-	Shipments   []ReturnableShipment `json:"shipments"`
-}
-
-// ReturnLineView is one line of a return.
-type ReturnLineView struct {
-	LineID         string  `json:"lineId"`
-	ATIN           string  `json:"atin"`
-	Title          string  `json:"title"`
-	Quantity       int     `json:"quantity"`
-	UnitPriceMinor int64   `json:"unitPriceMinor"`
-	Reason         string  `json:"reason"`
-	Outcome        *string `json:"outcome"`
-}
-
-// RefundQuote is tax-returns' refund estimate.
-type RefundQuote struct {
-	ItemsMinor         int64 `json:"itemsMinor"`
-	ShippingMinor      int64 `json:"shippingMinor"`
-	TaxMinor           int64 `json:"taxMinor"`
-	RestockingFeeMinor int64 `json:"restockingFeeMinor"`
-	TotalMinor         int64 `json:"totalMinor"`
-}
-
-// ReturnDetail is one return with its lines and refund estimate.
-type ReturnDetail struct {
-	ReturnSummary
-	Lines []ReturnLineView `json:"lines"`
-	Quote *RefundQuote     `json:"quote"`
-}
 
 // ---------------------------------------------------------------- login & security
 
