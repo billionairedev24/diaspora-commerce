@@ -1,5 +1,6 @@
 package com.afrotransact.deliveryruns.domain;
 
+import java.time.Duration;
 import java.time.Instant;
 
 /**
@@ -23,4 +24,17 @@ import java.time.Instant;
 public record Resolution(AreaKey place, boolean on, PreorderStatus stage, PreorderWindow window,
                          Instant countdownTarget, Integer count, Fallback fallback, boolean metro, FeeSnapshot doorFee,
                          FeeSnapshot pickupFee, boolean beyondRange, PreorderSettings settings) {
+
+    /**
+     * The same window for a member with early access (S323): an UPCOMING window that opens within {@code hours} is
+     * OPEN for them. Anything else is returned as it is.
+     */
+    public Resolution forEarlyAccess(Instant now, int hours) {
+        if (hours <= 0 || window == null || stage != PreorderStatus.UPCOMING
+                || window.details().opensAt().isAfter(now.plus(Duration.ofHours(hours)))) {
+            return this;
+        }
+        return new Resolution(place, on, PreorderStatus.OPEN, window, window.details().closesAt(), count, fallback,
+                metro, doorFee, pickupFee, beyondRange, settings);
+    }
 }

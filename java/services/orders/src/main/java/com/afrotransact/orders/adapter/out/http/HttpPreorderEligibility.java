@@ -46,6 +46,12 @@ class HttpPreorderEligibility implements PreorderEligibility {
     @Override
     public Map<String, Line> eligibility(String country, String region, String city,
                                          Collection<String> variantAtins) {
+        return eligibility(country, region, city, variantAtins, 0);
+    }
+
+    @Override
+    public Map<String, Line> eligibility(String country, String region, String city,
+                                         Collection<String> variantAtins, int earlyAccessHours) {
         Map<String, Line> out = new LinkedHashMap<>();
         if (variantAtins.isEmpty()) {
             return out;
@@ -58,6 +64,9 @@ class HttpPreorderEligibility implements PreorderEligibility {
             }
             if (!blank(city)) {
                 u.queryParam("city", city);
+            }
+            if (earlyAccessHours > 0) {
+                u.queryParam("earlyAccessHours", earlyAccessHours);
             }
             return u.build();
         }).headers(h -> h.setBearerAuth(tokens.token())).retrieve().body(JsonNode.class));

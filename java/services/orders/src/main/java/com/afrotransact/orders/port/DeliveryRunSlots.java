@@ -18,11 +18,24 @@ public interface DeliveryRunSlots {
     List<OpenRun> openRuns(String zip);
 
     /**
+     * The same for a member with early access (S323): announced runs opening within {@code earlyAccessHours} are
+     * listed too. Implementations that cannot pass the hours answer as without them.
+     */
+    default List<OpenRun> openRuns(String zip, int earlyAccessHours) {
+        return openRuns(zip);
+    }
+
+    /**
      * Takes the order's slot on exactly this run (never rolled to the next run: the shopper was quoted this run's date
      * and fee). Idempotent per order: the same order again answers the slot it holds. Throws {@link RunUnavailable}
      * when the run is closed or full.
      */
     void reserve(String runId, String orderId, String customerId);
+
+    /** The same for a member with early access: the run may still be announced, opening within the hours. */
+    default void reserve(String runId, String orderId, String customerId, int earlyAccessHours) {
+        reserve(runId, orderId, customerId);
+    }
 
     /**
      * Gives the order's slot back (cancelled, refunded or failed order). Idempotent: an order without a slot, or one

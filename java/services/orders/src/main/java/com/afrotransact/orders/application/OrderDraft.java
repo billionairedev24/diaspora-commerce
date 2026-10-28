@@ -9,6 +9,7 @@ import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.FulfilmentType;
 import com.afrotransact.orders.domain.FeeRuleSnapshot;
 import com.afrotransact.orders.domain.LocalDelivery;
+import com.afrotransact.orders.domain.MembershipWaiver;
 import com.afrotransact.orders.domain.OrderOrigin;
 import com.afrotransact.orders.domain.PreorderPackage;
 import com.afrotransact.orders.domain.ShipTo;
@@ -98,7 +99,20 @@ public record OrderDraft(String orderId, String orderNumber, String customerId, 
                                 boolean perishable, boolean handoverRequired, String handoverCodeHash,
                                 String handoverCodeSealed, long shippingMinor, LocalDate promisedFrom,
                                 LocalDate promisedBy, List<CheckoutPlan.Line> lines, LocalDelivery localDelivery,
-                                PreorderPackage preorder, FeeRuleSnapshot feeRule) {
+                                PreorderPackage preorder, FeeRuleSnapshot feeRule,
+                                MembershipWaiver membershipWaiver) {
+
+        /** A shipment whose shipping fee no membership waived. */
+        public DraftShipment(String id, int seq, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
+                             String nodeId, DeliveryMethod method, String serviceLevel, String pickupLocationId,
+                             DeliveryPreferences preferences, boolean perishable, boolean handoverRequired,
+                             String handoverCodeHash, String handoverCodeSealed, long shippingMinor,
+                             LocalDate promisedFrom, LocalDate promisedBy, List<CheckoutPlan.Line> lines,
+                             LocalDelivery localDelivery, PreorderPackage preorder, FeeRuleSnapshot feeRule) {
+            this(id, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, method, serviceLevel, pickupLocationId,
+                    preferences, perishable, handoverRequired, handoverCodeHash, handoverCodeSealed, shippingMinor,
+                    promisedFrom, promisedBy, lines, localDelivery, preorder, feeRule, null);
+        }
 
         /** A shipment without a fee rule snapshot. */
         public DraftShipment(String id, int seq, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
@@ -140,7 +154,15 @@ public record OrderDraft(String orderId, String orderNumber, String customerId, 
             return new DraftShipment(id, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, method, serviceLevel,
                     pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash,
                     handoverCodeSealed, newShippingMinor, promisedFrom, promisedBy, newLines, localDelivery, preorder,
-                    feeRule);
+                    feeRule, membershipWaiver);
+        }
+
+        /** The shipment charged {@code newShippingMinor} after a membership waived part of its fee. */
+        public DraftShipment waived(MembershipWaiver waiver, long newShippingMinor) {
+            return new DraftShipment(id, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, method, serviceLevel,
+                    pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash,
+                    handoverCodeSealed, newShippingMinor, promisedFrom, promisedBy, lines, localDelivery, preorder,
+                    feeRule, waiver);
         }
     }
 }

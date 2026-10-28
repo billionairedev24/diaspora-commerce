@@ -42,8 +42,13 @@ class PublicRunController {
     AvailableRunsResponse available(
             @Parameter(description = "5-digit ZIP, e.g. 78602") @RequestParam(required = false) String zip,
             @RequestParam(required = false) Double lat,
-            @RequestParam(required = false) Double lng) {
-        return new AvailableRunsResponse(publicRuns.available(zip, lat, lng).stream()
+            @RequestParam(required = false) Double lng,
+            @Parameter(description = "S323: a member's early access hours; announced runs opening within that time are "
+                    + "listed (orders-service sends the hours of the customer's membership; a run only takes the "
+                    + "order when its reservation names them too)")
+            @RequestParam(defaultValue = "0") int earlyAccessHours) {
+        int early = Math.max(0, Math.min(earlyAccessHours, 720));
+        return new AvailableRunsResponse(publicRuns.available(zip, lat, lng, early).stream()
                 .map(PublicRunResponse::of).toList());
     }
 

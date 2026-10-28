@@ -21,6 +21,13 @@ public interface PreorderPublicService {
     EligibilityResult eligibility(String country, String region, String city, List<String> atins);
 
     /**
+     * The same for a member with early access (S323): a window that opens within {@code earlyAccessHours} is OPEN for
+     * them, so checkout lets them order before everyone else.
+     */
+    EligibilityResult eligibility(String country, String region, String city, List<String> atins,
+                                  int earlyAccessHours);
+
+    /**
      * An open or upcoming window.
      *
      * @param window    the window

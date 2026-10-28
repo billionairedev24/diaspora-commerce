@@ -24,6 +24,7 @@ import com.afrotransact.orders.domain.FeeRuleSnapshot;
 import com.afrotransact.orders.domain.FulfilmentType;
 import com.afrotransact.orders.domain.HandoverPolicy;
 import com.afrotransact.orders.domain.LocalDelivery;
+import com.afrotransact.orders.domain.MembershipWaiver;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.domain.OrdersStateConflict;
@@ -39,6 +40,7 @@ import com.afrotransact.orders.port.CartClient;
 import com.afrotransact.orders.port.CouponsClient;
 import com.afrotransact.orders.port.HandoverCodeVault;
 import com.afrotransact.orders.port.InventoryClient;
+import com.afrotransact.orders.port.MemberBenefits;
 import com.afrotransact.orders.port.OfferInventory;
 import com.afrotransact.orders.port.MarketEligibility;
 import com.afrotransact.orders.port.OrderCouponRepository;
@@ -88,6 +90,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private final PreorderEligibility preorders;
     private final DeliveryRunSlots runSlots;
     private final DeliveryFeeRules deliveryFees;
+    private final MemberBenefits memberBenefits;
     private final PreorderSettings preorderSettings;
     private final OrdersSettings settings;
     private final Clock clock;
@@ -99,7 +102,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                            OrderCouponRepository orderCoupons, OrderRepository orderRepository,
                            OrderPlacementService placement, LocalDeliveryQuotes localDelivery,
                            PickupPoints pickupPoints, PreorderEligibility preorders, DeliveryRunSlots runSlots,
-                           DeliveryFeeRules deliveryFees, PreorderSettings preorderSettings, OrdersSettings settings, Clock clock) {
+                           DeliveryFeeRules deliveryFees, MemberBenefits memberBenefits, PreorderSettings preorderSettings,
+                           OrdersSettings settings, Clock clock) {
         this.markets = markets;
         this.catalog = catalog;
         this.promises = promises;
@@ -121,6 +125,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         this.preorders = preorders;
         this.runSlots = runSlots;
         this.deliveryFees = deliveryFees;
+        this.memberBenefits = memberBenefits;
         this.preorderSettings = preorderSettings;
         this.settings = settings;
         this.clock = clock;
@@ -337,7 +342,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         }
         try {
             out.putAll(preorders.eligibility(to.country(), to.state(), to.city(),
-                    rest.stream().map(CartClient.Item::variantAtin).distinct().toList()));
+                    rest.stream().map(CartClient.Item::variantAtin).distinct().toList(),
+                    memberBenefits.earlyAccessHours(in.customerId())));
         } catch (UpstreamFailure f) {
             if (in.lateAdd() != null) {
                 throw f;
@@ -363,7 +369,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             return Optional.empty();
         }
         try {
-            return runSlots.openRuns(zip).stream().filter(r -> !r.full()).findFirst();
+            return runSlots.openRuns(zip, memberBenefits.earlyAccessHours(in.customerId())).stream()
+                    .filter(r -> !r.full()).findFirst();
         } catch (UpstreamFailure f) {
             LOG.warn("delivery-runs open runs unavailable for order {} ({}); no run is offered", in.orderNumber(),
                     f.code());
@@ -518,8 +525,60 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         }
         OrderOrigin origin = in.lateAdd() != null ? null : OrderOrigin.checkout(in.attribution());
         return checkoutTax.tax(new OrderDraft(in.orderId(), in.orderNumber(), in.customerId(), in.workflowId(),
-                plan.currency(), in.shipTo(), reserved, shipments, Instant.now(clock), null, origin,
+                plan.currency(), in.shipTo(), reserved, withMembership(in, plan.currency(), shipments),
+                Instant.now(clock), null, origin,
                 plan.paymentMethodTypes(), in.savePaymentMethod(), in.useCredit()));
+    }
+
+    /**
+     * The shipping fees the customer's membership waives (S323, ADR 0006): the fee rules above priced every shipment,
+     * payments applies the tier's order minimum and per-order cap, and each waived fee is charged less and records the
+     * tier and benefit on the shipment. Fees are keyed by the shipment's number in the order. Checkout never fails over
+     * it: without an answer the customer pays the fees.
+     */
+    private List<OrderDraft.DraftShipment> withMembership(CheckoutInput in, String currency,
+                                                          List<OrderDraft.DraftShipment> shipments) {
+        List<MemberBenefits.Fee> fees = shipments.stream().filter(s -> s.shippingMinor() > 0)
+                .map(s -> new MemberBenefits.Fee(Integer.toString(s.seq()), feeKind(s), s.shippingMinor())).toList();
+        long items = shipments.stream().flatMap(s -> s.lines().stream()).mapToLong(CheckoutPlan.Line::itemsMinor).sum();
+        Optional<MemberBenefits.Waivers> answer = memberBenefits.waivers(in.customerId(), items, currency, fees);
+        if (answer.isEmpty()) {
+            return shipments;
+        }
+        Map<String, MemberBenefits.Waiver> byShipment = new LinkedHashMap<>();
+        answer.get().waivers().forEach(w -> byShipment.put(w.key(), w));
+        List<OrderDraft.DraftShipment> out = new ArrayList<>();
+        for (OrderDraft.DraftShipment s : shipments) {
+            MemberBenefits.Waiver w = byShipment.get(Integer.toString(s.seq()));
+            if (w == null) {
+                out.add(s);
+                continue;
+            }
+            long waived = Math.min(w.waivedMinor(), s.shippingMinor());
+            out.add(s.waived(new MembershipWaiver(answer.get().tierCode(), answer.get().tierName(), w.benefit(),
+                    waived), s.shippingMinor() - waived));
+        }
+        return out;
+    }
+
+    /** Which kind of delivery fee a shipment's shipping is: only delivery and standard shipping can be waived. */
+    private static MemberBenefits.FeeKind feeKind(OrderDraft.DraftShipment s) {
+        if (s.preorder() != null && s.feeRule() != null) {
+            return switch (s.feeRule().method()) {
+                case "PICKUP" -> MemberBenefits.FeeKind.PICKUP;
+                case "CARRIER" -> MemberBenefits.FeeKind.CARRIER;
+                default -> MemberBenefits.FeeKind.AFROTRANSACT_DELIVERY;
+            };
+        }
+        if (s.localDelivery() != null) {
+            return MemberBenefits.FeeKind.AFROTRANSACT_DELIVERY;
+        }
+        return switch (s.method()) {
+            case PICKUP -> MemberBenefits.FeeKind.PICKUP;
+            case AFROTRANSACT_DELIVERY -> MemberBenefits.FeeKind.AFROTRANSACT_DELIVERY;
+            case CARRIER -> DefaultShippingPolicy.EXPRESS.equalsIgnoreCase(s.serviceLevel())
+                    ? MemberBenefits.FeeKind.EXPRESS : MemberBenefits.FeeKind.CARRIER;
+        };
     }
 
     /**
@@ -714,7 +773,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         }
         return guard(() -> {
             try {
-                runSlots.reserve(runId, in.orderId(), in.customerId());
+                runSlots.reserve(runId, in.orderId(), in.customerId(),
+                        memberBenefits.earlyAccessHours(in.customerId()));
             } catch (DeliveryRunSlots.RunUnavailable e) {
                 throw new OrdersRuleViolation(e.code(), e.getMessage() + ". Your cart shows the next run, if there is "
                         + "one.");
@@ -739,9 +799,16 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                     order.totals().grandTotalMinor(), order.currency(), Instant.now(clock),
                     Map.of("order_number", order.number(), "customer_id", order.customerId()),
                     PaymentLines.of(order), order.customerId(), draft.paymentMethodTypes(), false,
-                    draft.savePaymentMethod(), draft.useCredit()));
+                    draft.savePaymentMethod(), draft.useCredit(), waivedFees(order)));
             return new PaymentRef(intent.paymentId(), intent.clientSecret(), intent.status(), intent.creditMinor());
         });
+    }
+
+    /** The shipping fees the shopper's membership waived, for payments to record as the benefits used (S323). */
+    private static List<PaymentsClient.WaivedFee> waivedFees(Order order) {
+        return order.shipments().stream().filter(s -> s.membershipWaiver() != null)
+                .map(s -> new PaymentsClient.WaivedFee(s.id(), s.membershipWaiver().benefit(),
+                        s.membershipWaiver().waivedMinor(), s.membershipWaiver().tierCode())).toList();
     }
 
     @Override

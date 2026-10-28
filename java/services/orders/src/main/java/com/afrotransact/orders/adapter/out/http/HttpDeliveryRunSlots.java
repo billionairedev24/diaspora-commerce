@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -38,8 +39,18 @@ class HttpDeliveryRunSlots implements DeliveryRunSlots {
 
     @Override
     public List<OpenRun> openRuns(String zip) {
-        JsonNode body = deliveryRuns.call(c -> c.get().uri(u -> u.path("/v1/public/runs/available")
-                .queryParam("zip", zip).build()).retrieve().body(JsonNode.class));
+        return openRuns(zip, 0);
+    }
+
+    @Override
+    public List<OpenRun> openRuns(String zip, int earlyAccessHours) {
+        JsonNode body = deliveryRuns.call(c -> c.get().uri(u -> {
+            u.path("/v1/public/runs/available").queryParam("zip", zip);
+            if (earlyAccessHours > 0) {
+                u.queryParam("earlyAccessHours", earlyAccessHours);
+            }
+            return u.build();
+        }).retrieve().body(JsonNode.class));
         List<OpenRun> out = new ArrayList<>();
         if (body == null) {
             return out;
@@ -55,11 +66,23 @@ class HttpDeliveryRunSlots implements DeliveryRunSlots {
 
     @Override
     public void reserve(String runId, String orderId, String customerId) {
+        reserve(runId, orderId, customerId, 0);
+    }
+
+    @Override
+    public void reserve(String runId, String orderId, String customerId, int earlyAccessHours) {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("orderId", orderId);
+        request.put("customerId", customerId);
+        request.put("packages", 1);
+        request.put("allowNextRun", false);
+        if (earlyAccessHours > 0) {
+            request.put("earlyAccessHours", earlyAccessHours);
+        }
         try {
             deliveryRuns.call(c -> c.post().uri("/v1/service/runs/{id}/reservations", runId)
                     .headers(h -> h.setBearerAuth(tokens.token())).contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of("orderId", orderId, "customerId", customerId, "packages", 1,
-                            "allowNextRun", false))
+                    .body(request)
                     .retrieve().toBodilessEntity());
         } catch (UpstreamFailure f) {
             if (f.status() == 409 && "delivery-runs.run-full".equals(f.code())) {
