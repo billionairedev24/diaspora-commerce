@@ -22,4 +22,4 @@ h1, h2, h3 { text-wrap: balance; }
 }
 
 /* An element marked hidden stays hidden even when a component class sets its display. */
-[hidden] { display: none !important; }
+[hidden] { display: none; }
