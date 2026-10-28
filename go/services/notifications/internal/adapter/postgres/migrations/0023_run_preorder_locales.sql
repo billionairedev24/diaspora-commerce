@@ -839,4 +839,271 @@ Darte de baja cuando quieras: {{.unsubscribeUrl}}'),
  'مرحبًا {{.firstName}}، سنبلغك عبر {{.channelList}} عندما تفتح جولة توصيل إلى {{.town}}، وقبيل إغلاقها، وعندما نكون في الطريق.
 شاهد الجولات القادمة: {{.locationUrl}}{{if .hasWhatsappCommunity}}
 انضم إلى مجتمع واتساب في {{.town}}: {{.whatsappInviteUrl}}{{end}}
-إلغاء الاشتراك في أي وقت: {{.unsubscribeUrl}}');
+إلغاء الاشتراك في أي وقت: {{.unsubscribeUrl}}'),
+('preorder.announce', 'yo', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.announce' AND t.locale = 'yo' AND t.channel = 'email'), 'reminder',
+ '{{.name}} ti ṣí: paṣẹ ṣáájú {{.closesDisplay}}',
+ '{{define "preheader"}}Paṣẹ ṣáájú {{.closesDisplay}}, a máa fi ránṣẹ́ ní {{.deliversDisplay}}.{{end}}
+{{badge "warning" "Ìpaṣẹ ṣáájú ti ṣí"}}
+<h1>{{if .headline}}{{.headline}}{{else}}Ìpaṣẹ ṣáájú ti ṣí ní {{.where}}{{end}}</h1>
+<p>Báwo ni {{.firstName}}, <strong>{{.name}}</strong> ti ṣí. Paṣẹ pẹ̀lú àwọn aládùúgbò rẹ, a ó sì gbé gbogbo rẹ̀ wá ní ọjọ́ kan.</p>
+{{facts "Paṣẹ ṣáájú" .closesDisplay "Ìfiránṣẹ́" .deliversDisplay "Ìfiránṣẹ́ sí ẹnu-ọ̀nà" .doorFee "Gbígbà ní ibùdó" .pickupFee "Àkókò gbígbà" .pickupWindow}}
+{{button .emailUrl "Paṣẹ ṣáájú báyìí"}}
+<p><small>A máa gba owó rẹ nígbà tí o bá ń sanwó, o sì lè yí àwọn ohun tí o paṣẹ ṣáájú padà tàbí fagilé wọn, a ó sì dá owó rẹ padà ní kíkún títí ìpaṣẹ ṣáájú yóò fi tì.</small></p>',
+ 'Báwo ni {{.firstName}}, {{.name}} ti ṣí. Paṣẹ ṣáájú {{.closesDisplay}}, a ó sì fi ránṣẹ́ ní {{.deliversDisplay}}.
+{{if .doorFee}}Ìfiránṣẹ́ sí ẹnu-ọ̀nà: {{.doorFee}} owó kan náà.
+{{end}}{{if .pickupFee}}Gbígbà ní ibùdó: {{.pickupFee}}{{if .pickupWindow}}, {{.pickupWindow}}{{end}}.
+{{end}}A máa gba owó rẹ nígbà tí o bá ń sanwó, o sì lè yí àwọn ohun tí o paṣẹ ṣáájú padà tàbí fagilé wọn, a ó sì dá owó rẹ padà ní kíkún títí ìpaṣẹ ṣáájú yóò fi tì.
+Paṣẹ ṣáájú báyìí: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+Jáwọ́ nínú ìkìlọ̀ ìpaṣẹ ṣáájú ti {{.where}}: {{.unsubscribeUrl}}{{end}}'),
+('preorder.announce', 'yo', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.announce' AND t.locale = 'yo' AND t.channel = 'push'), 'reminder',
+ 'Ìpaṣẹ ṣáájú ti ṣí ní {{.where}}',
+ '',
+ 'Paṣẹ ṣáájú {{.closesDisplay}}, a ó fi ránṣẹ́ ní {{.deliversDisplay}}.{{if .doorFee}} Ìfiránṣẹ́ sí ẹnu-ọ̀nà {{.doorFee}}.{{end}}'),
+('preorder.announce', 'yo', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.announce' AND t.locale = 'yo' AND t.channel = 'sms'), 'reminder',
+ '',
+ '',
+ '{{.smsCopy}}'),
+('preorder.closed', 'yo', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.closed' AND t.locale = 'yo' AND t.channel = 'email'), 'transactional',
+ '{{.name}} ti tì: ìfiránṣẹ́ ní {{.deliversDisplay}}',
+ '{{define "preheader"}}Ìpaṣẹ ṣáájú rẹ ti dájú fún {{.deliversDisplay}}.{{end}}
+{{badge "success" "Ó ti dájú"}}
+<h1>Ìpaṣẹ ṣáájú rẹ ti dájú</h1>
+<p>Báwo ni {{.firstName}}, <strong>{{.name}}</strong> ti tì báyìí. A máa fi ìpaṣẹ ṣáájú rẹ ránṣẹ́ ní <strong>{{.deliversDisplay}}</strong>{{if .pickupWindow}} (gbígbà {{.pickupWindow}}){{end}}.</p>
+{{button .emailUrl "Wo ìpaṣẹ ṣáájú rẹ"}}
+<p><small>Tí o bá fààyè gba ọ̀rọ̀ ìbánisọ̀rọ̀ SMS, a ó fi ránṣẹ́ sí ọ nígbà tí ó bá jáde fún ìfiránṣẹ́.</small></p>',
+ 'Báwo ni {{.firstName}}, {{.name}} ti tì báyìí. A máa fi ìpaṣẹ ṣáájú rẹ ránṣẹ́ ní {{.deliversDisplay}}{{if .pickupWindow}} (gbígbà {{.pickupWindow}}){{end}}. Tí o bá fààyè gba ọ̀rọ̀ ìbánisọ̀rọ̀ SMS, a ó fi ránṣẹ́ sí ọ nígbà tí ó bá jáde fún ìfiránṣẹ́. {{.emailUrl}}'),
+('preorder.confirmed', 'yo', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.confirmed' AND t.locale = 'yo' AND t.channel = 'email'), 'transactional',
+ 'O ti wà nínú rẹ̀: {{.name}}',
+ '{{define "preheader"}}Ìpaṣẹ ṣáájú {{.preorderNumber}}, ìfiránṣẹ́ ní {{.deliversDisplay}}. A gbà: {{.total}}.{{end}}
+{{badge "success" "O ti wà nínú rẹ̀"}}
+<h1>O ti wà nínú rẹ̀: {{.name}}</h1>
+<p>Báwo ni {{.firstName}}, a dúpẹ́ fún ìpaṣẹ ṣáájú rẹ. A máa fi ránṣẹ́ pẹ̀lú ti àwọn ará àdúgbò ní <strong>{{.deliversDisplay}}</strong>.</p>
+{{facts "Nọ́mbà ìpaṣẹ ṣáájú" .preorderNumber "Ìfiránṣẹ́" .deliversDisplay .fulfilmentText (or .doorFee .pickupFee) "A gbà" .total}}
+{{button .emailUrl "Wo ìpaṣẹ ṣáájú rẹ"}}
+{{template "packages" (index . "packages")}}
+{{template "totals" (index . "totals")}}
+{{template "address" (index . "shipTo")}}
+{{callout "info" (printf "%sO lè yí àwọn ohun tí o paṣẹ ṣáájú padà tàbí fagilé wọn, a ó sì dá owó rẹ padà ní kíkún títí di %s." (or .nowNote "") .cancelUntil)}}
+{{with index . "helpUrl"}}<p><small>Ṣé o nílò ìrànlọ́wọ́ lórí ìpàṣẹ yìí? Lọ sí <a href="{{.}}">Ibùdó Ìrànlọ́wọ́</a> tàbí dáhùn ímeèlì yìí.</small></p>{{end}}',
+ 'Báwo ni {{.firstName}}, o ti wà nínú rẹ̀: {{.name}}.
+Nọ́mbà ìpaṣẹ ṣáájú: {{.preorderNumber}}
+Ìfiránṣẹ́: {{.deliversDisplay}}
+{{.fulfilmentText}}: {{if .doorFee}}{{.doorFee}}{{else}}{{.pickupFee}}{{if .pickupWindow}}, {{.pickupWindow}}{{end}}{{end}}
+A gbà: {{.total}}
+{{if .nowNote}}{{.nowNote}} {{end}}O lè yí àwọn ohun tí o paṣẹ ṣáájú padà tàbí fagilé wọn, a ó sì dá owó rẹ padà ní kíkún títí di {{.cancelUntil}}. Tí o bá fààyè gba SMS, a ó fi ránṣẹ́ sí ọ ní ọjọ́ ìfiránṣẹ́.
+{{.emailUrl}}'),
+('preorder.delivery_missed', 'yo', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.delivery_missed' AND t.locale = 'yo' AND t.channel = 'email'), 'transactional',
+ 'A kò rí ọ gbà: {{.name}}',
+ '{{define "preheader"}}A tọrọ àforíjì. Yan ọjọ́ tuntun tàbí ìdápadà owó ní kíkún.{{end}}
+{{badge "danger" "A kò rí ọ gbà"}}
+<h1>A tọrọ àforíjì, a kò lè fi ránṣẹ́ sí ọ</h1>
+<p>Báwo ni {{.firstName}}, a kò lè fi <strong>{{.name}}</strong> (ìpàṣẹ {{.orderNumber}}) ránṣẹ́ ní {{.missedDisplay}}. Yan èyí tí ó tọ́ sí ọ:</p>
+{{if .newDateUrl}}{{button .newDateUrl (printf "Fi ránṣẹ́ ní %s" .newDateDisplay)}}{{end}}
+{{if .refundUrl}}{{secondaryButton .refundUrl (printf "Gba ìdápadà owó ní kíkún ti %s" .total)}}{{end}}
+{{template "packages" (index . "packages")}}
+{{with index . "helpUrl"}}<p><small>Ṣé o nílò ìrànlọ́wọ́ lórí ìpàṣẹ yìí? Lọ sí <a href="{{.}}">Ibùdó Ìrànlọ́wọ́</a> tàbí dáhùn ímeèlì yìí.</small></p>{{end}}',
+ 'Báwo ni {{.firstName}}, a tọrọ àforíjì: a kò lè fi {{.name}} (ìpàṣẹ {{.orderNumber}}) ránṣẹ́ ní {{.missedDisplay}}. Yan èyí tí ó tọ́ sí ọ:
+{{if .newDateUrl}}Fi ránṣẹ́ ní {{.newDateDisplay}}: {{.newDateUrl}}
+{{end}}{{if .refundUrl}}Gba ìdápadà owó ní kíkún ti {{.total}}: {{.refundUrl}}
+{{end}}Àwọn ìpàṣẹ rẹ: {{.orderUrl}}'),
+('preorder.last_call', 'yo', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.last_call' AND t.locale = 'yo' AND t.channel = 'push'), 'reminder',
+ 'Ìpè ìkẹyìn: {{.name}}',
+ '',
+ 'Ìpaṣẹ ṣáájú ń tì ní {{.closesDisplay}}. Ìfiránṣẹ́ ní {{.deliversDisplay}}.'),
+('preorder.last_call', 'yo', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.last_call' AND t.locale = 'yo' AND t.channel = 'sms'), 'reminder',
+ '',
+ '',
+ 'AfroTransact: ìpè ìkẹyìn! {{.name}} ń tì ní {{.closesDisplay}}. {{.smsUrl}} Fèsì STOP láti jáwọ́'),
+('preorder.late_order.payment_link', 'yo', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.late_order.payment_link' AND t.locale = 'yo' AND t.channel = 'sms'), 'transactional',
+ '',
+ '',
+ 'AfroTransact: san {{.total}} fún ìpaṣẹ ṣáájú rẹ: {{.paymentUrl}} Fèsì STOP láti jáwọ́'),
+('preorder.out_for_delivery', 'yo', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.out_for_delivery' AND t.locale = 'yo' AND t.channel = 'push'), 'transactional',
+ 'Ìpaṣẹ ṣáájú rẹ ti jáde fún ìfiránṣẹ́',
+ '',
+ '{{.name}} dé lónìí{{if .deliveryWindow}}, {{.deliveryWindow}}{{end}}.'),
+('preorder.out_for_delivery', 'yo', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.out_for_delivery' AND t.locale = 'yo' AND t.channel = 'sms'), 'transactional',
+ '',
+ '',
+ 'AfroTransact: {{.name}} ti jáde fún ìfiránṣẹ́ lónìí{{if .deliveryWindow}}, {{.deliveryWindow}}{{end}}. {{.smsUrl}} Fèsì STOP láti jáwọ́'),
+('preorder.reminder', 'yo', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.reminder' AND t.locale = 'yo' AND t.channel = 'email'), 'reminder',
+ 'Wákàtí 48 ló ṣẹ́ kù: {{.name}} ń tì ní {{.closesDisplay}}',
+ '{{define "preheader"}}Paṣẹ ṣáájú {{.closesDisplay}} kí o lè rí i gbà ní {{.deliversDisplay}}.{{end}}
+{{badge "warning" "Wákàtí 48 ló ṣẹ́ kù"}}
+<h1>Wákàtí 48 ló ṣẹ́ kù láti paṣẹ ṣáájú</h1>
+<p>Báwo ni {{.firstName}}, <strong>{{.name}}</strong> ń tì ní <strong>{{.closesDisplay}}</strong>. Gbogbo ohun tí o bá paṣẹ títí di ìgbà náà máa dé ní <strong>{{.deliversDisplay}}</strong>.</p>
+{{facts "Paṣẹ ṣáájú" .closesDisplay "Ìfiránṣẹ́" .deliversDisplay "Ìfiránṣẹ́ sí ẹnu-ọ̀nà" .doorFee "Gbígbà ní ibùdó" .pickupFee "Àkókò gbígbà" .pickupWindow}}
+{{button .emailUrl "Parí ìpaṣẹ ṣáájú rẹ"}}',
+ 'Báwo ni {{.firstName}}, {{.name}} ń tì ní {{.closesDisplay}}. Gbogbo ohun tí o bá paṣẹ títí di ìgbà náà máa dé ní {{.deliversDisplay}}{{if .doorFee}} pẹ̀lú ìfiránṣẹ́ sí ẹnu-ọ̀nà ní {{.doorFee}}{{end}}{{if .pickupFee}}{{if .doorFee}} tàbí{{else}} pẹ̀lú{{end}} gbígbà ní ibùdó ({{.pickupFee}}){{end}}.
+Parí ìpaṣẹ ṣáájú rẹ: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+Jáwọ́ nínú ìkìlọ̀: {{.unsubscribeUrl}}{{end}}'),
+('preorder.reminder', 'yo', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.reminder' AND t.locale = 'yo' AND t.channel = 'push'), 'reminder',
+ 'Wákàtí 48 ló ṣẹ́ kù láti paṣẹ ṣáájú',
+ '',
+ '{{.name}} ń tì ní {{.closesDisplay}}. Ìfiránṣẹ́ ní {{.deliversDisplay}}.'),
+('preorder.waitlist.opened', 'yo', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.waitlist.opened' AND t.locale = 'yo' AND t.channel = 'email'), 'reminder',
+ 'Ìpaṣẹ ṣáájú ti ṣí ní {{.where}}',
+ '{{define "preheader"}}{{.name}} ṣí títí di {{.closesDisplay}}.{{end}}
+{{badge "warning" "O béèrè, a sì dé"}}
+<h1>A ń fi ọjà ránṣẹ́ sí {{.where}}</h1>
+<p>Báwo ni {{.firstName}}, o ní kí a sọ fún ọ nígbà tí ìpaṣẹ ṣáájú bá ṣí ní {{.where}}. <strong>{{.name}}</strong> ti ṣí báyìí.</p>
+{{facts "Paṣẹ ṣáájú" .closesDisplay "Ìfiránṣẹ́" .deliversDisplay "Ìfiránṣẹ́ sí ẹnu-ọ̀nà" .doorFee "Gbígbà ní ibùdó" .pickupFee "Àkókò gbígbà" .pickupWindow}}
+{{button .emailUrl "Wo ohun tó wà nínú ìpaṣẹ ṣáájú"}}',
+ 'Báwo ni {{.firstName}}, o ní kí a sọ fún ọ nígbà tí ìpaṣẹ ṣáájú bá ṣí ní {{.where}}. {{.name}} ṣí títí di {{.closesDisplay}}, ìfiránṣẹ́ ní {{.deliversDisplay}}.{{if .doorFee}} Ìfiránṣẹ́ sí ẹnu-ọ̀nà jẹ́ {{.doorFee}} owó kan náà.{{end}}{{if .pickupFee}} Gbígbà ní ibùdó jẹ́ {{.pickupFee}}{{if .pickupWindow}}, {{.pickupWindow}}{{end}}.{{end}}
+Wo ohun tó wà nínú ìpaṣẹ ṣáájú: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+Kúrò nínú àtòjọ ìdúró: {{.unsubscribeUrl}}{{end}}'),
+('run.announced', 'yo', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.announced' AND t.locale = 'yo' AND t.channel = 'email'), 'reminder',
+ 'Ìrìn ìfiránṣẹ́ sí {{.town}} ní {{.deliveryDay}}',
+ '{{define "preheader"}}A ń lọ sí {{.town}} ní {{.deliveryDay}}. Ìpaṣẹ máa ṣí láìpẹ́.{{end}}
+{{badge "info" "A ti kéde ìrìn ìfiránṣẹ́"}}
+<h1>A ń bọ̀ sí {{.town}}</h1>
+<p>Báwo ni {{.firstName}}, ìrìn ìfiránṣẹ́ AfroTransact sí <strong>{{.town}}</strong> wà ní ìgbékalẹ̀ fún <strong>{{.deliveryDay}}</strong>. A ó sọ fún ọ ní kété tí ìpaṣẹ bá ṣí.</p>
+{{facts "Ọjọ́ ìfiránṣẹ́" .deliveryDay "Àkókò ìfiránṣẹ́" .windowDisplay "Paṣẹ ṣáájú" .cutoffDisplay "Owó ìfiránṣẹ́" .feeDisplay "Bí a ó ṣe fi ránṣẹ́" .dropText}}
+{{button .emailUrl "Wo ìrìn náà"}}
+{{if .whatsappInviteUrl}}<p><small>Darapọ̀ mọ́ àwùjọ WhatsApp ti {{.town}} fún ìròyìn láti ọ̀dọ̀ àwọn aládùúgbò àti àwọn awakọ̀ wa: <a href="{{.whatsappInviteUrl}}">darapọ̀</a>.</small></p>{{end}}',
+ 'Báwo ni {{.firstName}}, ìrìn ìfiránṣẹ́ AfroTransact sí {{.town}} wà ní ìgbékalẹ̀ fún {{.deliveryDay}} ({{.windowDisplay}}). Paṣẹ ṣáájú {{.cutoffDisplay}}; owó ìfiránṣẹ́ jẹ́ {{.feeDisplay}}. {{.dropText}}.
+A ó sọ fún ọ ní kété tí ìpaṣẹ bá ṣí.
+Wo ìrìn náà: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+Jáwọ́ nínú ìkìlọ̀ ìrìn ti {{.town}}: {{.unsubscribeUrl}}{{end}}'),
+('run.announced', 'yo', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.announced' AND t.locale = 'yo' AND t.channel = 'push'), 'reminder',
+ 'Ìrìn ìfiránṣẹ́ sí {{.town}}',
+ '',
+ 'A ń bọ̀ sí {{.town}} ní {{.deliveryDay}}. Ìpaṣẹ máa ṣí láìpẹ́.'),
+('run.cancelled', 'yo', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cancelled' AND t.locale = 'yo' AND t.channel = 'email'), 'transactional',
+ 'A ti fagilé ìrìn ìfiránṣẹ́ sí {{.town}} ti {{.deliveryDay}}',
+ '{{define "preheader"}}A ó dá owó rẹ padà ní kíkún, pẹ̀lú owó ìfiránṣẹ́.{{end}}
+{{badge "danger" "A ti fagilé ìrìn náà"}}
+<h1>A ti fagilé ìrìn {{.town}}</h1>
+<p>Báwo ni {{.firstName}}, a tọrọ àforíjì: ìrìn ìfiránṣẹ́ sí {{.town}} tí a gbèrò fún <strong>{{.deliveryDay}}</strong> kò ní wáyé mọ́. {{.reasonText}}</p>
+{{callout "info" .refundNote}}
+{{button .locationUrl "Wo ìrìn tó kàn"}}',
+ 'Báwo ni {{.firstName}}, a tọrọ àforíjì: ìrìn ìfiránṣẹ́ sí {{.town}} tí a gbèrò fún {{.deliveryDay}} kò ní wáyé mọ́. {{.reasonText}}
+{{.refundNote}}
+Wo ìrìn tó kàn: {{.locationUrl}}'),
+('run.cancelled', 'yo', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cancelled' AND t.locale = 'yo' AND t.channel = 'push'), 'transactional',
+ 'A ti fagilé ìrìn {{.town}}',
+ '',
+ 'A ó dá owó rẹ padà ní kíkún, pẹ̀lú owó ìfiránṣẹ́.'),
+('run.cancelled', 'yo', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cancelled' AND t.locale = 'yo' AND t.channel = 'sms'), 'transactional',
+ '',
+ '',
+ 'AfroTransact: a ti fagilé ìrìn {{.town}} ti {{.deliveryDay}}. A ó dá owó ìpàṣẹ rẹ padà ní kíkún, pẹ̀lú owó ìfiránṣẹ́. Fèsì STOP láti jáwọ́'),
+('run.confirmed', 'yo', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.confirmed' AND t.locale = 'yo' AND t.channel = 'email'), 'transactional',
+ 'Ìrìn {{.town}} ti dájú: ìfiránṣẹ́ ní {{.deliveryDay}}',
+ '{{define "preheader"}}Ìpàṣẹ rẹ ti dájú fún {{.deliveryDay}}, {{.windowText}}.{{end}}
+{{badge "success" "Ìrìn ti dájú"}}
+<h1>Ìrìn {{.town}} yóò wáyé</h1>
+<p>Báwo ni {{.firstName}}, àwọn ìpàṣẹ tó pọ̀ tó ti dé, nítorí náà ìrìn {{.town}} yóò tẹ̀síwájú. Ìpàṣẹ rẹ ti dájú fún <strong>{{.deliveryDay}}</strong>.</p>
+{{facts "Ọjọ́ ìfiránṣẹ́" .deliveryDay "Àkókò ìfiránṣẹ́" .windowDisplay "Bí a ó ṣe fi ránṣẹ́" .dropText "Kóòdù ìfàlọ́wọ́" .handoverCode}}
+{{button .emailUrl "Wo ìrìn náà"}}',
+ 'Báwo ni {{.firstName}}, ìrìn {{.town}} yóò tẹ̀síwájú. Ìpàṣẹ rẹ ti dájú fún {{.deliveryDay}} ({{.windowDisplay}}). {{.dropText}}.{{if .handoverCode}} Kóòdù ìfàlọ́wọ́: {{.handoverCode}}.{{end}}
+Wo ìrìn náà: {{.emailUrl}}'),
+('run.confirmed', 'yo', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.confirmed' AND t.locale = 'yo' AND t.channel = 'push'), 'transactional',
+ 'Ìrìn {{.town}} yóò wáyé',
+ '',
+ 'Ìpàṣẹ rẹ ti dájú fún {{.deliveryDay}}, {{.windowText}}.'),
+('run.cutoff_reminder', 'yo', 'chat', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cutoff_reminder' AND t.locale = 'yo' AND t.channel = 'chat'), 'reminder',
+ 'afrotransact_run_cutoff_reminder',
+ '',
+ '{{.town}}
+{{.deliveryDay}}
+{{.cutoffText}}
+{{.feeDisplay}}
+{{.whatsappUrl}}'),
+('run.cutoff_reminder', 'yo', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cutoff_reminder' AND t.locale = 'yo' AND t.channel = 'email'), 'reminder',
+ 'Àǹfààní ìkẹyìn fún ìrìn {{.town}}: paṣẹ ṣáájú {{.cutoffText}}',
+ '{{define "preheader"}}Ìrìn {{.town}} ń tì ní {{.cutoffText}}. A ń fi ránṣẹ́ ní {{.deliveryDay}}.{{end}}
+{{badge "warning" "Ó ń tì láìpẹ́"}}
+<h1>Ìrìn {{.town}} ń tì láìpẹ́</h1>
+<p>Báwo ni {{.firstName}}, ìpaṣẹ fún ìrìn ìfiránṣẹ́ sí {{.town}} ń tì ní <strong>{{.cutoffDisplay}}</strong>. A ń fi ránṣẹ́ ní <strong>{{.deliveryDay}}</strong>.</p>
+{{facts "Paṣẹ ṣáájú" .cutoffDisplay "Ọjọ́ ìfiránṣẹ́" .deliveryDay "Àkókò ìfiránṣẹ́" .windowDisplay "Owó ìfiránṣẹ́" .feeDisplay "Bí a ó ṣe fi ránṣẹ́" .dropText "Àwọn ìpàṣẹ títí di ìsinsìnyí" .minimumText}}
+{{button .emailUrl "Wo ìrìn náà"}}',
+ 'Báwo ni {{.firstName}}, ìpaṣẹ fún ìrìn ìfiránṣẹ́ sí {{.town}} ń tì ní {{.cutoffDisplay}}. A ń fi ránṣẹ́ ní {{.deliveryDay}} ({{.windowDisplay}}); owó ìfiránṣẹ́ jẹ́ {{.feeDisplay}}.
+Wo ìrìn náà: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+Jáwọ́ nínú ìkìlọ̀ ìrìn ti {{.town}}: {{.unsubscribeUrl}}{{end}}'),
+('run.cutoff_reminder', 'yo', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cutoff_reminder' AND t.locale = 'yo' AND t.channel = 'push'), 'reminder',
+ 'Àǹfààní ìkẹyìn fún ìrìn {{.town}}',
+ '',
+ 'Paṣẹ ṣáájú {{.cutoffText}}. Ìfiránṣẹ́ ní {{.deliveryDay}}.'),
+('run.cutoff_reminder', 'yo', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cutoff_reminder' AND t.locale = 'yo' AND t.channel = 'sms'), 'reminder',
+ '',
+ '',
+ 'AfroTransact: àǹfààní ìkẹyìn fún ìrìn {{.town}}. Paṣẹ ṣáájú {{.cutoffText}}. Ìfiránṣẹ́ {{.deliveryDay}}. {{.smsUrl}} Fèsì STOP láti jáwọ́'),
+('run.opened', 'yo', 'chat', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.opened' AND t.locale = 'yo' AND t.channel = 'chat'), 'reminder',
+ 'afrotransact_run_opened',
+ '',
+ '{{.town}}
+{{.deliveryDay}}
+{{.cutoffText}}
+{{.feeDisplay}}
+{{.whatsappUrl}}'),
+('run.opened', 'yo', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.opened' AND t.locale = 'yo' AND t.channel = 'email'), 'reminder',
+ 'Ìrìn ìfiránṣẹ́ sí {{.town}} ti ṣí: paṣẹ ṣáájú {{.cutoffText}}',
+ '{{define "preheader"}}Paṣẹ ṣáájú {{.cutoffText}}. A ń fi ránṣẹ́ ní {{.deliveryDay}}, {{.windowText}}.{{end}}
+{{badge "warning" "Ìrìn ti ṣí"}}
+<h1>Ìrìn ìfiránṣẹ́ sí {{.town}} ti ṣí</h1>
+<p>Báwo ni {{.firstName}}, a ń gbé àwọn ìpàṣẹ AfroTransact lọ sí {{.town}} ní <strong>{{.deliveryDay}}</strong>. Paṣẹ ṣáájú àkókò ìtìpa, ìpàṣẹ rẹ yóò sì bá wa lọ ní ìrìn kan náà.</p>
+{{facts "Ọjọ́ ìfiránṣẹ́" .deliveryDay "Àkókò ìfiránṣẹ́" .windowDisplay "Paṣẹ ṣáájú" .cutoffDisplay "Owó ìfiránṣẹ́" .feeDisplay "Bí a ó ṣe fi ránṣẹ́" .dropText "Àwọn ìpàṣẹ títí di ìsinsìnyí" .minimumText}}
+{{button .emailUrl "Wo ìrìn náà"}}
+{{if .whatsappInviteUrl}}<p><small>Darapọ̀ mọ́ àwùjọ WhatsApp ti {{.town}} fún ìròyìn láti ọ̀dọ̀ àwọn aládùúgbò àti àwọn awakọ̀ wa: <a href="{{.whatsappInviteUrl}}">darapọ̀</a>.</small></p>{{end}}',
+ 'Báwo ni {{.firstName}}, ìrìn ìfiránṣẹ́ sí {{.town}} ti ṣí. A ń fi ránṣẹ́ ní {{.deliveryDay}} ({{.windowDisplay}}). Paṣẹ ṣáájú {{.cutoffDisplay}}; owó ìfiránṣẹ́ jẹ́ {{.feeDisplay}}. {{.dropText}}.
+Wo ìrìn náà: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+Jáwọ́ nínú ìkìlọ̀ ìrìn ti {{.town}}: {{.unsubscribeUrl}}{{end}}'),
+('run.opened', 'yo', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.opened' AND t.locale = 'yo' AND t.channel = 'push'), 'reminder',
+ 'Ìrìn ìfiránṣẹ́ sí {{.town}} ti ṣí',
+ '',
+ 'Paṣẹ ṣáájú {{.cutoffText}}. Ìfiránṣẹ́ ní {{.deliveryDay}}.{{if .feeDisplay}} Owó ìfiránṣẹ́ {{.feeDisplay}}.{{end}}'),
+('run.opened', 'yo', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.opened' AND t.locale = 'yo' AND t.channel = 'sms'), 'reminder',
+ '',
+ '',
+ 'AfroTransact: ìrìn {{.town}} ti ṣí. Ìfiránṣẹ́ {{.deliveryDay}}. Paṣẹ ṣáájú {{.cutoffText}}. {{.smsUrl}} Fèsì STOP láti jáwọ́'),
+('run.out_for_delivery', 'yo', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.out_for_delivery' AND t.locale = 'yo' AND t.channel = 'email'), 'transactional',
+ 'Ìfiránṣẹ́ rẹ ní {{.town}} ń bọ̀ lónìí',
+ '{{define "preheader"}}A ti gbéra lọ sí {{.town}}. Àkókò ìfiránṣẹ́ {{.windowText}}.{{end}}
+{{badge "success" "Ó ń bọ̀"}}
+<h1>A ń lọ sí {{.town}}</h1>
+<p>Báwo ni {{.firstName}}, ìrìn ìfiránṣẹ́ sí {{.town}} ti gbéra. Ìpàṣẹ rẹ máa dé lónìí, {{.windowDisplay}}.</p>
+{{facts "Àkókò ìfiránṣẹ́" .windowDisplay "Bí a ó ṣe fi ránṣẹ́" .dropText "Kóòdù ìfàlọ́wọ́" .handoverCode}}
+{{if .handoverCode}}<p>Fi kóòdù yìí hàn nígbà tí o bá ń gba ìpàṣẹ rẹ: <strong>{{.handoverCode}}</strong>.</p>{{end}}
+{{button .emailUrl "Tẹ̀lé ìrìn náà"}}',
+ 'Báwo ni {{.firstName}}, ìrìn ìfiránṣẹ́ sí {{.town}} ti gbéra. Ìpàṣẹ rẹ máa dé lónìí, {{.windowDisplay}}. {{.dropText}}.{{if .handoverCode}} Kóòdù ìfàlọ́wọ́: {{.handoverCode}}.{{end}}
+Tẹ̀lé ìrìn náà: {{.emailUrl}}'),
+('run.out_for_delivery', 'yo', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.out_for_delivery' AND t.locale = 'yo' AND t.channel = 'push'), 'transactional',
+ 'Ìpàṣẹ rẹ sí {{.town}} ń bọ̀',
+ '',
+ 'Ó máa dé lónìí, {{.windowText}}.{{if .handoverCode}} Kóòdù ìfàlọ́wọ́ {{.handoverCode}}.{{end}}'),
+('run.out_for_delivery', 'yo', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.out_for_delivery' AND t.locale = 'yo' AND t.channel = 'sms'), 'transactional',
+ '',
+ '',
+ 'AfroTransact: ìpàṣẹ rẹ sí {{.town}} ti jáde fún ìfiránṣẹ́ lónìí, {{.windowText}}.{{if .handoverCode}} Kóòdù ìfàlọ́wọ́ {{.handoverCode}}.{{end}} Fèsì STOP láti jáwọ́'),
+('run.subscription.confirm', 'yo', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.subscription.confirm' AND t.locale = 'yo' AND t.channel = 'email'), 'transactional',
+ 'Jẹ́rìí sí àwọn ìkìlọ̀ ìrìn ìfiránṣẹ́ {{.town}} rẹ',
+ '{{define "preheader"}}Tẹ̀ ẹ́ lẹ́ẹ̀kan, a ó sì sọ fún ọ nígbà tí ìrìn sí {{.town}} bá ṣí.{{end}}
+<h1>Ìgbésẹ̀ kékeré kan</h1>
+<p>Jẹ́rìí sí ímeèlì rẹ kí o lè kọ́kọ́ gbọ́ nígbà tí AfroTransact bá ṣí ìrìn ìfiránṣẹ́ sí <strong>{{.town}}</strong>: nígbà tí ìpaṣẹ bá ṣí, nígbà tí ó bá fẹ́ tì, àti nígbà tí a bá ń bọ̀. A kò ní fi nǹkan kan ránṣẹ́ títí o fi jẹ́rìí.</p>
+{{button .confirmUrl "Jẹ́rìí sí àwọn ìkìlọ̀ mi"}}
+<p><small>Ṣé kì í ṣe ìwọ ló béèrè èyí? Fi ímeèlì yìí sílẹ̀, a kò sì ní fi nǹkan kan ránṣẹ́.</small></p>',
+ 'Jẹ́rìí sí ímeèlì rẹ kí o lè kọ́kọ́ gbọ́ nígbà tí AfroTransact bá ṣí ìrìn ìfiránṣẹ́ sí {{.town}}: nígbà tí ìpaṣẹ bá ṣí, nígbà tí ó bá fẹ́ tì, àti nígbà tí a bá ń bọ̀. A kò ní fi nǹkan kan ránṣẹ́ títí o fi jẹ́rìí.
+
+Jẹ́rìí sí àwọn ìkìlọ̀ mi: {{.confirmUrl}}
+
+Ṣé kì í ṣe ìwọ ló béèrè èyí? Fi ímeèlì yìí sílẹ̀, a kò sì ní fi nǹkan kan ránṣẹ́.'),
+('run.subscription.welcome', 'yo', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.subscription.welcome' AND t.locale = 'yo' AND t.channel = 'email'), 'transactional',
+ 'Ìwọ ni yóò kọ́kọ́ gbọ́ nípa àwọn ìrìn ìfiránṣẹ́ {{.town}}',
+ '{{define "preheader"}}O ti forúkọ sílẹ̀ fún àwọn ìkìlọ̀ ìrìn {{.town}} nípasẹ̀ {{.channelList}}.{{end}}
+{{badge "success" "O ti forúkọ sílẹ̀"}}
+<h1>O wà lórí àtòjọ {{.town}}</h1>
+<p>Báwo ni {{.firstName}}, a ó sọ fún ọ nípasẹ̀ {{.channelList}} nígbà tí ìrìn ìfiránṣẹ́ sí <strong>{{.town}}</strong> bá ṣí, nígbà tí ó bá fẹ́ tì, àti nígbà tí a bá ń bọ̀.</p>
+{{button .locationUrl "Wo àwọn ìrìn tó ń bọ̀"}}
+{{if .hasWhatsappCommunity}}<p>Àwọn aládùúgbò àti àwọn awakọ̀ wa ń pín ìròyìn nínú àwùjọ WhatsApp ti {{.town}}: <a href="{{.whatsappInviteUrl}}">darapọ̀ mọ́ àwùjọ náà</a>.</p>{{end}}
+<p><small>O lè yí èyí padà tàbí dáwọ́ rẹ̀ dúró nígbàkigbà láti inú àkọọ́lẹ̀ rẹ, tàbí pẹ̀lú ọ̀nà ìjáwọ́ tó wà nínú gbogbo ìfiránṣẹ́.</small></p>',
+ 'Báwo ni {{.firstName}}, a ó sọ fún ọ nípasẹ̀ {{.channelList}} nígbà tí ìrìn ìfiránṣẹ́ sí {{.town}} bá ṣí, nígbà tí ó bá fẹ́ tì, àti nígbà tí a bá ń bọ̀.
+Wo àwọn ìrìn tó ń bọ̀: {{.locationUrl}}{{if .hasWhatsappCommunity}}
+Darapọ̀ mọ́ àwùjọ WhatsApp ti {{.town}}: {{.whatsappInviteUrl}}{{end}}
+Jáwọ́ nígbàkigbà: {{.unsubscribeUrl}}');
