@@ -30,6 +30,7 @@ public final class TrustOpsEvents {
     public static final String CONSUMER_HANDOFFS = "trust-ops:ai-handoffs";
     public static final String CONSUMER_FULFILMENT = "trust-ops:fulfilment";
     public static final String CONSUMER_BOOKING_REVIEWS = "trust-ops:booking-reviews";
+    public static final String CONSUMER_PRODUCT_REVIEWS = "trust-ops:product-reviews";
 
     private TrustOpsEvents() {
     }

@@ -10,11 +10,11 @@ final class ModerationSubjects {
 
     /** Audit entity type of the item's subject. */
     static String entityType(ModerationItem i) {
-        return i.serviceReview() ? "REVIEW" : "LISTING";
+        return i.reviewItem() ? "REVIEW" : "LISTING";
     }
 
     /** Audit action, e.g. {@code trustops.listing.escalated} or {@code trustops.review.escalated}. */
     static String action(ModerationItem i, String verb) {
-        return (i.serviceReview() ? "trustops.review." : "trustops.listing.") + verb;
+        return (i.reviewItem() ? "trustops.review." : "trustops.listing.") + verb;
     }
 }
