@@ -378,12 +378,12 @@ function customer360(ctx: Ctx, id: string): Customer360 {
   const orders = records(ctx, 'orders').filter((o) => o.fields.customerId === id);
   const orderNumbers = new Set(orders.map((o) => o.id));
   const perms = ctx.permissions;
-  // The membership gives support the priority flag and free returns (S323); only a live membership counts.
+  // The membership gives support the priority flag (S323); only a live membership counts.
   const mem = records(ctx, 'memberships').find((m) => m.fields.customerId === id && ['TRIALING', 'ACTIVE', 'PAST_DUE'].includes(String(m.fields.status)));
   const tier = mem ? records(ctx, 'membership-tiers').find((t) => t.id === mem.fields.tierCode) : undefined;
   return {
     membership: mem
-      ? { tierName: String(mem.fields.tierName), status: String(mem.fields.status) as 'TRIALING' | 'ACTIVE' | 'PAST_DUE', prioritySupport: tier?.fields.prioritySupport === true, freeReturns: tier?.fields.freeReturns === true }
+      ? { tierName: String(mem.fields.tierName), status: String(mem.fields.status) as 'TRIALING' | 'ACTIVE' | 'PAST_DUE', prioritySupport: tier?.fields.prioritySupport === true }
       : null,
     customer: { id, name: String(u.fields.name), email: String(u.fields.email), enabled: u.fields.enabled === true, emailVerified: u.fields.emailVerified === true, roles: String(u.fields.roles).split(', ') },
     orders: orders.map((o) => ({

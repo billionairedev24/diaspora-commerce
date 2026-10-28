@@ -17,8 +17,6 @@ public enum BenefitCode {
     EARLY_ACCESS,
     /** Support tools show the member's cases first. */
     PRIORITY_SUPPORT,
-    /** Return labels are free for members. */
-    FREE_RETURNS,
     /** Referral and gift rewards the member earns are bigger by a percent. */
     BOOSTED_REWARDS,
     /** A fixed amount of credit every month. */

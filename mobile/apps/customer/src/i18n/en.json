@@ -123,5 +123,20 @@
   "cu.mfa.textAgain": "Text me a new code",
   "cu.mfa.useAuthenticator": "Use my authenticator app",
   "cu.mfa.useRecovery": "Use a recovery code",
-  "cu.mfa.back": "Back"
+  "cu.mfa.back": "Back",
+  "cu.account.credit": "AfroTransact credit",
+  "cu.credit.title": "AfroTransact credit",
+  "cu.credit.balance": "Your balance",
+  "cu.credit.intro": "Credit pays for products and services on AfroTransact and never expires. It can’t be withdrawn, paid out, refunded to a card or sent to someone else.",
+  "cu.credit.history": "History",
+  "cu.credit.none": "No credit activity yet.",
+  "cu.credit.loadMore": "Show older activity",
+  "cu.credit.after": "Balance {amount}",
+  "cu.credit.src.REFERRAL": "Referral reward",
+  "cu.credit.src.GIFT_CARD": "Gift card",
+  "cu.credit.src.MEMBERSHIP": "Membership",
+  "cu.credit.src.REFUND": "Refund",
+  "cu.credit.src.STAFF": "From AfroTransact",
+  "cu.credit.src.PROMO": "Promotion",
+  "cu.credit.src.ORDER": "Order"
 }

@@ -31,6 +31,7 @@ class MembershipBillingServiceImpl implements MembershipBillingService {
     private static final Logger LOG = LoggerFactory.getLogger(MembershipBillingServiceImpl.class);
     private static final String SYSTEM = "system:membership";
     private static final Duration CASHBACK_SWEEP_WINDOW = Duration.ofDays(2);
+    private static final Duration TRIAL_REMINDER_LEAD = Duration.ofDays(3);
 
     private final MembershipRepository memberships;
     private final MembershipTierRepository tiers;
@@ -131,6 +132,27 @@ class MembershipBillingServiceImpl implements MembershipBillingService {
         } else {
             recorder.record(failed, MembershipEvent.Type.PAST_DUE, SYSTEM, "Next try " + failed.nextRetryAt(), 0);
         }
+    }
+
+    @Override
+    public int remindTrialsEnding(int max) {
+        Instant now = Instant.now(clock);
+        int reminded = 0;
+        for (Membership m : memberships.trialsEndingBefore(now, now.plus(TRIAL_REMINDER_LEAD), max)) {
+            Boolean did = tx.serializable(() -> memberships.lockLiveOf(m.customerId())
+                    .filter(live -> live.status() == MembershipStatus.TRIALING)
+                    .filter(live -> activity.eventsOf(live.id()).stream()
+                            .noneMatch(e -> e.type() == MembershipEvent.Type.TRIAL_ENDING))
+                    .map(live -> {
+                        recorder.record(live, MembershipEvent.Type.TRIAL_ENDING, SYSTEM, "Trial ends "
+                                + live.trialEnd(), live.priceMinor());
+                        return true;
+                    }).orElse(false));
+            if (did) {
+                reminded++;
+            }
+        }
+        return reminded;
     }
 
     @Override

@@ -67,6 +67,15 @@ function SectionBody({ section }: { section: SettingsSection }): ReactNode {
           <ResourceTable resource="membership-settings" urlPrefix="membership-settings" />
         </div>
       );
+    case 'referrals':
+      return (
+        <div className="flex flex-col gap-4">
+          <p className="m-0 max-w-[80ch] text-sm text-muted">{t('st.settings.referrals.intro')}</p>
+          <ResourceTable resource="referral-settings" urlPrefix="referral-settings" />
+          <h2 className="m-0 text-base font-semibold">{t('st.settings.referrals.listTitle')}</h2>
+          <ResourceTable resource="referrals" urlPrefix="referrals" statusFilter />
+        </div>
+      );
     case 'fees':
       return <FeesView scope="fees" />;
     case 'delivery-fees':

@@ -180,8 +180,6 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("DELETE /v1/account/payment-methods/{paymentMethodId}", h.deletePaymentMethod)
 	route("GET /v1/account/orders", h.orders)
 	route("POST /v1/account/orders/{orderNumber}/shipments/{shipmentId}/cancel", h.cancelShipment)
-	route("GET /v1/account/returns", h.returns)
-	route("POST /v1/account/returns", h.startReturn)
 	// Checkout
 	route("GET /v1/checkout/summary", h.checkoutSummary)
 	route("POST /v1/checkout/orders", h.placeOrder)

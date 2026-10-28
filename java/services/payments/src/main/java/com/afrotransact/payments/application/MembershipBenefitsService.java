@@ -10,13 +10,20 @@ import com.afrotransact.payments.domain.TierBenefit;
 /**
  * What a membership gives, as the rest of the platform asks for it (S323): the delivery fee waivers checkout applies
  * through the fee rule resolution of ADR 0005 (and the cart and checkout preview), the entitlements other services act
- * on (early access, priority support, free returns, boosted rewards), recording the benefits used on an order, and the
+ * on (early access, priority support, boosted rewards), recording the benefits used on an order, and the
  * cashback on a delivered order.
  */
 public interface MembershipBenefitsService {
 
     /** What the customer is entitled to now; for orders-service, delivery-runs, support tools and the referral program. */
     Entitlements entitlementsOf(String customerId);
+
+    /**
+     * The extra share, in hundredths of a percent, a customer's referral rewards are bigger by because of the
+     * membership tier (the BOOSTED_REWARDS benefit; 0 for a non-member or during a trial). In-process: the referral
+     * program asks it while granting a reward, no access check.
+     */
+    int rewardBoostBps(String customerId);
 
     /** The signed-in shopper's own entitlements (customer token). */
     Entitlements myEntitlements();
@@ -54,7 +61,7 @@ public interface MembershipBenefitsService {
      * @param rewardBoostBps extra share of referral and gift rewards, in hundredths of a percent
      */
     record Entitlements(boolean member, String customerId, String tierCode, String tierName, MembershipStatus status,
-                        List<TierBenefit> benefits, boolean prioritySupport, boolean freeReturns,
+                        List<TierBenefit> benefits, boolean prioritySupport,
                         boolean memberPrices, int earlyAccessHours, int rewardBoostBps) {
 
         public boolean has(BenefitCode code) {

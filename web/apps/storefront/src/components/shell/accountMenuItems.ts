@@ -4,7 +4,7 @@ import { type MessageKey } from '@/i18n/t';
 import { backOfficeHref } from '@/lib/back-office';
 import { signInHref, signUpHref } from '@/lib/links';
 
-export type AccountMenuIcon = 'user' | 'package' | 'returns' | 'pin' | 'card' | 'shield' | 'sparkle' | 'store' | 'calendar' | 'desktop' | 'signin' | 'signup';
+export type AccountMenuIcon = 'user' | 'package' | 'help' | 'pin' | 'card' | 'shield' | 'sparkle' | 'store' | 'calendar' | 'desktop' | 'signin' | 'signup';
 
 export interface AccountMenuEntry {
   id: string;
@@ -53,7 +53,7 @@ export function accountMenuModel(me: Me | undefined, returnTo = '/'): AccountMen
     items: [
       { id: 'account', label: 'account.yourAccount', icon: 'user', href: '/account' },
       { id: 'orders', label: 'account.orders', icon: 'package', href: '/orders', count: c?.orders },
-      { id: 'returns', label: 'account.returns', icon: 'returns', href: '/account/returns', count: c?.returns },
+      { id: 'help', label: 'account.help', icon: 'help', href: '/account/help' },
       { id: 'addresses', label: 'account.addresses', icon: 'pin', href: '/account/addresses', count: c?.addresses },
       { id: 'payments', label: 'account.payments', icon: 'card', href: '/account/payments', count: c?.paymentMethods },
       { id: 'security', label: 'account.security', icon: 'shield', href: '/account/security' },

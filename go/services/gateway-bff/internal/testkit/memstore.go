@@ -24,6 +24,7 @@ type MemStore struct {
 	challenges map[string]port.Challenge
 	selection  map[string]map[string]bool
 	counters   map[string]int
+	receipts   map[string]string
 }
 
 var _ valkey.Store = (*MemStore)(nil)
@@ -31,7 +32,7 @@ var _ valkey.Store = (*MemStore)(nil)
 // NewMemStore returns an empty store.
 func NewMemStore() *MemStore {
 	return &MemStore{sessions: map[string][]byte{}, locks: map[string]bool{}, auth: map[string]port.AuthRequest{},
-		challenges: map[string]port.Challenge{}, selection: map[string]map[string]bool{}, counters: map[string]int{}}
+		challenges: map[string]port.Challenge{}, selection: map[string]map[string]bool{}, counters: map[string]int{}, receipts: map[string]string{}}
 }
 
 // Ping always succeeds.
@@ -170,6 +171,22 @@ func (m *MemStore) SetSelected(_ context.Context, owner string, atins []string, 
 			m.selection[owner][a] = true
 		}
 	}
+	return nil
+}
+
+// Recall returns a remembered receipt.
+func (m *MemStore) Recall(_ context.Context, key string) (string, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	v, ok := m.receipts[key]
+	return v, ok, nil
+}
+
+// Remember stores a receipt (the TTL is ignored in tests).
+func (m *MemStore) Remember(_ context.Context, key, value string, _ time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.receipts[key] = value
 	return nil
 }
 

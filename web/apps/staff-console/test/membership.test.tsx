@@ -167,12 +167,11 @@ describe('priority support for members (S323)', () => {
     asRoles('platform.customer_support');
   });
 
-  it('shows the member, the priority-support flag and free returns in the customer view', async () => {
+  it('shows the member, the priority-support flag in the customer view', async () => {
     await renderScreen(<CustomerPanel customerId="cus-1000" />);
     const flag = await screen.findByTestId('support-membership');
     expect(flag).toHaveTextContent('Plus member');
     expect(flag).toHaveTextContent('Priority support: handle first');
-    expect(flag).not.toHaveTextContent('Free returns');
   });
 
   it('shows nothing for a customer who is not a member', async () => {

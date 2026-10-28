@@ -188,7 +188,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	services.SellerAssistant = app.NewSellerAssistantService(sellerDeps, app.AssistantDeps{Model: upstreams.NewAssistantModel(client("ai-gateway", base)), Counter: NewMemStore(),
 		Orders: services.SellerOrders, Catalog: services.SellerCatalog, Fees: services.SellerFees, Money: services.SellerMoney, Coupons: services.SellerCoupons, Cases: sellerCases, Shell: services.SellerShell, Dashboard: services.SellerDashboard,
 		Now: clock.Now})
-	services.Shopper = shopperServices(u, client, identity, services, clock, log)
+	services.Shopper = shopperServices(u, client, identity, store, services, clock, log)
 	mux := http.NewServeMux()
 	httpapi.New(services, store, httpapi.SecurityOptions{AllowedOrigins: []string{WebOrigin, SellerCenterOrigin, StaffConsoleOrigin}, CookieName: "at_session",
 		CookieSecure: true, MaxBodyBytes: 64 << 10, AuthPerMinute: cfg.AuthPerMinute, LookupPerMinute: 1000}, log).Register(mux)

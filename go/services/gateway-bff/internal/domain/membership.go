@@ -28,7 +28,7 @@ const (
 )
 
 // MembershipBenefit is one benefit of a tier with the numbers it takes. Code is FREE_DELIVERY, FREE_SHIPPING, CASHBACK,
-// MEMBER_PRICES, EARLY_ACCESS, PRIORITY_SUPPORT, FREE_RETURNS, BOOSTED_REWARDS or MONTHLY_CREDIT.
+// MEMBER_PRICES, EARLY_ACCESS, PRIORITY_SUPPORT, BOOSTED_REWARDS or MONTHLY_CREDIT.
 type MembershipBenefit struct {
 	Code string `json:"code"`
 	// MinOrderMinor is the goods subtotal an order needs (free delivery, free shipping, cashback).

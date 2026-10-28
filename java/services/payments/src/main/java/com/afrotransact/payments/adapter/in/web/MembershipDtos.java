@@ -49,7 +49,7 @@ final class MembershipDtos {
     @Schema(name = "MembershipBenefit", description = "One benefit of a tier; which numbers apply depends on the code: "
             + "FREE_DELIVERY and FREE_SHIPPING take minOrderMinor and capMinor, CASHBACK takes percentBps (and "
             + "optionally minOrderMinor and capMinor), EARLY_ACCESS takes hours, BOOSTED_REWARDS takes percentBps, "
-            + "MONTHLY_CREDIT takes amountMinor; MEMBER_PRICES, PRIORITY_SUPPORT and FREE_RETURNS take none")
+            + "MONTHLY_CREDIT takes amountMinor; MEMBER_PRICES and PRIORITY_SUPPORT take none")
     record BenefitDto(
             @NotNull BenefitCode code,
             @PositiveOrZero @Schema(description = "Goods subtotal the order needs for the benefit") Long minOrderMinor,
@@ -236,13 +236,13 @@ final class MembershipDtos {
 
     @Schema(name = "MembershipEntitlements", description = "What a customer's membership gives right now")
     record EntitlementsDto(boolean member, String customerId, String tierCode, String tierName, String status,
-                           List<BenefitDto> benefits, boolean prioritySupport, boolean freeReturns,
+                           List<BenefitDto> benefits, boolean prioritySupport,
                            boolean memberPrices, int earlyAccessHours, int rewardBoostBps) {
 
         static EntitlementsDto of(Entitlements e) {
             return new EntitlementsDto(e.member(), e.customerId(), e.tierCode(), e.tierName(),
                     e.status() == null ? null : e.status().name(), e.benefits().stream().map(BenefitDto::of).toList(),
-                    e.prioritySupport(), e.freeReturns(), e.memberPrices(), e.earlyAccessHours(),
+                    e.prioritySupport(), e.memberPrices(), e.earlyAccessHours(),
                     e.rewardBoostBps());
         }
     }

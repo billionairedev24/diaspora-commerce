@@ -74,26 +74,6 @@ describe('shopping: browse → product → cart → checkout → order', () => {
   });
 });
 
-describe('returns', () => {
-  beforeEach(() => resetMockDb());
-
-  it('starts a return and lists it', async () => {
-    const a = api();
-    const delivered = { orderNumber: 'AT-0988-1120' };
-    const elig = await a.account.returnEligibility(delivered.orderNumber);
-    const shipment = elig.shipments[0];
-    const line = shipment?.lines.find((l) => !l.reportProblemOnly);
-    expect(line?.methods).toContain('DROP_OFF');
-    if (!shipment || !line) return;
-    const rma = await a.account.startReturn({ orderNumber: delivered.orderNumber, shipmentId: shipment.shipmentId, method: 'DROP_OFF', lines: [{ lineId: line.lineId, quantity: 1, reason: 'DAMAGED' }] });
-    expect(rma.rmaId).toMatch(/^RMA-/);
-    expect(rma.qrPayload).toContain(rma.rmaId);
-    expect((await a.bff.getReturns()).some((r) => r.rmaId === rma.rmaId)).toBe(true);
-    // Cancelled before drop-off.
-    expect((await a.account.cancelReturn(rma.rmaId)).status).toBe('CANCELLED');
-  });
-});
-
 describe('addresses', () => {
   beforeEach(() => resetMockDb());
   const input = { name: 'Adaeze Okafor', phone: '+17135550142', line1: '500 Main St', city: 'Houston', state: 'TX', zip: '77002' };

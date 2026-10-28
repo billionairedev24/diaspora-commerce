@@ -216,6 +216,33 @@ class GiftCardIT extends PaymentsIntegrationTest {
         assertThat(outbox("payments.gift_card.deliver", id)).isEqualTo(1);
     }
 
+    @Test
+    void theCodeIsHashedAtRestAndLeavesTheOutboxOnceTheEventWasRelayed() {
+        String buyer = id("buyer");
+        String id = buy(buyer, 2500, null, "hashed@example.com").path("id").asString();
+        String code = codeOf(id);
+        assertThat(code).isNotBlank();
+        // the card row never holds the code, only its keyed hash and the last four characters
+        String hash = jdbc.sql("select code_hash from gift_card where id = :id::uuid").param("id", id)
+                .query(String.class).single();
+        assertThat(hash).hasSize(64).doesNotContain(code.replace("-", ""));
+        assertThat(jdbc.sql("select count(*) from gift_card where id = :id::uuid and (code_hash = :c "
+                + "or code_last4 = :c)").param("id", id).param("c", code).query(Long.class).single()).isZero();
+
+        // while the event waits for the relay the code must stay in it: notifications needs it for the email
+        giftCards.scrubDeliveredCodes();
+        assertThat(codeOf(id)).isEqualTo(code);
+
+        // once it was relayed the code is gone from the database altogether
+        jdbc.sql("update platform_outbox set published_at = now() where aggregate_id = :id "
+                + "and type = 'payments.gift_card.deliver'").param("id", id).update();
+        assertThat(giftCards.scrubDeliveredCodes()).isGreaterThanOrEqualTo(1);
+        String payload = jdbc.sql("select payload::text from platform_outbox where aggregate_id = :id "
+                + "and type = 'payments.gift_card.deliver'").param("id", id).query(String.class).single();
+        assertThat(payload).doesNotContain(code).contains("hashed@example.com");
+        assertThat(giftCards.scrubDeliveredCodes()).as("repeating is harmless").isZero();
+    }
+
     // ------------------------------------------------------------------ redeem
 
     @Test

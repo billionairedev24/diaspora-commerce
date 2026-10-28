@@ -332,6 +332,20 @@ var DefaultEventRules = map[string][]EventRule{
 	"payments.gift_card.deliver": {{Topic: TopicPayments, Template: "payment.gift_card.delivered", Channels: chEmail,
 		Recipient: RecipientPayload, Enrich: enrichGiftCard}},
 
+	// ---- referrals (at.payment.events), S322: AfroTransact pays both sides; each is told in their own language ----
+	"payments.referral.rewarded": {{Topic: TopicPayments, Template: "payment.referral.rewarded", Channels: chEmail,
+		Recipient: RecipientUser, IDField: "customerId", Enrich: enrichReferralRewarded}},
+
+	// ---- membership (at.payment.events), S323: renewals, failed payments and trials about to end, in the member's language ----
+	"payments.membership.changed": {
+		{Topic: TopicPayments, Template: "payment.membership.renewed", Channels: chEmail, Recipient: RecipientUser, IDField: "customerId",
+			When: fieldIs("event", "RENEWED", "TRIAL_CONVERTED"), Enrich: enrichMembership},
+		{Topic: TopicPayments, Template: "payment.membership.payment_failed", Channels: chEmail, Recipient: RecipientUser, IDField: "customerId",
+			When: fieldIs("event", "RENEWAL_FAILED"), Enrich: enrichMembership},
+		{Topic: TopicPayments, Template: "payment.membership.trial_ending", Channels: chEmail, Recipient: RecipientUser, IDField: "customerId",
+			When: fieldIs("event", "TRIAL_ENDING"), Enrich: enrichMembership},
+	},
+
 	// ---- trust & safety (at.trustops.events), S230 ----
 	"trustops.claim.opened": {
 		{Topic: TopicTrustOps, Template: "claim.opened", Channels: chEmailPush, Recipient: RecipientUser,
@@ -591,6 +605,40 @@ func enrichGiftCard(d map[string]any, l Links) {
 	d["amount"] = moneyField(d, "amountMinor")
 	nullable(d, "recipientName", "senderName", "message", "code")
 	d["redeemUrl"] = join(l.Storefront, "/account/credit")
+}
+
+// enrichReferralRewarded words one side's reward: credit as an amount, membership as days. The friend's name arrives as
+// first name and last initial; the button goes to the credit page, or to the referrals page for membership days.
+func enrichReferralRewarded(d map[string]any, l Links) {
+	nullable(d, "friendName")
+	setDefault(d, "friendName", "your friend")
+	d["isReferrer"] = str(d, "side") == "REFERRER"
+	d["isCredit"] = str(d, "rewardType") != "MEMBERSHIP_DAYS"
+	d["amount"] = moneyField(d, "creditMinor")
+	if n, ok := integer(d, "membershipDays"); ok {
+		d["days"] = n
+	} else {
+		d["days"] = 0
+	}
+	d["creditUrl"] = join(l.Storefront, "/account/credit")
+	d["referUrl"] = join(l.Storefront, "/account/refer")
+}
+
+// enrichMembership words a membership email: the fee as an amount, the date benefits run to (or the trial ends), whether the
+// plan is yearly, and whether a failed renewal was the last try. Buttons go to the account's membership page, or to the
+// saved cards while a payment is being retried.
+func enrichMembership(d map[string]any, l Links) {
+	d["amount"] = moneyField(d, "amountMinor")
+	d["date"] = friendlyDate(str(d, "periodEnd"))
+	d["isYearly"] = str(d, "interval") == "YEARLY"
+	d["isLapsed"] = str(d, "status") == "LAPSED"
+	d["isTrialConverted"] = str(d, "event") == "TRIAL_CONVERTED"
+	d["manageUrl"] = join(l.Storefront, "/account/membership")
+	if d["isLapsed"] == true {
+		d["actionUrl"] = join(l.Storefront, "/membership")
+	} else {
+		d["actionUrl"] = join(l.Storefront, "/account/payments")
+	}
 }
 
 func enrichPayout(d map[string]any, l Links) {

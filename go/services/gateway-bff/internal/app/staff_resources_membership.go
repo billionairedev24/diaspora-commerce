@@ -25,11 +25,11 @@ func membershipResources() []*staffResource {
 var membershipBenefitLabels = map[string]string{
 	"FREE_DELIVERY": "Free AfroTransact delivery", "FREE_SHIPPING": "Free carrier shipping", "CASHBACK": "Cashback as credit",
 	"MEMBER_PRICES": "Member prices and deals", "EARLY_ACCESS": "Early access to pre-orders and runs", "PRIORITY_SUPPORT": "Priority support",
-	"FREE_RETURNS": "Free returns", "BOOSTED_REWARDS": "Bigger referral and gift rewards", "MONTHLY_CREDIT": "Monthly credit",
+	"BOOSTED_REWARDS": "Bigger referral and gift rewards", "MONTHLY_CREDIT": "Monthly credit",
 }
 
 // membershipBenefitOrder is the order benefits are shown in.
-var membershipBenefitOrder = []string{"FREE_DELIVERY", "FREE_SHIPPING", "CASHBACK", "MEMBER_PRICES", "EARLY_ACCESS", "PRIORITY_SUPPORT", "FREE_RETURNS",
+var membershipBenefitOrder = []string{"FREE_DELIVERY", "FREE_SHIPPING", "CASHBACK", "MEMBER_PRICES", "EARLY_ACCESS", "PRIORITY_SUPPORT",
 	"BOOSTED_REWARDS", "MONTHLY_CREDIT"}
 
 func benefitOf(tier jobj, code string) jobj {
@@ -145,7 +145,6 @@ func tierFields(o jobj) []domain.FormField {
 		withValue(ff("earlyAccess", "Early access to pre-order windows and delivery runs", "toggle", false), has("EARLY_ACCESS")),
 		withValue(withRange(ff("earlyAccessHours", "Early access: hours before everyone else (1 to 720)", "number", false), 720), num(benefitOf(o, "EARLY_ACCESS"), "hours")),
 		withValue(ff("prioritySupport", "Priority support", "toggle", false), has("PRIORITY_SUPPORT")),
-		withValue(ff("freeReturns", "Free returns", "toggle", false), has("FREE_RETURNS")),
 		withValue(ff("boostedRewards", "Bigger referral and gift rewards", "toggle", false), has("BOOSTED_REWARDS")),
 		withValue(withRange(ff("boostedPercent", "Bigger rewards: extra percent (0.01 to 100)", "number", false), 100), num(benefitOf(o, "BOOSTED_REWARDS"), "percentBps")/100),
 		withValue(ff("monthlyCredit", "A credit every month", "toggle", false), has("MONTHLY_CREDIT")),
@@ -156,7 +155,7 @@ func tierFields(o jobj) []domain.FormField {
 
 var tierChangeKeys = []string{"name", "description", "status", "sortOrder", "monthlyPrice", "yearlyPrice", "trialDays", "freeDelivery", "freeDeliveryMin",
 	"freeDeliveryCap", "freeShipping", "freeShippingMin", "freeShippingCap", "cashback", "cashbackPercent", "cashbackMin", "cashbackCap", "memberPrices",
-	"earlyAccess", "earlyAccessHours", "prioritySupport", "freeReturns", "boostedRewards", "boostedPercent", "monthlyCredit", "monthlyCreditAmount"}
+	"earlyAccess", "earlyAccessHours", "prioritySupport", "boostedRewards", "boostedPercent", "monthlyCredit", "monthlyCreditAmount"}
 
 // tierBenefits turns the toggles and numbers of the editor into the benefits payments stores.
 func tierBenefits(v jobj) ([]jobj, error) {
@@ -194,9 +193,6 @@ func tierBenefits(v jobj) ([]jobj, error) {
 	}
 	if vb(v, "prioritySupport") {
 		out = append(out, jobj{"code": "PRIORITY_SUPPORT"})
-	}
-	if vb(v, "freeReturns") {
-		out = append(out, jobj{"code": "FREE_RETURNS"})
 	}
 	if vb(v, "boostedRewards") {
 		bps := int(math.Round(vn(v, "boostedPercent") * 100))

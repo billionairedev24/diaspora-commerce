@@ -9,8 +9,8 @@ import (
 	"sync"
 )
 
-// ShopperPrefix is where the shopper-side fakes (payments wallet, orders customer routes, tax-returns, identity
-// security, bookings customer routes, storefront pages, ai-gateway, promise batches, carrier pickup/tracking, geo
+// ShopperPrefix is where the shopper-side fakes (payments wallet, orders customer routes, identity
+// security, bookings customer routes, trust-ops claims, storefront pages, ai-gateway, promise batches, carrier pickup/tracking, geo
 // zones) are mounted on the fake server, so they never collide with the other fakes' routes.
 const ShopperPrefix = "/shopper"
 
@@ -20,10 +20,10 @@ const (
 	ShopperOrderID     = "0b0b0b0b-0000-4000-8000-000000000777"
 	ShopperShipmentID  = "0b0b0b0b-0000-4000-8000-000000000778"
 	ShopperLineID      = "0b0b0b0b-0000-4000-8000-000000000779"
+	ShopperSellerOrgID = "org_afrotransact_retail"
 	ShopperServiceID   = "0c0c0c0c-0000-4000-8000-000000000001"
 	ShopperProviderID  = "org_braids"
 	ShopperBookingID   = "0c0c0c0c-0000-4000-8000-000000000002"
-	ShopperRMAID       = "0d0d0d0d-0000-4000-8000-000000000001"
 	// PayLinkOrderNumber is the late pre-order add of the pay-now link fakes; PayLinkToken is its valid token,
 	// PayLinkExpiredToken an expired one; any other token is unknown.
 	PayLinkOrderNumber  = "AT-2026-PAY001"
@@ -36,7 +36,7 @@ const (
 type shopperState struct {
 	mu            sync.Mutex
 	defaultPM     string
-	rmas          map[string]map[string]any
+	claims        []map[string]any
 	bookingStatus string
 	checkouts     map[string]string // idempotency key → order number
 	lastCheckout  map[string]any
@@ -67,7 +67,7 @@ func fakeQuoteGrocery(ln map[string]any) bool {
 }
 
 func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
-	st := &shopperState{defaultPM: "pm_visa", rmas: map[string]map[string]any{}, bookingStatus: "CONFIRMED", checkouts: map[string]string{},
+	st := &shopperState{defaultPM: "pm_visa", bookingStatus: "CONFIRMED", checkouts: map[string]string{},
 		prefs:   map[string]any{"email": true, "sms": true, "push": true, "marketingOptIn": false, "locale": "fr-CA", "timeZone": "America/Toronto"},
 		account: newAccountState()}
 	shopperStates.Store(u, st)
@@ -153,6 +153,7 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 
 	u.creditRoutes(mux)
 	u.membershipRoutes(mux)
+	u.referralRoutes(mux)
 
 	mux.HandleFunc("GET /v1/payments", authed(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("orderId") != ShopperOrderID {
@@ -169,7 +170,7 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 		return map[string]any{"id": ShopperOrderID, "orderNumber": ShopperOrderNumber, "status": "COMPLETED", "placedAt": "2026-10-01T15:00:00Z",
 			"currency": "USD", "itemsMinor": 2500, "shippingMinor": 0, "taxMinor": 206, "discountMinor": 0, "totalMinor": 2706, "shipTo": "9800 Westheimer Rd, Houston",
 			"shippingAddress": map[string]any{"fullName": "Adaeze Nwosu", "phone": "+17135550142", "line1": "9800 Westheimer Rd", "city": "Houston", "state": "TX", "postalCode": "77042", "country": "US"},
-			"shipments": []map[string]any{{"id": ShopperShipmentID, "shipmentId": ShopperShipmentID, "label": "Shipment 1 of 1", "sellerName": "AfroTransact Retail",
+			"shipments": []map[string]any{{"id": ShopperShipmentID, "shipmentId": ShopperShipmentID, "label": "Shipment 1 of 1", "sellerOrgId": ShopperSellerOrgID, "sellerName": "AfroTransact Retail",
 				"fulfilmentType": "RETAIL_1P", "deliveryMethod": "CARRIER", "serviceLevel": "standard", "status": status, "items": "Jollof Seasoning × 2",
 				"carrier": "ups", "trackingNumber": "1Z999", "promisedBy": "2026-10-03", "deliveredAt": "2026-10-03T17:00:00Z", "cancellable": cancellable,
 				"preferences": map[string]any{"handover": "DOOR"}, "perishable": false,
@@ -177,7 +178,6 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 				"deliveryFeeRule": map[string]any{"method": "CARRIER", "ruleId": "7f0c6d4e-1c1e-4f43-9c1e-0a0f5f1d2a11", "ruleVersion": 4, "currency": "USD",
 					"amountMinor": 0, "source": "RULE", "band": "free over 35.00"},
 				"membershipWaiver": map[string]any{"tierCode": "plus", "tierName": "Plus", "benefit": "FREE_SHIPPING", "waivedMinor": MembershipWaivedOnOrderMinor},
-				"returns":  map[string]any{"eligibility": "/v1/returns/eligibility?orderId=" + ShopperOrderID, "list": "/v1/returns?orderId=" + ShopperOrderID},
 				"lines":    []map[string]any{{"id": ShopperLineID, "variantAtin": "ATJOLLOFV1", "title": "Jollof Seasoning", "quantity": 2, "unitPriceMinor": 1250, "itemsMinor": 2500}},
 				"timeline": []map[string]any{{"from": "pending_payment", "to": "placed", "at": "2026-10-01T15:00:00Z"}, {"from": "out_for_delivery", "to": "delivered", "at": "2026-10-03T17:00:00Z"}}}}}
 	}
@@ -240,97 +240,8 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 		writeJSON(w, 200, checkoutView(r.PathValue("number"), "placed"))
 	}))
 
-	// ---- tax-returns
-	rmaJSON := func(id, status string, cancellable bool) map[string]any {
-		return map[string]any{"id": id, "number": "RMA-0000ABCD", "orderId": ShopperOrderID, "orderNumber": ShopperOrderNumber, "shipmentId": ShopperShipmentID,
-			"method": "DROP_OFF", "status": status, "refundState": "NONE", "currency": "USD", "estimateMinor": 1353, "carrier": "usps", "trackingNumber": "9400",
-			"labelUrl": "https://labels.example/rma.pdf", "qrPayload": "AFROTRANSACT-RETURN:RMA-0000ABCD:9400", "dropOffBy": "2026-10-20T00:00:00Z",
-			"cancellable": cancellable, "createdAt": "2026-10-05T10:00:00Z",
-			"lines": []map[string]any{{"lineId": ShopperLineID, "atin": "ATJOLLOFV1", "title": "Jollof Seasoning", "quantity": 1, "unitPriceMinor": 1250, "reason": "DAMAGED"}}}
-	}
-	mux.HandleFunc("GET /v1/returns/eligibility", authed(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("orderId") != ShopperOrderID {
-			problem(w, 404, "returns.order-not-found", "No such order", nil)
-			return
-		}
-		writeJSON(w, 200, map[string]any{"orderId": ShopperOrderID, "orderNumber": ShopperOrderNumber, "currency": "USD",
-			"shipments": []map[string]any{{"shipmentId": ShopperShipmentID, "sellerName": "AfroTransact Retail", "deliveredAt": "2026-10-03T17:00:00Z",
-				"lines": []map[string]any{{"lineId": ShopperLineID, "atin": "ATJOLLOFV1", "title": "Jollof Seasoning", "quantity": 2, "unitPriceMinor": 1250,
-					"eligible": true, "reportProblemOnly": false, "sellerFaultOnly": false, "maxQuantity": 2, "windowEndsAt": "2026-11-02T17:00:00Z",
-					"methods": []string{"DROP_OFF", "NO_RETURN"}}}}}})
-	}))
-	mux.HandleFunc("POST /v1/returns", authed(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Idempotency-Key") == "" {
-			problem(w, 400, "returns.idempotency-key-required", "Idempotency-Key required", nil)
-			return
-		}
-		b := readJSON(r)
-		if b["orderId"] != ShopperOrderID || b["shipmentId"] != ShopperShipmentID {
-			problem(w, 422, "returns.not-returnable", "Not returnable", nil)
-			return
-		}
-		if b["returnFrom"] != nil { // tax-returns defaults it to the order address; customer apps send nothing
-			problem(w, 400, "returns.unexpected-return-from", "returnFrom is staff-only here", nil)
-			return
-		}
-		rma := rmaJSON(ShopperRMAID, "AUTO_APPROVED", true)
-		st.mu.Lock()
-		st.rmas[ShopperRMAID] = rma
-		st.mu.Unlock()
-		writeJSON(w, 201, rma)
-	}))
-	mux.HandleFunc("GET /v1/returns", authed(func(w http.ResponseWriter, r *http.Request) {
-		st.mu.Lock()
-		defer st.mu.Unlock()
-		out := []map[string]any{}
-		orderID := r.URL.Query().Get("orderId")
-		for _, v := range st.rmas {
-			if orderID == "" || v["orderId"] == orderID {
-				out = append(out, v)
-			}
-		}
-		writeJSON(w, 200, out)
-	}))
-	mux.HandleFunc("GET /v1/returns/{id}", authed(func(w http.ResponseWriter, r *http.Request) {
-		st.mu.Lock()
-		defer st.mu.Unlock()
-		v, ok := st.rmas[r.PathValue("id")]
-		if !ok {
-			problem(w, 404, "returns.not-found", "No such return", nil)
-			return
-		}
-		writeJSON(w, 200, v)
-	}))
-	// GET /v1/returns/number/{number} and /v1/returns/{id}/refund-quote share one pattern (ServeMux would see a conflict).
-	mux.HandleFunc("GET /v1/returns/{id}/{sub}", authed(func(w http.ResponseWriter, r *http.Request) {
-		if r.PathValue("id") == "number" {
-			st.mu.Lock()
-			defer st.mu.Unlock()
-			for _, v := range st.rmas {
-				if v["number"] == r.PathValue("sub") {
-					writeJSON(w, 200, v)
-					return
-				}
-			}
-			problem(w, 404, "returns.not-found", "No such return", nil)
-			return
-		}
-		if r.PathValue("sub") != "refund-quote" {
-			http.NotFound(w, r)
-			return
-		}
-		writeJSON(w, 200, map[string]any{"itemsMinor": 1250, "shippingMinor": 0, "taxMinor": 103, "restockingFeeMinor": 0, "totalMinor": 1353, "lines": []any{}})
-	}))
-	mux.HandleFunc("POST /v1/returns/{id}/cancel", authed(func(w http.ResponseWriter, r *http.Request) {
-		st.mu.Lock()
-		defer st.mu.Unlock()
-		if _, ok := st.rmas[r.PathValue("id")]; !ok {
-			problem(w, 404, "returns.not-found", "No such return", nil)
-			return
-		}
-		st.rmas[r.PathValue("id")] = rmaJSON(r.PathValue("id"), "CANCELLED", false)
-		writeJSON(w, 200, st.rmas[r.PathValue("id")])
-	}))
+	u.shopperClaimRoutes(mux, st, authed)
+
 	mux.HandleFunc("POST /v1/tax/rates/import", authed(func(w http.ResponseWriter, r *http.Request) {
 		b := readJSON(r)
 		csv, _ := b["csv"].(string)
@@ -601,11 +512,11 @@ func (u *Upstreams) shopperDeliveryRoutes(mux *http.ServeMux, authed func(http.H
 		if r.URL.Query().Get("ownerOrg") == "" {
 			items = append(items,
 				map[string]any{"id": "pl-hou", "kind": "PLATFORM_COUNTER", "name": "AfroTransact Houston counter", "timezone": "America/Chicago",
-					"address": map[string]any{"line1": "1 Fulfilment Way", "city": "Houston", "state": "TX", "postalCode": "77042", "country": "US"},
+					"address":  map[string]any{"line1": "1 Fulfilment Way", "city": "Houston", "state": "TX", "postalCode": "77042", "country": "US"},
 					"position": map[string]any{"lat": 29.76, "lng": -95.37}, "hours": []map[string]any{{"weekday": 1, "open": "09:00", "close": "18:00"}},
 					"readyHours": 4, "active": true},
 				map[string]any{"id": "pl-dal", "kind": "PLATFORM_COUNTER", "name": "Dallas FC — Will Call", "timezone": "America/Chicago",
-					"address": map[string]any{"line1": "5000 Singleton Blvd", "city": "Dallas", "state": "TX", "postalCode": "75212", "country": "US"},
+					"address":  map[string]any{"line1": "5000 Singleton Blvd", "city": "Dallas", "state": "TX", "postalCode": "75212", "country": "US"},
 					"position": map[string]any{"lat": 32.776, "lng": -96.822}, "hours": []map[string]any{{"weekday": 1, "open": "08:00", "close": "20:00"}},
 					"readyHours": 2, "active": true})
 			prefix := r.URL.Query().Get("postalPrefix")

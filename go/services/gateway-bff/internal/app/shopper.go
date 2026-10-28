@@ -17,8 +17,9 @@ import (
 
 // ShopperDeps are the upstreams of the storefront's account, checkout, services and Lola use cases.
 type ShopperDeps struct {
-	Wallet  port.WalletClient
-	Orders  port.CustomerOrdersClient
+	Wallet port.WalletClient
+	Orders port.CustomerOrdersClient
+	// Returns is tax-returns (checkout tax estimates).
 	Returns port.ReturnsClient
 	// Payments reads an order's charged and refunded amounts (optional).
 	Payments port.OrderPaymentsClient

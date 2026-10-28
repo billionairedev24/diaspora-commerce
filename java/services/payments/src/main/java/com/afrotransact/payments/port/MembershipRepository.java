@@ -35,6 +35,9 @@ public interface MembershipRepository {
      */
     List<UUID> dueIds(Instant now, int limit);
 
+    /** Trialling memberships whose trial ends before the instant (and has not ended yet), soonest first. */
+    List<Membership> trialsEndingBefore(Instant now, Instant until, int limit);
+
     /** Active paid or complimentary memberships whose tier may grant monthly credit (the service filters further). */
     List<Membership> liveForMonthlyCredit(int limit, UUID after);
 

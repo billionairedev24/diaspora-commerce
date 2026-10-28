@@ -100,14 +100,14 @@ class MembershipAdminIT extends MembershipSupport {
         // edit, then publish
         TestSupport.as(TestSupport.SUPER_ADMIN);
         JsonNode edited = ok(send("PUT", "/v1/memberships/admin/tiers/" + code, body(code, "DRAFT", 1600, 16000, 10,
-                List.of(benefit("CASHBACK", Map.of("percentBps", 300)), benefit("FREE_RETURNS")),
+                List.of(benefit("CASHBACK", Map.of("percentBps", 300)), benefit("MEMBER_PRICES")),
                 "Raising the price after the pricing review", 0L), null));
         assertThat(edited.path("version").asLong()).isEqualTo(1);
         assertThat(edited.path("monthlyPriceMinor").asLong()).isEqualTo(1600);
         problem(send("PUT", "/v1/memberships/admin/tiers/" + code, body(code, "PUBLISHED", 1600, 16000, 10,
                 benefits, "Publishing with a stale version", 0L), null), 409, "payments.membership-tier-changed");
         JsonNode published = ok(send("PUT", "/v1/memberships/admin/tiers/" + code, body(code, "PUBLISHED", 1600,
-                16000, 10, List.of(benefit("CASHBACK", Map.of("percentBps", 300)), benefit("FREE_RETURNS")),
+                16000, 10, List.of(benefit("CASHBACK", Map.of("percentBps", 300)), benefit("MEMBER_PRICES")),
                 "Publishing the tier for launch", 1L), null));
         assertThat(published.path("status").asString()).isEqualTo("PUBLISHED");
         TestSupport.as(TestSupport.customer(id("shopper")));
@@ -123,7 +123,7 @@ class MembershipAdminIT extends MembershipSupport {
         assertThat(joined.path("membership").path("status").asString()).isEqualTo("TRIALING");
         TestSupport.as(TestSupport.SUPER_ADMIN);
         JsonNode retired = ok(send("PUT", "/v1/memberships/admin/tiers/" + code, body(code, "RETIRED", 1600, 16000,
-                10, List.of(benefit("CASHBACK", Map.of("percentBps", 300)), benefit("FREE_RETURNS")),
+                10, List.of(benefit("CASHBACK", Map.of("percentBps", 300)), benefit("MEMBER_PRICES")),
                 "Retiring the tier; members keep it", 2L), null));
         assertThat(retired.path("status").asString()).isEqualTo("RETIRED");
         TestSupport.as(TestSupport.customer(id("late")));
@@ -152,7 +152,7 @@ class MembershipAdminIT extends MembershipSupport {
         String code = tierCode("lab");
         TestSupport.as(TestSupport.customer(id("shopper")));
         problem(send("POST", "/v1/memberships/admin/tiers", body(code, "DRAFT", 1500, 15000, 0,
-                List.of(benefit("FREE_RETURNS")), "A shopper defining a tier", null), null), 403,
+                List.of(benefit("MEMBER_PRICES")), "A shopper defining a tier", null), null), 403,
                 "auth.missing-permission");
         problem(send("GET", "/v1/memberships/admin/members", null, null), 403, "auth.missing-permission");
         problem(send("GET", "/v1/memberships/admin/report", null, null), 403, "auth.missing-permission");

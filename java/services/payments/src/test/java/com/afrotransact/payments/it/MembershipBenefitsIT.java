@@ -242,7 +242,7 @@ class MembershipBenefitsIT extends MembershipSupport {
     void creditBenefitsWaitForTheFirstPaidPeriodSoATrialEarnsNoCredit() {
         String tier = tierCode("trial");
         tier(tier, 10, 999, 9900, 14, List.of(benefit("CASHBACK", Map.of("percentBps", 500)),
-                benefit("MONTHLY_CREDIT", Map.of("amountMinor", 500)), benefit("FREE_RETURNS")));
+                benefit("MONTHLY_CREDIT", Map.of("amountMinor", 500)), benefit("PRIORITY_SUPPORT")));
         String customer = shopperWithCard();
         assertThat(join(customer, tier, "MONTHLY").path("membership").path("status").asString())
                 .isEqualTo("TRIALING");
@@ -251,7 +251,7 @@ class MembershipBenefitsIT extends MembershipSupport {
         assertThat(balance(customer)).isZero();
         JsonNode e = entitlements(customer);
         assertThat(e.path("member").asBoolean()).isTrue();
-        assertThat(e.path("freeReturns").asBoolean()).isTrue();
+        assertThat(e.path("prioritySupport").asBoolean()).isTrue();
         assertThat(e.path("benefits").toString()).doesNotContain("CASHBACK").doesNotContain("MONTHLY_CREDIT");
 
         // the trial turns into a paid period and the credit benefits start
@@ -285,7 +285,7 @@ class MembershipBenefitsIT extends MembershipSupport {
     void entitlementsTellOtherServicesWhatTheMemberHas() {
         String tier = tierCode("max");
         tier(tier, 30, 1999, 19900, 0, List.of(benefit("EARLY_ACCESS", Map.of("hours", 24)),
-                benefit("PRIORITY_SUPPORT"), benefit("FREE_RETURNS"), benefit("MEMBER_PRICES"),
+                benefit("PRIORITY_SUPPORT"), benefit("MEMBER_PRICES"),
                 benefit("BOOSTED_REWARDS", Map.of("percentBps", 5000))));
         String customer = shopperWithCard();
         chargeWorks(customer, JOIN, 1999);
@@ -295,7 +295,6 @@ class MembershipBenefitsIT extends MembershipSupport {
         assertThat(e.path("tierName").asString()).isEqualTo(tier.toUpperCase());
         assertThat(e.path("earlyAccessHours").asInt()).isEqualTo(24);
         assertThat(e.path("prioritySupport").asBoolean()).isTrue();
-        assertThat(e.path("freeReturns").asBoolean()).isTrue();
         assertThat(e.path("memberPrices").asBoolean()).isTrue();
         assertThat(e.path("rewardBoostBps").asInt()).isEqualTo(5000);
 

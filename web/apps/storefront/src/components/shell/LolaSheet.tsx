@@ -47,7 +47,7 @@ function useProposalAction() {
         router.push(`/services/${encodeURIComponent(str(p.payload.serviceId))}`);
         return null;
       case 'START_RETURN':
-        router.push(`/account/returns/new?order=${encodeURIComponent(str(p.payload.orderId))}`);
+        router.push(`/account/help/new?order=${encodeURIComponent(str(p.payload.orderId))}`);
         return null;
       default:
         return null;

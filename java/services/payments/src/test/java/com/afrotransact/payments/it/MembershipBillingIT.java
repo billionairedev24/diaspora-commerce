@@ -224,8 +224,8 @@ class MembershipBillingIT extends MembershipSupport {
     void anUpgradeIsImmediateAndChargesTheDifferenceForTheRestOfThePeriod() {
         String basic = tierCode("basic");
         String pro = tierCode("pro");
-        tier(basic, 10, 1000, 10000, 0, List.of(benefit("FREE_RETURNS")));
-        tier(pro, 20, 2000, 20000, 0, List.of(benefit("FREE_RETURNS"), benefit("PRIORITY_SUPPORT")));
+        tier(basic, 10, 1000, 10000, 0, List.of(benefit("MEMBER_PRICES")));
+        tier(pro, 20, 2000, 20000, 0, List.of(benefit("MEMBER_PRICES"), benefit("PRIORITY_SUPPORT")));
         String customer = shopperWithCard();
         chargeWorks(customer, JOIN, 1000);
         join(customer, basic, "MONTHLY");
@@ -251,8 +251,8 @@ class MembershipBillingIT extends MembershipSupport {
     void aDowngradeWaitsForThePeriodEndAndKeepsTheBenefitsMeanwhile() {
         String basic = tierCode("basic");
         String pro = tierCode("pro");
-        tier(basic, 10, 1000, 10000, 0, List.of(benefit("FREE_RETURNS")));
-        tier(pro, 20, 2000, 20000, 0, List.of(benefit("FREE_RETURNS"), benefit("PRIORITY_SUPPORT")));
+        tier(basic, 10, 1000, 10000, 0, List.of(benefit("MEMBER_PRICES")));
+        tier(pro, 20, 2000, 20000, 0, List.of(benefit("MEMBER_PRICES"), benefit("PRIORITY_SUPPORT")));
         String customer = shopperWithCard();
         chargeWorks(customer, JOIN, 2000);
         join(customer, pro, "MONTHLY");

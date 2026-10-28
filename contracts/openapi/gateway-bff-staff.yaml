@@ -6433,7 +6433,7 @@ components:
       enum: [users, roles, applications, organisations, connect-accounts, orders, products, moderation, claims, returns, payouts, inventory, purchase-orders,
         routes, support-cases, audit, markets, site-settings, legal-documents, help-articles, privacy-requests, announcements,
         placements, identity-providers, fee-schedules, tax-rates, tax-codes, tax-rules, tax-review, dispatch-shipments, sos-alerts, vehicle-defects,
-        driver-events, pickup-locations, coupons, reconciliation, reconciliation-runs, ledger-adjustments, credit-adjustments, gift-cards, credit-liabilities, money-settings, membership-tiers, memberships, membership-settings, membership-report, stripe-lookup, payment-settings, tax-settings, maintenance, tax-filings, tax-nexus,
+        driver-events, pickup-locations, coupons, reconciliation, reconciliation-runs, ledger-adjustments, credit-adjustments, gift-cards, credit-liabilities, money-settings, membership-tiers, memberships, membership-settings, membership-report, referrals, referral-settings, stripe-lookup, payment-settings, tax-settings, maintenance, tax-filings, tax-nexus,
         oauth-clients, identity-sessions, signing-keys, auth-settings, exchange-rates]
     Tone: {type: string, enum: [good, warn, bad, info, brand]}
     CellValue:
@@ -6508,6 +6508,7 @@ components:
         help: {type: string}
         placeholder: {type: string}
         value: {$ref: '#/components/schemas/FieldValue'}
+        section: {type: string, description: 'The group the field belongs to; the form shows a heading when it changes from one field to the next (the referral program''s two reward sections)'}
     Form:
       type: object
       required: [title, submitLabel, fields]
@@ -6821,12 +6822,11 @@ components:
         cancelShipment: {type: boolean}
     SupportMembership:
       type: object
-      required: [tierName, status, prioritySupport, freeReturns]
+      required: [tierName, status, prioritySupport]
       properties:
         tierName: {type: string, examples: [Plus]}
         status: {type: string, enum: [TRIALING, ACTIVE, PAST_DUE]}
         prioritySupport: {type: boolean, description: Handle this customer's cases first}
-        freeReturns: {type: boolean, description: Returns cost this customer nothing}
     Customer360:
       type: object
       required: [customer, membership, orders, bookings, claims, returns, notifications, cases, audit, refundLimitMinor, can, unavailable]
@@ -6834,7 +6834,7 @@ components:
         customer: {$ref: '#/components/schemas/SupportCustomer'}
         membership:
           oneOf: [{$ref: '#/components/schemas/SupportMembership'}, {type: 'null'}]
-          description: 'The customer''s membership (S323): the priority-support flag and free returns; null when the customer is not a member'
+          description: 'The customer''s membership (S323): the priority-support flag; null when the customer is not a member'
         orders: {type: array, items: {$ref: '#/components/schemas/SupportOrder'}}
         bookings: {type: array, items: {$ref: '#/components/schemas/SupportBooking'}}
         claims: {type: array, items: {$ref: '#/components/schemas/SupportClaim'}}

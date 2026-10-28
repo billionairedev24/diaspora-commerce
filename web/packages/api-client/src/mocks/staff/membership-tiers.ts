@@ -8,7 +8,6 @@ const LABELS: [string, string][] = [
   ['memberPrices', 'Member prices and deals'],
   ['earlyAccess', 'Early access to pre-orders and runs'],
   ['prioritySupport', 'Priority support'],
-  ['freeReturns', 'Free returns'],
   ['boostedRewards', 'Bigger referral and gift rewards'],
   ['monthlyCredit', 'Monthly credit']
 ];

@@ -38,15 +38,14 @@ export const MOCK_MEMBERSHIP_TIERS: MembershipTier[] = [
     ]
   },
   {
-    code: 'premium', name: 'Premium', description: 'Everything in Plus on every order, bigger cashback, free returns and early access to pre-orders.', sortOrder: 20, currency: 'USD',
+    code: 'premium', name: 'Premium', description: 'Everything in Plus on every order, bigger cashback and early access to pre-orders.', sortOrder: 20, currency: 'USD',
     monthlyPriceMinor: 1999, yearlyPriceMinor: 19_900, trialDays: 14,
     benefits: [
       { ...noNumbers, code: 'FREE_DELIVERY', minOrderMinor: 0 },
       { ...noNumbers, code: 'FREE_SHIPPING', minOrderMinor: 0 },
       { ...noNumbers, code: 'CASHBACK', percentBps: 500, minOrderMinor: 0 },
       { ...noNumbers, code: 'EARLY_ACCESS', hours: 24 },
-      { ...noNumbers, code: 'PRIORITY_SUPPORT' },
-      { ...noNumbers, code: 'FREE_RETURNS' }
+      { ...noNumbers, code: 'PRIORITY_SUPPORT' }
     ]
   }
 ];

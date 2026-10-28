@@ -423,6 +423,10 @@ build() {
   mkdir -p "$BIN"
   if [[ -n "$java" ]]; then
     echo "==> building Java: ${java//services\//}"
+    # Maven copies resources but never deletes one that was renamed or removed, so a migration renumbered in git would
+    # live on in target/classes and Flyway would see two files with the same version: drop the copied migrations.
+    local s
+    for s in ${java//,/ }; do rm -rf "$ROOT/java/$s/target/classes/db/migration" 2>/dev/null || true; done
     (cd "$ROOT/java" && ./mvnw -q -B -DskipTests -pl "$java" -am package)
   fi
   for svc in $go; do
@@ -817,7 +821,9 @@ docs_up() {
   echo "==> starting the developer portal (Docusaurus; the first build takes a minute or two)"
   : >"$LOGS/docs-portal.log"
   (cd "$ROOT/docs/portal" || exit 1
-    node scripts/sync-contracts.mjs >>"$LOGS/docs-portal.log" 2>&1
+    if ! node scripts/sync-contracts.mjs >>"$LOGS/docs-portal.log" 2>&1; then
+      echo "  ✗ docs portal: contract sync failed, so the portal is not started; last log lines:" >&2; tail -n 15 "$LOGS/docs-portal.log" >&2; exit 0
+    fi
     nohup ./node_modules/.bin/docusaurus start --port "$port" --host localhost --no-open >>"$LOGS/docs-portal.log" 2>&1 &
     echo $! >"$PIDS/docs-portal.pid")
   for ((i = 0; i < 240; i += 3)); do

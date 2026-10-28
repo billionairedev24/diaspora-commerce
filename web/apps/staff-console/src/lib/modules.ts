@@ -66,7 +66,7 @@ export function moduleOf(pathname: string): StaffModuleKey | null {
 }
 
 /** The server-driven tables each module shows (one tab per table). */
-export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceKey; label: string }[]>> = {
+export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceKey; label: string; statusFilter?: boolean }[]>> = {
   orders: [{ resource: 'orders', label: 'Orders' }],
   catalog: [
     { resource: 'moderation', label: 'Moderation queue' },
@@ -93,6 +93,7 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
     { resource: 'credit-liabilities', label: 'Credit & gift card liability' },
     { resource: 'memberships', label: 'Members' },
     { resource: 'membership-report', label: 'Membership report' },
+    { resource: 'referrals', label: 'Referrals', statusFilter: true },
     { resource: 'reconciliation-runs', label: 'Daily runs' },
     { resource: 'stripe-lookup', label: 'Stripe lookup' }
   ],

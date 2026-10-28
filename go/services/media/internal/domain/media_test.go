@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -136,5 +137,22 @@ func TestLinkPolicy(t *testing.T) {
 		if got := lp.TTL(c.rules, c.requested, c.storeMx); got != c.want {
 			t.Fatalf("%s: got %s, want %s", c.name, got, c.want)
 		}
+	}
+}
+
+func TestReturnPhotoAcceptsHEICButProofPhotoDoesNot(t *testing.T) {
+	ret, err := domain.RulesFor(domain.PurposeReturnPhoto)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof, err := domain.RulesFor(domain.PurposeProofPhoto)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(ret.ContentTypes, "image/heic") || slices.Contains(proof.ContentTypes, "image/heic") {
+		t.Fatalf("return-photo %v, proof-photo %v", ret.ContentTypes, proof.ContentTypes)
+	}
+	if ret.MaxBytes != 10<<20 {
+		t.Fatalf("max %d", ret.MaxBytes)
 	}
 }

@@ -25,9 +25,10 @@ import { RevealDialog } from './RevealDialog';
  * Server-driven table of one resource on the shared DataTable: columns, rows and the create form come from the BFF; one
  * search over every column and any sort run on the BFF (?q=, ?sort=); rows can be selected for bulk actions and
  * exports; clicking a row opens its detail sheet (?open=<id>, so other pages can link to a record). Pages that show
- * several resource tables (tabs) give each a URL prefix.
+ * several resource tables (tabs) give each a URL prefix. `statusFilter` adds one chip per status the BFF names (the
+ * review queue of referrals is one tap away); it is off for tables that do not need it.
  */
-export function ResourceTable({ resource, urlPrefix }: { resource: ResourceKey; urlPrefix?: string }) {
+export function ResourceTable({ resource, urlPrefix, statusFilter = false }: { resource: ResourceKey; urlPrefix?: string; statusFilter?: boolean }) {
   const t = useT();
   const api = staffApi();
   const qc = useQueryClient();
@@ -43,8 +44,20 @@ export function ResourceTable({ resource, urlPrefix }: { resource: ResourceKey; 
   /** A secret the new record came with (a new OAuth client secret): shown once, kept out of the query cache. */
   const [reveal, setReveal] = useState<{ recordId: string; secret: OneTimeSecret } | null>(null);
 
+  const statusParam = urlPrefix ? `${urlPrefix}.status` : 'status';
+  const status = statusFilter ? (params.get(statusParam) ?? '') : '';
+  const setStatus = (value: string) => {
+    const next = new URLSearchParams(params.toString());
+    if (value) next.set(statusParam, value);
+    else next.delete(statusParam);
+    next.delete(urlPrefix ? `${urlPrefix}.page` : 'page');
+    next.delete('open');
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+
   const query = useQuery({
-    ...staffQueries.page(api, resource, { q: state.q || undefined, sort: state.sort, page: state.pagination.pageIndex, size: state.pagination.pageSize, cursor: state.cursor }),
+    ...staffQueries.page(api, resource, { q: state.q || undefined, status: status || undefined, sort: state.sort, page: state.pagination.pageIndex, size: state.pagination.pageSize, cursor: state.cursor }),
     placeholderData: keepPreviousData
   });
   const data = query.data;
@@ -121,7 +134,17 @@ export function ResourceTable({ resource, urlPrefix }: { resource: ResourceKey; 
         onExport={data?.exportable ? onExport : undefined}
         exportsHref="/exports"
         toolbar={
-          data?.canCreate && data.createForm ? (
+          <>
+            {statusFilter && data && data.facets.length > 0 ? (
+              <div role="group" aria-label={t('st.resourceTable.status')} className="flex flex-wrap gap-1">
+                {[{ value: '', label: t('st.resourceTable.allStatuses') }, ...data.facets].map((f) => (
+                  <Button key={f.value} size="sm" variant={status === f.value ? 'secondary' : 'neutral'} aria-pressed={status === f.value} onClick={() => setStatus(f.value)}>
+                    {f.label}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+            {data?.canCreate && data.createForm ? (
             <Button
               size="sm"
               icon={<Plus size={14} aria-hidden />}
@@ -133,7 +156,8 @@ export function ResourceTable({ resource, urlPrefix }: { resource: ResourceKey; 
             >
               {t('st.resourceTable.new')}
             </Button>
-          ) : null
+            ) : null}
+          </>
         }
         footer={
           data?.exportable ? (

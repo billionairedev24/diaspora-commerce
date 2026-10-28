@@ -86,7 +86,7 @@ export const ResourceKeySchema = z.enum([
   'users', 'roles', 'applications', 'organisations', 'connect-accounts', 'orders', 'products', 'moderation', 'claims', 'returns', 'payouts', 'inventory', 'purchase-orders', 'routes',
   'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'help-articles', 'privacy-requests', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates', 'tax-codes', 'tax-rules', 'tax-review',
   'dispatch-shipments', 'sos-alerts', 'vehicle-defects', 'driver-events', 'pickup-locations', 'coupons',
-  'reconciliation', 'reconciliation-runs', 'ledger-adjustments', 'credit-adjustments', 'gift-cards', 'credit-liabilities', 'money-settings', 'membership-tiers', 'memberships', 'membership-settings', 'membership-report', 'stripe-lookup', 'payment-settings', 'tax-settings', 'maintenance', 'tax-filings', 'tax-nexus',
+  'reconciliation', 'reconciliation-runs', 'ledger-adjustments', 'credit-adjustments', 'gift-cards', 'credit-liabilities', 'money-settings', 'membership-tiers', 'memberships', 'membership-settings', 'membership-report', 'referrals', 'referral-settings', 'stripe-lookup', 'payment-settings', 'tax-settings', 'maintenance', 'tax-filings', 'tax-nexus',
   'oauth-clients', 'identity-sessions', 'signing-keys', 'auth-settings', 'exchange-rates'
 ]);
 export type ResourceKey = z.infer<typeof ResourceKeySchema>;
@@ -130,7 +130,9 @@ export const FormFieldSchema = z.object({
   pattern: z.string().optional(),
   help: z.string().optional(),
   placeholder: z.string().optional(),
-  value: FieldValueSchema.optional()
+  value: FieldValueSchema.optional(),
+  /** The group the field belongs to: the form shows a heading when it changes from one field to the next. */
+  section: z.string().optional()
 });
 export type FormField = z.infer<typeof FormFieldSchema>;
 export const StaffFormSchema = z.object({ title: z.string(), submitLabel: z.string(), intro: z.string().optional(), fields: z.array(FormFieldSchema), changeKeys: z.array(z.string()).optional() });
@@ -314,8 +316,8 @@ export type AuditLine = z.infer<typeof AuditLineSchema>;
 
 export const Customer360Schema = z.object({
   customer: z.object({ id: z.string(), name: z.string(), email: z.string(), enabled: z.boolean(), emailVerified: z.boolean(), roles: z.array(z.string()) }),
-  /** The customer's membership (S323): priority support and free returns; null when not a member. */
-  membership: z.object({ tierName: z.string(), status: z.enum(['TRIALING', 'ACTIVE', 'PAST_DUE']), prioritySupport: z.boolean(), freeReturns: z.boolean() }).nullable(),
+  /** The customer's membership (S323): priority support; null when not a member. */
+  membership: z.object({ tierName: z.string(), status: z.enum(['TRIALING', 'ACTIVE', 'PAST_DUE']), prioritySupport: z.boolean() }).nullable(),
   orders: z.array(SupportOrderSchema),
   bookings: z.array(SupportBookingSchema),
   claims: z.array(SupportClaimSchema),

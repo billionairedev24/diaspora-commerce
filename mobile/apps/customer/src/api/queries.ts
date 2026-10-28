@@ -1,6 +1,6 @@
 /* TanStack Query hooks. Keys come from the factories in ./keys (BFF keys shared with the web via api-client). */
-import { type Cart, type SearchQuery, SearchQuerySchema } from '@afrotransact/api-client';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type Cart, creditQueries, type SearchQuery, SearchQuerySchema } from '@afrotransact/api-client';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApi } from './ApiProvider';
 import { accountKeys, bookingKeys, cartKeys, checkoutKeys, identityKeys, orderKeys, productKeys, searchKeys } from './keys';
@@ -49,16 +49,6 @@ export function useOrders() {
   return useQuery({ queryKey: accountKeys.orders(), queryFn: () => api.bff.getOrders() });
 }
 
-export function useReturnEligibility(orderNumber: string) {
-  const api = useApi();
-  return useQuery({ queryKey: [...accountKeys.returns(), 'eligibility', orderNumber], queryFn: () => api.account.returnEligibility(orderNumber), enabled: orderNumber !== '' });
-}
-
-export function useReturns() {
-  const api = useApi();
-  return useQuery({ queryKey: accountKeys.returns(), queryFn: () => api.bff.getReturns() });
-}
-
 export function useTracking(orderNumber: string) {
   const api = useApi();
   return useQuery({ queryKey: orderKeys.tracking(orderNumber), queryFn: () => api.account.tracking(orderNumber), enabled: !!orderNumber, refetchInterval: 30_000 });
@@ -67,6 +57,12 @@ export function useTracking(orderNumber: string) {
 export function useAddresses() {
   const api = useApi();
   return useQuery({ queryKey: accountKeys.addresses(), queryFn: () => api.bff.getAddresses() });
+}
+
+/** AfroTransact credit balance and history, newest first (S320). Read only: credit is spent at checkout, never paid out. */
+export function useCreditAccount() {
+  const api = useApi();
+  return useInfiniteQuery(creditQueries.account(api.bff));
 }
 
 export function usePaymentMethods() {

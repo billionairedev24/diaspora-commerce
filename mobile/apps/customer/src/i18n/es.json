@@ -130,5 +130,20 @@
   "cu.mfa.textAgain": "Text me a new code",
   "cu.mfa.useAuthenticator": "Use my authenticator app",
   "cu.mfa.useRecovery": "Use a recovery code",
-  "cu.mfa.back": "Back"
+  "cu.mfa.back": "Back",
+  "cu.account.credit": "Crédito AfroTransact",
+  "cu.credit.title": "Crédito AfroTransact",
+  "cu.credit.balance": "Tu saldo",
+  "cu.credit.intro": "El crédito sirve para pagar productos y servicios en AfroTransact y nunca caduca. No se puede retirar, pagar en efectivo, reembolsar a una tarjeta ni enviar a otra persona.",
+  "cu.credit.history": "Historial",
+  "cu.credit.none": "Aún no hay actividad de crédito.",
+  "cu.credit.loadMore": "Mostrar actividad anterior",
+  "cu.credit.after": "Saldo {amount}",
+  "cu.credit.src.REFERRAL": "Recompensa por referido",
+  "cu.credit.src.GIFT_CARD": "Tarjeta de regalo",
+  "cu.credit.src.MEMBERSHIP": "Membresía",
+  "cu.credit.src.REFUND": "Reembolso",
+  "cu.credit.src.STAFF": "De AfroTransact",
+  "cu.credit.src.PROMO": "Promoción",
+  "cu.credit.src.ORDER": "Pedido"
 }

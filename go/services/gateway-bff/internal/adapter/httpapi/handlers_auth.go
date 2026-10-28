@@ -23,7 +23,7 @@ func (h *handlersImpl) startLogin(w http.ResponseWriter, r *http.Request, provid
 		returnTo = "/"
 	}
 	url, err := h.s.Auth.AuthorizeURL(r.Context(), callerFrom(r.Context()), app.LoginRequest{Provider: provider, ReturnTo: returnTo,
-		Prompt: q.Get("prompt"), LoginHint: q.Get("login_hint"), Invitation: q.Get("invitation"), Intent: q.Get("intent"), Retried: q.Get("retried") == "1"})
+		Prompt: q.Get("prompt"), LoginHint: q.Get("login_hint"), Invitation: q.Get("invitation"), Referral: q.Get("referral"), Intent: q.Get("intent"), Retried: q.Get("retried") == "1"})
 	if err != nil {
 		h.reply(w, r, 0, nil, err)
 		return
@@ -200,31 +200,6 @@ func (h *handlersImpl) cancelShipment(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := h.s.Account.CancelShipment(r.Context(), callerFrom(r.Context()), r.PathValue("orderNumber"), r.PathValue("shipmentId"))
 	h.reply(w, r, http.StatusOK, v, err)
-}
-
-func (h *handlersImpl) returns(w http.ResponseWriter, r *http.Request) {
-	if h.s.Shopper.enabled() {
-		v, err := h.s.Shopper.Returns.List(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("orderNumber"))
-		h.reply(w, r, http.StatusOK, v, err)
-		return
-	}
-	v, err := h.s.Account.Returns(r.Context(), callerFrom(r.Context()))
-	h.reply(w, r, http.StatusOK, v, err)
-}
-
-func (h *handlersImpl) startReturn(w http.ResponseWriter, r *http.Request) {
-	var b domain.StartReturn
-	if err := decode(r, &b, false); err != nil {
-		h.reply(w, r, 0, nil, err)
-		return
-	}
-	if h.s.Shopper.enabled() {
-		v, err := h.s.Shopper.Returns.Start(r.Context(), callerFrom(r.Context()), r.Header.Get("Idempotency-Key"), b)
-		h.reply(w, r, http.StatusCreated, v, err)
-		return
-	}
-	v, err := h.s.Account.StartReturn(r.Context(), callerFrom(r.Context()), b)
-	h.reply(w, r, http.StatusCreated, v, err)
 }
 
 // ---------------------------------------------------------------- checkout

@@ -34,9 +34,9 @@ shipping on orders of at least $25.00. Everything is editable without a release.
 | `FREE_DELIVERY`, `FREE_SHIPPING` | order minimum, per-order cap | The fee rules produce the fee (ADR 0005); `FeeWaivers` removes it when the order's goods reach the minimum, capped per order. Pickup and express are never waived. Applies from the first day, trial included. |
 | `CASHBACK` | percent (basis points), optional minimum and cap | Credit on a delivered order, once per order. Hooked on settlement `markDelivered`; a 2-day sweep picks up any miss. |
 | `MONTHLY_CREDIT` | amount | Granted once a month by the hourly job, from the first paid period. |
-| `BOOSTED_REWARDS` | percent | Exposed as `rewardBoostBps` in the entitlements (and the BFF/support tools). The referral program (S322) is the consumer; gift cards do not read it yet. |
+| `BOOSTED_REWARDS` | percent | Applied by the referral program: when it grants a reward to a paying member, credit and free days are raised by this share (a 50% boost turns 10.00 into 15.00 and 14 days into 21), within the sanity bounds of a reward. Also exposed as `rewardBoostBps` in the entitlements. Gift cards are deliberately not boosted: a card is paid for, and a boost would create unbacked credit. |
 | `EARLY_ACCESS` | hours | Pre-order windows (eligibility) and delivery runs (availability and slot reservation) open this many hours earlier for members. |
-| `PRIORITY_SUPPORT`, `FREE_RETURNS` | none | Flags in the entitlements; the staff Customer 360 shows them. |
+| `PRIORITY_SUPPORT` | none | A flag in the entitlements; the staff Customer 360 shows it so support handles the member's cases first. |
 | `MEMBER_PRICES` | none | A flag only. Catalog and search do not read it yet: see "Not built". |
 
 **Credit benefits (cashback, monthly credit, boosted rewards) start with the first paid period**, never during a trial, so a
@@ -82,18 +82,26 @@ The same quote returns `cashbackMinor`, the credit the member will earn when the
 Orders passes `earlyAccessHours` (from the entitlements) to delivery-runs. A run or pre-order window that is announced but not
 yet open becomes available to members that many hours before its opening; the reservation honours the same hours.
 
-## Referral hook
-
+## Referral
+The referral program (S322) grants membership days through its `MembershipGrants` port; the adapter `MembershipProgramGrants`
+calls `MembershipRewardGrants`, which gives days of the entry tier (the published tier with the lowest sort order) through
 `MembershipGrants.grantDays(customerId, tierCode, days, reason, idempotencyKey)` (in process) and
-`POST /v1/memberships/grants` (`payments:credit.grant`) give free days. A customer without a live membership gets a
-complimentary one that ends on its date and needs no card; a member has the days added to the current period. Idempotent per key.
+`POST /v1/memberships/grants` (`payments:credit.grant`). A customer without a live membership gets a complimentary one that
+ends on its date and needs no card; a member has the days added to the current period. Idempotent per key, so the reward
+job can retry. With no published tier the reward stays `DEFERRED`. The `BOOSTED_REWARDS` benefit makes a member's reward bigger.
+
+## Emails
+`payments.membership.changed` drives three emails in the member's language (en, fr, es, ar, yo): a renewal or trial
+conversion receipt, a failed payment (retrying, or the last try when it lapses) and "your free trial ends on ..." three days
+before the trial ends (the hourly job records `TRIAL_ENDING` once per membership). Templates: `payment.membership.renewed`,
+`payment.membership.payment_failed`, `payment.membership.trial_ending` (notifications migration 0022).
 
 ## Staff
 
 Settings, Money, **Membership**: the tier editor (price, trial, benefit toggles and numbers, publish and retire; Save is
 disabled until something changes; a reason of at least 15 characters is required and is kept with who changed it) and the
 billing rules. Payouts and ledger: **Members** (by name, tier, status) and the **Membership report** (members, churn, cost of
-the benefits, credit granted, fees waived, MRR, ARR). Support's customer view shows the member, priority support and free returns.
+the benefits, credit granted, fees waived, MRR, ARR). Support's customer view shows the member, priority support.
 
 ## API
 
@@ -106,9 +114,6 @@ BFF (contract `gateway-bff.yaml`, tag Membership): `getMembershipOffer`, `getAcc
 ## Not built (documented gaps)
 
 - **Member prices**: the benefit can be switched on and is in the entitlements, but catalog, search and the cart do not apply a member price yet. It needs a price list per offer.
-- **Bigger referral and gift rewards**: the boost is exposed in the entitlements, but nothing in the referral or gift card flows applies it yet.
-- **Free returns**: exposed as a flag to support and returns tooling; the return label and refund flow do not read it yet.
 - **Annual fee deferral**: a yearly fee is booked as revenue when charged, not spread over twelve months.
 - **Mobile apps** have no membership screens.
-- **Notification templates** for renewal, failed payment and trial-ending emails are not written; the events are emitted.
 - Strong customer authentication: a card that needs a bank confirmation is declined with `MEMBERSHIP_AUTHENTICATION_REQUIRED` and the shopper tries another card.

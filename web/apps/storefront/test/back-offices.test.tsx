@@ -10,7 +10,7 @@ import { renderWithProviders } from './render';
 const person = (backOffices: BackOffice[]): Me => ({
   authenticated: true,
   user: { id: 'u1', firstName: 'Malo', lastName: 'Adeyemi', email: 'malo@example.com', initials: 'MA', roles: ['account.customer'], backOffices },
-  counts: { orders: 0, returns: 0, addresses: 1, paymentMethods: 1 }
+  counts: { orders: 0, addresses: 1, paymentMethods: 1 }
 });
 
 const backOfficeItems = (me: Me) =>

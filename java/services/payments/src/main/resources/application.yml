@@ -115,6 +115,12 @@ at:
       max-failures-per-address: ${GIFT_CARD_MAX_FAILURES_PER_ADDRESS:20}
       window: ${GIFT_CARD_ATTEMPT_WINDOW:15m}
       delivery-batch: 50
+    # S322 referral program. The offer itself (rewards, minimum order, return window, caps, validity, on/off) is staff
+    # Settings, stored in the database; only the key of the abuse-check fingerprints is configuration. Delivery addresses
+    # are kept as HMACs under REFERRAL_SIGNAL_KEY (blank: derived from the Stripe webhook secret). The reward job runs
+    # every referral-interval (jobs.referral-interval, jobs.referral-batch).
+    referral:
+      signal-key: ${REFERRAL_SIGNAL_KEY:}
     # S226: AfroTransact Retail supplier payments (retail.payment.released) are due this many days after release
     # unless retail-service sends a due date.
     supplier-payments:

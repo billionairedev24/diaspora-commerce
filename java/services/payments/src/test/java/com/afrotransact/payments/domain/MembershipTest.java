@@ -151,18 +151,18 @@ class MembershipTest {
 
     @Test
     void aTierNeedsSanePricesAndBenefitsWithTheirOwnNumbers() {
-        assertThatThrownBy(() -> tier("bad", 1, 999, 99_999, 0, TierBenefit.flag(BenefitCode.FREE_RETURNS)))
+        assertThatThrownBy(() -> tier("bad", 1, 999, 99_999, 0, TierBenefit.flag(BenefitCode.MEMBER_PRICES)))
                 .isInstanceOf(PaymentsRuleViolation.class).satisfies(e -> assertThat(
                         ((PaymentsRuleViolation) e).fieldErrors()).containsKey("yearlyPriceMinor"));
         assertThatThrownBy(() -> new TierBenefit(BenefitCode.CASHBACK, null, null, null, null, null))
                 .isInstanceOf(PaymentsRuleViolation.class);
-        assertThatThrownBy(() -> new TierBenefit(BenefitCode.FREE_RETURNS, null, null, 100, null, null))
+        assertThatThrownBy(() -> new TierBenefit(BenefitCode.MEMBER_PRICES, null, null, 100, null, null))
                 .as("a flag benefit takes no numbers").isInstanceOf(PaymentsRuleViolation.class);
         assertThatThrownBy(() -> new TierBenefit(BenefitCode.EARLY_ACCESS, null, null, null, 0, null))
                 .isInstanceOf(PaymentsRuleViolation.class);
         assertThatThrownBy(() -> tier("empty", 1, 999, 9900, 0)).as("a published tier has a benefit")
                 .isInstanceOf(PaymentsRuleViolation.class);
-        assertThatThrownBy(() -> tier("Bad Code", 1, 999, 9900, 0, TierBenefit.flag(BenefitCode.FREE_RETURNS)))
+        assertThatThrownBy(() -> tier("Bad Code", 1, 999, 9900, 0, TierBenefit.flag(BenefitCode.MEMBER_PRICES)))
                 .isInstanceOf(PaymentsRuleViolation.class);
         assertThat(plus().price(BillingInterval.YEARLY).minor()).isEqualTo(9900);
     }

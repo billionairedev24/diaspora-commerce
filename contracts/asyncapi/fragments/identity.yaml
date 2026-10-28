@@ -193,6 +193,18 @@ components:
         emailVerified: {type: boolean, description: true for social sign-ups and staff provisioning}
         smsConsent: {type: boolean, description: Separate, optional SMS opt-in from the sign-up form}
         registeredAt: {type: string, format: date-time}
+        referralCode:
+          type: [string, 'null']
+          maxLength: 20
+          description: Referral code from the friend's link or typed on the sign-up form (S322), as given; payments attaches it when it owns the code
+        deviceHash:
+          type: [string, 'null']
+          pattern: '^[0-9a-f]{64}$'
+          description: HMAC of the sign-up browser's device cookie (S322); only compared for equality by the referral abuse checks
+        networkHash:
+          type: [string, 'null']
+          pattern: '^[0-9a-f]{64}$'
+          description: HMAC of the sign-up network, IPv4 /24 or IPv6 /64 (S322)
     IdentityUserEmailVerified:
       type: object
       required: [userId, email, verifiedAt]

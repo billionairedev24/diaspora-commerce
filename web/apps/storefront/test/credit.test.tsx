@@ -125,8 +125,8 @@ describe('credit at checkout (S320)', () => {
   });
 });
 
-describe('refunds as credit (S320)', () => {
-  it('shows what credit paid and takes the card part of refunds as credit, after a second click', async () => {
+describe('credit on an order (S320)', () => {
+  it('shows what credit paid and gives the shopper no way to turn refunds into credit or to refund a delivered order', async () => {
     const api = await signInDemo();
     const jollof = await api.getProduct('AT000000P2');
     await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 12 });
@@ -136,14 +136,9 @@ describe('refunds as credit (S320)', () => {
       'checkout-credit-ui-0001'
     );
     await api.confirmCheckoutPayment(conf.orderNumber);
-    const user = userEvent.setup();
     renderWithProviders(<OrderDetailView orderNumber={conf.orderNumber} />);
     expect(await screen.findByTestId('order-credit')).toHaveTextContent('$25.00');
-    await user.click(await screen.findByTestId('order-card-as-credit-button'));
-    expect(await screen.findByText(/can’t be turned back into money/)).toBeInTheDocument();
-    await user.click(screen.getByTestId('order-card-as-credit-confirm'));
-    await waitFor(async () => expect((await api.getOrder(conf.orderNumber)).payment?.cardRefundsAsCredit).toBe(true));
-    await waitFor(() => expect(screen.queryByTestId('order-card-as-credit-button')).not.toBeInTheDocument());
+    expect(screen.queryByTestId('order-card-as-credit')).not.toBeInTheDocument();
+    expect(screen.queryByText(/return or replace/i)).not.toBeInTheDocument();
   });
 });
-

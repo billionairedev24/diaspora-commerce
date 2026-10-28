@@ -36,6 +36,14 @@ public interface GiftCardRepository {
     /** Active cards scheduled to be sent at or before {@code now}, locked and skipping rows another worker holds. */
     List<GiftCard> lockDue(Instant now, int limit);
 
+    /**
+     * Removes the code from the delivery events that were already handed to the message broker. The code only has to
+     * exist in the outbox until it is relayed; after that the database holds the hash alone.
+     *
+     * @return the number of events scrubbed
+     */
+    int scrubPublishedDeliveryCodes();
+
     /** Per status: number of cards and Σ amount. */
     Map<GiftCard.Status, long[]> totalsByStatus();
 }

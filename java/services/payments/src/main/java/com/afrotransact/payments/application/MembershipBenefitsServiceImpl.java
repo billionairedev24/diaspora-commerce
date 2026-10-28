@@ -59,6 +59,11 @@ class MembershipBenefitsServiceImpl implements MembershipBenefitsService {
     }
 
     @Override
+    public int rewardBoostBps(String customerId) {
+        return customerId == null ? 0 : entitlements(customerId).rewardBoostBps();
+    }
+
+    @Override
     public Entitlements myEntitlements() {
         return entitlements(access.customer().subject());
     }
@@ -81,12 +86,11 @@ class MembershipBenefitsServiceImpl implements MembershipBenefitsService {
                 .mapToInt(TierBenefit::percentBps).max().orElse(0);
         return new Entitlements(true, customerId, tier.code(), tier.name(), m.status(), active,
                 active.stream().anyMatch(b -> b.code() == BenefitCode.PRIORITY_SUPPORT),
-                active.stream().anyMatch(b -> b.code() == BenefitCode.FREE_RETURNS),
                 active.stream().anyMatch(b -> b.code() == BenefitCode.MEMBER_PRICES), early, boost);
     }
 
     private static Entitlements none(String customerId) {
-        return new Entitlements(false, customerId, null, null, null, List.of(), false, false, false, 0, 0);
+        return new Entitlements(false, customerId, null, null, null, List.of(), false, false, 0, 0);
     }
 
     // ------------------------------------------------------------------ fee waivers

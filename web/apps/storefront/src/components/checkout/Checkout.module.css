@@ -34,7 +34,7 @@
 .choiceCompact { padding: var(--at-space-2) var(--at-space-3); }
 .choice:has(input:checked), .choiceCompact:has(input:checked) { border-color: var(--at-color-action-secondary); background: var(--at-color-success-bg); }
 .choice input, .choiceCompact input, .option input, .point input { flex: none; accent-color: var(--at-color-action-secondary); }
-.choiceText { flex: 1; min-width: 0; }
+.choiceText { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .tag { flex: none; padding: 2px var(--at-space-2); border-radius: var(--at-radius-pill); background: var(--at-color-surface-muted); font-size: var(--at-text-xs); font-weight: var(--at-weight-semibold); white-space: nowrap; }
 .rowActions { display: flex; flex-wrap: wrap; gap: var(--at-space-3); align-items: center; justify-content: space-between; }
 .addRow { display: inline-flex; gap: var(--at-space-2); align-items: center; border: 0; background: none; padding: var(--at-space-2) 0; color: var(--at-color-link); font: inherit; font-size: var(--at-text-sm); cursor: pointer; }
@@ -74,7 +74,7 @@
 .options:disabled .option { cursor: not-allowed; opacity: .6; }
 .optionIcon { flex: none; display: grid; place-items: center; font-size: var(--at-text-lg); color: var(--at-color-text-muted); }
 .optionText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.optionFee { flex: none; font-weight: var(--at-weight-semibold); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.optionFee { flex: none; font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .eta { color: var(--at-color-success); }
 .pointText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--at-space-1); }
 .pointName { display: flex; flex-wrap: wrap; gap: var(--at-space-2); align-items: center; }
@@ -89,8 +89,8 @@
 .item { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: var(--at-space-3); align-items: center; }
 .thumb { width: 64px; border-radius: var(--at-radius-sm); overflow: hidden; }
 .itemText { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.itemTitle { font-size: var(--at-text-md); line-height: var(--at-leading-snug, 1.3); overflow-wrap: anywhere; }
-.itemPrice { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.itemTitle { font-size: var(--at-text-sm); font-weight: var(--at-weight-medium); color: var(--at-color-text); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.itemPrice { white-space: nowrap; font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); font-variant-numeric: tabular-nums; }
 
 /* Right rail — one panel; only the item list scrolls inside <details>, not payment */
 .rail {
@@ -176,6 +176,7 @@
 .paymentTitle { margin: 0; font-size: var(--at-text-lg); font-weight: var(--at-weight-bold); }
 .payment { display: flex; flex-direction: column; gap: var(--at-space-3); min-width: 0; }
 .newMethod, .newMethodOn { display: flex; flex-direction: column; gap: var(--at-space-3); }
+.newMethod[hidden], .newMethodOn[hidden] { display: none; }
 .save { display: flex; gap: var(--at-space-2); align-items: flex-start; font-size: var(--at-text-sm); cursor: pointer; }
 .save input { margin-top: 3px; accent-color: var(--at-color-action-secondary); }
 .save small { display: block; color: var(--at-color-text-muted); font-size: var(--at-text-xs); }
@@ -246,7 +247,6 @@
 .choiceBlock { display: flex; flex-direction: column; gap: var(--at-space-2); min-width: 0; }
 .choiceLine { display: flex; align-items: center; gap: var(--at-space-3); min-width: 0; font-size: var(--at-text-sm); }
 .choiceIcon { flex: none; font-size: var(--at-text-lg); color: var(--at-color-text-muted); }
-.choiceText { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .choiceList { margin: 0; padding: 0 0 0 calc(var(--at-text-lg) + var(--at-space-3)); border: 0; display: flex; flex-direction: column; gap: var(--at-space-1); min-width: 0; }
 .choiceRow { display: flex; align-items: center; gap: var(--at-space-3); padding: var(--at-space-2) var(--at-space-3); border-radius: var(--at-radius-sm); font-size: var(--at-text-sm); cursor: pointer; }
 .choiceRow:hover, .choiceRow:has(input:checked) { background: var(--at-color-surface-muted); }
@@ -327,11 +327,9 @@
   justify-content: center;
 }
 .itemInfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.itemTitle { font-size: var(--at-text-sm); font-weight: var(--at-weight-medium); color: var(--at-color-text); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .itemMeta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--at-space-1); font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
 .itemDot { color: var(--at-color-border-strong); }
-.perishableTag { color: #b45309; background: #fef3c7; padding: 1px 6px; border-radius: 4px; font-weight: var(--at-weight-semibold); }
-.itemPrice { font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); font-variant-numeric: tabular-nums; }
+.perishableTag { color: var(--at-color-warning); background: var(--at-color-warning-bg); padding: 1px 6px; border-radius: 4px; font-weight: var(--at-weight-semibold); }
 
 .deliveryOptionsSection {
   margin: 0;
@@ -369,9 +367,9 @@
   border-color: var(--at-color-border-strong);
   background: var(--at-color-surface-hover, var(--at-color-surface-muted));
 }
-.deliveryOptionCardActive {
-  border-color: var(--at-color-action-secondary) !important;
-  background: color-mix(in srgb, var(--at-color-action-secondary) 5%, var(--at-color-surface)) !important;
+.deliveryOptionCard.deliveryOptionCardActive {
+  border-color: var(--at-color-action-secondary);
+  background: color-mix(in srgb, var(--at-color-action-secondary) 5%, var(--at-color-surface));
   box-shadow: 0 0 0 1px var(--at-color-action-secondary);
 }
 .deliveryOptionCard input[type="radio"] {
@@ -389,8 +387,8 @@
   background: var(--at-color-surface-muted);
   flex: none;
 }
-.atdIcon { font-size: 18px; color: #f59e0b; }
-.expressIcon { font-size: 18px; color: #3b82f6; }
+.atdIcon { font-size: 18px; color: var(--at-color-warning); }
+.expressIcon { font-size: 18px; color: var(--at-color-info); }
 .carrierIcon { font-size: 18px; color: var(--at-color-text-muted); }
 .optionCardContent { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .optionCardHeader { display: flex; align-items: baseline; justify-content: space-between; gap: var(--at-space-2); }
@@ -401,18 +399,17 @@
   font-weight: var(--at-weight-semibold);
   padding: 1px 7px;
   border-radius: var(--at-radius-pill);
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--at-color-warning-bg);
+  color: var(--at-color-warning);
 }
 .expressBadge {
   font-size: 11px;
   font-weight: var(--at-weight-semibold);
   padding: 1px 7px;
   border-radius: var(--at-radius-pill);
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--at-color-info-bg);
+  color: var(--at-color-info);
 }
-.optionFee { font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); font-variant-numeric: tabular-nums; }
 .optionFeeFree {
   font-size: var(--at-text-xs);
   font-weight: var(--at-weight-bold);
@@ -441,7 +438,7 @@
   gap: var(--at-space-1);
   font-size: var(--at-text-xs);
   font-weight: var(--at-weight-bold);
-  color: #b45309;
+  color: var(--at-color-warning);
 }
 .localQuoteCharge {
   font-size: var(--at-text-sm);
@@ -516,9 +513,9 @@
   border-color: var(--at-color-border-strong);
   background: var(--at-color-surface-hover, var(--at-color-surface-muted));
 }
-.pickupOptionCardActive {
-  border-color: var(--at-color-action-secondary) !important;
-  background: color-mix(in srgb, var(--at-color-action-secondary) 5%, var(--at-color-surface)) !important;
+.pickupOptionCard.pickupOptionCardActive {
+  border-color: var(--at-color-action-secondary);
+  background: color-mix(in srgb, var(--at-color-action-secondary) 5%, var(--at-color-surface));
   box-shadow: 0 0 0 1px var(--at-color-action-secondary);
 }
 .pickupOptionCard input[type="radio"] {

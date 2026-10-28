@@ -34,6 +34,15 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     module: 'payouts',
     group: 'money'
   },
+  {
+    key: 'referrals',
+    label: 'Referral program',
+    description: 'What the customer who shares and the friend who joins each earn, when it is earned, the limits, and every referral with the ones held for review. Every change is kept with its reason.',
+    labelKey: 'st.settings.referrals.label',
+    descriptionKey: 'st.settings.referrals.description',
+    module: 'payouts',
+    group: 'money'
+  },
   { key: 'fees', label: 'Fees & commissions', description: 'Fee schedule versions, commission by category and plan, connection fees, negotiated rates and delivery pricing.', module: 'fees', group: 'money' },
   { key: 'delivery-fees', label: 'Delivery fees', description: 'What customers pay for AfroTransact delivery by distance, carrier shipping beyond our coverage, and pickup, by currency, with a reason on every change.', module: 'preorders', group: 'money' },
   {

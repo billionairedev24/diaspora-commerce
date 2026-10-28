@@ -15,6 +15,14 @@ const noContent = () => new Response(null, { status: 204 });
 const problem = (status: number, title: string, code: string, detail?: string) =>
   new Response(JSON.stringify({ type: bffProblemType(code), title, status, code, detail: detail ?? title }), { status, headers: { 'Content-Type': 'application/problem+json' } });
 
+/** The signed-in shopper's credit ledger, newest first: a gift card redeemed, then part of an order paid with it. */
+function mockCreditEntries() {
+  return [
+    { id: 'cre_2', kind: 'SPEND', source: 'ORDER', amountMinor: -1250, currency: 'USD', balanceAfterMinor: 3750, createdAt: '2026-10-20T15:04:00Z' },
+    { id: 'cre_1', kind: 'GRANT', source: 'GIFT_CARD', amountMinor: 5000, currency: 'USD', balanceAfterMinor: 5000, createdAt: '2026-10-12T09:30:00Z' }
+  ];
+}
+
 const TAX_RATE = 0.0825;
 const FREE_THRESHOLD = 3500;
 const SELLER_SHIPPING = 599;
@@ -252,7 +260,7 @@ const LABEL: Record<string, string> = { REQUESTED: 'Awaiting provider', CONFIRME
 /* ── Routes ────────────────────────────────────────────────────────────────── */
 
 const ROUTES: Array<[string, string, Handler]> = [
-  ['GET', '/v1/me', () => json({ authenticated: true, user: { id: USER.id, firstName: USER.firstName, lastName: USER.lastName, email: USER.email, initials: 'AO', roles: ['account.customer'] }, counts: { orders: mockDb().orders.length, returns: mockDb().returns.length, addresses: mockDb().addresses.length, paymentMethods: mockDb().paymentMethods.length } })],
+  ['GET', '/v1/me', () => json({ authenticated: true, user: { id: USER.id, firstName: USER.firstName, lastName: USER.lastName, email: USER.email, initials: 'AO', roles: ['account.customer'] }, counts: { orders: mockDb().orders.length, addresses: mockDb().addresses.length, paymentMethods: mockDb().paymentMethods.length } })],
   ['GET', '/v1/search', ({ url }) => json(search(url.searchParams.get('q') ?? '', Number(url.searchParams.get('page') ?? 0), Number(url.searchParams.get('size') ?? 24)))],
   ['GET', '/v1/products/:atin', ({ params }) => { const p = productByAtin(params.atin ?? ''); return p ? json(detailOf(p)) : problem(404, 'Product not found', 'NOT_FOUND'); }],
   ['GET', '/v1/cart', () => json(buildCart())],
@@ -315,49 +323,19 @@ const ROUTES: Array<[string, string, Handler]> = [
     if (db.addresses.length && !db.addresses.some((x) => x.isDefault)) db.addresses[0]!.isDefault = true;
     return noContent();
   }],
+  ['GET', '/v1/account/credit', ({ url }) => {
+    const entries = mockCreditEntries();
+    const before = url.searchParams.get('before');
+    const from = before ? entries.findIndex((e) => e.id === before) + 1 : 0;
+    const page = entries.slice(from, from + 20);
+    const next = from + 20 < entries.length ? page[page.length - 1]!.id : null;
+    return json({ balanceMinor: entries[0]?.balanceAfterMinor ?? 0, currency: 'USD', entries: page, nextBefore: next });
+  }],
   ['GET', '/v1/account/payment-methods', () => json({ items: mockDb().paymentMethods, nextCursor: null })],
   ['POST', '/v1/account/payment-methods/setup-intents', () => json({ clientSecret: `seti_mock_${nextId('')}_secret_mock`, publishableKey: 'pk_test_mock' }, 201)],
   ['DELETE', '/v1/account/payment-methods/:id', ({ params }) => { const db = mockDb(); db.paymentMethods = db.paymentMethods.filter((m) => m.id !== params.id); return noContent(); }],
   ['GET', '/v1/account/orders', () => json({ items: mockDb().orders.map((o) => ({ orderNumber: o.orderNumber, placedAt: o.placedAt, totalMinor: o.totalMinor, currency: 'USD', shipTo: o.shipTo, status: o.status, shipments: o.shipments.map((s) => ({ shipmentId: s.shipmentId, label: s.label, status: s.status, items: s.items.map((it) => `${productByAtin(it.atin)?.title ?? it.atin}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(', ') })) })), nextCursor: null })],
   ['GET', '/v1/account/orders/:orderNumber/tracking', ({ params }) => { const t = tracking(params.orderNumber ?? ''); return t ? json(t) : problem(404, 'Order not found', 'NOT_FOUND'); }],
-  ['GET', '/v1/account/returns', () => json({ items: mockDb().returns, nextCursor: null })],
-  ['GET', '/v1/account/orders/:orderNumber/returnable', ({ params }) => {
-    const o = mockDb().orders.find((x) => x.orderNumber === params.orderNumber);
-    if (!o) return problem(404, 'Order not found', 'NOT_FOUND');
-    const inAWeek = new Date(Date.now() + 7 * 86_400_000).toISOString();
-    return json({
-      orderNumber: o.orderNumber, currency: 'USD',
-      shipments: o.shipments.filter((s) => s.status === 'delivered').map((s) => ({
-        shipmentId: s.shipmentId, sellerName: s.label, deliveredAt: new Date().toISOString(),
-        lines: s.items.map((it) => {
-          const p = productByAtin(it.atin);
-          const food = s.perishable;
-          return { lineId: `${s.shipmentId}:${it.atin}`, atin: it.atin, title: p?.title ?? it.atin, quantity: it.quantity, maxQuantity: it.quantity, unitPriceMinor: p?.priceMinor ?? 0,
-            eligible: true, reportProblemOnly: food, sellerFaultOnly: food, windowEndsAt: inAWeek, methods: food ? ['NO_RETURN'] : ['DROP_OFF', 'DRIVER_PICKUP'], ineligibleReason: null };
-        })
-      }))
-    });
-  }],
-  ['POST', '/v1/account/returns', ({ body }) => {
-    const b = body as { orderNumber: string; shipmentId: string; method: 'DROP_OFF' | 'DRIVER_PICKUP' | 'NO_RETURN'; lines: Array<{ lineId: string; quantity: number; reason: string }> };
-    const atin = (b.lines[0]?.lineId ?? '').split(':')[1] ?? '';
-    const p = productByAtin(atin);
-    if (!p || b.lines.length === 0) return problem(422, 'Unknown item', 'VALIDATION');
-    const rmaId = `RMA-${100000 + mockDb().seq}`;
-    nextId('r');
-    const r = { rmaId, number: rmaId, orderNumber: b.orderNumber, title: p.title, status: 'LABEL_ISSUED', refundMinor: p.priceMinor * b.lines.reduce((a, l) => a + l.quantity, 0), atin, method: b.method,
-      cancellable: true, qrPayload: b.method === 'NO_RETURN' ? null : `afrotransact:return:${b.method === 'DROP_OFF' ? 'ups' : 'driver'}:${rmaId}`, dropOffBy: new Date(Date.now() + 7 * 86_400_000).toISOString() };
-    mockDb().returns.push(r);
-    return json(r, 201);
-  }],
-  ['POST', '/v1/account/returns/:rmaId/cancel', ({ params }) => {
-    const r = mockDb().returns.find((x) => x.rmaId === params.rmaId);
-    if (!r) return problem(404, 'Return not found', 'NOT_FOUND');
-    if (!r.cancellable) return problem(409, 'This return can no longer be cancelled', 'CONFLICT');
-    r.status = 'CANCELLED';
-    r.cancellable = false;
-    return json(r);
-  }],
   ['GET', '/v1/checkout/summary', () => { const s = checkoutSummary(); return s ? json(s) : problem(409, 'Your cart is empty', 'CART_EMPTY'); }],
   ['POST', '/v1/checkout/orders', ({ body }) => placeOrder(body as Parameters<typeof placeOrder>[0])],
   /* identity */

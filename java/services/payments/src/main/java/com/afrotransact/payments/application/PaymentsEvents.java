@@ -57,6 +57,13 @@ public final class PaymentsEvents {
     /** Staff changed a membership tier or the billing rules, with the reason (audit; key = tier code). */
     public static final String MEMBERSHIP_TIER_CHANGED = "payments.membership.tier_changed";
 
+    /** A referral reward was granted to one side (key = customer id): notifications tells them, S322. */
+    public static final String REFERRAL_REWARDED = "payments.referral.rewarded";
+    /** An abuse check holds a referral for staff (key = referral id). */
+    public static final String REFERRAL_FLAGGED = "payments.referral.flagged";
+    /** Staff approved or rejected a referral, or the system rejected it (key = referral id). */
+    public static final String REFERRAL_DECIDED = "payments.referral.decided";
+
     private PaymentsEvents() {
     }
 }

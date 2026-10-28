@@ -504,8 +504,27 @@ function seed(now: Date): MockStaffDb {
       { id: 'mh-1', changedAt: ago(20, 0), changedByName: 'Platform Admin', reason: 'Launch limits: $10 to $500' }
     ])
   ];
+  const referrals = [
+    rec('ref-1', { referrerId: customers[0]?.id ?? 'cus-1000', referrerName: customers[0]?.name ?? 'Amara Nwosu', referredId: customers[1]?.id ?? 'cus-1001', referredName: customers[1]?.name ?? 'Kofi Mensah', status: 'IN_REVIEW', flagsText: 'Same device', rewardsText: 'Referrer $10.00 credit (pending) · Friend $10.00 credit (pending)', costMinor: 0, signedUpAt: ago(20, 0), expiresAt: ahead(70), qualifyingOrderId: 'AT-000412', qualifyingMinor: 4_200, deliveredAt: ago(5, 0), eligibleAt: ahead(25), decision: null, decisionReason: null, decidedByName: null, decidedAt: null }, [], [
+      { id: 'REFERRER', who: customers[0]?.name ?? 'Amara Nwosu', side: 'Referrer', reward: '$10.00 credit', status: 'PENDING', grantedAt: null },
+      { id: 'REFERRED', who: customers[1]?.name ?? 'Kofi Mensah', side: 'Referred', reward: '$10.00 credit', status: 'PENDING', grantedAt: null }
+    ]),
+    rec('ref-2', { referrerId: customers[0]?.id ?? 'cus-1000', referrerName: customers[0]?.name ?? 'Amara Nwosu', referredId: customers[2]?.id ?? 'cus-1002', referredName: customers[2]?.name ?? 'Kwame Asante', status: 'REWARDED', flagsText: '', rewardsText: 'Referrer $10.00 credit · Friend $10.00 credit', costMinor: 2_000, signedUpAt: ago(60, 0), expiresAt: ahead(30), qualifyingOrderId: 'AT-000377', qualifyingMinor: 5_500, deliveredAt: ago(45, 0), eligibleAt: ago(15, 0), decision: null, decisionReason: null, decidedByName: null, decidedAt: null }, [], [
+      { id: 'REFERRER', who: customers[0]?.name ?? 'Amara Nwosu', side: 'Referrer', reward: '$10.00 credit', status: 'GRANTED', grantedAt: ago(15, 0) },
+      { id: 'REFERRED', who: customers[2]?.name ?? 'Kwame Asante', side: 'Referred', reward: '$10.00 credit', status: 'GRANTED', grantedAt: ago(15, 0) }
+    ]),
+    rec('ref-3', { referrerId: customers[1]?.id ?? 'cus-1001', referrerName: customers[1]?.name ?? 'Kofi Mensah', referredId: customers[3]?.id ?? 'cus-1003', referredName: customers[3]?.name ?? 'Efua Owusu', status: 'WAITING', flagsText: '', rewardsText: 'Referrer $10.00 credit (pending) · Friend 14 membership days (deferred)', costMinor: 0, signedUpAt: ago(12, 0), expiresAt: ahead(78), qualifyingOrderId: 'AT-000430', qualifyingMinor: 3_600, deliveredAt: ago(3, 0), eligibleAt: ahead(27), decision: null, decisionReason: null, decidedByName: null, decidedAt: null }, [], [
+      { id: 'REFERRER', who: customers[1]?.name ?? 'Kofi Mensah', side: 'Referrer', reward: '$10.00 credit', status: 'PENDING', grantedAt: null },
+      { id: 'REFERRED', who: customers[3]?.name ?? 'Efua Owusu', side: 'Referred', reward: '14 membership days', status: 'DEFERRED', grantedAt: null }
+    ])
+  ];
+  const referralSettings = [
+    rec('referral', { stateText: 'On', enabled: true, referrerType: 'CREDIT', referrerCreditMinor: 1_000, referrerDays: 0, referredType: 'CREDIT', referredCreditMinor: 1_000, referredDays: 0, referrerText: '$10.00 credit', referredText: '$10.00 credit', qualifyingEvent: 'FIRST_ORDER_DELIVERED', minOrderMinor: 3_000, returnWindowDays: 30, maxRewardedPerReferrer: 20, maxCreditPerCustomerMinor: 50_000, validityDays: 90, costMinor: 2_000, pendingMinor: 2_000, membershipDaysGranted: 0, countsText: 'In review: 1 · Rewarded: 1 · Waiting: 1', updatedByName: 'Platform Admin', updatedAt: ago(14, 0), version: 2 }, [], [
+      { id: 'rh-1', changedAt: ago(14, 0), changedByName: 'Platform Admin', reason: 'Launch offer: $10 each after a $30 first order' }
+    ])
+  ];
   const benefitFlags = { freeDelivery: false, freeDeliveryMin: 0, freeDeliveryCap: 0, freeShipping: false, freeShippingMin: 0, freeShippingCap: 0, cashback: false, cashbackPercent: 0, cashbackMin: 0, cashbackCap: 0,
-    memberPrices: false, earlyAccess: false, earlyAccessHours: 0, prioritySupport: false, freeReturns: false, boostedRewards: false, boostedPercent: 0, monthlyCredit: false, monthlyCreditAmount: 0 };
+    memberPrices: false, earlyAccess: false, earlyAccessHours: 0, prioritySupport: false, boostedRewards: false, boostedPercent: 0, monthlyCredit: false, monthlyCreditAmount: 0 };
   const membershipTiers = [
     rec('plus', { code: 'plus', name: 'Plus', description: 'Free delivery and shipping on orders from $25.00, cashback and priority support.', status: 'PUBLISHED', sortOrder: 10, monthlyPriceMinor: 999, yearlyPriceMinor: 9900, trialDays: 14, members: 12, trialing: 3,
       ...benefitFlags, freeDelivery: true, freeDeliveryMin: 25, freeShipping: true, freeShippingMin: 25, freeShippingCap: 15, cashback: true, cashbackPercent: 2, prioritySupport: true,
@@ -513,9 +532,9 @@ function seed(now: Date): MockStaffDb {
       { id: 'th-2', changedAt: ago(10, 0), changedByName: 'Platform Admin', action: 'Published', reason: 'Open Plus to every shopper' },
       { id: 'th-1', changedAt: ago(14, 0), changedByName: 'Platform Admin', action: 'Created', reason: 'The first membership tier' }
     ]),
-    rec('premium', { code: 'premium', name: 'Premium', description: 'Everything on every order, bigger cashback, free returns and early access.', status: 'DRAFT', sortOrder: 20, monthlyPriceMinor: 1999, yearlyPriceMinor: 19_900, trialDays: 14, members: 0, trialing: 0,
-      ...benefitFlags, freeDelivery: true, freeShipping: true, cashback: true, cashbackPercent: 5, earlyAccess: true, earlyAccessHours: 24, prioritySupport: true, freeReturns: true,
-      benefitsText: 'Free AfroTransact delivery, Free carrier shipping, Cashback as credit, Early access to pre-orders and runs, Priority support, Free returns', updatedByName: 'Platform Admin', updatedAt: ago(2, 0), version: 1 }, [], [
+    rec('premium', { code: 'premium', name: 'Premium', description: 'Everything on every order, bigger cashback and early access.', status: 'DRAFT', sortOrder: 20, monthlyPriceMinor: 1999, yearlyPriceMinor: 19_900, trialDays: 14, members: 0, trialing: 0,
+      ...benefitFlags, freeDelivery: true, freeShipping: true, cashback: true, cashbackPercent: 5, earlyAccess: true, earlyAccessHours: 24, prioritySupport: true,
+      benefitsText: 'Free AfroTransact delivery, Free carrier shipping, Cashback as credit, Early access to pre-orders and runs, Priority support', updatedByName: 'Platform Admin', updatedAt: ago(2, 0), version: 1 }, [], [
       { id: 'th-3', changedAt: ago(2, 0), changedByName: 'Platform Admin', action: 'Created', reason: 'A bigger tier for large households' }
     ])
   ];
@@ -590,8 +609,7 @@ function seed(now: Date): MockStaffDb {
     records: {
       users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
-      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards,
-      'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
+      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now),
       ...seedIdentityAdmin(now)

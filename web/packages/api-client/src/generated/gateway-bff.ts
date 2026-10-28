@@ -855,24 +855,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/account/returns": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Returns of the signed-in customer (all, or one order's) */
-        get: operations["listReturns"];
-        put?: never;
-        /** Start a return for delivered items (tax-returns RMA with label / QR, handover code or refund without return) */
-        post: operations["startReturn"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/account/stock-alerts": {
         parameters: {
             query?: never;
@@ -1144,6 +1126,29 @@ export interface paths {
          *     `before` = the previous page's `nextBefore`.
          */
         get: operations["getAccountCredit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/referral": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My referral code, share link, the offer, my friends and what I earned
+         * @description payments `GET /v1/referrals/me` and `/v1/referrals/me/friends` with the shopper's token. The code is created on
+         *     first use and never changes; `shareUrl` is the storefront link that opens sign-up with the code filled in.
+         *     Friends are shown by first name and last initial. A referral held for a check shows as `WAITING`: the shopper
+         *     never sees the check or a staff decision. `asFriend` is the shopper's own referral when someone referred them.
+         */
+        get: operations["getAccountReferral"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1610,57 +1615,6 @@ export interface paths {
         get: operations["trackOrder"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/account/orders/{orderNumber}/returnable": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** What can be returned from a delivered order (tax-returns eligibility per shipment and line) */
-        get: operations["getReturnEligibility"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/account/returns/{rmaId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** One of my returns with its lines and the refund estimate (tax-returns refund quote) */
-        get: operations["getReturn"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/account/returns/{rmaId}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Cancel a return before drop-off or pickup */
-        post: operations["cancelReturn"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2488,6 +2442,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/help-requests/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Signed direct upload for one evidence photo (JPEG, PNG, WebP or HEIC, at most 10 MB)
+         * @description Returns a short-lived URL from the media service (private storage). PUT the photo there with the given
+         *     headers, then call `…/uploads/{assetId}/complete` and send `assetId` in `evidenceAssetIds` when opening the
+         *     request (at most 5 photos per request).
+         */
+        post: operations["requestHelpEvidenceUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/help-requests/uploads/{assetId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check the uploaded photo (real type and size) and finalise it */
+        post: operations["completeHelpEvidenceUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/help-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My help requests, newest first */
+        get: operations["listHelpRequests"];
+        put?: never;
+        /**
+         * Report a problem with an order of mine
+         * @description Opens a dispute for staff to resolve; there is no automatic refund or return. The order must be the signed-in
+         *     customer's (anything else is 404). Amount, currency and seller come from the order, never from the request;
+         *     with `shipmentId` the claim covers that shipment's items, otherwise the order. Replaying an `Idempotency-Key`
+         *     returns the request it already created.
+         */
+        post: operations["createHelpRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/help-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of my help requests with its status and the outcome staff recorded */
+        get: operations["getHelpRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2962,6 +2996,83 @@ export interface components {
             bytes: number;
             /** @enum {string} */
             status: "READY";
+        };
+        HelpEvidenceUpload: {
+            assetId: string;
+            /** Format: int64 */
+            maxBytes: number;
+            upload: {
+                method: string;
+                url: string;
+                headers: {
+                    [key: string]: string;
+                };
+                /** Format: date-time */
+                expiresAt?: string | null;
+            };
+        };
+        HelpEvidenceAsset: {
+            assetId: string;
+            contentType: string;
+            /** Format: int64 */
+            bytes: number;
+            /** @enum {string} */
+            status: "READY";
+        };
+        /** @enum {string} */
+        HelpRequestType: "ITEM_NOT_RECEIVED" | "DAMAGED_ITEM" | "WRONG_ITEM" | "NOT_AS_DESCRIBED" | "OTHER";
+        CreateHelpRequest: {
+            /** @description An order of the signed-in customer */
+            orderNumber: string;
+            /** @description The shipment (package) the problem is about; omit for the whole order */
+            shipmentId?: string;
+            type: components["schemas"]["HelpRequestType"];
+            description: string;
+            /** @description Photos uploaded and completed through `/v1/me/help-requests/uploads` */
+            evidenceAssetIds?: string[];
+        };
+        /** @description A help request in the customer's words. Never carries internal ids, seller identities or staff names. */
+        HelpRequest: {
+            /** @description Use in the URL of this request; show `reference` to people */
+            id: string;
+            /** @example CLM-0001 */
+            reference: string;
+            orderNumber: string;
+            type: components["schemas"]["HelpRequestType"];
+            /**
+             * @description RECEIVED (we have it), IN_REVIEW (our team is looking into it), RESOLVED (refunded), CLOSED (reviewed, no refund), WITHDRAWN
+             * @enum {string}
+             */
+            status: "RECEIVED" | "IN_REVIEW" | "RESOLVED" | "CLOSED" | "WITHDRAWN";
+            /** @description The status in plain English */
+            statusLabel: string;
+            description: string;
+            evidenceCount: number;
+            /** Format: int64 */
+            claimedMinor: number;
+            currency: string;
+            /** @description Set once staff have decided */
+            resolution: {
+                /** @enum {string} */
+                outcome: "REFUNDED" | "NOT_REFUNDED";
+                /** @description What staff told the customer */
+                note: string;
+                /**
+                 * Format: int64
+                 * @description Goes back to whoever paid, in the same way they paid
+                 */
+                refundMinor: number | null;
+                /** Format: date-time */
+                decidedAt: string | null;
+            } | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        HelpRequestPage: {
+            items: components["schemas"]["HelpRequest"][];
+            nextCursor: string | null;
         };
         FacetBucket: {
             value: string;
@@ -3490,7 +3601,6 @@ export interface components {
             /** @description Badges for the account menu. */
             counts: {
                 orders: number;
-                returns: number;
                 addresses: number;
                 paymentMethods: number;
             } | null;
@@ -3590,46 +3700,16 @@ export interface components {
                 deliveredAt?: string | null;
                 /** @description One-time handover code (hand delivery or perishables) */
                 deliveryCode?: string | null;
-                /** @description A return can be started (show "Return items") */
+                /** @description A problem can be reported with this shipment (there is no self-service return; link to `/account/help/new`) */
                 returnable?: boolean;
                 /** Format: date-time */
                 returnWindowEndsAt?: string | null;
-                /** @description Only "Report a problem" is possible (e.g. perishables, window closed) */
+                /** @description Report a problem is the only route (e.g. perishables, window closed) */
                 problemReportOnly?: boolean;
             }[];
         };
         OrderPage: {
             items: components["schemas"]["OrderSummary"][];
-            nextCursor: string | null;
-        };
-        ReturnSummary: {
-            rmaId: string;
-            orderNumber: string;
-            title: string;
-            /** @description requested, approved, auto_approved, label_issued, in_transit, received, inspected, refunded, rejected, cancelled */
-            status: string;
-            /** @description Refund estimate (tax-returns), then the refunded amount */
-            refundMinor: number;
-            /** @example RMA-0000ABCD */
-            number?: string;
-            method?: components["schemas"]["ReturnMethod"];
-            reason?: string;
-            refundState?: string;
-            currency?: string;
-            cancellable?: boolean;
-            createdAt?: string | null;
-            /** @description Drop-off return label */
-            labelUrl?: string | null;
-            /** @description Render as the drop-off QR code */
-            qrPayload?: string | null;
-            /** @description Driver pickup code (DRIVER_PICKUP) */
-            handoverCode?: string | null;
-            dropOffBy?: string | null;
-            carrier?: string | null;
-            trackingNumber?: string | null;
-        };
-        ReturnPage: {
-            items: components["schemas"]["ReturnSummary"][];
             nextCursor: string | null;
         };
         CheckoutCouponSellerShare: {
@@ -3977,7 +4057,7 @@ export interface components {
         /** @description One benefit of a tier. Only the numbers the benefit takes are set. */
         MembershipBenefit: {
             /** @enum {string} */
-            code: "FREE_DELIVERY" | "FREE_SHIPPING" | "CASHBACK" | "MEMBER_PRICES" | "EARLY_ACCESS" | "PRIORITY_SUPPORT" | "FREE_RETURNS" | "BOOSTED_REWARDS" | "MONTHLY_CREDIT";
+            code: "FREE_DELIVERY" | "FREE_SHIPPING" | "CASHBACK" | "MEMBER_PRICES" | "EARLY_ACCESS" | "PRIORITY_SUPPORT" | "BOOSTED_REWARDS" | "MONTHLY_CREDIT";
             /**
              * Format: int64
              * @description Goods subtotal an order needs (free delivery
@@ -4184,7 +4264,7 @@ export interface components {
             availableMinor: number;
             /**
              * Format: int64
-             * @description The balance up to the total
+             * @description The balance up to the total, leaving at least 0.50 for the card or paying everything
              */
             appliedMinor: number;
             /**
@@ -4192,6 +4272,97 @@ export interface components {
              * @description What the card pays then; 0 means no payment method is needed
              */
             cardDueMinor: number;
+        };
+        /** @description What one side earns */
+        ReferralRewardTerms: {
+            /** @enum {string} */
+            type: "CREDIT" | "MEMBERSHIP_DAYS";
+            /**
+             * Format: int64
+             * @description Credit in minor units; 0 for membership days
+             */
+            creditMinor: number;
+            /** @description Free membership days; 0 for credit */
+            membershipDays: number;
+        };
+        /** @description The offer in force. AfroTransact pays both sides; credit only buys products and services. */
+        ReferralProgram: {
+            /** @description false while staff have switched the program off */
+            enabled: boolean;
+            referrerReward: components["schemas"]["ReferralRewardTerms"];
+            referredReward: components["schemas"]["ReferralRewardTerms"];
+            /**
+             * Format: int64
+             * @description The friend's delivered order must be worth at least this
+             */
+            minOrderMinor: number;
+            /** @description Rewards are granted this many days after delivery */
+            returnWindowDays: number;
+            /** @description Days after sign-up in which the friend can still qualify */
+            validityDays: number;
+            currency: string;
+        };
+        ReferralEarnings: {
+            /** @description Friends who signed up with my code */
+            invited: number;
+            /** @description Referrals not finished yet */
+            open: number;
+            /** @description Referrals that paid me a reward */
+            rewarded: number;
+            /**
+             * Format: int64
+             * @description Credit I earned from referrals
+             */
+            earnedMinor: number;
+            /** @description Free membership days I earned from referrals */
+            membershipDays: number;
+            /**
+             * Format: int64
+             * @description Credit promised for friends who qualified, granted after the return window
+             */
+            pendingMinor: number;
+        };
+        ReferralFriend: {
+            /** Format: uuid */
+            id: string;
+            /** @description First name and last initial; null on my own referral */
+            friendName: string | null;
+            /**
+             * @description PENDING: no qualifying order yet. WAITING: qualified, rewards after the return window (or under a check). CLOSED: not eligible.
+             * @enum {string}
+             */
+            status: "PENDING" | "WAITING" | "REWARDED" | "EXPIRED" | "CLOSED";
+            /** Format: date-time */
+            signedUpAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /**
+             * Format: date-time
+             * @description When the reward is due, once the friend qualified
+             */
+            eligibleAt: string | null;
+            reward: components["schemas"]["ReferralFriendReward"] | null;
+        };
+        ReferralFriendReward: {
+            terms: components["schemas"]["ReferralRewardTerms"];
+            granted: boolean;
+            /** Format: date-time */
+            grantedAt: string | null;
+        };
+        AccountReferral: {
+            /** @description Eight characters, for example KDM7XR3Q */
+            code: string;
+            /** @description The same as shown, KDM7-XR3Q */
+            displayCode: string;
+            /**
+             * Format: uri
+             * @description The storefront link that opens sign-up with the code filled in
+             */
+            shareUrl: string;
+            program: components["schemas"]["ReferralProgram"];
+            earnings: components["schemas"]["ReferralEarnings"];
+            friends: components["schemas"]["ReferralFriend"][];
+            asFriend: components["schemas"]["ReferralFriend"] | null;
         };
         CreditRefundChoice: {
             orderNumber: string;
@@ -4469,11 +4640,11 @@ export interface components {
                 deliveryCode: string | null;
                 lines: components["schemas"]["OrderLineView"][];
                 timeline: components["schemas"]["TimelineEvent"][];
-                /** @description A return can be started (show "Return items") */
+                /** @description A problem can be reported with this shipment (there is no self-service return; link to `/account/help/new`) */
                 returnable?: boolean;
                 /** Format: date-time */
                 returnWindowEndsAt?: string | null;
-                /** @description Only "Report a problem" is possible */
+                /** @description Report a problem is the only route */
                 problemReportOnly?: boolean;
                 /** @description AfroTransact Delivery from the seller's store (S255); null for other shipments */
                 localDelivery?: components["schemas"]["OrderLocalDelivery"] | null;
@@ -4529,73 +4700,6 @@ export interface components {
                 }[];
                 timeline: components["schemas"]["TimelineEvent"][];
             }[];
-        };
-        /**
-         * @description Seller fault (photos required for the first four): DAMAGED, DEFECTIVE, WRONG_ITEM, EXPIRED_OR_SPOILED, NOT_AS_DESCRIBED, MISSING_PARTS, ARRIVED_LATE. No fault: the rest.
-         * @enum {string}
-         */
-        ReturnReason: "DAMAGED" | "DEFECTIVE" | "WRONG_ITEM" | "NOT_AS_DESCRIBED" | "MISSING_PARTS" | "EXPIRED_OR_SPOILED" | "ARRIVED_LATE" | "NO_LONGER_NEEDED" | "ORDERED_BY_MISTAKE" | "BETTER_PRICE_AVAILABLE";
-        /** @enum {string} */
-        ReturnMethod: "DROP_OFF" | "DRIVER_PICKUP" | "NO_RETURN";
-        /**
-         * @description One delivered shipment, a method and a reason per line (`shipmentId`, `method`, `lines`). The customer app's
-         *     short form `{orderNumber, atin, reason}` returns one unit of that item with its first allowed method.
-         *     Send an `Idempotency-Key` header to make retries safe (one is derived otherwise).
-         */
-        StartReturnRequest: {
-            orderNumber: string;
-            shipmentId?: string;
-            method?: components["schemas"]["ReturnMethod"];
-            lines?: {
-                lineId: string;
-                quantity: number;
-                reason: components["schemas"]["ReturnReason"];
-                comment?: string;
-            }[];
-            atin?: components["schemas"]["Atin"];
-            reason?: components["schemas"]["ReturnReason"];
-        };
-        ReturnEligibility: {
-            orderNumber: string;
-            currency: string;
-            shipments: {
-                shipmentId: string;
-                sellerName: string;
-                deliveredAt: string | null;
-                lines: {
-                    lineId: string;
-                    atin: string;
-                    title: string;
-                    quantity: number;
-                    maxQuantity: number;
-                    unitPriceMinor: number;
-                    eligible: boolean;
-                    /** @description Food / perishables: report a problem (seller-fault reasons, refund without return) */
-                    reportProblemOnly: boolean;
-                    sellerFaultOnly: boolean;
-                    windowEndsAt: string | null;
-                    methods: components["schemas"]["ReturnMethod"][];
-                    ineligibleReason: string | null;
-                }[];
-            }[];
-        };
-        ReturnDetail: components["schemas"]["ReturnSummary"] & {
-            lines: {
-                lineId: string;
-                atin: string;
-                title: string;
-                quantity: number;
-                unitPriceMinor: number;
-                reason: string;
-                outcome: string | null;
-            }[];
-            quote: {
-                itemsMinor: number;
-                shippingMinor: number;
-                taxMinor: number;
-                restockingFeeMinor: number;
-                totalMinor: number;
-            } | null;
         };
         CodeInput: {
             code: string;
@@ -5744,6 +5848,8 @@ export interface operations {
                 login_hint?: string;
                 /** @description Organisation invitation token from an invite link; the account created on identity's sign-up page joins the organisation without an email code. */
                 invitation?: string;
+                /** @description Referral code from a friend's share link (S322); identity's sign-up page shows it filled in, and both are rewarded after the new customer's first delivered order. */
+                referral?: string;
                 /**
                  * @description Entry point the person came from (S286). `sell` ("Start selling") and `provide` ("Offer your services")
                  *     brand identity's sign-up page for it ("Create your account to start selling") and add the seller or
@@ -6256,64 +6362,6 @@ export interface operations {
             409: components["responses"]["Problem"];
         };
     };
-    listReturns: {
-        parameters: {
-            query?: {
-                /** @description Only this order's returns */
-                orderNumber?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Returns */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReturnPage"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    startReturn: {
-        parameters: {
-            query?: never;
-            header?: {
-                /** @description Makes retries safe (the same key replays the same result); derived per customer and minute when omitted. */
-                "Idempotency-Key"?: components["parameters"]["OptionalIdempotencyKey"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StartReturnRequest"];
-            };
-        };
-        responses: {
-            /** @description Return started */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReturnSummary"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-            422: components["responses"]["ValidationProblem"];
-            503: components["responses"]["Problem"];
-        };
-    };
     listStockAlerts: {
         parameters: {
             query?: never;
@@ -6724,6 +6772,28 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccountReferral: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The referral page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountReferral"];
+                };
+            };
+            401: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };
@@ -7397,83 +7467,6 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    getReturnEligibility: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                orderNumber: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Eligibility */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReturnEligibility"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    getReturn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The return id, or its number (RMA-XXXXXXXX, e.g. scanned from the QR code) */
-                rmaId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Return */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReturnDetail"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    cancelReturn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                rmaId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Cancelled */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReturnSummary"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };
@@ -8875,6 +8868,149 @@ export interface operations {
             };
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+        };
+    };
+    requestHelpEvidenceUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    fileName: string;
+                    /** @enum {string} */
+                    contentType: "image/jpeg" | "image/png" | "image/webp" | "image/heic";
+                    /** Format: int64 */
+                    size: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Upload instructions */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpEvidenceUpload"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    completeHelpEvidenceUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Photo ready; use assetId in evidenceAssetIds */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpEvidenceAsset"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listHelpRequests: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Help requests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpRequestPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createHelpRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateHelpRequest"];
+            };
+        };
+        responses: {
+            /** @description Request received */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpRequest"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getHelpRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Help request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpRequest"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
 }

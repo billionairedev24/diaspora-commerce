@@ -5758,7 +5758,7 @@ export interface components {
             charts: components["schemas"]["ChartSpec"][];
         };
         /** @enum {string} */
-        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "tax-codes" | "tax-rules" | "tax-review" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons" | "reconciliation" | "reconciliation-runs" | "ledger-adjustments" | "credit-adjustments" | "gift-cards" | "credit-liabilities" | "money-settings" | "membership-tiers" | "memberships" | "membership-settings" | "membership-report" | "stripe-lookup" | "payment-settings" | "tax-settings" | "maintenance" | "tax-filings" | "tax-nexus" | "oauth-clients" | "identity-sessions" | "signing-keys" | "auth-settings" | "exchange-rates";
+        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "tax-codes" | "tax-rules" | "tax-review" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons" | "reconciliation" | "reconciliation-runs" | "ledger-adjustments" | "credit-adjustments" | "gift-cards" | "credit-liabilities" | "money-settings" | "membership-tiers" | "memberships" | "membership-settings" | "membership-report" | "referrals" | "referral-settings" | "stripe-lookup" | "payment-settings" | "tax-settings" | "maintenance" | "tax-filings" | "tax-nexus" | "oauth-clients" | "identity-sessions" | "signing-keys" | "auth-settings" | "exchange-rates";
         /** @enum {string} */
         Tone: "good" | "warn" | "bad" | "info" | "brand";
         CellValue: string | number | null;
@@ -5818,6 +5818,8 @@ export interface components {
             help?: string;
             placeholder?: string;
             value?: components["schemas"]["FieldValue"];
+            /** @description The group the field belongs to; the form shows a heading when it changes from one field to the next (the referral program's two reward sections) */
+            section?: string;
         };
         Form: {
             title: string;
@@ -6123,12 +6125,10 @@ export interface components {
             status: "TRIALING" | "ACTIVE" | "PAST_DUE";
             /** @description Handle this customer's cases first */
             prioritySupport: boolean;
-            /** @description Returns cost this customer nothing */
-            freeReturns: boolean;
         };
         Customer360: {
             customer: components["schemas"]["SupportCustomer"];
-            /** @description The customer's membership (S323): the priority-support flag and free returns; null when the customer is not a member */
+            /** @description The customer's membership (S323): the priority-support flag; null when the customer is not a member */
             membership: components["schemas"]["SupportMembership"] | null;
             orders: components["schemas"]["SupportOrder"][];
             bookings: components["schemas"]["SupportBooking"][];

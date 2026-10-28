@@ -16,6 +16,14 @@ public interface MembershipBillingService {
      */
     int renewDue(int max);
 
+    /**
+     * Tells the members whose free trial ends within three days what happens next (once per membership): records
+     * TRIAL_ENDING on the timeline and publishes it, so notifications emails the date and the price.
+     *
+     * @return how many members were reminded
+     */
+    int remindTrialsEnding(int max);
+
     /** Grants this month's credit to members whose tier has a monthly credit; returns how many grants were made. */
     int grantMonthlyCredits(int max);
 

@@ -71,7 +71,7 @@ class MembershipAdminController {
     @Operation(operationId = "createMembershipTier", summary = "Define a new tier (payments:configure)",
             description = "A reason is required. A tier starts as a draft or is published at once; the benefits come "
                     + "from the menu (free delivery, free shipping, cashback, member prices, early access, priority "
-                    + "support, free returns, boosted rewards, monthly credit).")
+                    + "support, boosted rewards, monthly credit).")
     @PostMapping("/v1/memberships/admin/tiers")
     @ResponseStatus(HttpStatus.CREATED)
     TierDto createTier(@Valid @RequestBody TierRequest body) {

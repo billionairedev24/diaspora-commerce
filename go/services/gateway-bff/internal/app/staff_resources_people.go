@@ -20,6 +20,7 @@ func staffResources() map[string]*staffResource {
 	all = append(all, ledgerResources()...)
 	all = append(all, creditResources()...)
 	all = append(all, membershipResources()...)
+	all = append(all, referralResources()...)
 	all = append(all, platformSettingsResources()...)
 	all = append(all, identityAdminResources()...)
 	all = append(all,

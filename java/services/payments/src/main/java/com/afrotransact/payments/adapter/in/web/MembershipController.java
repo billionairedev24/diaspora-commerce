@@ -146,7 +146,7 @@ class MembershipController {
 
     @Operation(operationId = "getCustomerMembershipEntitlements", summary = "What a customer's membership gives now "
             + "(calling services, or staff with payments:read)",
-            description = "Early access hours for pre-order windows and runs, priority support and free returns for "
+            description = "Early access hours for pre-order windows and runs, priority support for "
                     + "support tools, the reward boost for the referral program.")
     @GetMapping("/v1/memberships/customers/{customerId}/entitlements")
     EntitlementsDto entitlements(@PathVariable String customerId) {

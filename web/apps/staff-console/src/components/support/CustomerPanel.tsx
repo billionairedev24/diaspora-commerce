@@ -76,7 +76,6 @@ export function CustomerPanel({ customerId, caseId }: { customerId: string; case
           <p className="m-0 flex flex-wrap items-center gap-2 text-sm" data-testid="support-membership">
             <StatusPill tone="brand">{c.membership.tierName} member</StatusPill>
             {c.membership.prioritySupport ? <StatusPill tone="good">Priority support: handle first</StatusPill> : null}
-            {c.membership.freeReturns ? <StatusPill tone="info">Free returns</StatusPill> : null}
           </p>
         ) : null}
         <p className="m-0 text-xs text-muted">

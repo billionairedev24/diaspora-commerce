@@ -138,6 +138,13 @@ class JdbcMembershipRepository implements MembershipRepository {
     }
 
     @Override
+    public List<Membership> trialsEndingBefore(Instant now, Instant until, int limit) {
+        return jdbc.sql(SELECT + " where status = 'TRIALING' and trial_end > :now and trial_end <= :until "
+                + "order by trial_end, id limit :n")
+                .param("now", Sql.ts(now)).param("until", Sql.ts(until)).param("n", limit).query(this::map).list();
+    }
+
+    @Override
     public List<Membership> liveForMonthlyCredit(int limit, UUID after) {
         return jdbc.sql(SELECT + " where status = 'ACTIVE' and (cast(:after as uuid) is null or id > :after) "
                 + "order by id limit :n")

@@ -124,7 +124,7 @@ func (s *staffSupportImpl) Customer(ctx context.Context, c *domain.Caller, id st
 			mu.Lock()
 			defer mu.Unlock()
 			out.Membership = &domain.SupportMembership{TierName: firstNonEmpty(jstr(e, "tierName"), jstr(e, "tierCode")), Status: jstr(e, "status"),
-				PrioritySupport: boolean(e, "prioritySupport"), FreeReturns: boolean(e, "freeReturns")}
+				PrioritySupport: boolean(e, "prioritySupport")}
 		}
 	})
 	run(func() {

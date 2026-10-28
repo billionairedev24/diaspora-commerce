@@ -356,10 +356,32 @@ type PhoneVerification struct {
 	VerifiedAt    *time.Time `json:"verifiedAt,omitempty"`
 }
 
+// ReturnSummary is one return (RMA).
+type ReturnSummary struct {
+	RMAID       string `json:"rmaId"`
+	OrderNumber string `json:"orderNumber"`
+	Title       string `json:"title"`
+	Status      string `json:"status"`
+	RefundMinor int64  `json:"refundMinor"`
+	// Optional facts from tax-returns (drop-off label / QR, driver handover code, cancel button).
+	Number       string  `json:"number,omitempty"`
+	Method       string  `json:"method,omitempty"`
+	Reason       string  `json:"reason,omitempty"`
+	RefundState  string  `json:"refundState,omitempty"`
+	Currency     string  `json:"currency,omitempty"`
+	Cancellable  bool    `json:"cancellable,omitempty"`
+	CreatedAt    *string `json:"createdAt,omitempty"`
+	LabelURL     *string `json:"labelUrl,omitempty"`
+	QRPayload    *string `json:"qrPayload,omitempty"`
+	HandoverCode *string `json:"handoverCode,omitempty"`
+	DropOffBy    *string `json:"dropOffBy,omitempty"`
+	Carrier      *string `json:"carrier,omitempty"`
+	Tracking     *string `json:"trackingNumber,omitempty"`
+}
+
 // MeCounts are the account menu badges.
 type MeCounts struct {
 	Orders         int `json:"orders"`
-	Returns        int `json:"returns"`
 	Addresses      int `json:"addresses"`
 	PaymentMethods int `json:"paymentMethods"`
 }
@@ -462,48 +484,6 @@ type OrderSummary struct {
 	ShipTo      string          `json:"shipTo"`
 	Status      string          `json:"status"`
 	Shipments   []OrderShipment `json:"shipments"`
-}
-
-// ReturnSummary is one return (RMA).
-type ReturnSummary struct {
-	RMAID       string `json:"rmaId"`
-	OrderNumber string `json:"orderNumber"`
-	Title       string `json:"title"`
-	Status      string `json:"status"`
-	RefundMinor int64  `json:"refundMinor"`
-	// Optional facts from tax-returns (drop-off label / QR, driver handover code, cancel button).
-	Number       string  `json:"number,omitempty"`
-	Method       string  `json:"method,omitempty"`
-	Reason       string  `json:"reason,omitempty"`
-	RefundState  string  `json:"refundState,omitempty"`
-	Currency     string  `json:"currency,omitempty"`
-	Cancellable  bool    `json:"cancellable,omitempty"`
-	CreatedAt    *string `json:"createdAt,omitempty"`
-	LabelURL     *string `json:"labelUrl,omitempty"`
-	QRPayload    *string `json:"qrPayload,omitempty"`
-	HandoverCode *string `json:"handoverCode,omitempty"`
-	DropOffBy    *string `json:"dropOffBy,omitempty"`
-	Carrier      *string `json:"carrier,omitempty"`
-	Tracking     *string `json:"trackingNumber,omitempty"`
-}
-
-// StartReturn starts a return: one delivered shipment, a method and a reason per line. The legacy shape
-// (orderNumber + atin + reason, used by the customer app) returns one unit of that item with the first allowed method.
-type StartReturn struct {
-	OrderNumber string            `json:"orderNumber"`
-	ShipmentID  string            `json:"shipmentId"`
-	Method      string            `json:"method"`
-	Lines       []StartReturnLine `json:"lines"`
-	ATIN        string            `json:"atin"`
-	Reason      string            `json:"reason"`
-}
-
-// StartReturnLine is one returned order line.
-type StartReturnLine struct {
-	LineID   string `json:"lineId"`
-	Quantity int    `json:"quantity"`
-	Reason   string `json:"reason"`
-	Comment  string `json:"comment,omitempty"`
 }
 
 // PickupPoint is a pickup location offered for a package at checkout.
