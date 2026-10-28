@@ -30,9 +30,9 @@ import {
   type PublicService,
   type PublicServiceSearch,
   type RegisterDeviceRequest,
-  type SetupIntent,
   type ReturnEligibility,
   type ReturnSummary,
+  type SetupIntent,
   type StartReturnRequest
 } from './types';
 

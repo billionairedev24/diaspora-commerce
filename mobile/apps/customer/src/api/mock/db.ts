@@ -18,6 +18,7 @@ export interface MockShipment {
   deliveryCode: string | null;
   items: Array<{ atin: string; quantity: number }>;
 }
+export interface MockReview { id: string; rating: number; title: string | null; text: string | null; status: 'PUBLISHED' | 'PENDING'; createdAt: string; updatedAt: string }
 export interface MockOrder { orderNumber: string; placedAt: string; totalMinor: number; shipTo: string; status: string; shipments: MockShipment[] }
 export interface MockReturn { rmaId: string; orderNumber: string; title: string; status: string; refundMinor: number; atin: string; number?: string; method?: 'DROP_OFF' | 'DRIVER_PICKUP' | 'NO_RETURN'; cancellable?: boolean; qrPayload?: string | null; dropOffBy?: string | null }
 
@@ -67,6 +68,8 @@ function seed() {
     bookings: seedBookings(),
     bookingHistory: {} as Record<string, Array<{ at: string; by: string; action: string }>>,
     devices: [] as Array<{ id: string; token: string; app: string; platform: string; provider: string }>,
+    /** The shopper's own product reviews by product ATIN (S324). */
+    reviews: {} as Record<string, MockReview>,
     prefs: { email: true, sms: true, push: true, marketingOptIn: false, updatedAt: new Date().toISOString() },
     seq: 100
   };
