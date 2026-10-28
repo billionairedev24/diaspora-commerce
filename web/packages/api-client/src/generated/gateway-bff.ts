@@ -1152,6 +1152,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/account/referral": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My referral code, share link, the offer, my friends and what I earned
+         * @description payments `GET /v1/referrals/me` and `/v1/referrals/me/friends` with the shopper's token. The code is created on
+         *     first use and never changes; `shareUrl` is the storefront link that opens sign-up with the code filled in.
+         *     Friends are shown by first name and last initial. A referral held for a check shows as `WAITING`: the shopper
+         *     never sees the check or a staff decision. `asFriend` is the shopper's own referral when someone referred them.
+         */
+        get: operations["getAccountReferral"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/account/orders/{orderNumber}/credit-refunds": {
         parameters: {
             query?: never;
@@ -2711,7 +2734,7 @@ export interface components {
             ordersLeft?: number | null;
             /** @description No room left; checkout offers the next run */
             full: boolean;
-            /** @description Link to the run on the location page */
+            /** @description Link to the run on the location page, with attribution */
             runUrl?: string;
         };
         RunLocationPage: {
@@ -2730,7 +2753,7 @@ export interface components {
             granted: boolean;
             /** Format: date-time */
             consentedAt?: string | null;
-            /** @description Where the consent was given (location-page */
+            /** @description Where the consent was given (location-page, account, ...) */
             source?: string | null;
             /** Format: date-time */
             withdrawnAt?: string | null;
@@ -2790,7 +2813,7 @@ export interface components {
         RunVisitRequest: {
             /**
              * Format: uuid
-             * @description The run the visitor was looking at
+             * @description The run the visitor was looking at, if any
              */
             runId?: string;
             /** @example whatsapp */
@@ -3848,6 +3871,97 @@ export interface components {
              * @description What the card pays then; 0 means no payment method is needed
              */
             cardDueMinor: number;
+        };
+        /** @description What one side earns */
+        ReferralRewardTerms: {
+            /** @enum {string} */
+            type: "CREDIT" | "MEMBERSHIP_DAYS";
+            /**
+             * Format: int64
+             * @description Credit in minor units; 0 for membership days
+             */
+            creditMinor: number;
+            /** @description Free membership days; 0 for credit */
+            membershipDays: number;
+        };
+        /** @description The offer in force. AfroTransact pays both sides; credit only buys products and services. */
+        ReferralProgram: {
+            /** @description false while staff have switched the program off */
+            enabled: boolean;
+            referrerReward: components["schemas"]["ReferralRewardTerms"];
+            referredReward: components["schemas"]["ReferralRewardTerms"];
+            /**
+             * Format: int64
+             * @description The friend's delivered order must be worth at least this
+             */
+            minOrderMinor: number;
+            /** @description Rewards are granted this many days after delivery */
+            returnWindowDays: number;
+            /** @description Days after sign-up in which the friend can still qualify */
+            validityDays: number;
+            currency: string;
+        };
+        ReferralEarnings: {
+            /** @description Friends who signed up with my code */
+            invited: number;
+            /** @description Referrals not finished yet */
+            open: number;
+            /** @description Referrals that paid me a reward */
+            rewarded: number;
+            /**
+             * Format: int64
+             * @description Credit I earned from referrals
+             */
+            earnedMinor: number;
+            /** @description Free membership days I earned from referrals */
+            membershipDays: number;
+            /**
+             * Format: int64
+             * @description Credit promised for friends who qualified
+             */
+            pendingMinor: number;
+        };
+        ReferralFriend: {
+            /** Format: uuid */
+            id: string;
+            /** @description First name and last initial; null on my own referral */
+            friendName: string | null;
+            /**
+             * @description PENDING: no qualifying order yet. WAITING: qualified, rewards after the return window (or under a check). CLOSED: not eligible.
+             * @enum {string}
+             */
+            status: "PENDING" | "WAITING" | "REWARDED" | "EXPIRED" | "CLOSED";
+            /** Format: date-time */
+            signedUpAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /**
+             * Format: date-time
+             * @description When the reward is due
+             */
+            eligibleAt: string | null;
+            reward: components["schemas"]["ReferralFriendReward"] | null;
+        };
+        ReferralFriendReward: {
+            terms: components["schemas"]["ReferralRewardTerms"];
+            granted: boolean;
+            /** Format: date-time */
+            grantedAt: string | null;
+        };
+        AccountReferral: {
+            /** @description Eight characters, for example KDM7XR3Q */
+            code: string;
+            /** @description The same as shown, KDM7-XR3Q */
+            displayCode: string;
+            /**
+             * Format: uri
+             * @description The storefront link that opens sign-up with the code filled in
+             */
+            shareUrl: string;
+            program: components["schemas"]["ReferralProgram"];
+            earnings: components["schemas"]["ReferralEarnings"];
+            friends: components["schemas"]["ReferralFriend"][];
+            asFriend: components["schemas"]["ReferralFriend"] | null;
         };
         CreditRefundChoice: {
             orderNumber: string;
@@ -5398,6 +5512,8 @@ export interface operations {
                 login_hint?: string;
                 /** @description Organisation invitation token from an invite link; the account created on identity's sign-up page joins the organisation without an email code. */
                 invitation?: string;
+                /** @description Referral code from a friend's share link (S322); identity's sign-up page shows it filled in, and both are rewarded after the new customer's first delivered order. */
+                referral?: string;
                 /**
                  * @description Entry point the person came from (S286). `sell` ("Start selling") and `provide` ("Offer your services")
                  *     brand identity's sign-up page for it ("Create your account to start selling") and add the seller or
@@ -6075,7 +6191,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Counted */
+            /** @description Counted, or nothing to count */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -6297,7 +6413,7 @@ export interface operations {
                 country?: string;
                 region?: string;
                 city?: string;
-                /** @description An anonymous id the storefront keeps per browser */
+                /** @description An anonymous id the storefront keeps per browser, so A/B variants stay stable */
                 visitor?: string;
                 limit?: number;
             };
@@ -6378,6 +6494,28 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccountReferral: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The referral page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountReferral"];
+                };
+            };
+            401: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };
