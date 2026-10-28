@@ -9,6 +9,7 @@ import java.util.Set;
 
 import com.afrotransact.payments.adapter.out.localtest.LocalTestStripeGateway;
 import com.afrotransact.payments.adapter.out.persistence.HmacGiftCodeHasher;
+import com.afrotransact.payments.adapter.out.persistence.HmacSignalHasher;
 import com.afrotransact.payments.adapter.out.stripe.StripeJavaGateway;
 import com.afrotransact.payments.application.GiftCardSettings;
 import com.afrotransact.payments.application.PaymentsSettings;
@@ -24,6 +25,7 @@ import com.afrotransact.payments.domain.PayoutPolicy;
 import com.afrotransact.payments.domain.Reconciler;
 import com.afrotransact.payments.domain.RefundAllocator;
 import com.afrotransact.payments.port.GiftCodeHasher;
+import com.afrotransact.payments.port.SignalHasher;
 import com.afrotransact.payments.port.StripeGateway;
 import com.stripe.StripeClient;
 import org.springframework.beans.factory.annotation.Value;
@@ -96,6 +98,18 @@ class PaymentsConfiguration {
         String key = codeKey == null || codeKey.isBlank()
                 ? "gift-card-code-key:" + props.stripe().webhookSecret() : codeKey;
         return new HmacGiftCodeHasher(key);
+    }
+
+    /**
+     * Referral abuse-check fingerprints (S322) are stored as HMACs under {@code REFERRAL_SIGNAL_KEY}, derived from the
+     * Stripe webhook secret until it is set (same approach as the gift card key).
+     */
+    @Bean
+    SignalHasher signalHasher(@Value("${at.payments.referral.signal-key:}") String signalKey,
+                              PaymentsProperties props) {
+        String key = signalKey == null || signalKey.isBlank()
+                ? "referral-signal-key:" + props.stripe().webhookSecret() : signalKey;
+        return new HmacSignalHasher(key);
     }
 
     @Bean

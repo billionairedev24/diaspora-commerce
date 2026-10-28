@@ -53,6 +53,13 @@ public final class PaymentsEvents {
     /** A staff grant or correction of credit was posted (key = customer id), S320. */
     public static final String CREDIT_ADJUSTED = "payments.credit.adjusted";
 
+    /** A referral reward was granted to one side (key = customer id): notifications tells them, S322. */
+    public static final String REFERRAL_REWARDED = "payments.referral.rewarded";
+    /** An abuse check holds a referral for staff (key = referral id). */
+    public static final String REFERRAL_FLAGGED = "payments.referral.flagged";
+    /** Staff approved or rejected a referral, or the system rejected it (key = referral id). */
+    public static final String REFERRAL_DECIDED = "payments.referral.decided";
+
     private PaymentsEvents() {
     }
 }

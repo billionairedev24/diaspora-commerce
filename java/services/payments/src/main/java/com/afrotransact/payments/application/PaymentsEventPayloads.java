@@ -187,4 +187,21 @@ public final class PaymentsEventPayloads {
     public record CreditAdjustedPayload(String adjustmentId, String customerId, long amountMinor, String currency,
                                         String source, String reason, String proposedBy, String decidedBy) {
     }
+
+    /**
+     * payments.referral.rewarded: one side of a referral was granted its reward. {@code friendName} is the other
+     * side's first name and last initial for the referrer's message, null for the friend.
+     */
+    public record ReferralRewardedPayload(String referralId, String customerId, String side, String rewardType,
+                                          long creditMinor, String currency, int membershipDays, String friendName) {
+    }
+
+    /** payments.referral.flagged: abuse checks hold the referral for staff. */
+    public record ReferralFlaggedPayload(String referralId, String referrerId, String referredId, List<String> flags) {
+    }
+
+    /** payments.referral.decided: APPROVED or REJECTED by staff, or SYSTEM (cap, the order was refunded). */
+    public record ReferralDecidedPayload(String referralId, String referrerId, String referredId, String decision,
+                                         String reason, String decidedBy) {
+    }
 }
