@@ -1,4 +1,4 @@
-export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike, uploadResume } from './client';
+export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike, type PutWithProgress, uploadHelpEvidence, uploadResume } from './client';
 export { ApiError, isApiError } from './errors';
 export { applyBps, bpsToPercentText, formatBps, parsePercent, quoteTariff, type TariffLike, tariffSummary } from './fees';
 export { type RequestOptions } from './http';
@@ -13,7 +13,7 @@ export { accountKeys, careersKeys, cartKeys, helpKeys, legalKeys, productKeys, s
 export { accountQueries, careersQueries, cartQueries, helpQueries, legalQueries, productQueries, searchQueries, siteQueries } from './query/options';
 export { sellerKeys, sellerQueries } from './query/seller';
 export { settingsKeys, settingsQueries } from './query/settings';
-export { bookingKeys, checkoutKeys, lolaKeys, orderKeys, payLinkKeys, returnKeys, securityKeys, serviceKeys, shopperQueries } from './query/shopper';
+export { bookingKeys, checkoutKeys, helpRequestKeys, lolaKeys, orderKeys, payLinkKeys, securityKeys, serviceKeys, shopperQueries } from './query/shopper';
 export { staffKeys, staffQueries } from './query/staff';
 export * from './schemas/account';
 export * from './schemas/auth';
@@ -23,6 +23,7 @@ export * from './schemas/catalog';
 export * from './schemas/common';
 export * from './schemas/exports';
 export * from './schemas/help';
+export * from './schemas/help-requests';
 export * from './schemas/home';
 export * from './schemas/legal';
 export * from './schemas/location';

@@ -3215,10 +3215,9 @@ components:
         counts:
           type: [object, 'null']
           description: Badges for the account menu.
-          required: [orders, returns, addresses, paymentMethods]
+          required: [orders, addresses, paymentMethods]
           properties:
             orders: {type: integer}
-            returns: {type: integer}
             addresses: {type: integer}
             paymentMethods: {type: integer}
     SignOutResult:

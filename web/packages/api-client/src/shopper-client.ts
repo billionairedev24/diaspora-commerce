@@ -2,7 +2,18 @@ import { z } from 'zod';
 
 import { type ApiClientOptions, type Requester } from './http';
 import { streamLola } from './lola';
-import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema, type ReturnSummary, ReturnSummarySchema } from './schemas/account';
+import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema } from './schemas/account';
+import {
+  type CreateHelpRequest,
+  type HelpEvidenceAsset,
+  HelpEvidenceAssetSchema,
+  type HelpEvidenceUpload,
+  HelpEvidenceUploadSchema,
+  type HelpRequest,
+  type HelpRequestPage,
+  HelpRequestPageSchema,
+  HelpRequestSchema
+} from './schemas/help-requests';
 import { type SearchClickRequest, type SearchClickResult, SearchClickResultSchema } from './schemas/search';
 import {
   type AddressInput,
@@ -45,10 +56,6 @@ import {
   ProviderPageSchema,
   type RecoveryCodes,
   RecoveryCodesSchema,
-  type ReturnDetail,
-  ReturnDetailSchema,
-  type ReturnEligibility,
-  ReturnEligibilitySchema,
   type SecurityOverview,
   SecurityOverviewSchema,
   type ServiceDetail,
@@ -57,7 +64,6 @@ import {
   ServiceSearchSchema,
   type SetupIntent,
   SetupIntentSchema,
-  type StartReturnRequest,
   type TotpSetup,
   TotpSetupSchema
 } from './schemas/shopper';
@@ -110,13 +116,17 @@ export function shopperMethods(request: Requester, options: ApiClientOptions) {
     cancelShipment: (orderNumber: string, shipmentId: string, reason?: string): Promise<OrderSummary> =>
       request(`/v1/account/orders/${enc(orderNumber)}/shipments/${enc(shipmentId)}/cancel`, OrderSummarySchema, { method: 'POST', body: reason ? { reason } : {} }),
 
-    /* Returns (tax-returns) */
-    getReturnEligibility: (orderNumber: string, signal?: AbortSignal): Promise<ReturnEligibility> =>
-      request(`/v1/account/orders/${enc(orderNumber)}/returnable`, ReturnEligibilitySchema, { signal }),
-    startReturn: (body: StartReturnRequest, idempotencyKey?: string): Promise<ReturnSummary> =>
-      request('/v1/account/returns', ReturnSummarySchema, { method: 'POST', body, headers: idem(idempotencyKey) }),
-    getReturn: (rmaId: string, signal?: AbortSignal): Promise<ReturnDetail> => request(`/v1/account/returns/${enc(rmaId)}`, ReturnDetailSchema, { signal }),
-    cancelReturn: (rmaId: string): Promise<ReturnSummary> => request(`/v1/account/returns/${enc(rmaId)}/cancel`, ReturnSummarySchema, { method: 'POST' }),
+    /* Help requests: the customer side of disputes (no self-service return or refund; staff resolve) */
+    requestHelpEvidenceUpload: (input: { fileName: string; contentType: string; size: number }): Promise<HelpEvidenceUpload> =>
+      request('/v1/me/help-requests/uploads', HelpEvidenceUploadSchema, { method: 'POST', body: input }),
+    completeHelpEvidenceUpload: (assetId: string): Promise<HelpEvidenceAsset> =>
+      request(`/v1/me/help-requests/uploads/${enc(assetId)}/complete`, HelpEvidenceAssetSchema, { method: 'POST' }),
+    /** `idempotencyKey` stays the same across retries of one submission (the BFF replays the request it created). */
+    createHelpRequest: (body: CreateHelpRequest, idempotencyKey: string): Promise<HelpRequest> =>
+      request('/v1/me/help-requests', HelpRequestSchema, { method: 'POST', body, headers: idem(idempotencyKey) }),
+    getHelpRequests: (cursor?: string, signal?: AbortSignal): Promise<HelpRequestPage> =>
+      request('/v1/me/help-requests', HelpRequestPageSchema, { query: { cursor, limit: '20' }, signal }),
+    getHelpRequest: (id: string, signal?: AbortSignal): Promise<HelpRequest> => request(`/v1/me/help-requests/${enc(id)}`, HelpRequestSchema, { signal }),
 
     /* Login & security (identity) */
     getSecurity: (signal?: AbortSignal): Promise<SecurityOverview> => request('/v1/account/security', SecurityOverviewSchema, { signal }),

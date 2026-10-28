@@ -321,7 +321,6 @@ type PhoneVerification struct {
 // MeCounts are the account menu badges.
 type MeCounts struct {
 	Orders         int `json:"orders"`
-	Returns        int `json:"returns"`
 	Addresses      int `json:"addresses"`
 	PaymentMethods int `json:"paymentMethods"`
 }

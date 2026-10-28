@@ -16,7 +16,7 @@ export const MeSchema = z.object({
       phoneVerified: z.boolean().optional()
     })
     .nullable(),
-  counts: z.object({ orders: z.number().int(), returns: z.number().int(), addresses: z.number().int(), paymentMethods: z.number().int() }).nullable()
+  counts: z.object({ orders: z.number().int(), addresses: z.number().int(), paymentMethods: z.number().int() }).nullable()
 });
 export type Me = z.infer<typeof MeSchema>;
 
