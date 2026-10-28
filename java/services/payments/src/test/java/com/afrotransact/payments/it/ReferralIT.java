@@ -200,9 +200,16 @@ class ReferralIT extends PaymentsIntegrationTest {
         assertThat(outbox("payments.referral.rewarded", referrer)).isEqualTo(1);
         assertThat(outbox("payments.referral.rewarded", friend)).isEqualTo(1);
 
-        // the program cost is booked as an expense against the credit liability
-        assertThat(jdbc.sql("select count(*) from credit_entry where customer_id = :c and source = 'REFERRAL' "
-                + "and kind = 'GRANT'").param("c", referrer).query(Long.class).single()).isEqualTo(1);
+        // the platform pays: each grant is booked as program cost (Dr 5200) against the credit liability (Cr 2600)
+        for (String customer : List.of(referrer, friend)) {
+            String entry = jdbc.sql("select id::text from credit_entry where customer_id = :c and source = 'REFERRAL'")
+                    .param("c", customer).query(String.class).single();
+            assertThat(jdbc.sql("""
+                    select string_agg(l.account_code || l.side || l.amount_minor, ',' order by l.account_code)
+                    from journal_entry j join journal_line l on l.journal_id = j.id where j.journal_key = :k
+                    """).param("k", "credit-grant:" + entry).query(String.class).single())
+                    .isEqualTo("2600C1000,5200D1000");
+        }
         assertEveryJournalBalances();
 
         // the customer's view: names, not ids, and no internals
@@ -373,6 +380,33 @@ class ReferralIT extends PaymentsIntegrationTest {
         assertThat(balance(friend)).isEqualTo(1000);
         assertThat(outbox("payments.referral.flagged", id)).isEqualTo(1);
         assertThat(outbox("payments.referral.decided", id)).isEqualTo(1);
+    }
+
+    @Test
+    void sameNetworkAloneIsFlaggedToo() {
+        String referrer = id("referrer");
+        String friend = id("friend");
+        program.signedUp(new ReferralProgram.SignUp(referrer, "Ada", "Obi", "SHOP", null, DEVICE_A, NET_A, now()));
+        signUp(friend, codeOf(referrer), DEVICE_B, NET_A);
+        String o = id("ORD");
+        order(friend, o, 4000, "7 Willow St", o + "-S1");
+        delivered(friend, o, o + "-S1");
+        JsonNode referral = referralOf(friend);
+        assertThat(referral.path("status").asString()).isEqualTo("IN_REVIEW");
+        assertThat(referral.path("flags").toString()).contains("SAME_NETWORK").doesNotContain("SAME_DEVICE");
+    }
+
+    @Test
+    void differentDevicesAndNetworksAreNotFlagged() {
+        String referrer = id("referrer");
+        String friend = id("friend");
+        program.signedUp(new ReferralProgram.SignUp(referrer, "Ada", "Obi", "SHOP", null, DEVICE_A, NET_A, now()));
+        signUp(friend, codeOf(referrer), DEVICE_B, DEVICE_B);
+        String o = id("ORD");
+        order(friend, o, 4000, "8 Cypress St", o + "-S1");
+        delivered(friend, o, o + "-S1");
+        assertThat(referralOf(friend).path("status").asString()).isEqualTo("WAITING");
+        assertThat(referralOf(friend).path("flags")).isEmpty();
     }
 
     @Test
