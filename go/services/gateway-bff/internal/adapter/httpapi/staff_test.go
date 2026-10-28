@@ -235,6 +235,21 @@ func giftCardFake(now string) map[string]any {
 		"deliveryStatus": "SENT", "deliveryCount": 1, "sentAt": now, "refundedToCard": false, "createdAt": now}
 }
 
+func referralFake(now string, status string) map[string]any {
+	return map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f1", "referrerId": "cus-1", "referredId": "cus-2", "referredName": "Kofi B.", "status": status,
+		"flags": []any{"SAME_DEVICE"}, "signedUpAt": now, "expiresAt": now, "qualifyingOrderId": "AT-000042", "qualifyingMinor": 4000, "deliveredAt": now, "eligibleAt": now,
+		"decision": nil, "decisionReason": nil, "decidedBy": nil, "decidedAt": nil, "costMinor": 0, "createdAt": now,
+		"rewards": []any{
+			map[string]any{"side": "REFERRER", "customerId": "cus-1", "terms": map[string]any{"type": "CREDIT", "creditMinor": 1000, "membershipDays": 0}, "currency": "USD", "status": "PENDING", "grantedAt": nil},
+			map[string]any{"side": "REFERRED", "customerId": "cus-2", "terms": map[string]any{"type": "MEMBERSHIP_DAYS", "creditMinor": 0, "membershipDays": 14}, "currency": "USD", "status": "DEFERRED", "grantedAt": nil}}}
+}
+
+func referralSettingsFake(now string) map[string]any {
+	return map[string]any{"enabled": true, "referrer": map[string]any{"type": "CREDIT", "creditMinor": 1000, "membershipDays": 0},
+		"referred": map[string]any{"type": "CREDIT", "creditMinor": 1000, "membershipDays": 0}, "qualifyingEvent": "FIRST_ORDER_DELIVERED", "minOrderMinor": 3000,
+		"returnWindowDays": 30, "maxRewardedPerReferrer": 20, "maxCreditPerCustomerMinor": 50000, "validityDays": 90, "updatedBy": "stf-1", "updatedAt": now, "version": 3}
+}
+
 func moneySettingsFake(now string) map[string]any {
 	return map[string]any{"giftCardMinMinor": 1000, "giftCardMaxMinor": 50000, "giftCardPresets": []any{2500, 5000, 10000}, "giftCardTerms": map[string]any{"en": "Gift cards never expire."},
 		"creditApprovalLimitMinor": 10000, "updatedBy": "stf-1", "updatedAt": now, "version": 3}
@@ -488,6 +503,26 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, moneySettingsFake(now))
 	case p == "/v1/money/settings/history":
 		writeJ(w, 200, []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000b1", "changedBy": "stf-1", "changedAt": now, "reason": "Raise the gift card ceiling for the holidays",
+			"before": "{}", "after": "{}"}})
+	// payments: the referral program (S322)
+	case p == "/v1/referrals" && r.Method == http.MethodGet:
+		writeJ(w, 200, []any{referralFake(now, "IN_REVIEW"), referralFake(now, "REWARDED")})
+	case p == "/v1/referrals/summary":
+		writeJ(w, 200, map[string]any{"costMinor": 2000, "membershipDays": 0, "pendingMinor": 2000, "currency": "USD", "enabled": true,
+			"byStatus": map[string]any{"IN_REVIEW": 1, "REWARDED": 1, "PENDING": 0}})
+	case strings.HasPrefix(p, "/v1/referrals/"):
+		ref := referralFake(now, "IN_REVIEW")
+		if strings.HasSuffix(p, "/approve") {
+			ref["status"], ref["decision"], ref["decisionReason"] = "WAITING", "APPROVED", body["reason"]
+		}
+		if strings.HasSuffix(p, "/reject") {
+			ref["status"], ref["decision"], ref["decisionReason"] = "REJECTED", "REJECTED", body["reason"]
+		}
+		writeJ(w, 200, ref)
+	case p == "/v1/referral-settings" && (r.Method == http.MethodGet || r.Method == http.MethodPut):
+		writeJ(w, 200, referralSettingsFake(now))
+	case p == "/v1/referral-settings/history":
+		writeJ(w, 200, []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000d1", "changedBy": "stf-1", "changedAt": now, "reason": "Launch offer for the autumn",
 			"before": "{}", "after": "{}"}})
 	case p == "/v1/settings/summary":
 		writeJ(w, 200, []any{map[string]any{"key": "settlement.hold", "label": "Hold before a seller can be paid", "value": "7 days after delivery", "help": "Protects against returns.", "source": "SETTLEMENT_HOLD"},
@@ -912,6 +947,62 @@ func TestStaffContractConformance(t *testing.T) {
 	}
 	do("admin", "PATCH", "/v1/staff/resources/money-settings/money", map[string]any{"values": map[string]any{"giftCardMin": 10, "giftCardMax": 600, "presets": "lots", "creditApprovalLimit": 150, "reason": "Raise the ceiling for the holidays"}}, 422)
 	do("support", "PATCH", "/v1/staff/resources/money-settings/money", map[string]any{"values": map[string]any{"giftCardMin": 10, "giftCardMax": 600, "presets": "25", "creditApprovalLimit": 150, "reason": "Raise the ceiling for the holidays"}}, 403)
+	// The referral program (S322): referrals by name with their rewards and cost, the review queue, each side's reward.
+	refs := do("admin", "GET", "/v1/staff/resources/referrals?status=IN_REVIEW", nil, 200)
+	if cols := refs["columns"].([]any); cols[0].(map[string]any)["label"] != "Referrer" || cols[1].(map[string]any)["label"] != "Friend" {
+		t.Fatalf("referral columns = %v", cols)
+	}
+	if facets := refs["facets"].([]any); facets[0].(map[string]any)["value"] != "IN_REVIEW" {
+		t.Fatalf("the review queue comes first: %v", facets)
+	}
+	row := refs["rows"].([]any)[0].(map[string]any)["cells"].(map[string]any)
+	if strings.Contains(fmt.Sprint(row), "cus-") || row["referrerName"] != "Amara Nwosu" || row["flagsText"] != "Same device" ||
+		row["rewardsText"] != "Referrer $10.00 credit (pending) · Friend 14 membership days (deferred)" {
+		t.Fatalf("referral row = %v", row)
+	}
+	refSheet := do("admin", "GET", "/v1/staff/resources/referrals/0f0f0f0f-0000-4000-8000-0000000000f1", nil, 200)
+	// the title and the sections speak of names; the ids are only in the closing "IDs" section, copyable
+	if refSheet["title"] != "Amara Nwosu referred Kofi B." || strings.Contains(fmt.Sprint(refSheet["sections"].([]any)[:3]), "cus-") ||
+		!strings.Contains(fmt.Sprint(refSheet["actions"]), "approve") {
+		t.Fatalf("referral sheet = %v", refSheet)
+	}
+	do("support", "POST", "/v1/staff/resources/referrals/0f0f0f0f-0000-4000-8000-0000000000f1/actions/approve", map[string]any{"values": map[string]any{"reason": "Two housemates, checked by phone"}}, 403)
+	do("admin", "POST", "/v1/staff/resources/referrals/0f0f0f0f-0000-4000-8000-0000000000f1/actions/approve", map[string]any{"values": map[string]any{"reason": "Two housemates, checked by phone"}}, 200)
+	if sent := f.bodies["POST /v1/referrals/0f0f0f0f-0000-4000-8000-0000000000f1/approve"]; sent["reason"] != "Two housemates, checked by phone" {
+		t.Fatalf("approve body = %v", sent)
+	}
+	do("admin", "POST", "/v1/staff/resources/referrals/0f0f0f0f-0000-4000-8000-0000000000f1/actions/reject", map[string]any{"values": map[string]any{"reason": "The same household made a second account"}}, 200)
+	if sent := f.bodies["POST /v1/referrals/0f0f0f0f-0000-4000-8000-0000000000f1/reject"]; sent["reason"] != "The same household made a second account" {
+		t.Fatalf("reject body = %v", sent)
+	}
+	rset := do("admin", "GET", "/v1/staff/resources/referral-settings/referral", nil, 200)
+	form := rset["editForm"].(map[string]any)
+	sections := map[string]bool{}
+	for _, fld := range form["fields"].([]any) {
+		sections[fld.(map[string]any)["section"].(string)] = true
+	}
+	if !sections["What the customer who shares earns"] || !sections["What the friend who joins earns"] || len(form["changeKeys"].([]any)) < 10 {
+		t.Fatalf("settings form = %v", form)
+	}
+	if !strings.Contains(fmt.Sprint(rset["sections"]), "2000") {
+		t.Fatalf("the program cost is on the settings sheet: %v", rset["sections"])
+	}
+	same := map[string]any{"enabled": true, "referrerType": "CREDIT", "referrerCredit": 10, "referrerDays": 0, "referredType": "CREDIT", "referredCredit": 10, "referredDays": 0,
+		"qualifyingEvent": "FIRST_ORDER_DELIVERED", "minOrder": 30, "returnWindowDays": 30, "validityDays": 90, "maxRewarded": 20, "maxCredit": 500, "reason": "Nothing really changes here"}
+	do("admin", "PATCH", "/v1/staff/resources/referral-settings/referral", map[string]any{"values": same}, 422) // Save is refused until something changed
+	changed := map[string]any{}
+	for k, v := range same {
+		changed[k] = v
+	}
+	changed["referrerType"], changed["referrerDays"], changed["referredCredit"], changed["reason"] = "MEMBERSHIP_DAYS", 14, 12.5, "Membership for sharers, 12.50 for friends"
+	do("support", "PATCH", "/v1/staff/resources/referral-settings/referral", map[string]any{"values": changed}, 403)
+	do("admin", "PATCH", "/v1/staff/resources/referral-settings/referral", map[string]any{"values": changed}, 200)
+	refSent := f.bodies["PUT /v1/referral-settings"]
+	rr, rd := refSent["referrer"].(map[string]any), refSent["referred"].(map[string]any)
+	if rr["type"] != "MEMBERSHIP_DAYS" || rr["membershipDays"] != float64(14) || rr["creditMinor"] != float64(0) || rd["type"] != "CREDIT" || rd["creditMinor"] != float64(1250) ||
+		refSent["minOrderMinor"] != float64(3000) || refSent["maxCreditPerCustomerMinor"] != float64(50000) || refSent["version"] != float64(3) || refSent["reason"] != "Membership for sharers, 12.50 for friends" {
+		t.Fatalf("referral settings body = %v", refSent)
+	}
 	made := do("admin", "POST", "/v1/staff/resources/stripe-lookup", map[string]any{"values": map[string]any{"ref": "po_123456", "orgId": "org-1"}}, 201)
 	if made["id"] != "po_123456 org-1" {
 		t.Fatalf("stripe lookup id = %v", made["id"])
