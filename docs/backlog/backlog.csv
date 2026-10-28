@@ -1162,13 +1162,13 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Staff grant or adjust credit with a reason; amounts above a staff-set limit need a second approver
 - Customer sees balance and history in the storefront and the app; finance sees totals and liabilities
 - Idempotent: a retried order never spends twice; concurrent orders cannot overspend
-- Contracts first, conformance tests, ITs for concurrency and refund paths","E35","","High","13","wallet checkout","payments","To Do"
+- Contracts first, conformance tests, ITs for concurrency and refund paths","E35","","High","13","wallet checkout","payments","Done"
 "S321","Story","Gift cards: buy, send by email, redeem into AfroTransact credit","Customers buy a gift card (fixed or custom amount) with a card, choose a recipient email, message and send date; the recipient redeems the code into AfroTransact credit. Staff can issue, void and look up gift cards.","- Purchase with the normal checkout payment; code generated, stored hashed, emailed on the send date
 - Redeeming adds the value to the recipient credit once; codes are rate limited against guessing
 - Amount limits and terms are staff-configurable; no expiry by default
 - Staff issue, void and look up cards (reason, audit); refunds of an unredeemed card void it
 - Sold gift cards are a liability in finance reports, not revenue, until spent
-- Contracts first, tests incl. double redeem and brute force","E35","","High","8","wallet gift-cards","payments","To Do"
+- Contracts first, tests incl. double redeem and brute force","E35","","High","8","wallet gift-cards","payments","Done"
 "S322","Story","Referral program: share a code, both sides earn credit","Referrals are the platform's responsibility: AfroTransact funds the rewards. Every customer has a referral code and link. When a referred friend signs up with it and meets the conditions, the referrer and the referred each earn what staff configured in Settings (credit amount, or a membership trial, per side).","- Code and share link per customer in the storefront and the app
 - Settings (staff): reward for the referrer and reward for the referred are configured separately (credit amount or free membership days), with qualifying event (first order delivered), minimum order value, caps, validity window and on/off, each change with a reason and audit
 - Reward is granted once per referral, after the qualifying event and the return window, paid by the platform as credit
