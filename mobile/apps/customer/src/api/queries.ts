@@ -49,16 +49,6 @@ export function useOrders() {
   return useQuery({ queryKey: accountKeys.orders(), queryFn: () => api.bff.getOrders() });
 }
 
-export function useReturnEligibility(orderNumber: string) {
-  const api = useApi();
-  return useQuery({ queryKey: [...accountKeys.returns(), 'eligibility', orderNumber], queryFn: () => api.account.returnEligibility(orderNumber), enabled: orderNumber !== '' });
-}
-
-export function useReturns() {
-  const api = useApi();
-  return useQuery({ queryKey: accountKeys.returns(), queryFn: () => api.bff.getReturns() });
-}
-
 export function useTracking(orderNumber: string) {
   const api = useApi();
   return useQuery({ queryKey: orderKeys.tracking(orderNumber), queryFn: () => api.account.tracking(orderNumber), enabled: !!orderNumber, refetchInterval: 30_000 });

@@ -9,7 +9,7 @@ Design source: `design/AfroTransact Mobile App.dc.html` (+ `design/ios-frame.jsx
 | S164 Layout | `ui/Screen.tsx`: solid status strip, fixed header, fixed footer/tab bar; only the inner `ScrollView`/`FlatList` scrolls, vertically. Inner pages pin title + back (`SubHeader`). |
 | S165 Shopping | Home, browse/search, product, cart grouped by shipper, checkout from `GET /v1/checkout/summary` (per-package delivery option, AfroTransact Delivery preferences, pickup points). Saved card → `POST /v1/checkout/orders` (+ `handleNextAction` for 3-D Secure); Apple Pay / Google Pay / new card / US bank → Stripe **PaymentSheet in deferred-intent mode built from the summary total**, whose confirm handler places the order with the PaymentMethod and returns the PaymentIntent client secret. Add payment method = SetupIntent + PaymentSheet (card with ZIP, US bank account via Financial Connections). Orders over $100 and wallet payments ask for Face ID (or the app passcode). |
 | Data loading | Every request has a 20 s deadline and an unreachable server becomes a `NetworkError` (`src/api/network.ts`), so a wrong host or no signal shows “You seem to be offline · Try again” (with the host in non-prod builds) instead of an endless spinner or a misleading “No orders yet”. React Query retries connectivity and 5xx twice with back-off, never a 4xx, and refetches stale data when the app returns to the foreground. Data screens use `ui/QueryStates.tsx` (error view, pull-to-refresh). |
-| S166 Orders | Orders list, tracking (steps, driver, 4-digit delivery code for hand-delivery / perishables), buy again, returns (items, reason, method) → RMA + QR code. |
+| S166 Orders | Orders list, tracking (steps, driver, 4-digit delivery code for hand-delivery / perishables), buy again, "Get help" on a delivered order (opens the storefront help flow: describe the problem, add photos; staff resolve it — there is no self-service return or refund). |
 | Addresses | Native list and add/edit form (`app/(app)/addresses/`): state picker, default switch, remove, and the “couldn’t verify this address — fix it or keep mine” step. |
 | S167 Bookings | Book a pro: providers, services, days/slots from the provider calendar, deposit via PaymentSheet on the bookings-service PaymentIntent, bookings list, appointment detail (accept/decline proposed time, reschedule, cancel with the **exact refund quoted before cancelling**, history). |
 | S168 Push | Device token registered with identity on every start and token refresh (`POST /v1/me/devices`, `app: customer`, `provider: apns` on iOS / `fcm` on Android), unregistered on sign-out (`DELETE /v1/me/devices`). Taps deep-link to the right screen; foreground pushes respect per-category switches + identity's `GET/PUT /v1/me/notification-preferences`. `com.afrotransact.customer://…` and the environment's universal links `<EXPO_PUBLIC_WEB_URL>/app/…` route in-app. |
@@ -85,8 +85,8 @@ on the hosted login page (the app sends them; today they are ignored).
 
 ```
 src/app/            expo-router routes: sign-in, setup, (app)/(tabs)/{index,search,lola,cart,account}, product, checkout,
-                    orders, returns, payments, addresses, services, book, bookings, inbox, settings, +native-intent
-src/domain/         plain TS rules (unit-tested): passcode, lock policy, checkout, tracking, returns, bookings,
+                    orders, payments, addresses, services, book, bookings, inbox, settings, +native-intent
+src/domain/         plain TS rules (unit-tested): passcode, lock policy, checkout, tracking, bookings,
                     notifications/deep links, payment form, jwt, lola
 src/api/            bearer fetch + refresh, BFF client (@afrotransact/api-client), bookings/identity requesters,
                     TanStack Query key factories + hooks, generated contract types, dev mock router

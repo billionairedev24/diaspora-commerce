@@ -44,7 +44,7 @@ export const FOOTER_COLUMNS: Array<{ title: MessageKey; links: FooterLink[] }> =
       { label: 'footer.account', href: '/account' },
       { label: 'footer.orders', href: '/orders' },
       { label: 'footer.shipping', href: '/help/shipping' },
-      { label: 'footer.returns', href: '/account/returns' },
+      { label: 'footer.orderHelp', href: '/account/help' },
       { label: 'footer.helpCenter', href: '/help' },
       { label: 'footer.accessibility', href: '/legal/accessibility' }
     ]

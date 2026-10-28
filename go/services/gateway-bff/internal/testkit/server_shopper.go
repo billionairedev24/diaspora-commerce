@@ -17,7 +17,7 @@ const TestPublishableKey = "pk_test_bff"
 const TestStorefrontOrigin = "https://shop.test"
 
 // shopperServices wires the storefront account/checkout/services/Lola use cases against the shopper fakes.
-func shopperServices(u *Upstreams, client func(name, url string) httpclient.Client, identity port.IdentityClient, s httpapi.Services,
+func shopperServices(u *Upstreams, client func(name, url string) httpclient.Client, identity port.IdentityClient, store port.ReceiptStore, s httpapi.Services,
 	clock *Clock, log *slog.Logger) httpapi.ShopperServices {
 	base := u.URL() + ShopperPrefix
 	tokens := upstreams.NewServiceTokens(client("identity", u.URL()), upstreams.IdentityOptions{ClientID: u.ClientID, ClientSecret: u.Secret, Now: clock.Now})
@@ -31,8 +31,10 @@ func shopperServices(u *Upstreams, client func(name, url string) httpclient.Clie
 		Identity: identity, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
 		PublishableKey: TestPublishableKey, IdentityPublicURL: u.URL(), Clock: clock.Now, Log: log,
 	}
-	return httpapi.ShopperServices{Wallet: app.NewWalletService(d), Orders: app.NewCustomerOrdersService(d),
-		Checkout: app.NewCheckoutPaymentService(d, s.Site), Returns: app.NewReturnsService(d), Security: app.NewSecurityService(d),
+	help := app.NewHelpRequestsService(app.HelpRequestsDeps{Orders: d.Orders, Claims: upstreams.NewHelpRequests(client("trust-ops", base)),
+		Media: upstreams.NewMedia(client("media", u.URL())), Receipts: store})
+	return httpapi.ShopperServices{HelpRequests: help, Wallet: app.NewWalletService(d), Orders: app.NewCustomerOrdersService(d),
+		Checkout: app.NewCheckoutPaymentService(d, s.Site), Security: app.NewSecurityService(d),
 		Settings: app.NewAccountSettingsService(app.AccountSettingsDeps{Identity: upstreams.NewAccountSettings(client("identity", base)),
 			Alerts: upstreams.NewAlertPreferences(client("notifications", base))}),
 		Services: app.NewServicesService(d), Lola: app.NewLolaService(d),

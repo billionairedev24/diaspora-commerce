@@ -1,5 +1,5 @@
 export { type AddressLookup, addressLookup, type AddressLookupClient, type AddressSearchOptions, newAddressSessionToken, type ResolvableAddressSuggestion } from './address-lookup';
-export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike, uploadResume } from './client';
+export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike, type PutWithProgress, uploadHelpEvidence, uploadResume } from './client';
 export { CORRELATION_HEADER, newCorrelationId, withCorrelationHeaders } from './correlation';
 export * from './credit-client';
 export { creditSplit, MIN_CARD_MINOR } from './credit-split';
@@ -21,7 +21,7 @@ export { accountQueries, careersQueries, cartQueries, helpQueries, legalQueries,
 export { referralKeys, referralQueries } from './query/referral';
 export { sellerKeys, sellerQueries } from './query/seller';
 export { settingsKeys, settingsQueries } from './query/settings';
-export { bookingKeys, checkoutKeys, lolaKeys, orderKeys, payLinkKeys, returnKeys, securityKeys, serviceKeys, shopperQueries } from './query/shopper';
+export { bookingKeys, checkoutKeys, helpRequestKeys, lolaKeys, orderKeys, payLinkKeys, securityKeys, serviceKeys, shopperQueries } from './query/shopper';
 export { staffKeys, staffQueries } from './query/staff';
 export * from './referral-client';
 export * from './schemas/account';
@@ -33,6 +33,7 @@ export * from './schemas/common';
 export * from './schemas/credit';
 export * from './schemas/exports';
 export * from './schemas/help';
+export * from './schemas/help-requests';
 export * from './schemas/home';
 export * from './schemas/legal';
 export * from './schemas/location';

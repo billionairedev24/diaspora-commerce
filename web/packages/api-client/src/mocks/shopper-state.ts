@@ -1,13 +1,12 @@
-/* Per-account state of the mock BFF for the account pages, checkout, returns, security and bookings. Lives on the
+/* Per-account state of the mock BFF for the account pages, checkout, help requests, security and bookings. Lives on the
    mock database (getDb()), so resetDb() restores the fixtures. */
 import { type PreorderAttribution, type PreorderConfirmation } from '../preorders';
-import { type Address, type PaymentMethod, type ReturnSummary } from '../schemas/account';
+import { type Address, type PaymentMethod } from '../schemas/account';
+import { type HelpRequest } from '../schemas/help-requests';
 import {
   type CustomerBooking,
   type NotificationPreferences,
   type OrderDetail,
-  type RefundQuote,
-  type ReturnDetail,
   type SecurityOverview,
   type ServiceDetail
 } from '../schemas/shopper';
@@ -15,7 +14,7 @@ import { getDb } from './db';
 import { atinOf, PRODUCTS } from './fixtures/catalog';
 
 export interface MockOrder extends OrderDetail {
-  /** Lines that are food / perishables (report a problem instead of a return). */
+  /** Lines that are food / perishables (report a problem only, within the window). */
   perishable: Set<string>;
   /** The part of the total paid with credit (S320). */
   creditMinor?: number;
@@ -41,7 +40,9 @@ export interface AccountState {
   addresses: Address[];
   paymentMethods: PaymentMethod[];
   orders: MockOrder[];
-  returns: ReturnDetail[];
+  helpRequests: HelpRequest[];
+  /** Evidence photos uploaded for the next request: asset id → completed. */
+  evidence: Map<string, boolean>;
   bookings: CustomerBooking[];
   security: Omit<SecurityOverview, 'passkeyRegistrationUrl'>;
   prefs: NotificationPreferences;
@@ -158,11 +159,6 @@ export const PROVIDERS: Record<string, { displayName: string; location: string; 
   org_diaspora_tax: { displayName: 'Diaspora Tax Help', location: 'Online', slug: 'diaspora-tax', tagline: 'Taxes across borders, explained', layout: 'CLASSIC', rating: 4.9, reviews: 143 }
 };
 
-export const MOCK_REFUND_QUOTE = (r: ReturnSummary): RefundQuote => {
-  const tax = Math.round(r.refundMinor * 0.0762);
-  return { itemsMinor: r.refundMinor - tax, shippingMinor: 0, taxMinor: tax, restockingFeeMinor: 0, totalMinor: r.refundMinor };
-};
-
 export function bookingFor(svc: ServiceDetail, id: string, reference: string, status: string, start: Date, extra: Partial<CustomerBooking> = {}): CustomerBooking {
   const end = new Date(start.getTime() + svc.durationMinutes * 60_000);
   const labels: Record<string, string> = {
@@ -187,7 +183,7 @@ export function bookingFor(svc: ServiceDetail, id: string, reference: string, st
 
 function seed(userId: string): AccountState {
   const empty: AccountState = {
-    addresses: [], paymentMethods: [], orders: [], returns: [], bookings: [],
+    addresses: [], paymentMethods: [], orders: [], helpRequests: [], evidence: new Map(), bookings: [],
     security: { mfa: { totp: false, sms: true, smsPhone: '•••• 0142', recoveryCodesLeft: 8, required: false, mayDisable: true, mayRemoveTotp: false, mayRemoveSms: true },
       passkeys: [], trustedBrowsers: [], sessions: [{ id: 'sess-web', clientName: 'AfroTransact web · this browser', signedInAt: iso(daysAgo(0)), lastActiveAt: iso(new Date()), current: true }],
       devices: [], linkedAccounts: { accounts: [], hasPassword: true } },
@@ -211,6 +207,12 @@ function seed(userId: string): AccountState {
     orders: [
       deliveredOrder('AT-2026-104221', daysAgo(6), [{ id: 'p15', qty: 1 }, { id: 'p1', qty: 1 }], 'Shipped by AfroTransact from Houston FC', 'Tamale Shea Co-op'),
       deliveredOrder('AT-2026-100873', daysAgo(19), [{ id: 'p17', qty: 1 }], 'Shipped by Diaspora Books from Atlanta, GA', 'Diaspora Books')
+    ],
+    helpRequests: [
+      { id: 'help-9001', reference: 'CLM-9001', orderNumber: 'AT-2026-100873', type: 'DAMAGED_ITEM', status: 'RESOLVED', statusLabel: 'Resolved',
+        description: 'The cover was torn and two pages were missing when the book arrived.', evidenceCount: 2, claimedMinor: 1899, currency: 'USD',
+        resolution: { outcome: 'REFUNDED', note: 'Thank you for the photos. We have refunded the book to your original payment method.', refundMinor: 1899, decidedAt: iso(daysAgo(10)) },
+        createdAt: iso(daysAgo(14)), updatedAt: iso(daysAgo(10)) }
     ],
     bookings: [
       bookingFor(braids, 'bk-1001', 'BK-7Q2X', 'CONFIRMED', new Date(daysAhead(5).setUTCHours(15, 0, 0, 0))),
@@ -259,7 +261,6 @@ export function accountCounts(userId: string) {
   const a = account(userId);
   return {
     orders: a.orders.length,
-    returns: a.returns.filter((r) => !['refunded', 'cancelled', 'rejected'].includes(r.status)).length,
     addresses: a.addresses.length,
     paymentMethods: a.paymentMethods.length
   };

@@ -2,11 +2,11 @@
 
 import { accountKeys, cartKeys, type Me } from '@afrotransact/api-client';
 import {
-  ArrowUUpLeft,
   CalendarCheck,
   CaretDown,
   CreditCard,
   Desktop,
+  Headset,
   MapPin,
   Menu,
   MenuGroup,
@@ -36,7 +36,7 @@ import { type AccountMenuIcon, accountMenuModel, signOutReturnTo } from './accou
 const ICONS: Record<AccountMenuIcon, ReactNode> = {
   user: <UserCircle aria-hidden />,
   package: <Package aria-hidden />,
-  returns: <ArrowUUpLeft aria-hidden />,
+  help: <Headset aria-hidden />,
   pin: <MapPin aria-hidden />,
   card: <CreditCard aria-hidden />,
   shield: <ShieldCheck aria-hidden />,

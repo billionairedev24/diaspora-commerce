@@ -23,8 +23,6 @@ type AccountService interface {
 	DeletePaymentMethod(ctx context.Context, c *domain.Caller, id string) error
 	Orders(ctx context.Context, c *domain.Caller, cursor string, limit int) (domain.Page[domain.OrderSummary], error)
 	CancelShipment(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string) (domain.OrderSummary, error)
-	Returns(ctx context.Context, c *domain.Caller) (domain.Page[domain.ReturnSummary], error)
-	StartReturn(ctx context.Context, c *domain.Caller, r domain.StartReturn) (domain.ReturnSummary, error)
 	// StartPhoneVerification texts a 6-digit code to the account phone; ConfirmPhoneVerification checks it.
 	StartPhoneVerification(ctx context.Context, c *domain.Caller) (domain.PhoneCodeSent, error)
 	ConfirmPhoneVerification(ctx context.Context, c *domain.Caller, code string) (domain.PhoneVerification, error)
@@ -275,44 +273,6 @@ func (s *accountServiceImpl) CancelShipment(ctx context.Context, c *domain.Calle
 	}
 	o.Shipments = orEmpty(o.Shipments)
 	return o, nil
-}
-
-func (s *accountServiceImpl) Returns(ctx context.Context, c *domain.Caller) (domain.Page[domain.ReturnSummary], error) {
-	if err := requireCustomer(c); err != nil {
-		return domain.Page[domain.ReturnSummary]{}, err
-	}
-	page, err := s.orders.Returns(ctx, c.BearerToken)
-	if err != nil {
-		return page, mapErr("orders", err)
-	}
-	page.Items = orEmpty(page.Items)
-	return page, nil
-}
-
-var returnReasons = map[string]bool{"DAMAGED": true, "WRONG_ITEM": true, "NOT_AS_DESCRIBED": true, "NO_LONGER_NEEDED": true}
-
-func (s *accountServiceImpl) StartReturn(ctx context.Context, c *domain.Caller, r domain.StartReturn) (domain.ReturnSummary, error) {
-	if err := requireCustomer(c); err != nil {
-		return domain.ReturnSummary{}, err
-	}
-	errs := map[string]string{}
-	if strings.TrimSpace(r.OrderNumber) == "" {
-		errs["orderNumber"] = "Required"
-	}
-	if !atinRe.MatchString(r.ATIN) {
-		errs["atin"] = "Invalid ATIN"
-	}
-	if !returnReasons[r.Reason] {
-		errs["reason"] = "Choose a reason"
-	}
-	if len(errs) > 0 {
-		return domain.ReturnSummary{}, domain.ValidationProblem(errs)
-	}
-	out, err := s.orders.StartReturn(ctx, c.BearerToken, r)
-	if err != nil {
-		return out, mapErr("orders", err)
-	}
-	return out, nil
 }
 
 // ---------------------------------------------------------------- phone verification (S234 / S236)

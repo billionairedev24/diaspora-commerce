@@ -93,6 +93,7 @@ type UpShipment struct {
 	ID               string         `json:"id"`
 	ShipmentID       string         `json:"shipmentId"`
 	Label            string         `json:"label"`
+	SellerOrgID      string         `json:"sellerOrgId"`
 	SellerName       string         `json:"sellerName"`
 	FulfilmentType   string         `json:"fulfilmentType"`
 	DeliveryMethod   string         `json:"deliveryMethod"`
@@ -254,78 +255,9 @@ type UpRma struct {
 	CreatedAt     string      `json:"createdAt"`
 }
 
-// UpLineEligibility is tax-returns' LineEligibility.
-type UpLineEligibility struct {
-	LineID            string   `json:"lineId"`
-	ATIN              string   `json:"atin"`
-	Title             string   `json:"title"`
-	Quantity          int      `json:"quantity"`
-	UnitPriceMinor    int64    `json:"unitPriceMinor"`
-	Eligible          bool     `json:"eligible"`
-	ReportProblemOnly bool     `json:"reportProblemOnly"`
-	SellerFaultOnly   bool     `json:"sellerFaultOnly"`
-	MaxQuantity       int      `json:"maxQuantity"`
-	WindowEndsAt      string   `json:"windowEndsAt"`
-	Methods           []string `json:"methods"`
-	IneligibleCode    string   `json:"ineligibleCode"`
-}
-
-// UpShipmentEligibility is tax-returns' ShipmentEligibility.
-type UpShipmentEligibility struct {
-	ShipmentID  string              `json:"shipmentId"`
-	SellerName  string              `json:"sellerName"`
-	DeliveredAt string              `json:"deliveredAt"`
-	Lines       []UpLineEligibility `json:"lines"`
-}
-
-// UpReturnEligibility is tax-returns' ReturnEligibility.
-type UpReturnEligibility struct {
-	OrderID     string                  `json:"orderId"`
-	OrderNumber string                  `json:"orderNumber"`
-	Currency    string                  `json:"currency"`
-	Shipments   []UpShipmentEligibility `json:"shipments"`
-}
-
-// UpReturnAddress is tax-returns' Address (returnFrom).
-type UpReturnAddress struct {
-	Name       string `json:"name,omitempty"`
-	Phone      string `json:"phone,omitempty"`
-	Line1      string `json:"line1"`
-	Line2      string `json:"line2,omitempty"`
-	City       string `json:"city"`
-	State      string `json:"state"`
-	PostalCode string `json:"postalCode"`
-	Country    string `json:"country"`
-}
-
-// UpCreateReturnLine is tax-returns' CreateReturnLine.
-type UpCreateReturnLine struct {
-	LineID   string `json:"lineId"`
-	Quantity int    `json:"quantity"`
-	Reason   string `json:"reason"`
-	Comment  string `json:"comment,omitempty"`
-}
-
-// UpCreateReturn is tax-returns' CreateReturn.
-type UpCreateReturn struct {
-	OrderID    string               `json:"orderId"`
-	ShipmentID string               `json:"shipmentId"`
-	Method     string               `json:"method"`
-	Lines      []UpCreateReturnLine `json:"lines"`
-	ReturnFrom *UpReturnAddress     `json:"returnFrom,omitempty"`
-}
-
-// ReturnsClient calls tax-returns with the customer's token.
+// ReturnsClient calls tax-returns for checkout tax estimates. Customers have no self-service return: problems go
+// through help requests (trust-ops claims).
 type ReturnsClient interface {
-	Eligibility(ctx context.Context, bearer, orderID string) (UpReturnEligibility, error)
-	Create(ctx context.Context, bearer, key string, req UpCreateReturn) (UpRma, error)
-	// List returns the customer's returns, optionally for one order (orderID "" = all).
-	List(ctx context.Context, bearer, orderID string) ([]UpRma, error)
-	Get(ctx context.Context, bearer, id string) (UpRma, error)
-	// ByNumber reads a return by its number (RMA-XXXXXXXX).
-	ByNumber(ctx context.Context, bearer, number string) (UpRma, error)
-	Cancel(ctx context.Context, bearer, id string) (UpRma, error)
-	Quote(ctx context.Context, bearer, id string) (domain.RefundQuote, error)
 	TaxQuote(ctx context.Context, req UpTaxQuoteRequest) (UpTaxQuote, error)
 }
 

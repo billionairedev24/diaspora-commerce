@@ -5,10 +5,10 @@ const UPDATED = '2026-10-11T00:00:00Z';
 
 export const HELP_ARTICLES: HelpArticle[] = [
   {
-    slug: 'help-center', topic: 'ORDERS_DELIVERY', topicTitle: 'Orders & delivery', title: 'Help center', summary: 'Track a package, return an item or reach us.', updatedAt: UPDATED,
+    slug: 'help-center', topic: 'ORDERS_DELIVERY', topicTitle: 'Orders & delivery', title: 'Help center', summary: 'Track a package, report a problem or reach us.', updatedAt: UPDATED,
     sections: [
       { heading: 'Track a package', body: '[Your orders](/orders) shows every shipment and its live status from carriers and AfroTransact Delivery.' },
-      { heading: 'Returns', body: 'Most items can be returned within 30 days. Food is refundable if damaged or wrong. [Start a return](/account/returns).' },
+      { heading: 'Report a problem', body: 'If something is wrong with a delivered order, tell us and add photos. Our team will look into it and reply. [Get help with an order](/account/help).' },
       { heading: 'Contact us', body: 'Chat with Lola any time, or reach a person 8 am–10 pm ET at help@afrotransact.com.' }
     ]
   },
@@ -21,11 +21,11 @@ export const HELP_ARTICLES: HelpArticle[] = [
     ]
   },
   {
-    slug: 'returns', topic: 'RETURNS_REFUNDS', topicTitle: 'Returns & refunds', title: 'Returns & refunds', summary: 'Return items within 30 days and follow your refund.', updatedAt: UPDATED,
+    slug: 'returns', topic: 'RETURNS_REFUNDS', topicTitle: 'Returns & refunds', title: 'Returns & refunds', summary: 'Report a problem with an order and follow what we decide.', updatedAt: UPDATED,
     sections: [
-      { heading: 'Returns', body: 'Most items can be returned within 30 days. Food is refundable if damaged or wrong.' },
-      { heading: 'Start a return', body: 'Go to [Returns & refunds](/account/returns), choose the order and the items, and tell us why. We email a label or arrange a pickup.' },
-      { heading: 'Refunds', body: 'Refunds go back to the original payment method once the return is received or the claim is approved. Read the full [Returns & Refunds policy](/legal/returns).' }
+      { heading: 'Problems with an order', body: 'There is no self-service return. If something arrived damaged, wrong, not as described or not at all, contact us and add photos.' },
+      { heading: 'Report a problem', body: 'Go to [Get help](/account/help), choose the order and what went wrong, describe it and add photos. Our team reviews every request and replies.' },
+      { heading: 'Refunds', body: 'If we refund you, the money goes back to whoever paid, once we have decided. Read the full [Returns & Refunds policy](/legal/returns).' }
     ]
   },
   {

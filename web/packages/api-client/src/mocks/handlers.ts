@@ -18,6 +18,7 @@ import { locationForZip, nearestZip } from './delivery';
 import { deliveryRunHandlers } from './delivery-run-handlers';
 import { DEMO_CODE, JOBS, SITE_CONFIG } from './fixtures/content';
 import { helpHandlers } from './help-handlers';
+import { helpRequestHandlers } from './help-requests';
 import { body, type Ctx, json, requireUser, route } from './http-kit';
 import { legalHandlers } from './legal-handlers';
 import { preorderHandlers } from './preorder-handlers';
@@ -264,8 +265,9 @@ export const handlers = [
 
   /* Profile, sign-in & security, notifications and preferences (shared with the back offices) */
   ...shopperSettingsHandlers,
-  /* Addresses, payments, orders, returns, checkout, services & bookings, Lola */
+  /* Addresses, payments, orders, help requests, checkout, services & bookings, Lola */
   ...shopperHandlers,
+  ...helpRequestHandlers,
   ...creditHandlers,
   ...referralHandlers,
   ...preorderHandlers,

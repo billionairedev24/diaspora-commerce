@@ -6,7 +6,7 @@ import { deliveryRunMethods } from './delivery-runs';
 import { type ApiClientOptions, createRequester, joinUrl } from './http';
 import { type PreorderFulfilmentRequest, preorderMethods } from './preorders';
 import { referralMethods } from './referral-client';
-import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema, type ReturnSummary, ReturnSummarySchema } from './schemas/account';
+import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema } from './schemas/account';
 import { type Me, MeSchema, type PhoneCodeSent, PhoneCodeSentSchema, type PhoneVerification, PhoneVerificationSchema, type SignOutResult, SignOutResultSchema } from './schemas/auth';
 import {
   type ApplicationReceipt,
@@ -22,6 +22,7 @@ import {
 import { type AddToCartRequest, type Cart, CartSchema, type UpdateCartLineRequest } from './schemas/cart';
 import { type ProductDetail, ProductDetailSchema, type StockAlert, StockAlertSchema } from './schemas/catalog';
 import { type HelpArticle, type HelpArticlePage, HelpArticlePageSchema, HelpArticleSchema, type HelpQuery } from './schemas/help';
+import { type HelpEvidenceAsset } from './schemas/help-requests';
 import { type Home, HomeSchema } from './schemas/home';
 import {
   type ConsentRecord,
@@ -157,8 +158,6 @@ export function createApiClient(options: ApiClientOptions) {
     getAddresses: async (): Promise<Address[]> => (await request('/v1/account/addresses', pageOf(AddressSchema))).items,
     getPaymentMethods: async (): Promise<PaymentMethod[]> => (await request('/v1/account/payment-methods', pageOf(PaymentMethodSchema))).items,
     getOrders: async (): Promise<OrderSummary[]> => (await request('/v1/account/orders', pageOf(OrderSummarySchema))).items,
-    getReturns: async (orderNumber?: string): Promise<ReturnSummary[]> =>
-      (await request('/v1/account/returns', pageOf(ReturnSummarySchema), { query: orderNumber ? { orderNumber } : undefined })).items,
 
     /* Account details, checkout, services & bookings, Lola */
     ...shopperMethods(request, options)
@@ -180,4 +179,40 @@ export async function uploadResume(
   const res = await put(ticket.upload.url, { method: ticket.upload.method, headers: ticket.upload.headers, body: file });
   if (!res.ok) throw new Error(`Upload failed (${res.status})`);
   return api.completeResumeUpload(ticket.assetId);
+}
+
+/** Sends one request body to a signed upload URL; `onProgress` gets 0..1 while the bytes go out. */
+export type PutWithProgress = (url: string, init: { method: string; headers: Record<string, string>; body: Blob }, onProgress: (fraction: number) => void) => Promise<{ ok: boolean; status: number }>;
+
+/** XMLHttpRequest, the only browser API that reports upload progress. */
+const putWithXhr: PutWithProgress = (url, init, onProgress) =>
+  new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(init.method, url);
+    for (const [name, value] of Object.entries(init.headers)) xhr.setRequestHeader(name, value);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status });
+    xhr.onerror = () => reject(new Error('Upload failed'));
+    xhr.onabort = () => reject(new Error('Upload cancelled'));
+    xhr.send(init.body);
+  });
+
+/**
+ * Uploads one help-request evidence photo through the media service's signed upload (ask the BFF for a URL, PUT the
+ * file straight to storage with no BFF credentials, then let media check it). Returns the asset id to send in
+ * `evidenceAssetIds`. Progress is reported as a fraction (0..1) while the file goes out.
+ */
+export async function uploadHelpEvidence(
+  api: Pick<ApiClient, 'requestHelpEvidenceUpload' | 'completeHelpEvidenceUpload'>,
+  file: { name: string; type: string; size: number } & Blob,
+  opts: { onProgress?: (fraction: number) => void; put?: PutWithProgress } = {}
+): Promise<HelpEvidenceAsset> {
+  const onProgress = opts.onProgress ?? (() => undefined);
+  const ticket = await api.requestHelpEvidenceUpload({ fileName: file.name, contentType: file.type, size: file.size });
+  const res = await (opts.put ?? putWithXhr)(ticket.upload.url, { method: ticket.upload.method, headers: ticket.upload.headers, body: file }, onProgress);
+  if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+  onProgress(1);
+  return api.completeHelpEvidenceUpload(ticket.assetId);
 }

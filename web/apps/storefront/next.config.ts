@@ -41,7 +41,11 @@ const nextConfig: NextConfig = {
       { source: '/terms-of-use', destination: '/legal/conditions-of-use', permanent: true },
       { source: '/privacy', destination: '/legal/privacy', permanent: true },
       { source: '/cookies', destination: '/legal/cookies', permanent: true },
-      { source: '/cookie-policy', destination: '/legal/cookies', permanent: true }
+      { source: '/cookie-policy', destination: '/legal/cookies', permanent: true },
+      // A delivered order has no self-service return: the old pages lead to getting help from support (the query,
+      // e.g. ?order=AT-…, is passed along).
+      { source: '/account/returns', destination: '/account/help', permanent: false },
+      { source: '/account/returns/new', destination: '/account/help/new', permanent: false }
     ];
   }
 };

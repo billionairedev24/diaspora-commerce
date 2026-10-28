@@ -12,14 +12,13 @@ const MINUTE = 60_000;
 export const orderKeys = {
   all: [...accountKeys.all, 'orders'] as const,
   lists: () => [...orderKeys.all, 'list'] as const,
-  detail: (orderNumber: string) => [...orderKeys.all, 'detail', orderNumber] as const,
-  returnable: (orderNumber: string) => [...orderKeys.all, 'returnable', orderNumber] as const
+  detail: (orderNumber: string) => [...orderKeys.all, 'detail', orderNumber] as const
 };
 
-export const returnKeys = {
-  all: [...accountKeys.all, 'returns'] as const,
-  list: (orderNumber?: string) => [...returnKeys.all, 'list', orderNumber ?? 'all'] as const,
-  detail: (rmaId: string) => [...returnKeys.all, 'detail', rmaId] as const
+export const helpRequestKeys = {
+  all: [...accountKeys.all, 'help-requests'] as const,
+  lists: () => [...helpRequestKeys.all, 'list'] as const,
+  detail: (id: string) => [...helpRequestKeys.all, 'detail', id] as const
 };
 
 export const securityKeys = {
@@ -79,11 +78,17 @@ export const shopperQueries = {
     }),
   order: (api: ApiClient, orderNumber: string) =>
     queryOptions({ queryKey: orderKeys.detail(orderNumber), queryFn: ({ signal }) => api.getOrder(orderNumber, signal), staleTime: 30_000 }),
-  returnable: (api: ApiClient, orderNumber: string) =>
-    queryOptions({ queryKey: orderKeys.returnable(orderNumber), queryFn: ({ signal }) => api.getReturnEligibility(orderNumber, signal), staleTime: 0 }),
-  returns: (api: ApiClient, orderNumber?: string) =>
-    queryOptions({ queryKey: returnKeys.list(orderNumber), queryFn: () => api.getReturns(orderNumber), staleTime: 30_000 }),
-  returnDetail: (api: ApiClient, rmaId: string) => queryOptions({ queryKey: returnKeys.detail(rmaId), queryFn: ({ signal }) => api.getReturn(rmaId, signal) }),
+  /** My help requests, newest first; `fetchNextPage` follows nextCursor. */
+  helpRequests: (api: ApiClient) =>
+    infiniteQueryOptions({
+      queryKey: helpRequestKeys.lists(),
+      queryFn: ({ pageParam, signal }) => api.getHelpRequests(pageParam, signal),
+      initialPageParam: undefined as string | undefined,
+      getNextPageParam: (last) => last.nextCursor ?? undefined,
+      staleTime: 30_000
+    }),
+  helpRequest: (api: ApiClient, id: string) =>
+    queryOptions({ queryKey: helpRequestKeys.detail(id), queryFn: ({ signal }) => api.getHelpRequest(id, signal), staleTime: 30_000 }),
   security: (api: ApiClient) => queryOptions({ queryKey: securityKeys.overview(), queryFn: ({ signal }) => api.getSecurity(signal), staleTime: 0 }),
   notificationPreferences: (api: ApiClient) =>
     queryOptions({ queryKey: securityKeys.preferences(), queryFn: ({ signal }) => api.getNotificationPreferences(signal), staleTime: MINUTE }),

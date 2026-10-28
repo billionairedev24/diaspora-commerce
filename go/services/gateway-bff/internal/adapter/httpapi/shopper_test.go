@@ -158,38 +158,8 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 	}
 	mustStatus(t, b.do("POST", "/v1/account/orders/"+testkit.ShopperOrderNumber+"/shipments/"+testkit.ShopperShipmentID+"/cancel", map[string]any{"reason": "late"}), 409)
 
-	// Returns via tax-returns.
-	r = b.do("GET", "/v1/account/orders/"+testkit.ShopperOrderNumber+"/returnable", nil)
-	mustStatus(t, r, 200)
-	mustStatus(t, b.do("POST", "/v1/account/returns", map[string]any{"orderNumber": testkit.ShopperOrderNumber, "shipmentId": testkit.ShopperShipmentID,
-		"method": "DROP_OFF", "lines": []map[string]any{{"lineId": testkit.ShopperLineID, "quantity": 1, "reason": "BROKEN"}}}), 422)
-	r = b.do("POST", "/v1/account/returns", map[string]any{"orderNumber": testkit.ShopperOrderNumber, "shipmentId": testkit.ShopperShipmentID,
-		"method": "DROP_OFF", "lines": []map[string]any{{"lineId": testkit.ShopperLineID, "quantity": 1, "reason": "DAMAGED", "comment": "Torn"}}})
-	mustStatus(t, r, 201)
-	if r.json(t)["qrPayload"] == nil || r.json(t)["refundMinor"].(float64) != 1353 {
-		t.Fatalf("start return: %s", r.body)
-	}
-	// The customer app's short form.
-	mustStatus(t, b.do("POST", "/v1/account/returns", map[string]any{"orderNumber": testkit.ShopperOrderNumber, "atin": "ATJOLLOFV1", "reason": "NO_LONGER_NEEDED"}), 201)
-	mustStatus(t, b.do("GET", "/v1/account/returns", nil), 200)
-	r = b.do("GET", "/v1/account/returns?orderNumber="+testkit.ShopperOrderNumber, nil)
-	mustStatus(t, r, 200)
-	if n := len(r.json(t)["items"].([]any)); n != 1 {
-		t.Fatalf("returns of the order: %d", n)
-	}
-	mustStatus(t, b.do("GET", "/v1/account/returns?orderNumber=AT-2026-NOPE", nil), 404)
-	r = b.do("GET", "/v1/account/returns/RMA-0000ABCD", nil) // by number (QR)
-	mustStatus(t, r, 200)
-	if r.json(t)["rmaId"] != testkit.ShopperRMAID {
-		t.Fatalf("by number: %s", r.body)
-	}
-	r = b.do("GET", "/v1/account/returns/"+testkit.ShopperRMAID, nil)
-	mustStatus(t, r, 200)
-	if r.json(t)["quote"] == nil {
-		t.Fatal("return detail needs the refund quote")
-	}
-	mustStatus(t, b.do("POST", "/v1/account/returns/"+testkit.ShopperRMAID+"/cancel", nil), 200)
-	mustStatus(t, b.do("GET", "/v1/account/returns/nope", nil), 404)
+	// Help requests (the customer side of disputes); the full flow and its guards are in help_requests_test.go.
+	exerciseHelpRequests(t, b, u)
 
 	// Login & security.
 	r = b.do("GET", "/v1/account/security", nil)
@@ -344,7 +314,8 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 
 	for _, op := range []string{"searchServices", "getService", "getServiceDays", "getServiceSlots", "getBookingQuote", "getProviderPage",
 		"listPaymentMethods", "createSetupIntent", "deletePaymentMethod", "setDefaultPaymentMethod", "createPaymentSheetKeys", "listOrders",
-		"getOrder", "trackOrder", "cancelShipment", "getReturnEligibility", "startReturn", "listReturns", "getReturn", "cancelReturn",
+		"getOrder", "trackOrder", "cancelShipment", "requestHelpEvidenceUpload", "completeHelpEvidenceUpload", "createHelpRequest",
+		"listHelpRequests", "getHelpRequest",
 		"getSecurity", "changePassword", "startTotp", "confirmTotp", "disableTotp", "startSmsMfa", "confirmSmsMfa", "disableSmsMfa",
 		"regenerateRecoveryCodes", "removePasskey", "revokeSession", "revokeOtherSessions", "removeDevice", "unlinkAccount",
 		"getNotificationPreferences", "saveNotificationPreferences", "bookService", "syncBookingPayment", "listMyBookings", "getMyBooking",
