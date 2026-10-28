@@ -3,6 +3,7 @@ package testkit
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -119,9 +120,11 @@ func (u *Upstreams) membershipRoutes(mux *http.ServeMux) {
 		}
 	}
 	mux.HandleFunc("GET /v1/memberships/tiers", func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := bearerSub(w, r); ok {
-			writeJSON(w, 200, tiers())
+		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") { // any token: visitors use the BFF's service token
+			problem(w, 401, "auth.unauthenticated", "Bearer token required", nil)
+			return
 		}
+		writeJSON(w, 200, tiers())
 	})
 	mux.HandleFunc("GET /v1/memberships/me", customerOnly("payments.customer-only", func(w http.ResponseWriter, _ *http.Request) {
 		st.mu.Lock()
