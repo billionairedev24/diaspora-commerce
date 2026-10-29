@@ -2,23 +2,34 @@
 
 import { definitiveFailure, type MembershipInterval, membershipKeys, membershipQueries, type MembershipTier, randomUuid } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, CheckCircle, Skeleton, useToast } from '@afrotransact/ui';
+import { Button, buttonClassName, FlatPage, Message, PageHeader, Section, Skeleton, textLinkClassName, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 
-import pages from '@/components/account/Pages.module.css';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { accountQueries } from '@/lib/api/queries';
 import { signInHref } from '@/lib/links';
 
+import { BenefitList } from './BenefitList';
 import styles from './Membership.module.css';
-import { benefitDetail, benefitTitle, everyKey, membershipError } from './memberText';
+import { everyKey, membershipError } from './memberText';
+
+const INTERVALS: MembershipInterval[] = ['MONTHLY', 'YEARLY'];
+
+/** Whole-percent saving of paying a year at once against twelve months, over the best tier. */
+function bestYearlyPercent(tiers: readonly MembershipTier[]): number {
+  return tiers.reduce((best, tier) => {
+    const full = tier.monthlyPriceMinor * 12;
+    return full > 0 ? Math.max(best, Math.round(((full - tier.yearlyPriceMinor) / full) * 100)) : best;
+  }, 0);
+}
 
 /**
  * Join a membership (S323): the tiers staff configure, monthly or yearly, and a button that starts the free trial when
- * the shopper is eligible. Joining bills the default saved card; managing it is on the account page.
+ * the shopper is eligible. What renews, when it is charged and how to cancel are written out before the button.
+ * Joining bills the default saved card; managing it is on the account page.
  */
 export function MembershipOfferView() {
   const t = useT();
@@ -59,89 +70,102 @@ export function MembershipOfferView() {
   const current = account.data?.tier;
   const tiers = offer.data?.tiers ?? [];
   const trialAvailable = account.data?.trialAvailable ?? true;
+  const percent = bestYearlyPercent(tiers);
 
   return (
-    <div className={pages.page}>
-      <div className={pages.head}>
-        <h1 className={pages.h1}>{t('mem.title')}</h1>
-        {signedIn && (
-          <Link href="/account/membership" className={buttonClassName({ variant: 'secondary' })}>
-            {t('mem.manageLink')}
-          </Link>
-        )}
-      </div>
-      <p className={styles.intro}>{t('mem.intro')}</p>
+    <FlatPage width="wide">
+      <PageHeader
+        title={t('mem.title')}
+        lead={t('mem.intro')}
+        actions={
+          signedIn ? (
+            <Link href="/account/membership" className={textLinkClassName}>
+              {t('mem.manageLink')}
+            </Link>
+          ) : undefined
+        }
+      />
       {member && current && (
-        <p className={styles.note} role="status" data-testid="membership-already">
+        <Message tone="success" testId="membership-already">
           {t('mem.alreadyMember', { tier: current.name })}
-        </p>
+        </Message>
       )}
 
-      <div className={styles.toggle} role="group" aria-label={t('mem.title')}>
-        {(['MONTHLY', 'YEARLY'] as const).map((i) => (
-          <button key={i} type="button" className={styles.toggleOption} aria-pressed={interval === i} onClick={() => setInterval(i)} data-testid={`membership-interval-${i}`}>
-            {t(i === 'MONTHLY' ? 'mem.interval.MONTHLY' : 'mem.interval.YEARLY')}
-          </button>
-        ))}
-      </div>
+      <Section title={t('mem.chooseBilling')} id="mem-billing">
+        <fieldset className={styles.radioRows}>
+          <legend className="at-visually-hidden">{t('mem.billingGroup')}</legend>
+          {INTERVALS.map((i) => (
+            <label key={i} className={styles.radioRow}>
+              <input type="radio" name="mem-interval" checked={interval === i} onChange={() => setInterval(i)} data-testid={`membership-interval-${i}`} />
+              <span className={styles.radioText}>
+                <span className={styles.radioTitle}>{t(i === 'MONTHLY' ? 'mem.interval.MONTHLY' : 'mem.interval.YEARLY')}</span>
+                <span className={styles.radioDetail}>{i === 'MONTHLY' ? t('mem.billing.MONTHLY') : t('mem.billing.YEARLY', { percent })}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      </Section>
 
-      {error && (
-        <p className={pages.error} role="alert" data-testid="membership-error">
-          {error}
-        </p>
-      )}
+      {error && <Message tone="error" testId="membership-error">{error}</Message>}
       {offer.isPending && <Skeleton height={260} />}
-      {offer.isError && <p className={pages.error} role="alert">{t('mem.loadError')}</p>}
+      {offer.isError && <Message tone="error">{t('mem.loadError')}</Message>}
 
       <div className={styles.tiers}>
-        {tiers.map((tier) => {
+        {tiers.map((tier, index) => {
           const price = interval === 'YEARLY' ? tier.yearlyPriceMinor : tier.monthlyPriceMinor;
           const yearlySaving = tier.monthlyPriceMinor * 12 - tier.yearlyPriceMinor;
           const trial = trialAvailable && tier.trialDays > 0;
+          const money = fmt.money(price, tier.currency);
+          const every = t(everyKey(interval));
           return (
-            <section key={tier.code} className={`${pages.card} ${styles.tier}`} aria-labelledby={`tier-${tier.code}`} data-testid={`membership-tier-${tier.code}`}>
+            <section key={tier.code} className={styles.tier} aria-labelledby={`tier-${tier.code}`} data-testid={`membership-tier-${tier.code}`}>
               <div className={styles.tierHead}>
-                <h2 id={`tier-${tier.code}`} className={styles.tierName}>{tier.name}</h2>
-                {trial && <span className={styles.pill}>{t('mem.trialDays', { days: tier.trialDays })}</span>}
+                <h2 id={`tier-${tier.code}`} className={styles.tierName}>
+                  {tier.name}
+                </h2>
+                {trial && <span className={styles.trial}>{t('mem.trialDays', { days: tier.trialDays })}</span>}
               </div>
               <p className={styles.fine}>{tier.description}</p>
               <p className={styles.price}>
-                {fmt.money(price, tier.currency)} <span className={styles.priceUnit}>{t(everyKey(interval))}</span>
+                {money} <span className={styles.priceUnit}>{every}</span>
               </p>
               {interval === 'YEARLY' && yearlySaving > 0 && <p className={styles.save}>{t('mem.yearlySaving', { amount: fmt.money(yearlySaving, tier.currency) })}</p>}
-              <ul className={styles.benefits}>
-                {tier.benefits.map((b) => {
-                  const detail = benefitDetail(t, fmt, b, tier.currency);
-                  return (
-                    <li key={b.code} className={styles.benefit}>
-                      <CheckCircle weight="fill" className={styles.benefitIcon} aria-hidden />
-                      <span className={styles.benefitText}>
-                        <span className={styles.benefitTitle}>{benefitTitle(t, fmt, b)}</span>
-                        {detail && <span className={styles.benefitDetail}>{detail}</span>}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-              <p className={styles.fine}>{trial ? t('mem.trialThen', { price: fmt.money(price, tier.currency), every: t(everyKey(interval)) }) : t('mem.billed', { price: fmt.money(price, tier.currency), every: t(everyKey(interval)) })}</p>
-              {!signedIn ? (
-                <a href={signInHref('/membership')} className={buttonClassName({ block: true })} data-testid={`membership-signin-${tier.code}`}>
-                  {t('mem.signInToJoin')}
-                </a>
-              ) : member ? (
-                <Link href="/account/membership" className={buttonClassName({ block: true, variant: 'secondary' })}>
-                  {t('mem.manageLink')}
-                </Link>
-              ) : (
-                <Button block loading={joining === tier.code} disabled={join.isPending || !account.isSuccess} onClick={() => join.mutate(tier)} data-testid={`membership-join-${tier.code}`}>
-                  {trial ? t('mem.joinTrial', { days: tier.trialDays }) : t('mem.join', { tier: tier.name })}
-                </Button>
-              )}
+              <BenefitList benefits={tier.benefits} currency={tier.currency} t={t} fmt={fmt} />
+              <div className={styles.disclosure}>
+                <p>{trial ? t('mem.disclosure.trial', { days: tier.trialDays, price: money, every }) : t('mem.disclosure.billed', { price: money, every })}</p>
+                <p>{t('mem.disclosure.cancel')}</p>
+                <p>
+                  <Link href="/legal/membership-terms" data-testid={`membership-terms-${tier.code}`}>
+                    {t('mem.termsLink')}
+                  </Link>
+                </p>
+              </div>
+              <div className={styles.action}>
+                {!signedIn ? (
+                  <a href={signInHref('/membership')} className={buttonClassName({ variant: index === 0 ? 'primary' : 'neutral' })} data-testid={`membership-signin-${tier.code}`}>
+                    {t('mem.signInToJoin')}
+                  </a>
+                ) : member ? (
+                  <Link href="/account/membership" className={buttonClassName({ variant: 'neutral' })}>
+                    {t('mem.manageLink')}
+                  </Link>
+                ) : (
+                  <Button
+                    variant={index === 0 ? 'primary' : 'neutral'}
+                    loading={joining === tier.code}
+                    disabled={join.isPending || !account.isSuccess}
+                    onClick={() => join.mutate(tier)}
+                    data-testid={`membership-join-${tier.code}`}
+                  >
+                    {trial ? t('mem.joinTrial', { days: tier.trialDays }) : t('mem.join', { tier: tier.name })}
+                  </Button>
+                )}
+              </div>
             </section>
           );
         })}
       </div>
       <p className={styles.fine}>{t('mem.creditNote')}</p>
-    </div>
+    </FlatPage>
   );
 }

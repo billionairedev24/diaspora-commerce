@@ -12,18 +12,35 @@ import {
   randomUuid
 } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, CheckCircle, Skeleton, useToast } from '@afrotransact/ui';
+import {
+  Button,
+  buttonClassName,
+  DataTable,
+  DefinitionList,
+  EmptyState,
+  FlatPage,
+  Message,
+  Row,
+  RowList,
+  Section,
+  Skeleton,
+  StatusText,
+  type StatusTone,
+  textLinkClassName,
+  TextLinkButton,
+  useToast
+} from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 
-import { AccountCrumb } from '@/components/account/AccountCrumb';
-import pages from '@/components/account/Pages.module.css';
+import { AccountHeader } from '@/components/account/AccountHeader';
 import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 
+import { BenefitList } from './BenefitList';
 import styles from './Membership.module.css';
-import { benefitDetail, benefitName, benefitTitle, everyKey, membershipError } from './memberText';
+import { benefitName, everyKey, membershipError } from './memberText';
 
 const STATUS_KEYS: Record<string, MessageKey> = {
   TRIALING: 'mem.status.TRIALING',
@@ -37,8 +54,9 @@ const STATUS_KEYS: Record<string, MessageKey> = {
 const priceOf = (tier: MembershipTier, interval: MembershipInterval) => (interval === 'YEARLY' ? tier.yearlyPriceMinor : tier.monthlyPriceMinor);
 
 /**
- * Manage the membership (S323): status, renewal or end date, what it gives, upgrade now or switch at the end of the
- * period, cancel (benefits run to the end of the period) or cancel with a refund while the refund rule allows it.
+ * Manage the membership (S323): status, plan, next billing date and payment method, what it gives and what has been
+ * used, change plan (upgrade now or switch at the end of the period), and cancel in one path with the refund rule shown
+ * (benefits run to the end of the period, or a full refund while the rule allows it).
  */
 export function MembershipManageView() {
   const t = useT();
@@ -94,21 +112,25 @@ export function MembershipManageView() {
     onError: failed
   });
 
+  const header = <AccountHeader title={t('mem.manage.title')} crumb={t('account.membership')} actions={<Link href="/membership" className={textLinkClassName}>{t('mem.title')}</Link>} />;
+
   if (account.isPending) {
     return (
-      <div className={pages.page} aria-busy="true">
-        <AccountCrumb>{t('account.membership')}</AccountCrumb>
+      <FlatPage>
+        {header}
         <Skeleton height={36} width={260} />
         <Skeleton height={180} />
-      </div>
+      </FlatPage>
     );
   }
   if (account.isError) {
     return (
-      <div className={pages.page}>
-        <AccountCrumb>{t('account.membership')}</AccountCrumb>
-        <p className={pages.error} role="alert">{t('mem.loadError')}</p>
-      </div>
+      <FlatPage>
+        {header}
+        <Message tone="error">
+          {t('mem.loadError')} <TextLinkButton onClick={() => void account.refetch()}>{t('acct.retry')}</TextLinkButton>
+        </Message>
+      </FlatPage>
     );
   }
   const a = account.data;
@@ -118,16 +140,22 @@ export function MembershipManageView() {
 
   if (!m || !tier) {
     return (
-      <div className={pages.page}>
-        <AccountCrumb>{t('account.membership')}</AccountCrumb>
-        <h1 className={pages.h1}>{t('mem.manage.title')}</h1>
-        <section className={pages.card} data-testid="membership-none">
-          <p className={styles.intro}>{t('mem.intro')}</p>
-          <Link href="/membership" className={buttonClassName({ variant: 'primary' })}>
-            {t('mem.title')}
-          </Link>
-        </section>
-      </div>
+      <FlatPage>
+        <AccountHeader title={t('mem.manage.title')} crumb={t('account.membership')} />
+        <Section title={t('mem.manage.noneTitle')} testId="membership-none">
+          <EmptyState
+            action={
+              <div>
+                <Link href="/membership" className={buttonClassName({ variant: 'primary' })}>
+                  {t('mem.title')}
+                </Link>
+              </div>
+            }
+          >
+            {t('mem.intro')}
+          </EmptyState>
+        </Section>
+      </FlatPage>
     );
   }
 
@@ -138,217 +166,220 @@ export function MembershipManageView() {
   const pending = a.pendingTier;
   const needsAttention = m.status === 'PAST_DUE';
   const refund = a.refund;
+  const statusTone: StatusTone = needsAttention ? 'warning' : !live ? 'negative' : m.status === 'TRIALING' ? 'info' : 'positive';
+
+  const dateRow =
+    m.status === 'TRIALING' && m.trialEnd && !ending
+      ? { term: t('mem.manage.trialEndsLabel'), value: fmt.date(m.trialEnd) }
+      : ending || !live
+        ? { term: t('mem.manage.endsLabel'), value: fmt.date(m.endedAt ?? m.periodEnd) }
+        : m.source === 'PAID'
+          ? { term: t('mem.manage.nextBilling'), value: fmt.date(m.periodEnd) }
+          : { term: t('mem.manage.endsLabel'), value: fmt.date(m.periodEnd) };
+  const card = a.card?.last4 ? `${a.card.brand ?? ''} ${a.card.last4}`.trim() : null;
 
   return (
-    <div className={pages.page}>
-      <AccountCrumb>{t('account.membership')}</AccountCrumb>
-      <div className={pages.head}>
-        <h1 className={pages.h1}>{t('mem.manage.title')}</h1>
-        <Link href="/membership" className={buttonClassName({ variant: 'secondary' })}>
-          {t('mem.title')}
-        </Link>
-      </div>
-      {error && (
-        <p className={pages.error} role="alert" data-testid="membership-error">
-          {error}
-        </p>
-      )}
+    <FlatPage>
+      {header}
+      {error && <Message tone="error" testId="membership-error">{error}</Message>}
 
-      <section className={pages.card} aria-labelledby="mem-plan" data-testid="membership-plan">
-        <div className={styles.tierHead}>
-          <h2 id="mem-plan" className={styles.big}>
-            {t('mem.manage.plan', { tier: tier.name, price, every })}
-          </h2>
-          <span className={`${styles.pill} ${needsAttention ? styles.pillWarn : !live ? styles.pillBad : ''}`} data-testid="membership-status">
-            {t(STATUS_KEYS[m.status] ?? 'mem.status.ACTIVE')}
-          </span>
-        </div>
-        {m.status === 'TRIALING' && m.trialEnd && !ending && (
-          <p className={pages.muted}>{t('mem.manage.trialEnds', { date: fmt.date(m.trialEnd), price, every })}</p>
-        )}
-        {m.source === 'COMPLIMENTARY' && live && <p className={pages.muted}>{t('mem.manage.free', { date: fmt.date(m.periodEnd) })}</p>}
-        {live && m.source === 'PAID' && !ending && m.status !== 'TRIALING' && <p className={pages.muted}>{t('mem.manage.renews', { date: fmt.date(m.periodEnd) })}</p>}
-        {ending && <p className={styles.note} data-testid="membership-ending">{t('mem.manage.endsOn', { date: fmt.date(m.periodEnd) })}</p>}
-        {!live && !needsAttention && <p className={pages.muted}>{t('mem.manage.ended', { date: fmt.date(m.endedAt ?? m.periodEnd) })}</p>}
+      <Section title={t('mem.manage.plan', { tier: tier.name, price, every })} id="mem-plan" testId="membership-plan">
+        <DefinitionList
+          items={[
+            { term: t('mem.manage.statusLabel'), value: <StatusText tone={statusTone} testId="membership-status">{t(STATUS_KEYS[m.status] ?? 'mem.status.ACTIVE')}</StatusText> },
+            { term: t('mem.manage.planLabel'), value: t('mem.manage.planValue', { tier: tier.name, interval: t(m.interval === 'YEARLY' ? 'mem.interval.YEARLY' : 'mem.interval.MONTHLY') }) },
+            { term: t('mem.manage.priceLabel'), value: `${price} ${every}` },
+            dateRow,
+            {
+              term: t('mem.manage.paymentLabel'),
+              value: (
+                <>
+                  {card ?? t('mem.manage.noCardValue')}{' '}
+                  <Link href="/account/payments" className={textLinkClassName}>
+                    {t('mem.manage.updateCard')}
+                  </Link>
+                </>
+              )
+            }
+          ]}
+        />
+        {m.status === 'TRIALING' && m.trialEnd && !ending && <p className={styles.rule}>{t('mem.manage.trialEnds', { date: fmt.date(m.trialEnd), price, every })}</p>}
+        {m.source === 'COMPLIMENTARY' && live && <p className={styles.rule}>{t('mem.manage.free', { date: fmt.date(m.periodEnd) })}</p>}
+        {live && m.source === 'PAID' && !ending && m.status !== 'TRIALING' && <p className={styles.rule}>{t('mem.manage.renews', { date: fmt.date(m.periodEnd) })}</p>}
+        {ending && <p className={styles.notice} data-testid="membership-ending">{t('mem.manage.endsOn', { date: fmt.date(m.periodEnd) })}</p>}
+        {!live && !needsAttention && <p className={styles.rule}>{t('mem.manage.ended', { date: fmt.date(m.endedAt ?? m.periodEnd) })}</p>}
         {needsAttention && (
           <p className={styles.alert} role="alert">
             {t('mem.manage.pastDue')} {m.nextRetryAt ? t('mem.manage.retryOn', { date: fmt.date(m.nextRetryAt) }) : ''}
           </p>
         )}
         {pending && m.pendingInterval && (
-          <p className={styles.note} data-testid="membership-pending">
+          <p className={styles.notice} data-testid="membership-pending">
             {t('mem.manage.pending', { date: fmt.date(m.periodEnd), tier: pending.name, price: fmt.money(priceOf(pending, m.pendingInterval), pending.currency), every: t(everyKey(m.pendingInterval)) })}
           </p>
         )}
-        <p className={pages.muted}>
-          {a.card?.last4 ? t('mem.manage.card', { card: `${a.card.brand ?? ''} ${a.card.last4}`.trim() }) : t('mem.manage.noCard')}
-        </p>
+        {!card && <p className={styles.rule}>{t('mem.manage.noCard')}</p>}
         {(ending || pending) && live && (
           <div className={styles.buttons}>
-            <Button variant="secondary" loading={resume.isPending} disabled={busy} onClick={() => resume.mutate()} data-testid="membership-resume">
+            <Button loading={resume.isPending} disabled={busy} onClick={() => resume.mutate()} data-testid="membership-resume">
               {t('mem.manage.keep')}
             </Button>
           </div>
         )}
-      </section>
+      </Section>
 
-      <section className={pages.card} aria-labelledby="mem-benefits">
-        <h2 id="mem-benefits" className={pages.h}>{t('mem.manage.benefits')}</h2>
-        <ul className={styles.benefits}>
-          {tier.benefits.map((b) => {
-            const detail = benefitDetail(t, fmt, b, tier.currency);
-            return (
-              <li key={b.code} className={styles.benefit}>
-                <CheckCircle weight="fill" className={styles.benefitIcon} aria-hidden />
-                <span className={styles.benefitText}>
-                  <span className={styles.benefitTitle}>{benefitTitle(t, fmt, b)}</span>
-                  {detail && <span className={styles.benefitDetail}>{detail}</span>}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+      <Section title={t('mem.manage.benefits')} id="mem-benefits">
+        <BenefitList benefits={tier.benefits} currency={tier.currency} t={t} fmt={fmt} />
         <p className={styles.fine}>{t('mem.creditNote')}</p>
-      </section>
+      </Section>
+
+      <Section title={t('mem.usage.title')} id="mem-usage">
+        {a.usage.length === 0 ? (
+          <EmptyState>{t('mem.usage.none')}</EmptyState>
+        ) : (
+          <DataTable
+            caption={t('mem.tableUsage')}
+            testId="membership-usage"
+            rows={a.usage}
+            rowKey={(u) => u.benefit}
+            columns={[
+              { key: 'b', header: t('mem.col.benefit'), label: t('mem.col.benefit'), cell: (u) => benefitName(t, fmt, u.benefit) },
+              { key: 'n', header: t('mem.col.times'), label: t('mem.col.times'), numeric: true, cell: (u) => u.uses },
+              { key: 'a', header: t('mem.col.saved'), label: t('mem.col.saved'), numeric: true, cell: (u) => fmt.money(u.amountMinor, u.currency) }
+            ]}
+          />
+        )}
+        {(uses.data?.items.length ?? 0) > 0 && (
+          <RowList testId="membership-uses" label={t('mem.benefitsUsed.title')}>
+            {uses.data?.items.map((u) => (
+              <Row
+                key={`${u.benefit}-${u.createdAt}`}
+                title={t('mem.benefitsUsed.row', { benefit: benefitName(t, fmt, u.benefit), amount: fmt.money(u.amountMinor, u.currency) })}
+                detail={fmt.date(u.createdAt)}
+              />
+            ))}
+          </RowList>
+        )}
+      </Section>
 
       {live && a.tiers.length > 0 && (
-        <section className={pages.card} aria-labelledby="mem-change" data-testid="membership-change">
-          <h2 id="mem-change" className={pages.h}>{t('mem.manage.change')}</h2>
-          <ul className={pages.list}>
+        <Section title={t('mem.manage.change')} id="mem-change" testId="membership-change">
+          <RowList>
             {a.tiers.flatMap((o) =>
               (['MONTHLY', 'YEARLY'] as const).map((interval) => {
                 const isCurrent = o.code === tier.code && interval === m.interval && !pending;
                 const isUpgrade = o.sortOrder > tier.sortOrder;
                 return (
-                  <li key={`${o.code}-${interval}`} className={styles.planRow} data-testid={`membership-plan-${o.code}-${interval}`}>
-                    <span className={styles.planText}>
-                      <strong>
-                        {o.name} · {t(interval === 'YEARLY' ? 'mem.interval.YEARLY' : 'mem.interval.MONTHLY')}
-                      </strong>
-                      <span className={styles.fine}>
-                        {fmt.money(priceOf(o, interval), o.currency)} {t(everyKey(interval))}
-                        {isCurrent ? '' : ` · ${isUpgrade ? t('mem.manage.upgradeNote') : t('mem.manage.switchNote', { date: fmt.date(m.periodEnd) })}`}
-                      </span>
-                    </span>
-                    {isCurrent ? (
-                      <span className={styles.pill}>{t('mem.manage.current')}</span>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant={isUpgrade ? 'primary' : 'secondary'}
-                        disabled={busy || needsAttention}
-                        loading={change.isPending && change.variables?.tier.code === o.code && change.variables.interval === interval}
-                        onClick={() => change.mutate({ tier: o, interval })}
-                      >
-                        {isUpgrade ? t('mem.manage.upgrade') : t('mem.manage.switch')}
-                      </Button>
-                    )}
-                  </li>
+                  <Row
+                    key={`${o.code}-${interval}`}
+                    testId={`membership-plan-${o.code}-${interval}`}
+                    title={`${o.name} · ${t(interval === 'YEARLY' ? 'mem.interval.YEARLY' : 'mem.interval.MONTHLY')}`}
+                    detail={`${fmt.money(priceOf(o, interval), o.currency)} ${t(everyKey(interval))}${isCurrent ? '' : ` · ${isUpgrade ? t('mem.manage.upgradeNote') : t('mem.manage.switchNote', { date: fmt.date(m.periodEnd) })}`}`}
+                    actions={
+                      isCurrent ? (
+                        <StatusText tone="positive">{t('mem.manage.current')}</StatusText>
+                      ) : (
+                        <TextLinkButton
+                          disabled={busy || needsAttention}
+                          onClick={() => change.mutate({ tier: o, interval })}
+                          aria-busy={change.isPending && change.variables?.tier.code === o.code && change.variables.interval === interval ? true : undefined}
+                        >
+                          {isUpgrade ? t('mem.manage.upgrade') : t('mem.manage.switch')}
+                        </TextLinkButton>
+                      )
+                    }
+                  />
                 );
               })
             )}
-          </ul>
-        </section>
+          </RowList>
+        </Section>
       )}
 
       {live && m.source === 'PAID' && (
-        <section className={pages.card} aria-labelledby="mem-cancel" data-testid="membership-cancel">
-          <h2 id="mem-cancel" className={pages.h}>{t('mem.manage.cancel')}</h2>
-          {refund.eligible && (
-            <div className={styles.note} data-testid="membership-refund">
-              <strong>{t('mem.refund.title')}</strong>
-              <p className={pages.muted}>{t('mem.refund.ok', { amount: fmt.money(refund.amountMinor, refund.currency), date: fmt.date(refund.until ?? new Date()) })}</p>
-              {confirm === 'refund' ? (
-                <div className={styles.buttons}>
-                  <Button variant="dark" loading={cancel.isPending} onClick={() => cancel.mutate(true)} data-testid="membership-refund-confirm">
-                    {t('mem.refund.confirm')}
-                  </Button>
-                  <Button variant="secondary" disabled={cancel.isPending} onClick={() => setConfirm(null)}>
-                    {t('mem.manage.keep')}
-                  </Button>
-                </div>
-              ) : (
-                <Button variant="secondary" disabled={busy} onClick={() => setConfirm('refund')} data-testid="membership-refund-button">
-                  {t('mem.refund.button', { amount: fmt.money(refund.amountMinor, refund.currency) })}
-                </Button>
-              )}
-            </div>
-          )}
-          {!refund.eligible && refund.reason === 'BENEFIT_USED' && <p className={pages.muted} data-testid="membership-refund-used">{t('mem.refund.BENEFIT_USED')}</p>}
-          {!refund.eligible && refund.reason === 'WINDOW_PASSED' && <p className={pages.muted}>{t('mem.refund.WINDOW_PASSED', { days: refund.windowDays })}</p>}
-          {!ending && (
-            <>
-              <p className={pages.muted}>{t('mem.manage.cancelBody', { date: fmt.date(m.periodEnd) })}</p>
-              {confirm === 'cancel' ? (
-                <div className={styles.buttons}>
-                  <Button variant="dark" loading={cancel.isPending} onClick={() => cancel.mutate(false)} data-testid="membership-cancel-confirm">
-                    {t('mem.manage.cancelConfirm')}
-                  </Button>
-                  <Button variant="secondary" disabled={cancel.isPending} onClick={() => setConfirm(null)}>
-                    {t('mem.manage.keep')}
-                  </Button>
-                </div>
-              ) : (
-                <div className={styles.buttons}>
-                  <Button variant="secondary" disabled={busy} onClick={() => setConfirm('cancel')} data-testid="membership-cancel-button">
-                    {t('mem.manage.cancel')}
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </section>
+        <Section title={t('mem.manage.cancel')} id="mem-cancel" testId="membership-cancel">
+          <div className={styles.stack}>
+            {refund.eligible && (
+              <div data-testid="membership-refund" className={styles.stack}>
+                <p className={styles.rule}>
+                  <strong>{t('mem.refund.title')}</strong> {t('mem.refund.ok', { amount: fmt.money(refund.amountMinor, refund.currency), date: fmt.date(refund.until ?? new Date()) })}
+                </p>
+                {confirm === 'refund' ? (
+                  <div className={styles.buttons}>
+                    <Button variant="dark" loading={cancel.isPending} onClick={() => cancel.mutate(true)} data-testid="membership-refund-confirm">
+                      {t('mem.refund.confirm')}
+                    </Button>
+                    <TextLinkButton disabled={cancel.isPending} onClick={() => setConfirm(null)}>
+                      {t('mem.manage.keep')}
+                    </TextLinkButton>
+                  </div>
+                ) : (
+                  <div className={styles.buttons}>
+                    <TextLinkButton disabled={busy} onClick={() => setConfirm('refund')} data-testid="membership-refund-button">
+                      {t('mem.refund.button', { amount: fmt.money(refund.amountMinor, refund.currency) })}
+                    </TextLinkButton>
+                  </div>
+                )}
+              </div>
+            )}
+            {!refund.eligible && refund.reason === 'BENEFIT_USED' && <p className={styles.rule} data-testid="membership-refund-used">{t('mem.refund.BENEFIT_USED')}</p>}
+            {!refund.eligible && refund.reason === 'WINDOW_PASSED' && <p className={styles.rule}>{t('mem.refund.WINDOW_PASSED', { days: refund.windowDays })}</p>}
+            {!ending && (
+              <>
+                <p className={styles.rule}>{t('mem.manage.cancelBody', { date: fmt.date(m.periodEnd) })}</p>
+                {confirm === 'cancel' ? (
+                  <div className={styles.buttons}>
+                    <Button variant="dark" loading={cancel.isPending} onClick={() => cancel.mutate(false)} data-testid="membership-cancel-confirm">
+                      {t('mem.manage.cancelConfirm')}
+                    </Button>
+                    <TextLinkButton disabled={cancel.isPending} onClick={() => setConfirm(null)}>
+                      {t('mem.manage.keep')}
+                    </TextLinkButton>
+                  </div>
+                ) : (
+                  <div className={styles.buttons}>
+                    <TextLinkButton danger disabled={busy} onClick={() => setConfirm('cancel')} data-testid="membership-cancel-button">
+                      {t('mem.manage.cancel')}
+                    </TextLinkButton>
+                  </div>
+                )}
+              </>
+            )}
+            <p className={styles.fine}>
+              <Link href="/legal/membership-terms">{t('mem.termsLink')}</Link>
+            </p>
+          </div>
+        </Section>
       )}
 
-      <section className={pages.card} aria-labelledby="mem-usage">
-        <h2 id="mem-usage" className={pages.h}>{t('mem.usage.title')}</h2>
-        {a.usage.length === 0 ? (
-          <p className={pages.muted}>{t('mem.usage.none')}</p>
-        ) : (
-          <ul className={pages.list} data-testid="membership-usage">
-            {a.usage.map((u) => (
-              <li key={u.benefit} className={styles.entry}>
-                <span>{t('mem.usage.row', { times: u.uses, benefit: benefitName(t, fmt, u.benefit) })}</span>
-                <span className={styles.amount}>{fmt.money(u.amountMinor, u.currency)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {(uses.data?.items.length ?? 0) > 0 && (
-          <>
-            <h3 className={pages.h}>{t('mem.benefitsUsed.title')}</h3>
-            <ul className={pages.list} data-testid="membership-uses">
-              {uses.data?.items.map((u) => (
-                <li key={`${u.benefit}-${u.createdAt}`} className={styles.entry}>
-                  <span>{t('mem.benefitsUsed.row', { benefit: benefitName(t, fmt, u.benefit), amount: fmt.money(u.amountMinor, u.currency) })}</span>
-                  <span className={styles.date}>{fmt.date(u.createdAt)}</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </section>
-
-      <section className={pages.card} aria-labelledby="mem-charges">
-        <h2 id="mem-charges" className={pages.h}>{t('mem.charges.title')}</h2>
+      <Section title={t('mem.charges.title')} id="mem-charges">
         {a.charges.length === 0 ? (
-          <p className={pages.muted}>{t('mem.charges.none')}</p>
+          <EmptyState>{t('mem.charges.none')}</EmptyState>
         ) : (
-          <ul className={pages.list} data-testid="membership-charges">
-            {a.charges.map((c) => (
-              <li key={`${c.kind}-${c.createdAt}`} className={styles.entry}>
-                <span>
-                  {t(c.kind === 'JOIN' ? 'mem.charge.JOIN' : c.kind === 'RENEWAL' ? 'mem.charge.RENEWAL' : 'mem.charge.UPGRADE')}
-                  {c.status === 'FAILED' ? ` · ${t('mem.charge.FAILED')}` : ''}
-                  {c.refundedMinor > 0 ? ` · ${t('mem.charge.refunded', { amount: fmt.money(c.refundedMinor, c.currency) })}` : ''}
-                </span>
-                <span className={styles.amount}>{fmt.money(c.amountMinor, c.currency)}</span>
-                <span className={styles.date}>{fmt.date(c.createdAt)}</span>
-              </li>
-            ))}
-          </ul>
+          <DataTable
+            caption={t('mem.tableCharges')}
+            testId="membership-charges"
+            rows={a.charges}
+            rowKey={(c) => `${c.kind}-${c.createdAt}`}
+            columns={[
+              { key: 'd', header: t('mem.col.date'), label: t('mem.col.date'), cell: (c) => fmt.date(c.createdAt) },
+              {
+                key: 'w',
+                header: t('mem.col.description'),
+                label: t('mem.col.description'),
+                cell: (c) => (
+                  <>
+                    {t(c.kind === 'JOIN' ? 'mem.charge.JOIN' : c.kind === 'RENEWAL' ? 'mem.charge.RENEWAL' : 'mem.charge.UPGRADE')}
+                    {c.status === 'FAILED' ? ` · ${t('mem.charge.FAILED')}` : ''}
+                    {c.refundedMinor > 0 ? ` · ${t('mem.charge.refunded', { amount: fmt.money(c.refundedMinor, c.currency) })}` : ''}
+                  </>
+                )
+              },
+              { key: 'a', header: t('mem.col.amount'), label: t('mem.col.amount'), numeric: true, cell: (c) => fmt.money(c.amountMinor, c.currency) }
+            ]}
+          />
         )}
-      </section>
-    </div>
+      </Section>
+    </FlatPage>
   );
 }

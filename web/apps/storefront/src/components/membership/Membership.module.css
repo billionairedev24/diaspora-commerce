@@ -1,37 +1,43 @@
-/* AfroTransact membership (S323). Design tokens only. */
-.intro { margin: 0; max-width: 46rem; font-size: var(--at-text-lg); color: var(--at-color-text-muted); line-height: var(--at-leading-normal); }
-.toggle { display: inline-flex; gap: var(--at-space-1); padding: var(--at-space-1); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-pill); background: var(--at-color-surface-muted); align-self: flex-start; }
-.toggleOption { min-height: var(--at-size-touch); padding: 0 var(--at-space-4); border: 0; border-radius: var(--at-radius-pill); background: transparent; font: inherit; font-weight: var(--at-weight-semibold); cursor: pointer; color: var(--at-color-text); }
-.toggleOption[aria-pressed='true'] { background: var(--at-color-surface); box-shadow: var(--at-shadow-sm); }
-.tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: var(--at-space-4); }
-.tier { display: flex; flex-direction: column; gap: var(--at-space-3); }
+/* AfroTransact membership (S323): the sign-up page, the manage page and the cart upsell. Flat; design tokens only. */
+.intro { margin: 0; max-inline-size: 46rem; font-size: var(--at-text-md); color: var(--at-color-text-muted); line-height: var(--at-leading-normal); }
+
+/* Billing period: radio rows separated by hairlines */
+.radioRows { display: flex; flex-direction: column; max-inline-size: 36rem; margin: 0; padding: 0; border: 0; }
+.radioRow { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--at-space-3); align-items: start; padding-block: var(--at-space-3); border-block-start: 1px solid var(--at-color-border); cursor: pointer; }
+.radioRow:first-of-type { border-block-start: 0; }
+.radioRow input { inline-size: 18px; block-size: 18px; margin-block-start: 2px; accent-color: var(--at-color-action-secondary); }
+.radioRow:has(input:focus-visible) { outline: 2px solid var(--at-color-focus); outline-offset: 2px; }
+.radioText { display: flex; flex-direction: column; gap: 2px; }
+.radioTitle { font-size: var(--at-text-base); font-weight: var(--at-weight-semibold); }
+.radioDetail { font-size: var(--at-text-sm); color: var(--at-color-text-muted); line-height: var(--at-leading-normal); }
+
+/* Tiers side by side, a hairline between them */
+.tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--at-space-8) var(--at-space-10); }
+.tier { display: flex; flex-direction: column; gap: var(--at-space-3); min-width: 0; }
 .tierHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--at-space-2); }
-.tierName { margin: 0; font-family: var(--at-font-heading); font-size: var(--at-text-2xl); font-weight: var(--at-weight-bold); }
+.tierName { margin: 0; font-size: var(--at-text-2xl); font-weight: var(--at-weight-bold); }
+.trial { font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); color: var(--at-color-success); }
 .price { margin: 0; font-size: var(--at-text-3xl); font-weight: var(--at-weight-bold); line-height: 1.1; font-variant-numeric: tabular-nums; }
 .priceUnit { font-size: var(--at-text-sm); font-weight: var(--at-weight-regular); color: var(--at-color-text-muted); }
-.fine { margin: 0; font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
+.fine { margin: 0; font-size: var(--at-text-sm); color: var(--at-color-text-muted); line-height: var(--at-leading-normal); }
 .save { margin: 0; font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); color: var(--at-color-success); }
-.benefits { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-2); }
-.benefit { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--at-space-2); align-items: start; }
-.benefitIcon { color: var(--at-color-success); margin-top: 2px; }
+.disclosure { display: flex; flex-direction: column; gap: var(--at-space-1); margin: 0; font-size: var(--at-text-sm); line-height: var(--at-leading-normal); color: var(--at-color-text); }
+.disclosure p { margin: 0; }
+.action { display: flex; flex-wrap: wrap; gap: var(--at-space-2) var(--at-space-4); align-items: center; }
+
+.benefits { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-3); }
+.benefit { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--at-space-3); align-items: start; }
+.benefitIcon { display: grid; place-items: center; inline-size: 28px; block-size: 28px; font-size: var(--at-text-2xl); color: var(--at-color-action-secondary); }
 .benefitText { display: flex; flex-direction: column; gap: 2px; }
 .benefitTitle { font-weight: var(--at-weight-semibold); }
 .benefitDetail { font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
-.pill { display: inline-flex; align-self: flex-start; padding: 2px var(--at-space-2); border-radius: var(--at-radius-pill); background: var(--at-color-surface-brand); font-size: var(--at-text-xs); font-weight: var(--at-weight-bold); }
-.pillWarn { background: var(--at-color-warning-bg); }
-.pillBad { background: var(--at-color-danger-bg); color: var(--at-color-danger); }
-.summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--at-space-2) var(--at-space-4); align-items: baseline; }
-.big { margin: 0; font-family: var(--at-font-heading); font-size: var(--at-text-2xl); font-weight: var(--at-weight-bold); }
-.planRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--at-space-1) var(--at-space-3); align-items: center; padding: var(--at-space-3) 0; border-top: 1px solid var(--at-color-border); }
-.planRow:first-child { border-top: 0; }
-.planText { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.buttons { display: flex; flex-wrap: wrap; gap: var(--at-space-2); }
-.entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--at-space-1) var(--at-space-3); align-items: baseline; padding: var(--at-space-3) 0; border-top: 1px solid var(--at-color-border); }
-.entry:first-child { border-top: 0; }
-.amount { justify-self: end; font-weight: var(--at-weight-bold); font-variant-numeric: tabular-nums; }
-.date { font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
-.note { padding: var(--at-space-3) var(--at-space-4); border-radius: var(--at-radius-sm); background: var(--at-color-surface-muted); font-size: var(--at-text-sm); }
-.alert { padding: var(--at-space-3) var(--at-space-4); border-radius: var(--at-radius-sm); background: var(--at-color-warning-bg); font-size: var(--at-text-sm); }
+
+/* Manage page */
+.notice { margin: 0; padding-inline-start: var(--at-space-3); border-inline-start: 3px solid var(--at-color-border-strong); font-size: var(--at-text-md); line-height: var(--at-leading-normal); }
+.alert { margin: 0; padding-inline-start: var(--at-space-3); border-inline-start: 3px solid var(--at-color-warning); font-size: var(--at-text-md); line-height: var(--at-leading-normal); }
+.rule { margin: 0; font-size: var(--at-text-md); line-height: var(--at-leading-normal); }
+.buttons { display: flex; flex-wrap: wrap; gap: var(--at-space-2) var(--at-space-4); align-items: center; }
+.stack { display: flex; flex-direction: column; gap: var(--at-space-3); max-inline-size: 46rem; }
 
 /* "Join Plus to save $X on this order" in the cart and at checkout */
 .upsell { display: flex; flex-direction: column; gap: var(--at-space-1); padding: var(--at-space-3) var(--at-space-4); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); background: var(--at-color-surface-brand); }
