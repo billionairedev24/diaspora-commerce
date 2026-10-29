@@ -283,7 +283,7 @@ func RefundLimitProblem(limit int64) *Problem {
 var ResourceKeys = []string{"users", "roles", "applications", "organisations", "connect-accounts", "orders", "products", "moderation", "product-reviews", "claims", "returns", "payouts",
 	"inventory", "purchase-orders", "routes", "support-cases", "audit", "markets", "site-settings", "legal-documents", "help-articles", "privacy-requests", "announcements",
 	"placements", "identity-providers", "fee-schedules", "tax-rates", "tax-codes", "tax-rules", "tax-review", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events", "pickup-locations", "coupons",
-	"reconciliation", "reconciliation-runs", "ledger-adjustments", "credit-adjustments", "gift-cards", "credit-liabilities", "money-settings", "membership-tiers", "memberships", "membership-settings", "membership-report", "referrals", "referral-settings", "stripe-lookup", "payment-settings", "tax-settings", "maintenance", "tax-filings", "tax-nexus",
+	"reconciliation", "reconciliation-runs", "ledger-adjustments", "recoveries", "credit-adjustments", "gift-cards", "credit-liabilities", "money-settings", "membership-tiers", "memberships", "membership-settings", "membership-report", "referrals", "referral-settings", "stripe-lookup", "payment-settings", "tax-settings", "maintenance", "tax-filings", "tax-nexus",
 	"oauth-clients", "identity-sessions", "signing-keys", "auth-settings", "exchange-rates"}
 
 // Column is one table column; Width is its share of the table in percent.
