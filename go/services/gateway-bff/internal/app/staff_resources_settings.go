@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -179,20 +180,42 @@ func siteSettingsResource() *staffResource {
 
 // ---------------------------------------------------------------- legal documents (content)
 
+// legalOrder is a document's place in the legal center (unknown keys last), so the staff table reads like the public index.
+func legalOrder(key string) int {
+	for i, g := range domain.LegalGroups {
+		for j, k := range g.Documents {
+			if k == key {
+				return i*100 + j
+			}
+		}
+	}
+	return 1 << 20
+}
+
 func legalResource() *staffResource {
 	load := func(ctx context.Context, sc staffCtx, _ staffQuery) ([]jobj, error) {
 		var idx jobj
 		if err := sc.get(ctx, sc.up.Content, "/v1/legal", nil, &idx); err != nil {
 			return nil, err
 		}
-		return objs(idx, "documents"), nil
+		docs := objs(idx, "documents")
+		sort.SliceStable(docs, func(i, j int) bool { return legalOrder(jstr(docs[i], "key")) < legalOrder(jstr(docs[j], "key")) })
+		for _, d := range docs {
+			d["group"] = domain.LegalGroupTitle(jstr(d, "key"))
+			d["state"] = "In force"
+			if boolean(d, "draftBanner") {
+				d["state"] = "Draft for counsel"
+			}
+		}
+		return docs, nil
 	}
 	list := listAll(load)
 	return &staffResource{
 		key: "legal-documents", module: "siteCfg", title: "Legal documents",
-		columns: []domain.Column{col("title", "Document", "strong", 36), col("key", "Key", "mono", 20), col("version", "Version", "text", 14), col("effectiveDate", "Effective", "date", 30)},
-		idOf:    func(o jobj) string { return jstr(o, "key") },
-		list:    list,
+		columns: []domain.Column{col("title", "Document", "strong", 28), col("group", "Group", "text", 18), col("key", "Key", "mono", 18), col("version", "Version", "text", 10),
+			col("effectiveDate", "Effective", "date", 12), col("state", "Status", "text", 14)},
+		idOf: func(o jobj) string { return jstr(o, "key") },
+		list: list,
 		get: func(ctx context.Context, sc staffCtx, id string) (jobj, error) {
 			o, err := findIn(list, "key")(ctx, sc, id)
 			if err != nil {
@@ -225,12 +248,20 @@ func legalResource() *staffResource {
 				form: func(context.Context, staffCtx, jobj) *domain.Form {
 					return &domain.Form{Title: "Raise the version (the current one is archived)", SubmitLabel: "Publish version", Fields: []domain.FormField{
 						withPattern(ff("version", "Version", "text", true), `^[0-9]+\.[0-9]+$`, "Major.minor, e.g. 3.3"), ff("effectiveDate", "Effective date", "date", true),
-						withMax(ff("changeSummary", "What changed", "textarea", true), 1000), ff("body", "Document (Markdown, English)", "textarea", true),
+						withMax(ff("changeSummary", "What changed", "textarea", true), 1000), ff("body", "Document (Markdown, English, binding)", "textarea", true),
+						ff("bodyFr", "Français (optional)", "textarea", false), ff("bodyEs", "Español (optional)", "textarea", false),
+						ff("bodyAr", "العربية (optional)", "textarea", false), ff("bodyYo", "Yorùbá (optional)", "textarea", false),
 						ff("draftBanner", "Show the draft banner", "toggle", false)}}
 				},
 				run: func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {
+					bodies := jobj{"en": vs(v, "body")}
+					for _, loc := range domain.LegalLocales {
+						if t := strings.TrimSpace(vs(v, "body"+strings.ToUpper(loc[:1])+loc[1:])); t != "" {
+							bodies[loc] = t
+						}
+					}
 					return sc.post(ctx, sc.up.Content, "/v1/legal/"+url.PathEscape(jstr(o, "key"))+"/versions", jobj{"version": vs(v, "version"), "effectiveDate": vs(v, "effectiveDate"),
-						"changeSummary": vs(v, "changeSummary"), "bodies": jobj{"en": vs(v, "body")}, "draftBanner": vb(v, "draftBanner")}, nil)
+						"changeSummary": vs(v, "changeSummary"), "bodies": bodies, "draftBanner": vb(v, "draftBanner")}, nil)
 				}},
 		},
 		edit: &staffEdit{permission: "content:legal.edit",

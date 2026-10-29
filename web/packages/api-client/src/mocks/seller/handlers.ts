@@ -626,7 +626,8 @@ const ComplianceBody = z.object({
   insuranceDocumentAssetId: z.string().optional(),
   agreementsAccepted: z.boolean().optional(),
   w9Certified: z.boolean().optional(),
-  w9SignerName: z.string().optional()
+  w9SignerName: z.string().optional(),
+  agreements: z.array(z.object({ key: z.string(), version: z.string() })).optional()
 });
 const UploadBody = z.object({ fileName: z.string().min(1), contentType: z.string(), size: z.number().int() });
 const blankToNull = (v: string | undefined): string | null => (v && v.trim() ? v.trim() : null);

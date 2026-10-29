@@ -1,6 +1,7 @@
 /* In-memory state of the mock staff BFF (stored on globalThis so the route handler, server components and tests share
    it). Seeded from the Backoffice prototype (backoffice-data.js, backoffice-config.js, at-site.js) relative to today. */
 import { type ExportJob } from '../../schemas/exports';
+import { legalGroupTitle } from '../../schemas/legal';
 import { type ActivityEntry, type ResourceKey } from '../../schemas/staff';
 import { HELP_ARTICLES } from '../fixtures/help';
 import { type MockDispatch, seedDispatch } from './dispatch';
@@ -394,7 +395,10 @@ function seed(now: Date): MockStaffDb {
     ['subprocessors', 'Subprocessors', '1.0', day(28)],
     ['data-processing', 'Data Processing Addendum', '1.0', day(28)],
     ['seller-fees', 'Seller Fees & Charges', '1.0', day(28)]
-  ].map(([key, title, version, effective]) => rec(key as string, { key: key as string, title: title as string, version: version as string, effectiveDate: effective as string, draftBanner: true, href: `/legal/${key as string}` }));
+  ].map(([key, title, version, effective]) => rec(key as string, {
+    key: key as string, title: title as string, group: legalGroupTitle(key as string), version: version as string, effectiveDate: effective as string,
+    draftBanner: true, state: 'Draft for counsel', href: `/legal/${key as string}`
+  }));
 
   const helpArticles = HELP_ARTICLES.map((a) => rec(a.slug, {
     slug: a.slug, title: a.title, summary: a.summary, topic: a.topic, topicTitle: a.topicTitle, status: 'PUBLISHED', updatedAt: a.updatedAt,

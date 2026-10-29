@@ -34,9 +34,49 @@ export const LEGAL_GROUPS = [
 ] as const satisfies ReadonlyArray<{ id: string; documents: readonly (typeof LEGAL_DOCUMENT_KEYS)[number][] }>;
 export type LegalGroupId = (typeof LEGAL_GROUPS)[number]['id'];
 
+/** English section titles of the legal center (the storefront translates them; the staff console shows these). */
+export const LEGAL_GROUP_TITLES: Readonly<Record<LegalGroupId, string>> = {
+  customers: 'Customers',
+  payments: 'Payments and money',
+  sellers: 'Sellers and providers',
+  privacy: 'Privacy and cookies',
+  policies: 'Policies'
+};
+
+/** The legal center section of a document key (empty for an unknown key). */
+export function legalGroupTitle(key: string): string {
+  const group = LEGAL_GROUPS.find((g) => (g.documents as readonly string[]).includes(key));
+  return group ? LEGAL_GROUP_TITLES[group.id] : '';
+}
+
 /** Documents a seller accepts (with the version shown) in onboarding; a provider accepts PROVIDER_AGREEMENTS instead. */
 export const SELLER_AGREEMENTS = ['seller-terms', 'payments-terms', 'data-processing'] as const;
 export const PROVIDER_AGREEMENTS = ['provider-terms', 'payments-terms', 'data-processing'] as const;
+
+/** English titles (content-service LegalDocumentType): for apps without a catalogue, such as Seller Center and the staff console. */
+export const LEGAL_DOCUMENT_TITLES = {
+  'conditions-of-use': 'Conditions of Use',
+  privacy: 'Privacy Notice',
+  cookies: 'Cookie Notice',
+  'privacy-choices': 'Your Privacy Choices',
+  returns: 'Returns & Refunds',
+  'seller-terms': 'Seller & Provider Terms',
+  'prohibited-items': 'Prohibited & Restricted Items',
+  accessibility: 'Accessibility Statement',
+  'sms-terms': 'SMS & Notification Terms',
+  'gift-card-terms': 'Gift Card Terms',
+  'store-credit-terms': 'Store Credit Terms',
+  'membership-terms': 'Membership Terms',
+  'referral-terms': 'Referral Program Terms',
+  'preorder-delivery-terms': 'Pre-order & Delivery Terms',
+  'community-guidelines': 'Community Guidelines',
+  'ip-policy': 'Intellectual Property Policy',
+  'provider-terms': 'Service Provider Terms',
+  'payments-terms': 'Payments Terms',
+  subprocessors: 'Subprocessors',
+  'data-processing': 'Data Processing Addendum',
+  'seller-fees': 'Seller Fees & Charges'
+} as const satisfies Record<(typeof LEGAL_DOCUMENT_KEYS)[number], string>;
 
 export const LegalDocumentKeySchema = z.enum(LEGAL_DOCUMENT_KEYS);
 export type LegalDocumentKey = z.infer<typeof LegalDocumentKeySchema>;

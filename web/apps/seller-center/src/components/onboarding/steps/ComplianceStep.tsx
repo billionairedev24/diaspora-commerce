@@ -1,11 +1,12 @@
 'use client';
 
-import { type OnboardingForm } from '@afrotransact/api-client';
+import { LEGAL_DOCUMENT_TITLES, type LegalDocumentKey, legalHref, type OnboardingForm, PROVIDER_AGREEMENTS, SELLER_AGREEMENTS } from '@afrotransact/api-client';
 import { Checkbox, cx, Select, TextField } from '@afrotransact/ui';
 import { Check } from '@phosphor-icons/react/ssr';
 import { useImperativeHandle } from 'react';
 
 import { sellerApi } from '@/lib/api';
+import { useStorefrontUrl } from '@/lib/runtime-config';
 import {
   BEAUTY_CATEGORIES,
   type ComplianceValues,
@@ -79,6 +80,27 @@ export function w9Signer(form: OnboardingForm): string {
   return control ? [control.firstName, control.lastName].filter(Boolean).join(' ') : (form.details.legalName ?? '');
 }
 
+/** The documents this application accepts, in reading order: the seller terms, the provider terms, or both. */
+export function agreementKeys(offering: OnboardingForm['business']['offering']): LegalDocumentKey[] {
+  const keys: LegalDocumentKey[] = [];
+  if (offering !== 'SERVICES') keys.push(...SELLER_AGREEMENTS);
+  if (offering === 'SERVICES' || offering === 'BOTH') keys.push(...PROVIDER_AGREEMENTS);
+  keys.push('seller-fees');
+  return [...new Set(keys)];
+}
+
+/** "Seller & Provider Terms, Payments Terms and Data Processing Addendum" as links to the legal center (new tab). */
+function DocumentLinks({ keys, base }: { keys: LegalDocumentKey[]; base: string }) {
+  return keys.map((k, i) => (
+    <span key={k}>
+      {i === 0 ? '' : i === keys.length - 1 ? ' and ' : ', '}
+      <a href={`${base}${legalHref(k)}`} target="_blank" rel="noopener noreferrer">
+        {LEGAL_DOCUMENT_TITLES[k]}
+      </a>
+    </span>
+  ));
+}
+
 /**
  * Step 7: "Catalog, permits & licences" (sellers: categories, the food permit, beauty labelling) or "Services &
  * licences" (providers: services and their licences, insurance), with the agreements and the W-9 certification.
@@ -90,6 +112,7 @@ export function ComplianceStep({ status, ref }: StepProps) {
   const f = useStepForm(() => complianceValues(form));
   const v = f.values;
   const signer = w9Signer(form);
+  const storefront = useStorefrontUrl();
 
   useImperativeHandle(ref, () => ({
     save: (mode) =>
@@ -289,7 +312,11 @@ export function ComplianceStep({ status, ref }: StepProps) {
       <section aria-label="Agreements" className="flex flex-col gap-1.5 border-t border-border pt-3">
         <Checkbox
           id={fieldId('agreeTerms')}
-          label="I agree to the AfroTransact Seller & Provider Agreement and fee schedule"
+          label={
+            <>
+              I agree to the <DocumentLinks keys={agreementKeys(offering)} base={storefront} />
+            </>
+          }
           checked={v.agreeTerms}
           onChange={(e) => f.patch({ agreeTerms: e.target.checked }, ['agreeTerms'])}
           error={f.errors.agreeTerms}
@@ -297,7 +324,11 @@ export function ComplianceStep({ status, ref }: StepProps) {
         />
         <Checkbox
           id={fieldId('agreePolicy')}
-          label="I will follow the Prohibited Items and Services Policy"
+          label={
+            <>
+              I will follow the <DocumentLinks keys={['prohibited-items', 'community-guidelines']} base={storefront} />
+            </>
+          }
           checked={v.agreePolicy}
           onChange={(e) => f.patch({ agreePolicy: e.target.checked }, ['agreePolicy'])}
           error={f.errors.agreePolicy}

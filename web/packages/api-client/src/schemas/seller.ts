@@ -184,7 +184,9 @@ export const OnboardingFormSchema = z.object({
     insuranceDocumentAssetId: nullableString,
     agreementsAccepted: z.boolean().nullable(),
     w9Certified: z.boolean().nullable(),
-    w9SignerName: nullableString
+    w9SignerName: nullableString,
+    /** The legal documents accepted, each with the version in force when accepted. */
+    agreements: z.array(z.object({ key: z.string(), version: z.string(), acceptedOn: nullableString }))
   }),
   documents: z.array(z.object({ assetId: z.string(), kind: z.string(), label: z.string() })),
   prefilled: z.array(z.string()),
@@ -290,6 +292,8 @@ export interface OnboardingComplianceInput {
   agreementsAccepted?: boolean;
   w9Certified?: boolean;
   w9SignerName?: string;
+  /** The documents and versions shown; the BFF records the current version of every required document. */
+  agreements?: { key: string; version: string }[];
 }
 
 export const OnboardingStripeSessionSchema = z.object({

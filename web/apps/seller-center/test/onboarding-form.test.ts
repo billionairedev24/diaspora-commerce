@@ -100,7 +100,8 @@ const form = (over: Partial<OnboardingForm> = {}): OnboardingForm => ({
     insuranceDocumentAssetId: null,
     agreementsAccepted: null,
     w9Certified: null,
-    w9SignerName: null
+    w9SignerName: null,
+    agreements: []
   },
   documents: [],
   prefilled: ['business.contactEmail', 'business.phone', 'details.address', 'details.legalFirstName', 'details.legalLastName'],

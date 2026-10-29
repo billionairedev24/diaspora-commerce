@@ -7,7 +7,9 @@ import {
   createApiClient,
   LEGAL_DOCUMENT_ALIASES,
   LEGAL_DOCUMENT_KEYS,
+  LEGAL_DOCUMENT_TITLES,
   LEGAL_GROUPS,
+  legalGroupTitle,
   legalDocumentKeyOf,
   legalKeys,
   type LegalPage,
@@ -58,6 +60,14 @@ describe('legal document keys', () => {
       expect(LEGAL_DOCUMENT_KEYS).toContain(key);
       expect(LEGAL_DOCUMENT_KEYS).not.toContain(alias);
     }
+  });
+
+  it('has an English title and a section for every document', () => {
+    expect(Object.keys(LEGAL_DOCUMENT_TITLES).sort()).toEqual([...LEGAL_DOCUMENT_KEYS].sort());
+    expect(legalGroupTitle('seller-fees')).toBe('Payments and money');
+    expect(legalGroupTitle('privacy')).toBe('Privacy and cookies');
+    expect(legalGroupTitle('nope')).toBe('');
+    for (const key of LEGAL_DOCUMENT_KEYS) expect(legalGroupTitle(key), key).not.toBe('');
   });
 
   it('groups the index into the five sections with every document exactly once', () => {

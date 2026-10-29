@@ -1,6 +1,6 @@
 'use client';
 
-import { isApiError, type OnboardingForm, type OnboardingStatus, sellerKeys } from '@afrotransact/api-client';
+import { isApiError, LEGAL_DOCUMENT_TITLES, type LegalDocumentKey, type OnboardingForm, type OnboardingStatus, sellerKeys } from '@afrotransact/api-client';
 import { WarningCircle } from '@phosphor-icons/react/ssr';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -94,7 +94,14 @@ function sectionRows(st: OnboardingStatus): Record<string, Row[]> {
           ]
         : []),
       ...c.services.map((s): Row => [s.serviceName, `${dash(s.licenceNumber)} · ${dash(s.issuingState)} · expires ${dash(s.expiresOn)}`]),
-      ['Agreements', c.agreementsAccepted ? 'Accepted' : 'Not accepted yet'],
+      [
+        'Agreements',
+        c.agreementsAccepted
+          ? c.agreements.length
+            ? `Accepted: ${c.agreements.map((a) => `${LEGAL_DOCUMENT_TITLES[a.key as LegalDocumentKey] ?? a.key} ${a.version}`).join(', ')}`
+            : 'Accepted'
+          : 'Not accepted yet'
+      ],
       ['W-9 certification', c.w9Certified ? `Certified${c.w9SignerName ? ` by ${c.w9SignerName}` : ''}` : 'Not certified yet']
     ]
   };
