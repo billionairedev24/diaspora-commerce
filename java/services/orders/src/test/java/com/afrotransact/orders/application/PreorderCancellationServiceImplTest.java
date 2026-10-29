@@ -1,6 +1,7 @@
 package com.afrotransact.orders.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -117,8 +118,20 @@ class PreorderCancellationServiceImplTest {
         assertThat(PaymentLines.refundOf(paidAndCaptured).stream().mapToLong(r -> r.itemsMinor() + r.shippingMinor()
                 + r.taxMinor()).sum()).as("the refund includes the delivery fee").isEqualTo(paidAndCaptured.totalMinor());
 
+        // notifications tells each customer "refunded in full, delivery fee included" from these fields (S262): a
+        // PREORDER shipment, cancelled by AfroTransact (not the customer), with its captured state and full total.
+        ArgumentCaptor<Object> cancelledEvents = ArgumentCaptor.forClass(Object.class);
         verify(events, times(2)).publish(eq(OrdersEvents.SHIPMENT_CANCELLED), eq(OrdersEvents.AGGREGATE), any(),
-                any());
+                cancelledEvents.capture());
+        assertThat(cancelledEvents.getAllValues()).extracting(e -> (OrdersEventPayloads.ShipmentCancelled) e)
+                .extracting(OrdersEventPayloads.ShipmentCancelled::fulfilmentType,
+                        OrdersEventPayloads.ShipmentCancelled::windowId, OrdersEventPayloads.ShipmentCancelled::actorType,
+                        OrdersEventPayloads.ShipmentCancelled::captured, OrdersEventPayloads.ShipmentCancelled::totalMinor)
+                .containsExactlyInAnyOrder(
+                        tuple("PREORDER", "win-1", "PLATFORM_ADMIN", true,
+                                paidAndCaptured.totalMinor()),
+                        tuple("PREORDER", "win-1", "PLATFORM_ADMIN", false,
+                                authorised.totalMinor()));
         verify(events, times(2)).publish(eq(OrdersEvents.ORDER_CANCELLED), eq(OrdersEvents.AGGREGATE), any(), any());
         ArgumentCaptor<StatusChange> history = ArgumentCaptor.forClass(StatusChange.class);
         verify(orders, times(2)).appendHistory(history.capture(), any());
