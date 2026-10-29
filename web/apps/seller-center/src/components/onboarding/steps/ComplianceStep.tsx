@@ -89,7 +89,7 @@ export function agreementKeys(offering: OnboardingForm['business']['offering']):
   return [...new Set(keys)];
 }
 
-/** "Seller & Provider Terms, Payments Terms and Data Processing Addendum" as links to the legal center (new tab). */
+/** "Seller Terms, Payment Terms for Sellers and Providers and Data Processing Terms" as links to the legal center (new tab). */
 function DocumentLinks({ keys, base }: { keys: LegalDocumentKey[]; base: string }) {
   return keys.map((k, i) => (
     <span key={k}>

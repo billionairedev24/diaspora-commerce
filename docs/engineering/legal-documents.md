@@ -41,16 +41,17 @@ Short links redirect to the canonical key (`/legal/terms`, `/legal/privacy-notic
 ## Writing a document
 
 `docs/legal/<key>.en.md` is required (English is binding). Translations are `<key>.fr.md`, `.es.md`, `.ar.md`, `.yo.md`: until one
-exists the page shows the English text under a notice that English is the binding version.
+exists the page shows the English text under a notice that English is the binding version. Other files in the folder (`README.md`,
+`open-questions-*.md`, matrices) are notes, not documents, and are ignored.
 
 ```markdown
 ---
 key: gift-card-terms          # = the file name
 title: Gift Card Terms
-version: "1.1"                # major.minor[.patch], quoted; translations carry the same version
-effective: 2026-11-01         # the date it takes effect (shown on the page)
+version: 1.1                  # major.minor[.patch]; translations carry the same version
+effective: 2026-11-01         # the date it takes effect (shown on the page), or TBD-at-launch
 change_summary: Adds the dormant balance rules
-applies_to: [customers]       # informational
+applies_to: Anyone who buys or redeems a gift card     # informational
 draft: true                   # true = "Draft for legal counsel review - not yet in force" banner
 ---
 # Gift Card Terms
@@ -59,6 +60,14 @@ draft: true                   # true = "Draft for legal counsel review - not yet
 Text. Contact {legal} or {phone}.
 ```
 
+* Front matter is simple `key: value` lines (a colon inside a value is fine; an indented line continues the previous value). It is not parsed
+  as YAML. `title` and `applies_to` are informational: the page title comes from the content service and the app catalogues
+  (`LegalDocumentType`, `legal.doc.<key>` in the five storefront locales, `LEGAL_DOCUMENT_TITLES`), so keep the document's title
+  equal to the app's.
+* `effective: TBD-at-launch` (or any non-date) is loaded as the launch date: `--launch-date YYYY-MM-DD` or `LEGAL_LAUNCH_DATE`, default
+  2026-12-01. Change it once, regenerate, and every such document moves; staff can still amend a single date in the console.
+* `[[LEGAL: Qnn ...]]` counsel markers are allowed while `draft: true` (they show in the text on purpose) and fail the build once a document
+  says `draft: false`.
 * `# Title` first, then `##` sections. Each `##` becomes a numbered section and an "On this page" entry, so do not number headings
   yourself ("1. Scope" is shown as "Scope").
 * Supported Markdown: paragraphs, `###`/`####` sub-headings, `-` / `1.` lists with one nested level, pipe tables, `>` quotes, `---`,
@@ -81,7 +90,10 @@ The generated migration applies, per document:
    staff edits, raise the version number;
 4. a newer CURRENT version (raised in the staff console) is never touched.
 
-`build_seed.py` refuses a version lower than what the service seeds (for example `privacy` below 4.0, which would be a silent no-op).
+The seeded texts of the first nine documents are placeholders with an invented history (V5 says Conditions of Use 3.2, with archived 3.1
+and 3.0). A written version *lower* than a still-untouched seeded one (the first real Conditions of Use is 1.0) replaces the
+placeholder and its history (`build_seed.py` prints a note per document). If the placeholder was edited in the staff console it is not
+untouched and the written text is not loaded: raise the written version above it, or amend it in the console.
 The loader does not publish `legal.version-published` events or audit rows (those come from the staff console action); a deploy
 with a new migration changes `updated_at`, which refreshes the site-config fingerprint, so caches pick the change up within
 the 60 s cache window.
@@ -99,7 +111,7 @@ The file name carries a hash of every document (text, version, date, banner, sum
 identical name and content; `--check` fails when the hash differs, or when the file was edited by hand. Each migration contains
 every document and is idempotent, so a later migration simply supersedes an earlier one. Do not edit a deployed migration; add a
 new one by running the tool. Flyway versions are unique per service: the tool takes the next free number.
-Needs PyYAML (`pip install pyyaml`).
+Python 3 only (no packages).
 
 ## Acceptance
 

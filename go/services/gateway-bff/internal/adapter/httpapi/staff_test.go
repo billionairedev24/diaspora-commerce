@@ -497,7 +497,7 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case p == "/v1/legal":
 		writeJ(w, 200, map[string]any{"documents": []any{
 			map[string]any{"key": "privacy", "title": "Privacy Notice", "version": "4.0", "effectiveDate": "2026-09-01", "draftBanner": false},
-			map[string]any{"key": "seller-fees", "title": "Seller Fees & Charges", "version": "1.0", "effectiveDate": "2026-10-01", "draftBanner": true},
+			map[string]any{"key": "seller-fees", "title": "Seller Fees Summary", "version": "1.0", "effectiveDate": "2026-10-01", "draftBanner": true},
 			map[string]any{"key": "conditions-of-use", "title": "Conditions of Use", "version": "3.2", "effectiveDate": "2026-09-01", "draftBanner": true}}})
 	case strings.HasPrefix(p, "/v1/legal/"):
 		writeJ(w, 200, []any{map[string]any{"version": "3.2", "effectiveDate": "2026-09-01", "status": "CURRENT"}})

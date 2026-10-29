@@ -107,12 +107,12 @@ class BuildSeedTest(unittest.TestCase):
 
     def test_rejects_bad_documents_with_a_message_per_problem(self):
         cases = {
-            "bad-version": "lower than the 4.0 ",
+            "bad-markers": "[[LEGAL ...]] counsel marker(s) are still in the text",
             "bad-placeholder": "unknown placeholder {supportEmail}",
             "bad-no-english": "English is the binding text",
             "bad-key": "not a legal document key",
             "bad-no-sections": "at least one '## Section'",
-            "bad-front-matter": "without YAML front matter",
+            "bad-front-matter": "starts without front matter",
         }
         for folder, expected in cases.items():
             with self.subTest(folder):
@@ -120,6 +120,26 @@ class BuildSeedTest(unittest.TestCase):
                 self.assertEqual(code, 2)
                 self.assertIn(expected, err)
         self.assertEqual(self.generated(), [])
+
+    def test_first_written_documents_load_as_the_content_team_writes_them(self):
+        # Version 1.0 below the seeded 3.2/4.0 placeholders, "effective: TBD-at-launch", a colon in applies_to, a README and
+        # notes next to the documents, counsel markers in a draft.
+        code, out, err = self.run_tool("first")
+        self.assertEqual(code, 0, err)
+        self.assertIn("conditions-of-use: written 1.0 replaces the seeded placeholder 3.2", out)
+        self.assertIn("privacy: written 1.0 replaces the seeded placeholder 4.0", out)
+        [name] = self.generated()
+        with open(os.path.join(self.migrations, name), encoding="utf-8") as f:
+            sql = f.read()
+        self.assertIn("'2026-12-01'::date", sql)  # TBD-at-launch -> the launch date
+        self.assertEqual(self.run_tool("first", "--check")[0], 0)
+        # The launch date is a parameter, and is part of the hash.
+        launched = build_seed.run(os.path.join(DATA, "first"), self.migrations, launch_date="2027-01-15", out=io.StringIO())
+        self.assertEqual(launched, 0)
+        self.assertEqual(len(self.generated()), 2)
+        code, out, _ = self.run_tool("first", "--list")
+        self.assertIn("counsel marker(s)", out)
+        self.assertIn("conditions-of-use", out)
 
     def test_every_key_of_the_content_service_is_known(self):
         keys = build_seed.known_keys()
@@ -132,7 +152,7 @@ class BuildSeedTest(unittest.TestCase):
         code, out, _ = self.run_tool("ok", "--list")
         self.assertEqual(code, 0)
         self.assertIn("privacy", out)
-        self.assertIn("written 4.1 (en)", out)
+        self.assertIn("written 4.1 en effective 2026-11-15", out)
         self.assertIn("written not written", out)
 
     @unittest.skipUnless(os.environ.get("LEGAL_TEST_PG"), "LEGAL_TEST_PG not set")
@@ -174,6 +194,20 @@ class BuildSeedTest(unittest.TestCase):
         psql("update legal_version set draft_banner = false, updated_at = now() + interval '1 hour' where doc_type = 'sms-terms'", db)
         psql_file(path)
         self.assertEqual(psql("select draft_banner from legal_version where doc_type = 'sms-terms'", db), "f")
+        # The first written Conditions of Use (1.0) replaces the untouched 3.2 placeholder and its invented history; the
+        # amended (touched) privacy placeholder is left alone.
+        self.run_tool("first")
+        first_path = os.path.join(self.migrations, self.generated()[-1])
+        self.assertNotEqual(first_path, path)
+        psql("update legal_version set draft_banner = false, updated_at = now() + interval '1 hour' "
+             "where doc_type = 'conditions-of-use' and version = '3.2'", db)
+        psql_file(first_path)
+        self.assertEqual(psql("select version || ':' || status from legal_version where doc_type = 'conditions-of-use' order by major desc", db).split("\n"),
+                         ["3.2:CURRENT", "3.1:ARCHIVED", "3.0:ARCHIVED"])  # touched: never replaced
+        psql("update legal_version set updated_at = created_at where doc_type = 'conditions-of-use'", db)
+        psql_file(first_path)
+        self.assertEqual(psql("select version || ':' || status || ':' || created_by from legal_version where doc_type = 'conditions-of-use'", db),
+                         "1.0:CURRENT:legal-loader")
         # A newer version raised in the staff console is never replaced.
         psql("update legal_version set status = 'ARCHIVED', archived_at = now() where doc_type = 'privacy' and version = '4.1'", db)
         psql("insert into legal_version select gen_random_uuid(), doc_type, '5.0', 5, 0, 0, effective_date, 'CURRENT', true, bodies, "

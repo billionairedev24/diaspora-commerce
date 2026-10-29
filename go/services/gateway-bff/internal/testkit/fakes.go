@@ -239,12 +239,12 @@ var legalFixtureOrder = []string{"conditions-of-use", "privacy", "cookies", "pri
 
 var legalFixtureTitles = map[string]string{"conditions-of-use": "Conditions of Use", "privacy": "Privacy Notice",
 	"cookies": "Cookie Notice", "privacy-choices": "Your Privacy Choices", "returns": "Returns & Refunds",
-	"seller-terms": "Seller & Provider Terms", "prohibited-items": "Prohibited & Restricted Items",
+	"seller-terms": "Seller Terms", "prohibited-items": "Prohibited & Restricted Items",
 	"accessibility": "Accessibility Statement", "sms-terms": "SMS & Notification Terms", "gift-card-terms": "Gift Card Terms",
-	"store-credit-terms": "Store Credit Terms", "membership-terms": "Membership Terms", "referral-terms": "Referral Program Terms",
-	"preorder-delivery-terms": "Pre-order & Delivery Terms", "community-guidelines": "Community Guidelines",
-	"ip-policy": "Intellectual Property Policy", "provider-terms": "Service Provider Terms", "payments-terms": "Payments Terms",
-	"subprocessors": "Subprocessors", "data-processing": "Data Processing Addendum", "seller-fees": "Seller Fees & Charges"}
+	"store-credit-terms": "Store Credit Terms", "membership-terms": "Plus Membership Terms", "referral-terms": "Referral Program Terms",
+	"preorder-delivery-terms": "Pre-order and Delivery Run Terms", "community-guidelines": "Community Guidelines",
+	"ip-policy": "Intellectual Property and Copyright Policy", "provider-terms": "Service Provider Terms", "payments-terms": "Payment Terms for Sellers and Providers",
+	"subprocessors": "Sub-processors and Service Providers", "data-processing": "Data Processing Terms", "seller-fees": "Seller Fees Summary"}
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")

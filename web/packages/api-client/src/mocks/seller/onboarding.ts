@@ -218,7 +218,7 @@ export function stepErrors(key: OnboardingStepKey, app: MockApplication, kind: O
         req(blank(s.documentAssetId), `compliance.services[${i}].documentAssetId`);
       });
       if (c.services.some((s) => s.regulated)) req(blank(c.insuranceDocumentAssetId), 'compliance.insuranceDocumentAssetId');
-      if (c.agreementsAccepted !== true) e['compliance.agreementsAccepted'] = 'Accept the Seller & Provider Terms';
+      if (c.agreementsAccepted !== true) e['compliance.agreementsAccepted'] = 'Accept the Seller Terms';
       if (c.w9Certified !== true) e['compliance.w9Certified'] = 'Certify your taxpayer details (W-9)';
       break;
     }

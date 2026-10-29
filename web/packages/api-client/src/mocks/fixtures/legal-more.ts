@@ -33,7 +33,7 @@ export const MORE_LEGAL_DOCUMENTS: LegalDocumentFixture[] = [
   },
   {
     key: 'membership-terms',
-    title: 'Membership Terms',
+    title: 'Plus Membership Terms',
     versions: [
       {
         version: '1.0',
@@ -41,7 +41,7 @@ export const MORE_LEGAL_DOCUMENTS: LegalDocumentFixture[] = [
         status: 'CURRENT',
         draftBanner: true,
         changeSummary: 'First draft',
-        body: '# Membership Terms\n\nThe AfroTransact membership programme: fees, benefits, renewal and cancellation.\n\n## The programme\n\nMembership gives eligible orders delivery and other benefits described on the membership page when you join. Benefits can change; we give notice before any change takes effect.\n\n## Fees and renewal\n\nFees are shown in US dollars before you join. Membership renews at the end of each period at the then-current fee until you cancel. We email you before an annual renewal.\n\n## Free trials and promotions\n\nA trial converts to a paid membership unless cancelled before it ends. Promotional pricing applies only to the period stated.\n\n## Cancelling\n\nCancel in your account at any time. Benefits continue to the end of the paid period. Fees already paid are refunded only where the law requires or where we have not delivered the benefits.\n\n## Fair use\n\nBenefits are for personal use. We may end a membership that is used for resale or abuse, with a refund of the unused fee.\n'
+        body: '# Plus Membership Terms\n\nThe AfroTransact membership programme: fees, benefits, renewal and cancellation.\n\n## The programme\n\nMembership gives eligible orders delivery and other benefits described on the membership page when you join. Benefits can change; we give notice before any change takes effect.\n\n## Fees and renewal\n\nFees are shown in US dollars before you join. Membership renews at the end of each period at the then-current fee until you cancel. We email you before an annual renewal.\n\n## Free trials and promotions\n\nA trial converts to a paid membership unless cancelled before it ends. Promotional pricing applies only to the period stated.\n\n## Cancelling\n\nCancel in your account at any time. Benefits continue to the end of the paid period. Fees already paid are refunded only where the law requires or where we have not delivered the benefits.\n\n## Fair use\n\nBenefits are for personal use. We may end a membership that is used for resale or abuse, with a refund of the unused fee.\n'
       }
     ]
   },
@@ -61,7 +61,7 @@ export const MORE_LEGAL_DOCUMENTS: LegalDocumentFixture[] = [
   },
   {
     key: 'preorder-delivery-terms',
-    title: 'Pre-order & Delivery Terms',
+    title: 'Pre-order and Delivery Run Terms',
     versions: [
       {
         version: '1.0',
@@ -69,7 +69,7 @@ export const MORE_LEGAL_DOCUMENTS: LegalDocumentFixture[] = [
         status: 'CURRENT',
         draftBanner: true,
         changeSummary: 'First draft',
-        body: '# Pre-order & Delivery Terms\n\nPre-orders: charging, delivery windows, delays and cancellation.\n\n## Pre-orders\n\nA pre-order reserves an item that is not yet available. The expected delivery window is shown on the listing and in your order.\n\n## Payment\n\nThe payment timing is shown before you order: either charged when you place the pre-order or when the item ships. Deposits are shown separately.\n\n## Delivery windows and delays\n\nIf the delivery window will be missed, we tell you promptly and give you the choice to wait or cancel for a full refund.\n\n## Cancelling\n\nYou can cancel a pre-order before it ships for a full refund of what you paid. Once shipped, the Returns & Refunds policy applies.\n\n## Delivery\n\nDelivery terms, risk of loss and failed-delivery handling follow the Conditions of Use and the carrier information in your order.\n'
+        body: '# Pre-order and Delivery Run Terms\n\nPre-orders: charging, delivery windows, delays and cancellation.\n\n## Pre-orders\n\nA pre-order reserves an item that is not yet available. The expected delivery window is shown on the listing and in your order.\n\n## Payment\n\nThe payment timing is shown before you order: either charged when you place the pre-order or when the item ships. Deposits are shown separately.\n\n## Delivery windows and delays\n\nIf the delivery window will be missed, we tell you promptly and give you the choice to wait or cancel for a full refund.\n\n## Cancelling\n\nYou can cancel a pre-order before it ships for a full refund of what you paid. Once shipped, the Returns & Refunds policy applies.\n\n## Delivery\n\nDelivery terms, risk of loss and failed-delivery handling follow the Conditions of Use and the carrier information in your order.\n'
       }
     ]
   },
@@ -89,7 +89,7 @@ export const MORE_LEGAL_DOCUMENTS: LegalDocumentFixture[] = [
   },
   {
     key: 'ip-policy',
-    title: 'Intellectual Property Policy',
+    title: 'Intellectual Property and Copyright Policy',
     versions: [
       {
         version: '1.0',
@@ -97,7 +97,7 @@ export const MORE_LEGAL_DOCUMENTS: LegalDocumentFixture[] = [
         status: 'CURRENT',
         draftBanner: true,
         changeSummary: 'First draft',
-        body: '# Intellectual Property Policy\n\nReporting infringement and responding to a report.\n\n## Our approach\n\nWe respect intellectual property rights and expect sellers, providers and members to do the same. We remove content and listings when we receive a valid notice.\n\n## Reporting infringement\n\nSend a notice to {legal} identifying the work, the listing or content, your contact details, a statement of good faith belief and a statement that the notice is accurate under penalty of perjury, with your signature.\n\n## Responding to a notice\n\nWe tell the affected seller or provider, who may send a counter-notice. We may restore the content if the rights holder does not file a court action within the period the law allows.\n\n## Repeat infringers\n\nWe close the accounts of sellers and members who repeatedly infringe.\n'
+        body: '# Intellectual Property and Copyright Policy\n\nReporting infringement and responding to a report.\n\n## Our approach\n\nWe respect intellectual property rights and expect sellers, providers and members to do the same. We remove content and listings when we receive a valid notice.\n\n## Reporting infringement\n\nSend a notice to {legal} identifying the work, the listing or content, your contact details, a statement of good faith belief and a statement that the notice is accurate under penalty of perjury, with your signature.\n\n## Responding to a notice\n\nWe tell the affected seller or provider, who may send a counter-notice. We may restore the content if the rights holder does not file a court action within the period the law allows.\n\n## Repeat infringers\n\nWe close the accounts of sellers and members who repeatedly infringe.\n'
       }
     ]
   },
@@ -111,13 +111,13 @@ export const MORE_LEGAL_DOCUMENTS: LegalDocumentFixture[] = [
         status: 'CURRENT',
         draftBanner: true,
         changeSummary: 'First draft',
-        body: '# Service Provider Terms\n\nTerms for providers who list and perform services on AfroTransact.\n\n## Agreement\n\nThese terms apply to individuals and businesses who offer services on AfroTransact. They add to the Conditions of Use, the Payments Terms and the Data Processing Addendum.\n\n## Independent providers\n\nYou are an independent provider, not an employee or agent of AfroTransact. You set your services, hold the licences and insurance your services require, and are responsible for the work.\n\n## Bookings and cancellations\n\nYou honour confirmed bookings and the cancellation policy shown to customers. Repeated no-shows can lead to restrictions.\n\n## Fees and payouts\n\nFees are shown in the fee schedule and in your Provider Hub. Payouts follow the Payments Terms.\n\n## Conduct and safety\n\nYou follow the Community Guidelines, the Prohibited and Restricted Items policy where relevant and applicable law. We may suspend providers for safety or fraud risks.\n\n## Ending\n\nYou may stop offering services at any time after completing confirmed bookings. We may suspend or end access for breach of these terms.\n'
+        body: '# Service Provider Terms\n\nTerms for providers who list and perform services on AfroTransact.\n\n## Agreement\n\nThese terms apply to individuals and businesses who offer services on AfroTransact. They add to the Conditions of Use, the Payment Terms for Sellers and Providers and the Data Processing Terms.\n\n## Independent providers\n\nYou are an independent provider, not an employee or agent of AfroTransact. You set your services, hold the licences and insurance your services require, and are responsible for the work.\n\n## Bookings and cancellations\n\nYou honour confirmed bookings and the cancellation policy shown to customers. Repeated no-shows can lead to restrictions.\n\n## Fees and payouts\n\nFees are shown in the fee schedule and in your Provider Hub. Payouts follow the Payment Terms for Sellers and Providers.\n\n## Conduct and safety\n\nYou follow the Community Guidelines, the Prohibited and Restricted Items policy where relevant and applicable law. We may suspend providers for safety or fraud risks.\n\n## Ending\n\nYou may stop offering services at any time after completing confirmed bookings. We may suspend or end access for breach of these terms.\n'
       }
     ]
   },
   {
     key: 'payments-terms',
-    title: 'Payments Terms',
+    title: 'Payment Terms for Sellers and Providers',
     versions: [
       {
         version: '1.0',
@@ -125,13 +125,13 @@ export const MORE_LEGAL_DOCUMENTS: LegalDocumentFixture[] = [
         status: 'CURRENT',
         draftBanner: true,
         changeSummary: 'First draft',
-        body: '# Payments Terms\n\nHow payments, payouts, refunds and chargebacks work for sellers and providers.\n\n## Payment processing\n\nPayments are processed by Stripe. By selling or providing services you also accept Stripe’s Connected Account Agreement.\n\n## Payouts\n\nNet proceeds are paid out to your bank account on the schedule shown in your Seller Center or Provider Hub. We may hold payouts for risk review, disputes or missing information.\n\n## Refunds and chargebacks\n\nRefunds approved under the Returns & Refunds policy are deducted from your balance. You are responsible for chargebacks on your orders and may be asked for evidence.\n\n## Taxes\n\nWe collect and remit sales tax where marketplace facilitator laws require. You are responsible for your own income taxes and provide the tax information we request.\n\n## Reserves and set-off\n\nWe may keep a reserve or set off amounts you owe against future payouts, with notice.\n'
+        body: '# Payment Terms for Sellers and Providers\n\nHow payments, payouts, refunds and chargebacks work for sellers and providers.\n\n## Payment processing\n\nPayments are processed by Stripe. By selling or providing services you also accept Stripe’s Connected Account Agreement.\n\n## Payouts\n\nNet proceeds are paid out to your bank account on the schedule shown in your Seller Center or Provider Hub. We may hold payouts for risk review, disputes or missing information.\n\n## Refunds and chargebacks\n\nRefunds approved under the Returns & Refunds policy are deducted from your balance. You are responsible for chargebacks on your orders and may be asked for evidence.\n\n## Taxes\n\nWe collect and remit sales tax where marketplace facilitator laws require. You are responsible for your own income taxes and provide the tax information we request.\n\n## Reserves and set-off\n\nWe may keep a reserve or set off amounts you owe against future payouts, with notice.\n'
       }
     ]
   },
   {
     key: 'subprocessors',
-    title: 'Subprocessors',
+    title: 'Sub-processors and Service Providers',
     versions: [
       {
         version: '1.0',
@@ -139,13 +139,13 @@ export const MORE_LEGAL_DOCUMENTS: LegalDocumentFixture[] = [
         status: 'CURRENT',
         draftBanner: true,
         changeSummary: 'First draft',
-        body: '# Subprocessors\n\nThe companies that process personal data for AfroTransact and what they do.\n\n## About this list\n\nAfroTransact uses subprocessors to run the marketplace. Each is bound by a data processing agreement. This page is updated before a new subprocessor starts processing.\n\n## Current subprocessors\n\nPayments: Stripe. Hosting and infrastructure: the cloud provider for the market you use. Email and messaging: our transactional email and SMS providers. Support tooling and analytics: providers named in the Cookie Notice.\n\n## Changes and objections\n\nCustomers who have signed the Data Processing Addendum are notified of changes. Write to {privacy} to object.\n'
+        body: '# Sub-processors and Service Providers\n\nThe companies that process personal data for AfroTransact and what they do.\n\n## About this list\n\nAfroTransact uses subprocessors to run the marketplace. Each is bound by a data processing agreement. This page is updated before a new subprocessor starts processing.\n\n## Current subprocessors\n\nPayments: Stripe. Hosting and infrastructure: the cloud provider for the market you use. Email and messaging: our transactional email and SMS providers. Support tooling and analytics: providers named in the Cookie Notice.\n\n## Changes and objections\n\nCustomers who have signed the Data Processing Terms are notified of changes. Write to {privacy} to object.\n'
       }
     ]
   },
   {
     key: 'data-processing',
-    title: 'Data Processing Addendum',
+    title: 'Data Processing Terms',
     versions: [
       {
         version: '1.0',
@@ -153,13 +153,13 @@ export const MORE_LEGAL_DOCUMENTS: LegalDocumentFixture[] = [
         status: 'CURRENT',
         draftBanner: true,
         changeSummary: 'First draft',
-        body: '# Data Processing Addendum\n\nHow AfroTransact and sellers or providers handle personal data of customers.\n\n## Scope and roles\n\nThis addendum applies where a seller or provider receives personal data of customers to fulfil orders or bookings. Each party is an independent controller of the data it holds for its own purposes.\n\n## Use limits\n\nYou use customer data only to fulfil the order or booking, provide support, meet legal duties and prevent fraud. You do not sell it or use it for marketing without consent.\n\n## Security\n\nYou protect the data with appropriate technical and organisational measures and report a personal data breach to {privacy} without undue delay.\n\n## Requests and deletion\n\nYou help with privacy requests promptly and delete customer data when you no longer need it.\n\n## Subprocessors and transfers\n\nYou may use subprocessors under written terms no less protective than this addendum. Transfers outside the customer’s country follow the safeguards the law requires.\n'
+        body: '# Data Processing Terms\n\nHow AfroTransact and sellers or providers handle personal data of customers.\n\n## Scope and roles\n\nThis addendum applies where a seller or provider receives personal data of customers to fulfil orders or bookings. Each party is an independent controller of the data it holds for its own purposes.\n\n## Use limits\n\nYou use customer data only to fulfil the order or booking, provide support, meet legal duties and prevent fraud. You do not sell it or use it for marketing without consent.\n\n## Security\n\nYou protect the data with appropriate technical and organisational measures and report a personal data breach to {privacy} without undue delay.\n\n## Requests and deletion\n\nYou help with privacy requests promptly and delete customer data when you no longer need it.\n\n## Sub-processors and Service Providers and transfers\n\nYou may use subprocessors under written terms no less protective than this addendum. Transfers outside the customer’s country follow the safeguards the law requires.\n'
       }
     ]
   },
   {
     key: 'seller-fees',
-    title: 'Seller Fees & Charges',
+    title: 'Seller Fees Summary',
     versions: [
       {
         version: '1.0',
@@ -167,7 +167,7 @@ export const MORE_LEGAL_DOCUMENTS: LegalDocumentFixture[] = [
         status: 'CURRENT',
         draftBanner: true,
         changeSummary: 'First draft',
-        body: '# Seller Fees & Charges\n\nPlans, referral fees, fulfilment and other charges for selling on AfroTransact.\n\n## Plans\n\nSellers choose a plan in Seller Center. The monthly or annual plan fee and the features included are shown when you choose.\n\n## Referral fees\n\nA referral fee is a percentage of the item price and shipping for each sale, by category, as shown in the fee schedule in Seller Center.\n\n## Fulfilment and shipping\n\nIf you use Fulfilled by AfroTransact, fulfilment and storage fees apply. Shipping labels bought through AfroTransact are charged at the rates shown at purchase.\n\n## Other charges\n\nAdvertising, returns processing and refunds administration fees are shown before you accept them.\n\n## Changes\n\nWe give at least 30 days’ notice of fee increases.\n'
+        body: '# Seller Fees Summary\n\nPlans, referral fees, fulfilment and other charges for selling on AfroTransact.\n\n## Plans\n\nSellers choose a plan in Seller Center. The monthly or annual plan fee and the features included are shown when you choose.\n\n## Referral fees\n\nA referral fee is a percentage of the item price and shipping for each sale, by category, as shown in the fee schedule in Seller Center.\n\n## Fulfilment and shipping\n\nIf you use Fulfilled by AfroTransact, fulfilment and storage fees apply. Shipping labels bought through AfroTransact are charged at the rates shown at purchase.\n\n## Other charges\n\nAdvertising, returns processing and refunds administration fees are shown before you accept them.\n\n## Changes\n\nWe give at least 30 days’ notice of fee increases.\n'
       }
     ]
   }

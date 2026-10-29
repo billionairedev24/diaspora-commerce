@@ -133,7 +133,7 @@ const FIRST_NINE: LegalDocumentFixture[] = [
   },
   {
     key: 'seller-terms',
-    title: 'Seller & Provider Terms',
+    title: 'Seller Terms',
     versions: [
       {
         version: '2.4',
@@ -141,7 +141,7 @@ const FIRST_NINE: LegalDocumentFixture[] = [
         status: 'CURRENT',
         draftBanner: true,
         changeSummary: 'Adds notifications, SMS and current contact details',
-        body: '# Seller & Provider Terms\n\n## Eligibility\n\nSellers and providers must complete Stripe Connect verification and AfroTransact’s document review before going live. Licences, permits and insurance must stay current.\n\n## Fees\n\nAfroTransact charges a referral fee per sale or booking and a monthly plan fee where applicable. Current rates are shown in Seller Central and the plan page; we give 30 days’ notice of changes.\n\n## Payouts\n\nEarnings are held for at least 7 days after delivery (products) or service completion (services) so payments settle and returns or disputes can be raised. Released earnings appear as your available balance. You request payouts from your AfroTransact dashboard (minimum $25, one request per day); we review and send approved payouts by ACH to your verified bank account, normally within 1–2 business days. Payments are processed by Stripe on our behalf — you do not need a Stripe account login. We may hold specific funds while a return, dispute, chargeback or policy review is open, and unclaimed balances are paid out automatically before any legal holding limit.\n\n## Listings and conduct\n\nListings must be accurate and comply with the Prohibited & Restricted Items policy. Do not divert customers off AfroTransact or manipulate reviews.\n\n## Performance\n\nWe measure late shipments, cancellations, defects and response time. Accounts below standard may be limited or suspended after notice and a chance to appeal.\n'
+        body: '# Seller Terms\n\n## Eligibility\n\nSellers and providers must complete Stripe Connect verification and AfroTransact’s document review before going live. Licences, permits and insurance must stay current.\n\n## Fees\n\nAfroTransact charges a referral fee per sale or booking and a monthly plan fee where applicable. Current rates are shown in Seller Central and the plan page; we give 30 days’ notice of changes.\n\n## Payouts\n\nEarnings are held for at least 7 days after delivery (products) or service completion (services) so payments settle and returns or disputes can be raised. Released earnings appear as your available balance. You request payouts from your AfroTransact dashboard (minimum $25, one request per day); we review and send approved payouts by ACH to your verified bank account, normally within 1–2 business days. Payments are processed by Stripe on our behalf — you do not need a Stripe account login. We may hold specific funds while a return, dispute, chargeback or policy review is open, and unclaimed balances are paid out automatically before any legal holding limit.\n\n## Listings and conduct\n\nListings must be accurate and comply with the Prohibited & Restricted Items policy. Do not divert customers off AfroTransact or manipulate reviews.\n\n## Performance\n\nWe measure late shipments, cancellations, defects and response time. Accounts below standard may be limited or suspended after notice and a chance to appeal.\n'
       },
       {
         version: '2.3',
@@ -149,7 +149,7 @@ const FIRST_NINE: LegalDocumentFixture[] = [
         status: 'ARCHIVED',
         draftBanner: true,
         changeSummary: 'Archived',
-        body: '# Seller & Provider Terms (version 2.3)\n\n## Archived version\n\nVersion 2.3 of the Seller & Provider Terms applied from 2026-04-01 until 2026-09-01, when version 2.4 replaced it. Write to {legal} for a certified copy of the full text.\n'
+        body: '# Seller Terms (version 2.3)\n\n## Archived version\n\nVersion 2.3 of the Seller Terms applied from 2026-04-01 until 2026-09-01, when version 2.4 replaced it. Write to {legal} for a certified copy of the full text.\n'
       }
     ]
   },
