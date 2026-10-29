@@ -58,12 +58,12 @@ test.describe('storefront · your account', () => {
     await code.fill('abcd efgh');
     await expect(code).toHaveValue('ABCD-EFGH');
     await expect(redeem).toBeDisabled();
-    await code.fill('abcd efgh jklm 2345');
-    await expect(code).toHaveValue('ABCD-EFGH-JKLM-2345');
+    await code.fill('aaaa bbbb cccc dddd');
+    await expect(code).toHaveValue('AAAA-BBBB-CCCC-DDDD');
     await expect(redeem).toBeEnabled();
     await redeem.click();
-    // The demo card redeems once per server run; either answer is shown inline, next to the field.
-    await expect(page.getByText(/added to your credit|already redeemed/).first()).toBeVisible();
+    // A wrong code is refused inline under the field (the real redeem changes the shared mock balance, so vitest covers it).
+    await expect(page.getByText('That code isn’t valid. Check it and try again.')).toBeVisible();
 
     await expect(page.getByRole('link', { name: 'Buy a gift card' })).toHaveAttribute('href', '/gift-cards');
     const table = page.getByRole('table', { name: 'Credit activity' });
@@ -114,6 +114,7 @@ test.describe('storefront · your account', () => {
   test('membership: manage view shows the plan, the refund rule and one cancel path, or the way in', async ({ page }) => {
     await page.goto('/account/membership');
     await expect(page.getByRole('heading', { level: 1, name: 'Your membership' })).toBeVisible();
+    await expect(page.getByTestId('membership-none').or(page.getByTestId('membership-plan'))).toBeVisible();
     if (await page.getByTestId('membership-none').isVisible()) {
       await expect(page.getByRole('link', { name: 'AfroTransact Membership' })).toHaveAttribute('href', '/membership');
       return;
