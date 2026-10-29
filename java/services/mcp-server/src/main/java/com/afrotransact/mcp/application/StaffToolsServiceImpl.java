@@ -61,6 +61,13 @@ class StaffToolsServiceImpl implements StaffToolsService {
     }
 
     @Override
+    public ToolResult categoryRequestsQueue(McpCaller caller, String status) {
+        guard.require(caller.profile(), ToolCatalog.CATEGORY_REQUESTS_QUEUE);
+        String wanted = status == null || status.isBlank() ? null : status.trim().toUpperCase(Locale.ROOT);
+        return Results.from(catalog.categoryRequests(wanted, caller.bearerToken()), "category requests");
+    }
+
+    @Override
     public ToolResult orderPaymentSplit(McpCaller caller, String orderId) {
         guard.require(caller.profile(), ToolCatalog.ORDER_PAYMENT_SPLIT);
         return Results.from(payments.orderSplit(orderId == null ? "" : orderId.trim(), caller.bearerToken()),

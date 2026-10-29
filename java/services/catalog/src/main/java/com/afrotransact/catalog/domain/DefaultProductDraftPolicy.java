@@ -22,7 +22,7 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
             errors.put("title", "At most " + MAX_TITLE + " characters");
         }
 
-        for (AttributeDefinition def : type.attributes()) {
+        for (AttributeDefinition def : type.applicableAttributes()) {
             String problem = def.problem(draft.attributes().get(def.key()));
             if (problem != null) {
                 errors.put("attributes." + def.key(), problem);

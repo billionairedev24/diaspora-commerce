@@ -10,7 +10,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Full active category tree (department › category › product type) */
+        /**
+         * Full active category tree (department › category › product type)
+         * @description includeRetired=true also lists retired nodes, for consumers that resolve the category of an existing product.
+         */
         get: operations["tree"];
         put?: never;
         post?: never;
@@ -64,7 +67,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Approve a category request; waiting products move into listing review */
+        /** Approve a category request, creating its category and product type in one step; waiting products move into listing review */
         post: operations["approve_1"];
         delete?: never;
         options?: never;
@@ -961,6 +964,233 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/category-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One category request with the products waiting on it (catalog:taxonomy) */
+        get: operations["requestDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/category-requests/{id}/approval-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What approving would create, without creating it (catalog:taxonomy) */
+        post: operations["previewApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/taxonomy/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audit trail of taxonomy changes, newest first */
+        get: operations["taxonomyAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/taxonomy/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a department, category or product type
+         * @description A product type uses an existing schema (productType) or defines a new one (newProductType). 422 for duplicate names or codes, a wrong parent level or a retired parent.
+         */
+        post: operations["createNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/taxonomy/nodes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Rename a node; the paths below it follow
+         * @description If-Match: the version read with the record (412 catalog.version-mismatch when it changed since, 428 when missing). Every change carries a reason.
+         */
+        patch: operations["renameNode"];
+        trace?: never;
+    };
+    "/v1/taxonomy/nodes/{id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a category to another department or a product type to another category
+         * @description If-Match: the version read with the record (412 catalog.version-mismatch when it changed since, 428 when missing). Every change carries a reason.
+         */
+        post: operations["moveNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/taxonomy/nodes/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore a retired node
+         * @description If-Match: the version read with the record (412 catalog.version-mismatch when it changed since, 428 when missing). Every change carries a reason.
+         */
+        post: operations["restoreNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/taxonomy/nodes/{id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire a node (soft)
+         * @description 409 catalog.taxonomy-in-use while the node or anything under it has products. A retired node stays on existing products but cannot be chosen for new ones. If-Match: the version read with the record (412 catalog.version-mismatch when it changed since, 428 when missing). Every change carries a reason.
+         */
+        post: operations["retireNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/taxonomy/product-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Product-type schemas with where they are used */
+        get: operations["listTaxonomyProductTypes"];
+        put?: never;
+        /** Create a product-type schema */
+        post: operations["createProductType"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/taxonomy/product-types/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One product-type schema with every attribute, including those that do not apply */
+        get: operations["getTaxonomyProductType"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit a product type: label, identifier rule, traits and attributes
+         * @description Only the fields sent change. Sales-tax question (tax_class) wording and choices are owned by tax-returns and cannot be edited. If-Match: the version read with the record (412 catalog.version-mismatch when it changed since, 428 when missing). Every change carries a reason.
+         */
+        patch: operations["updateProductType"];
+        trace?: never;
+    };
+    "/v1/taxonomy/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set the display order of the children of a node (or of the departments)
+         * @description ids is every child of the parent, retired ones included; 412 when the list changed.
+         */
+        post: operations["reorderNodes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/taxonomy/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The whole tree with retired nodes, product counts and the pending-request count */
+        get: operations["taxonomyTree"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1339,6 +1569,8 @@ export interface components {
             reference?: string;
             orgId?: string;
             path?: string;
+            parentPath?: string;
+            name?: string;
             exampleProduct?: string;
             detailsNeeded?: string;
             status?: string;
@@ -1349,14 +1581,19 @@ export interface components {
             createdAt?: string;
             /** Format: date-time */
             decidedAt?: string;
+            /** Format: int64 */
+            productsWaiting?: number;
         };
         RejectCategoryRequest: {
             note: string;
         };
+        /** @description parentCategoryId is a department (a category named categoryName, default the requested name, is created for it) or a category. Give productType (an existing schema) or newProductType (a new one), not both. */
         ApproveCategoryRequest: {
             /** Format: uuid */
             parentCategoryId: string;
-            productType: string;
+            categoryName?: string;
+            productType?: string;
+            newProductType?: components["schemas"]["TaxonomyNewProductType"];
             note?: string;
         };
         VariantLookup: {
@@ -1602,6 +1839,7 @@ export interface components {
             /** @enum {string} */
             section?: "DETAILS" | "FOOD" | "REGULATED";
             help?: string;
+            applies?: boolean;
         };
         /** @description Attributes carry kind (TEXT, MULTILINE, ENUM, NUMBER), units, the form section (DETAILS, FOOD, REGULATED) and a help line; traits decide the conditional form sections */
         ProductType: {
@@ -1783,6 +2021,184 @@ export interface components {
             /** Format: int32 */
             products: number;
         };
+        /** @description parentId null orders the departments; ids must be every child of the parent, retired ones included */
+        ReorderTaxonomyNodes: {
+            /** Format: uuid */
+            parentId?: string;
+            ids: string[];
+            reason: string;
+        };
+        TaxonomyNode: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            parentId?: string;
+            code?: string;
+            name?: string;
+            level?: string;
+            productType?: string;
+            productTypeLabel?: string;
+            path?: string;
+            /** Format: int32 */
+            position?: number;
+            active?: boolean;
+            /** Format: date-time */
+            retiredAt?: string;
+            retiredReason?: string;
+            /** Format: int64 */
+            version?: number;
+            /** Format: int64 */
+            productCount?: number;
+            /** Format: int64 */
+            subtreeProductCount?: number;
+            /** Format: int32 */
+            childCount?: number;
+        };
+        CreateTaxonomyProductType: {
+            code?: string;
+            label: string;
+            /** @enum {string} */
+            identifierRule: "GTIN" | "ISBN";
+            traits?: components["schemas"]["TaxonomyTraits"];
+            attributes?: components["schemas"]["TaxonomyAttribute"][];
+            basedOn?: string;
+            reason: string;
+        };
+        /** @description One detail a product type asks for. applies=false keeps the definition but stops asking (brand is just an attribute; a Books type has none). */
+        TaxonomyAttribute: {
+            key: string;
+            label: string;
+            options?: string[];
+            required?: boolean;
+            /** @enum {string} */
+            kind: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER";
+            units?: string[];
+            /** @enum {string} */
+            section?: "DETAILS" | "FOOD" | "REGULATED";
+            help?: string;
+            applies?: boolean;
+        };
+        TaxonomyTraits: {
+            food?: boolean;
+            perishable?: boolean;
+            regulated?: boolean;
+            preorder?: boolean;
+        };
+        /** @description A product-type schema as staff edit it: every attribute including the ones that do not apply, the version to send as If-Match, and where it is used */
+        TaxonomyProductType: {
+            code?: string;
+            label?: string;
+            identifierRule?: string;
+            traits?: components["schemas"]["ProductTypeTraits"];
+            attributes?: components["schemas"]["AttributeDefinition"][];
+            themes?: components["schemas"]["VariationTheme"][];
+            /** Format: int64 */
+            version?: number;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: int64 */
+            productCount?: number;
+            usedBy?: components["schemas"]["TaxonomyTypeUse"][];
+        };
+        TaxonomyTypeUse: {
+            /** Format: uuid */
+            nodeId?: string;
+            path?: string;
+            active?: boolean;
+        };
+        CreateTaxonomyNode: {
+            /** @enum {string} */
+            level: "DEPARTMENT" | "CATEGORY" | "PRODUCT_TYPE";
+            /** Format: uuid */
+            parentId?: string;
+            name: string;
+            code?: string;
+            productType?: string;
+            newProductType?: components["schemas"]["TaxonomyNewProductType"];
+            reason: string;
+        };
+        TaxonomyNewProductType: {
+            code?: string;
+            label: string;
+            /** @enum {string} */
+            identifierRule: "GTIN" | "ISBN";
+            traits?: components["schemas"]["TaxonomyTraits"];
+            attributes?: components["schemas"]["TaxonomyAttribute"][];
+            basedOn?: string;
+        };
+        TaxonomyReason: {
+            reason: string;
+        };
+        MoveTaxonomyNode: {
+            /** Format: uuid */
+            parentId: string;
+            reason: string;
+        };
+        /** @description What approving the request would create; nothing is created by asking */
+        ApprovalPlan: {
+            nodes?: components["schemas"]["PlannedNode"][];
+            productType?: components["schemas"]["PlannedProductType"];
+            /** Format: int64 */
+            productsMoving?: number;
+        };
+        PlannedNode: {
+            level?: string;
+            name?: string;
+            path?: string;
+            created?: boolean;
+        };
+        PlannedProductType: {
+            code?: string;
+            label?: string;
+            created?: boolean;
+            /** Format: int32 */
+            attributeCount?: number;
+        };
+        /** @description Only the fields sent change; attributes, when sent, is the whole new list */
+        UpdateTaxonomyProductType: {
+            label?: string;
+            /** @enum {string} */
+            identifierRule?: "GTIN" | "ISBN";
+            traits?: components["schemas"]["TaxonomyTraits"];
+            attributes?: components["schemas"]["TaxonomyAttribute"][];
+            reason: string;
+        };
+        RenameTaxonomyNode: {
+            name: string;
+            reason: string;
+        };
+        TaxonomyTree: {
+            nodes?: components["schemas"]["TaxonomyNode"][];
+            /** Format: int64 */
+            pendingRequests?: number;
+        };
+        TaxonomyAuditEntry: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: date-time */
+            at?: string;
+            actorId?: string;
+            action?: string;
+            subjectKind?: string;
+            subjectId?: string;
+            subjectLabel?: string;
+            reason?: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description A request with the products waiting on it and the department or category its requested path points to (null when the path does not exist) */
+        CategoryRequestDetail: {
+            request?: components["schemas"]["CategoryRequest"];
+            products?: components["schemas"]["WaitingProduct"][];
+            suggestedParent?: components["schemas"]["CategoryNode"];
+        };
+        WaitingProduct: {
+            /** Format: uuid */
+            id?: string;
+            atin?: string;
+            title?: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -1794,7 +2210,9 @@ export type $defs = Record<string, never>;
 export interface operations {
     tree: {
         parameters: {
-            query?: never;
+            query?: {
+                includeRetired?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3218,6 +3636,351 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["VariantLookup"];
+                };
+            };
+        };
+    };
+    requestDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CategoryRequestDetail"];
+                };
+            };
+        };
+    };
+    previewApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApproveCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApprovalPlan"];
+                };
+            };
+        };
+    };
+    taxonomyAudit: {
+        parameters: {
+            query?: {
+                subject?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyAuditEntry"][];
+                };
+            };
+        };
+    };
+    createNode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTaxonomyNode"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyNode"];
+                };
+            };
+        };
+    };
+    renameNode: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameTaxonomyNode"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyNode"];
+                };
+            };
+        };
+    };
+    moveNode: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveTaxonomyNode"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyNode"];
+                };
+            };
+        };
+    };
+    restoreNode: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxonomyReason"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyNode"];
+                };
+            };
+        };
+    };
+    retireNode: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxonomyReason"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyNode"];
+                };
+            };
+        };
+    };
+    listTaxonomyProductTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyProductType"][];
+                };
+            };
+        };
+    };
+    createProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTaxonomyProductType"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyProductType"];
+                };
+            };
+        };
+    };
+    getTaxonomyProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyProductType"];
+                };
+            };
+        };
+    };
+    updateProductType: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTaxonomyProductType"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyProductType"];
+                };
+            };
+        };
+    };
+    reorderNodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderTaxonomyNodes"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyNode"][];
+                };
+            };
+        };
+    };
+    taxonomyTree: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["TaxonomyTree"];
                 };
             };
         };

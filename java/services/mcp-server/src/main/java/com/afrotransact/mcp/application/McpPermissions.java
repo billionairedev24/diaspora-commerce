@@ -5,6 +5,7 @@ public final class McpPermissions {
 
     public static final String CATALOG_WRITE = "catalog:write";
     public static final String CATALOG_MODERATE = "catalog:moderate";
+    public static final String CATALOG_TAXONOMY = "catalog:taxonomy";
     public static final String ORDERS_READ = "orders:read";
     public static final String ORDERS_UPDATE_STATUS = "orders:update-status";
     public static final String INVENTORY_READ = "inventory:read";

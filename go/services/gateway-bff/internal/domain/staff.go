@@ -48,7 +48,7 @@ var StaffNav = []StaffNavGroupDef{
 	}},
 	{"commerce", "Commerce", []StaffModule{
 		{"orders", "orders", "Orders & shipments", "All marketplace and AfroTransact Retail orders."},
-		{"catalog", "catalog", "Listing moderation", "AI-flagged listings awaiting a human decision."},
+		{"catalog", "catalog", "Catalog", "Listing moderation, products, the category tree with its product-type details, and seller category requests."},
 		{"inventory", "inventory", "Inventory", "AfroTransact-owned and FBA stock by fulfilment centre, lot by lot."},
 		{"retail", "retail", "AfroTransact Retail (1P)", "Purchase orders for AfroTransact-owned and AfroTransact Brand inventory."},
 		{"dispatch", "dispatch", "Delivery dispatch", "AfroTransact Delivery routes, drivers and internal delivery."},
@@ -280,7 +280,7 @@ func RefundLimitProblem(limit int64) *Problem {
 // ---------------------------------------------------------------- tables and sheets
 
 // ResourceKeys are the tables of the console (contract ResourceKey).
-var ResourceKeys = []string{"users", "roles", "applications", "organisations", "connect-accounts", "orders", "products", "moderation", "product-reviews", "claims", "returns", "payouts",
+var ResourceKeys = []string{"users", "roles", "applications", "organisations", "connect-accounts", "orders", "products", "category-requests", "moderation", "product-reviews", "claims", "returns", "payouts",
 	"inventory", "purchase-orders", "routes", "support-cases", "audit", "markets", "site-settings", "legal-documents", "help-articles", "privacy-requests", "announcements",
 	"placements", "identity-providers", "fee-schedules", "tax-rates", "tax-codes", "tax-rules", "tax-review", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events", "pickup-locations", "coupons",
 	"reconciliation", "reconciliation-runs", "ledger-adjustments", "credit-adjustments", "gift-cards", "credit-liabilities", "money-settings", "membership-tiers", "memberships", "membership-settings", "membership-report", "referrals", "referral-settings", "stripe-lookup", "payment-settings", "tax-settings", "maintenance", "tax-filings", "tax-nexus",

@@ -70,6 +70,15 @@ public interface ProductRepository {
 
     boolean sellerSkuTaken(String orgId, String sellerSku);
 
+    /** Products per category node (nodes without products are absent), leaving out the given statuses. */
+    Map<UUID, Long> countByCategory(Set<ProductStatus> excluding);
+
+    /** Products per product-type code (types without products are absent). */
+    Map<String, Long> countByProductType();
+
+    /** Products waiting on each of the category requests (requests nobody built against are absent). */
+    Map<UUID, Long> countByCategoryRequest(Collection<UUID> requestIds);
+
     /** The product a seller SKU belongs to. */
     record SkuOwner(UUID productId, String productTypeCode) {
     }

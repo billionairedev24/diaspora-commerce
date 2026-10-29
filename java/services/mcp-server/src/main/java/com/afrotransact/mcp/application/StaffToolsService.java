@@ -9,6 +9,9 @@ public interface StaffToolsService {
 
     ToolResult moderationQueue(McpCaller caller, Integer page);
 
+    /** Sellers' requests for a category that does not exist yet, with the products waiting on each. */
+    ToolResult categoryRequestsQueue(McpCaller caller, String status);
+
     ToolResult orderPaymentSplit(McpCaller caller, String orderId);
 
     /** One order with its shipments and payment state; personal data masked. */

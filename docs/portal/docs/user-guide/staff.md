@@ -39,6 +39,39 @@ why it is here and who reported it. **Allow** publishes it (or keeps a reported 
 it down with a reason the customer sees (abusive, personal information, spam, off topic, conflict of interest, other). Rejected
 and removed reviews leave the product's average and count straight away. People and products are shown by name.
 
+## Categories and category requests
+
+You see **Catalog, Categories** and **Category requests** when your role includes the `catalog:taxonomy` permission
+(Catalog Manager and Super Admin). Everyone else sees the other Catalog tabs only.
+
+**Categories** shows the tree: departments, the categories in them and the product types (what a seller picks, such as
+*Dresses*). The number on each row is the products in it and under it. Retired categories are hidden until you tick
+*Show retired*.
+
+- **Add a department, category or product type**: open the place it goes in and choose *Add…*. Every change asks for a
+  **reason**, which is kept with your name in the node's **History**.
+- **Rename** or **Move**: a rename carries everything inside it; a move takes the products along. *Save* stays off until
+  something has changed. If a colleague saved first, you are told to reload instead of overwriting them.
+- **Reorder**: use the up and down arrows on a row, then **Save order** and say why. Shoppers and sellers see the new order.
+- **Retire**: hides a category (and what is in it) from new listings. It is never deleted, and **a category that still has
+  products cannot be retired**: move its product types to another category first. A retired category stays on the
+  products that already use it. **Restore** brings it back.
+- **Edit its details** (on a product type): this is what sellers fill in. Add, reorder or remove details, choose how
+  each is answered (short text, long text, choose one, number with units), where it appears (product details, food,
+  regulated), whether it is **required**, and whether to **ask sellers for this at all**. *Brand* is just a detail: a
+  Books type has none, and switching it off removes it from the seller's form and upload template. The **What
+  sellers will see** panel shows the form as you edit. The sales-tax question belongs to the tax service: you can choose
+  whether to ask it, not change its wording. Other product types may share the same details, so the editor says how
+  many categories use them.
+
+**Category requests** is the queue of sellers' requests for a category that does not exist (the seller is shown by
+name, with the path they asked for and how many of their products are waiting). Open one:
+
+- **Approve & create** asks where it goes (a department creates a category for it too) and whether to reuse existing
+  details or start new ones, and lists what will be created before you confirm. The waiting products move into
+  review.
+- **Reject** needs a reason; the seller sees it and the waiting products are rejected with it.
+
 ## Payouts and Stripe
 
 **Payouts** lists every seller payout. Open one for the seller's details, amounts, the Stripe payout/transfer IDs

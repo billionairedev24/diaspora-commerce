@@ -36,6 +36,7 @@ public final class ToolCatalog {
     public static final String APPLICATIONS_QUEUE = "applications_queue";
     public static final String APPLICATION_DETAIL = "application_detail";
     public static final String MODERATION_QUEUE = "moderation_queue";
+    public static final String CATEGORY_REQUESTS_QUEUE = "category_requests_queue";
     public static final String ORDER_PAYMENT_SPLIT = "order_payment_split";
     public static final String ORDER_LOOKUP = "order_lookup";
     public static final String SELLER_PAYOUT_STATUS = "seller_payout_status";
@@ -66,6 +67,7 @@ public final class ToolCatalog {
             new ToolDescriptor(APPLICATIONS_QUEUE, Toolset.STAFF, McpPermissions.APPLICATIONS_REVIEW, true),
             new ToolDescriptor(APPLICATION_DETAIL, Toolset.STAFF, McpPermissions.APPLICATIONS_REVIEW, true),
             new ToolDescriptor(MODERATION_QUEUE, Toolset.STAFF, McpPermissions.CATALOG_MODERATE, true),
+            new ToolDescriptor(CATEGORY_REQUESTS_QUEUE, Toolset.STAFF, McpPermissions.CATALOG_TAXONOMY, true),
             new ToolDescriptor(ORDER_PAYMENT_SPLIT, Toolset.STAFF, McpPermissions.LEDGER_READ, true),
             new ToolDescriptor(ORDER_LOOKUP, Toolset.STAFF, McpPermissions.ORDERS_READ, true),
             new ToolDescriptor(SELLER_PAYOUT_STATUS, Toolset.STAFF, McpPermissions.LEDGER_READ, true),

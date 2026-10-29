@@ -71,7 +71,8 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
   catalog: [
     { resource: 'moderation', label: 'Moderation queue' },
     { resource: 'product-reviews', label: 'Product reviews' },
-    { resource: 'products', label: 'Products' }
+    { resource: 'products', label: 'Products' },
+    { resource: 'category-requests', label: 'Category requests', statusFilter: true }
   ],
   inventory: [{ resource: 'inventory', label: 'Lots' }],
   retail: [{ resource: 'purchase-orders', label: 'Purchase orders' }],

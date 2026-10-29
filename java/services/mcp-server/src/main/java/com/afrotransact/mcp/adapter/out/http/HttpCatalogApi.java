@@ -60,6 +60,17 @@ class HttpCatalogApi implements CatalogApi {
     }
 
     @Override
+    public Downstream categoryRequests(String status, String bearerToken) {
+        return http.call(bearerToken, c -> c.get().uri(u -> {
+            u.path("/v1/category-requests");
+            if (status != null && !status.isBlank()) {
+                u.queryParam("status", status);
+            }
+            return u.build();
+        }));
+    }
+
+    @Override
     public Downstream requestCategory(Map<String, Object> request, String bearerToken) {
         return http.call(bearerToken, c -> c.post().uri("/v1/category-requests")
                 .contentType(MediaType.APPLICATION_JSON).body(request));

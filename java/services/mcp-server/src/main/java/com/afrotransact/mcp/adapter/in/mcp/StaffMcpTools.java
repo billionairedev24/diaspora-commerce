@@ -45,6 +45,17 @@ class StaffMcpTools {
         return staff.moderationQueue(McpCallerExtractor.caller(context), page);
     }
 
+    @McpTool(name = ToolCatalog.CATEGORY_REQUESTS_QUEUE, title = "Category requests",
+            description = "Sellers' requests for a category that does not exist yet, oldest first, with the seller, the "
+                    + "requested path and how many products wait on it (catalog:taxonomy). Staff approve or reject "
+                    + "them in the staff console under Catalog.",
+            annotations = @McpTool.McpAnnotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true))
+    ToolResult categoryRequestsQueue(McpTransportContext context,
+                                     @McpToolParam(description = "PENDING_REVIEW (default), APPROVED or REJECTED",
+                                             required = false) String status) {
+        return staff.categoryRequestsQueue(McpCallerExtractor.caller(context), status);
+    }
+
     @McpTool(name = ToolCatalog.ORDER_LOOKUP, title = "Order lookup",
             description = "One order with its shipments and status (orders:read). Personal data is masked.",
             annotations = @McpTool.McpAnnotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true))
