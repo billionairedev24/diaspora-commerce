@@ -6421,6 +6421,20 @@ components:
           type: integer
           format: int32
           description: Minimum order count a new window starts with
+    CampaignResponse:
+      type: object
+      properties:
+        utmSource:
+          type: string
+        utmMedium:
+          type: string
+        utmCampaign:
+          type: string
+        utmContent:
+          type: string
+        orders:
+          type: integer
+          format: int32
     ChannelResponse:
       type: object
       properties:
@@ -6526,6 +6540,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ChannelResponse'
+        byCampaign:
+          type: array
+          description: Orders that came from one of the window's own messages, per UTM source, medium, campaign (preorder-<code>)
+            and content (announce, remind, last, ...), most first
+          items:
+            $ref: '#/components/schemas/CampaignResponse'
         topProducts:
           type: array
           items:

@@ -331,6 +331,10 @@ export const PreorderSummarySchema = z.object({
   /** Calendar days (YYYY-MM-DD) from the opening day; afterClose marks days after the closing date. */
   byDay: z.array(z.object({ date: z.string(), count: z.number().int(), afterClose: z.boolean() })),
   byChannel: z.array(z.object({ channel: PreorderChannelSchema, count: z.number().int() })),
+  /** Orders that came from one of the window's own messages, per UTM tags of its link (utm_campaign = preorder-<code>). */
+  byCampaign: z
+    .array(z.object({ utmSource: z.string(), utmMedium: z.string(), utmCampaign: z.string(), utmContent: z.string(), orders: z.number().int() }))
+    .default([]),
   topProducts: z.array(z.object({ name: z.string(), units: z.number().int() })),
   fulfilmentSplit: z.object({ door: z.number().int(), pickup: z.number().int() }),
   placements: z.array(

@@ -408,6 +408,16 @@ function summary(s: MockPreorderState, w: MockPreorderWindow): PreorderSummary {
   paid.forEach((o) => o.lines.forEach((l) => units.set(l.name, (units.get(l.name) ?? 0) + l.qty)));
   const byChannel = new Map<PreorderChannel, number>();
   paid.forEach((o) => byChannel.set(o.channel, (byChannel.get(o.channel) ?? 0) + 1));
+  const byCampaign = new Map<string, PreorderSummary['byCampaign'][number]>();
+  const messageSource: Partial<Record<PreorderChannel, string>> = { EMAIL: 'email', SMS: 'sms', APP: 'push' };
+  paid.forEach((o) => {
+    const source = messageSource[o.channel];
+    if (!source) return;
+    const utmContent = /(?:^|&)cr=([a-z]+)/.exec(o.trackingTag)?.[1] ?? 'announce';
+    const key = `${source}|${utmContent}`;
+    const row = byCampaign.get(key) ?? { utmSource: source, utmMedium: source, utmCampaign: `preorder-${w.code}`, utmContent, orders: 0 };
+    byCampaign.set(key, { ...row, orders: row.orders + 1 });
+  });
   const byDay: PreorderSummary['byDay'] = [];
   if (all.length) {
     const d0 = new Date(w.opensAt);
@@ -448,6 +458,7 @@ function summary(s: MockPreorderState, w: MockPreorderWindow): PreorderSummary {
     ordersTotal: all.length,
     byDay,
     byChannel: [...byChannel.entries()].sort((a, b) => b[1] - a[1]).map(([channel, count]) => ({ channel, count })),
+    byCampaign: [...byCampaign.values()].sort((a, b) => b.orders - a.orders),
     topProducts: [...units.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([name, n]) => ({ name, units: n })),
     fulfilmentSplit: { door: paid.filter((o) => o.fulfilment === 'DOOR').length, pickup: paid.filter((o) => o.fulfilment === 'PICKUP').length },
     placements: PL.map(([key, name, creative, srcs]) => {

@@ -16,7 +16,8 @@ import (
 // call go to the window's audience (area subscribers with consent on the channel plus past buyers; the waitlist gets
 // its own "pre-order is open" email); closed and out-for-delivery go to the window's buyers (orders[]). Fees are
 // the window's effective fees (doorFeeMinor / pickupFeeMinor from the payment settings or the window's overrides),
-// never literal amounts. Every link carries ?src=<channel>&po=<CODE>&cr=<slot>; SMS stay in one GSM-7 segment.
+// never literal amounts. Every link carries ?src=<channel>&po=<CODE>&cr=<slot> and the UTM tags (preorderLink); SMS
+// stay in one GSM-7 segment, two when their link carries the UTM tags.
 
 // Pre-order comms kinds (delivery-runs CommKind) and the cr slot their links carry.
 const (
@@ -79,13 +80,31 @@ func withAttribution(link, src, code, cr string) string {
 	return link + sep + "src=" + url.QueryEscape(src) + "&po=" + url.QueryEscape(code) + "&cr=" + url.QueryEscape(cr)
 }
 
-// preorderLinks sets emailUrl, smsUrl and pushUrl: the storefront's pre-order page for the window code, per channel.
+// preorderLinks sets emailUrl, smsUrl and pushUrl: the storefront's pre-order page for the window code, per channel,
+// with the order attribution and the UTM tags of the message (preorderLink).
 func preorderLinks(d map[string]any, l Links, cr string) {
 	base := join(l.Storefront, "/pre-orders")
 	code := str(d, "code")
 	for _, ch := range []string{"email", "sms", "push"} {
-		d[ch+"Url"] = withAttribution(base, ch, code, cr)
+		d[ch+"Url"] = preorderLink(base, ch, code, cr)
 	}
+}
+
+// preorderLink is a pre-order announcement link, the same as the one delivery-runs builds (PreorderUtm): the order
+// attribution the storefront keeps until checkout (src = email, sms, or app for push; po = the window code; cr = the
+// message) plus utm_source and utm_medium = the channel, utm_campaign = preorder-<code> and utm_content = the
+// message. Every announcement is attributed in analytics like a run announcement, and an order placed from it is
+// credited to the same campaign in the staff analytics.
+func preorderLink(link, channel, code, cr string) string {
+	if link == "" {
+		return ""
+	}
+	src := channel
+	if channel == "push" {
+		src = "app"
+	}
+	return withAttribution(link, src, code, cr) + "&utm_source=" + url.QueryEscape(channel) + "&utm_medium=" + url.QueryEscape(channel) +
+		"&utm_campaign=" + url.QueryEscape("preorder-"+code) + "&utm_content=" + url.QueryEscape(cr)
 }
 
 func boolOr(d map[string]any, k string, def bool) bool {

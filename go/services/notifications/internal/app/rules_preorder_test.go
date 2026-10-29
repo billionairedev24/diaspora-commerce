@@ -128,6 +128,56 @@ func TestPreorderCommsFanOutToTheAudienceWithTrackedLinks(t *testing.T) {
 	}
 }
 
+// S262: every link of a pre-order announcement carries the UTM tags (source = medium = the channel, campaign
+// preorder-<code>, content = the message) next to the order attribution, so it is attributed in analytics like a run.
+func TestEveryPreorderMessageLinkCarriesUtm(t *testing.T) {
+	n := &recordingNotifier{}
+	member := func(ch string) []port.AudienceMember {
+		return []port.AudienceMember{{UserID: "cust-1", Email: "a@example.com", Phone: "+15550009999", UnsubscribeURL: "https://u/" + ch}}
+	}
+	aud := &fakeAudience{members: map[string][]port.AudienceMember{
+		"email/SUBSCRIBERS": member("e"), "sms/SUBSCRIBERS": member("s"), "push/SUBSCRIBERS": member("p"), "email/WAITLIST": member("w"),
+	}}
+	ing := app.NewIngest(n, app.IngestConfig{Resolver: stubResolver{}, Links: sampleLinks, Audience: aud}, slog.New(slog.DiscardHandler))
+	kinds := map[string]string{"ANNOUNCE": "announce", "REMIND_48H": "remind", "LAST_CALL_6H": "last", "CLOSED": "closed", "OUT_FOR_DELIVERY": "ofd"}
+	seen := map[string]bool{}
+	for _, ev := range app.SampleEvents(sampleLinks)["preorder.comms.due"] {
+		n.reqs = nil
+		handle(t, ing, "preorder.comms.due", ev)
+		kind, _ := ev["kind"].(string)
+		if len(n.reqs) == 0 {
+			t.Fatalf("%s sent nothing", kind)
+		}
+		for _, r := range n.reqs {
+			want := kinds[kind]
+			if r.TemplateKey == "preorder.waitlist.opened" {
+				want = "waitlist"
+			}
+			for ch, src := range map[string]string{"email": "email", "sms": "sms", "push": "app"} {
+				link, _ := r.Data[ch+"Url"].(string)
+				u, err := url.Parse(link)
+				if err != nil {
+					t.Fatalf("%s %s: %v", r.TemplateKey, ch, err)
+				}
+				q := u.Query()
+				got := []string{q.Get("src"), q.Get("po"), q.Get("cr"), q.Get("utm_source"), q.Get("utm_medium"), q.Get("utm_campaign"), q.Get("utm_content")}
+				if exp := []string{src, "LBK-7", want, ch, ch, "preorder-LBK-7", want}; strings.Join(got, "|") != strings.Join(exp, "|") {
+					t.Fatalf("%s %sUrl = %s\n got %v\nwant %v", r.TemplateKey, ch, link, got, exp)
+				}
+			}
+			seen[r.TemplateKey] = true
+		}
+		if sms, _ := n.reqs[0].Data["smsCopy"].(string); kind == "ANNOUNCE" && !strings.Contains(sms, "utm_source=sms&utm_medium=sms&utm_campaign=preorder-LBK-7&utm_content=announce") {
+			t.Fatalf("the announcement SMS link has no UTM: %q", sms)
+		}
+	}
+	for _, key := range []string{"preorder.announce", "preorder.waitlist.opened", "preorder.reminder", "preorder.last_call", "preorder.closed", "preorder.out_for_delivery"} {
+		if !seen[key] {
+			t.Errorf("%s was never sent", key)
+		}
+	}
+}
+
 // OUT_FOR_DELIVERY (published when the window's run leaves) goes to the window's buyers, by SMS and push, with the
 // pickup-point handover code when the order has one.
 func TestPreorderOutForDeliveryTellsTheBuyersWithTheirHandoverCode(t *testing.T) {
