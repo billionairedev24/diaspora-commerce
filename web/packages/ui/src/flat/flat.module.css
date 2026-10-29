@@ -68,6 +68,12 @@
 .pager { display: flex; flex-wrap: wrap; gap: var(--at-space-2) var(--at-space-4); align-items: center; font-size: var(--at-text-md); }
 .pagerInfo { color: var(--at-color-text-muted); }
 
+/* Filters above a table */
+.filters { display: flex; flex-wrap: wrap; gap: var(--at-space-2) var(--at-space-6); align-items: center; }
+.filter { display: inline-flex; gap: var(--at-space-2); align-items: center; font-size: var(--at-text-md); }
+.filterSelect { block-size: var(--at-size-control); min-inline-size: 12rem; padding: 0 var(--at-space-2); border: 1px solid var(--at-color-border-strong); border-radius: var(--at-radius-sm); background: var(--at-color-surface); color: var(--at-color-text); font: inherit; }
+.filterSelect:focus-visible { outline: none; border-color: var(--at-color-focus); box-shadow: var(--at-shadow-focus); }
+
 /* Empty / loading / error */
 .empty { display: flex; flex-direction: column; gap: var(--at-space-2); align-items: flex-start; padding-block: var(--at-space-3); max-inline-size: 60ch; }
 .emptyTitle { margin: 0; font-size: var(--at-text-base); font-weight: var(--at-weight-semibold); }

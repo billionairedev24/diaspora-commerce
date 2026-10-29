@@ -282,14 +282,20 @@ export function FormActions({ children }: { children: ReactNode }) {
   return <div className={styles.actions}>{children}</div>;
 }
 
+export interface InlineFieldProps {
+  id: string;
+  'aria-describedby': string | undefined;
+  'aria-invalid': boolean | undefined;
+}
+
 export interface InlineFormRowProps {
   label: ReactNode;
-  /** The input, whose id is `fieldId`. */
-  children: ReactNode;
+  /** The input: spread the given props on it (id, aria-describedby, aria-invalid). */
+  children: (field: InlineFieldProps) => ReactNode;
   button: ReactNode;
   help?: ReactNode;
-  /** Success or error text shown under the row. */
-  message?: ReactNode;
+  /** Inline success or error text under the row (announced to screen readers). */
+  message?: { tone: 'error' | 'success'; text: ReactNode; testId?: string } | null;
   fieldId: string;
   onSubmit?: (e: FormEvent<HTMLFormElement>) => void;
   testId?: string;
@@ -297,17 +303,31 @@ export interface InlineFormRowProps {
 
 /** Label, field and button on one line ("Redeem a gift card"), wrapping on a phone; help and message under it. */
 export function InlineFormRow({ label, children, button, help, message, fieldId, onSubmit, testId }: InlineFormRowProps) {
+  const helpId = `${fieldId}-help`;
+  const messageId = `${fieldId}-message`;
+  const describedBy = [help ? helpId : null, message ? messageId : null].filter(Boolean).join(' ') || undefined;
   return (
     <form className={styles.inline} onSubmit={onSubmit} noValidate data-testid={testId}>
       <label htmlFor={fieldId} className={styles.inlineLabel}>
         {label}
       </label>
       <div className={styles.inlineRow}>
-        <div className={styles.inlineField}>{children}</div>
+        <div className={styles.inlineField}>{children({ id: fieldId, 'aria-describedby': describedBy, 'aria-invalid': message?.tone === 'error' ? true : undefined })}</div>
         {button}
       </div>
-      {help ? <p className={styles.inlineHelp}>{help}</p> : null}
-      {message}
+      {help ? (
+        <p id={helpId} className={styles.inlineHelp}>
+          {help}
+        </p>
+      ) : null}
+      {/* The live region exists before its text does, so a screen reader announces the result. */}
+      <div id={messageId} aria-live="polite">
+        {message ? (
+          <p className={cx(styles.message, message.tone === 'error' ? styles.messageError : styles.messageSuccess)} data-testid={message.testId}>
+            {message.text}
+          </p>
+        ) : null}
+      </div>
     </form>
   );
 }
@@ -357,5 +377,37 @@ export function LinkEntry({ link, text, fact, testId }: LinkEntryProps) {
       {text ? <span className={styles.linkItemText}>{text}</span> : null}
       {fact ? <span className={styles.linkItemFact}>{fact}</span> : null}
     </li>
+  );
+}
+
+/** A row of filters above a table (labels beside short selects, wrapping on a phone). */
+export function FilterBar({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className={styles.filters} role="group" aria-label={label}>
+      {children}
+    </div>
+  );
+}
+
+export interface FilterSelectProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  testId?: string;
+}
+
+export function FilterSelect({ label, value, onChange, options, testId }: FilterSelectProps) {
+  return (
+    <label className={styles.filter}>
+      {label}
+      <select className={styles.filterSelect} value={value} onChange={(e) => onChange(e.target.value)} data-testid={testId}>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

@@ -2,6 +2,7 @@ import { type Meta, type StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 
 import { Button } from '../button/Button';
+import { fieldStyles } from '../form/Field';
 import { TextField } from '../form/TextField';
 import { mobile, rtl } from '../stories.helpers';
 import {
@@ -45,8 +46,8 @@ export const Page: Story = {
         <BigFigure>$25.00</BigFigure>
       </Section>
       <Section title="Redeem a gift card">
-        <InlineFormRow fieldId="code" label="Gift card code" button={<Button>Redeem</Button>} help="16 characters, from the email" message={<Message tone="success">$50.00 added to your credit.</Message>}>
-          <TextField id="code" label="Gift card code" placeholder="XXXX-XXXX-XXXX-XXXX" />
+        <InlineFormRow fieldId="code" label="Gift card code" button={<Button>Redeem</Button>} help="16 characters, from the email" message={{ tone: 'success', text: '$50.00 added to your credit.' }}>
+          {(field) => <input {...field} className={fieldStyles.control} placeholder="XXXX-XXXX-XXXX-XXXX" />}
         </InlineFormRow>
       </Section>
       <Section title="Activity">
