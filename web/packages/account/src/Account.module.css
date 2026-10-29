@@ -132,6 +132,9 @@
 @media (hover: hover) {
   .flat .pill:hover { background: none; color: var(--at-color-link-hover); text-decoration: underline; }
 }
+@media (pointer: coarse) {
+  .flat .link, .flat .pill { display: inline-flex; align-items: center; min-height: var(--at-size-touch); }
+}
 
 /* Back-office layout: title, then the sections as tabs (the same look as the module pages' tabs, e.g. Inventory),
    then the section, full width. No second sidebar next to the app's own. */
