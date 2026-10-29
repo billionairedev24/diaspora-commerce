@@ -1735,5 +1735,6 @@
   "refer.col.joined": "Inscription",
   "refer.col.reward": "Votre récompense",
   "refer.table": "Amis que vous avez invités",
-  "refer.shareLead": "Envoyez votre lien à un ami."
+  "refer.shareLead": "Envoyez votre lien à un ami.",
+  "addr.none": "Aucune adresse enregistrée. Ajoutez-en une pour commander plus vite."
 }

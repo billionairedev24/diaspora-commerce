@@ -1735,5 +1735,6 @@
   "refer.col.joined": "Se unió",
   "refer.col.reward": "Tu recompensa",
   "refer.table": "Amigos que invitaste",
-  "refer.shareLead": "Envía tu enlace a un amigo."
+  "refer.shareLead": "Envía tu enlace a un amigo.",
+  "addr.none": "Aún no hay direcciones guardadas. Añade una para pagar más rápido."
 }

@@ -1728,5 +1728,6 @@
   "refer.col.joined": "Joined",
   "refer.col.reward": "Your reward",
   "refer.table": "Friends you invited",
-  "refer.shareLead": "Send your link to a friend."
+  "refer.shareLead": "Send your link to a friend.",
+  "addr.none": "No addresses saved yet. Add one to check out faster."
 }

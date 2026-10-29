@@ -40,7 +40,7 @@
 .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--at-space-1) var(--at-space-4); align-items: start; padding-block: var(--at-space-3); border-block-start: 1px solid var(--at-color-border); }
 .row:first-child { border-block-start: 0; padding-block-start: var(--at-space-1); }
 .rowMain { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
-.rowTitle { font-size: var(--at-text-base); font-weight: var(--at-weight-semibold); }
+.rowTitle { display: flex; flex-wrap: wrap; gap: var(--at-space-1) var(--at-space-3); align-items: center; font-size: var(--at-text-base); font-weight: var(--at-weight-semibold); }
 .rowDetail { font-size: var(--at-text-sm); line-height: var(--at-leading-normal); color: var(--at-color-text-muted); }
 .rowActions { display: flex; flex-wrap: wrap; gap: var(--at-space-1) var(--at-space-3); justify-content: flex-end; align-items: center; font-size: var(--at-text-md); }
 .rowLink { color: inherit; text-decoration: none; }
