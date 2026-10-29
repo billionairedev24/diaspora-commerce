@@ -90,8 +90,15 @@ func (r *runAlertsImpl) Advertorials(ctx context.Context, q url.Values) (json.Ra
 	return r.send(ctx, httpclient.Request{Path: "/v1/public/advertorials", Query: q})
 }
 
-func (r *runAlertsImpl) AdvertorialEvent(ctx context.Context, id, eventType string) error {
-	_, err := r.send(ctx, httpclient.Request{Method: http.MethodPost, Path: "/v1/public/advertorials/" + url.PathEscape(id) + "/events",
-		JSON: map[string]string{"type": eventType}})
+func (r *runAlertsImpl) AdvertorialEvent(ctx context.Context, id, eventType, visitor, clientIP string) error {
+	body := map[string]string{"type": eventType}
+	if visitor != "" {
+		body["visitor"] = visitor
+	}
+	req := httpclient.Request{Method: http.MethodPost, Path: "/v1/public/advertorials/" + url.PathEscape(id) + "/events", JSON: body}
+	if clientIP != "" {
+		req.Header = http.Header{"X-Forwarded-For": []string{clientIP}}
+	}
+	_, err := r.send(ctx, req)
 	return err
 }

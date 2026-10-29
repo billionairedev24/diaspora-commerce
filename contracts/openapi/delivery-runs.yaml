@@ -3407,8 +3407,8 @@ paths:
       tags:
       - Advertorials
       summary: The advertorials a visitor sees for their deliver-to place (no sign-in)
-      description: A ZIP or coordinates match delivery runs by coverage; country and region (and city) match pre-order windows.
-        Only windows and runs that take orders right now are served, one variant each (the same visitor keeps their variant),
+      description: A ZIP or coordinates match delivery runs by coverage and the pre-order windows of the towns that coverage
+        falls in (a ZIP alone is enough); country and region (and city) match pre-order windows too. Only windows and runs that take orders right now are served, one variant each (the same visitor keeps their variant),
         higher priority first. Each carries the countdown target (the close or cutoff) and a link with UTM and order attribution.
       operationId: servedAdvertorials
       parameters:
@@ -3475,7 +3475,9 @@ paths:
       tags:
       - Advertorials
       summary: Count a view or a click (no sign-in)
-      description: 'Best effort: the shop front sends VIEW once per visit and CLICK on the button. 404 for an unknown advertorial.'
+      description: 'Best effort: the shop front sends VIEW once per visit and CLICK on the button. 404 for an unknown advertorial.
+        204 without counting when the advertorial is not live and servable now (draft, paused, ended, outside its schedule, or
+        its window or run is closed) or when the same visitor (or client address) already counted this kind in the event window.'
       operationId: advertorialEvent
       parameters:
       - name: id
@@ -6986,8 +6988,13 @@ components:
         orders:
           type: integer
           format: int32
-          description: 'Orders that came through the advertorial and still stand: a window''s pre-orders whose tracking tag
-            carries it, a run''s orders whose attribution (cr=adv-...) does and that still hold a slot on the run'
+          description: 'Orders that came through the advertorial and still stand, on one rule for windows and runs: a
+            window''s pre-orders whose tracking tag carries it that are not cancelled, a run''s orders whose attribution
+            (cr=adv-...) does and that still hold a slot on the run'
+        cancelledOrders:
+          type: integer
+          format: int32
+          description: Orders that came through the advertorial and were cancelled or refunded (not in orders)
     LocalAdvertorial:
       type: object
       description: 'Words for the visitors of the area a pre-order window or run serves, shown with a live closing
@@ -7087,6 +7094,11 @@ components:
           enum:
           - VIEW
           - CLICK
+        visitor:
+          type: string
+          description: The visitor id also sent for sticky variants; one visitor counts once per advertorial and kind in
+            the event window
+          maxLength: 64
       required:
       - type
     WindowPlanRequest:

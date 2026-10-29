@@ -7611,8 +7611,10 @@ export interface components {
             clicks: number;
             /** @description clicks / views x 100 */
             ctrPct?: number | null;
-            /** @description Orders that came through the advertorial and still stand: a window's pre-orders whose tracking tag carries it, a run's orders whose attribution (`cr=adv-...`) does and that still hold a slot on the run */
+            /** @description Orders that came through the advertorial and still stand, on one rule for windows and runs: a window's pre-orders whose tracking tag carries it that are not cancelled, a run's orders whose attribution (`cr=adv-...`) does and that still hold a slot on the run */
             orders?: number | null;
+            /** @description Orders that came through the advertorial and were cancelled or refunded (not in `orders`) */
+            cancelledOrders?: number;
         };
         StaffAdvertorial: {
             /** Format: uuid */

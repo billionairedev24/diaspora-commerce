@@ -2,6 +2,7 @@ package testkit
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -157,6 +158,8 @@ func (u *Upstreams) runAlertRoutes(mux *http.ServeMux) {
 		}
 		u.mu.Lock()
 		u.AdvertorialEvents = append(u.AdvertorialEvents, b["type"].(string))
+		u.AdvertorialEventVisitors = append(u.AdvertorialEventVisitors, fmt.Sprint(b["visitor"]))
+		u.AdvertorialEventClients = append(u.AdvertorialEventClients, r.Header.Get("X-Forwarded-For"))
 		u.mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 	})

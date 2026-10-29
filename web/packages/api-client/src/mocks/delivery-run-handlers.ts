@@ -41,7 +41,7 @@ interface RunsMock {
   subs: Map<string, RunSubscription>;
   /** Email sign-ups waiting for their confirmation link. */
   pending: { email: string; locationId: string }[];
-  events: { id: string; type: string }[];
+  events: { id: string; type: string; visitor?: string }[];
   /** Visits counted with their UTM tags. */
   visits: { slug: string; utmSource?: string; utmMedium?: string; utmCampaign?: string; runId?: string }[];
 }
@@ -75,7 +75,7 @@ const VisitBody = z.object({ runId: z.string().uuid().optional(), utmSource: z.s
 const MineBody = z.object({ locationId: z.string().uuid(), channels: z.array(RunChannelSchema).min(1), source: z.string().max(80).optional() });
 const TokenBody = z.object({ token: z.string().min(1).max(200) });
 const UnsubscribeBody = z.object({ token: z.string().min(1).max(200), channels: z.array(RunChannelSchema).optional() });
-const EventBody = z.object({ type: z.enum(['VIEW', 'CLICK']) });
+const EventBody = z.object({ type: z.enum(['VIEW', 'CLICK']), visitor: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional() });
 
 export const deliveryRunHandlers = [
   http.get('*/v1/delivery-runs/locations', route(() => json({ items: LOCATIONS.map(locationOf) }))),
@@ -205,9 +205,10 @@ export const deliveryRunHandlers = [
     });
   })),
   http.post('*/v1/delivery-runs/advertorials/:id/events', route(async (ctx, p) => {
-    const { type } = await body(ctx.request, EventBody);
+    const { type, visitor } = await body(ctx.request, EventBody);
     if (p.id !== ADVERTORIAL_ID) throw new MockProblem(404, 'NOT_FOUND', 'Not found', 'We couldn’t find that.');
-    state().events.push({ id: p.id ?? '', type });
+    // As the service does: one visitor counts once per advertorial and kind (a repeat answers 204 without counting).
+    if (!visitor || !state().events.some((e) => e.id === p.id && e.type === type && e.visitor === visitor)) state().events.push({ id: p.id ?? '', type, visitor });
     return new Response(null, { status: 204 });
   }))
 ];
@@ -228,4 +229,4 @@ function subscription(locationId: string, consents: RunSubscription['consents'],
 export const mockRunVisits = (): readonly RunsMock['visits'][number][] => state().visits;
 
 /** Test hook: what the mock counted. */
-export const mockRunAdvertorialEvents = (): readonly { id: string; type: string }[] => state().events;
+export const mockRunAdvertorialEvents = (): readonly { id: string; type: string; visitor?: string }[] => state().events;

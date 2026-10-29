@@ -195,7 +195,7 @@ function seed(db: MockStaffDb): RunsState {
     status: 'LIVE',
     ended: null,
     serving: true,
-    results: { views: 1840, clicks: 212, ctrPct: 11.5, orders: 37 },
+    results: { views: 1840, clicks: 212, ctrPct: 11.5, orders: 37, cancelledOrders: 3 },
     createdBy: 'system',
     createdAt: at(-9),
     updatedAt: at(-9),
@@ -204,8 +204,8 @@ function seed(db: MockStaffDb): RunsState {
   });
   const advertorials = [
     adv(1, { featuredProducts: [{ atin: 'ATSHEA0001', title: 'Shea butter, raw' }, { atin: 'ATGARI0001', title: 'Garri, white' }] }),
-    adv(2, { variant: 'B', generated: false, headline: 'Last days: Lubbock jollof and spice box', body: 'Pre-order closes Thursday. Free pickup, door delivery from the run fee.', ctaLabel: 'Reserve yours', results: { views: 1792, clicks: 274, ctrPct: 15.3, orders: 52 } }),
-    adv(3, { source: 'RUN', sourceId: run(4, lbk, 'OPEN', 6, 19).id, sourceName: 'Lubbock run', sourceCode: null, sourceStatus: 'OPEN', variant: 'A', headline: 'Our Lubbock delivery run is open', ctaLabel: 'See the run', results: { views: 420, clicks: 38, ctrPct: 9, orders: 6 } })
+    adv(2, { variant: 'B', generated: false, headline: 'Last days: Lubbock jollof and spice box', body: 'Pre-order closes Thursday. Free pickup, door delivery from the run fee.', ctaLabel: 'Reserve yours', results: { views: 1792, clicks: 274, ctrPct: 15.3, orders: 52, cancelledOrders: 5 } }),
+    adv(3, { source: 'RUN', sourceId: run(4, lbk, 'OPEN', 6, 19).id, sourceName: 'Lubbock run', sourceCode: null, sourceStatus: 'OPEN', variant: 'A', headline: 'Our Lubbock delivery run is open', ctaLabel: 'See the run', results: { views: 420, clicks: 38, ctrPct: 9, orders: 6, cancelledOrders: 0 } })
   ];
   const logs = new Map<string, RunLogEntry[]>([
     [
@@ -1067,7 +1067,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       const a: StaffAdvertorial = {
         id: `5c3a0e4b-0000-4000-8000-${String(s.seq).padStart(12, '0')}`, source: b.source, sourceId: b.sourceId, sourceName: info.name, sourceCode: info.code, sourceStatus: info.status,
         sourceCloses: info.closes, locationId: info.location?.id ?? null, locationName: info.location?.name ?? null, variant: nextVariant(s.advertorials, b.source, b.sourceId), weight: 1, priority: 0,
-        generated: true, ...draftWords(info), startsAt: null, endsAt: null, status: 'LIVE', ended: null, serving: false, results: { views: 0, clicks: 0, ctrPct: null, orders: 0 }, featuredProducts: [],
+        generated: true, ...draftWords(info), startsAt: null, endsAt: null, status: 'LIVE', ended: null, serving: false, results: { views: 0, clicks: 0, ctrPct: null, orders: 0, cancelledOrders: 0 }, featuredProducts: [],
         createdBy: ctx.action.actor, createdAt: ctx.now.toISOString(), updatedAt: ctx.now.toISOString(), version: 0
       };
       s.advertorials.unshift(a);
@@ -1088,7 +1088,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
         sourceStatus: info.status, sourceCloses: info.closes, locationId: info.location?.id ?? null, locationName: info.location?.name ?? null,
         variant: b.variant?.trim() || nextVariant(s.advertorials, b.source as AdvertorialSource, b.sourceId as string), weight: b.weight ?? 1, priority: b.priority ?? 0, generated: false,
         headline: b.headline.trim(), body: (b.body ?? '').trim(), ctaLabel: b.ctaLabel.trim(), startsAt: b.startsAt ?? null, endsAt: b.endsAt ?? null, status: 'DRAFT', ended: null, serving: false,
-        results: { views: 0, clicks: 0, ctrPct: null, orders: 0 }, featuredProducts: featured(b.featuredProducts), createdBy: ctx.action.actor, createdAt: ctx.now.toISOString(), updatedAt: ctx.now.toISOString(), version: 0
+        results: { views: 0, clicks: 0, ctrPct: null, orders: 0, cancelledOrders: 0 }, featuredProducts: featured(b.featuredProducts), createdBy: ctx.action.actor, createdAt: ctx.now.toISOString(), updatedAt: ctx.now.toISOString(), version: 0
       };
       s.advertorials.unshift(a);
       audit(ctx, 'advertorial.created', a.id, `Wrote variant ${a.variant} for ${info.name}`);

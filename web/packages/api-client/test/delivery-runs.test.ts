@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createApiClient, deliveryRunKeys, grantedChannels, isApiError, isRunChannelOn } from '../src';
 import { resetDb } from '../src/mocks';
+import { mockRunAdvertorialEvents } from '../src/mocks/delivery-run-handlers';
 import { mockServer } from '../src/mocks/node';
 
 function browserLikeClient() {
@@ -94,5 +95,17 @@ describe('location advertorials', () => {
     await expect(api.recordRunAdvertorialEvent(ad.id, 'VIEW')).resolves.toBeUndefined();
     await expect(api.recordRunAdvertorialEvent(ad.id, 'CLICK')).resolves.toBeUndefined();
     await expect(api.recordRunAdvertorialEvent('5c3a0e4b-0000-4000-8000-0000000000ff', 'VIEW')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('sends the visitor id with a view or a click, and the server counts each visitor once per kind', async () => {
+    const { api } = browserLikeClient();
+    const ad = (await api.listRunAdvertorials({ zip: '79401', visitor: 'v1' })).items[0]!;
+    const before = mockRunAdvertorialEvents().length;
+    await api.recordRunAdvertorialEvent(ad.id, 'VIEW', 'visit_01-ab');
+    await api.recordRunAdvertorialEvent(ad.id, 'VIEW', 'visit_01-ab');
+    await api.recordRunAdvertorialEvent(ad.id, 'CLICK', 'visit_01-ab');
+    await api.recordRunAdvertorialEvent(ad.id, 'VIEW', 'other');
+    expect(mockRunAdvertorialEvents().slice(before).map((e) => `${e.type}:${e.visitor}`)).toEqual(['VIEW:visit_01-ab', 'CLICK:visit_01-ab', 'VIEW:other']);
+    await expect(api.recordRunAdvertorialEvent(ad.id, 'VIEW', 'not a visitor!')).rejects.toMatchObject({ status: 422 });
   });
 });

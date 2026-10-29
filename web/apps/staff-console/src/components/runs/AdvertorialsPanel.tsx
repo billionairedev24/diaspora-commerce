@@ -190,7 +190,75 @@ function Results({ a }: { a: StaffAdvertorial }) {
           {r.orders === null ? t('st.runs.adv.results.notTracked') : fmt.number(r.orders)}
         </dd>
       </div>
+      {r.cancelledOrders > 0 ? (
+        <div className="flex gap-1">
+          <dt className="text-muted">{t('st.runs.adv.results.cancelled')}</dt>
+          <dd className="m-0 font-bold" data-testid={`adv-cancelled-${a.variant}`}>
+            {fmt.number(r.cancelledOrders)}
+          </dd>
+        </div>
+      ) : null}
     </dl>
+  );
+}
+
+const ctrOf = (views: number, clicks: number): number | null => (views === 0 ? null : Math.round((clicks * 1000) / views) / 10);
+
+/** The variants side by side: views, clicks, click rate, orders and each one's share of the views, with the total. */
+function VariantResults({ items }: { items: StaffAdvertorial[] }) {
+  const t = useT();
+  const fmt = useFormatters();
+  const sum = (pick: (a: StaffAdvertorial) => number) => items.reduce((n, a) => n + pick(a), 0);
+  const totals = { views: sum((a) => a.results.views), clicks: sum((a) => a.results.clicks), orders: sum((a) => a.results.orders ?? 0), cancelled: sum((a) => a.results.cancelledOrders) };
+  const rate = (value: number | null) => (value === null ? '-' : `${fmt.number(value, { maximumFractionDigits: 1 })}%`);
+  const head = ['variant', 'views', 'clicks', 'ctr', 'orders', 'cancelled', 'share'] as const;
+  const label = (c: (typeof head)[number]) => t(c === 'variant' ? 'st.runs.adv.compare.variant' : c === 'share' ? 'st.runs.adv.compare.share' : (`st.runs.adv.results.${c}` as MessageKey));
+  return (
+    <div className="flex flex-col gap-1" data-testid="adv-compare">
+      <h4 className="m-0 text-sm font-bold">{t('st.runs.adv.compare.title')}</h4>
+      <p className="m-0 max-w-[80ch] text-xs text-muted">{t('st.runs.adv.compare.caption')}</p>
+      <div className="overflow-auto rounded-md border border-border">
+        <table className="w-full min-w-[520px] border-collapse text-sm" aria-label={t('st.runs.adv.compare.title')}>
+          <thead className="bg-surface-muted text-left">
+            <tr className="text-2xs font-bold tracking-[0.06em] text-muted uppercase">
+              {head.map((c, i) => (
+                <th key={c} scope="col" className={i === 0 ? 'px-3 py-2' : 'px-3 py-2 text-right'}>
+                  {label(c)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((a) => (
+              <tr key={a.id} className="border-t border-border" data-testid={`adv-compare-${a.variant}`}>
+                <th scope="row" className="px-3 py-2 text-left font-semibold">
+                  {t('st.runs.adv.variant', { variant: a.variant })}
+                </th>
+                <td className="px-3 py-2 text-right">{fmt.number(a.results.views)}</td>
+                <td className="px-3 py-2 text-right">{fmt.number(a.results.clicks)}</td>
+                <td className="px-3 py-2 text-right">{rate(a.results.ctrPct)}</td>
+                <td className="px-3 py-2 text-right">{a.results.orders === null ? '-' : fmt.number(a.results.orders)}</td>
+                <td className="px-3 py-2 text-right">{fmt.number(a.results.cancelledOrders)}</td>
+                <td className="px-3 py-2 text-right">{totals.views === 0 ? '-' : rate(Math.round((a.results.views * 1000) / totals.views) / 10)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-border font-bold" data-testid="adv-compare-total">
+              <th scope="row" className="px-3 py-2 text-left">
+                {t('st.runs.adv.compare.total')}
+              </th>
+              <td className="px-3 py-2 text-right">{fmt.number(totals.views)}</td>
+              <td className="px-3 py-2 text-right">{fmt.number(totals.clicks)}</td>
+              <td className="px-3 py-2 text-right">{rate(ctrOf(totals.views, totals.clicks))}</td>
+              <td className="px-3 py-2 text-right">{fmt.number(totals.orders)}</td>
+              <td className="px-3 py-2 text-right">{fmt.number(totals.cancelled)}</td>
+              <td className="px-3 py-2 text-right">{totals.views === 0 ? '-' : rate(100)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -261,6 +329,7 @@ export function AdvertorialsPanel({ source, sourceId }: { source: AdvertorialSou
         ) : null}
       </div>
       {items.length === 0 ? <EmptyState title={t('st.runs.adv.empty.title')}>{t('st.runs.adv.empty.help')}</EmptyState> : null}
+      {items.length > 1 ? <VariantResults items={items} /> : null}
       <ul aria-label={t('st.runs.adv.title')} className="m-0 grid list-none gap-3 p-0 md:grid-cols-2">
         {items.map((a) => (
           <li key={a.id} className={CARD} data-testid={`adv-${a.variant}`}>

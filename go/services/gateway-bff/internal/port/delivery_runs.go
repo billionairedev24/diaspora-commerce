@@ -32,6 +32,7 @@ type RunAlertClient interface {
 	CountVisit(ctx context.Context, slug string, body map[string]string) error
 	// Advertorials is GET /v1/public/advertorials (zip, lat, lng, country, region, city, visitor, limit).
 	Advertorials(ctx context.Context, q url.Values) (json.RawMessage, error)
-	// AdvertorialEvent is POST /v1/public/advertorials/{id}/events (VIEW or CLICK; 204).
-	AdvertorialEvent(ctx context.Context, id, eventType string) error
+	// AdvertorialEvent is POST /v1/public/advertorials/{id}/events (VIEW or CLICK; 204). The visitor id goes in the body and
+	// the client address in X-Forwarded-For: delivery-runs counts each visitor once per window and limits one address.
+	AdvertorialEvent(ctx context.Context, id, eventType, visitor, clientIP string) error
 }
