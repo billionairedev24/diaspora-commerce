@@ -13,6 +13,9 @@ update category set code = left(trim(both '-' from regexp_replace(lower(path), '
 alter table category alter column code set not null;
 create unique index category_code on category (code);
 create index category_parent on category (parent_id, position);
+-- Sibling names are unique whatever their case, departments (no parent) included: two staff creating the same name at
+-- once cannot both succeed.
+create unique index category_sibling_name on category (coalesce(parent_id, '00000000-0000-0000-0000-000000000000'::uuid), lower(name));
 create index product_category on product (category_id) where category_id is not null;
 
 alter table product_type
