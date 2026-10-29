@@ -26,7 +26,7 @@ class BuildSeedTest(unittest.TestCase):
         # Only the content seeds the loader reasons about, not the whole schema history.
         os.makedirs(self.migrations)
         for name in os.listdir(build_seed.MIGRATIONS):
-            if name.endswith(".sql"):
+            if name.endswith(".sql") and not build_seed.GENERATED_RE.match(name):
                 shutil.copy(os.path.join(build_seed.MIGRATIONS, name), self.migrations)
         self.before = set(os.listdir(self.migrations))
 
