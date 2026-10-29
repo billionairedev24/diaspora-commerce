@@ -35,6 +35,9 @@ type StaffDeps struct {
 	Log            *slog.Logger
 	// Background runs export jobs (defaults to a goroutine); tests run them inline.
 	Background func(func())
+	// StorefrontURL is the public storefront origin (PUBLIC_WEB_URL, no trailing slash): every "view the live page" link the
+	// console shows is built on it, because the console cannot open a storefront path on its own origin.
+	StorefrontURL string
 	// RetailOrgID is AfroTransact Retail (merchant of record): never charged commission or fees, never overridden.
 	RetailOrgID string
 }
@@ -75,6 +78,8 @@ type staffCtx struct {
 	maint  MaintenanceService
 	// names turns ids into display names (nil in unit tests: ids are then named "Unknown …").
 	names *staffNames
+	// storefront is the storefront origin ("" when unknown: links are then left out rather than pointing at the console).
+	storefront string
 	// nameWho names the people and organisations in every document relayed as-is (pass-through screens set it).
 	nameWho bool
 	// idem is the request's Idempotency-Key (relayed to upstreams that accept one).
@@ -85,6 +90,18 @@ type staffCtx struct {
 
 // showOnce puts a secret in the answer of the current action or creation, and nowhere else: it is not cached, logged
 // or kept, and the upstream cannot return it again.
+// storefrontLink is the absolute storefront address of a public path ("/help/shipping"), or "" when the storefront
+// origin is not configured. Staff links to live pages always go through it.
+func (s staffCtx) storefrontLink(path string) string {
+	if s.storefront == "" {
+		return ""
+	}
+	if path == "" || path[0] != '/' {
+		path = "/" + path
+	}
+	return s.storefront + path
+}
+
 func (s staffCtx) showOnce(label, value, note string) {
 	if s.reveal != nil {
 		*s.reveal = domain.OneTimeSecret{Label: label, Value: value, Note: note}
@@ -160,7 +177,7 @@ func (r *staffResolver) resolve(ctx context.Context, c *domain.Caller) (staffCtx
 	if err := requireCustomer(c); err != nil {
 		return staffCtx{}, err
 	}
-	sc := staffCtx{bearer: c.BearerToken, up: r.d.Up, now: r.d.Clock(), maint: r.d.Maintenance, names: r.names}
+	sc := staffCtx{bearer: c.BearerToken, up: r.d.Up, now: r.d.Clock(), maint: r.d.Maintenance, names: r.names, storefront: strings.TrimRight(r.d.StorefrontURL, "/")}
 	if err := sc.get(ctx, r.d.Up.Identity, "/v1/me", nil, &sc.me); err != nil {
 		return staffCtx{}, err
 	}

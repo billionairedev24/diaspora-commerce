@@ -203,6 +203,8 @@ func legalResource() *staffResource {
 		sort.SliceStable(docs, func(i, j int) bool { return legalOrder(jstr(docs[i], "key")) < legalOrder(jstr(docs[j], "key")) })
 		for _, d := range docs {
 			d["group"] = domain.LegalGroupTitle(jstr(d, "key"))
+			d["path"] = "/legal/" + jstr(d, "key")
+			d["href"] = sc.storefrontLink(jstr(d, "path"))
 			d["state"] = "In force"
 			if boolean(d, "draftBanner") {
 				d["state"] = "Draft for counsel"
@@ -232,15 +234,15 @@ func legalResource() *staffResource {
 		subtitleOf: func(o jobj) string {
 			return "Version " + jstr(o, "version") + " · effective " + jstr(o, "effectiveDate")
 		},
-		sections: func(o jobj) []domain.DetailSection { return autoSections(o, "", "versions") },
+		sections: func(o jobj) []domain.DetailSection { return autoSections(o, "", "versions", "path") },
 		tables: func(o jobj) []domain.DetailTable {
 			rows, _ := o["versions"].([]jobj)
 			return []domain.DetailTable{tableOf("Versions", rows, []domain.Column{col("version", "Version", "text", 15), col("effectiveDate", "Effective", "date", 20),
 				col("status", "Status", "status", 20), col("changeSummary", "What changed", "text", 45)}, "version")}
 		},
 		links: func(o jobj) []domain.RecordLink {
-			if h := jstr(o, "href"); h != "" {
-				return []domain.RecordLink{{Label: "Open the published page", Href: h}}
+			if p := jstr(o, "path"); p != "" {
+				return []domain.RecordLink{{Label: "Open the live page", Href: p, Storefront: true}}
 			}
 			return nil
 		},

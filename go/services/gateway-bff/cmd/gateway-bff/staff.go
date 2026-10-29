@@ -49,7 +49,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 			Proof:   sc.proofLinks,
 		},
 		Matrix: upstreams.NewOrgAccess(sc.identity), Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL,
-		Maintenance: maintenance, Jobs: valkey.NewExportJobs(rdb), Renderer: exportfiles.NewRenderer(), ExportBasePath: cfg.Web.BFFPath, Log: log, RetailOrgID: cfg.Commerce.RetailOrgID,
+		Maintenance: maintenance, Jobs: valkey.NewExportJobs(rdb), Renderer: exportfiles.NewRenderer(), ExportBasePath: cfg.Web.BFFPath, StorefrontURL: cfg.Web.PublicOrigin, Log: log, RetailOrgID: cfg.Commerce.RetailOrgID,
 	}
 	out := httpapi.StaffServices{}
 	seller := app.ExportDeps{Jobs: d.Jobs, Renderer: d.Renderer, BasePath: cfg.Web.BFFPath}

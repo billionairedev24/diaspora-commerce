@@ -440,6 +440,9 @@ type RecordLink struct {
 	Href  string `json:"href"`
 	// External opens the link in a new tab (an uploaded document the reviewer reads).
 	External bool `json:"external,omitempty"`
+	// Storefront marks Href as a public storefront path ("/help/shipping"): the framework makes it absolute on the
+	// storefront origin and opens it in a new tab. Never serialised.
+	Storefront bool `json:"-"`
 }
 
 // RecordDetail is the detail sheet of one record.
