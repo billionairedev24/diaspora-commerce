@@ -2,6 +2,7 @@
 
 import { type StaffModuleKey } from '@afrotransact/api-client';
 
+import { CatalogView } from '@/components/catalog/CatalogView';
 import { DashboardView } from '@/components/dashboard/DashboardView';
 import { DispatchView } from '@/components/dispatch/DispatchView';
 import { ExportsView } from '@/components/exports/ExportsView';
@@ -20,13 +21,15 @@ import { SupportView } from '@/components/support/SupportView';
 import { ModuleView } from './ModuleView';
 
 /** The screen of a module: dashboard, exports, support, fees, dispatch, notifications, pre-orders, the inventory hub,
-    AfroTransact Retail, Markets & locations (the location tree), Plans & billing and Identity & access have their own; the rest are server-driven tables. */
+    AfroTransact Retail, Catalog (listings, the category tree and category requests), Markets & locations (the location tree), Plans & billing and Identity & access have their own; the rest are server-driven tables. */
 export function ModuleScreen({ module }: { module: StaffModuleKey }) {
   switch (module) {
     case 'dash':
       return <DashboardView />;
     case 'exports':
       return <ExportsView />;
+    case 'catalog':
+      return <CatalogView />;
     case 'support':
       return <SupportView />;
     case 'fees':
