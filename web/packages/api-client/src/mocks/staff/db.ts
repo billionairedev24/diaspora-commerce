@@ -381,7 +381,19 @@ function seed(now: Date): MockStaffDb {
     ['seller-terms', 'Seller & Provider Terms', '2.4', day(40)],
     ['prohibited-items', 'Prohibited & Restricted Items', '1.6', day(88)],
     ['accessibility', 'Accessibility Statement', '1.2', day(52)],
-    ['sms-terms', 'SMS & Notification Terms', '1.0', day(1)]
+    ['sms-terms', 'SMS & Notification Terms', '1.0', day(1)],
+    ['gift-card-terms', 'Gift Card Terms', '1.0', day(28)],
+    ['store-credit-terms', 'Store Credit Terms', '1.0', day(28)],
+    ['membership-terms', 'Membership Terms', '1.0', day(28)],
+    ['referral-terms', 'Referral Program Terms', '1.0', day(28)],
+    ['preorder-delivery-terms', 'Pre-order & Delivery Terms', '1.0', day(28)],
+    ['community-guidelines', 'Community Guidelines', '1.0', day(28)],
+    ['ip-policy', 'Intellectual Property Policy', '1.0', day(28)],
+    ['provider-terms', 'Service Provider Terms', '1.0', day(28)],
+    ['payments-terms', 'Payments Terms', '1.0', day(28)],
+    ['subprocessors', 'Subprocessors', '1.0', day(28)],
+    ['data-processing', 'Data Processing Addendum', '1.0', day(28)],
+    ['seller-fees', 'Seller Fees & Charges', '1.0', day(28)]
   ].map(([key, title, version, effective]) => rec(key as string, { key: key as string, title: title as string, version: version as string, effectiveDate: effective as string, draftBanner: true, href: `/legal/${key as string}` }));
 
   const helpArticles = HELP_ARTICLES.map((a) => rec(a.slug, {

@@ -17,7 +17,7 @@ const notFound = () => new MockProblem(404, 'NOT_FOUND', 'Not found', 'We couldn
 function fill(markdown: string): string {
   const c = SITE_CONFIG.contacts;
   const values: Record<string, string> = {
-    phone: c.phone, privacy: c.privacyEmail, legal: c.legalEmail, accessibility: c.accessibilityEmail, address: c.address,
+    phone: c.phone, support: 'help@afrotransact.com', privacy: c.privacyEmail, legal: c.legalEmail, accessibility: c.accessibilityEmail, address: c.address,
     smsProgramName: SITE_CONFIG.smsProgramName
   };
   return markdown.replace(/\{([A-Za-z][A-Za-z0-9]*)\}/g, (m, k: string) => values[k] ?? m);
@@ -38,6 +38,13 @@ const PrivacyRequestBody = z.object({
 });
 
 export const legalHandlers = [
+  http.get('*/v1/legal', route(() => {
+    const documents = LEGAL_DOCUMENTS.map((d) => {
+      const v = d.versions.find((x) => x.status === 'CURRENT') ?? d.versions[0];
+      return { key: d.key, title: d.title, version: v?.version ?? '1.0', effectiveDate: v?.effectiveDate ?? '2026-01-01', href: `/legal/${d.key}`, draftBanner: v?.draftBanner ?? true };
+    });
+    return json({ documents });
+  })),
   http.get('*/v1/legal/:key', route((ctx, params) => {
     const key = params.key ?? '';
     const doc = isLegalDocumentKey(key) ? LEGAL_DOCUMENTS.find((d) => d.key === key) : undefined;

@@ -81,7 +81,19 @@ export const SITE_CONFIG: SiteConfig = {
     { key: 'seller-terms', title: 'Seller & Provider Terms', version: '2.4', effective: '2026-09-01', href: '/legal/seller-terms' },
     { key: 'prohibited-items', title: 'Prohibited & Restricted Items', version: '1.6', effective: '2026-07-15', href: '/legal/prohibited-items' },
     { key: 'accessibility', title: 'Accessibility Statement', version: '1.2', effective: '2026-08-20', href: '/legal/accessibility' },
-    { key: 'sms-terms', title: 'SMS & Notification Terms', version: '1.0', effective: '2026-10-10', href: '/legal/sms-terms' }
+    { key: 'sms-terms', title: 'SMS & Notification Terms', version: '1.0', effective: '2026-10-10', href: '/legal/sms-terms' },
+    { key: 'gift-card-terms', title: 'Gift Card Terms', version: '1.0', effective: '2026-10-01', href: '/legal/gift-card-terms' },
+    { key: 'store-credit-terms', title: 'Store Credit Terms', version: '1.0', effective: '2026-10-01', href: '/legal/store-credit-terms' },
+    { key: 'membership-terms', title: 'Membership Terms', version: '1.0', effective: '2026-10-01', href: '/legal/membership-terms' },
+    { key: 'referral-terms', title: 'Referral Program Terms', version: '1.0', effective: '2026-10-01', href: '/legal/referral-terms' },
+    { key: 'preorder-delivery-terms', title: 'Pre-order & Delivery Terms', version: '1.0', effective: '2026-10-01', href: '/legal/preorder-delivery-terms' },
+    { key: 'community-guidelines', title: 'Community Guidelines', version: '1.0', effective: '2026-10-01', href: '/legal/community-guidelines' },
+    { key: 'ip-policy', title: 'Intellectual Property Policy', version: '1.0', effective: '2026-10-01', href: '/legal/ip-policy' },
+    { key: 'provider-terms', title: 'Service Provider Terms', version: '1.0', effective: '2026-10-01', href: '/legal/provider-terms' },
+    { key: 'payments-terms', title: 'Payments Terms', version: '1.0', effective: '2026-10-01', href: '/legal/payments-terms' },
+    { key: 'subprocessors', title: 'Subprocessors', version: '1.0', effective: '2026-10-01', href: '/legal/subprocessors' },
+    { key: 'data-processing', title: 'Data Processing Addendum', version: '1.0', effective: '2026-10-01', href: '/legal/data-processing' },
+    { key: 'seller-fees', title: 'Seller Fees & Charges', version: '1.0', effective: '2026-10-01', href: '/legal/seller-fees' }
   ],
   identityProviders: [
     { id: 'google', name: 'Google', enabled: true },

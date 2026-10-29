@@ -1,6 +1,8 @@
 /* Legal & privacy center fixtures: the content-service seed (java/services/content/.../V5__seed_legal.sql and V6
    cookie table), so mock mode serves the same first drafts. Placeholders ({phone}, {privacy}, …) are filled when served. */
 
+import { MORE_LEGAL_DOCUMENTS } from './legal-more';
+
 export interface LegalVersionFixture {
   version: string;
   effectiveDate: string;
@@ -18,7 +20,7 @@ export interface LegalDocumentFixture {
   versions: LegalVersionFixture[];
 }
 
-export const LEGAL_DOCUMENTS: LegalDocumentFixture[] = [
+const FIRST_NINE: LegalDocumentFixture[] = [
   {
     key: 'conditions-of-use',
     title: 'Conditions of Use',
@@ -194,6 +196,9 @@ export const LEGAL_DOCUMENTS: LegalDocumentFixture[] = [
     ]
   }
 ];
+
+/** All twenty-one documents of the legal center, in the order content-service lists them. */
+export const LEGAL_DOCUMENTS: LegalDocumentFixture[] = [...FIRST_NINE, ...MORE_LEGAL_DOCUMENTS];
 
 export const COOKIE_CATEGORIES = [
   { key: 'necessary', name: 'Strictly necessary', description: 'Sign-in, cart, checkout, fraud prevention and security. These cannot be switched off.', required: true, gpcOptOut: false },
