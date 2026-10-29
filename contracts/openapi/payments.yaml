@@ -1381,6 +1381,10 @@ paths:
             - PLAN_FEE_SETTLED
             - SUPPLIER_PAYABLE
             - SUPPLIER_PAYMENT
+            - TRANSFER_RECOVERY_OPENED
+            - TRANSFER_RECOVERY_SETTLED
+            - TRANSFER_RECOVERY_RECEIVED
+            - TRANSFER_RECOVERY_WRITE_OFF
           uniqueItems: true
       responses:
         '200':
@@ -1952,6 +1956,147 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/PayoutResponse'
+  /v1/transfer-recoveries:
+    get:
+      tags:
+      - Transfer recoveries
+      summary: Transfer recoveries, newest first (payments:read)
+      description: 'Each is an amount Stripe definitively refused to take back from a seller''s transfer for a refund (typically
+        balance_insufficient: the seller''s balance was already paid out). The customer''s refund completed; the seller owes the
+        platform until later transfers recover it or Finance resolves it.'
+      operationId: listTransferRecoveries
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - OPEN
+          - RECOVERED
+          - WRITTEN_OFF
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TransferRecoveryResponse'
+  /v1/transfer-recoveries/{id}:
+    get:
+      tags:
+      - Transfer recoveries
+      summary: One transfer recovery (payments:read)
+      operationId: getTransferRecovery
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TransferRecoveryResponse'
+  /v1/transfer-recoveries/{id}/propose:
+    post:
+      tags:
+      - Transfer recoveries
+      summary: 'Propose closing a transfer recovery: received outside Stripe, or written off (ledger:adjust)'
+      description: 'Nothing is posted until a different person with ledger:approve approves it. RECOVERED needs the bank reference
+        of the money received (Dr 1050 / Cr 2000:org); WRITE_OFF absorbs the outstanding amount as a platform loss (Dr 5300 / Cr 2000:org).
+        409 payments.recovery-pending while another proposal waits; 409 payments.recovery-closed once it is recovered or written off.'
+      operationId: proposeTransferRecoveryResolution
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposeResolutionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TransferRecoveryResponse'
+  /v1/transfer-recoveries/{id}/approve:
+    post:
+      tags:
+      - Transfer recoveries
+      summary: Approve the proposed resolution and post it (ledger:approve, not the proposer)
+      description: 403 payments.recovery-four-eyes when the approver proposed it.
+      operationId: approveTransferRecoveryResolution
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryDecisionRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TransferRecoveryResponse'
+  /v1/transfer-recoveries/{id}/reject:
+    post:
+      tags:
+      - Transfer recoveries
+      summary: Reject the proposed resolution, with the reason (ledger:approve; the proposer may withdraw)
+      operationId: rejectTransferRecoveryResolution
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryDecisionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TransferRecoveryResponse'
   /v1/webhooks/stripe:
     post:
       tags:
@@ -4155,6 +4300,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Reversal'
+        transferRecoveries:
+          type: array
+          description: 'Reversals Stripe definitively refused (the seller''s balance was already paid out): the refund completed
+            and the seller owes the platform these amounts. GET /v1/transfer-recoveries lists them.'
+          items:
+            $ref: '#/components/schemas/TransferRecoveryResponse'
         createdAt:
           type: string
           format: date-time
@@ -4184,6 +4335,53 @@ components:
         amountMinor:
           type: integer
           format: int64
+    TransferRecoveryResponse:
+      type: object
+      description: An amount Stripe refused to take back from a seller's transfer for a refund; the seller owes it to the platform
+        until later transfers recover it or Finance resolves it
+      properties:
+        id: {type: string, format: uuid}
+        refundId: {type: string, format: uuid}
+        orderId: {type: string}
+        orgId: {type: string}
+        stripeTransferId: {type: string}
+        currency: {type: string}
+        amountMinor: {type: integer, format: int64}
+        recoveredMinor: {type: integer, format: int64, description: Taken from later transfers of the organisation}
+        resolvedMinor: {type: integer, format: int64, description: Closed by an approved resolution (received outside Stripe, or written off)}
+        outstandingMinor: {type: integer, format: int64, description: 'Still owed: amount - recovered - resolved'}
+        status: {type: string, enum: [OPEN, RECOVERED, WRITTEN_OFF]}
+        stripeCode: {type: string, description: 'Stripe''s error code, e.g. balance_insufficient'}
+        reason: {type: string}
+        pending:
+          $ref: '#/components/schemas/PendingResolutionResponse'
+        decidedBy: {type: string}
+        decidedAt: {type: string, format: date-time}
+        decisionNote: {type: string}
+        resolution: {type: string, enum: [RECOVERED, WRITE_OFF], description: How an approved proposal closed it; null while open or when later earnings paid it}
+        resolutionRef: {type: string, description: The bank reference of money received outside Stripe}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    PendingResolutionResponse:
+      type: object
+      description: A resolution proposed by one Finance person and waiting for a different one; null when none
+      properties:
+        resolution: {type: string, enum: [RECOVERED, WRITE_OFF]}
+        reason: {type: string}
+        reference: {type: string}
+        proposedBy: {type: string}
+        proposedAt: {type: string, format: date-time}
+    ProposeResolutionRequest:
+      type: object
+      required: [resolution, reason]
+      properties:
+        resolution: {type: string, enum: [RECOVERED, WRITE_OFF]}
+        reason: {type: string, maxLength: 500, description: At least 15 characters}
+        reference: {type: string, maxLength: 120, description: The bank reference of the money received; required for RECOVERED}
+    RecoveryDecisionRequest:
+      type: object
+      properties:
+        note: {type: string, maxLength: 500}
     OffSessionChargeRequest:
       type: object
       description: 'Charge lines of the order off-session on the customer''s saved card (manual capture: capture with POST
@@ -5191,6 +5389,12 @@ components:
           description: 'Seller plan fees withheld from earnings (S298) and not yet recovered from a transfer: they come out
             of onHoldMinor; only the part the amounts on hold no longer cover reduces availableMinor. Negative when a released
             fee is paid back with the next transfer. Details: GET /v1/orgs/{orgId}/plan-fee-withholdings'
+        transferRecoveriesMinor:
+          type: integer
+          format: int64
+          description: 'Refunds Stripe would not take back from the organisation''s transfers (its balance was already paid out)
+            and not yet recovered: owed to the platform, deducted from availableMinor in full and recovered from the next transfers.
+            Details: GET /v1/transfer-recoveries?orgId='
         deliveryFeesMinor:
           type: integer
           format: int64

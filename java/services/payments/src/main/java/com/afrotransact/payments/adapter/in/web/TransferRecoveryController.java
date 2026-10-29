@@ -45,7 +45,7 @@ class TransferRecoveryController {
                     + "customer's refund completed; the seller owes the platform until later transfers recover it "
                     + "or Finance resolves it.")
     @GetMapping("/v1/transfer-recoveries")
-    List<TransferRecoveryResponse> list(@RequestParam(required = false) TransferRecoveryStatus status,
+    List<TransferRecoveryResponse> listTransferRecoveries(@RequestParam(required = false) TransferRecoveryStatus status,
                                         @RequestParam(required = false) String orgId,
                                         @RequestParam(defaultValue = "100") int limit) {
         return recoveries.list(status, orgId, limit).stream().map(TransferRecoveryResponse::of).toList();
@@ -53,7 +53,7 @@ class TransferRecoveryController {
 
     @Operation(summary = "One transfer recovery (payments:read)")
     @GetMapping("/v1/transfer-recoveries/{id}")
-    TransferRecoveryResponse get(@PathVariable UUID id) {
+    TransferRecoveryResponse getTransferRecovery(@PathVariable UUID id) {
         return TransferRecoveryResponse.of(recoveries.get(id));
     }
 
@@ -65,7 +65,8 @@ class TransferRecoveryController {
                     + "payments.recovery-pending while another proposal waits; 409 payments.recovery-closed once "
                     + "it is recovered or written off.")
     @PostMapping("/v1/transfer-recoveries/{id}/propose")
-    TransferRecoveryResponse propose(@PathVariable UUID id, @Valid @RequestBody ProposeResolutionRequest body) {
+    TransferRecoveryResponse proposeTransferRecoveryResolution(@PathVariable UUID id,
+                                                               @Valid @RequestBody ProposeResolutionRequest body) {
         return TransferRecoveryResponse.of(recoveries.propose(id, body.resolution(), body.reason(),
                 body.reference()));
     }
@@ -73,15 +74,16 @@ class TransferRecoveryController {
     @Operation(summary = "Approve the proposed resolution and post it (ledger:approve, not the proposer)",
             description = "403 payments.recovery-four-eyes when the approver proposed it.")
     @PostMapping("/v1/transfer-recoveries/{id}/approve")
-    TransferRecoveryResponse approve(@PathVariable UUID id,
-                                     @RequestBody(required = false) RecoveryDecisionRequest body) {
+    TransferRecoveryResponse approveTransferRecoveryResolution(
+            @PathVariable UUID id, @RequestBody(required = false) RecoveryDecisionRequest body) {
         return TransferRecoveryResponse.of(recoveries.approve(id, body == null ? null : body.note()));
     }
 
     @Operation(summary = "Reject the proposed resolution, with the reason (ledger:approve; the proposer may "
             + "withdraw)")
     @PostMapping("/v1/transfer-recoveries/{id}/reject")
-    TransferRecoveryResponse reject(@PathVariable UUID id, @RequestBody RecoveryDecisionRequest body) {
+    TransferRecoveryResponse rejectTransferRecoveryResolution(@PathVariable UUID id,
+                                                              @RequestBody RecoveryDecisionRequest body) {
         return TransferRecoveryResponse.of(recoveries.reject(id, body == null ? null : body.note()));
     }
 }
