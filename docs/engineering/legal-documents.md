@@ -103,15 +103,20 @@ Needs PyYAML (`pip install pyyaml`).
 
 ## Acceptance
 
-* **Sign-up** (identity hosted page): links to `conditions-of-use` and `privacy`; the SMS opt-in links to `sms-terms`. The accepted
-  Conditions version is stored with the account (`termsAccepted`/version in identity).
+* **Sign-up** (identity hosted page, mobile sign-in): links to `conditions-of-use` and `privacy`; the SMS opt-in names the program
+  (identity's `smsProgram` setting, which must equal the content site config's `smsProgramName` that the `sms-terms` document is
+  rendered with; both default to "AfroTransact Alerts") and links to `sms-terms`. Identity stores *when* the
+  terms were accepted (`termsAcceptedAt`), not which version (follow-up: pass the version the page showed).
 * **Sellers** accept `seller-terms`, `payments-terms` and `data-processing` in onboarding (providers: `provider-terms`,
   `payments-terms`, `data-processing`). The gateway-bff stamps the *current version of each document* into the compliance step
   (`agreements: [{key, version}]`) and seller-service records them with the time of acceptance; the review step and the
   application show what was accepted.
-* **Checkout, gift card purchase, membership, referral, pre-order** pages link to their terms (`conditions-of-use`+`privacy`,
-  `gift-card-terms`, `membership-terms`, `referral-terms`, `preorder-delivery-terms`).
+* **Checkout** links `conditions-of-use`, `privacy` and `returns`, and `preorder-delivery-terms` when the order holds a pre-order.
+  Gift card purchase, membership and referral screens do not exist in the apps yet: when they are built they link
+  `gift-card-terms`, `membership-terms` and `referral-terms` with `legalHref(key)`.
 * **Cookie banner** links to `cookies`; **footer** links the legal center and the main documents.
 
-Where a surface does not exist yet in an app (gift cards, membership, referral), its terms are still published at `/legal/<key>` and
-the constants in `@afrotransact/api-client` (`legalHref`, `SELLER_AGREEMENTS`, `PROVIDER_AGREEMENTS`) are what the new screen uses.
+Seller Center's agreement checkboxes link each document (new tab) and the review step lists what was accepted with its version;
+the staff console's legal documents table lists the twenty-one documents in the legal center's order with group and state, and
+"New version" accepts the draft banner and the fr/es/ar/yo translations. `@afrotransact/api-client` holds the shared constants
+(`legalHref`, `LEGAL_GROUPS`, `LEGAL_DOCUMENT_TITLES`, `SELLER_AGREEMENTS`, `PROVIDER_AGREEMENTS`).
