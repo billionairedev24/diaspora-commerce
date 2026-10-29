@@ -2,10 +2,13 @@ package com.afrotransact.content.adapter.in.web;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 
+import com.afrotransact.content.adapter.in.web.HelpDtos.AdminArticleDto;
 import com.afrotransact.content.adapter.in.web.HelpDtos.ArticleDto;
 import com.afrotransact.content.adapter.in.web.HelpDtos.ArticleRequest;
 import com.afrotransact.content.adapter.in.web.HelpDtos.PageDto;
+import com.afrotransact.content.application.HelpAuthoringService;
 import com.afrotransact.content.application.HelpCenterService;
 import com.afrotransact.content.domain.help.HelpTopic;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,9 +33,11 @@ class HelpController {
     private static final CacheControl SHORT = CacheControl.maxAge(Duration.ofMinutes(1)).cachePublic();
 
     private final HelpCenterService help;
+    private final HelpAuthoringService authoring;
 
-    HelpController(HelpCenterService help) {
+    HelpController(HelpCenterService help, HelpAuthoringService authoring) {
         this.help = help;
+        this.authoring = authoring;
     }
 
     @Operation(operationId = "listHelpArticles", summary = "Published help articles (the hub excluded), by topic and text, a page at a time")
@@ -54,8 +59,9 @@ class HelpController {
 
     @Operation(operationId = "allHelpArticles", summary = "Every help article including drafts (content:site.view)")
     @GetMapping("/admin/articles")
-    List<ArticleDto> all() {
-        return help.all().stream().map(ArticleDto::of).toList();
+    List<AdminArticleDto> all() {
+        Set<String> withDraft = authoring.slugsWithDraft();
+        return help.all().stream().map(a -> AdminArticleDto.of(a, withDraft.contains(a.slug()))).toList();
     }
 
     @Operation(operationId = "saveHelpArticle", summary = "Create or change a help article (content:site.edit); expectedVersion guards concurrent edits")

@@ -10,8 +10,10 @@ import java.util.Map;
 
 import com.afrotransact.content.domain.ContentRuleViolation;
 import com.afrotransact.content.domain.help.HelpArticle;
+import com.afrotransact.content.domain.help.HelpRevision;
 import com.afrotransact.content.domain.help.HelpTopic;
 import com.afrotransact.content.port.HelpArticleRepository;
+import com.afrotransact.content.port.HelpRevisionRepository;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.NotFoundException;
@@ -24,12 +26,15 @@ class HelpCenterServiceImpl implements HelpCenterService {
     static final int MAX_LIMIT = 50;
 
     private final HelpArticleRepository articles;
+    private final HelpRevisionRepository revisions;
     private final ContentAccess access;
     private final AuditTrail audit;
     private final Clock clock;
 
-    HelpCenterServiceImpl(HelpArticleRepository articles, ContentAccess access, AuditTrail audit, Clock clock) {
+    HelpCenterServiceImpl(HelpArticleRepository articles, HelpRevisionRepository revisions, ContentAccess access,
+                          AuditTrail audit, Clock clock) {
         this.articles = articles;
+        this.revisions = revisions;
         this.access = access;
         this.audit = audit;
         this.clock = clock;
@@ -74,9 +79,10 @@ class HelpCenterServiceImpl implements HelpCenterService {
         var current = articles.find(article.slug());
         if (current.isEmpty()) {
             HelpArticle created = new HelpArticle(article.slug(), article.topic(), article.title(), article.summary(),
-                    article.sections(), article.status(), article.sortOrder(), now, 0);
+                    article.sections(), article.status(), article.sortOrder(), now, 0, actor.subject());
             created.validate();
             articles.insert(created);
+            revisions.append(HelpRevision.of(created, 1, null, "Page created", actor.subject(), now));
             audit.record(actor.subject(), "help-article.created", "help-article", created.slug(),
                     Map.of("status", created.status().name()));
             return created;
@@ -86,12 +92,15 @@ class HelpCenterServiceImpl implements HelpCenterService {
                     "Someone changed this article in the meantime. Reload it and apply your change again.");
         }
         HelpArticle next = new HelpArticle(article.slug(), article.topic(), article.title(), article.summary(),
-                article.sections(), article.status(), article.sortOrder(), now, current.get().version() + 1);
+                article.sections(), article.status(), article.sortOrder(), now, current.get().version() + 1,
+                actor.subject());
         next.validate();
         if (!articles.update(next, expectedVersion)) {
             throw new ConflictException("content.stale-help-article",
                     "Someone changed this article in the meantime. Reload it and apply your change again.");
         }
+        revisions.append(HelpRevision.of(next, revisions.nextRevision(next.slug()), null, "Saved in the editor",
+                actor.subject(), now));
         audit.record(actor.subject(), "help-article.updated", "help-article", next.slug(),
                 Map.of("from", current.get().status().name(), "to", next.status().name()));
         return next;

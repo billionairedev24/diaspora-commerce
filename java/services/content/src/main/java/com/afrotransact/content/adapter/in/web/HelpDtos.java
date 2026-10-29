@@ -69,6 +69,18 @@ final class HelpDtos {
         }
     }
 
+    @Schema(name = "HelpArticleAdmin", description = "A help page as site-content staff see it: who changed it last and whether a draft is waiting")
+    record AdminArticleDto(String slug, HelpTopic topic, String topicTitle, String title, String summary,
+                           List<SectionDto> sections, HelpArticleStatus status, int sortOrder, Instant updatedAt,
+                           long version, String updatedBy, boolean hasDraft) {
+
+        static AdminArticleDto of(HelpArticle a, boolean hasDraft) {
+            return new AdminArticleDto(a.slug(), a.topic(), a.topic().title(), a.title(), a.summary(),
+                    a.sections().stream().map(SectionDto::of).toList(), a.status(), a.sortOrder(), a.updatedAt(),
+                    a.version(), a.updatedBy(), hasDraft);
+        }
+    }
+
     @Schema(name = "HelpArticleRequest")
     record ArticleRequest(@NotNull HelpTopic topic, @NotBlank String title, @NotBlank String summary,
                           @NotNull List<SectionDto> sections, @NotNull HelpArticleStatus status, Integer sortOrder,
@@ -77,7 +89,7 @@ final class HelpDtos {
 
         HelpArticle toDomain(String slug) {
             return new HelpArticle(slug, topic, title, summary, sections.stream().map(SectionDto::toDomain).toList(),
-                    status, sortOrder == null ? 0 : sortOrder, null, 0);
+                    status, sortOrder == null ? 0 : sortOrder, null, 0, null);
         }
     }
 }

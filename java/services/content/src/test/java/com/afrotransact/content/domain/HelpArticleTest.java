@@ -15,7 +15,7 @@ class HelpArticleTest {
 
     private static HelpArticle article(String slug, List<HelpSection> sections) {
         return new HelpArticle(slug, HelpTopic.ORDERS_DELIVERY, "Shipping & delivery", "Carriers and pickup", sections,
-                HelpArticleStatus.PUBLISHED, 0, null, 0);
+                HelpArticleStatus.PUBLISHED, 0, null, 0, null);
     }
 
     @Test
