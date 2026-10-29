@@ -27,8 +27,7 @@ public class DefaultRunPnlCalculator implements RunPnlCalculator {
     @Override
     public RunPnl pnl(Run run, RouteEstimate route, List<RunOrder> slots, Long manualPlatformFeesMinor) {
         RunTerms t = run.terms();
-        RunOrderTally tally = slots.isEmpty() && run.reservedOrders() > 0 ? RunOrderTally.counted(run)
-                : RunOrderTally.of(run, slots);
+        RunOrderTally tally = RunOrderTally.forRun(run, slots);
         Integer capacity = t.capacity().maxOrders();
         if (run.status() == RunStatus.CANCELLED) {
             RunEconomics planned = calculator.evaluate(route, t.dropMode(), t.feeMinor(), t.currency(), t.minOrders(),

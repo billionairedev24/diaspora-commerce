@@ -19,6 +19,7 @@ import com.afrotransact.deliveryruns.domain.Subscription;
 import com.afrotransact.deliveryruns.domain.SubscriptionStatus;
 import com.afrotransact.deliveryruns.port.ConcurrentUpdateException;
 import com.afrotransact.deliveryruns.port.MonthlyCount;
+import com.afrotransact.deliveryruns.port.NetGrowth;
 import com.afrotransact.deliveryruns.port.SubscriberCounts;
 import com.afrotransact.deliveryruns.port.SubscriptionRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -170,6 +171,31 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
                 group by 1 order by 1
                 """).param("l", locationId).param("since", Sql.ts(since))
                 .query((rs, n) -> new MonthlyCount(YearMonth.parse(rs.getString("month")), rs.getLong("n"))).list();
+    }
+
+    @Override
+    public List<NetGrowth> netGrowth(UUID locationId, Instant since) {
+        return jdbc.sql("""
+                with joined as (
+                    select to_char(date_trunc('month', created_at at time zone 'UTC'), 'YYYY-MM') as month,
+                        count(*) as n
+                    from subscription where location_id = :l and created_at >= :since
+                    group by 1),
+                ended as (
+                    select to_char(date_trunc('month', e.at at time zone 'UTC'), 'YYYY-MM') as month, count(*) as n
+                    from (select coalesce((select max(c.at) from consent_log c
+                                           where c.subscription_id = s.id and c.action = 'WITHDRAWN'),
+                                          s.updated_at) as at
+                          from subscription s where s.location_id = :l and s.status = 'CANCELLED') e
+                    where e.at >= :since
+                    group by 1)
+                select coalesce(joined.month, ended.month) as month, coalesce(joined.n, 0) as signups,
+                    coalesce(ended.n, 0) as unsubscribes
+                from joined full outer join ended on joined.month = ended.month
+                order by 1
+                """).param("l", locationId).param("since", Sql.ts(since))
+                .query((rs, n) -> new NetGrowth(YearMonth.parse(rs.getString("month")), rs.getLong("signups"),
+                        rs.getLong("unsubscribes"))).list();
     }
 
     /** Upserts consent rows and appends a consent_log entry for every grant, withdrawal and confirmation. */

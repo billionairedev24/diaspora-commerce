@@ -72,6 +72,11 @@ public record RunOrderTally(int carried, int delivered, int failed, int cancelle
         return of(null, List.of());
     }
 
+    /** The run's orders: from its slots, else (a run whose slots were never recorded) from its counter. */
+    public static RunOrderTally forRun(Run run, List<RunOrder> slots) {
+        return slots.isEmpty() && run.reservedOrders() > 0 ? counted(run) : of(run, slots);
+    }
+
     /**
      * A run whose slots are not recorded (only its counter is): its reserved orders, every amount the run's fee
      * standing in for what was charged, labelled as an estimate.
