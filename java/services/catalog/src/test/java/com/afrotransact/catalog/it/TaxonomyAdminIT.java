@@ -46,7 +46,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * S291 staff taxonomy administration against PostgreSQL, through the HTTP API: permissions, reason + audit + event on
+ * S325 staff taxonomy administration against PostgreSQL, through the HTTP API: permissions, reason + audit + event on
  * every change, optimistic locking, soft retire (refused while products use the node), moves and renames that carry
  * paths, attribute editing, and approving a category request that creates its node and product type in one step.
  * {@code AT_IT_POSTGRES_URL=jdbc:postgresql://…} runs the tests on that PostgreSQL instead of a container.

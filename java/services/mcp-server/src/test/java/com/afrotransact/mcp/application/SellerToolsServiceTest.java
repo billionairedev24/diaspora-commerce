@@ -62,6 +62,20 @@ class SellerToolsServiceTest {
     }
 
     @Test
+    void staffReadTheCategoryRequestQueueUnderTheTaxonomyPermission() {
+        StaffToolsService staff = new StaffToolsServiceImpl(guard, null, catalog, null, null, null, null);
+        catalog.next = Downstream.ok(List.of(Map.of("reference", "REQ-000041")));
+        assertThat(staff.categoryRequestsQueue(ADMIN, " approved ").status()).isEqualTo("OK");
+        assertThat(staff.categoryRequestsQueue(ADMIN, null).status()).isEqualTo("OK");
+        assertThat(catalog.calls).containsExactly("categoryRequests APPROVED", "categoryRequests null");
+        assertThat(guard.required).containsExactly(ToolCatalog.CATEGORY_REQUESTS_QUEUE, ToolCatalog.CATEGORY_REQUESTS_QUEUE);
+        assertThat(ToolCatalog.find(ToolCatalog.CATEGORY_REQUESTS_QUEUE).orElseThrow().requiredPermission())
+                .isEqualTo("catalog:taxonomy");
+        catalog.next = Downstream.of(Downstream.Status.FORBIDDEN);
+        assertThat(staff.categoryRequestsQueue(ADMIN, null).status()).isEqualTo("FORBIDDEN");
+    }
+
+    @Test
     void listsOrdersAndInventoryForTheOrganisation() {
         orders.next = Downstream.ok(List.of());
         assertThat(tools.listMyOrders(SELLER, "READY", "cur-2").status()).isEqualTo("OK");
@@ -168,6 +182,12 @@ class SellerToolsServiceTest {
         private Downstream next = Downstream.ok(Map.of());
         private final List<String> calls = new ArrayList<>();
         private final List<Map<String, Object>> bodies = new ArrayList<>();
+
+        @Override
+        public Downstream categoryRequests(String status, String bearerToken) {
+            calls.add("categoryRequests " + status);
+            return next;
+        }
 
         @Override
         public Downstream publicProduct(String atin, String bearerToken) {

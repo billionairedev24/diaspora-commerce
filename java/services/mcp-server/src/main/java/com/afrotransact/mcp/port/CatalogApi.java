@@ -14,4 +14,7 @@ public interface CatalogApi {
     Downstream product(String idOrAtin, String bearerToken);
 
     Downstream requestCategory(Map<String, Object> request, String bearerToken);
+
+    /** The review queue of category requests (staff, catalog:taxonomy); status null means pending review. */
+    Downstream categoryRequests(String status, String bearerToken);
 }

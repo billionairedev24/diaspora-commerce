@@ -92,7 +92,7 @@ operations:
     channel: {$ref: '#/channels/catalogTaxonomyEvents'}
     summary: >-
       catalog-service publishes catalog.taxonomy.changed whenever staff create, rename, move, reorder, retire or
-      restore a node, or create or edit a product type (S291, /v1/taxonomy/*). Approving a category request publishes
+      restore a node, or create or edit a product type (S325, /v1/taxonomy/*). Approving a category request publishes
       one per node and product type it creates.
   consumeCatalogSellerComplianceEvents:
     action: receive

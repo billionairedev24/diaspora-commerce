@@ -122,7 +122,7 @@ class SellerAccountToolsServiceTest {
         assertThat(ToolCatalog.find(ToolCatalog.PAYOUT_BALANCE)).isPresent();
         assertThat(ToolCatalog.find(ToolCatalog.SELLER_PAYOUT_STATUS)).get().extracting(ToolDescriptor::readOnly)
                 .isEqualTo(true);
-        assertThat(ToolCatalog.all()).hasSize(26);
+        assertThat(ToolCatalog.all()).hasSize(27);
     }
 
     /** Access is checked by the guard's own tests; here every call is allowed. */

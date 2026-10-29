@@ -215,7 +215,7 @@ class McpServerIT {
                 HttpResponse.BodyHandlers.ofString());
         assertThat(response.statusCode()).isEqualTo(200);
         JsonNode tools = json.readTree(response.body());
-        assertThat(tools.size()).isEqualTo(26);
+        assertThat(tools.size()).isEqualTo(27);
         JsonNode update = tools.valueStream().filter(t -> t.path("name").asString().equals("update_shipment_status"))
                 .findFirst().orElseThrow();
         assertThat(update.path("requiredScope").asString()).isEqualTo("mcp:seller");

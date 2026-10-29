@@ -1,4 +1,4 @@
--- S291 taxonomy administration: staff create, rename, move, reorder and retire departments, categories and product
+-- S325 taxonomy administration: staff create, rename, move, reorder and retire departments, categories and product
 -- types in the console. V2 stays the initial data only; every later change is an audited staff action.
 
 alter table category

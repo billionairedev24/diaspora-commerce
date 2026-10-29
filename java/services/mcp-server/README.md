@@ -74,6 +74,7 @@ layer.
 | | `account_health` | — | seller `GET /v1/orgs/{orgId}/account-health` — what Stripe still needs, whether payouts or charges are off |
 | staff (`mcp:staff` + staff) | `applications_queue`, `application_detail` | `applications:review` | seller `GET /v1/applications…` — PII masked |
 | | `moderation_queue` | `catalog:moderate` | catalog `GET /v1/products?status=IN_REVIEW` |
+| | `category_requests_queue` | `catalog:taxonomy` | catalog `GET /v1/category-requests?status=` — sellers' requests for a missing category with the products waiting; read-only (staff decide in the console under Catalog) |
 | | `order_payment_split` | `ledger:read` | payments `GET /v1/orders/{id}/payment-split` |
 | | `order_lookup` | `orders:read` | orders `GET /v1/orders/{id}` — PII masked |
 | | `seller_payout_status` | `ledger:read` | payments `GET /v1/payouts/balance?orgId=` — why a seller has not been paid |
