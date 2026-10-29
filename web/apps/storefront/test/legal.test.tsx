@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CookieBanner } from '@/components/legal/CookieBanner';
 import { LegalCenter } from '@/components/legal/LegalCenter';
-import { headingId, LegalBlocks, parseLegalMarkdown, renderInline, safeHref } from '@/components/legal/markdown';
+import { headingId, LegalBlocks, parseLegalMarkdown, renderInline, safeHref } from '@afrotransact/content';
 import { PrivacyChoices } from '@/components/legal/PrivacyChoices';
 import { messagesFor } from '@/i18n/catalogs';
 import { EN_MESSAGES, tEn } from '@/i18n/t';

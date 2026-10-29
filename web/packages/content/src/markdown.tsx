@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from 'react';
 
-/* Legal documents are Markdown from content-service (`# Title`, `## Section`, `###` sub-headings, paragraphs, `-` / `1.`
+/* Shared by the storefront (which shows the page) and the staff console (which previews and edits it), so the preview is
+   the page. Legal documents are Markdown from content-service (`# Title`, `## Section`, `###` sub-headings, paragraphs, `-` / `1.`
    lists with one nested level, pipe tables, `>` quotes, `---` rules, **bold**, *italic*, `code`, [links](…)). This
    renders exactly that subset to React elements — never HTML strings — so a document can't inject markup. Email
    addresses become mailto: links. */
@@ -188,16 +189,45 @@ export function safeHref(href: string): string | null {
   return null;
 }
 
+/** `[[LEGAL: …]]`: a point counsel still has to decide. Shoppers never see one in a published final document. */
+export const LEGAL_MARKER = /\[\[LEGAL:[^\]]*\]\]/g;
+
+/** How many unresolved `[[LEGAL: …]]` markers a text holds. */
+export const countLegalMarkers = (text: string): number => text.match(LEGAL_MARKER)?.length ?? 0;
+
+/** When set, `[[LEGAL: …]]` markers render as a highlighted `<mark data-legal-marker>` (the staff preview). */
+export interface MarkerStyle {
+  className?: string;
+}
+
+function plain(text: string, marks: MarkerStyle | undefined, key: () => number): ReactNode[] {
+  if (!marks) return [text];
+  const out: ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(LEGAL_MARKER)) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push(
+      <mark key={`m${key()}`} data-legal-marker="" className={marks.className}>
+        {m[0]}
+      </mark>
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
 /** Renders the inline subset: `code`, **bold**, *italic*, [text](href) and email addresses. */
-export function renderInline(text: string): ReactNode[] {
+export function renderInline(text: string, marks?: MarkerStyle): ReactNode[] {
   const out: ReactNode[] = [];
   let last = 0;
   let n = 0;
+  const key = () => n++;
   for (const m of text.matchAll(INLINE)) {
     const at = m.index;
-    if (at > last) out.push(text.slice(last, at));
+    if (at > last) out.push(...plain(text.slice(last, at), marks, key));
     if (m[1] !== undefined) out.push(<code key={n++}>{m[1]}</code>);
-    else if (m[2] !== undefined) out.push(<strong key={n++}>{renderInline(m[2])}</strong>);
+    else if (m[2] !== undefined) out.push(<strong key={n++}>{renderInline(m[2], marks)}</strong>);
     else if (m[3] !== undefined) out.push(<em key={n++}>{m[3]}</em>);
     else if (m[4] !== undefined) out.push(<em key={n++}>{m[4]}</em>);
     else if (m[5] !== undefined) {
@@ -206,7 +236,7 @@ export function renderInline(text: string): ReactNode[] {
     } else if (m[7] !== undefined) out.push(<a key={n++} href={`mailto:${m[7]}`}>{m[7]}</a>);
     last = at + m[0].length;
   }
-  if (last < text.length) out.push(text.slice(last));
+  if (last < text.length) out.push(...plain(text.slice(last), marks, key));
   return out;
 }
 
@@ -219,12 +249,18 @@ export interface LegalBlockClasses {
   table?: string;
   cell?: string;
   rule?: string;
+  /** Class of a highlighted `[[LEGAL: …]]` marker. */
+  marker?: string;
+  /** Render `[[LEGAL: …]]` markers highlighted (staff preview only). */
+  highlightMarkers?: boolean;
 }
 
 function Block({ block, classes }: { block: LegalBlock; classes: LegalBlockClasses }) {
+  const marks: MarkerStyle | undefined = classes.highlightMarkers ? { className: classes.marker } : undefined;
+  const inline = (text: string) => renderInline(text, marks);
   switch (block.kind) {
     case 'p':
-      return <p className={classes.body}>{renderInline(block.text)}</p>;
+      return <p className={classes.body}>{inline(block.text)}</p>;
     case 'h3':
       return (
         <h3 id={block.id} className={classes.subheading}>
@@ -238,7 +274,7 @@ function Block({ block, classes }: { block: LegalBlock; classes: LegalBlockClass
         </h4>
       );
     case 'quote':
-      return <blockquote className={classes.quote}>{renderInline(block.text)}</blockquote>;
+      return <blockquote className={classes.quote}>{inline(block.text)}</blockquote>;
     case 'hr':
       return <hr className={classes.rule} />;
     case 'table':
@@ -249,7 +285,7 @@ function Block({ block, classes }: { block: LegalBlock; classes: LegalBlockClass
               <tr>
                 {block.head.map((h, c) => (
                   <th key={c} scope="col" className={classes.cell} style={block.align[c] ? { textAlign: block.align[c] } : undefined}>
-                    {renderInline(h)}
+                    {inline(h)}
                   </th>
                 ))}
               </tr>
@@ -259,7 +295,7 @@ function Block({ block, classes }: { block: LegalBlock; classes: LegalBlockClass
                 <tr key={r}>
                   {row.map((cell, c) => (
                     <td key={c} className={classes.cell} style={block.align[c] ? { textAlign: block.align[c] } : undefined}>
-                      {renderInline(cell)}
+                      {inline(cell)}
                     </td>
                   ))}
                 </tr>
@@ -277,7 +313,7 @@ function Block({ block, classes }: { block: LegalBlock; classes: LegalBlockClass
             const child = block.children?.[j];
             return (
               <li key={j}>
-                {renderInline(it)}
+                {inline(it)}
                 {child && <Block block={child} classes={classes} />}
               </li>
             );
