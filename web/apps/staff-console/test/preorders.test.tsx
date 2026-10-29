@@ -108,6 +108,8 @@ describe('Pre-orders back office (S274)', () => {
     nav.set('/preorders/lbk-7');
     await renderScreen(<PreordersView screen={{ kind: 'detail', id: 'lbk-7' }} />);
     expect(await screen.findByTestId('kpi-Pre-orders')).toHaveTextContent(/\d+/);
+    // Orders that came from the window's own messages are credited to their UTM campaign (S262).
+    expect(await screen.findByRole('region', { name: 'UTM campaign preorder-LBK-7' })).toHaveTextContent(/(email|sms|push) \/ announce/);
     expect(screen.getByRole('tab', { name: 'Orders (142)' })).toHaveAttribute('href', '/preorders/lbk-7?tab=orders');
     nav.set('/preorders/lbk-7?tab=orders');
     await waitFor(() => expect(screen.getAllByTestId('order-row')).toHaveLength(12));
@@ -124,13 +126,13 @@ describe('Pre-orders back office (S274)', () => {
     expect(await screen.findByRole('heading', { name: 'Edit · Midland–Odessa Pre-order #2' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Comms/ }));
     const preview = await screen.findByTestId('sms-preview');
-    await waitFor(() => expect(preview).toHaveTextContent(/\/pre-orders\?src=sms&po=[A-Z]{3}-\d+&cr=announce/));
+    await waitFor(() => expect(preview).toHaveTextContent(/\/pre-orders\?src=sms&po=[A-Z]{3}-\d+&cr=announce&utm_source=sms&utm_medium=sms&utm_campaign=preorder-[A-Z]{3}-\d+&utm_content=announce/));
     expect(preview).not.toHaveTextContent('{link}');
     const sent = preview.textContent ?? '';
-    expect(screen.getByTestId('sms-count')).toHaveTextContent(`${sent.length}/160`);
+    expect(screen.getByTestId('sms-count')).toHaveTextContent(`${sent.length}/306`);
     const box = screen.getByRole('textbox', { name: /SMS copy/ });
     await user.clear(box);
-    await user.type(box, `${'x'.repeat(140)} {{link}`);
+    await user.type(box, `${'x'.repeat(160)} {{link}`);
     expect(screen.getByTestId('sms-count').className).toContain('text-red-600');
   });
 
