@@ -16,12 +16,15 @@ import com.afrotransact.content.domain.legal.LegalDocumentType;
 import com.afrotransact.platform.web.error.NotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -59,7 +62,10 @@ class LegalController {
     }
 
     @Operation(summary = "A document's current version, rendered (placeholders filled from the site config)")
-    @ApiResponse(responseCode = "404", description = "No such document")
+    @ApiResponse(responseCode = "200", description = "OK")
+    @ApiResponse(responseCode = "404", description = "No such document",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemDetail.class)))
     @SecurityRequirements
     @GetMapping("/{type}")
     ResponseEntity<PageResponse> current(@PathVariable @Parameter(example = "sms-terms", description = "Document key: " + KEYS) String type,
@@ -68,7 +74,10 @@ class LegalController {
     }
 
     @Operation(summary = "All versions of a document, newest first (archived ones stay retrievable)")
-    @ApiResponse(responseCode = "404", description = "No such document")
+    @ApiResponse(responseCode = "200", description = "OK")
+    @ApiResponse(responseCode = "404", description = "No such document",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemDetail.class)))
     @SecurityRequirements
     @GetMapping("/{type}/versions")
     ResponseEntity<List<VersionDto>> versions(@PathVariable String type) {
@@ -76,7 +85,10 @@ class LegalController {
     }
 
     @Operation(summary = "One version of a document (current or archived)")
-    @ApiResponse(responseCode = "404", description = "No such document or version")
+    @ApiResponse(responseCode = "200", description = "OK")
+    @ApiResponse(responseCode = "404", description = "No such document or version",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemDetail.class)))
     @SecurityRequirements
     @GetMapping("/{type}/versions/{version}")
     ResponseEntity<PageResponse> version(@PathVariable String type, @PathVariable String version,
