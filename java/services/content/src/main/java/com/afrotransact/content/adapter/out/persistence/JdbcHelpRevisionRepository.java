@@ -3,7 +3,9 @@ package com.afrotransact.content.adapter.out.persistence;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import com.afrotransact.content.domain.help.HelpArticleStatus;
@@ -47,6 +49,16 @@ class JdbcHelpRevisionRepository implements HelpRevisionRepository {
     public int nextRevision(String slug) {
         return jdbc.sql("select coalesce(max(revision), 0) + 1 from help_article_revision where slug = :slug")
                 .param("slug", slug).query(Integer.class).single();
+    }
+
+    @Override
+    public Map<String, Integer> latestRevisions() {
+        Map<String, Integer> out = new HashMap<>();
+        jdbc.sql("select slug, max(revision) as latest from help_article_revision group by slug").query((rs, row) -> {
+            out.put(rs.getString("slug"), rs.getInt("latest"));
+            return null;
+        }).list();
+        return out;
     }
 
     @Override

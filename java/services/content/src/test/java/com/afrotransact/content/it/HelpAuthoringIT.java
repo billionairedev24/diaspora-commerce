@@ -26,7 +26,7 @@ class HelpAuthoringIT extends ContentIntegrationTest {
         HttpResponse<String> saved = put(path + "/draft", draft("Collect from a locker.", null));
         assertThat(saved.statusCode()).isEqualTo(200);
         assertThat(json(saved).get("updatedBy").asString()).isEqualTo("marketer");
-        assertThat(json(get("/v1/help/admin/articles")).toString()).contains("\"hasDraft\":true");
+        assertThat(json(get("/v1/help/admin/articles")).toString()).contains("\"hasDraft\":true", "\"revision\":");
         assertThat(json(get(path)).get("sections").get(0).get("heading").asString()).isEqualTo(liveBefore);
         assertThat(put(path + "/draft", draft("x", 0L)).statusCode()).isEqualTo(409);
 

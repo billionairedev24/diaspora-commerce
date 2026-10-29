@@ -1,6 +1,7 @@
 package com.afrotransact.content.port;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import com.afrotransact.content.domain.help.HelpRevision;
@@ -15,6 +16,9 @@ public interface HelpRevisionRepository {
 
     /** The number the next revision of the page gets. */
     int nextRevision(String slug);
+
+    /** The newest revision number of every page. */
+    Map<String, Integer> latestRevisions();
 
     void append(HelpRevision revision);
 }

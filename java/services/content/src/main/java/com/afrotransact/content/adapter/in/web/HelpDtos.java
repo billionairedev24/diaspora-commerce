@@ -72,12 +72,12 @@ final class HelpDtos {
     @Schema(name = "HelpArticleAdmin", description = "A help page as site-content staff see it: who changed it last and whether a draft is waiting")
     record AdminArticleDto(String slug, HelpTopic topic, String topicTitle, String title, String summary,
                            List<SectionDto> sections, HelpArticleStatus status, int sortOrder, Instant updatedAt,
-                           long version, String updatedBy, boolean hasDraft) {
+                           long version, String updatedBy, boolean hasDraft, int revision) {
 
-        static AdminArticleDto of(HelpArticle a, boolean hasDraft) {
+        static AdminArticleDto of(HelpArticle a, boolean hasDraft, int revision) {
             return new AdminArticleDto(a.slug(), a.topic(), a.topic().title(), a.title(), a.summary(),
                     a.sections().stream().map(SectionDto::of).toList(), a.status(), a.sortOrder(), a.updatedAt(),
-                    a.version(), a.updatedBy(), hasDraft);
+                    a.version(), a.updatedBy(), hasDraft, revision);
         }
     }
 

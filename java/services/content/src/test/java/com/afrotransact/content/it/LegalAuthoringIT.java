@@ -33,6 +33,17 @@ class LegalAuthoringIT extends ContentIntegrationTest {
         assertThat(draft.get("needsReview").toString()).isEqualTo("[\"fr\"]");
         assertThat(json(get(DOC)).get("version").asString()).isEqualTo(liveBefore);
         assertThat(json(get(DOC + "/history")).toString()).doesNotContain("9.1");
+        JsonNode overview = json(get("/v1/legal/overview"));
+        assertThat(overview.size()).isEqualTo(21);
+        JsonNode fees = null;
+        for (JsonNode entry : overview) {
+            if ("seller-fees".equals(entry.get("key").asString())) {
+                fees = entry;
+            }
+        }
+        assertThat(fees).isNotNull();
+        assertThat(fees.get("hasDraft").asBoolean()).isTrue();
+        assertThat(fees.get("draftUpdatedBy").asString()).isEqualTo("editor-a");
 
         // A stale save is refused, and the editor cannot approve their own draft.
         assertThat(put(DOC + "/draft", body("9.1", "# x", true, 0L)).statusCode()).isEqualTo(409);

@@ -1,6 +1,7 @@
 package com.afrotransact.content.application;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -19,6 +20,9 @@ public interface HelpAuthoringService {
 
     /** Slugs that have a working draft (content:site.view or edit). */
     Set<String> slugsWithDraft();
+
+    /** The newest revision number of every page (content:site.view or edit). */
+    Map<String, Integer> latestRevisions();
 
     /** Saves the draft; the first save starts it from the live page. {@code expectedRowVersion} is null on the first. */
     HelpDraft save(String slug, HelpDraft.Edit edit, Long expectedRowVersion);

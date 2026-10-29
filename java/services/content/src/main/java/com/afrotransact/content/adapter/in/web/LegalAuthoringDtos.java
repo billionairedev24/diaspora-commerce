@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.afrotransact.content.application.LegalAuthoringService;
 import com.afrotransact.content.domain.legal.LegalDraft;
 import com.afrotransact.content.domain.legal.LegalVersion;
 import com.afrotransact.content.domain.legal.LegalVersionStatus;
@@ -64,6 +65,20 @@ final class LegalAuthoringDtos {
         static EntryResponse of(LegalVersion v) {
             return new EntryResponse(v.version().toString(), v.effectiveDate(), v.status(), v.draftBanner(),
                     List.copyOf(v.bodies().keySet()), v.changeSummary(), v.createdBy(), v.createdAt(), v.archivedAt());
+        }
+    }
+
+    @Schema(name = "LegalOverviewEntry", description = "A document's current version, who published it, and its draft if any (staff)")
+    record OverviewEntry(String key, String title, String version, LocalDate effectiveDate, boolean draftBanner,
+                         String publishedBy, Instant publishedAt, boolean hasDraft, String draftVersion,
+                         String draftUpdatedBy, Instant draftUpdatedAt) {
+
+        static OverviewEntry of(LegalAuthoringService.Overview o) {
+            LegalVersion v = o.current();
+            return new OverviewEntry(v.type().key(), v.type().title(), v.version().toString(), v.effectiveDate(),
+                    v.draftBanner(), v.createdBy(), v.createdAt(), o.draft().isPresent(),
+                    o.draft().map(d -> d.version().toString()).orElse(null),
+                    o.draft().map(LegalDraft::updatedBy).orElse(null), o.draft().map(LegalDraft::updatedAt).orElse(null));
         }
     }
 

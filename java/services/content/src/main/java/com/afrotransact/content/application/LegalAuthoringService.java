@@ -13,6 +13,18 @@ import com.afrotransact.content.domain.legal.LegalVersion;
  */
 public interface LegalAuthoringService {
 
+    /** Every document's current version and its working draft, if any (content:legal.view or edit). */
+    List<Overview> overview();
+
+    /**
+     * One document in the staff overview.
+     *
+     * @param current the version shoppers read now (with who published it)
+     * @param draft   the working draft, if any
+     */
+    record Overview(LegalVersion current, Optional<LegalDraft> draft) {
+    }
+
     /** The working draft, if any (content:legal.view or edit). */
     Optional<LegalDraft> draft(LegalDocumentType type);
 

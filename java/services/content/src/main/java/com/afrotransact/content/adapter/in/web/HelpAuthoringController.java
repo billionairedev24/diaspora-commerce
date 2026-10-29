@@ -9,6 +9,7 @@ import com.afrotransact.content.adapter.in.web.HelpAuthoringDtos.RestoreRequest;
 import com.afrotransact.content.adapter.in.web.HelpAuthoringDtos.RevisionResponse;
 import com.afrotransact.content.adapter.in.web.HelpDtos.AdminArticleDto;
 import com.afrotransact.content.application.HelpAuthoringService;
+import com.afrotransact.content.domain.help.HelpArticle;
 import com.afrotransact.platform.web.error.NotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,6 +36,10 @@ class HelpAuthoringController {
         this.authoring = authoring;
     }
 
+    private AdminArticleDto adminOf(HelpArticle article) {
+        return AdminArticleDto.of(article, false, authoring.latestRevisions().getOrDefault(article.slug(), 1));
+    }
+
     @Operation(operationId = "getHelpDraft", summary = "The working draft of a page (content:site.view)")
     @GetMapping("/draft")
     DraftResponse draft(@PathVariable String slug) {
@@ -59,7 +64,7 @@ class HelpAuthoringController {
     @PostMapping("/draft/publication")
     @ResponseStatus(HttpStatus.CREATED)
     AdminArticleDto publish(@PathVariable String slug, @Valid @RequestBody PublishRequest body) {
-        return AdminArticleDto.of(authoring.publish(slug, body.reason(), body.rowVersion()), false);
+        return adminOf(authoring.publish(slug, body.reason(), body.rowVersion()));
     }
 
     @Operation(operationId = "listHelpRevisions", summary = "Every published revision of a page, newest first (content:site.view)")
@@ -78,6 +83,6 @@ class HelpAuthoringController {
     @PostMapping("/revisions/{revision}/restoration")
     @ResponseStatus(HttpStatus.CREATED)
     AdminArticleDto restore(@PathVariable String slug, @PathVariable int revision, @Valid @RequestBody RestoreRequest body) {
-        return AdminArticleDto.of(authoring.restore(slug, revision, body.reason()), false);
+        return adminOf(authoring.restore(slug, revision, body.reason()));
     }
 }

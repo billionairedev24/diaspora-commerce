@@ -59,6 +59,13 @@ class HelpAuthoringServiceImpl implements HelpAuthoringService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Map<String, Integer> latestRevisions() {
+        access.requireAny(ContentPermissions.SITE_VIEW, ContentPermissions.SITE_EDIT);
+        return revisions.latestRevisions();
+    }
+
+    @Override
     @Transactional
     public HelpDraft save(String slug, HelpDraft.Edit edit, Long expectedRowVersion) {
         Actor actor = access.require(ContentPermissions.SITE_EDIT);

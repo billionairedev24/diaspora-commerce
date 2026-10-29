@@ -3,6 +3,7 @@ package com.afrotransact.content.adapter.out.persistence;
 import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -35,6 +36,11 @@ class JdbcLegalDraftRepository implements LegalDraftRepository {
     @Override
     public Optional<LegalDraft> find(LegalDocumentType type) {
         return jdbc.sql(SELECT + " where doc_type = :t").param("t", type.key()).query(this::map).optional();
+    }
+
+    @Override
+    public List<LegalDraft> findAll() {
+        return jdbc.sql(SELECT).query(this::map).list();
     }
 
     @Override

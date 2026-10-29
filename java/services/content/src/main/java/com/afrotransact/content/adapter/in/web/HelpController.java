@@ -2,6 +2,7 @@ package com.afrotransact.content.adapter.in.web;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import com.afrotransact.content.adapter.in.web.HelpDtos.AdminArticleDto;
@@ -61,7 +62,9 @@ class HelpController {
     @GetMapping("/admin/articles")
     List<AdminArticleDto> all() {
         Set<String> withDraft = authoring.slugsWithDraft();
-        return help.all().stream().map(a -> AdminArticleDto.of(a, withDraft.contains(a.slug()))).toList();
+        Map<String, Integer> latest = authoring.latestRevisions();
+        return help.all().stream().map(a -> AdminArticleDto.of(a, withDraft.contains(a.slug()),
+                latest.getOrDefault(a.slug(), 1))).toList();
     }
 
     @Operation(operationId = "saveHelpArticle", summary = "Create or change a help article (content:site.edit); expectedVersion guards concurrent edits")

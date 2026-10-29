@@ -2,6 +2,7 @@ package com.afrotransact.content.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +44,16 @@ class LegalAuthoringServiceImpl implements LegalAuthoringService {
         this.access = access;
         this.audit = audit;
         this.clock = clock;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Overview> overview() {
+        access.requireAny(ContentPermissions.LEGAL_VIEW, ContentPermissions.LEGAL_EDIT);
+        Map<LegalDocumentType, LegalDraft> byType = new HashMap<>();
+        drafts.findAll().forEach(d -> byType.put(d.type(), d));
+        return legal.allCurrent().stream().sorted(Comparator.comparing(v -> v.type().ordinal()))
+                .map(v -> new Overview(v, Optional.ofNullable(byType.get(v.type())))).toList();
     }
 
     @Override
