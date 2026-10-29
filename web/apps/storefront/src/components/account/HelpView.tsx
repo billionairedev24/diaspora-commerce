@@ -2,7 +2,7 @@
 
 import { type HelpRequest } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { EmptyState, FlatPage, Message, Row, RowList, Section, Skeleton, StatusText, type StatusTone, textLinkClassName, TextLinkButton } from '@afrotransact/ui';
+import { EmptyState, FlatPage, Message, Row, RowList, Section, Skeleton, StatusText, type StatusTone, TextLinkButton,textLinkClassName } from '@afrotransact/ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';

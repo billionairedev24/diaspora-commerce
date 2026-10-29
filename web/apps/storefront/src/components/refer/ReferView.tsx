@@ -2,7 +2,7 @@
 
 import { type ReferralFriend, referralQueries, type ReferralRewardTerms } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, DataTable, DefinitionList, EmptyState, FlatPage, Message, Row, RowList, Section, Skeleton, StatusText, type StatusTone, textLinkClassName, TextLinkButton, useToast } from '@afrotransact/ui';
+import { Button, DataTable, DefinitionList, EmptyState, FlatPage, Message, Row, RowList, Section, Skeleton, StatusText, type StatusTone, TextLinkButton, textLinkClassName, useToast } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 

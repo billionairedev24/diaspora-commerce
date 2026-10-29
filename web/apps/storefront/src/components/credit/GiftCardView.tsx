@@ -2,7 +2,7 @@
 
 import { creditKeys, creditQueries, type GiftCard, type GiftCardPurchaseRequest, isApiError, randomUuid } from '@afrotransact/api-client';
 import { useFormatters, useLocale } from '@afrotransact/i18n/react';
-import { Button, cx, EmptyState, fieldWidth, FlatPage, FormActions, Message, Row, RowList, Section, Skeleton, StatusText, textLinkClassName, TextField, useToast } from '@afrotransact/ui';
+import { Button, cx, EmptyState, fieldWidth, FlatPage, FormActions, Message, Row, RowList, Section, Skeleton, StatusText, TextField, textLinkClassName, useToast } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';

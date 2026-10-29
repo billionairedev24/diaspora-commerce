@@ -17,8 +17,8 @@ import {
   Pager,
   Section,
   Skeleton,
-  textLinkClassName,
   TextLinkButton,
+  textLinkClassName,
   useToast
 } from '@afrotransact/ui';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';

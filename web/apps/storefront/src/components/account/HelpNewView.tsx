@@ -15,7 +15,7 @@ import {
   isApiError,
   uploadHelpEvidence
 } from '@afrotransact/api-client';
-import { Button, buttonClassName, CheckCircle, Field, FlatPage, FormActions, Message, Skeleton, textLinkClassName, TextLinkButton, UploadSimple, WarningCircle, X } from '@afrotransact/ui';
+import { Button, buttonClassName, CheckCircle, Field, FlatPage, FormActions, Message, Skeleton, TextLinkButton, textLinkClassName, UploadSimple, WarningCircle, X } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type ChangeEvent, type DragEvent, type FormEvent, useEffect, useId, useRef, useState } from 'react';

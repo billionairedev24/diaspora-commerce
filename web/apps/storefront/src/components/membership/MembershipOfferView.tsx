@@ -95,6 +95,8 @@ export function MembershipOfferView() {
         <fieldset className={styles.radioRows}>
           <legend className="at-visually-hidden">{t('mem.billingGroup')}</legend>
           {INTERVALS.map((i) => (
+            // The label wraps the radio and holds its translated title and detail two spans down.
+            // eslint-disable-next-line jsx-a11y/label-has-associated-control
             <label key={i} className={styles.radioRow}>
               <input type="radio" name="mem-interval" checked={interval === i} onChange={() => setInterval(i)} data-testid={`membership-interval-${i}`} />
               <span className={styles.radioText}>
