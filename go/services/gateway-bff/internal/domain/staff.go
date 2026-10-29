@@ -48,7 +48,7 @@ var StaffNav = []StaffNavGroupDef{
 	}},
 	{"commerce", "Commerce", []StaffModule{
 		{"orders", "orders", "Orders & shipments", "All marketplace and AfroTransact Retail orders."},
-		{"catalog", "catalog", "Listing moderation", "AI-flagged listings awaiting a human decision."},
+		{"catalog", "catalog", "Catalog", "Listing moderation, products, the category tree with its product-type details, and seller category requests."},
 		{"inventory", "inventory", "Inventory", "AfroTransact-owned and FBA stock by fulfilment centre, lot by lot."},
 		{"retail", "retail", "AfroTransact Retail (1P)", "Purchase orders for AfroTransact-owned and AfroTransact Brand inventory."},
 		{"dispatch", "dispatch", "Delivery dispatch", "AfroTransact Delivery routes, drivers and internal delivery."},

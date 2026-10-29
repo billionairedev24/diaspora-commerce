@@ -79,6 +79,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 	out.Preorders = app.NewStaffPreordersService(d)
 	out.Inventory = app.NewStaffInventoryService(d)
 	out.Markets = app.NewStaffMarketsService(d)
+	out.Taxonomy = app.NewStaffTaxonomyService(d)
 	out.Plans = app.NewStaffPlansService(d)
 	out.Identity = app.NewStaffIdentityService(d)
 	// Lola for staff: read-only lookups through the console's own use cases, one model turn at ai-gateway per round.
