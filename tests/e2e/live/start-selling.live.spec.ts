@@ -341,7 +341,7 @@ test('customer.houston completes the whole application; staff approve it in the 
     await onStep(page, 'catalog-compliance', 'Catalog, permits & licences');
     const fashion = page.getByRole('button', { name: 'Fashion' });
     if ((await fashion.getAttribute('aria-pressed')) !== 'true') await fashion.click();
-    for (const name of [/Seller & Provider Agreement/, /Prohibited Items/, /W-9 certification/]) {
+    for (const name of [/I agree to the Seller & Provider Terms/, /I will follow the Prohibited/, /W-9 certification/]) {
       const box = page.getByRole('checkbox', { name });
       if (!(await box.isChecked())) await box.check();
     }

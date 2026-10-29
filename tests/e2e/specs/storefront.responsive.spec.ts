@@ -47,6 +47,8 @@ const ROUTES: AuditRoute[] = [
   { label: 'order detail', path: '/orders/AT-2026-104221' },
   { label: 'help', path: '/help' },
   { label: 'help article', path: '/help/shipping' },
+  { label: 'legal center', path: '/legal' },
+  { label: 'legal gift card terms', path: '/legal/gift-card-terms' },
   { label: 'legal privacy', path: '/legal/privacy' },
   { label: 'legal cookies', path: '/legal/cookies' },
   { label: 'privacy choices', path: '/legal/privacy-choices' },

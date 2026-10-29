@@ -143,8 +143,12 @@ test.describe('seller center · application wizard', () => {
     await page.getByLabel('Expires').fill('2028-06-30');
     await page.locator('input[type=file]').setInputFiles(PDF);
     await expect(page.getByText('permit.pdf')).toBeVisible();
-    await page.getByRole('checkbox', { name: /Seller & Provider Agreement/ }).check();
-    await page.getByRole('checkbox', { name: /Prohibited Items/ }).check();
+    const terms = page.getByRole('checkbox', { name: /I agree to the Seller & Provider Terms/ });
+    await expect(terms.locator('xpath=ancestor::label').getByRole('link')).toHaveText([
+      'Seller & Provider Terms', 'Payments Terms', 'Data Processing Addendum', 'Seller Fees & Charges'
+    ]);
+    await terms.check();
+    await page.getByRole('checkbox', { name: /I will follow the Prohibited/ }).check();
     await page.getByRole('checkbox', { name: /W-9 certification/ }).check();
     await shot(page, '7-catalog-compliance');
     await saveAndContinue(page);
@@ -154,6 +158,8 @@ test.describe('seller center · application wizard', () => {
     await expect(page.getByRole('region', { name: 'Payouts' })).toContainText('Linked to Stripe Connect');
     await expect(page.getByRole('region', { name: 'Business details & TIN' })).toContainText('••-•••6789');
     await expect(page.getByRole('link', { name: 'Edit Owners' })).toHaveAttribute('href', '/onboarding/owners');
+    // The documents accepted are listed with the version recorded.
+    await expect(page.getByRole('region', { name: 'Catalog, permits & licences' })).toContainText('Seller & Provider Terms 2.4, Payments Terms 1.0, Data Processing Addendum 1.0');
     await shot(page, '8-review');
     await page.getByRole('button', { name: 'Submit for review' }).click();
 
