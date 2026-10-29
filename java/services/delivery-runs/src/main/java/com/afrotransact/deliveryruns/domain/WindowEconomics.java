@@ -25,9 +25,12 @@ import java.util.UUID;
  * @param economics            route, cost model, break-even and P&amp;L at the actual orders; null when no location
  *                             serves the window or geo-service cannot measure the route
  * @param minimumCoversBreakEven whether the minimum reaches break-even (null without a break-even or a minimum)
+ * @param platformFees         the contribution lens: platform fees on the goods of these orders, apart from the
+ *                            delivery P&amp;L above (null for a cancelled window)
  */
 public record WindowEconomics(UUID windowId, String code, String name, PreorderStatus status, boolean cancelled,
                               UUID locationId, String locationName, String currency, int minOrders, int orders,
                               long revenueMinor, long deliveryFeesMinor, int ordersRefunded, int refundsSettled,
-                              long refundedMinor, RunEconomics economics, Boolean minimumCoversBreakEven) {
+                              long refundedMinor, RunEconomics economics, Boolean minimumCoversBreakEven,
+                              PlatformFees platformFees) {
 }

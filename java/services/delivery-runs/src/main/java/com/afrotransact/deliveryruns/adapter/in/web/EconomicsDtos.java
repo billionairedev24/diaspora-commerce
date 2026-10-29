@@ -106,12 +106,14 @@ final class EconomicsDtos {
                                example = "[\"US/TX/Bastrop\"]") List<String> targets,
                        Boolean door, Boolean pickup, @PositiveOrZero @Max(10_000) Long doorFeeMinor,
                        @PositiveOrZero @Max(10_000) Long pickupFeeMinor,
-                       @Min(0) @Max(100_000) Integer minOrders, @Min(0) @Max(100_000) Integer expectedOrders) {
+                       @Min(0) @Max(100_000) Integer minOrders, @Min(0) @Max(100_000) Integer expectedOrders,
+                       @Min(1) @Max(10_000) @Schema(description = "Most orders the run can carry, to show the "
+                               + "margin at capacity (null = the location's default capacity)") Integer capacityOrders) {
 
         WindowPlanCommand toCommand() {
             List<AreaKey> keys = targets == null ? List.of() : targets.stream().map(AreaKey::parse).toList();
             return new WindowPlanCommand(locationId, keys, door == null || door, pickup != null && pickup,
-                    doorFeeMinor, pickupFeeMinor, minOrders, expectedOrders);
+                    doorFeeMinor, pickupFeeMinor, minOrders, expectedOrders, capacityOrders);
         }
     }
 }

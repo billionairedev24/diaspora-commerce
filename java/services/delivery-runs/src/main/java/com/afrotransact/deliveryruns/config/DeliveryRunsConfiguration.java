@@ -15,9 +15,11 @@ import com.afrotransact.deliveryruns.domain.AreaKey;
 import com.afrotransact.deliveryruns.domain.CutoffDecisionPolicy;
 import com.afrotransact.deliveryruns.domain.DefaultCutoffDecisionPolicy;
 import com.afrotransact.deliveryruns.domain.DefaultRunEconomicsCalculator;
+import com.afrotransact.deliveryruns.domain.DefaultRunPnlCalculator;
 import com.afrotransact.deliveryruns.domain.EconomicsSettings;
 import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.RunEconomicsCalculator;
+import com.afrotransact.deliveryruns.domain.RunPnlCalculator;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -46,6 +48,11 @@ class DeliveryRunsConfiguration {
     @Bean
     RunEconomicsCalculator runEconomicsCalculator(EconomicsBook economics) {
         return new DefaultRunEconomicsCalculator(economics);
+    }
+
+    @Bean
+    RunPnlCalculator runPnlCalculator(RunEconomicsCalculator calculator, EconomicsBook economics) {
+        return new DefaultRunPnlCalculator(calculator, economics);
     }
 
     @Bean
