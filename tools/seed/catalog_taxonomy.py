@@ -2,6 +2,11 @@
 
 Usage: python3 tools/seed/catalog_taxonomy.py > java/services/catalog/src/main/resources/db/migration/V2__seed_taxonomy.sql
 Ids are deterministic (uuid5) so re-running produces identical SQL.
+
+This is the INITIAL data of a new environment, nothing more. Since S325 staff create, rename, move, retire and edit
+categories, product types and their details in the staff console (Catalog > Categories), audited and with a reason;
+see docs/engineering/taxonomy.md. Never regenerate V2 (Flyway would reject the changed checksum on every existing
+database) and never add a migration to change the live tree: use the console or the /v1/taxonomy API.
 """
 import json
 import uuid

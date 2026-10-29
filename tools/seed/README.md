@@ -19,6 +19,13 @@ carrier-gateway, CARRIER_GATEWAY_URL), `bookings`, `ops`, `users`. The datasets 
 `seedlib/dataset.py` and `seedlib/ops_dataset.py`; photo sources, attribution and service URLs are described in
 `seed.py` and the guide.
 
+## The category tree is not seeded here
+
+The department > category > product type tree and each product type's details are the catalog service's initial
+data (`V2__seed_taxonomy.sql`, generated once by `catalog_taxonomy.py`). They are managed by staff in the console
+(Catalog > Categories) from then on, so this seeder only reads the tree to place its demo products and never edits it.
+See [docs/engineering/taxonomy.md](../../docs/engineering/taxonomy.md).
+
 ## Operations data (`ops`)
 
 Needs the catalogue (the `products` step) and, besides the catalogue services, retail, orders, payments, fulfilment,

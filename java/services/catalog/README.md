@@ -72,6 +72,23 @@ Spring Boot 4.1 · Java 25 · PostgreSQL · local port **8101**.
   - *Drafts* (`/v1/product-drafts`, table `product_draft`) store the form's input as JSON (≤ 256 KB). They are
     versioned for autosave (409 on a stale version) and there is one per product for edits. Submitting with
     `draftId` deletes the draft in the same transaction.
+- **Taxonomy administration (S325)** (`/v1/taxonomy/**`, guide: [docs/engineering/taxonomy.md](../../../docs/engineering/taxonomy.md)):
+  - Staff create, rename, move, reorder, retire and restore departments, categories and product types, and edit a
+    product type's schema (label, identifier rule, traits, attributes with kind, units, choices, section, required and
+    `applies`). `V11` adds `category.code|version|retired_*`, `product_type.version` and the append-only
+    `taxonomy_audit`; `V2` stays the initial data only.
+  - Every change needs a reason (3 to 1,000 characters), writes an audit row and publishes `catalog.taxonomy.changed`.
+    Nodes and schemas carry a `version`: edits send `If-Match` (412 `catalog.version-mismatch`, 428
+    `catalog.if-match-required`); a reorder sends the whole sibling list.
+  - Retire is soft and refused (409 `catalog.taxonomy-in-use`) while any non-rejected product is on the node or under
+    it. Retired nodes leave `/v1/categories` (the sellers' tree) and are refused for new products, but stay on existing
+    ones (`?includeRetired=true`). Names are unique among siblings, codes are unique, the tree has three levels.
+  - Attributes with `applies: false` are kept but dropped from the public schema, the validators and the upload
+    template. The sales-tax question (`tax_class`) cannot be reworded or removed here (tax-returns owns its choices).
+  - Approving a category request goes through the same service: it creates the category (under a department) and the
+    leaf with an existing or a new schema, in one transaction, and `approval-preview` returns the plan without writing.
+  - `TaxonomyAdminIT` (HTTP, PostgreSQL; `AT_IT_POSTGRES_URL` runs it without Docker) covers permissions, reasons, audit,
+    events, versions, retire with products, reorder, attribute rules and the request approval.
 - **Bulk upload (S308)** (`/v1/imports`; the design is in [ADR 0003](../../../docs/adr/0003-bulk-product-upload-in-catalog.md)):
   - **Templates.** `GET /v1/imports/template?productType=|categoryId=&format=xlsx|csv` returns a generic or
     per-product-type template, generated with Apache POI.
@@ -128,7 +145,7 @@ suggested correction) or exemption, ISBN-13 for books, price > 0.
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | `/v1/categories`, `/v1/product-types`, `/v1/product-types/{code}` | public |
+| GET | `/v1/categories` (`?includeRetired=true` also lists retired nodes), `/v1/product-types`, `/v1/product-types/{code}` | public |
 | POST | `/v1/products` | `catalog:write` |
 | PUT | `/v1/products/{id}` (S307) | `catalog:write` (owner) |
 | GET/POST/GET/PUT/DELETE | `/v1/product-drafts`, `/v1/product-drafts/{id}` (S307) | `catalog:write` (own org) |
@@ -138,7 +155,8 @@ suggested correction) or exemption, ISBN-13 for books, price > 0.
 | POST | `/v1/products/{id}/approve`, `/reject` | `catalog:moderate` |
 | POST | `/v1/products/{id}/pause`, `/resume` | `catalog:write` (owner) |
 | POST/GET | `/v1/category-requests`, `/v1/category-requests/mine` | `catalog:write` |
-| GET/POST | `/v1/category-requests?status=`, `/{id}/approve`, `/{id}/reject` | `catalog:taxonomy` |
+| GET/POST | `/v1/category-requests?status=` (with the products waiting), `/{id}` (detail and suggested parent), `/{id}/approval-preview`, `/{id}/approve` (creates the category and the product type), `/{id}/reject` | `catalog:taxonomy` |
+| GET/POST/PATCH | `/v1/taxonomy/tree`, `/v1/taxonomy/nodes` (create), `PATCH /nodes/{id}` (rename), `POST /nodes/{id}/move\|retire\|restore`, `POST /v1/taxonomy/reorder`, `/v1/taxonomy/product-types[/{code}]` (create, edit), `/v1/taxonomy/audit` (S325) | `catalog:taxonomy` (every change: reason, audit row, `If-Match`) |
 | POST | `/v1/products/{id}/flags {reasonCode, details, riskLevel}` | `catalog:moderate` (staff = `STAFF`, principal type `SERVICE` = `AUTOMATED`) |
 | POST | `/v1/products/{id}/takedown {reasonCode, note}`, `/v1/products/{id}/restore {note}` | `catalog:moderate` |
 | POST | `/v1/public/products/{atin}/reports {reasonCode, details}` | any signed-in user (201 new, 200 repeated report) |
@@ -179,7 +197,7 @@ Interactive docs when running: `/swagger-ui.html`, `/docs` (Scalar), `/redoc`.
 `catalog.product.created|updated|terms_changed|resubmitted|approved|rejected|paused|resumed|hidden|restored|flagged|taken_down|reinstated`,
 `catalog.import.completed` (on `at.product-import.events`),
 `catalog.product.rating_changed` and `catalog.review.submitted|published|updated|rejected|removed|deleted|reported|replied` (S324; the review events are on `at.product-review.events`),
-`catalog.category-request.created|approved|rejected` —
+`catalog.category-request.created|approved|rejected`, `catalog.taxonomy.changed` (S325, on `at.taxonomy.events`) —
 see [`contracts/asyncapi/fragments/catalog.yaml`](../../../contracts/asyncapi/fragments/catalog.yaml). Product payloads
 carry `sellerHidden` (true while the owner's listings are hidden).
 
