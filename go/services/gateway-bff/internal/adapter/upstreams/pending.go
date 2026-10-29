@@ -357,6 +357,17 @@ func (n *notificationsImpl) RemoveStockAlert(ctx context.Context, bearer, atin s
 
 // ---------------------------------------------------------------- legal & privacy center (content)
 
+func (k *contentImpl) LegalIndex(ctx context.Context) (domain.LegalIndex, error) {
+	return cached(k.cache, "content:legal:index", func() (domain.LegalIndex, http.Header, error) {
+		var out domain.LegalIndex
+		res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/legal"}, &out)
+		if err != nil {
+			return out, nil, err
+		}
+		return out, res.Header, nil
+	}, k.ttl)
+}
+
 func (k *contentImpl) LegalDocument(ctx context.Context, key, version, locale string) (domain.LegalPage, error) {
 	path := "/v1/legal/" + url.PathEscape(key)
 	if version != "" {

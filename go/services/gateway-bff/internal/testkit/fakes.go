@@ -231,6 +231,21 @@ func (u *Upstreams) SetStock(atin string, stock int) {
 	}
 }
 
+// legalFixtureOrder / legalFixtureTitles are the legal documents the fake content service publishes.
+var legalFixtureOrder = []string{"conditions-of-use", "privacy", "cookies", "privacy-choices", "returns", "seller-terms",
+	"prohibited-items", "accessibility", "sms-terms", "gift-card-terms", "store-credit-terms", "membership-terms",
+	"referral-terms", "preorder-delivery-terms", "community-guidelines", "ip-policy", "provider-terms", "payments-terms",
+	"subprocessors", "data-processing", "seller-fees"}
+
+var legalFixtureTitles = map[string]string{"conditions-of-use": "Conditions of Use", "privacy": "Privacy Notice",
+	"cookies": "Cookie Notice", "privacy-choices": "Your Privacy Choices", "returns": "Returns & Refunds",
+	"seller-terms": "Seller & Provider Terms", "prohibited-items": "Prohibited & Restricted Items",
+	"accessibility": "Accessibility Statement", "sms-terms": "SMS & Notification Terms", "gift-card-terms": "Gift Card Terms",
+	"store-credit-terms": "Store Credit Terms", "membership-terms": "Membership Terms", "referral-terms": "Referral Program Terms",
+	"preorder-delivery-terms": "Pre-order & Delivery Terms", "community-guidelines": "Community Guidelines",
+	"ip-policy": "Intellectual Property Policy", "provider-terms": "Service Provider Terms", "payments-terms": "Payments Terms",
+	"subprocessors": "Subprocessors", "data-processing": "Data Processing Addendum", "seller-fees": "Seller Fees & Charges"}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -1013,18 +1028,32 @@ func (u *Upstreams) contentRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/newsletter/subscriptions", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 202, map[string]any{"status": "pending_confirmation"})
 	})
+	mux.HandleFunc("GET /v1/legal", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=60")
+		docs := make([]map[string]any, 0, len(legalFixtureTitles))
+		for _, k := range legalFixtureOrder {
+			docs = append(docs, map[string]any{"key": k, "title": legalFixtureTitles[k], "version": "1.0", "effectiveDate": "2026-10-10",
+				"href": "/legal/" + k, "draftBanner": true})
+		}
+		// A key this BFF does not know must be dropped from the index, not forwarded.
+		docs = append(docs, map[string]any{"key": "future-policy", "title": "Future", "version": "1.0", "effectiveDate": "2027-01-01",
+			"href": "/legal/future-policy", "draftBanner": false})
+		writeJSON(w, 200, map[string]any{"documents": docs})
+	})
 	mux.HandleFunc("GET /v1/legal/{key}", func(w http.ResponseWriter, r *http.Request) {
-		if r.PathValue("key") != "sms-terms" {
-			problem(w, 422, "content.unknown-legal-document", "Unknown legal document", nil)
+		key := r.PathValue("key")
+		title, ok := legalFixtureTitles[key]
+		if !ok {
+			problem(w, 404, "content.legal-not-found", "Not found", nil)
 			return
 		}
 		w.Header().Set("Cache-Control", "public, max-age=60")
 		loc := r.URL.Query().Get("locale")
-		writeJSON(w, 200, map[string]any{"key": "sms-terms", "title": "SMS & Notification Terms", "version": "1.0", "effectiveDate": "2026-10-10",
+		writeJSON(w, 200, map[string]any{"key": key, "title": title, "version": "1.0", "effectiveDate": "2026-10-10",
 			"status": "CURRENT", "draftBanner": true, "locale": "en", "binding": true, "translationFallback": loc != "en", "bindingLocale": "en",
-			"body": "# SMS & Notification Terms\n\n## Program\n\nAfroTransact Alerts sends order updates.\n", "outline": []map[string]any{{"id": "program", "title": "Program"}},
+			"body": "# " + title + "\n\n## Program\n\nAfroTransact Alerts sends order updates.\n", "outline": []map[string]any{{"id": "program", "title": "Program"}},
 			"versions": []map[string]any{{"version": "1.0", "effectiveDate": "2026-10-10", "status": "CURRENT", "archivedAt": nil, "changeSummary": "First draft"}},
-			"href":     "/legal/sms-terms", "archivedAt": nil})
+			"href":     "/legal/" + key, "archivedAt": nil})
 	})
 	mux.HandleFunc("GET /v1/legal/{key}/versions/{version}", func(w http.ResponseWriter, r *http.Request) {
 		problem(w, 404, "content.legal-version-not-found", "No such version", nil)

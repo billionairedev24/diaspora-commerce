@@ -419,6 +419,8 @@ type ContentClient interface {
 	Apply(ctx context.Context, jobID string, a domain.JobApplication) (domain.ApplicationReceipt, error)
 	// Eligibility asks content whether a place is served; city is optional (a city switched off in Markets is not).
 	Eligibility(ctx context.Context, country, state, zip, city string) (domain.MarketEligibility, error)
+	// LegalIndex is the current version of every legal document.
+	LegalIndex(ctx context.Context) (domain.LegalIndex, error)
 	// LegalDocument is a document's current version (version "") or one version; port.ErrNotFound when unknown.
 	LegalDocument(ctx context.Context, key, version, locale string) (domain.LegalPage, error)
 	// CookiePolicy is the consent banner configuration and cookie table.
