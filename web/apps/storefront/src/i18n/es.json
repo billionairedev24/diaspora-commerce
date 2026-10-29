@@ -1683,5 +1683,22 @@
   "gift.previewNow": "Se envía en cuanto se acepta el pago.",
   "gift.previewOn": "Se envía el {date}.",
   "gift.previewFooter": "El crédito nunca caduca y no se puede convertir en efectivo.",
-  "gift.previewAnon": "un amigo"
+  "gift.previewAnon": "un amigo",
+  "acct.group.orders": "Pedidos y citas",
+  "acct.group.security": "Inicio de sesión y seguridad",
+  "acct.group.payments": "Pagos y crédito",
+  "acct.group.addresses": "Direcciones y entrega",
+  "acct.group.membership": "Membresía y recompensas",
+  "acct.group.privacy": "Notificaciones y privacidad",
+  "acct.group.help": "Ayuda",
+  "acct.privacyChoices": "Tus opciones de privacidad",
+  "acct.privacyChoicesSub": "Rechaza la venta, el uso compartido y la publicidad dirigida",
+  "acct.helpCenter": "Centro de ayuda",
+  "acct.helpCenterSub": "Envíos, devoluciones, pagos y más",
+  "acct.fact.credit": "Saldo {amount}",
+  "acct.fact.notMember": "Aún no eres miembro",
+  "acct.fact.address": "Predeterminada: {line}",
+  "acct.fact.noAddress": "Aún no hay direcciones guardadas",
+  "acct.fact.card": "Predeterminada: {card}",
+  "acct.fact.noCard": "Aún no hay métodos de pago guardados"
 }

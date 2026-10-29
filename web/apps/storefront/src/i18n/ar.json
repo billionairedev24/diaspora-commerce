@@ -1683,5 +1683,22 @@
   "gift.previewNow": "تُرسل فور نجاح الدفع.",
   "gift.previewOn": "تُرسل في {date}.",
   "gift.previewFooter": "لا تنتهي صلاحية الرصيد ولا يمكن تحويله إلى نقد.",
-  "gift.previewAnon": "صديق"
+  "gift.previewAnon": "صديق",
+  "acct.group.orders": "الطلبات والمواعيد",
+  "acct.group.security": "تسجيل الدخول والأمان",
+  "acct.group.payments": "المدفوعات والرصيد",
+  "acct.group.addresses": "العناوين والتوصيل",
+  "acct.group.membership": "العضوية والمكافآت",
+  "acct.group.privacy": "الإشعارات والخصوصية",
+  "acct.group.help": "المساعدة",
+  "acct.privacyChoices": "خياراتك للخصوصية",
+  "acct.privacyChoicesSub": "ارفض البيع والمشاركة والإعلانات الموجهة",
+  "acct.helpCenter": "مركز المساعدة",
+  "acct.helpCenterSub": "الشحن والإرجاع والدفع وغير ذلك",
+  "acct.fact.credit": "الرصيد {amount}",
+  "acct.fact.notMember": "لست عضوًا بعد",
+  "acct.fact.address": "الافتراضي: {line}",
+  "acct.fact.noAddress": "لا يوجد عنوان محفوظ بعد",
+  "acct.fact.card": "الافتراضية: {card}",
+  "acct.fact.noCard": "لا توجد وسيلة دفع محفوظة بعد"
 }

@@ -1676,5 +1676,22 @@
   "gift.previewNow": "Sent as soon as the payment goes through.",
   "gift.previewOn": "Sent on {date}.",
   "gift.previewFooter": "Credit never expires and can’t be converted to cash.",
-  "gift.previewAnon": "a friend"
+  "gift.previewAnon": "a friend",
+  "acct.group.orders": "Orders & appointments",
+  "acct.group.security": "Login & security",
+  "acct.group.payments": "Payments & credit",
+  "acct.group.addresses": "Addresses & delivery",
+  "acct.group.membership": "Membership & rewards",
+  "acct.group.privacy": "Notifications & privacy",
+  "acct.group.help": "Help",
+  "acct.privacyChoices": "Your Privacy Choices",
+  "acct.privacyChoicesSub": "Opt out of sale, sharing and targeted ads",
+  "acct.helpCenter": "Help center",
+  "acct.helpCenterSub": "Shipping, returns, payments and more",
+  "acct.fact.credit": "Balance {amount}",
+  "acct.fact.notMember": "Not a member yet",
+  "acct.fact.address": "Default: {line}",
+  "acct.fact.noAddress": "No address saved yet",
+  "acct.fact.card": "Default: {card}",
+  "acct.fact.noCard": "No payment method saved yet"
 }

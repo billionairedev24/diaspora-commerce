@@ -1683,5 +1683,22 @@
   "gift.previewNow": "A fi ránṣẹ́ ní kété tí ìsanwó bá lọ.",
   "gift.previewOn": "A fi ránṣẹ́ ní {date}.",
   "gift.previewFooter": "Owó ìdókòwò kì í parí, a kò sì lè sọ ọ́ di owó ọwọ́.",
-  "gift.previewAnon": "ọ̀rẹ́ kan"
+  "gift.previewAnon": "ọ̀rẹ́ kan",
+  "acct.group.orders": "Àwọn ìbéèrè àti ìpàdé",
+  "acct.group.security": "Ìwọlé àti ààbò",
+  "acct.group.payments": "Ìsanwó àti owó ìdókòwò",
+  "acct.group.addresses": "Àdírẹ́sì àti ìfiránṣẹ́",
+  "acct.group.membership": "Ẹ̀tọ́ ọmọ ẹgbẹ́ àti ẹ̀bùn",
+  "acct.group.privacy": "Ìfitónilétí àti àṣírí",
+  "acct.group.help": "Ìrànlọ́wọ́",
+  "acct.privacyChoices": "Àwọn àṣàyàn àṣírí rẹ",
+  "acct.privacyChoicesSub": "Kọ títà, pípín àti ìpolówó tí a dojú kọ ẹni",
+  "acct.helpCenter": "Ibùdó ìrànlọ́wọ́",
+  "acct.helpCenterSub": "Ìfiránṣẹ́, ìpadà, ìsanwó àti bẹ́ẹ̀ bẹ́ẹ̀ lọ",
+  "acct.fact.credit": "Ìyókù {amount}",
+  "acct.fact.notMember": "O kò tíì jẹ́ ọmọ ẹgbẹ́",
+  "acct.fact.address": "Àkọ́kọ́: {line}",
+  "acct.fact.noAddress": "Kò sí àdírẹ́sì tí a fi pamọ́ síbẹ̀",
+  "acct.fact.card": "Àkọ́kọ́: {card}",
+  "acct.fact.noCard": "Kò sí ọ̀nà ìsanwó tí a fi pamọ́ síbẹ̀"
 }

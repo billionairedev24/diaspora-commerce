@@ -1683,5 +1683,22 @@
   "gift.previewNow": "Envoyée dès que le paiement est accepté.",
   "gift.previewOn": "Envoyée le {date}.",
   "gift.previewFooter": "Le crédit n’expire jamais et ne peut pas être converti en espèces.",
-  "gift.previewAnon": "un ami"
+  "gift.previewAnon": "un ami",
+  "acct.group.orders": "Commandes et rendez-vous",
+  "acct.group.security": "Connexion et sécurité",
+  "acct.group.payments": "Paiements et crédit",
+  "acct.group.addresses": "Adresses et livraison",
+  "acct.group.membership": "Abonnement et récompenses",
+  "acct.group.privacy": "Notifications et confidentialité",
+  "acct.group.help": "Aide",
+  "acct.privacyChoices": "Vos choix de confidentialité",
+  "acct.privacyChoicesSub": "Refuser la vente, le partage et la publicité ciblée",
+  "acct.helpCenter": "Centre d’aide",
+  "acct.helpCenterSub": "Livraison, retours, paiements et plus",
+  "acct.fact.credit": "Solde {amount}",
+  "acct.fact.notMember": "Pas encore abonné",
+  "acct.fact.address": "Par défaut : {line}",
+  "acct.fact.noAddress": "Aucune adresse enregistrée",
+  "acct.fact.card": "Par défaut : {card}",
+  "acct.fact.noCard": "Aucun moyen de paiement enregistré"
 }
