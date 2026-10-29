@@ -759,7 +759,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/HelpArticle'
+                  $ref: '#/components/schemas/HelpArticleAdmin'
   /v1/help/articles:
     get:
       tags:
@@ -847,6 +847,165 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/HelpArticle'
+  /v1/help/articles/{slug}/draft:
+    get:
+      tags:
+      - Help center
+      summary: The working draft of a page (content:site.view)
+      operationId: getHelpDraft
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/HelpDraft'
+    put:
+      tags:
+      - Help center
+      summary: Create or change the draft; nothing public changes (content:site.edit)
+      operationId: saveHelpDraft
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveHelpDraftRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/HelpDraft'
+    delete:
+      tags:
+      - Help center
+      summary: Throw the draft away (content:site.edit)
+      operationId: discardHelpDraft
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: No Content
+  /v1/help/articles/{slug}/draft/publication:
+    post:
+      tags:
+      - Help center
+      summary: Replace the live text with the draft and record a revision (content:site.edit)
+      operationId: publishHelpDraft
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishHelpDraftRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/HelpArticleAdmin'
+  /v1/help/articles/{slug}/revisions:
+    get:
+      tags:
+      - Help center
+      summary: Every published revision of a page, newest first (content:site.view)
+      operationId: listHelpRevisions
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HelpRevision'
+  /v1/help/articles/{slug}/revisions/{revision}:
+    get:
+      tags:
+      - Help center
+      summary: One revision (content:site.view)
+      operationId: getHelpRevision
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: revision
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/HelpRevision'
+  /v1/help/articles/{slug}/revisions/{revision}/restoration:
+    post:
+      tags:
+      - Help center
+      summary: Publish an older revision's text as the newest revision (content:site.edit)
+      operationId: restoreHelpRevision
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: revision
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int32
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreHelpRevisionRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/HelpArticleAdmin'
   /v1/legal:
     get:
       tags:
@@ -922,6 +1081,135 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/LegalVersion'
+  /v1/legal/{type}/draft:
+    get:
+      tags:
+      - Legal
+      summary: The working draft of a document (content:legal.view)
+      operationId: getLegalDraft
+      parameters:
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LegalDraft'
+    put:
+      tags:
+      - Legal
+      summary: Create or change the draft; nothing public changes (content:legal.edit)
+      operationId: saveLegalDraft
+      parameters:
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveLegalDraftRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LegalDraft'
+    delete:
+      tags:
+      - Legal
+      summary: Throw the draft away (content:legal.edit)
+      operationId: discardLegalDraft
+      parameters:
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: No Content
+  /v1/legal/{type}/draft/publication:
+    post:
+      tags:
+      - Legal
+      summary: Publish the draft as a new version; the previous one is archived. The person who saved the draft last cannot
+        publish it (content:legal.edit)
+      operationId: publishLegalDraft
+      parameters:
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishLegalDraftRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LegalVersion'
+  /v1/legal/{type}/draft/restoration:
+    post:
+      tags:
+      - Legal
+      summary: Start a draft from an older version's text (rollback; content:legal.edit)
+      operationId: restoreLegalVersion
+      parameters:
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreLegalVersionRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LegalDraft'
+  /v1/legal/{type}/history:
+    get:
+      tags:
+      - Legal
+      summary: Every published version with who published it (content:legal.view)
+      operationId: getLegalHistory
+      parameters:
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LegalVersionEntry'
   /v1/legal/{type}/versions:
     get:
       tags:
@@ -1011,6 +1299,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
       security: []
+  /v1/legal/{type}/versions/{version}/source:
+    get:
+      tags:
+      - Legal
+      summary: One version's Markdown as written (content:legal.view)
+      operationId: getLegalVersionSource
+      parameters:
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LegalVersionSource'
   /v1/markets/countries:
     get:
       tags:
@@ -2220,6 +2532,85 @@ components:
         updatedAt:
           type: string
           format: date-time
+    SaveLegalDraftRequest:
+      type: object
+      description: The whole draft as the editor shows it; rowVersion is the version the editor loaded (omit on the first
+        save)
+      properties:
+        version:
+          type: string
+          example: '3.3'
+          minLength: 1
+        effectiveDate:
+          type: string
+          format: date
+        draftBanner:
+          type: boolean
+          description: Show the counsel-review banner (default true)
+        bodies:
+          type: object
+          additionalProperties:
+            type: string
+          description: Markdown per locale; en is required
+          minProperties: 1
+        needsReview:
+          type: array
+          description: Translations a reviewer still has to check
+          items:
+            type: string
+          uniqueItems: true
+        changeSummary:
+          type: string
+        rowVersion:
+          type: integer
+          format: int64
+      required:
+      - bodies
+      - effectiveDate
+      - version
+    LegalDraft:
+      type: object
+      description: The working copy of a document; saving it changes nothing public
+      properties:
+        key:
+          type: string
+        version:
+          type: string
+        baseVersion:
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+        draftBanner:
+          type: boolean
+        bodies:
+          type: object
+          additionalProperties:
+            type: string
+        needsReview:
+          type: array
+          items:
+            type: string
+        changeSummary:
+          type: string
+        unresolvedMarkers:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        rowVersion:
+          type: integer
+          format: int64
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
     HelpArticleRequest:
       type: object
       properties:
@@ -2304,6 +2695,87 @@ components:
         version:
           type: integer
           format: int64
+    SaveHelpDraftRequest:
+      type: object
+      description: The whole draft as the editor shows it; rowVersion is the version the editor loaded (omit on the first
+        save)
+      properties:
+        topic:
+          type: string
+          enum:
+          - ORDERS_DELIVERY
+          - RETURNS_REFUNDS
+          - ACCOUNT_PAYMENTS
+          - SELLING
+          - COMPANY
+        title:
+          type: string
+          minLength: 1
+        summary:
+          type: string
+          minLength: 1
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/HelpSection'
+        sortOrder:
+          type: integer
+          format: int32
+        changeSummary:
+          type: string
+        rowVersion:
+          type: integer
+          format: int64
+      required:
+      - sections
+      - summary
+      - title
+      - topic
+    HelpDraft:
+      type: object
+      description: The working copy of a help page; saving it changes nothing public
+      properties:
+        slug:
+          type: string
+        topic:
+          type: string
+          enum:
+          - ORDERS_DELIVERY
+          - RETURNS_REFUNDS
+          - ACCOUNT_PAYMENTS
+          - SELLING
+          - COMPANY
+        topicTitle:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/HelpSection'
+        sortOrder:
+          type: integer
+          format: int32
+        changeSummary:
+          type: string
+        baseVersion:
+          type: integer
+          format: int64
+        rowVersion:
+          type: integer
+          format: int64
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
     FlagTargeting:
       type: object
       description: Empty lists mean any; allowList subjects always get the flag
@@ -3040,6 +3512,94 @@ components:
         createdAt:
           type: string
           format: date-time
+    RestoreLegalVersionRequest:
+      type: object
+      properties:
+        version:
+          type: string
+          example: '3.1'
+          minLength: 1
+      required:
+      - version
+    PublishLegalDraftRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Why this is being published (kept in the audit trail)
+          minLength: 1
+        rowVersion:
+          type: integer
+          format: int64
+          description: The draft version the approver reviewed
+      required:
+      - reason
+      - rowVersion
+    RestoreHelpRevisionRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Why this revision is being restored
+          minLength: 1
+      required:
+      - reason
+    HelpArticleAdmin:
+      type: object
+      description: 'A help page as site-content staff see it: who changed it last and whether a draft is waiting'
+      properties:
+        slug:
+          type: string
+        topic:
+          type: string
+          enum:
+          - ORDERS_DELIVERY
+          - RETURNS_REFUNDS
+          - ACCOUNT_PAYMENTS
+          - SELLING
+          - COMPANY
+        topicTitle:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/HelpSection'
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+        sortOrder:
+          type: integer
+          format: int32
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+        updatedBy:
+          type: string
+        hasDraft:
+          type: boolean
+    PublishHelpDraftRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Why this is being published (kept in the audit trail)
+          minLength: 1
+        rowVersion:
+          type: integer
+          format: int64
+          description: The draft version being published
+      required:
+      - reason
+      - rowVersion
     CreateFlagRequest:
       type: object
       properties:
@@ -3694,6 +4254,68 @@ components:
           format: date-time
         changeSummary:
           type: string
+    LegalVersionSource:
+      type: object
+      description: One published version with its Markdown as written
+      properties:
+        key:
+          type: string
+        version:
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - CURRENT
+          - ARCHIVED
+        draftBanner:
+          type: boolean
+        bodies:
+          type: object
+          additionalProperties:
+            type: string
+        changeSummary:
+          type: string
+        publishedBy:
+          type: string
+        publishedAt:
+          type: string
+          format: date-time
+        archivedAt:
+          type: string
+          format: date-time
+    LegalVersionEntry:
+      type: object
+      description: A published version with who published it and when (staff)
+      properties:
+        version:
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - CURRENT
+          - ARCHIVED
+        draftBanner:
+          type: boolean
+        locales:
+          type: array
+          items:
+            type: string
+        changeSummary:
+          type: string
+        publishedBy:
+          type: string
+        publishedAt:
+          type: string
+          format: date-time
+        archivedAt:
+          type: string
+          format: date-time
     HelpArticlePage:
       type: object
       properties:
@@ -3746,6 +4368,50 @@ components:
         count:
           type: integer
           format: int32
+    HelpRevision:
+      type: object
+      description: One published state of a help page
+      properties:
+        slug:
+          type: string
+        revision:
+          type: integer
+          format: int32
+        topic:
+          type: string
+          enum:
+          - ORDERS_DELIVERY
+          - RETURNS_REFUNDS
+          - ACCOUNT_PAYMENTS
+          - SELLING
+          - COMPANY
+        topicTitle:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/HelpSection'
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+        sortOrder:
+          type: integer
+          format: int32
+        changeSummary:
+          type: string
+        reason:
+          type: string
+        publishedBy:
+          type: string
+        publishedAt:
+          type: string
+          format: date-time
     CookiePolicy:
       type: object
       properties:
