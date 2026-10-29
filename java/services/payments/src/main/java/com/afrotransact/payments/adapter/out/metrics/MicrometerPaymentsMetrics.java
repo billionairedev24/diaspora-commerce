@@ -42,4 +42,18 @@ class MicrometerPaymentsMetrics implements PaymentsMetrics {
         Counter.builder("payments.transfers").tag("outcome", outcome)
                 .description("Settlement transfers by outcome").register(registry).increment();
     }
+
+    @Override
+    public void transferReversalRefused(String stripeCode) {
+        Counter.builder("payments.transfer.reversals.refused").tag("code", stripeCode == null ? "unknown" : stripeCode)
+                .description("Transfer reversals Stripe definitively refused for a refund (the seller owes the "
+                        + "platform; see transfer recoveries)").register(registry).increment();
+    }
+
+    @Override
+    public void transferRecovery(String outcome) {
+        Counter.builder("payments.transfer.recoveries").tag("outcome", outcome)
+                .description("Transfer recoveries by outcome: opened, settled, received, written_off")
+                .register(registry).increment();
+    }
 }

@@ -271,6 +271,58 @@ public final class Postings {
         return b.build(id, at);
     }
 
+    /**
+     * Stripe refused to reverse a transfer for a refund (the seller's balance was already paid out). The refund journal
+     * debited the seller's payable on the order and nothing credited it back, so the order's payable is short by
+     * {@code r.amount()}; this moves that debt to the organisation's unattributed payable (Dr 2000:org / Cr 2000:org on
+     * the order), exactly like a label charge: the order's payable is whole again, the organisation's total payable is
+     * negative by what it owes, and its next transfers recover it ({@link #transferRecoverySettled}). 1000 is untouched
+     * (no money came back).
+     */
+    public static Journal transferRecoveryOpened(UUID id, Instant at, String key, TransferRecovery r) {
+        return Journal.builder(JournalType.TRANSFER_RECOVERY_OPENED, key)
+                .description("Transfer " + r.stripeTransferId() + " could not be reversed for order " + r.orderId()
+                        + " (" + (r.stripeCode() == null ? "refused" : r.stripeCode()) + "): " + r.orgId()
+                        + " owes " + r.amount())
+                .debit(LedgerAccount.sellerPayable(r.orgId()), r.amount(), r.orgId())
+                .creditOrder(LedgerAccount.sellerPayable(r.orgId()), r.amount(), r.orgId(), r.orderId())
+                .build(id, at);
+    }
+
+    /**
+     * A transfer recovers {@code amount} of a refused reversal: Dr 2000:org on the order being transferred / Cr 2000:org
+     * unattributed. The transfer is smaller by {@code amount}, which stays with the platform.
+     */
+    public static Journal transferRecoverySettled(UUID id, Instant at, String key, String orderId,
+                                                  TransferRecovery r, Money amount) {
+        return Journal.builder(JournalType.TRANSFER_RECOVERY_SETTLED, key)
+                .description("Refund recovery for order " + r.orderId() + " deducted from order " + orderId)
+                .debitOrder(LedgerAccount.sellerPayable(r.orgId()), amount, r.orgId(), orderId)
+                .credit(LedgerAccount.sellerPayable(r.orgId()), amount, r.orgId())
+                .build(id, at);
+    }
+
+    /** The seller paid the platform back outside Stripe: Dr 1050 operating bank / Cr 2000:org unattributed. */
+    public static Journal transferRecoveryReceived(UUID id, Instant at, String key, TransferRecovery r, Money amount,
+                                                   String reference) {
+        return Journal.builder(JournalType.TRANSFER_RECOVERY_RECEIVED, key)
+                .description("Refund recovery for order " + r.orderId() + " received from " + r.orgId()
+                        + ", reference " + reference)
+                .debit(LedgerAccount.of(Chart.OPERATING_BANK), amount, r.orgId())
+                .credit(LedgerAccount.sellerPayable(r.orgId()), amount, r.orgId())
+                .build(id, at);
+    }
+
+    /** The platform absorbs what is left: Dr 5300 transfer recovery losses / Cr 2000:org unattributed. */
+    public static Journal transferRecoveryWrittenOff(UUID id, Instant at, String key, TransferRecovery r,
+                                                     Money amount) {
+        return Journal.builder(JournalType.TRANSFER_RECOVERY_WRITE_OFF, key)
+                .description("Refund recovery for order " + r.orderId() + " written off for " + r.orgId())
+                .debit(LedgerAccount.of(Chart.TRANSFER_RECOVERY_LOSSES), amount, r.orgId())
+                .credit(LedgerAccount.sellerPayable(r.orgId()), amount, r.orgId())
+                .build(id, at);
+    }
+
     /** "Plan fee (invoice INV-0042)": the line sellers see on statements and payouts. */
     public static String planFeeLabel(PlanFeeWithholding w) {
         return "Plan fee (invoice " + (w.invoiceNumber() == null || w.invoiceNumber().isBlank() ? w.invoiceId()

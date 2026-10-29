@@ -35,6 +35,7 @@ import com.afrotransact.payments.domain.RefundLine;
 import com.afrotransact.payments.domain.RefundStatus;
 import com.afrotransact.payments.domain.SavedPaymentMethod;
 import com.afrotransact.payments.domain.SettlementTransfer;
+import com.afrotransact.payments.domain.TransferRecovery;
 import com.afrotransact.payments.port.FeeScheduleRepository;
 import com.afrotransact.payments.port.IdempotencyStore;
 import com.afrotransact.payments.port.PaymentRepository;
@@ -43,6 +44,7 @@ import com.afrotransact.payments.port.StripeGateway;
 import com.afrotransact.payments.port.StripeGateway.BalanceTxn;
 import com.afrotransact.payments.port.StripeGateway.IntentSnapshot;
 import com.afrotransact.payments.port.StripeGateway.OffSessionAttempt;
+import com.afrotransact.payments.port.StripeGatewayException;
 import com.afrotransact.payments.port.WalletRepository;
 import com.afrotransact.payments.port.WalletRepository.StripeCustomer;
 import com.afrotransact.platform.events.DomainEventPublisher;
@@ -87,6 +89,7 @@ class PaymentServiceImpl implements PaymentService {
     private final LineRates lineRates;
     private final CreditLedger credit;
     private final MembershipBenefitsService membership;
+    private final TransferRecoveryLedger recoveries;
     private final Clock clock;
 
     PaymentServiceImpl(PaymentRepository payments, FeeScheduleRepository feeSchedules,
@@ -95,7 +98,7 @@ class PaymentServiceImpl implements PaymentService {
                        WalletSync wallet, WalletRepository savedMethods, MoneyTransactions tx, PaymentsAccess access,
                        DomainEventPublisher events, PaymentsSettings settings, OrgPlanService orgPlans,
                        LineRates lineRates, CreditLedger credit, MembershipBenefitsService membership,
-                       Clock clock) {
+                       TransferRecoveryLedger recoveries, Clock clock) {
         this.payments = payments;
         this.feeSchedules = feeSchedules;
         this.settlements = settlements;
@@ -114,6 +117,7 @@ class PaymentServiceImpl implements PaymentService {
         this.lineRates = lineRates;
         this.credit = credit;
         this.membership = membership;
+        this.recoveries = recoveries;
         this.clock = clock;
     }
 
@@ -556,7 +560,8 @@ class PaymentServiceImpl implements PaymentService {
             Optional<StoredRef> prior = idempotency.claim("refund", idempotencyKey, fingerprint, StoredRef.class);
             if (prior.isPresent()) {
                 Refund done = payments.findRefund(prior.get().id()).orElseThrow();
-                return new RefundResult(done, requirePayment(done.paymentId()), List.of(), true);
+                return new RefundResult(done, requirePayment(done.paymentId()), List.of(), recoveries.ofRefund(done.id()),
+                        true);
             }
             Payment p = payments.lockById(paymentId).orElseThrow(() -> notFound(paymentId.toString()));
             FeeSchedule schedule = schedule(p);
@@ -616,11 +621,11 @@ class PaymentServiceImpl implements PaymentService {
                 refund = settleRefund(refund, now, actor.subject());
             }
             Payment stored = payments.update(p.refund(refund, now));
-            List<RefundResult.Reversal> reversals = reverseTransfers(p, refund, now, actor.subject());
+            Reversals reversed = reverseTransfers(p, refund, now, actor.subject());
             events.publish(PaymentsEvents.REFUNDED, PaymentsEvents.AGGREGATE_PAYMENT, p.orderId(),
-                    PaymentsEventPayloads.RefundedPayload.of(refund, reversals));
+                    PaymentsEventPayloads.RefundedPayload.of(refund, reversed.reversals()));
             idempotency.complete("refund", idempotencyKey, new StoredRef(refundId));
-            return new RefundResult(refund, stored, reversals, false);
+            return new RefundResult(refund, stored, reversed.reversals(), reversed.refused(), false);
         });
     }
 
@@ -637,8 +642,14 @@ class PaymentServiceImpl implements PaymentService {
      * When a seller's net for the order was already transferred, take back what the refund debits from them
      * (capped at what is left of their transfers) with Stripe transfer reversals. AfroTransact Retail lines are
      * skipped: Retail money is never transferred, its refund only debits 4400 Retail sales.
+     *
+     * <p>Stripe may refuse a reversal for good (a 4xx such as {@code balance_insufficient}: the seller's balance was
+     * already paid out). The customer's refund must not fail for that: the amount becomes a transfer recovery the
+     * seller owes the platform ({@link TransferRecoveryLedger#open}). Anything that is not a definitive refusal
+     * (5xx, timeouts, rate limits, authentication errors) still fails the refund, which is retried with the same
+     * Idempotency-Key.
      */
-    private List<RefundResult.Reversal> reverseTransfers(Payment p, Refund refund, Instant now, String by) {
+    private Reversals reverseTransfers(Payment p, Refund refund, Instant now, String by) {
         Map<String, Money> debitByOrg = new LinkedHashMap<>();
         for (RefundLine l : refund.lines()) {
             if (!l.sellerOrg().equals(settings.retailOrgId())) {
@@ -646,6 +657,7 @@ class PaymentServiceImpl implements PaymentService {
             }
         }
         List<RefundResult.Reversal> out = new ArrayList<>();
+        List<TransferRecovery> refused = new ArrayList<>();
         for (Map.Entry<String, Money> e : debitByOrg.entrySet()) {
             Money toReverse = e.getValue();
             for (SettlementTransfer t : settlements.lockTransfers(p.orderId(), e.getKey())) {
@@ -656,9 +668,19 @@ class PaymentServiceImpl implements PaymentService {
                 if (!amount.isPositive()) {
                     continue;
                 }
-                StripeGateway.ReversalSnapshot rev = stripe.reverseTransfer(t.stripeTransferId(), amount,
-                        Map.of("order_id", p.orderId(), "refund_id", refund.id().toString()),
-                        p.stripeKeyPrefix() + ":reversal:" + refund.id() + ":" + t.id());
+                StripeGateway.ReversalSnapshot rev;
+                try {
+                    rev = stripe.reverseTransfer(t.stripeTransferId(), amount,
+                            Map.of("order_id", p.orderId(), "refund_id", refund.id().toString()),
+                            p.stripeKeyPrefix() + ":reversal:" + refund.id() + ":" + t.id());
+                } catch (StripeGatewayException ex) {
+                    if (!ex.refusal()) {
+                        throw ex;
+                    }
+                    refused.add(recoveries.open(refund.id(), t, amount, ex, now, by));
+                    toReverse = toReverse.minus(amount);
+                    continue;
+                }
                 settlements.insertReversal(t.id(), rev.id(), amount, refund.id(), now);
                 settlements.updateTransfer(t.reversedBy(amount));
                 ledger.post(Postings.transferReversal(Fingerprint.id("journal", "reversal", rev.id()), now,
@@ -667,7 +689,11 @@ class PaymentServiceImpl implements PaymentService {
                 toReverse = toReverse.minus(amount);
             }
         }
-        return out;
+        return new Reversals(out, refused);
+    }
+
+    /** What reversing the transfers of one refund did: the reversals Stripe made and the ones it refused. */
+    private record Reversals(List<RefundResult.Reversal> reversals, List<TransferRecovery> refused) {
     }
 
     @Override

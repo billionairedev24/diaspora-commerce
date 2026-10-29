@@ -42,5 +42,16 @@ public enum JournalType {
     /** A membership fee charged to a shopper's card: Dr 1000, Dr 5000 / Cr 4700 (S323). */
     MEMBERSHIP_CHARGE,
     /** A membership fee refunded to the card: Dr 4700 / Cr 1000 (S323). */
-    MEMBERSHIP_REFUND
+    MEMBERSHIP_REFUND,
+    /**
+     * Stripe refused to reverse a seller's transfer for a refund: the debit moves from the order's payable to the
+     * organisation's unattributed payable, which goes negative (the seller owes the platform).
+     */
+    TRANSFER_RECOVERY_OPENED,
+    /** A later transfer of the seller recovered some of it: Dr 2000:org on the order / Cr 2000:org unattributed. */
+    TRANSFER_RECOVERY_SETTLED,
+    /** The seller paid the platform back outside Stripe: Dr 1050 operating bank / Cr 2000:org. */
+    TRANSFER_RECOVERY_RECEIVED,
+    /** Finance wrote the rest off: Dr 5300 / Cr 2000:org. */
+    TRANSFER_RECOVERY_WRITE_OFF
 }

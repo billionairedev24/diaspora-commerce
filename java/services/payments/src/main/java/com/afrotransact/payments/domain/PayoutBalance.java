@@ -17,6 +17,9 @@ import java.util.List;
  * @param planFees            plan fees withheld from earnings (S298) and not yet recovered from a transfer: they come
  *                            out of the amounts on hold; only the part those cannot cover reserves available.
  *                            Negative when a released fee is owed back and paid with the next transfer
+ * @param transferRecoveries  refunds Stripe would not take back from the organisation's transfers (its balance was
+ *                            already paid out) and not yet recovered: owed to the platform, deducted from
+ *                            {@code available} in full and recovered from the organisation's next transfers
  * @param deliveryFees        AfroTransact Delivery pickup fees the organisation has paid on captured lines (S259), net of
  *                            fees given back by customer-fault refunds: already deducted from its nets, shown so
  *                            earnings can list them
@@ -29,7 +32,7 @@ import java.util.List;
  */
 public record PayoutBalance(String orgId, String currency, Money available, List<HeldOrder> onHold,
                             Money onHoldTotal, Money inFlight, Money paid, Money providerFees, Money labelCharges,
-                            Money planFees, Money deliveryFees, Money minimum,
+                            Money planFees, Money transferRecoveries, Money deliveryFees, Money minimum,
                             boolean canRequestToday, boolean payoutsPaused, String payoutsPausedReason,
                             boolean connectedAccount) {
 

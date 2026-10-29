@@ -54,6 +54,7 @@ class SettlementServiceImpl implements SettlementService {
     private final PaymentsMetrics metrics;
     private final PaymentsSettings settings;
     private final PlanFeeWithholdingRepository planFees;
+    private final TransferRecoveryLedger recoveries;
     private final MembershipBenefitsService membership;
     private final Clock clock;
 
@@ -61,7 +62,7 @@ class SettlementServiceImpl implements SettlementService {
                           ConnectedAccountRepository accounts, StripeGateway stripe, LedgerPoster ledger,
                           MoneyTransactions tx, PaymentsAccess access, DomainEventPublisher events,
                           PaymentsMetrics metrics, PaymentsSettings settings, PlanFeeWithholdingRepository planFees,
-                          MembershipBenefitsService membership, Clock clock) {
+                          TransferRecoveryLedger recoveries, MembershipBenefitsService membership, Clock clock) {
         this.settlements = settlements;
         this.payments = payments;
         this.ledgerReader = ledgerReader;
@@ -74,6 +75,7 @@ class SettlementServiceImpl implements SettlementService {
         this.metrics = metrics;
         this.settings = settings;
         this.planFees = planFees;
+        this.recoveries = recoveries;
         this.membership = membership;
         this.clock = clock;
     }
@@ -313,28 +315,32 @@ class SettlementServiceImpl implements SettlementService {
     /**
      * Plan fees withheld from earnings (S298) and label charges (S256) are the organisation's, not an order's: they sit
      * on 2000:org without an order. Before an order's payable is transferred they are settled against it: released plan
-     * fees are paid back with it first (the transfer is larger), then withheld plan fees are recovered from it, oldest
-     * first (the transfer is smaller, one "Plan fee (invoice …)" deduction each), then outstanding label charges are
+     * fees are paid back with it first (the transfer is larger), then refunds Stripe would not take back from earlier
+     * transfers are recovered, then withheld plan fees are recovered from it, oldest first (the transfer is smaller, one "Plan fee (invoice …)" deduction each), then outstanding label charges are
      * recovered and credits from voided labels paid. Pure ledger reclasses between the order's and the organisation's
      * unattributed payable; returns what to transfer.
      */
     private Money settleOrgCharges(String orderId, String org, Money payable, Instant now) {
         String currency = payable.currency();
         long unattributed = ledgerReader.unattributedPayable(org, currency);
-        if (unattributed == 0 && planFees.outstanding(org, currency) == 0) {
+        long owedBack = recoveries.outstanding(org, currency);
+        if (unattributed == 0 && planFees.outstanding(org, currency) == 0 && owedBack == 0) {
             return payable;
         }
         List<PlanFeeWithholding> open = planFees.lockOutstanding(org, currency);
         long planOutstanding = open.stream().mapToLong(w -> w.outstanding().minor()).sum();
-        // What is left on the unattributed payable once plan fees are taken out: label charges (negative) or credits
-        // from voided labels (positive).
-        long labels = unattributed + planOutstanding;
+        // What is left on the unattributed payable once plan fees and refused reversals are taken out: label charges
+        // (negative) or credits from voided labels (positive).
+        long labels = unattributed + planOutstanding + owedBack;
         Money remaining = payable;
         for (PlanFeeWithholding w : open) {
             if (w.outstanding().isNegative()) {
                 remaining = remaining.plus(settlePlanFee(orderId, w, w.outstanding(), now));
             }
         }
+        // Refunds Stripe would not take back from earlier transfers come before everything else: that money already
+        // left the platform.
+        remaining = remaining.minus(recoveries.recoverFrom(orderId, org, remaining, now));
         for (PlanFeeWithholding w : open) {
             if (w.outstanding().isPositive() && remaining.isPositive()) {
                 remaining = remaining.minus(settlePlanFee(orderId, w, w.outstanding().min(remaining), now));

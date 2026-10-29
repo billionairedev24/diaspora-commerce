@@ -85,7 +85,13 @@ public enum Chart {
     STRIPE_FEES("5000", "Stripe processing fees", AccountType.EXPENSE, Scope.NONE),
     CHARGEBACK_LOSSES("5100", "Chargeback losses", AccountType.EXPENSE, Scope.NONE),
     /** Credit and gift cards AfroTransact gives away (staff, promotions, referral, membership): the program's cost. */
-    CREDIT_GRANTED_EXPENSE("5200", "Credit and gift cards granted (program cost)", AccountType.EXPENSE, Scope.NONE);
+    CREDIT_GRANTED_EXPENSE("5200", "Credit and gift cards granted (program cost)", AccountType.EXPENSE, Scope.NONE),
+    /**
+     * Refunds Stripe would not take back from a seller's transfer (the money had been paid out) that Finance wrote off
+     * instead of recovering: the platform's loss on the refund.
+     */
+    TRANSFER_RECOVERY_LOSSES("5300", "Transfer recovery losses (refunds not recovered from sellers)",
+            AccountType.EXPENSE, Scope.NONE);
 
     /** Whether the account has one sub-account per organisation or jurisdiction. */
     public enum Scope { NONE, ORG, JURISDICTION, SUPPLIER }

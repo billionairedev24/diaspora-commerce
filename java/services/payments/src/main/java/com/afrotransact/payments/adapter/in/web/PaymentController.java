@@ -190,7 +190,7 @@ class PaymentController {
                 body.reason(), body.fault(), Boolean.TRUE.equals(body.cardAsCredit()), body.chosenBy()),
                 idempotencyKey);
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
-                .body(RefundResponse.of(result.refund(), result.reversals(), result.replayed()));
+                .body(RefundResponse.of(result.refund(), result.reversals(), result.recoveries(), result.replayed()));
     }
 
     @Operation(summary = "Refund by order and line ids (payments:service; e.g. trust-ops claims)",
@@ -207,7 +207,7 @@ class PaymentController {
                 body.amountMinor(), body.reason(), body.fault(), Boolean.TRUE.equals(body.cardAsCredit()),
                 body.chosenBy()), idempotencyKey);
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
-                .body(RefundResponse.of(result.refund(), result.reversals(), result.replayed()));
+                .body(RefundResponse.of(result.refund(), result.reversals(), result.recoveries(), result.replayed()));
     }
 
     @Operation(summary = "Captures of a payment")
@@ -221,7 +221,7 @@ class PaymentController {
     @Operation(summary = "Refunds of a payment")
     @GetMapping("/v1/payments/{id}/refunds")
     List<RefundResponse> refunds(@PathVariable UUID id) {
-        return payments.refunds(id).stream().map(r -> RefundResponse.of(r, List.of(), false)).toList();
+        return payments.refunds(id).stream().map(r -> RefundResponse.of(r, List.of(), List.of(), false)).toList();
     }
 
     private static Money money(Long minor, String currency) {
