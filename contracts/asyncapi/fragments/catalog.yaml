@@ -42,6 +42,13 @@ channels:
       catalogCategoryRequestCreated: {$ref: '#/components/messages/catalogCategoryRequestCreated'}
       catalogCategoryRequestApproved: {$ref: '#/components/messages/catalogCategoryRequestApproved'}
       catalogCategoryRequestRejected: {$ref: '#/components/messages/catalogCategoryRequestRejected'}
+  catalogTaxonomyEvents:
+    address: at.taxonomy.events
+    description: >-
+      Staff changes to the category tree and product-type schemas (key = node id, or product-type code). Consumers that
+      cache the tree (search indexer, delivery-runs) drop their copy on receipt.
+    messages:
+      catalogTaxonomyChanged: {$ref: '#/components/messages/catalogTaxonomyChanged'}
 operations:
   publishCatalogProductEvents:
     action: send
@@ -80,6 +87,13 @@ operations:
   publishCatalogCategoryRequestEvents:
     action: send
     channel: {$ref: '#/channels/catalogCategoryRequestEvents'}
+  publishCatalogTaxonomyEvents:
+    action: send
+    channel: {$ref: '#/channels/catalogTaxonomyEvents'}
+    summary: >-
+      catalog-service publishes catalog.taxonomy.changed whenever staff create, rename, move, reorder, retire or
+      restore a node, or create or edit a product type (S291, /v1/taxonomy/*). Approving a category request publishes
+      one per node and product type it creates.
   consumeCatalogSellerComplianceEvents:
     action: receive
     channel: {$ref: '#/channels/sellerComplianceEvents'}
@@ -241,6 +255,11 @@ components:
       title: The product's seller replied to a review (once)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/CatalogReview'}
+    catalogTaxonomyChanged:
+      name: catalog.taxonomy.changed
+      title: Staff changed the category tree or a product type
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogTaxonomyEvent'}
     catalogCategoryRequestCreated:
       name: catalog.category-request.created
       headers: {$ref: '#/components/schemas/EventHeaders'}
@@ -423,6 +442,18 @@ components:
         approvePath: {type: string, description: 'Catalog endpoint that publishes the review (catalog:moderate)'}
         rejectPath: {type: string, description: 'Endpoint that refuses a pending review, body {reasonCode, note}'}
         removePath: {type: string, description: 'Endpoint that takes a review down, body {reasonCode, note}'}
+    CatalogTaxonomyEvent:
+      type: object
+      required: [action, subjectKind, subjectId, label]
+      properties:
+        action:
+          type: string
+          enum: [NODE_CREATED, NODE_RENAMED, NODE_MOVED, NODE_RETIRED, NODE_RESTORED, NODES_REORDERED, TYPE_CREATED,
+                 TYPE_UPDATED]
+        subjectKind: {type: string, enum: [NODE, PRODUCT_TYPE]}
+        subjectId: {type: string, description: 'Node id, product-type code, or the parent id ("root" for departments) of a reorder'}
+        label: {type: string, description: 'Path of the node, or label of the product type, after the change'}
+        version: {type: integer, format: int64}
     CatalogCategoryRequestEvent:
       type: object
       properties:
