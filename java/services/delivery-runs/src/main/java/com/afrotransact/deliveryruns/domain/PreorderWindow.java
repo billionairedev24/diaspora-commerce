@@ -41,6 +41,9 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
     /** Placeholder in the SMS copy that notifications replaces with the tracked link. */
     public static final String SMS_LINK = "{link}";
 
+    /** Messages the announcement SMS may take with its tracked link: the UTM tags lengthen it past one. */
+    public static final int MAX_SMS_SEGMENTS = 2;
+
     /** Delivery may be at most this long before the close (the design allows the same day). */
     public static final Duration DELIVERY_GRACE = Duration.ofHours(12);
 
@@ -163,18 +166,22 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
     }
 
     /**
-     * The announcement SMS as notifications sends it: {@code {link}} becomes {@code <pageUrl>?src=sms&po=<CODE>&cr=announce}.
+     * The announcement SMS as notifications sends it: {@code {link}} becomes {@code <pageUrl>?src=sms&po=<CODE>&cr=announce}
+     * plus the UTM tags ({@link PreorderUtm}).
      */
     public String smsAsSent(String pageUrl) {
-        return details.smsCopy().replace(SMS_LINK, pageUrl + "?src=sms&po=" + code + "&cr=announce");
+        return details.smsCopy().replace(SMS_LINK, pageUrl + "?" + PreorderUtm.query("sms", code, "announce"));
     }
 
-    /** As {@link #publishChecks(DeliveryFees)}, plus: the announcement SMS fits one message with its tracked link. */
+    /**
+     * As {@link #publishChecks(DeliveryFees)}, plus: the announcement SMS fits {@link #MAX_SMS_SEGMENTS} messages with
+     * its tracked link (the UTM tags make the link long, as in the delivery run alerts).
+     */
     public List<RuleViolation> publishChecks(DeliveryFees fees, String pageUrl) {
         List<RuleViolation> failed = publishChecks(fees);
-        if (pageUrl != null && !Gsm7.fitsOneSegment(smsAsSent(pageUrl))) {
+        if (pageUrl != null && Gsm7.segments(smsAsSent(pageUrl)) > MAX_SMS_SEGMENTS) {
             failed.add(new RuleViolation("delivery-runs.preorder-sms-too-long",
-                    "Announcement SMS fits one message with its tracked link"));
+                    "Announcement SMS fits " + MAX_SMS_SEGMENTS + " messages with its tracked link"));
         }
         return failed;
     }

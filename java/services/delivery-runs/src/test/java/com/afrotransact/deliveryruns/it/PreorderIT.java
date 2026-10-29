@@ -572,7 +572,21 @@ class PreorderIT {
                 .containsExactly("ANNOUNCE", "REMIND_48H", "LAST_CALL_6H", "CLOSED");
         JsonNode announce = json.readTree(outboxPayloads("preorder.comms.due", w.id().toString()).get(0));
         assertThat(announce.path("smsCopy").asString()).isEqualTo("AfroTransact: pre-order open");
-        assertThat(announce.path("links").path("sms").asString()).endsWith("src=sms&po=" + w.code());
+        // Every announcement link carries the order attribution and the UTM tags (S262), content = the message.
+        String campaign = "utm_campaign=preorder-" + w.code();
+        assertThat(announce.path("links").path("sms").asString()).contains("/pre-orders?src=sms&po=" + w.code()
+                + "&cr=announce&utm_source=sms&utm_medium=sms&" + campaign + "&utm_content=announce");
+        assertThat(announce.path("links").path("email").asString()).contains("src=email&po=" + w.code()
+                + "&cr=announce&utm_source=email&utm_medium=email&" + campaign + "&utm_content=announce");
+        assertThat(announce.path("links").path("push").asString()).contains("src=app&po=" + w.code()
+                + "&cr=announce&utm_source=push&utm_medium=push&" + campaign + "&utm_content=announce");
+        assertThat(announce.path("links").path("instagram").asString()).contains("src=ig&po=" + w.code()
+                + "&cr=story&utm_source=instagram&utm_medium=social&" + campaign + "&utm_content=story");
+        JsonNode remind = json.readTree(outboxPayloads("preorder.comms.due", w.id().toString()).get(1));
+        assertThat(remind.path("kind").asString()).isEqualTo("REMIND_48H");
+        assertThat(remind.path("links").path("email").asString()).contains("cr=remind").contains("utm_content=remind");
+        JsonNode lastCall = json.readTree(outboxPayloads("preorder.comms.due", w.id().toString()).get(2));
+        assertThat(lastCall.path("links").path("sms").asString()).contains("cr=last").contains("utm_content=last");
         assertThat(announce.path("doorFeeMinor").asLong()).isEqualTo(799);
         assertThat(outboxTypes(w.id().toString())).contains("preorder.window.opened", "preorder.window.closed");
         assertThat(outboxTypes(run.id().toString())).contains("delivery-runs.run.confirmed");

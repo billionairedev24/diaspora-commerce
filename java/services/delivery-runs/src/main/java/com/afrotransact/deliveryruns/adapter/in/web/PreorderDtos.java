@@ -399,6 +399,9 @@ final class PreorderDtos {
     record ChannelResponse(AttributionChannel channel, int count, String label) {
     }
 
+    record CampaignResponse(String utmSource, String utmMedium, String utmCampaign, String utmContent, int orders) {
+    }
+
     record ProductUnitsResponse(String name, int units, String atin, String seller) {
     }
 
@@ -413,6 +416,9 @@ final class PreorderDtos {
     @Schema(name = "PreorderSummary", description = "Overview + Analytics of a window")
     record SummaryResponse(KpisResponse kpis, @Schema(description = "Orders incl. cancelled") int ordersTotal,
                            List<DayResponse> byDay, List<ChannelResponse> byChannel,
+                           @Schema(description = "Orders that came from one of the window's own messages, per UTM "
+                                   + "source, medium, campaign (preorder-<code>) and content (announce, remind, "
+                                   + "last, ...), most first") List<CampaignResponse> byCampaign,
                            List<ProductUnitsResponse> topProducts, SplitResponse fulfilmentSplit,
                            List<PlacementResponse> placements) {
 
@@ -424,6 +430,8 @@ final class PreorderDtos {
                     k.preorders() + k.cancelled(),
                     s.byDay().stream().map(d -> new DayResponse(d.date(), d.orders(), d.afterClose())).toList(),
                     s.byChannel().stream().map(c -> new ChannelResponse(c.channel(), c.orders(), c.label())).toList(),
+                    s.byCampaign().stream().map(c -> new CampaignResponse(c.utmSource(), c.utmMedium(),
+                            c.utmCampaign(), c.utmContent(), c.orders())).toList(),
                     s.topProducts().stream().map(p -> new ProductUnitsResponse(p.name(), p.units(), p.atin(),
                             p.seller())).toList(),
                     new SplitResponse(f.door(), f.pickup(), f.doorPct(), f.pickupPct()),

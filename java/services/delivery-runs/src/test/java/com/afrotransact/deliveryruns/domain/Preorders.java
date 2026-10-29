@@ -79,4 +79,11 @@ final class Preorders {
                 List.of(lines), status == PreorderOrderStatus.CANCELLED)), fulfilment, "USD", status, null, placedAt,
                 placedAt, 0);
     }
+
+    /** {@code o} as the shopper placed it from a link: with the tracking tag of the order attribution. */
+    static PreorderOrder tagged(PreorderOrder o, String trackingTag) {
+        return new PreorderOrder(o.orderId(), o.number(), o.windowId(), o.customerId(), o.customerName(), o.phone(),
+                o.email(), o.address(), o.deliveryNote(), o.placedAt(), o.channel(), trackingTag, o.packages(),
+                o.fulfilment(), o.currency(), o.status(), o.note(), o.createdAt(), o.updatedAt(), o.version());
+    }
 }
