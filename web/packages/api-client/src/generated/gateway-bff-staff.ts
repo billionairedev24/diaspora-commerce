@@ -3064,6 +3064,160 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/content/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every public page with its live link, last update, who made it and whether a draft is waiting
+         * @description Needs VIEW on Site content & legal. Legal documents (content `GET /v1/legal/overview`) and help pages (content
+         *     `GET /v1/help/admin/articles`) come with their editor (`editor: page`); the other public surfaces (contacts and
+         *     social links, the maintenance notice, announcements, banners, notification templates) point at the table or screen
+         *     that edits them (`editor: record`); pages whose text still ships with the code say `developer`. `liveUrl` is built
+         *     on the storefront origin (`PUBLIC_WEB_URL`) and is null when it is not configured or the page is hidden.
+         */
+        get: operations["listStaffContentPages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/content/pages/{kind}/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["ContentPageKind"];
+                /** @description A legal document key (conditions-of-use…) or a help page slug */
+                key: components["parameters"]["ContentPageKey"];
+            };
+            cookie?: never;
+        };
+        /**
+         * A page as published, its draft, its history, the placeholder values and what this person may do
+         * @description Legal: content `GET /v1/legal/{key}/history`, `/versions/{current}/source` and `/draft`. Help: content
+         *     `GET /v1/help/admin/articles`, `/articles/{slug}/revisions` and `/draft`. `placeholders` are the values the
+         *     `{phone}`, `{legal}`, `{address}` tokens of legal Markdown are filled with, so a preview reads as shoppers will see it.
+         */
+        get: operations["getStaffContentPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/content/pages/{kind}/{key}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["ContentPageKind"];
+                /** @description A legal document key (conditions-of-use…) or a help page slug */
+                key: components["parameters"]["ContentPageKey"];
+                /** @description A legal version (3.2) or a help revision number (7) */
+                version: components["parameters"]["ContentPageVersion"];
+            };
+            cookie?: never;
+        };
+        /** A past version's Markdown as written, to preview or to compare with another */
+        get: operations["getStaffContentVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/content/pages/{kind}/{key}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["ContentPageKind"];
+                /** @description A legal document key (conditions-of-use…) or a help page slug */
+                key: components["parameters"]["ContentPageKey"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save the draft (nothing public changes); the first save starts it from the published page
+         * @description The whole draft as the editor shows it. `rowVersion` is the draft version the editor loaded (omit on the first
+         *     save); 409 when someone saved in between. Needs `content:legal.edit` (legal) or `content:site.edit` (help) and
+         *     EDIT on Site content & legal. 422 names the fields: English required, no repeated section names, links that go
+         *     somewhere (https://, /path, #section, mailto:, tel:), translations only for fr / es / ar / yo.
+         */
+        put: operations["saveStaffContentDraft"];
+        post?: never;
+        /** Throw the draft away */
+        delete: operations["discardStaffContentDraft"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/content/pages/{kind}/{key}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["ContentPageKind"];
+                /** @description A legal document key (conditions-of-use…) or a help page slug */
+                key: components["parameters"]["ContentPageKey"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish the draft with a reason; the previous version stays in the history
+         * @description `rowVersion` is the draft the approver reviewed (409 when it changed). Legal documents: a different person than
+         *     the draft's last editor must publish (403 `content.second-approver-required`), the Approve level is needed, and a
+         *     document published as final (draft banner off) may not hold `[[LEGAL: …]]` markers (422 on `bodies`). The reason
+         *     (5 to 500 characters) is kept in the audit trail.
+         */
+        post: operations["publishStaffContentPage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/content/pages/{kind}/{key}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["ContentPageKind"];
+                /** @description A legal document key (conditions-of-use…) or a help page slug */
+                key: components["parameters"]["ContentPageKey"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Go back to an earlier version by publishing it as a new one
+         * @description Help pages: the revision's text is published at once as the newest revision (reason required). Legal documents:
+         *     a new draft starts from the older text, numbered one minor version up, and a second person publishes it; 409 when
+         *     a draft already exists.
+         */
+        post: operations["rollbackStaffContentPage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/places": {
         parameters: {
             query?: never;
@@ -6071,6 +6225,138 @@ export interface components {
             version: number;
             changes?: components["schemas"]["StaffMarketChanges"];
         };
+        StaffContentPageRow: {
+            /** @description legal, help, or record for content edited in its own table */
+            kind: string;
+            key: string;
+            title: string;
+            /** @description The legal center group, the help topic, or the area of the site */
+            group: string;
+            /** @description Storefront path, for example /legal/privacy */
+            livePath: string | null;
+            /** @description Absolute storefront address (PUBLIC_WEB_URL + livePath); open it in a new tab */
+            liveUrl: string | null;
+            /** @enum {string} */
+            status: "PUBLISHED" | "DRAFT_FOR_COUNSEL" | "HIDDEN" | "DEVELOPER_ONLY";
+            /** @description Legal version (3.2) or help revision number; empty for record rows */
+            version: string;
+            /** Format: date */
+            effectiveDate: string | null;
+            /** Format: date-time */
+            updatedAt: string | null;
+            /** @description The person's name, never an id */
+            updatedByName: string | null;
+            hasDraft: boolean;
+            draftUpdatedByName: string | null;
+            /** @enum {string} */
+            editor: "page" | "record" | "developer";
+            /** @description Resource table that edits a record row */
+            resource: string | null;
+            resourceId: string | null;
+            /** @description A console path for content with its own screen */
+            consoleHref: string | null;
+            canEdit: boolean;
+            locales: ("en" | "fr" | "es" | "ar" | "yo")[];
+        };
+        StaffContentPageList: {
+            storefrontUrl: string | null;
+            items: components["schemas"]["StaffContentPageRow"][];
+        };
+        StaffContentDocument: {
+            version: string;
+            /** Format: date */
+            effectiveDate: string | null;
+            /** @description Legal only; shows the counsel-review banner */
+            draftBanner: boolean | null;
+            title: string;
+            /** @description Help only */
+            summary: string | null;
+            /** @description Help only */
+            topic: string | null;
+            sortOrder: number | null;
+            /** @description Markdown per locale (en always). Help pages: the sections as one text, a `## Heading` line before each. */
+            bodies: {
+                [key: string]: string;
+            };
+            /** @description Translations a reviewer still has to check */
+            needsReview: string[];
+            changeSummary: string | null;
+            /** @description A draft's optimistic-locking counter */
+            rowVersion: number | null;
+            /** Format: date-time */
+            updatedAt: string | null;
+            updatedByName: string | null;
+            /** @description Why a help revision was published */
+            reason: string | null;
+        };
+        StaffContentVersionRef: {
+            version: string;
+            /** @enum {string} */
+            status: "CURRENT" | "ARCHIVED";
+            /** Format: date */
+            effectiveDate: string | null;
+            changeSummary: string | null;
+            reason: string | null;
+            /** Format: date-time */
+            publishedAt: string | null;
+            publishedByName: string | null;
+            draftBanner: boolean | null;
+            locales: string[];
+        };
+        StaffContentAccess: {
+            canEdit: boolean;
+            canPublish: boolean;
+            /** @description Someone other than the draft's last editor must publish it */
+            secondApprover: boolean;
+            /** @description Why this person cannot publish */
+            reason: string | null;
+        };
+        StaffContentPage: {
+            /** @enum {string} */
+            kind: "legal" | "help";
+            key: string;
+            title: string;
+            group: string;
+            livePath: string | null;
+            liveUrl: string | null;
+            locales: ("en" | "fr" | "es" | "ar" | "yo")[];
+            published: components["schemas"]["StaffContentDocument"];
+            draft: components["schemas"]["StaffContentDocument"] | null;
+            versions: components["schemas"]["StaffContentVersionRef"][];
+            placeholders: {
+                [key: string]: string;
+            };
+            /** @description Help topics to choose from */
+            topics: components["schemas"]["FieldOption"][];
+            access: components["schemas"]["StaffContentAccess"];
+        };
+        StaffContentDraftInput: {
+            /** @description Legal only; must be higher than the published version */
+            version?: string;
+            /** Format: date */
+            effectiveDate?: string;
+            draftBanner?: boolean;
+            title?: string;
+            summary?: string;
+            topic?: string;
+            sortOrder?: number;
+            bodies: {
+                [key: string]: string;
+            };
+            needsReview?: ("fr" | "es" | "ar" | "yo")[];
+            changeSummary?: string;
+            /** @description The draft version the editor loaded */
+            rowVersion?: number;
+        };
+        StaffContentPublishInput: {
+            reason: string;
+            rowVersion: number;
+        };
+        StaffContentRollbackInput: {
+            version: string;
+            /** @description Required for help pages */
+            reason?: string;
+        };
         StaffPlaceList: {
             /** @description Country, what the country calls its regions (State, Province…), or City */
             label: string;
@@ -8945,6 +9231,11 @@ export interface components {
         IdempotencyKey: string;
         /** @description Same key = same refund; never refunds twice. */
         IdempotencyKeyRequired: string;
+        ContentPageKind: "legal" | "help";
+        /** @description A legal document key (conditions-of-use…) or a help page slug */
+        ContentPageKey: string;
+        /** @description A legal version (3.2) or a help revision number (7) */
+        ContentPageVersion: string;
         MarketCountryCode: string;
         MarketRegionCode: string;
         /** @description The version from the ETag (optimistic locking). */
@@ -13956,6 +14247,215 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffContentPages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pages */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffContentPageList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffContentPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["ContentPageKind"];
+                /** @description A legal document key (conditions-of-use…) or a help page slug */
+                key: components["parameters"]["ContentPageKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffContentPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffContentVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["ContentPageKind"];
+                /** @description A legal document key (conditions-of-use…) or a help page slug */
+                key: components["parameters"]["ContentPageKey"];
+                /** @description A legal version (3.2) or a help revision number (7) */
+                version: components["parameters"]["ContentPageVersion"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffContentDocument"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveStaffContentDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["ContentPageKind"];
+                /** @description A legal document key (conditions-of-use…) or a help page slug */
+                key: components["parameters"]["ContentPageKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffContentDraftInput"];
+            };
+        };
+        responses: {
+            /** @description Draft saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffContentDocument"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    discardStaffContentDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["ContentPageKind"];
+                /** @description A legal document key (conditions-of-use…) or a help page slug */
+                key: components["parameters"]["ContentPageKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discarded */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    publishStaffContentPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["ContentPageKind"];
+                /** @description A legal document key (conditions-of-use…) or a help page slug */
+                key: components["parameters"]["ContentPageKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffContentPublishInput"];
+            };
+        };
+        responses: {
+            /** @description Published */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffContentPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    rollbackStaffContentPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: components["parameters"]["ContentPageKind"];
+                /** @description A legal document key (conditions-of-use…) or a help page slug */
+                key: components["parameters"]["ContentPageKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffContentRollbackInput"];
+            };
+        };
+        responses: {
+            /** @description Rolled back (help) or draft started (legal) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffContentPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];

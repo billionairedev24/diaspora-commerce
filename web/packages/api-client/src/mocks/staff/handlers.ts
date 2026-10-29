@@ -48,6 +48,7 @@ import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
 import { exportFileOf, type MockExportColumn } from '../export-file';
 import { type HubGate, inventoryHubHandlers } from '../inventory-hub';
 import { parseSort, queryRows, type SortKey } from '../table';
+import { contentPageHandlers } from './content-pages';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
 import { canAdvance, planRun } from './dispatch';
 import { feeRateHandlers } from './fee-rates';
@@ -1310,6 +1311,8 @@ export const staffHandlers = [
   ...runHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Settings → Markets & locations (location tree) and the shared place pickers */
   ...marketHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
+  /* Settings → Published pages: the legal and help editors, drafts, publication and rollback */
+  ...contentPageHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   ...taxonomyHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Plans & billing (S292–S297): the seller service's catalogue, trials, rewards and per-seller billing */
   ...planHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),

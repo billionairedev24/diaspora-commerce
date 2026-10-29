@@ -534,7 +534,7 @@ func contentProblems(kind string, in domain.ContentDraftInput) map[string]string
 			seen[h] = true
 		}
 		for _, m := range mdLink.FindAllStringSubmatch(text, -1) {
-			if dest := m[1]; dest == "" || !linkScheme.MatchString(dest) {
+			if dest := m[1]; dest == "" || strings.HasPrefix(dest, "//") || !linkScheme.MatchString(dest) {
 				if _, taken := errs["bodies."+loc]; !taken {
 					errs["bodies."+loc] = fmt.Sprintf("The link “%s” does not go anywhere. Use https://, /path, #section, mailto: or tel:.", dest)
 				}

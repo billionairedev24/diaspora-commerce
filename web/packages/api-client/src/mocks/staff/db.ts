@@ -4,6 +4,7 @@ import { type ExportJob } from '../../schemas/exports';
 import { legalGroupTitle } from '../../schemas/legal';
 import { type ActivityEntry, type ResourceKey } from '../../schemas/staff';
 import { HELP_ARTICLES } from '../fixtures/help';
+import { type MockContentState, seedContent } from './content-pages';
 import { type MockDispatch, seedDispatch } from './dispatch';
 import { seedExchangeRates } from './exchange-rates';
 import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
@@ -56,6 +57,8 @@ export interface MockStaffDb {
   preorders: MockPreorderState;
   /** content's draft markets: countries → states → cities (Markets & locations). */
   markets: MockMarketsState;
+  /** content's legal and help authoring: versions, revisions and working drafts (Settings → Published pages). */
+  content: MockContentState;
   /** catalog's category tree, product-type details and the audit of changes (Catalog → Categories). */
   taxonomy: MockTaxonomyState;
   /** seller's plan catalogue, trial campaigns, reward rules, grants and per-seller billing (S292–S297). */
@@ -665,6 +668,7 @@ function seed(now: Date): MockStaffDb {
     templates: { rows: seedTemplateRows(), samples: seedTemplateSamples() },
     preorders: seedPreorders(now),
     markets: seedMarkets(),
+    content: seedContent(now, helpArticles.map((r) => ({ slug: r.id, title: String(r.fields.title), summary: String(r.fields.summary), topic: String(r.fields.topic), status: String(r.fields.status), body: String(r.fields.sections), updatedAt: String(r.fields.updatedAt) }))),
     taxonomy: seedTaxonomy(),
     plans: seedPlans(now),
     feeRates: seedFeeRates(now),
@@ -678,6 +682,7 @@ export function getStaffDb(): MockStaffDb {
   // A database seeded before pre-orders existed (dev server kept across reloads) gets them on first use.
   g[KEY].preorders ??= seedPreorders(g[KEY].now);
   g[KEY].markets ??= seedMarkets();
+  g[KEY].content ??= seedContent(g[KEY].now, []);
   g[KEY].taxonomy ??= seedTaxonomy();
   g[KEY].plans ??= seedPlans(g[KEY].now);
   g[KEY].feeRates ??= seedFeeRates(g[KEY].now);
