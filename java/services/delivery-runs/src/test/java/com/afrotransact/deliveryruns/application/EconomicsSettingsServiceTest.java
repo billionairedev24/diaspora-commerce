@@ -171,6 +171,25 @@ class EconomicsSettingsServiceTest {
     }
 
     @Test
+    void thePlatformFeeEstimateIsSavedWithAReasonAuditedAndRangeChecked() {
+        EconomicsSettingsCommand withFee = new EconomicsSettingsCommand(2500L, 70L, 45.0, 6.0, 30.0, 1.0, true, 250L,
+                "Commission averages $2.50 an order");
+        EconomicsRevision saved = service.replace(withFee, 0L);
+        assertThat(saved.settings().platformFeePerOrderMinor()).isEqualTo(250);
+        assertThat(service.changes(10)).singleElement().satisfies(c -> {
+            assertThat(c.before().platformFeePerOrderMinor()).isZero();
+            assertThat(c.after().platformFeePerOrderMinor()).isEqualTo(250);
+            assertThat(c.reason()).isEqualTo("Commission averages $2.50 an order");
+        });
+        for (Long bad : new Long[] {-1L, EconomicsSettings.MAX_PLATFORM_FEE_MINOR + 1, null}) {
+            assertThatThrownBy(() -> service.replace(new EconomicsSettingsCommand(2500L, 70L, 45.0, 6.0, 30.0, 1.0,
+                    true, bad, "Typo"), 1L)).isInstanceOfSatisfying(RuleViolation.class,
+                    e -> assertThat(e.code()).isEqualTo("delivery-runs.invalid-economics"));
+        }
+        assertThat(service.current().version()).isEqualTo(1);
+    }
+
+    @Test
     void aStaleVersionIsRefusedAndTellsWhatIsCurrent() {
         service.replace(command(3000, 80, "First"), 0L);
         assertThatThrownBy(() -> service.replace(command(3100, 80, "Stale"), 0L))

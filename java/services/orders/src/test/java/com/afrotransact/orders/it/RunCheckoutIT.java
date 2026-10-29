@@ -167,7 +167,11 @@ class RunCheckoutIT extends OrdersIntegrationTest {
                 + "/reservations")).withHeader("Authorization", WireMock.equalTo("Bearer " + Upstreams.SERVICE_TOKEN))
                 .withRequestBody(WireMock.matchingJsonPath("$.orderId", WireMock.equalTo(orderId)))
                 .withRequestBody(WireMock.matchingJsonPath("$.customerId", WireMock.equalTo(customer)))
-                .withRequestBody(WireMock.matchingJsonPath("$.allowNextRun", WireMock.equalTo("false"))));
+                .withRequestBody(WireMock.matchingJsonPath("$.allowNextRun", WireMock.equalTo("false")))
+                // S265: the slot is told what the order is charged, so the run's P&L uses the fee it actually paid.
+                .withRequestBody(WireMock.matchingJsonPath("$.feeMinor", WireMock.equalTo("799")))
+                .withRequestBody(WireMock.matchingJsonPath("$.deliveryKind", WireMock.equalTo("DOOR")))
+                .withRequestBody(WireMock.matchingJsonPath("$.totalMinor", WireMock.matching("\\d+"))));
         // The run's fee is the delivery charge, and the rule behind it is kept on the shipment.
         assertThat(jdbc.sql("select shipping_minor from shipment where id = :id")
                 .param("id", UUID.fromString(runShipment.path("shipmentId").asString())).query(Long.class).single())
