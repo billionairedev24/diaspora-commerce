@@ -156,6 +156,18 @@ export function sectionsFor(type: ProductTypeSchema | undefined): SectionKey[] {
 export const attributesIn = (type: ProductTypeSchema | undefined, section: AttributeDef['section']) =>
   (type?.attributes ?? []).filter((a) => a.section === section && a.key !== 'brand');
 
+/** The brand attribute of a product type: the Brand field is shown only when the type defines it (a book has an author, not a brand). */
+export const brandOf = (type: ProductTypeSchema | undefined) => type?.attributes.find((a) => a.key === 'brand');
+
+/** Up to `limit` filled-in attributes for the shopper preview, brand / author first (what a search result line shows). */
+export function previewAttributes(type: ProductTypeSchema | undefined, s: FormState, limit = 4): { label: string; value: string }[] {
+  const defs = [...(type?.attributes ?? [])].sort((a, b) => Number(b.key === 'brand' || b.key === 'author') - Number(a.key === 'brand' || a.key === 'author'));
+  return defs
+    .map((a) => ({ label: a.label, value: attrValue(a, s.attrs[a.key] ?? '', s.units[a.key]) }))
+    .filter((x) => x.value !== '' && x.value !== undefined)
+    .slice(0, limit);
+}
+
 /* ── Variants ── */
 
 /** Variant combinations of the chosen theme (cartesian product of the selected options). */
@@ -279,7 +291,7 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
   const title = s.title.trim();
   if (title.length < 10) add(fieldId.title, 'basics', 'sc.pf.field.title', title ? 'sc.pf.err.titleShort' : 'sc.pf.err.required');
   else if (title.length > 200) add(fieldId.title, 'basics', 'sc.pf.field.title', 'sc.pf.err.titleLong');
-  const brandDef = type?.attributes.find((a) => a.key === 'brand');
+  const brandDef = brandOf(type);
   if (brandDef?.required && !(s.attrs.brand ?? '').trim()) add(fieldId.brand, 'basics', 'sc.pf.field.brand', 'sc.pf.err.required');
   if (s.description.length > MAX_DESCRIPTION) add(fieldId.description, 'basics', 'sc.pf.field.description', 'sc.pf.err.descriptionLong');
   const kws = keywordsOf(s.keywords);
@@ -364,6 +376,70 @@ export function orderedProblems(p: Problems, sections: SectionKey[]): [string, P
   return Object.entries(p).sort((a, b) => rank(a[1].section) - rank(b[1].section));
 }
 
+/* ── Completion and listing quality ── */
+
+export interface SectionStatus {
+  /** Required items still open in the section. */
+  missing: number;
+  state: 'complete' | 'incomplete';
+}
+
+/** Per section: how many required things are still open (the navigator shows a check or "N to do"). */
+export function sectionStatus(sections: SectionKey[], problems: Problems): Record<SectionKey, SectionStatus> {
+  const out = {} as Record<SectionKey, SectionStatus>;
+  sections.forEach((k) => {
+    const missing = Object.values(problems).filter((p) => p.section === k).length;
+    out[k] = { missing, state: missing === 0 ? 'complete' : 'incomplete' };
+  });
+  return out;
+}
+
+export interface QualityItem {
+  id: string;
+  section: SectionKey;
+  label: Problem['label'];
+  /** Required items block submission; recommended ones only raise the score. */
+  required: boolean;
+  done: boolean;
+  /** Shown for recommended items that are not done. */
+  tip?: MessageKey;
+}
+
+/** The checklist behind the quality score: every required field of the form (done = no problem) plus two recommendations
+    (a description, three or more images). */
+export function qualityItems(s: FormState, type: ProductTypeSchema | undefined, problems: Problems): QualityItem[] {
+  const items: QualityItem[] = [];
+  const req = (id: string, section: SectionKey, label: Problem['label'], done = !problems[id]) => items.push({ id, section, label, required: true, done });
+  req(fieldId.category, 'basics', 'sc.pf.field.category');
+  req(fieldId.title, 'basics', 'sc.pf.field.title');
+  const brand = brandOf(type);
+  if (brand?.required) req(fieldId.brand, 'basics', { text: brand.label });
+  req(fieldId.images, 'images', 'sc.pf.field.images');
+  type?.attributes.forEach((a) => {
+    if (a.key === 'brand' || !a.required) return;
+    req(fieldId.attr(a.key), a.section === 'DETAILS' ? 'details' : 'compliance', { text: a.label });
+  });
+  if (type) {
+    if (s.hasVariants && type.themes.length) {
+      const bad = Object.keys(problems).some((id) => id === fieldId.theme || id.startsWith('pf-var-'));
+      req(fieldId.theme, 'variants', 'sc.pf.field.theme', !bad);
+    } else {
+      req(fieldId.sku, 'offer', 'sc.pf.field.sku');
+      if (!s.noGtin) req(fieldId.gtin, 'offer', type.identifierRule === 'isbn' ? 'sc.pf.field.isbn' : 'sc.pf.field.gtin');
+      req(fieldId.price, 'offer', 'sc.pf.field.price');
+      req(fieldId.qty, 'offer', 'sc.pf.field.qty');
+    }
+    if (s.fulfilment === 'AFROTRANSACT') req(fieldId.pkg, 'fulfilment', 'sc.pf.field.package');
+    else req(fieldId.handling, 'fulfilment', 'sc.pf.field.handling');
+  }
+  items.push({ id: fieldId.description, section: 'basics', label: 'sc.pf.field.description', required: false, done: s.description.trim().length >= 40, tip: 'sc.pf.tip.description' });
+  items.push({ id: fieldId.images, section: 'images', label: 'sc.pf.field.images', required: false, done: s.images.filter((i) => i.url).length >= 3, tip: 'sc.pf.tip.images' });
+  return items;
+}
+
+/** 0–100: the share of checklist items that are done. */
+export const qualityScore = (items: QualityItem[]) => (items.length ? Math.round((100 * items.filter((i) => i.done).length) / items.length) : 0);
+
 /** Server field errors ("title", "listing.packaging", "attributes.shelf", "variants") → form field ids. */
 export function serverFieldId(field: string): string {
   if (field.startsWith('attributes.')) return fieldId.attr(field.slice('attributes.'.length));
@@ -377,7 +453,10 @@ export function serverFieldId(field: string): string {
 
 /* ── Submission ── */
 
-const attrValue = (a: AttributeDef | undefined, v: string, unit: string | undefined) => (a?.kind === 'NUMBER' && a.units.length ? `${v.trim()} ${unit || a.units[0]}` : v.trim());
+function attrValue(a: AttributeDef | undefined, v: string, unit: string | undefined): string {
+  const text = v.trim();
+  return text && a?.kind === 'NUMBER' && a.units.length ? `${text} ${unit || a.units[0]}` : text;
+}
 
 /** The catalog submission (call when validateForm is empty). */
 export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined, draftId?: string | null): ProductDraft {
@@ -407,7 +486,7 @@ export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined
     title: s.title.trim(),
     attributes: Object.fromEntries(
       Object.entries(s.attrs)
-        .filter(([, v]) => v.trim() !== '')
+        .filter(([k, v]) => v.trim() !== '' && (!type || type.attributes.some((a) => a.key === k)))
         .map(([k, v]) => [k, attrValue(type?.attributes.find((a) => a.key === k), v, s.units[k])])
     ),
     images: s.images.filter((i) => i.url).map(imageInput),

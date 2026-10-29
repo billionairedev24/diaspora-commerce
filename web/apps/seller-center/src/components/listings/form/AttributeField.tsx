@@ -50,7 +50,7 @@ export function AttributeField({ def, value, unit, error, onChange, onUnit }: Pr
   }
   if (def.kind === 'MULTILINE' || def.multiline) {
     return (
-      <Field id={id} label={label} help={help} error={error} className="sm:col-span-2">
+      <Field id={id} label={label} help={help} error={error} className="col-span-full">
         {(a11y) => <textarea {...a11y} rows={3} className={`${fieldStyles.control} min-h-20 py-2`} value={value} onChange={(e) => onChange(e.target.value)} />}
       </Field>
     );

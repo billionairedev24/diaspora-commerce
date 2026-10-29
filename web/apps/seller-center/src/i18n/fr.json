@@ -498,7 +498,6 @@
   "sc.pf.field.category": "Catégorie",
   "sc.pf.field.title": "Titre du produit",
   "sc.pf.field.brand": "Marque",
-  "sc.pf.field.brandOptional": "Marque (facultatif)",
   "sc.pf.field.condition": "État",
   "sc.pf.field.description": "Description",
   "sc.pf.field.keywords": "Mots-clés de recherche",
@@ -1030,5 +1029,19 @@
   "sc.reviews.pages": "Pages d’avis",
   "sc.reviews.previous": "Précédent",
   "sc.reviews.next": "Suivant",
-  "sc.reviews.pageOf": "Page {page} sur {pages}"
+  "sc.reviews.pageOf": "Page {page} sur {pages}",
+  "sc.pf.nav.label": "Sections",
+  "sc.pf.nav.done": "Terminé",
+  "sc.pf.nav.todo": "{count} à faire",
+  "sc.pf.q.title": "Qualité de l’annonce",
+  "sc.pf.q.percent": "{percent} % complété",
+  "sc.pf.q.required": "Requis pour soumettre",
+  "sc.pf.q.improve": "Pour l’améliorer",
+  "sc.pf.tip.description": "Ajoutez une description d’au moins 40 caractères",
+  "sc.pf.tip.images": "Ajoutez 3 images ou plus",
+  "sc.pf.bar.label": "Actions de l’annonce",
+  "sc.pf.bar.noChanges": "Aucune modification à enregistrer.",
+  "sc.pf.images.addMore": "Ajouter des images",
+  "sc.pf.images.reorderHint": "Faites glisser les images pour les réorganiser. La première est l’image principale.",
+  "sc.pf.titleHelpPlain": "Nom du produit + détail clé · {count}/200"
 }

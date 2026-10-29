@@ -451,8 +451,11 @@ async function probe(opts: ProbeOptions): Promise<ProbeResult> {
       if (!hit || hit === el || el.contains(hit) || hit.contains(el)) continue;
       const layer = fixedLayerOf(hit);
       if (!layer || layer.contains(el)) continue;
-      // Scrolled: content passing under the sticky header is expected; only layers off the top edge count.
-      if (scrolled && layer.getBoundingClientRect().top <= 2) continue;
+      // Scrolled: content passing under the sticky header, or under a bar stuck to the top below it (a section navigator), is
+      // expected and scrolls free again; only other layers off the top edge count.
+      const lr = layer.getBoundingClientRect();
+      const ls = styleOf(layer);
+      if (scrolled && (lr.top <= 2 || (ls.position === 'sticky' && ls.top !== 'auto' && lr.bottom < vh / 2))) continue;
       covered.add(el);
       issues.push({ check: 'covered', selector: describe(el), detail: `under ${describe(layer)} "${textOf(el) || el.getAttribute('aria-label') || ''}"` });
     }

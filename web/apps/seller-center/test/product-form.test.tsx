@@ -35,7 +35,7 @@ async function chooseCategory(query: string, name: RegExp) {
 
 const sectionTitles = () => within(screen.getByRole('form', { name: 'Product' })).getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
 
-describe('product form v2 (S309): one column of sections with proper dropdowns', () => {
+describe('product form v2 (S309): wide cards of sections with proper dropdowns', () => {
   it('shows the sections in order, only the ones the category needs, with compliance last', async () => {
     await renderScreen(<ProductForm />);
     expect(await screen.findByRole('heading', { level: 1, name: 'Add a product' })).toBeInTheDocument();
@@ -161,7 +161,7 @@ describe('product form v2 (S309): one column of sections with proper dropdowns',
     expect(screen.getByLabelText('Product title')).toHaveFocus();
     // Submitting with problems moves to the first one and calls nothing.
     fireEvent.change(screen.getByLabelText('Product title'), { target: { value: 'Suya' } });
-    fireEvent.click(within(panel).getByTestId('pf-primary'));
+    fireEvent.click(screen.getByTestId('pf-primary'));
     expect(await screen.findAllByText('At least 10 characters')).not.toHaveLength(0);
     expect(nav.push).not.toHaveBeenCalled();
   });
@@ -177,7 +177,7 @@ describe('product form v2 (S309): one column of sections with proper dropdowns',
     expect(within(screen.getByRole('list', { name: /Product images/ })).getByText('Main')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Description of image 1'), { target: { value: 'Jar of spice on a white table' } });
     fireEvent.change(screen.getByLabelText('Product title'), { target: { value: `${title}, Family Size` } });
-    fireEvent.click(within(screen.getByRole('complementary', { name: 'Listing readiness' })).getByTestId('pf-primary'));
+    fireEvent.click(screen.getByTestId('pf-primary'));
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/listings'));
     expect(getSellerDb().listings.find((l) => l.productId === listing.productId)?.title).toBe(`${title}, Family Size`);
     expect(getSellerDb().productDetails[listing.productId]?.images[0]?.alt).toBe('Jar of spice on a white table');
@@ -190,6 +190,135 @@ describe('product form v2 (S309): one column of sections with proper dropdowns',
     expect(nav.replace).toHaveBeenCalledWith(expect.stringMatching(/^\/listings\/new\?draft=draft-\d+$/), { scroll: false });
     await renderScreen(<ListingsView />);
     expect(await screen.findByRole('link', { name: 'Zobo leaves, dried' })).toHaveAttribute('href', expect.stringContaining('/listings/new?draft='));
+  });
+});
+
+describe('attributes come from the product type (owner feedback)', () => {
+  it('shows no Brand field for a book, and its own author, publisher, language and pages instead', async () => {
+    await renderScreen(<ProductForm />);
+    await chooseCategory('cookbooks', /African & Caribbean cooking/);
+    await screen.findByLabelText('Author');
+    expect(screen.queryByRole('combobox', { name: /Brand/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Brand/)).not.toBeInTheDocument();
+    for (const label of ['Author', 'Publisher', 'Language', 'Pages']) expect(screen.getByLabelText(label)).toBeInTheDocument();
+    // The ISBN is the identifier of a book and cannot be waived.
+    expect(screen.getByLabelText('ISBN-13')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Books need an ISBN-13/)).toBeDisabled();
+    // Optional book fields are offered under More details.
+    expect(screen.getByLabelText('Publication year (optional)').closest('details')).not.toHaveAttribute('open');
+    expect(screen.getByLabelText('Edition (optional)')).toBeInTheDocument();
+  });
+
+  it('shows the Brand field for a type that defines a brand, and drops it when the category changes to a book', async () => {
+    await renderScreen(<ProductForm />);
+    expect(screen.queryByRole('combobox', { name: /Brand/ })).not.toBeInTheDocument();
+    await chooseCategory('dresses', /Dresses/);
+    const brand = await screen.findByRole('combobox', { name: 'Brand' });
+    fireEvent.change(brand, { target: { value: 'Zuri' } });
+    fireEvent.click(await screen.findByRole('option', { name: /Add “Zuri” as a new brand/ }));
+    await chooseCategory('cookbooks', /African & Caribbean cooking/);
+    await waitFor(() => expect(screen.queryByRole('combobox', { name: /Brand/ })).not.toBeInTheDocument());
+    // The stale brand does not leak into the book's preview.
+    expect(within(screen.getByRole('complementary', { name: 'Listing readiness' })).queryByText('Zuri')).not.toBeInTheDocument();
+  });
+});
+
+describe('section navigator, listing quality and the sticky actions', () => {
+  const sections = () => screen.getByRole('navigation', { name: 'Sections' });
+  const stateOf = (name: RegExp) => within(sections()).getByRole('link', { name }).getAttribute('data-state');
+
+  it('marks each section complete or with what is left to do, and updates as fields are filled in', async () => {
+    await renderScreen(<ProductForm />);
+    await screen.findByRole('navigation', { name: 'Sections' });
+    expect(stateOf(/Basics/)).toBe('incomplete');
+    expect(within(sections()).getByRole('link', { name: /Basics/ })).toHaveTextContent('2 to do');
+    expect(stateOf(/Photos/)).toBe('incomplete');
+
+    await chooseCategory('cookbooks', /African & Caribbean cooking/);
+    await screen.findByLabelText('Author');
+    fireEvent.change(screen.getByLabelText('Product title'), { target: { value: 'Jollof Rice and Other Stories' } });
+    expect(stateOf(/Basics/)).toBe('complete');
+    expect(within(sections()).getByRole('link', { name: /Basics/ })).toHaveTextContent('Complete');
+    expect(stateOf(/Details/)).toBe('incomplete');
+    expect(within(sections()).getByRole('link', { name: /Details/ })).toHaveTextContent('4 to do');
+
+    for (const [label, value] of [['Author', 'Ade Bello'], ['Publisher', 'Kachifo'], ['Pages', '240']] as const) fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'English' } });
+    expect(stateOf(/Details/)).toBe('complete');
+    // The section card shows the same state.
+    const card = document.querySelector('[data-section="details"]') as HTMLElement;
+    expect(within(card).getByTestId('section-state')).toHaveTextContent('Complete');
+    // Shipping has valid defaults; Price & stock still needs SKU, ISBN, price and quantity.
+    expect(stateOf(/Shipping/)).toBe('complete');
+    expect(stateOf(/Price & stock/)).toBe('incomplete');
+  });
+
+  it('scores the listing, lists what is missing and jumps to the field when an item is clicked', async () => {
+    await renderScreen(<ProductForm />);
+    const panel = await screen.findByRole('complementary', { name: 'Listing readiness' });
+    const before = Number(within(panel).getByRole('progressbar', { name: 'Listing quality' }).getAttribute('aria-valuenow'));
+    await chooseCategory('cookbooks', /African & Caribbean cooking/);
+    await screen.findByLabelText('Author');
+    fireEvent.change(screen.getByLabelText('Product title'), { target: { value: 'Jollof Rice and Other Stories' } });
+    await waitFor(() => expect(Number(within(panel).getByRole('progressbar').getAttribute('aria-valuenow'))).toBeGreaterThan(before));
+    expect(within(panel).getByTestId('quality-percent')).toHaveTextContent(/\d+% complete/);
+
+    const missing = within(panel).getByTestId('missing-list');
+    expect(within(missing).getByRole('link', { name: /Author/ })).toBeInTheDocument();
+    fireEvent.click(within(missing).getByRole('link', { name: /Publisher/ }));
+    expect(screen.getByLabelText('Publisher')).toHaveFocus();
+    // The message appears with the field it belongs to, and is linked to it.
+    expect(screen.getByLabelText('Publisher')).toHaveAccessibleDescription('Required');
+
+    // Recommended items are listed apart and also jump to their field.
+    const tips = within(panel).getByTestId('tips-list');
+    fireEvent.click(within(tips).getByRole('link', { name: /Description/ }));
+    expect(screen.getByLabelText('Description')).toHaveFocus();
+  });
+
+  it('jumps to a section and moves focus to its heading', async () => {
+    await renderScreen(<ProductForm />);
+    await chooseCategory('cookbooks', /African & Caribbean cooking/);
+    await screen.findByLabelText('Author');
+    fireEvent.click(within(await screen.findByRole('navigation', { name: 'Sections' })).getByRole('link', { name: /Details/ }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Details' })).toHaveFocus();
+  });
+
+  it('previews the listing on the storefront with its title, price and key attributes', async () => {
+    await renderScreen(<ProductForm />);
+    await chooseCategory('cookbooks', /African & Caribbean cooking/);
+    await screen.findByLabelText('Author');
+    fireEvent.change(screen.getByLabelText('Product title'), { target: { value: 'Jollof Rice and Other Stories' } });
+    fireEvent.change(screen.getByLabelText('Author'), { target: { value: 'Ade Bello' } });
+    fireEvent.change(screen.getByLabelText('Price (USD)'), { target: { value: '18.50' } });
+    const preview = within(screen.getByRole('complementary', { name: 'Listing readiness' })).getByTestId('listing-preview');
+    expect(within(preview).getByTestId('preview-title')).toHaveTextContent('Jollof Rice and Other Stories');
+    expect(within(preview).getByTestId('preview-price')).toHaveTextContent('$18.50');
+    expect(within(preview).getByTestId('preview-attrs')).toHaveTextContent('AuthorAde Bello');
+  });
+
+  it('keeps Save draft and Submit in one bar, Save draft only when there is something new to save', async () => {
+    await renderScreen(<ProductForm />);
+    const bar = await screen.findByRole('region', { name: 'Listing actions' });
+    expect(within(bar).getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Product title'), { target: { value: 'Zobo leaves, dried' } });
+    expect(within(bar).getByRole('button', { name: 'Save draft' })).toBeEnabled();
+    fireEvent.click(within(bar).getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(within(bar).getByTestId('save-state')).toHaveTextContent(/Draft saved/));
+    expect(within(bar).getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    expect(within(bar).getByTestId('pf-primary')).toHaveTextContent('Submit for review');
+  });
+
+  it('cannot save an edit nobody changed', async () => {
+    const listing = getSellerDb().listings.find((l) => l.status === 'IN_REVIEW');
+    if (!listing) throw new Error('fixture has a listing in review');
+    await renderScreen(<ProductForm productId={listing.productId} />);
+    const primary = await screen.findByTestId('pf-primary');
+    await waitFor(() => expect(screen.getByLabelText('Product title')).toHaveValue(listing.title));
+    expect(primary).toBeDisabled();
+    expect(screen.getByTestId('save-state')).toHaveTextContent('No changes to save.');
+    fireEvent.change(screen.getByLabelText('Product title'), { target: { value: `${listing.title}, new pack` } });
+    expect(primary).toBeEnabled();
   });
 });
 

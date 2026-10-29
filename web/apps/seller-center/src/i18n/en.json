@@ -511,7 +511,6 @@
   "sc.pf.field.category": "Category",
   "sc.pf.field.title": "Product title",
   "sc.pf.field.brand": "Brand",
-  "sc.pf.field.brandOptional": "Brand (optional)",
   "sc.pf.field.condition": "Condition",
   "sc.pf.field.description": "Description",
   "sc.pf.field.keywords": "Search keywords",
@@ -1023,5 +1022,19 @@
   "sc.reviews.pages": "Review pages",
   "sc.reviews.previous": "Previous",
   "sc.reviews.next": "Next",
-  "sc.reviews.pageOf": "Page {page} of {pages}"
+  "sc.reviews.pageOf": "Page {page} of {pages}",
+  "sc.pf.nav.label": "Sections",
+  "sc.pf.nav.done": "Complete",
+  "sc.pf.nav.todo": "{count} to do",
+  "sc.pf.q.title": "Listing quality",
+  "sc.pf.q.percent": "{percent}% complete",
+  "sc.pf.q.required": "Required to submit",
+  "sc.pf.q.improve": "Make it better",
+  "sc.pf.tip.description": "Add a description of at least 40 characters",
+  "sc.pf.tip.images": "Add 3 or more images",
+  "sc.pf.bar.label": "Listing actions",
+  "sc.pf.bar.noChanges": "No changes to save.",
+  "sc.pf.images.addMore": "Add more images",
+  "sc.pf.images.reorderHint": "Drag images to reorder them. The first image is the main one.",
+  "sc.pf.titleHelpPlain": "Product name + key detail · {count}/200"
 }

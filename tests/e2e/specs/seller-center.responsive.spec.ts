@@ -13,7 +13,19 @@ const openMenu = async (page: Page) => {
 const SELLER_ROUTES: AuditRoute[] = [
   { label: 'dashboard', path: '/', open: { label: 'menu', run: openMenu } },
   { label: 'listings', path: '/listings' },
-  { label: 'new listing', path: '/listings/new' },
+  {
+    label: 'new listing',
+    path: '/listings/new',
+    // A chosen category brings every section (price, details, variations, shipping, compliance) onto the page.
+    open: {
+      label: 'category chosen',
+      run: async (p) => {
+        await p.getByRole('combobox', { name: 'Category' }).fill('spices');
+        await p.getByRole('option', { name: /Spices & seasonings/ }).click();
+        await p.getByRole('heading', { name: 'Compliance' }).waitFor();
+      }
+    }
+  },
   { label: 'inventory', path: '/inventory' },
   { label: 'orders', path: '/orders', open: { label: 'order sheet', run: (p) => p.getByTestId('order-row').first().click() } },
   { label: 'ship from', path: '/orders/ship-from' },

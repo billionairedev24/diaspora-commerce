@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { cellProblems, fileProblem, importable, phaseOf, previewColumns, progress } from '@/components/listings/bulk/bulk-model';
 import {
   applyToAll,
+  brandOf,
   comboKey,
   combos,
   emptyForm,
@@ -16,9 +17,13 @@ import {
   gtinOk,
   leavesOf,
   packagingOf,
+  previewAttributes,
   priceMinor,
+  qualityItems,
+  qualityScore,
   searchLeaves,
   sectionsFor,
+  sectionStatus,
   suggestSku,
   toDraftPayload,
   toProductDraft,
@@ -156,6 +161,50 @@ describe('one-step product form: submission, edit and drafts', () => {
     expect(back.images.map((i) => i.id)).toEqual(['i1']);
     expect({ ...back, images: [] }).toEqual({ ...suya(), images: [] });
     expect(fromDraftPayload({ title: 5, condition: 'BROKEN', rows: 'x' })).toMatchObject({ title: '', condition: 'NEW', rows: {} });
+  });
+});
+
+describe('one-step product form: attributes of the type, completion and quality', () => {
+  const cookbooks = { id: 'pt-cook', path: 'Books › Cookbooks', productType: 'book' };
+
+  it('defines a brand only for types that have one: a book has none', () => {
+    expect(brandOf(book)).toBeUndefined();
+    expect(brandOf(dress)?.key).toBe('brand');
+    expect(brandOf(undefined)).toBeUndefined();
+    expect(validateForm({ ...withCategory(emptyForm(), cookbooks), title: 'Jollof Rice and Other Stories' }, book)[fieldId.brand]).toBeUndefined();
+  });
+
+  it('submits only attributes the product type defines (a brand typed for a previous category is dropped)', () => {
+    const s = { ...withCategory(suya(), cookbooks), attrs: { brand: 'Mama Kano', author: 'Ade Bello', pages: '240' } };
+    expect(toProductDraft(s, book).attributes).toEqual({ author: 'Ade Bello', pages: '240' });
+  });
+
+  it('counts the open required items per section', () => {
+    const s = { ...withCategory(emptyForm(), cookbooks), title: 'Jollof Rice and Other Stories' };
+    const status = sectionStatus(sectionsFor(book), validateForm(s, book));
+    expect(status.basics).toEqual({ missing: 0, state: 'complete' });
+    expect(status.images).toEqual({ missing: 1, state: 'incomplete' });
+    expect(status.details).toEqual({ missing: 4, state: 'incomplete' });
+    expect(status.fulfilment.state).toBe('complete');
+    const ready = sectionStatus(sectionsFor(grocery), validateForm(suya(), grocery));
+    expect(Object.values(ready).every((x) => x.state === 'complete')).toBe(true);
+  });
+
+  it('scores the checklist: required items plus a description and three images', () => {
+    const s = suya();
+    const items = qualityItems(s, grocery, validateForm(s, grocery));
+    expect(items.filter((i) => i.required).every((i) => i.done)).toBe(true);
+    expect(items.filter((i) => !i.required && !i.done).map((i) => i.tip)).toEqual(['sc.pf.tip.description', 'sc.pf.tip.images']);
+    expect(qualityScore(items)).toBeGreaterThan(80);
+    expect(qualityScore(items)).toBeLessThan(100);
+    const full = { ...s, description: 'Hand-ground in Kano from groundnut, chilli and ginger, packed fresh.', images: [image, { ...image, id: 'i2' }, { ...image, id: 'i3' }] };
+    expect(qualityScore(qualityItems(full, grocery, validateForm(full, grocery)))).toBe(100);
+    expect(qualityScore(qualityItems(emptyForm(), undefined, validateForm(emptyForm(), undefined)))).toBeLessThan(20);
+  });
+
+  it('picks the key attributes for the storefront preview, brand or author first, with units', () => {
+    expect(previewAttributes(grocery, suya()).map((a) => `${a.label}: ${a.value}`)).toEqual(['Brand: Mama Kano', 'Ingredients: Groundnut, chilli', 'Allergens (FALCPA): Contains peanuts', 'Shelf life: 12 months']);
+    expect(previewAttributes(book, { ...emptyForm(), attrs: { pages: '240', author: 'Ade Bello' } }).map((a) => a.label)).toEqual(['Author', 'Pages']);
   });
 });
 
