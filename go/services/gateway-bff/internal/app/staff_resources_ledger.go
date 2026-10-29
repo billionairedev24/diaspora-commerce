@@ -16,7 +16,7 @@ import (
 // person, approved by another) and a lookup of any Stripe object next to what the ledger booked for it.
 
 func ledgerResources() []*staffResource {
-	return []*staffResource{reconciliationResource(), reconciliationRunsResource(), ledgerAdjustmentsResource(), stripeLookupResource()}
+	return []*staffResource{reconciliationResource(), reconciliationRunsResource(), ledgerAdjustmentsResource(), recoveriesResource(), stripeLookupResource()}
 }
 
 // ---------------------------------------------------------------- names instead of ids

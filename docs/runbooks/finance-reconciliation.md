@@ -46,6 +46,42 @@ needs the Stripe object it corrects. Posted adjustments cannot be edited; fix a 
 
 After approval, **run the day again** (Daily runs): the difference should be gone. If it carries on it appears as a new item.
 
+## Refunds Stripe would not take back (Refund recoveries)
+
+Sellers are paid by transfer after delivery and their payouts are manual, so by the time an order is refunded the seller may already
+have been paid out. Payments asks Stripe to reverse the transfer; when Stripe **definitively refuses** (usually
+`balance_insufficient`) the customer's refund still completes and the amount becomes a *refund recovery*: money the seller owes the
+platform. It is under Payouts → *Refund recoveries*, by seller and order number, with Stripe's code and what is still owed. (A
+timeout or Stripe outage is not a refusal: the refund fails and is retried under the same key, as before.)
+
+What the ledger shows:
+
+| When | Journal | Effect |
+|---|---|---|
+| Stripe refuses | `TRANSFER_RECOVERY_OPENED`: Dr 2000:org / Cr 2000:org on the order | The refund's debit moves from the order to the seller's unattributed payable, which goes **negative** (what the seller owes). 1000 Stripe clearing is untouched: no money came back. |
+| A later transfer of the seller | `TRANSFER_RECOVERY_SETTLED`: Dr 2000:org on that order / Cr 2000:org | The transfer is smaller by the amount taken, oldest recovery first and before plan fees and label charges. The recovery turns *Recovered* when paid. |
+| Finance: *Mark recovered* | `TRANSFER_RECOVERY_RECEIVED`: Dr 1050 Operating bank / Cr 2000:org | The seller paid by bank transfer. |
+| Finance: *Write off* | `TRANSFER_RECOVERY_WRITE_OFF`: Dr 5300 Transfer recovery losses / Cr 2000:org | The platform absorbs the rest. |
+
+The seller's payout balance (Seller Center and `GET /v1/payouts/balance`) deducts the amount owed from *available* in full, before any
+new payout, and shows it as `transferRecoveriesMinor`.
+
+**You normally do nothing**: the seller's next transfers pay it back. Act only when they will not (the seller has nothing coming):
+
+1. Open the recovery (*Refund recoveries*, filter *Open*). Read *Stripe said*, *Still owed* and *Recovered from later transfers*.
+2. **Mark recovered** (`ledger:adjust`) when the seller paid outside Stripe: give the bank reference and why (15+ characters).
+   **Write off** (`ledger:adjust`) when it will not be recovered: say why (15+ characters).
+3. This is a ledger posting, so it needs four eyes. The proposal waits (*Waiting for* on the row) and a **different** person with
+   `ledger:approve` uses **Approve and post** or **Reject** (with a reason; the recovery stays open). You cannot approve your own
+   proposal (403 `payments.recovery-four-eyes`). Only one proposal can wait at a time. Posted resolutions cannot be edited.
+4. Approving closes what is still owed at that moment: if a transfer recovered part of it in the meantime, only the rest is booked.
+
+A reversal made by hand in the Stripe dashboard is not matched to a recovery: it is booked to the order's payable by the
+`transfer.reversed` webhook. Do not use it to settle a recovery; see the `TransferReversalRefused` runbook. Alerts:
+`TransferReversalRefused` (a refusal in the last hour) and `TransferReversalRefusedUnexpectedly` (any code but
+`balance_insufficient`; counters `payments_transfer_reversals_refused_total{code}` and
+`payments_transfer_recoveries_total{outcome}`).
+
 ## Looking up a Stripe object
 
 Payouts → *Stripe lookup* → *Look up*: a Stripe id (`po_`, `tr_`, `pi_`, `ch_`, `re_`, `txn_`, `dp_`, `acct_`). A payout lives on the
@@ -54,7 +90,7 @@ against that id. Locally (no Stripe key) only ids made by the local stand-in (`�
 
 ## Lola (staff)
 
-Lola can read all of the above (the payout sheet, differences, adjustments, a Stripe lookup) and explain it. She never proposes,
+Lola can read all of the above (the payout sheet, differences, adjustments, refund recoveries, a Stripe lookup) and explain it. She never proposes,
 approves or posts anything; she names the action and opens the record.
 
 ## Permissions
@@ -63,8 +99,8 @@ approves or posts anything; she names the action and opens the record.
 |---|---|
 | `payments:read` | Look up, read differences and adjustments |
 | `payments:configure` | Run a reconciliation day |
-| `ledger:adjust` | Explain a difference, propose an adjustment |
-| `ledger:approve` | Approve or reject an adjustment (never your own) |
+| `ledger:adjust` | Explain a difference, propose an adjustment, propose closing a refund recovery |
+| `ledger:approve` | Approve or reject an adjustment or a refund recovery resolution (never your own) |
 | `payouts:approve` | Approve, hold, release, check with Stripe |
 
 `ledger:adjust` and `ledger:approve` are granted to Super Admin and Platform Finance (identity migration V30). Give them to

@@ -57,6 +57,7 @@ import com.afrotransact.payments.domain.Settlement;
 import com.afrotransact.payments.domain.SettlementTransfer;
 import com.afrotransact.payments.domain.ShipmentSettlement;
 import com.afrotransact.payments.domain.StatementLine;
+import com.afrotransact.payments.domain.TransferRecovery;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
@@ -301,7 +302,11 @@ final class PaymentsDtos {
 
     record RefundResponse(UUID id, UUID paymentId, String orderId, String stripeRefundId, long amountMinor,
                           String currency, String status, String reason, List<RefundLineResponse> lines,
-                          List<RefundResult.Reversal> transferReversals, Instant createdAt, Instant settledAt,
+                          List<RefundResult.Reversal> transferReversals,
+                          @Schema(description = "Reversals Stripe definitively refused (the seller's balance was "
+                                  + "already paid out): the refund completed and the seller owes the platform these "
+                                  + "amounts. GET /v1/transfer-recoveries lists them.")
+                          List<TransferRecoveryResponse> transferRecoveries, Instant createdAt, Instant settledAt,
                           boolean replayed,
                           @Schema(description = "S320: the part returned as AfroTransact credit (the credit the "
                                   + "order used, plus the card part when staff chose credit)")
@@ -309,15 +314,51 @@ final class PaymentsDtos {
                           @Schema(description = "The part that goes back to the card through Stripe")
                           long cardMinor) {
 
-        static RefundResponse of(Refund r, List<RefundResult.Reversal> reversals, boolean replayed) {
+        static RefundResponse of(Refund r, List<RefundResult.Reversal> reversals,
+                                 List<TransferRecovery> recoveries, boolean replayed) {
             return new RefundResponse(r.id(), r.paymentId(), r.orderId(), r.stripeRefundId(), r.amount().minor(),
                     r.amount().currency(), r.status().name(), r.reason(), r.lines().stream()
                     .map(l -> new RefundLineResponse(l.lineId(), l.sellerOrg(), l.items().minor(),
                             l.shipping().minor(), l.tax().minor(), l.commissionReversed().minor(),
                             l.deliveryFeeReversed().minor(), l.connectionFee())).toList(),
-                    reversals, r.createdAt(), r.settledAt(), replayed, r.creditReturned().minor(),
+                    reversals, recoveries.stream().map(TransferRecoveryResponse::of).toList(), r.createdAt(),
+                    r.settledAt(), replayed, r.creditReturned().minor(),
                     r.stripeAmount().minor());
         }
+    }
+
+    @Schema(description = "An amount Stripe refused to take back from a seller's transfer for a refund: the seller owes "
+            + "it to the platform until later transfers recover it or Finance resolves it")
+    record TransferRecoveryResponse(UUID id, UUID refundId, String orderId, String orgId, String stripeTransferId,
+                                    String currency, long amountMinor, long recoveredMinor, long resolvedMinor,
+                                    @Schema(description = "Still owed: amount - recovered - resolved")
+                                    long outstandingMinor,
+                                    @Schema(allowableValues = {"OPEN", "RECOVERED", "WRITTEN_OFF"}) String status,
+                                    @Schema(description = "Stripe's error code, e.g. balance_insufficient")
+                                    String stripeCode, String reason,
+                                    @Schema(description = "A resolution proposed by one Finance person and waiting "
+                                            + "for a different one; null when none")
+                                    PendingResolutionResponse pending,
+                                    String decidedBy, Instant decidedAt, String decisionNote,
+                                    @Schema(allowableValues = {"RECOVERED", "WRITE_OFF"},
+                                            description = "How an approved proposal closed it; null while open or "
+                                                    + "when later earnings paid it") String resolution,
+                                    String resolutionRef, Instant createdAt, Instant updatedAt) {
+
+        static TransferRecoveryResponse of(TransferRecovery r) {
+            TransferRecovery.ProposedResolution p = r.pending();
+            return new TransferRecoveryResponse(r.id(), r.refundId(), r.orderId(), r.orgId(), r.stripeTransferId(),
+                    r.amount().currency(), r.amount().minor(), r.recovered().minor(), r.resolved().minor(),
+                    r.outstanding().minor(), r.status().name(), r.stripeCode(), r.reason(),
+                    p == null ? null : new PendingResolutionResponse(p.kind().name(), p.reason(), p.reference(),
+                            p.by(), p.at()), r.decidedBy(), r.decidedAt(), r.decisionNote(),
+                    r.resolution() == null ? null : r.resolution().name(), r.resolutionRef(), r.createdAt(),
+                    r.updatedAt());
+        }
+    }
+
+    record PendingResolutionResponse(@Schema(allowableValues = {"RECOVERED", "WRITE_OFF"}) String resolution,
+                                     String reason, String reference, String proposedBy, Instant proposedAt) {
     }
 
     record RefundLineResponse(String lineId, String sellerOrg, long itemsMinor, long shippingMinor, long taxMinor,
@@ -780,6 +821,11 @@ final class PaymentsDtos {
                                          + "released fee is paid back with the next transfer. Details: GET "
                                          + "/v1/orgs/{orgId}/plan-fee-withholdings")
                                  long planFeesMinor,
+                                 @Schema(description = "Refunds Stripe would not take back from the organisation's "
+                                         + "transfers (its balance was already paid out) and not yet recovered: owed "
+                                         + "to the platform, deducted from availableMinor in full and recovered from "
+                                         + "the next transfers. Details: GET /v1/transfer-recoveries?orgId=")
+                                 long transferRecoveriesMinor,
                                  @Schema(description = "AfroTransact Delivery pickup fees paid on captured lines, net "
                                          + "of fees given back by customer-fault refunds (S259); already deducted from "
                                          + "the order nets, shown for earnings")
@@ -801,6 +847,7 @@ final class PaymentsDtos {
                     b.onHold().stream().map(h -> new HeldOrderResponse(h.orderId(), h.amount().minor(),
                             h.releaseAt())).toList(), b.inFlight().minor(), b.paid().minor(),
                     b.providerFees().minor(), b.labelCharges().minor(), b.planFees().minor(),
+                    b.transferRecoveries().minor(),
                     b.deliveryFees().minor(),
                     b.minimum().minor(), b.canRequestToday(),
                     b.payoutsPaused(),

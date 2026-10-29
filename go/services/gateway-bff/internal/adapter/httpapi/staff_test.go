@@ -293,6 +293,20 @@ func order(n int) map[string]any {
 			"lines": []any{map[string]any{"id": "ln-1", "title": "Shea butter", "category": "BEAUTY", "quantity": 1, "itemsMinor": 2000, "discountMinor": 0}}}}}
 }
 
+// recoveryFake is payments' transfer recovery: 18.40 Stripe would not take back from org-1's transfer.
+func recoveryFake(now, suffix, status string, pending map[string]any) map[string]any {
+	r := map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000" + suffix, "refundId": "0f0f0f0f-0000-4000-8000-0000000000f1", "orderId": "ord-1", "orgId": "org-1",
+		"stripeTransferId": "tr_1", "currency": "USD", "amountMinor": 1840, "recoveredMinor": 0, "resolvedMinor": 0, "outstandingMinor": 1840, "status": status,
+		"stripeCode": "balance_insufficient", "reason": "Insufficient funds", "createdAt": now, "updatedAt": now}
+	if pending != nil {
+		r["pending"] = pending
+	}
+	if status != "OPEN" {
+		r["outstandingMinor"], r["resolvedMinor"], r["decidedBy"], r["decidedAt"], r["resolution"] = 0, 1840, "stf-1", now, "WRITE_OFF"
+	}
+	return r
+}
+
 func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body := f.record(r)
 	if f.override != nil && f.override(w, r, body) {
@@ -501,6 +515,22 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(p, "/v1/ledger/adjustments/"):
 		writeJ(w, 200, map[string]any{"id": "adj-1", "stripeRef": "ch_123456", "currency": "USD", "reason": "Stripe fee booked twice for the charge", "status": "PROPOSED",
 			"proposedBy": "u-1", "proposedAt": now, "lines": []any{map[string]any{"account": "1000", "title": "Stripe clearing", "side": "CREDIT", "amountMinor": 250}, map[string]any{"account": "5000", "title": "Stripe processing fees", "side": "DEBIT", "amountMinor": 250}}})
+	// payments: refunds Stripe would not take back from a paid-out seller (transfer recoveries)
+	case p == "/v1/transfer-recoveries" && r.Method == http.MethodGet:
+		writeJ(w, 200, []any{recoveryFake(now, "d1", "OPEN", nil), recoveryFake(now, "d2", "OPEN", map[string]any{"resolution": "WRITE_OFF", "reason": "Seller closed the shop", "proposedBy": "stf-2", "proposedAt": now}),
+			recoveryFake(now, "d3", "OPEN", map[string]any{"resolution": "RECOVERED", "reason": "Seller wired the money", "reference": "WIRE-1", "proposedBy": "stf-1", "proposedAt": now})})
+	case strings.HasPrefix(p, "/v1/transfer-recoveries/"):
+		id := strings.Split(strings.TrimPrefix(p, "/v1/transfer-recoveries/"), "/")[0]
+		switch id[len(id)-2:] {
+		case "d2":
+			writeJ(w, 200, recoveryFake(now, "d2", "OPEN", map[string]any{"resolution": "WRITE_OFF", "reason": "Seller closed the shop", "proposedBy": "stf-2", "proposedAt": now}))
+		case "d3":
+			writeJ(w, 200, recoveryFake(now, "d3", "OPEN", map[string]any{"resolution": "RECOVERED", "reason": "Seller wired the money", "reference": "WIRE-1", "proposedBy": "stf-1", "proposedAt": now}))
+		case "d4":
+			writeJ(w, 200, recoveryFake(now, "d4", "WRITTEN_OFF", nil))
+		default:
+			writeJ(w, 200, recoveryFake(now, "d1", "OPEN", nil))
+		}
 	// payments: AfroTransact credit, gift cards and their limits (S320, S321)
 	case p == "/v1/credit/adjustments" && r.Method == http.MethodGet:
 		writeJ(w, 200, []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000a1", "customerId": "cus-1", "amountMinor": 25000, "currency": "USD", "source": "STAFF",
@@ -991,6 +1021,49 @@ func TestStaffContractConformance(t *testing.T) {
 		id := rows[0].(map[string]any)["id"].(string)
 		do("admin", "GET", "/v1/staff/resources/"+res+"/"+id, nil, 200)
 	}
+	// Refund recoveries: names, not ids; every action of the resource, with four eyes on the ones that post.
+	rec := do("admin", "GET", "/v1/staff/resources/recoveries/0f0f0f0f-0000-4000-8000-0000000000d1", nil, 200)
+	if rec["title"] != "Refund recovery of $18.40" || !strings.Contains(rec["subtitle"].(string), "Kente Naturals") {
+		t.Fatalf("recovery sheet = %v / %v", rec["title"], rec["subtitle"])
+	}
+	for _, sec := range rec["sections"].([]any) { // the "IDs" section is where ids live; everything else names things
+		if m := sec.(map[string]any); m["title"] != "IDs" && (strings.Contains(fmt.Sprint(m), "org-1") || strings.Contains(fmt.Sprint(m), "stf-") || strings.Contains(fmt.Sprint(m), "ord-1")) {
+			t.Fatalf("recovery sheet shows ids in %v", m)
+		}
+	}
+	if pg := do("admin", "GET", "/v1/staff/resources/recoveries?status=OPEN", nil, 200); len(pg["rows"].([]any)) != 3 {
+		t.Fatalf("recoveries = %v", pg["rows"])
+	} else if c := pg["rows"].([]any)[0].(map[string]any)["cells"].(map[string]any); c["orgName"] != "Kente Naturals" {
+		t.Fatalf("recovery row = %v", c)
+	}
+	const (
+		recOpen    = "/v1/staff/resources/recoveries/0f0f0f0f-0000-4000-8000-0000000000d1"
+		recOthers  = "/v1/staff/resources/recoveries/0f0f0f0f-0000-4000-8000-0000000000d2"
+		recOwn     = "/v1/staff/resources/recoveries/0f0f0f0f-0000-4000-8000-0000000000d3"
+		recClosed  = "/v1/staff/resources/recoveries/0f0f0f0f-0000-4000-8000-0000000000d4"
+		payRecOpen = "POST /v1/transfer-recoveries/0f0f0f0f-0000-4000-8000-0000000000d1/"
+	)
+	do("admin", "POST", recOpen+"/actions/mark-recovered", map[string]any{"values": map[string]any{"reason": "The seller wired the money on Friday"}}, 422)
+	do("admin", "POST", recOpen+"/actions/mark-recovered", map[string]any{"values": map[string]any{"reference": "WIRE-4471", "reason": "The seller wired the money on Friday"}}, 200)
+	if sent := f.bodies[payRecOpen+"propose"]; sent["resolution"] != "RECOVERED" || sent["reference"] != "WIRE-4471" || sent["reason"] != "The seller wired the money on Friday" {
+		t.Fatalf("mark recovered body = %v", sent)
+	}
+	do("admin", "POST", recOpen+"/actions/write-off", map[string]any{"values": map[string]any{"reason": "The seller closed the shop and cannot be reached"}}, 200)
+	if sent := f.bodies[payRecOpen+"propose"]; sent["resolution"] != "WRITE_OFF" || sent["reference"] != nil {
+		t.Fatalf("write-off body = %v", sent)
+	}
+	do("support", "POST", recOpen+"/actions/write-off", map[string]any{"values": map[string]any{"reason": "The seller closed the shop and cannot be reached"}}, 403)
+	do("admin", "POST", recOthers+"/actions/write-off", map[string]any{"values": map[string]any{"reason": "The seller closed the shop and cannot be reached"}}, 409)
+	do("admin", "POST", recOpen+"/actions/approve", nil, 409)
+	do("admin", "POST", recOpen+"/actions/reject", map[string]any{"values": map[string]any{"note": "Not needed anymore, thank you"}}, 409)
+	do("admin", "POST", recOthers+"/actions/approve", nil, 200)
+	do("admin", "POST", recOthers+"/actions/reject", map[string]any{"values": map[string]any{"note": "Chase the seller first, please"}}, 200)
+	if sent := f.bodies["POST /v1/transfer-recoveries/0f0f0f0f-0000-4000-8000-0000000000d2/reject"]; sent["note"] != "Chase the seller first, please" {
+		t.Fatalf("reject body = %v", sent)
+	}
+	do("support", "POST", recOthers+"/actions/approve", nil, 403)
+	do("admin", "POST", recOwn+"/actions/approve", nil, 409) // proposed by the same person: four eyes
+	do("admin", "POST", recClosed+"/actions/write-off", map[string]any{"values": map[string]any{"reason": "The seller closed the shop and cannot be reached"}}, 409)
 	// AfroTransact credit and gift cards (S320, S321): names, not ids; the reason travels; nothing pays credit out.
 	adj := do("admin", "GET", "/v1/staff/resources/credit-adjustments/0f0f0f0f-0000-4000-8000-0000000000a1", nil, 200)
 	if adj["title"] != "Credit added for Amara Nwosu" {

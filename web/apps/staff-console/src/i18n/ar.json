@@ -35,6 +35,7 @@
   "st.states.tryAgain": "حاول مرة أخرى",
   "st.states.youDonTHaveAccess": "ليس لديك صلاحية الوصول إلى هذه الصفحة",
   "st.moduleView.tables": "الجداول",
+  "st.moduleView.tab.recoveries": "مبالغ استرداد مستحقة",
   "st.modulePage.readOnly": "للقراءة فقط.",
   "st.resourceTable.export": "تصدير",
   "st.resourceTable.status": "الحالة",

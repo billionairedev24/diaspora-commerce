@@ -28,7 +28,7 @@ export function ModuleView({ module }: { module: StaffModuleKey }) {
           label={t('st.moduleView.tables')}
           value={tab}
           onValueChange={(v) => router.replace(`${pathname}?${new URLSearchParams([...params.entries()].filter(([k]) => k === 'section').concat([['tab', v]])).toString()}`, { scroll: false })}
-          items={tables.map((t) => ({ value: t.resource, label: t.label, content: <ResourceTable resource={t.resource} urlPrefix={t.resource} statusFilter={t.statusFilter} /> }))}
+          items={tables.map((table) => ({ value: table.resource, label: table.labelKey ? t(table.labelKey) : table.label, content: <ResourceTable resource={table.resource} urlPrefix={table.resource} statusFilter={table.statusFilter} /> }))}
         />
       )}
     </ModulePage>

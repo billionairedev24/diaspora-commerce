@@ -137,6 +137,22 @@ final class StripeStubs {
                         + ",\"currency\":\"usd\",\"transfer\":\"" + transferId + "\"}");
     }
 
+    /** Stripe definitively refuses the reversal: 400 {@code code}, e.g. balance_insufficient after the payout. */
+    void reversalRefused(String transferId, String code) {
+        server.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/transfers/" + transferId + "/reversals"))
+                .willReturn(WireMock.aResponse().withStatus(400).withHeader("Content-Type", "application/json")
+                        .withBody("{\"error\":{\"type\":\"invalid_request_error\",\"code\":\"" + code
+                                + "\",\"message\":\"Insufficient funds in Stripe account. The connected account's "
+                                + "balance cannot cover the reversal.\"}}")));
+    }
+
+    /** Stripe is down for the reversal: a 500 that a retry with the same key may get past. */
+    void reversalDown(String transferId) {
+        server.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/transfers/" + transferId + "/reversals"))
+                .willReturn(WireMock.aResponse().withStatus(500).withHeader("Content-Type", "application/json")
+                        .withBody("{\"error\":{\"type\":\"api_error\",\"message\":\"Stripe is down\"}}")));
+    }
+
     void payout(String account, String payoutId, long amount) {
         json(WireMock.post(WireMock.urlPathEqualTo("/v1/payouts"))
                 .withHeader("Stripe-Account", WireMock.equalTo(account)),

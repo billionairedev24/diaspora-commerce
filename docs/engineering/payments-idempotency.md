@@ -41,6 +41,8 @@ its tests.
 | payments → Stripe create PaymentIntent | `<orderId>:create-intent` (multicapture requested), `<orderId>:create-intent:single` (single capture) | Stripe replays the same intent for 24 h. Late adds charged off-session use the same key. A key is never reused with other parameters: when Stripe refuses multicapture ("not eligible for the requested card features") the intent is created under the `:single` key. |
 | payments → Stripe capture / refund / cancel / release | `<prefix>:capture:<shipmentId>`, `<prefix>:refund:<refundId>`, `<prefix>:cancel`, `<prefix>:release` (`prefix` = order id, or `<orderId>:os:<paymentId>` for off-session follow-ups) | A shipment is captured once (`payment_capture` unique per shipment). Over-capture is refused (`capture-exceeds-authorised`), and refunds are bounded per line. Without multicapture an order's first shipment captures every line; later shipments get that capture back (replayed), and orders marks them captured from the capture's `lineIds`. |
 | payments transfers / reversals / payouts | `<prefix>:reversal:<refundId>:<transferId>`, settlement and payout keys | Each ledger journal has a unique key (`capture:<id>`, `refund:<id>`, …), so a replay never posts twice. |
+| Refused transfer reversal | same reversal key; `transfer_recovery (refund_id, transfer_id)` unique; journal `transfer-recovery-opened:<recoveryId>` | A definitive 4xx opens one recovery and the refund completes; a replay returns the first one. A 5xx or timeout fails the refund and the retry repeats the reversal under the same key. |
+| Recovery netted from a transfer | journal `transfer-recovery-settled:<uuid>` inside the transfer's transaction | The deduction and the transfer journal commit together; a failed Stripe transfer leaves the payable already reduced, so the retry transfers the same smaller amount. |
 | Stripe webhooks → payments | Stripe event id | Signature verified. The inbox stores each event once (`stripe_event` primary key = event id) and processes it asynchronously. |
 | Webhook ordering | — | An authorised payment (AUTHORIZED / PARTIALLY_CAPTURED) is never moved back by an older `payment_failed` or `requires_action`. The handler re-reads the intent instead and publishes no `INTENT_FAILED`. An authorisation that reaches a cancelled payment is cancelled at Stripe (`<prefix>:cancel-late-authorization`). |
 | Temporal checkout saga | Workflow id `checkout-<orderId>` | Activities are deterministic and every side effect is keyed by the order id (reservation, payment, capture). Compensations (cancel payment, release stock) are idempotent. |
@@ -71,8 +73,15 @@ connected account is created with:
 | `settings[payouts][schedule][interval]` | `manual` | payments-service releases payouts after delivery |
 
 This is the liability of the Standard accounts the current platform sends sellers to Stripe to create, without the
-redirect. Idempotency key: `connect-account-v2-<orgId>` (the version names these settings; a reused key with other
+redirect. Idempotency key: `connect-account-v3-<orgId>` (the version names these settings; a reused key with other
 parameters is refused by Stripe).
+
+`StripeConnectGuardrailsTest` (seller) holds the two settings that keep money under payments-service's control: it creates
+accounts through the real adapter against a Stripe stand-in and fails when `controller[stripe_dashboard][type]` is anything
+but `none` (a seller could then change the payout schedule or pay themselves out in Stripe) or
+`settings[payouts][schedule][interval]` is anything but `manual` (an automatic schedule pays every transfer out before a
+refund can reverse it). It also fails when an Account Session enables anything but `account_onboarding`,
+`account_management` and `notification_banner` (no `payouts`, `payments` or `balances` component, whatever the caller asks for).
 
 ### Bank collected by Stripe
 
@@ -104,9 +113,40 @@ What these settings do **not** move: checkout uses *separate charges and transfe
 account per order, transfers per seller, `transfer_group` = order id). AfroTransact is the merchant of record for
 that charge, so refunds and disputes are debited from the platform balance whatever the connected-account settings
 say. The platform recovers a seller's share by reversing that seller's transfer, which is why payouts are manual
-and released only after delivery; if the seller's balance cannot cover a reversal, the negative balance is Stripe's.
-Only *direct charges* (each seller charges the customer on its own account) would make the seller the merchant of
-record for disputes, at the cost of one card charge per seller in a multi-seller cart.
+and released only after delivery. `losses[payments]=stripe` covers negative balances that card losses create on the
+connected account; it does **not** make Stripe take a transfer back: when the seller's balance cannot cover a reversal
+(the money was already paid out) Stripe **refuses** it (a 400, usually `balance_insufficient`), and the loss on that refund is
+the platform's until the seller repays it. Only *direct charges* (each seller charges the customer on its own account) would make the
+seller the merchant of record for disputes, at the cost of one card charge per seller in a multi-seller cart.
+
+### Refunds after a payout: refused transfer reversals
+
+`PaymentServiceImpl.reverseTransfers` reverses, per transfer, what a refund debits from a seller whose net was already
+transferred (`<orderId>:reversal:<refundId>:<transferId>`: the same call, with the same key, is made again on a retry).
+
+| Stripe answers | The refund | Ledger and state |
+|---|---|---|
+| reversal created | completes | `TRANSFER_REVERSAL` journal and `transfer_reversal` row, as before |
+| definitive refusal: a 4xx other than 401, 403, 409 and 429 (`StripeGatewayException.refusal()`), e.g. `balance_insufficient` | **still completes**, the customer is refunded | one `transfer_recovery` row per (refund, transfer) holding the amount, Stripe's code and message; `TRANSFER_RECOVERY_OPENED` moves the refund's debit from the order's payable to the organisation's unattributed payable, which goes negative |
+| 5xx, timeout, network failure, 429, 409, 401, 403 | **fails** (502 `payments.stripe-unavailable` or the Stripe error), nothing is committed | the refund is retried under the same Idempotency-Key and Stripe replays the same answer |
+
+A replay of the refund returns the stored refund with its recoveries and posts nothing (`transfer_recovery` is unique on
+`(refund_id, transfer_id)`, the journal key is `transfer-recovery-opened:<recoveryId>`).
+
+What the seller owes is netted before any new money moves:
+
+- **Next transfers.** `SettlementServiceImpl` recovers open recoveries first, oldest first, then plan fees, then label charges. The
+  transfer is smaller by the amount taken (`TRANSFER_RECOVERY_SETTLED`, one `transfer_recovery_deduction` row each,
+  committed with the transfer's journal in one transaction). A recovery turns `RECOVERED` when paid.
+- **Payout balance.** `availableMinor` is reduced by the whole outstanding amount (`transferRecoveriesMinor`): the money already
+  left the connected account, so it is reserved against what the seller could request, and payouts never exceed available.
+- **Finance** (Payouts → *Refund recoveries*): *Mark recovered* (the seller paid by bank transfer: Dr 1050 / Cr 2000:org) and
+  *Write off* (Dr 5300 / Cr 2000:org) are proposed with `ledger:adjust` and approved by a **different** person with
+  `ledger:approve` (four eyes, like a ledger adjustment). Approval books what is outstanding at that moment, once.
+
+Counters: `payments_transfer_reversals_refused_total{code}` and `payments_transfer_recoveries_total{outcome}`; alert
+`TransferReversalRefused` (`docs/runbooks/TransferReversalRefused.md`); Finance's workflow is in
+`docs/runbooks/finance-reconciliation.md`.
 
 ## Tests that hold these guarantees
 
@@ -114,6 +154,7 @@ record for disputes, at the cost of one card charge per seller in a multi-seller
 |---|---|
 | orders | `CheckoutIT`: same cart under two keys gives one order and one intent; retry with the same key; a different cart supersedes the open checkout; the open-checkout constraint. `PreorderCheckoutIT`: pay-now link to our page, expiry cancels the intent, a paid link places once and is then refused, key replay charges once, duplicate under another key is 409, key required. `HmacPayLinkSignerTest`. |
 | payments (plan fees, S298) | `PlanFeeWithholdingIT`: withheld once per invoice, partial when short, never from undelivered or disputed orders, deducted from the next transfer, a release paid back with the following one. `PlanFeeWithholdingTest`. Seller `PlanFeeCollectionIT`: Idempotency-Keys of the withholding, the balance credit and the release; 503 then a single collection on redelivery. |
+| payments (refused reversals) | `TransferRecoveryIT`: a refused reversal completes the refund and opens a recovery with a balanced ledger; a replay posts and calls Stripe once; a 5xx still fails the refund and the retry succeeds; the payout balance nets the amount; later transfers recover it in parts (smaller transfer, then recovered); write-off and "received outside Stripe" with four eyes (403 for the proposer, reject keeps it open). `TransferRecoveryTest`, `StripeGatewayExceptionTest`, `TransferRecoveryContractIT`. Seller `StripeConnectGuardrailsTest`: no Stripe dashboard, manual payouts, only the three Account Session components. |
 | payments | `WebhookInboxIT`: a stale `payment_failed` after AUTHORIZED; a late authorisation of a cancelled payment is cancelled. `PreorderPaymentsIT`: pay-now late adds create a PaymentIntent, never a session; cancelling one cancels the intent; an off-session replay charges once. `PaymentTest`. `StripeMockContractIT` (stripe-mock). |
 | delivery-runs | `PreorderIT`: a late add without a key is 422; a replayed key gives one order, one charge and one SMS; orders' 409 stays 409. |
 | gateway-bff | Late add key required and relayed; `TestPayLinksServeOurPayPageWithoutASession`; `TestSlowCallsUseTheSlowTimeout`. |

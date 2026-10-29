@@ -47,7 +47,7 @@ class OrderRefundServiceImpl implements OrderRefundService {
         Optional<Refund> earlier = payments.findRefund(Fingerprint.id("refund", payment.id().toString(),
                 idempotencyKey));
         if (earlier.isPresent()) {
-            return new RefundResult(earlier.get(), payment, List.of(), true);
+            return new RefundResult(earlier.get(), payment, List.of(), List.of(), true);
         }
         List<PaymentLine> lines = new ArrayList<>();
         for (String lineId : new LinkedHashSet<>(cmd.lineIds())) {
