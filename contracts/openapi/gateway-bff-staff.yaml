@@ -8142,6 +8142,7 @@ components:
         pickupPointStopMinutes: {type: number, minimum: 0, maximum: 1440, description: Time at a community pickup point}
         handoverMinutesPerOrder: {type: number, minimum: 0, maximum: 1440, description: Time per order handed over at a pickup point}
         roundTrip: {type: boolean, description: Count the drive back to the origin}
+        platformFeePerOrderMinor: {type: integer, minimum: 0, maximum: 100000, description: 'What the platform keeps on the goods of one order (seller commission and fees), minor units. The estimate behind the "Platform fees on goods" line until payments reports the real commission of an order; 0 = not configured. Saved with a reason and audited like the other numbers.'}
     StaffEconomicsSettings:
       description: |
         The driver cost model; the ETag carries the version for If-Match. Version 0 (`source` CONFIG): the environment's
@@ -8233,6 +8234,55 @@ components:
         dropMode: {type: [string, 'null'], enum: [DOORSTEP, PICKUP_POINT, null]}
         expectedOrders: {type: [integer, 'null'], minimum: 0}
         commissionShareMinor: {type: [integer, 'null'], minimum: 0}
+    StaffRunFeeLine:
+      type: object
+      required: [kind, orders, feeMinor]
+      description: The delivery fees charged on the delivered orders of one way of delivery
+      properties:
+        kind: {type: string, enum: [DOOR, PICKUP, CARRIER]}
+        orders: {type: integer}
+        feeMinor: {type: integer, description: Fees charged on those orders}
+    StaffRunActuals:
+      type: object
+      required: [ordersCarried, ordersDelivered, ordersFailed, ordersCancelled, ordersRefunded, feeMix, deliveryFeesMinor, refundedFeesMinor, netDeliveryFeesMinor, feesEstimated, customersPaidMinor, totalsComplete, refundsMinor, costBasis, estimatedCostMinor, contributionMarginMinor]
+      description: |
+        The run's delivery P&L built from its real orders, not from orders x one fee: what each order was charged (door,
+        pickup and carrier differ), what was handed back, the cost and the margin. Platform fees on goods are not
+        here (see `platformFees`).
+      properties:
+        ordersCarried: {type: integer, description: Orders that held a place on the run}
+        ordersDelivered: {type: integer, description: 'Of them, delivered (before the run: the orders it will deliver)'}
+        ordersFailed: {type: integer, description: 'Of them, not delivered (the driver reported a failed or returned delivery)'}
+        ordersCancelled: {type: integer, description: Slots customers gave back after reserving (and orders cancelled once confirmed); they earn and cost nothing}
+        ordersRefunded: {type: integer, description: Delivered orders money was handed back on}
+        feeMix: {type: array, items: {$ref: '#/components/schemas/StaffRunFeeLine'}}
+        deliveryFeesMinor: {type: integer, description: Delivery fees charged on the delivered orders}
+        refundedFeesMinor: {type: integer, description: 'Of them, handed back (from the refunds payments issued)'}
+        netDeliveryFeesMinor: {type: integer, description: Fees kept}
+        feesEstimated: {type: boolean, description: 'Some order had no reported fee; the run''s fee stands in for it (labelled estimate)'}
+        customersPaidMinor: {type: integer, description: 'What the delivered orders'' customers paid in all, delivery fees included (reported totals)'}
+        totalsComplete: {type: boolean, description: Every delivered order's total was reported}
+        refundsMinor: {type: integer, description: 'All money handed back on the delivered orders, goods and fees'}
+        averageFeeMinor: {type: [number, 'null'], description: Average delivery fee kept per delivered order}
+        costBasis: {type: string, enum: [ESTIMATE, ACTUAL_TIME], description: 'ESTIMATE: route time and miles from geo x the staff-set driver cost. ACTUAL_TIME: the minutes the driver was out (captured from the run) replace the estimated minutes; miles stay estimated.'}
+        actualMinutes: {type: [number, 'null'], description: 'Minutes the driver was out, when captured and plausible'}
+        estimatedCostMinor: {type: integer, description: Driver and vehicle cost}
+        contributionMarginMinor: {type: integer, description: Net delivery fees minus the cost}
+        breakEvenOrders: {type: [integer, 'null'], description: 'Fewest orders whose fees cover the cost at the average fee actually kept'}
+        breakEvenCovered: {type: [boolean, 'null'], description: Whether the delivered orders reach that break-even}
+    StaffPlatformFees:
+      type: object
+      required: [source, orders, ordersReported, perOrderEstimateMinor]
+      description: |
+        The contribution lens: what the platform keeps on the goods of the orders (seller commission and fees), shown as
+        its own line "Platform fees on goods" and never mixed into the delivery P&L. From the commission payments
+        reported on each order; for the others the staff-configured platform fee per order (economics settings).
+      properties:
+        source: {type: string, enum: [PAYMENTS, MIXED, ESTIMATE, MANUAL, NONE], description: 'PAYMENTS: all reported. MIXED: some reported, the rest estimated. ESTIMATE: orders x the configured fee. MANUAL: typed into the request. NONE: nothing reported and no estimate configured.'}
+        commissionMinor: {type: [integer, 'null'], description: Null when source is NONE}
+        orders: {type: integer}
+        ordersReported: {type: integer, description: Orders payments reported the commission of}
+        perOrderEstimateMinor: {type: integer, description: The configured estimate per order (0 = not configured)}
     StaffRunPnl:
       type: object
       required: [economics, status, phase, ordersRefunded, refundedFeesMinor]
@@ -8241,8 +8291,11 @@ components:
         status: {type: string, enum: [DRAFT, ANNOUNCED, OPEN, EXTENDED, CUT_OFF, CONFIRMED, COLLECTING, OUT_FOR_DELIVERY, COMPLETED, CANCELLED]}
         phase: {type: string, enum: [BEFORE, AFTER, CANCELLED], description: 'BEFORE the run is driven, AFTER once completed, CANCELLED: nothing earned or spent'}
         cancelReason: {type: [string, 'null']}
-        ordersRefunded: {type: integer, description: Orders of a cancelled run (each refunded in full)}
-        refundedFeesMinor: {type: integer, description: Delivery fees handed back}
+        ordersRefunded: {type: integer, description: 'Orders refunded: a cancelled run''s orders (each refunded in full), otherwise the delivered orders money was handed back on. The location history counts them the same way.'}
+        refundedFeesMinor: {type: integer, description: 'Delivery fees handed back, from the fees the orders were actually charged'}
+        refundedFeesEstimated: {type: boolean, description: 'Some of those orders had no reported fee; the run''s fee stands in for it (an estimate)'}
+        actuals: {oneOf: [{$ref: '#/components/schemas/StaffRunActuals'}, {type: 'null'}], description: 'The delivery P&L from the real orders; null for a cancelled run'}
+        platformFees: {oneOf: [{$ref: '#/components/schemas/StaffPlatformFees'}, {type: 'null'}], description: 'Platform fees on goods, apart from the delivery P&L; null for a cancelled run'}
     StaffWindowPlanRequest:
       type: object
       properties:
@@ -8254,6 +8307,7 @@ components:
         pickupFeeMinor: {type: [integer, 'null'], minimum: 0, maximum: 10000}
         minOrders: {type: [integer, 'null'], minimum: 0, maximum: 100000, description: The minimum being weighed}
         expectedOrders: {type: [integer, 'null'], minimum: 0, maximum: 100000, description: Orders to show a P&L for (default the minimum)}
+        capacityOrders: {type: [integer, 'null'], minimum: 1, maximum: 10000, description: 'Most orders the run can carry, to show the margin at capacity (absent: the location''s default capacity)'}
     StaffWindowPlan:
       type: object
       required: [currency, feeMinor, dropMode, minOrders, can]
@@ -8266,6 +8320,7 @@ components:
         minOrders: {type: integer}
         economics: {oneOf: [{$ref: '#/components/schemas/StaffRunEconomics'}, {type: 'null'}], description: 'Null when no location serves the targets or the route cannot be measured'}
         minimumCoversBreakEven: {type: [boolean, 'null'], description: Whether the minimum reaches break-even (null without a break-even or a minimum)}
+        capacityOrders: {type: [integer, 'null'], description: 'The orders `economics.atCapacity` is worked out for; null when the capacity is not known or not limited'}
         can: {$ref: '#/components/schemas/PreorderCan'}
     StaffWindowEconomics:
       type: object
@@ -8288,6 +8343,7 @@ components:
         refundedMinor: {type: integer, description: 'What customers got back, delivery fees included'}
         economics: {oneOf: [{$ref: '#/components/schemas/StaffRunEconomics'}, {type: 'null'}], description: At the actual orders; null when no location serves the window}
         minimumCoversBreakEven: {type: [boolean, 'null']}
+        platformFees: {oneOf: [{$ref: '#/components/schemas/StaffPlatformFees'}, {type: 'null'}], description: 'Platform fees on the goods of these orders, apart from the delivery P&L above; null for a cancelled window'}
         can: {$ref: '#/components/schemas/PreorderCan'}
     StaffRunLocation:
       type: object
@@ -8546,6 +8602,9 @@ components:
     StaffRunLocationHistory:
       type: object
       required: [location, runs, subscribers, subscriberGrowth]
+      description: |
+        Runs newest first with their orders, cost, margin and break-even (the same figures as the run's P&L), pre-order
+        windows with their orders and fees, subscriber counts and growth per month (gross sign-ups, and net of unsubscribes).
       properties:
         location: {$ref: '#/components/schemas/StaffRunLocation'}
         runs:
@@ -8561,10 +8620,38 @@ components:
               orders: {type: integer}
               packages: {type: integer}
               feeMinor: {type: integer}
-              feeRevenueMinor: {type: integer, description: 'Delivery fees earned; 0 for a cancelled run'}
-              ordersRefunded: {type: integer, description: Orders refunded in full (cancelled runs)}
+              feeRevenueMinor: {type: integer, description: 'Delivery fees kept; 0 for a cancelled run'}
+              ordersRefunded: {type: integer, description: 'Orders refunded, counted as in the run''s P&L (a cancelled run: every order, each refunded in full)'}
               minOrders: {type: integer}
               minimumMet: {type: boolean}
+              ordersDelivered: {type: integer}
+              ordersCancelled: {type: integer, description: Slots customers gave back after reserving}
+              refundedFeesMinor: {type: integer, description: Delivery fees handed back}
+              feesEstimated: {type: boolean, description: A fee or refund stands in for an unreported one (the run's fee)}
+              phase: {type: string, enum: [BEFORE, AFTER, CANCELLED]}
+              costMinor: {type: [integer, 'null'], description: 'Estimated driver and vehicle cost; null when the route could not be measured'}
+              marginMinor: {type: [integer, 'null'], description: Delivery fees kept minus the cost}
+              breakEvenOrders: {type: [integer, 'null'], description: Orders whose fees cover the cost at the run's fee}
+              minimumCoveredBreakEven: {type: [boolean, 'null'], description: Whether the run's minimum reached the break-even}
+        windows:
+          type: array
+          items:
+            type: object
+            required: [id, code, name, status, deliversOn, currency, orders, deliveryFeesMinor, revenueMinor, ordersRefunded, refundedMinor, minOrders]
+            properties:
+              id: {type: string}
+              code: {type: string}
+              name: {type: string}
+              status: {type: string}
+              deliversOn: {type: string, format: date}
+              currency: {type: string}
+              orders: {type: integer, description: Orders that count; 0 once the window was cancelled}
+              deliveryFeesMinor: {type: integer}
+              revenueMinor: {type: integer, description: 'What customers paid, delivery fees included'}
+              ordersRefunded: {type: integer, description: Orders refunded in full by the window's cancellation}
+              refundedMinor: {type: integer}
+              minOrders: {type: integer}
+              minimumMet: {type: [boolean, 'null'], description: Whether the orders placed reached the minimum (null without one)}
         subscribers:
           type: object
           required: [total, active, pending, byChannel]
@@ -8581,7 +8668,18 @@ components:
             required: [month, count]
             properties:
               month: {type: string, examples: ['2026-10']}
-              count: {type: integer}
+              count: {type: integer, description: Gross sign-ups}
+        subscriberNetGrowth:
+          type: array
+          description: Sign-ups minus unsubscribes per month
+          items:
+            type: object
+            required: [month, signUps, unsubscribes, net]
+            properties:
+              month: {type: string, examples: ['2026-10']}
+              signUps: {type: integer}
+              unsubscribes: {type: integer}
+              net: {type: integer}
     StaffAdvertorialResults:
       type: object
       required: [views, clicks]
