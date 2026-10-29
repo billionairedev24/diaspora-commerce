@@ -18,6 +18,8 @@ import (
 type SellerDeps struct {
 	Orgs    port.OrgAccessClient
 	Sellers port.SellerServiceClient
+	// Content resolves the current version of the legal documents an application accepts (onboarding agreements).
+	Content port.ContentClient
 	// Addresses is the identity address book: its default address prefills the business address (S286). Optional.
 	Addresses port.AddressBook
 	Catalog   port.SellerCatalogClient

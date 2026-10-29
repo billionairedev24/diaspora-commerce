@@ -110,6 +110,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	clientCreds := upstreams.IdentityOptions{ClientID: u.ClientID, ClientSecret: u.Secret, Now: clock.Now}
 	media := upstreams.NewMedia(client("media", base))
 	sellerDeps := app.SellerDeps{Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", base)), Addresses: identity,
+		Content: content,
 		Catalog: upstreams.NewSellerCatalog(client("catalog", base), cache, 10*time.Minute), Stock: upstreams.NewStock(client("inventory", base)),
 		Offers: upstreams.NewOffers(offersClient), Media: media,
 		Orders: upstreams.NewSellerOrders(client("orders", pending)), Carrier: upstreams.NewCarrier(client("carrier-gateway", base)),

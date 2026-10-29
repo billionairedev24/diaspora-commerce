@@ -11,7 +11,7 @@ import (
 // startedApplicant is a customer who started a seller application (S286) on a BFF whose Stripe key is key.
 func startedApplicant(t *testing.T, key string) (*testkit.Upstreams, *browser) {
 	t.Helper()
-	bff, b := sellerSetup(t, testkit.Options{SellerPending: true, SellerPublishableKey: key})
+	bff, b := sellerSetup(t, testkit.Options{SellerPending: true, SellerPublishableKey: key, Content: true})
 	up := bff.Upstreams
 	up.MemberOrgs, up.ActiveOrgID, up.NoApplication = nil, "", true
 	if r := b.do("POST", "/v1/seller/onboarding", map[string]any{"kind": "SELLER"}); r.status != 201 {
@@ -133,6 +133,56 @@ func TestOnboardingOwnersPayoutsPlanAndCompliance(t *testing.T) {
 	s := up.StepBodies["catalog-compliance"]
 	if comp.status != 200 || fmt.Sprint(s["categories"]) != "[groceries prepared_food]" || s["foodPermit"].(map[string]any)["permitType"] != "COTTAGE_FOOD" {
 		t.Fatalf("compliance = %d %v", comp.status, s)
+	}
+	// The accepted documents are recorded with the version in force, not with whatever the client claims.
+	if got := agreementKeys(t, s); got != "seller-terms=1.0 payments-terms=1.0 data-processing=1.0" {
+		t.Fatalf("seller agreements = %q (%v)", got, s["agreements"])
+	}
+}
+
+func agreementKeys(t *testing.T, step map[string]any) string {
+	t.Helper()
+	var parts []string
+	list, _ := step["agreements"].([]any)
+	for _, a := range list {
+		m := a.(map[string]any)
+		parts = append(parts, fmt.Sprintf("%v=%v", m["key"], m["version"]))
+	}
+	return strings.Join(parts, " ")
+}
+
+// Providers accept the provider terms in place of the seller terms, "both" accepts both, nothing is recorded until
+// the box is ticked, and a document that changed since the applicant read it must be read again.
+func TestOnboardingAgreementsFollowTheOffering(t *testing.T) {
+	up, b := startedApplicant(t, "pk_test_x")
+	save := func(extra map[string]any) resp {
+		in := map[string]any{"categories": []string{"groceries"}, "w9Certified": true, "w9SignerName": "Kofi Mensah"}
+		for k, v := range extra {
+			in[k] = v
+		}
+		return b.do("PUT", "/v1/seller/onboarding/catalog-compliance", in)
+	}
+	if r := save(map[string]any{"agreementsAccepted": false}); r.status != 200 || up.StepBodies["catalog-compliance"]["agreements"] != nil {
+		t.Fatalf("unaccepted = %d %v", r.status, up.StepBodies["catalog-compliance"])
+	}
+	up.Application["business"] = map[string]any{"offering": "SERVICES"}
+	mustStatus(t, save(map[string]any{"agreementsAccepted": true}), 200)
+	if got := agreementKeys(t, up.StepBodies["catalog-compliance"]); got != "provider-terms=1.0 payments-terms=1.0 data-processing=1.0" {
+		t.Fatalf("provider agreements = %q", got)
+	}
+	up.Application["business"] = map[string]any{"offering": "BOTH"}
+	mustStatus(t, save(map[string]any{"agreementsAccepted": true}), 200)
+	if got := agreementKeys(t, up.StepBodies["catalog-compliance"]); got != "seller-terms=1.0 provider-terms=1.0 payments-terms=1.0 data-processing=1.0" {
+		t.Fatalf("both agreements = %q", got)
+	}
+	// The versions the applicant saw match: accepted. One is stale: refused with a message on `agreements`.
+	shown := []map[string]any{{"key": "provider-terms", "version": "1.0"}, {"key": "seller-terms", "version": "1.0"}}
+	mustStatus(t, save(map[string]any{"agreementsAccepted": true, "agreements": shown}), 200)
+	stale := []map[string]any{{"key": "seller-terms", "version": "0.9"}}
+	r := save(map[string]any{"agreementsAccepted": true, "agreements": stale})
+	mustStatus(t, r, 422)
+	if r.json(t)["code"] != "LEGAL_DOCUMENT_CHANGED" || r.json(t)["errors"].(map[string]any)["agreements"] == nil {
+		t.Fatalf("stale agreements = %s", r.body)
 	}
 }
 

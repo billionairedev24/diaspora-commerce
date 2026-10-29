@@ -1888,6 +1888,8 @@ export interface components {
                 agreementsAccepted: boolean | null;
                 w9Certified: boolean | null;
                 w9SignerName: string | null;
+                /** @description The legal documents accepted, each with the version in force when accepted and the date (sellers - seller-terms, payments-terms, data-processing; providers - provider-terms in place of seller-terms) */
+                agreements: components["schemas"]["OnboardingAgreement"][];
             };
             documents: {
                 assetId: string;
@@ -1994,6 +1996,22 @@ export interface components {
             agreementsAccepted?: boolean;
             w9Certified?: boolean;
             w9SignerName?: string;
+            /** @description The documents and versions the applicant was shown. The BFF records the current version of every document the application requires and answers 422 LEGAL_DOCUMENT_CHANGED when one differs from what was shown. */
+            agreements?: components["schemas"]["OnboardingAgreementInput"][];
+        };
+        OnboardingAgreement: {
+            /** @example seller-terms */
+            key: string;
+            /** @example 2.4 */
+            version: string;
+            /** Format: date */
+            acceptedOn: string | null;
+        };
+        OnboardingAgreementInput: {
+            /** @example seller-terms */
+            key: string;
+            /** @example 2.4 */
+            version: string;
         };
         OnboardingStripeSession: {
             accountId: string;

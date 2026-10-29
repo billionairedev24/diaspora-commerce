@@ -109,6 +109,7 @@ func run() error {
 	notifications := upstreams.NewNotifications(client("notifications", up.Notifications))
 	sellerDeps := app.SellerDeps{
 		Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", up.Seller)), Addresses: identity,
+		Content: content,
 		Catalog: upstreams.NewSellerCatalog(catalogClient, cache, cfg.Cache.ReferenceTTL),
 		Stock:   upstreams.NewStock(inventoryClient), Offers: upstreams.NewOffers(offersClient),
 		InventoryAPI: upstreams.NewStaffUpstream(inventoryClient),

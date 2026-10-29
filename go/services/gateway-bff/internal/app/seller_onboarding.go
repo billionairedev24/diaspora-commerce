@@ -200,6 +200,13 @@ func (s *sellerShellImpl) SaveOnboardingCompliance(ctx context.Context, c *domai
 	body := port.SellerApplicationCompliance{Categories: []string{}, Services: []port.SellerServiceLicence{},
 		BeautyLabellingConfirmed: in.BeautyLabellingConfirmed, InsuranceDocumentAssetID: strings.TrimSpace(in.InsuranceDocumentAssetID),
 		AgreementsAccepted: &in.AgreementsAccepted, W9Certified: &in.W9Certified, W9SignerName: strings.TrimSpace(in.W9SignerName)}
+	if in.AgreementsAccepted {
+		refs, err := s.acceptedAgreements(ctx, c, in.Agreements)
+		if err != nil {
+			return domain.OnboardingStatus{}, err
+		}
+		body.Agreements = refs
+	}
 	for _, cat := range in.Categories {
 		if k := strings.ToLower(strings.TrimSpace(cat)); k != "" && !slices.Contains(body.Categories, k) {
 			body.Categories = append(body.Categories, k)
@@ -215,6 +222,55 @@ func (s *sellerShellImpl) SaveOnboardingCompliance(ctx context.Context, c *domai
 			DocumentAssetID: trimmedOf(l.DocumentAssetID)})
 	}
 	return s.saveStep(ctx, c, "catalog-compliance", body)
+}
+
+// acceptedAgreements resolves the current version of every legal document this application accepts (sellers: seller
+// terms, payments terms, data processing; providers: provider terms in place of the seller terms) so the version
+// that is recorded is the one in force. When the applicant's screen showed another version the save is refused: they
+// must read the changed document first.
+func (s *sellerShellImpl) acceptedAgreements(ctx context.Context, c *domain.Caller, shown []domain.OnboardingAgreementInput) ([]port.SellerAgreement, error) {
+	if err := requireCustomer(c); err != nil {
+		return nil, err
+	}
+	app, err := s.r.d.Sellers.Application(ctx, c.BearerToken)
+	if err != nil {
+		return nil, mapErr("seller", err)
+	}
+	offering := ""
+	if app.Business != nil {
+		offering = app.Business.Offering
+	}
+	if offering == "" && strings.EqualFold(app.Kind, "PROVIDER") {
+		offering = "SERVICES"
+	}
+	if s.r.d.Content == nil {
+		return nil, domain.UpstreamUnavailable("content")
+	}
+	idx, err := s.r.d.Content.LegalIndex(ctx)
+	if err != nil {
+		return nil, mapErr("content", err)
+	}
+	current := make(map[string]string, len(idx.Documents))
+	for _, d := range idx.Documents {
+		current[d.Key] = d.Version
+	}
+	seen := make(map[string]string, len(shown))
+	for _, a := range shown {
+		seen[strings.TrimSpace(a.Key)] = strings.TrimSpace(a.Version)
+	}
+	var out []port.SellerAgreement
+	for _, key := range domain.RequiredAgreements(offering) {
+		v, ok := current[key]
+		if !ok {
+			return nil, domain.UpstreamUnavailable("content")
+		}
+		if sv, listed := seen[key]; listed && sv != v {
+			return nil, domain.FieldProblem("LEGAL_DOCUMENT_CHANGED", "The terms changed", "agreements",
+				"A document changed while you were reading it. Read the current version of the "+key+" and accept again.")
+		}
+		out = append(out, port.SellerAgreement{Key: key, Version: v})
+	}
+	return out, nil
 }
 
 func (s *sellerShellImpl) saveStep(ctx context.Context, c *domain.Caller, step string, body any) (domain.OnboardingStatus, error) {
@@ -389,7 +445,7 @@ func firstChargeOf(f *port.SellerFirstCharge) *domain.OnboardingFirstCharge {
 // onboardingForm maps every section of the application onto the wizard's form.
 func onboardingForm(a port.SellerApplication, status string) domain.OnboardingForm {
 	f := domain.OnboardingForm{Prefilled: []string{}, Owners: []domain.OnboardingOwner{}, Documents: []domain.OnboardingDocument{},
-		Compliance: domain.OnboardingCompliance{Categories: []string{}, Services: []domain.OnboardingServiceLicence{}},
+		Compliance: domain.OnboardingCompliance{Categories: []string{}, Services: []domain.OnboardingServiceLicence{}, Agreements: []domain.OnboardingAgreement{}},
 		Editable:   status == "DRAFT" || status == "INFO_REQUESTED"}
 	if b := a.Business; b != nil {
 		f.Business = domain.OnboardingBusiness{Offering: strPtr(strings.ToUpper(b.Offering)), EntityType: strPtr(strings.ToUpper(b.EntityType)),
@@ -419,6 +475,9 @@ func onboardingForm(a port.SellerApplication, status string) domain.OnboardingFo
 		f.Compliance.Categories = append(f.Compliance.Categories, c.Categories...)
 		f.Compliance.BeautyLabellingConfirmed, f.Compliance.AgreementsAccepted, f.Compliance.W9Certified = c.BeautyLabellingConfirmed, c.AgreementsAccepted, c.W9Certified
 		f.Compliance.InsuranceDocumentAssetID, f.Compliance.W9SignerName = strPtr(c.InsuranceDocumentAssetID), strPtr(c.W9SignerName)
+		for _, g := range c.Agreements {
+			f.Compliance.Agreements = append(f.Compliance.Agreements, domain.OnboardingAgreement{Key: g.Key, Version: g.Version, AcceptedOn: strPtr(g.AcceptedOn)})
+		}
 		if p := c.FoodPermit; p != nil {
 			f.Compliance.FoodPermit = &domain.OnboardingFoodPermit{PermitType: strPtr(p.PermitType), PermitNumber: strPtr(p.PermitNumber),
 				IssuingAuthority: strPtr(p.IssuingAuthority), ExpiresOn: strPtr(p.ExpiresOn), DocumentAssetID: strPtr(p.DocumentAssetID)}
