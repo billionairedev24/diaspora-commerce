@@ -84,7 +84,7 @@ class CategoryController {
 
     @Operation(summary = "What approving would create, without creating it (catalog:taxonomy)")
     @PostMapping("/v1/category-requests/{id}/approval-preview")
-    ApprovalPlanResponse preview(@PathVariable UUID id, @Valid @RequestBody ApproveCategoryRequest body) {
+    ApprovalPlanResponse previewApproval(@PathVariable UUID id, @Valid @RequestBody ApproveCategoryRequest body) {
         return ApprovalPlanResponse.of(categories.planApproval(id, body.toChoice()));
     }
 

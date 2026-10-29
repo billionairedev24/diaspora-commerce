@@ -48,7 +48,7 @@ class TaxonomyController {
 
     @Operation(summary = "The whole tree with retired nodes, product counts and the pending-request count")
     @GetMapping("/v1/taxonomy/tree")
-    TaxonomyTreeResponse tree() {
+    TaxonomyTreeResponse taxonomyTree() {
         return TaxonomyTreeResponse.of(taxonomy.tree());
     }
 
@@ -57,7 +57,7 @@ class TaxonomyController {
                     + "(newProductType). 422 for duplicate names or codes, a wrong parent level or a retired parent.")
     @PostMapping("/v1/taxonomy/nodes")
     @ResponseStatus(HttpStatus.CREATED)
-    TaxonomyNodeResponse create(@Valid @RequestBody CreateNodeBody body) {
+    TaxonomyNodeResponse createNode(@Valid @RequestBody CreateNodeBody body) {
         return TaxonomyNodeResponse.of(taxonomy.createNode(new CreateNode(body.level(), body.parentId(), body.name(),
                 body.code(), body.productType(),
                 body.newProductType() == null ? null : body.newProductType().toDomain(), body.reason())));
@@ -65,7 +65,7 @@ class TaxonomyController {
 
     @Operation(summary = "Rename a node; the paths below it follow", description = IF_MATCH_NOTE)
     @PatchMapping("/v1/taxonomy/nodes/{id}")
-    TaxonomyNodeResponse rename(@PathVariable UUID id, @Valid @RequestBody RenameBody body,
+    TaxonomyNodeResponse renameNode(@PathVariable UUID id, @Valid @RequestBody RenameBody body,
                                 @RequestHeader(name = HttpHeaders.IF_MATCH, required = false) String ifMatch) {
         return TaxonomyNodeResponse.of(taxonomy.renameNode(id, IfMatch.expected(ifMatch), body.name(), body.reason()));
     }
@@ -73,7 +73,7 @@ class TaxonomyController {
     @Operation(summary = "Move a category to another department or a product type to another category",
             description = IF_MATCH_NOTE)
     @PostMapping("/v1/taxonomy/nodes/{id}/move")
-    TaxonomyNodeResponse move(@PathVariable UUID id, @Valid @RequestBody MoveBody body,
+    TaxonomyNodeResponse moveNode(@PathVariable UUID id, @Valid @RequestBody MoveBody body,
                               @RequestHeader(name = HttpHeaders.IF_MATCH, required = false) String ifMatch) {
         return TaxonomyNodeResponse.of(taxonomy.moveNode(id, IfMatch.expected(ifMatch), body.parentId(),
                 body.reason()));
@@ -83,14 +83,14 @@ class TaxonomyController {
             description = "409 catalog.taxonomy-in-use while the node or anything under it has products. A retired "
                     + "node stays on existing products but cannot be chosen for new ones. " + IF_MATCH_NOTE)
     @PostMapping("/v1/taxonomy/nodes/{id}/retire")
-    TaxonomyNodeResponse retire(@PathVariable UUID id, @Valid @RequestBody ReasonBody body,
+    TaxonomyNodeResponse retireNode(@PathVariable UUID id, @Valid @RequestBody ReasonBody body,
                                 @RequestHeader(name = HttpHeaders.IF_MATCH, required = false) String ifMatch) {
         return TaxonomyNodeResponse.of(taxonomy.retireNode(id, IfMatch.expected(ifMatch), body.reason()));
     }
 
     @Operation(summary = "Restore a retired node", description = IF_MATCH_NOTE)
     @PostMapping("/v1/taxonomy/nodes/{id}/restore")
-    TaxonomyNodeResponse restore(@PathVariable UUID id, @Valid @RequestBody ReasonBody body,
+    TaxonomyNodeResponse restoreNode(@PathVariable UUID id, @Valid @RequestBody ReasonBody body,
                                  @RequestHeader(name = HttpHeaders.IF_MATCH, required = false) String ifMatch) {
         return TaxonomyNodeResponse.of(taxonomy.restoreNode(id, IfMatch.expected(ifMatch), body.reason()));
     }
@@ -98,20 +98,20 @@ class TaxonomyController {
     @Operation(summary = "Set the display order of the children of a node (or of the departments)",
             description = "ids is every child of the parent, retired ones included; 412 when the list changed.")
     @PostMapping("/v1/taxonomy/reorder")
-    List<TaxonomyNodeResponse> reorder(@Valid @RequestBody ReorderBody body) {
+    List<TaxonomyNodeResponse> reorderNodes(@Valid @RequestBody ReorderBody body) {
         return taxonomy.reorder(body.parentId(), body.ids(), body.reason()).stream()
                 .map(TaxonomyNodeResponse::of).toList();
     }
 
     @Operation(summary = "Product-type schemas with where they are used")
     @GetMapping("/v1/taxonomy/product-types")
-    List<ProductTypeAdminResponse> productTypes() {
+    List<ProductTypeAdminResponse> listTaxonomyProductTypes() {
         return taxonomy.productTypes().stream().map(ProductTypeAdminResponse::of).toList();
     }
 
     @Operation(summary = "One product-type schema with every attribute, including those that do not apply")
     @GetMapping("/v1/taxonomy/product-types/{code}")
-    ProductTypeAdminResponse productType(@PathVariable String code) {
+    ProductTypeAdminResponse getTaxonomyProductType(@PathVariable String code) {
         return ProductTypeAdminResponse.of(taxonomy.productType(code));
     }
 
@@ -139,7 +139,7 @@ class TaxonomyController {
 
     @Operation(summary = "Audit trail of taxonomy changes, newest first")
     @GetMapping("/v1/taxonomy/audit")
-    List<AuditResponse> audit(@RequestParam(required = false) String subject,
+    List<AuditResponse> taxonomyAudit(@RequestParam(required = false) String subject,
                               @RequestParam(defaultValue = "50") int limit) {
         return taxonomy.audit(subject, limit).stream().map(AuditResponse::of).toList();
     }
