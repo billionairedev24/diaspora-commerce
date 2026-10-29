@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
@@ -27,6 +28,8 @@ import com.afrotransact.deliveryruns.domain.CreativeRef;
 import com.afrotransact.deliveryruns.domain.CreativeSlot;
 import com.afrotransact.deliveryruns.domain.FeeSnapshot;
 import com.afrotransact.deliveryruns.domain.LocalAdvertorial;
+import com.afrotransact.deliveryruns.domain.Location;
+import com.afrotransact.deliveryruns.domain.LocationDetails;
 import com.afrotransact.deliveryruns.domain.PreorderStatus;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
 import com.afrotransact.deliveryruns.domain.Resolution;
@@ -78,15 +81,18 @@ class AdvertorialServingImpl implements AdvertorialServing {
         int limit = Math.min(Math.max(q.limit(), 1), MAX_SERVED);
         Map<UUID, Candidate> candidates = new LinkedHashMap<>();
         if (hasText(q.zip()) || q.lat() != null && q.lng() != null) {
-            for (AvailableRun a : publicRuns.available(q.zip(), q.lat(), q.lng())) {
+            List<Location> covering = publicRuns.coveringLocations(q.zip(), q.lat(), q.lng());
+            for (AvailableRun a : publicRuns.available(covering, 0)) {
                 Advertorial data = publicRuns.advertorial(a.run().id());
                 candidates.put(a.run().id(), new Candidate(AdvertorialSource.RUN, a.run().id(), null, data.town(),
                         data.cutoffAt(), data.deliveryDay(), data.feeDisplay(), null,
                         creative -> links.runAdvertorialUrl(a.location(), a.run(), creative)));
             }
+            // A ZIP alone finds windows too: through the towns whose delivery area covers it, as the runs are found.
+            windowCandidates(covering).forEach(c -> candidates.putIfAbsent(c.id(), c));
         }
         if (hasText(q.country()) && hasText(q.region())) {
-            windowCandidate(q).ifPresent(c -> candidates.put(c.id(), c));
+            windowCandidate(q).ifPresent(c -> candidates.putIfAbsent(c.id(), c));
         }
         List<ServedAdvertorial> served = new ArrayList<>();
         Map<UUID, List<LocalAdvertorial>> bySource = advertorials.findLive(candidates.keySet()).stream()
@@ -143,10 +149,41 @@ class AdvertorialServingImpl implements AdvertorialServing {
         }
     }
 
+    /** The open window that serves the place the visitor named (country, region and city). */
     private Optional<Candidate> windowCandidate(AdvertorialQuery q) {
+        return openWindowAt(q.country(), q.region(), q.city(), null);
+    }
+
+    /**
+     * The open windows that serve the towns a ZIP falls in: for each covering location, the window whose targets
+     * cover its town ({@code market/state/name}), and any open window planned for that location.
+     */
+    private List<Candidate> windowCandidates(List<Location> covering) {
+        Map<UUID, Candidate> found = new LinkedHashMap<>();
+        for (Location l : covering) {
+            LocationDetails d = l.details();
+            if (hasText(d.market()) && hasText(d.state())) {
+                openWindowAt(d.market(), d.state(), d.name(), d.name()).ifPresent(c -> found.putIfAbsent(c.id(), c));
+            }
+        }
+        Set<UUID> ids = covering.stream().map(Location::id).collect(Collectors.toSet());
+        if (!ids.isEmpty()) {
+            for (PreorderPublicService.OpenWindow o : preorders.open()) {
+                UUID planned = o.window().details().locationId();
+                if (planned != null && ids.contains(planned) && o.stage() == PreorderStatus.OPEN) {
+                    String town = covering.stream().filter(l -> l.id().equals(planned)).map(Location::name)
+                            .findFirst().orElse(null);
+                    found.putIfAbsent(o.window().id(), candidate(o.window(), o.doorFee(), town));
+                }
+            }
+        }
+        return List.copyOf(found.values());
+    }
+
+    private Optional<Candidate> openWindowAt(String country, String region, String city, String town) {
         Resolution r;
         try {
-            r = preorders.resolve(q.country(), q.region(), q.city());
+            r = preorders.resolve(country, region, city);
         } catch (RuleViolation e) {
             return Optional.empty();
         }
@@ -154,13 +191,18 @@ class AdvertorialServingImpl implements AdvertorialServing {
         if (!r.on() || w == null || r.stage() != PreorderStatus.OPEN) {
             return Optional.empty();
         }
-        FeeSnapshot door = r.doorFee();
+        return Optional.of(candidate(w, r.doorFee(), town));
+    }
+
+    /** {@code town} is the visitor's town when known; otherwise the window's first target names the place. */
+    private Candidate candidate(PreorderWindow w, FeeSnapshot door, String town) {
         String fee = door == null ? null : RunLinks.money(door.amountMinor(), door.currency());
         CreativeRef hero = w.creatives().get(CreativeSlot.HERO);
-        String place = w.details().targets().isEmpty() ? "your area" : w.details().targets().get(0).label();
-        return Optional.of(new Candidate(AdvertorialSource.WINDOW, w.id(), w.code(), place, w.details().closesAt(),
+        String place = hasText(town) ? town.trim()
+                : w.details().targets().isEmpty() ? "your area" : w.details().targets().get(0).label();
+        return new Candidate(AdvertorialSource.WINDOW, w.id(), w.code(), place, w.details().closesAt(),
                 DAY.format(w.details().deliversOn()), fee, hero == null ? null : hero.url(),
-                creative -> links.windowAdvertorialUrl(w.code(), creative)));
+                creative -> links.windowAdvertorialUrl(w.code(), creative));
     }
 
     private ServedAdvertorial served(LocalAdvertorial a, Candidate c) {

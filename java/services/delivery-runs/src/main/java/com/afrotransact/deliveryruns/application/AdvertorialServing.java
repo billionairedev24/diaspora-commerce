@@ -38,8 +38,9 @@ public interface AdvertorialServing {
     }
 
     /**
-     * Where the visitor is. A ZIP or coordinates match delivery runs by coverage; country and region (and city) match
-     * pre-order windows.
+     * Where the visitor is. A ZIP or coordinates match delivery runs by coverage, and the pre-order windows of the
+     * towns that coverage falls in (so a ZIP alone finds a window); country and region (and city) match pre-order
+     * windows too. Both together give each source once.
      *
      * @param zip     5-digit ZIP
      * @param lat     latitude

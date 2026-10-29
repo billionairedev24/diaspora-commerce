@@ -67,6 +67,12 @@ class PublicRunServiceImpl implements PublicRunService {
     @Override
     @Transactional(readOnly = true)
     public List<AvailableRun> available(String zip, Double lat, Double lng, int earlyAccessHours) {
+        return available(coveringLocations(zip, lat, lng), earlyAccessHours);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Location> coveringLocations(String zip, Double lat, Double lng) {
         Optional<GeoPoint> point = point(zip, lat, lng);
         if (point.isEmpty()) {
             return List.of();
@@ -89,9 +95,17 @@ class PublicRunServiceImpl implements PublicRunService {
                 }
             }
         }
-        if (covering.isEmpty()) {
+        return covering.values().stream().sorted(Comparator.comparing(Location::name)).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AvailableRun> available(List<Location> locationsCovering, int earlyAccessHours) {
+        if (locationsCovering.isEmpty()) {
             return List.of();
         }
+        Map<UUID, Location> covering = new HashMap<>();
+        locationsCovering.forEach(l -> covering.put(l.id(), l));
         Instant now = Instant.now(clock);
         List<AvailableRun> out = new ArrayList<>();
         Map<UUID, Optional<FeeSnapshot>> doorRules = new HashMap<>();

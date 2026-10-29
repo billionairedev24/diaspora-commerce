@@ -113,8 +113,9 @@ class AdvertorialController {
     }
 
     @Operation(summary = "The advertorials a visitor sees for their deliver-to place (no sign-in)",
-            description = "A ZIP or coordinates match delivery runs by coverage; country and region (and city) match "
-                    + "pre-order windows. Only windows and runs that take orders right now are served, one variant "
+            description = "A ZIP or coordinates match delivery runs by coverage and the pre-order windows of the towns "
+                    + "that coverage falls in (a ZIP alone is enough); country and region (and city) match "
+                    + "pre-order windows too. Only windows and runs that take orders right now are served, one variant "
                     + "each (the same visitor keeps their variant), higher priority first. Each carries the "
                     + "countdown target (the close or cutoff) and a link with UTM and order attribution.")
     @SecurityRequirements

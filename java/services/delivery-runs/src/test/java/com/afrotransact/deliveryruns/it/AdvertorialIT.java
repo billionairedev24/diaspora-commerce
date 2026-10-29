@@ -330,6 +330,60 @@ class AdvertorialIT {
     }
 
     @Test
+    void aZipAloneFindsTheOpenWindowOfTheTownItFallsIn() {
+        String town = "Zipton" + UUID.randomUUID().toString().replace("-", "").chars().limit(8)
+                .mapToObj(c -> String.valueOf((char) ('a' + Character.digit(c, 16)))).collect(Collectors.joining());
+        locations.create(Fixtures.town(Fixtures.slug("zipton"), town));
+        Instant opens = clock.instant().minus(Duration.ofDays(1));
+        Instant closes = clock.instant().plus(Duration.ofDays(2));
+        PreorderWindow w = publish("Adv Zip #10", "US/TX/" + town, opens, closes);
+        scheduler.process(w.id());
+
+        Res byZip = call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&visitor=zip-1&limit=10", null, null);
+        assertThat(byZip.status()).isEqualTo(200);
+        JsonNode s = null;
+        for (JsonNode item : byZip.body().path("items")) {
+            if (item.path("sourceId").asString().equals(w.id().toString())) {
+                s = item;
+            }
+        }
+        assertThat(s).as("a ZIP alone, no country, region or city").isNotNull();
+        assertThat(s.path("source").asString()).isEqualTo("WINDOW");
+        assertThat(s.path("place").asString()).as("the town the ZIP falls in").isEqualTo(town);
+        assertThat(s.path("code").asString()).isEqualTo(w.code());
+        assertThat(Instant.parse(s.path("countdownTarget").asString())).isEqualTo(closes);
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?zip=78701&limit=10", null, null).body().path("items"))
+                .as("Austin is outside the town's area").extracting(i -> i.path("sourceId").asString())
+                .doesNotContain(w.id().toString());
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&country=US&region=TX&city=" + town
+                + "&limit=10", null, null).body().path("items")).as("ZIP and place together: one card, not two")
+                .extracting(i -> i.path("sourceId").asString()).containsOnlyOnce(w.id().toString());
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?country=US&region=TX&city=" + town + "&limit=10",
+                null, null).body().path("items")).as("the session location alone still finds it")
+                .extracting(i -> i.path("sourceId").asString()).contains(w.id().toString());
+    }
+
+    @Test
+    void aZipFindsAWindowPlannedForTheLocationItFallsInEvenWhenItsTargetNamesAnotherCity() {
+        String town = "Plan" + UUID.randomUUID().toString().replace("-", "").chars().limit(8)
+                .mapToObj(c -> String.valueOf((char) ('a' + Character.digit(c, 16)))).collect(Collectors.joining());
+        UUID location = locations.create(Fixtures.town(Fixtures.slug("planned"), town)).id();
+        Instant opens = clock.instant().minus(Duration.ofDays(1));
+        Instant closes = clock.instant().plus(Duration.ofDays(2));
+        WindowView v = windows.create(command("Adv Planned #11", "US/TX/Elsewhere" + town.substring(4), opens, closes,
+                "Planned for the town", location));
+        WindowView withHero = windows.setCreative(v.window().id(), CreativeSlot.HERO, upstreams.image(1920, 640),
+                v.window().version());
+        PreorderWindow w = windows.publish(v.window().id(), withHero.window().version()).window();
+        scheduler.process(w.id());
+
+        List<String> ids = new ArrayList<>();
+        call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&limit=10", null, null).body().path("items")
+                .forEach(i -> ids.add(i.path("sourceId").asString()));
+        assertThat(ids).contains(w.id().toString());
+    }
+
+    @Test
     void theSweeperEndsAWindowAdvertorialOnceTheWindowClosedWithoutAnyEvent() {
         Fixture f = fixture("Adv Sweep Window #9", "Plainview", 1);
         String a = advertorialOf("WINDOW", f.window.id());
@@ -606,10 +660,15 @@ class AdvertorialIT {
     }
 
     private static WindowCommand command(String name, String target, Instant opens, Instant closes, String headline) {
+        return command(name, target, opens, closes, headline, null);
+    }
+
+    private static WindowCommand command(String name, String target, Instant opens, Instant closes, String headline,
+                                         UUID locationId) {
         LocalDate delivers = closes.plus(Duration.ofDays(2)).atZone(CHICAGO).toLocalDate();
         return new WindowCommand(name, List.of(target), opens, closes, delivers, "America/Chicago",
                 name + " is open", headline, "AfroTransact: pre-order open", Set.of("Pantry", "Spices"), true, true,
-                null, null, true, 20_000L, Set.of(CommKind.ANNOUNCE), null, null, null, 0);
+                null, null, true, 20_000L, Set.of(CommKind.ANNOUNCE), null, null, locationId, 0);
     }
 
     private PreorderWindow publish(String name, String target, Instant opens, Instant closes) {
