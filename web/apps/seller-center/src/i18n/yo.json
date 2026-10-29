@@ -498,7 +498,6 @@
   "sc.pf.field.category": "Ẹ̀ka",
   "sc.pf.field.title": "Àkọlé ọjà",
   "sc.pf.field.brand": "Orúkọ ìdámọ̀",
-  "sc.pf.field.brandOptional": "Orúkọ ìdámọ̀ (kò pọn dandan)",
   "sc.pf.field.condition": "Ipò",
   "sc.pf.field.description": "Àpèjúwe",
   "sc.pf.field.keywords": "Àwọn ọ̀rọ̀ ìwádìí",
@@ -1030,5 +1029,18 @@
   "sc.reviews.pages": "Àwọn ojú ìwé àtúnyẹ̀wò",
   "sc.reviews.previous": "Ti tẹ́lẹ̀",
   "sc.reviews.next": "Tó kàn",
-  "sc.reviews.pageOf": "Ojú ìwé {page} nínú {pages}"
+  "sc.reviews.pageOf": "Ojú ìwé {page} nínú {pages}",
+  "sc.pf.nav.label": "Àwọn abala",
+  "sc.pf.nav.done": "Ti parí",
+  "sc.pf.nav.todo": "{count} kù láti ṣe",
+  "sc.pf.q.title": "Dídára ìpolówó",
+  "sc.pf.q.percent": "{percent}% ti parí",
+  "sc.pf.q.required": "Ó pọndandan láti fi ránṣẹ́",
+  "sc.pf.q.improve": "Láti mú un dára sí i",
+  "sc.pf.tip.description": "Fi àpèjúwe tí kò dín ní ọ̀rọ̀ 40 kún un",
+  "sc.pf.tip.images": "Fi àwòrán mẹ́ta tàbí jù bẹ́ẹ̀ lọ kún un",
+  "sc.pf.bar.label": "Àwọn ìgbésẹ̀ ìpolówó",
+  "sc.pf.bar.noChanges": "Kò sí àyípadà láti fi pamọ́.",
+  "sc.pf.images.addMore": "Fi àwọn àwòrán míràn kún un",
+  "sc.pf.images.reorderHint": "Fa àwọn àwòrán láti tún wọn tò. Àkọ́kọ́ ni àwòrán pàtàkì."
 }

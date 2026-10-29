@@ -498,7 +498,6 @@
   "sc.pf.field.category": "Categoría",
   "sc.pf.field.title": "Título del producto",
   "sc.pf.field.brand": "Marca",
-  "sc.pf.field.brandOptional": "Marca (opcional)",
   "sc.pf.field.condition": "Estado",
   "sc.pf.field.description": "Descripción",
   "sc.pf.field.keywords": "Palabras clave de búsqueda",
@@ -1030,5 +1029,18 @@
   "sc.reviews.pages": "Páginas de opiniones",
   "sc.reviews.previous": "Anterior",
   "sc.reviews.next": "Siguiente",
-  "sc.reviews.pageOf": "Página {page} de {pages}"
+  "sc.reviews.pageOf": "Página {page} de {pages}",
+  "sc.pf.nav.label": "Secciones",
+  "sc.pf.nav.done": "Completa",
+  "sc.pf.nav.todo": "{count} por hacer",
+  "sc.pf.q.title": "Calidad del anuncio",
+  "sc.pf.q.percent": "{percent} % completado",
+  "sc.pf.q.required": "Necesario para enviar",
+  "sc.pf.q.improve": "Para mejorarlo",
+  "sc.pf.tip.description": "Añade una descripción de al menos 40 caracteres",
+  "sc.pf.tip.images": "Añade 3 imágenes o más",
+  "sc.pf.bar.label": "Acciones del anuncio",
+  "sc.pf.bar.noChanges": "No hay cambios que guardar.",
+  "sc.pf.images.addMore": "Añadir más imágenes",
+  "sc.pf.images.reorderHint": "Arrastra las imágenes para reordenarlas. La primera es la imagen principal."
 }

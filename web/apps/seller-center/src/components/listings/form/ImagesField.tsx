@@ -1,7 +1,7 @@
 'use client';
 
 import { cx, fieldStyles } from '@afrotransact/ui';
-import { ArrowDown, ArrowUp, Star, Trash, UploadSimple } from '@phosphor-icons/react/ssr';
+import { ArrowLeft, ArrowRight, Star, Trash, UploadSimple } from '@phosphor-icons/react/ssr';
 import { type DragEvent, useState } from 'react';
 
 import { useT } from '@/i18n/t';
@@ -23,7 +23,7 @@ interface Props {
   error?: string;
 }
 
-const iconButton = 'grid size-8 place-items-center rounded-xs border-0 bg-surface-muted disabled:opacity-40';
+const iconButton = 'grid size-9 place-items-center rounded-xs border-0 bg-surface-muted disabled:opacity-40 sm:size-8';
 
 const move = (list: FormImage[], from: number, to: number) => {
   const next = [...list];
@@ -39,6 +39,7 @@ export function ImagesField({ images, update, error }: Props) {
   const [note, setNote] = useState('');
   const [over, setOver] = useState(false);
   const [dragging, setDragging] = useState<string | null>(null);
+  const [target, setTarget] = useState<string | null>(null);
   const patch = (id: string, p: Partial<FormImage>) => update((list) => list.map((i) => (i.id === id ? { ...i, ...p } : i)));
 
   const add = async (files: FileList | File[] | null) => {
@@ -89,9 +90,10 @@ export function ImagesField({ images, update, error }: Props) {
     if (im.status === 'low' && i === 0) return t('sc.pf.images.tooSmall', { px: MIN_IMAGE_PX });
     return `${im.width}×${im.height}`;
   };
+  const empty = images.length === 0;
 
   return (
-    <div id={fieldId.images} tabIndex={-1} className="flex flex-col gap-3 outline-none">
+    <div id={fieldId.images} tabIndex={-1} className="flex flex-col gap-4 outline-none">
       <label
         onDragOver={(e) => {
           e.preventDefault();
@@ -99,37 +101,43 @@ export function ImagesField({ images, update, error }: Props) {
         }}
         onDragLeave={() => setOver(false)}
         onDrop={onDrop}
-        className={cx('flex min-h-28 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border-2 border-dashed p-4 text-center text-sm',
+        className={cx('flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed p-4 text-center text-sm focus-within:border-focus',
+          empty ? 'min-h-48 sm:min-h-60' : 'min-h-24',
           over ? 'border-gold-500 bg-gold-50' : error ? 'border-danger bg-surface-sunken' : 'border-border-strong bg-surface-sunken')}
       >
-        <UploadSimple size={28} aria-hidden />
-        <span><strong>{t('sc.pf.images.drop')}</strong> {t('sc.pf.images.browse')}</span>
+        <UploadSimple size={empty ? 40 : 28} aria-hidden />
+        <span className={empty ? 'text-base' : undefined}><strong>{empty ? t('sc.pf.images.drop') : t('sc.pf.images.addMore')}</strong> {t('sc.pf.images.browse')}</span>
         <span className="text-xs text-muted">{t('sc.pf.images.rules', { count: images.length, max: MAX_IMAGES, px: MIN_IMAGE_PX })}</span>
-        <input type="file" data-testid="image-input" accept={IMAGE_TYPES.join(',')} multiple className="at-visually-hidden" onChange={(e) => void add(e.target.files)} />
+        <input type="file" data-testid="image-input" accept={IMAGE_TYPES.join(',')} multiple className="at-visually-hidden" aria-describedby={error ? 'pf-images-error' : undefined}
+          onChange={(e) => { void add(e.target.files); e.target.value = ''; }} />
       </label>
-      {note || error ? <span role="alert" className="text-xs text-danger">{note || error}</span> : null}
+      {note || error ? <span id="pf-images-error" role="alert" className="text-xs text-danger">{note || error}</span> : null}
       {images.length ? (
-        <ul aria-label={t('sc.pf.images.list')} className="m-0 flex list-none flex-col gap-3 p-0">
-          {images.map((im, i) => (
-            <li
-              key={im.id}
-              draggable
-              onDragStart={() => setDragging(im.id)}
-              onDragEnd={() => setDragging(null)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const from = images.findIndex((x) => x.id === dragging);
-                if (from >= 0 && from !== i) update((list) => move(list, from, i));
-                setDragging(null);
-              }}
-              className={cx('flex items-start gap-3', dragging === im.id && 'opacity-50')}
-            >
-              <div className="relative flex-none">
-                <img src={im.previewUrl} alt={im.alt || t('sc.pf.images.alt', { n: i + 1 })} className={cx('size-20 cursor-grab rounded-sm bg-surface object-cover', i === 0 && 'ring-2 ring-gold-500')} />
-                {i === 0 ? <span className="absolute top-1 left-1 rounded-xs bg-gold-500 px-1.5 text-2xs font-bold">{t('sc.pf.images.main')}</span> : null}
-              </div>
-              <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <>
+          <p className="m-0 text-xs text-muted">{t('sc.pf.images.reorderHint')}</p>
+          <ul aria-label={t('sc.pf.images.list')} className="m-0 grid list-none grid-cols-2 gap-3 p-0 @lg:grid-cols-3 @3xl:grid-cols-4 @5xl:grid-cols-5">
+            {images.map((im, i) => (
+              <li
+                key={im.id}
+                draggable
+                onDragStart={() => setDragging(im.id)}
+                onDragEnd={() => { setDragging(null); setTarget(null); }}
+                onDragOver={(e) => { e.preventDefault(); if (dragging) setTarget(im.id); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const from = images.findIndex((x) => x.id === dragging);
+                  if (from >= 0 && from !== i) update((list) => move(list, from, i));
+                  setDragging(null);
+                  setTarget(null);
+                }}
+                className={cx('flex min-w-0 flex-col gap-2 rounded-md border bg-surface p-2', dragging === im.id && 'opacity-50', target === im.id && dragging !== im.id ? 'border-gold-500 bg-gold-50' : 'border-border',
+                  i === 0 && 'ring-2 ring-gold-500')}
+                data-main={i === 0 ? 'true' : undefined}
+              >
+                <div className="relative">
+                  <img src={im.previewUrl} alt={im.alt || t('sc.pf.images.alt', { n: i + 1 })} className="aspect-square w-full cursor-grab rounded-sm bg-surface-muted object-cover" />
+                  {i === 0 ? <span className="absolute top-1.5 left-1.5 rounded-xs bg-gold-500 px-1.5 py-0.5 text-2xs font-bold">{t('sc.pf.images.main')}</span> : null}
+                </div>
                 <input
                   type="text"
                   maxLength={200}
@@ -148,20 +156,20 @@ export function ImagesField({ images, update, error }: Props) {
                       </button>
                     ) : null}
                     <button type="button" disabled={i === 0} className={iconButton} aria-label={t('sc.pf.images.left', { n: i + 1 })} onClick={() => update((list) => move(list, i, i - 1))}>
-                      <ArrowUp size={14} aria-hidden />
+                      <ArrowLeft size={14} aria-hidden />
                     </button>
                     <button type="button" disabled={i === images.length - 1} className={iconButton} aria-label={t('sc.pf.images.right', { n: i + 1 })} onClick={() => update((list) => move(list, i, i + 1))}>
-                      <ArrowDown size={14} aria-hidden />
+                      <ArrowRight size={14} aria-hidden />
                     </button>
                     <button type="button" className={cx(iconButton, 'text-danger')} aria-label={t('sc.pf.images.remove', { n: i + 1 })} onClick={() => update((list) => list.filter((x) => x.id !== im.id))}>
                       <Trash size={14} aria-hidden />
                     </button>
                   </span>
                 </span>
-              </div>
-            </li>
-          ))}
-        </ul>
+              </li>
+            ))}
+          </ul>
+        </>
       ) : null}
     </div>
   );

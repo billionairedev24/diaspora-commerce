@@ -1,92 +1,98 @@
 'use client';
 
-import { Button, cx } from '@afrotransact/ui';
-import { CaretUp, CheckCircle, WarningCircle } from '@phosphor-icons/react/ssr';
-import { type ReactNode, useState } from 'react';
+import { cx } from '@afrotransact/ui';
+import { CheckCircle, WarningCircle } from '@phosphor-icons/react/ssr';
+import { type ReactNode } from 'react';
 
 import { type MessageKey, useT } from '@/i18n/t';
 
-import { type Problem } from '../form-model';
+import { type Problem, type QualityItem } from '../form-model';
+import { motion } from './SectionNav';
 
-interface Props {
-  problems: [string, Problem][];
-  /** Autosave state line ("Draft saved 10:42"). */
-  saveState: ReactNode;
-  preview: ReactNode;
-  primaryLabel: string;
-  onPrimary: () => void;
-  onSaveDraft: (() => void) | null;
-  busy: boolean;
-  savingDraft: boolean;
-}
-
-/** Moves to a field and focuses it (the readiness links). */
+/** Moves to a field and focuses it (the quality-panel links). A field folded in a closed "More details" is opened first. */
 export function goToField(id: string) {
   const el = typeof document !== 'undefined' ? document.getElementById(id) : null;
   if (!el) return;
-  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const folded = el.closest('details');
+  if (folded && !folded.open) folded.open = true;
+  el.scrollIntoView({ behavior: motion(), block: 'center' });
   el.focus({ preventScroll: true });
 }
 
-function Items({ problems, onGo }: { problems: [string, Problem][]; onGo: (id: string) => void }) {
+export const labelOf = (t: ReturnType<typeof useT>, label: Problem['label']) =>
+  typeof label === 'string' ? t(label) : label.key ? `${label.text} · ${t(label.key)}` : label.text;
+
+/** Progress bar of the listing quality score. */
+export function QualityBar({ percent }: { percent: number }) {
   const t = useT();
-  const label = (p: Problem) => (typeof p.label === 'string' ? t(p.label) : p.label.key ? `${p.label.text} · ${t(p.label.key)}` : p.label.text);
   return (
-    <ul className="m-0 flex list-none flex-col gap-1 p-0">
-      {problems.map(([id, p]) => (
-        <li key={id}>
-          <a href={`#${id}`} onClick={(e) => { e.preventDefault(); onGo(id); }} className="flex flex-col rounded-sm px-2 py-1 text-sm hover:bg-surface-hover">
-            <span className="font-semibold text-text">{label(p)}</span>
-            <span className="text-xs text-danger">{t(p.key as MessageKey, p.vars)}</span>
-          </a>
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="font-semibold">{t('sc.pf.q.title')}</span>
+        <span className="text-muted" data-testid="quality-percent">{t('sc.pf.q.percent', { percent })}</span>
+      </div>
+      <div role="progressbar" aria-label={t('sc.pf.q.title')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-valuetext={t('sc.pf.q.percent', { percent })}
+        className="h-2 overflow-hidden rounded-pill bg-surface-sunken">
+        <div className={cx('h-full rounded-pill transition-[width]', percent === 100 ? 'bg-success' : 'bg-gold-500')} style={{ width: `${percent}%` }} />
+      </div>
+    </div>
   );
 }
 
-/** Sticky readiness panel: "Ready to publish" or "N things missing" with links to each field, autosave state and the actions.
-    On phones it is a bar at the bottom of the screen whose list opens upwards. */
-export function ReadinessPanel({ problems, saveState, preview, primaryLabel, onPrimary, onSaveDraft, busy, savingDraft }: Props) {
+/** What is missing (required, with its message) and what would make the listing better; each row jumps to its field. */
+export function QualityLists({ problems, tips, onGo }: { problems: [string, Problem][]; tips: QualityItem[]; onGo: (id: string) => void }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
-  const ready = problems.length === 0;
-  const heading = ready ? t('sc.pf.ready.ready') : t('sc.pf.ready.missing', { count: problems.length });
-  const icon = ready ? <CheckCircle size={20} weight="fill" aria-hidden className="text-success" /> : <WarningCircle size={20} weight="fill" aria-hidden className="text-warning" />;
-  const actions = (
-    <div className="flex flex-col gap-2">
-      <Button block loading={busy} onClick={onPrimary} data-testid="pf-primary">{primaryLabel}</Button>
-      {onSaveDraft ? <Button block variant="neutral" loading={savingDraft} onClick={onSaveDraft}>{t('sc.pf.actions.saveDraft')}</Button> : null}
-    </div>
+  const row = (key: string, id: string, title: string, note: string, tone: 'text-danger' | 'text-muted') => (
+    <li key={key}>
+      <a href={`#${id}`} onClick={(e) => { e.preventDefault(); onGo(id); }} className="flex flex-col rounded-sm px-2 py-1.5 text-sm hover:bg-surface-hover">
+        <span className="font-semibold text-text">{title}</span>
+        <span className={cx('text-xs', tone)}>{note}</span>
+      </a>
+    </li>
   );
   return (
-    <>
-      <aside aria-label={t('sc.pf.ready.label')} className="sticky top-[calc(var(--at-sticky-header-h)+1rem)] hidden flex-col gap-2.5 self-start rounded-md bg-surface-muted p-3.5 lg:flex">
-        <h2 className="m-0 flex items-center gap-2 text-base font-semibold" data-testid="readiness">{icon}{heading}</h2>
-        {ready ? <p className="m-0 text-sm text-muted">{t('sc.pf.ready.readyHint')}</p> : (
-          <div className="flex max-h-48 flex-col overflow-y-auto"><Items problems={problems} onGo={goToField} /></div>
-        )}
-        {actions}
-        <p className="m-0 text-xs text-muted" aria-live="polite">{saveState}</p>
-        {preview}
-      </aside>
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] shadow-lg lg:hidden">
-        {open && !ready ? (
-          <div id="pf-ready-list" className="mb-2 max-h-[45vh] overflow-y-auto">
-            <Items problems={problems} onGo={(id) => { setOpen(false); goToField(id); }} />
-          </div>
-        ) : null}
-        <div className="flex items-center gap-2">
-          <button type="button" aria-expanded={ready ? undefined : open} aria-controls={ready ? undefined : 'pf-ready-list'} disabled={ready} onClick={() => setOpen(!open)}
-            className="flex min-w-0 flex-1 items-center gap-1.5 border-0 bg-transparent p-0 text-left text-sm font-semibold text-text">
-            {icon}<span className="truncate" data-testid="readiness-mobile">{heading}</span>
-            {ready ? null : <CaretUp size={14} aria-hidden className={cx('transition-transform', !open && 'rotate-180')} />}
-          </button>
-          {onSaveDraft ? <Button size="sm" variant="neutral" loading={savingDraft} onClick={onSaveDraft}>{t('sc.pf.actions.saveDraftShort')}</Button> : null}
-          <Button size="sm" loading={busy} onClick={onPrimary}>{primaryLabel}</Button>
-        </div>
-        <p className="m-0 mt-1 text-2xs text-muted">{saveState}</p>
-      </div>
-    </>
+    <div className="flex flex-col gap-2">
+      {problems.length ? (
+        <ul aria-label={t('sc.pf.q.required')} className="m-0 flex list-none flex-col gap-0.5 p-0" data-testid="missing-list">
+          {problems.map(([id, p]) => row(id, id, labelOf(t, p.label), t(p.key as MessageKey, p.vars), 'text-danger'))}
+        </ul>
+      ) : null}
+      {tips.length ? (
+        <>
+          <h3 className="m-0 mt-1 px-2 text-xs font-semibold text-muted">{t('sc.pf.q.improve')}</h3>
+          <ul aria-label={t('sc.pf.q.improve')} className="m-0 flex list-none flex-col gap-0.5 p-0" data-testid="tips-list">
+            {tips.map((i) => row(`tip-${i.id}`, i.id, labelOf(t, i.label), t(i.tip ?? 'sc.pf.tip.description'), 'text-muted'))}
+          </ul>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+interface Props {
+  problems: [string, Problem][];
+  tips: QualityItem[];
+  percent: number;
+  preview: ReactNode;
+  onGo: (id: string) => void;
+}
+
+/** Sticky right-hand "Listing quality" panel (wide screens): score, what is missing, what would help, and the storefront preview. */
+export function ReadinessPanel({ problems, tips, percent, preview, onGo }: Props) {
+  const t = useT();
+  const ready = problems.length === 0;
+  const heading = ready ? t('sc.pf.ready.ready') : t('sc.pf.ready.missing', { count: problems.length });
+  return (
+    <aside aria-label={t('sc.pf.ready.label')}
+      className="sticky top-[calc(var(--at-sticky-header-h)+4.25rem)] hidden max-h-[calc(100dvh-var(--at-sticky-header-h)-9rem)] flex-col gap-3 self-start overflow-y-auto rounded-md border border-border bg-surface p-4 xl:flex">
+      <QualityBar percent={percent} />
+      <h2 className="m-0 flex items-center gap-2 text-base font-semibold" data-testid="readiness">
+        {ready ? <CheckCircle size={20} weight="fill" aria-hidden className="text-success" /> : <WarningCircle size={20} weight="fill" aria-hidden className="text-warning" />}
+        {heading}
+      </h2>
+      {ready ? <p className="m-0 -mt-1 text-sm text-muted">{t('sc.pf.ready.readyHint')}</p> : null}
+      <QualityLists problems={problems} tips={tips} onGo={onGo} />
+      {preview}
+    </aside>
   );
 }

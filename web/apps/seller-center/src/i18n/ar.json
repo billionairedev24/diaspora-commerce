@@ -498,7 +498,6 @@
   "sc.pf.field.category": "الفئة",
   "sc.pf.field.title": "عنوان المنتج",
   "sc.pf.field.brand": "العلامة التجارية",
-  "sc.pf.field.brandOptional": "العلامة التجارية (اختياري)",
   "sc.pf.field.condition": "الحالة",
   "sc.pf.field.description": "الوصف",
   "sc.pf.field.keywords": "كلمات البحث",
@@ -1030,5 +1029,18 @@
   "sc.reviews.pages": "صفحات المراجعات",
   "sc.reviews.previous": "السابق",
   "sc.reviews.next": "التالي",
-  "sc.reviews.pageOf": "الصفحة {page} من {pages}"
+  "sc.reviews.pageOf": "الصفحة {page} من {pages}",
+  "sc.pf.nav.label": "الأقسام",
+  "sc.pf.nav.done": "مكتمل",
+  "sc.pf.nav.todo": "{count} متبقٍ",
+  "sc.pf.q.title": "جودة الإعلان",
+  "sc.pf.q.percent": "اكتمل {percent}٪",
+  "sc.pf.q.required": "مطلوب للإرسال",
+  "sc.pf.q.improve": "لتحسينه",
+  "sc.pf.tip.description": "أضف وصفًا لا يقل عن 40 حرفًا",
+  "sc.pf.tip.images": "أضف 3 صور أو أكثر",
+  "sc.pf.bar.label": "إجراءات الإعلان",
+  "sc.pf.bar.noChanges": "لا توجد تغييرات لحفظها.",
+  "sc.pf.images.addMore": "أضف المزيد من الصور",
+  "sc.pf.images.reorderHint": "اسحب الصور لإعادة ترتيبها. الصورة الأولى هي الرئيسية."
 }
