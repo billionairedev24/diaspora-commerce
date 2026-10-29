@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.afrotransact.deliveryruns.application.AdvertorialLifecycle;
 import com.afrotransact.deliveryruns.application.AttributionService;
 import com.afrotransact.deliveryruns.application.ExtendCommand;
 import com.afrotransact.deliveryruns.application.LocationService;
@@ -47,6 +48,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpMethod;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -96,13 +98,15 @@ class AdvertorialIT {
     private final RunService runs;
     private final RunSlotService slots;
     private final AttributionService attribution;
+    private final AdvertorialLifecycle lifecycle;
+    private final JdbcClient jdbc;
 
     @Autowired
     AdvertorialIT(@LocalServerPort int port, JsonMapper json, MutableClock clock, FakeUpstreams upstreams,
                   PreorderWindowService windows, PreorderDecisionService decisions,
                   PreorderProjectionService projection, PreorderSchedulerService scheduler,
                   LocationService locations, RunService runs, RunSlotService slots,
-                  AttributionService attribution) {
+                  AttributionService attribution, AdvertorialLifecycle lifecycle, JdbcClient jdbc) {
         this.http = RestClient.builder().baseUrl("http://localhost:" + port).build();
         this.json = json;
         this.clock = clock;
@@ -115,6 +119,8 @@ class AdvertorialIT {
         this.runs = runs;
         this.slots = slots;
         this.attribution = attribution;
+        this.lifecycle = lifecycle;
+        this.jdbc = jdbc;
     }
 
     @DynamicPropertySource
@@ -324,6 +330,73 @@ class AdvertorialIT {
     }
 
     @Test
+    void theSweeperEndsAWindowAdvertorialOnceTheWindowClosedWithoutAnyEvent() {
+        Fixture f = fixture("Adv Sweep Window #9", "Plainview", 1);
+        String a = advertorialOf("WINDOW", f.window.id());
+        assertThat(statusOf(a)).isEqualTo("LIVE");
+        lifecycle.sweep(1000);
+        assertThat(statusOf(a)).as("still open: nothing to end").isEqualTo("LIVE");
+
+        clock.set(f.closes.plusSeconds(60));
+        assertThat(lifecycle.sweep(1000)).isPositive();
+        assertThat(statusOf(a)).isEqualTo("ENDED");
+        assertThat(endedOf(a)).isEqualTo("SOURCE_CLOSED");
+        assertThat(lifecycle.sweep(1000)).as("idempotent: an ended one is not touched again").isZero();
+        assertThat(endedOf(a)).isEqualTo("SOURCE_CLOSED");
+    }
+
+    @Test
+    void theSweeperEndsARunAdvertorialPastCutoffAndExtendingTheRunBringsItBack() {
+        UUID location = locations.create(Fixtures.bastrop(Fixtures.slug("sweep"), DropMode.DOORSTEP, null,
+                CutoffPolicy.CANCEL)).id();
+        Run run = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(3), 2));
+        runs.announce(run.id());
+        String a = advertorialOf("RUN", run.id());
+        lifecycle.sweep(1000);
+        assertThat(statusOf(a)).as("an announced run is not over").isEqualTo("LIVE");
+        runs.open(run.id());
+
+        clock.set(run.terms().cutoffAt().plusSeconds(60));
+        assertThat(lifecycle.sweep(1000)).isPositive();
+        assertThat(statusOf(a)).as("past the cutoff, before the schedule job decided the run").isEqualTo("ENDED");
+        assertThat(endedOf(a)).isEqualTo("SOURCE_CLOSED");
+        assertThat(servedRunIds()).doesNotContain(run.id().toString());
+        assertThat(lifecycle.sweep(1000)).isZero();
+
+        runs.extend(run.id(), new ExtendCommand(clock.instant().plus(Duration.ofDays(1)), null, null, null,
+                "More time"));
+        assertThat(statusOf(a)).as("the run takes orders again, so does its advertorial").isEqualTo("LIVE");
+        assertThat(servedRunIds()).contains(run.id().toString());
+    }
+
+    @Test
+    void theSweeperEndsRunAdvertorialsOfACancelledOrCompletedRunWhoseEventWasMissed() {
+        UUID location = locations.create(Fixtures.bastrop(Fixtures.slug("sweep"), DropMode.DOORSTEP, null,
+                CutoffPolicy.CANCEL)).id();
+        Run cancelled = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(3), 2));
+        Run completed = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(4), 2));
+        Run closed = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(5), 2));
+        for (Run r : List.of(cancelled, completed, closed)) {
+            runs.announce(r.id());
+            runs.open(r.id());
+        }
+        String c = advertorialOf("RUN", cancelled.id());
+        String d = advertorialOf("RUN", completed.id());
+        String x = advertorialOf("RUN", closed.id());
+
+        // As if the run events were never handled: the runs change in the database only.
+        jdbc.sql("update run set status = 'CANCELLED' where id = :id").param("id", cancelled.id()).update();
+        jdbc.sql("update run set status = 'COMPLETED' where id = :id").param("id", completed.id()).update();
+        assertThat(lifecycle.sweep(1000)).isGreaterThanOrEqualTo(2);
+        assertThat(statusOf(c)).isEqualTo("ENDED");
+        assertThat(endedOf(c)).isEqualTo("SOURCE_CLOSED");
+        assertThat(statusOf(d)).isEqualTo("ENDED");
+        assertThat(endedOf(d)).isEqualTo("SOURCE_CLOSED");
+        assertThat(statusOf(x)).as("an open run before its cutoff keeps its advertorial").isEqualTo("LIVE");
+        assertThat(lifecycle.sweep(1000)).isZero();
+    }
+
+    @Test
     void onlyALiveServableAdvertorialCountsAndEachVisitorCountsOncePerWindow() {
         Fixture f = fixture("Adv Gate #7", "Plainview", 2);
         String a = call(HttpMethod.GET, "/v1/advertorials?source=WINDOW&sourceId=" + f.window.id(), null, null)
@@ -485,6 +558,26 @@ class AdvertorialIT {
     private long[] results(String advertorial) {
         JsonNode r = call(HttpMethod.GET, "/v1/advertorials/" + advertorial, null, null).body().path("results");
         return new long[] {r.path("views").asLong(), r.path("clicks").asLong()};
+    }
+
+    private String advertorialOf(String source, UUID sourceId) {
+        return call(HttpMethod.GET, "/v1/advertorials?source=" + source + "&sourceId=" + sourceId, null, null).body()
+                .path("items").get(0).path("id").asString();
+    }
+
+    private String statusOf(String advertorial) {
+        return call(HttpMethod.GET, "/v1/advertorials/" + advertorial, null, null).body().path("status").asString();
+    }
+
+    private String endedOf(String advertorial) {
+        return call(HttpMethod.GET, "/v1/advertorials/" + advertorial, null, null).body().path("ended").asString();
+    }
+
+    private List<String> servedRunIds() {
+        List<String> out = new ArrayList<>();
+        call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&limit=10", null, null).body().path("items")
+                .forEach(i -> out.add(i.path("sourceId").asString()));
+        return out;
     }
 
     /** {orders, cancelledOrders} of an advertorial as staff see them. */

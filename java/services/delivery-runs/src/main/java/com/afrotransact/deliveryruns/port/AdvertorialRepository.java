@@ -33,6 +33,9 @@ public interface AdvertorialRepository {
     /** The LIVE advertorials of these windows or runs. */
     List<LocalAdvertorial> findLive(Collection<UUID> sourceIds);
 
+    /** At most {@code limit} LIVE advertorials of any window or run, oldest first (the sweeper's worklist). */
+    List<LocalAdvertorial> findLive(int limit);
+
     /** Adds to the counters of the advertorial's UTC day. */
     void count(UUID advertorialId, LocalDate day, long views, long clicks);
 

@@ -124,6 +124,12 @@ class JdbcAdvertorialRepository implements AdvertorialRepository {
     }
 
     @Override
+    public List<LocalAdvertorial> findLive(int limit) {
+        return jdbc.sql("select * from local_advertorial where status = 'LIVE' order by created_at, id limit :limit")
+                .param("limit", limit).query(this::row).list();
+    }
+
+    @Override
     public void count(UUID advertorialId, LocalDate day, long views, long clicks) {
         jdbc.sql("""
                 insert into local_advertorial_stat (advertorial_id, day, views, clicks)
