@@ -167,6 +167,10 @@ Prices and free tiers change: check the provider's pricing page.
 - **Create:** [openrouter.ai](https://openrouter.ai) → **Keys → Create Key** → `OPENROUTER_API_KEY` (`sk-or-v1-…`); add
   credit under **Credits** (some models are free).
 - **Note:** ai-gateway starts with `make up`. After adding the key, `tools/dev/local.sh restart ai-gateway` re-reads it. Without a key, AI chats answer 503. Every task defaults to the cheapest models (Gemini 2.5 Flash-Lite, then GPT-5 Nano); raise one with `AI_MODELS_<TASK>` (`INTENT`, `PLANNING`, `CHAT`, `LISTING_WRITER`, `TRANSLATION`, `TRIAGE`, `IMAGE_MODERATION`), a comma-separated list in fallback order.
+- **Privacy:** ai-gateway sends `provider: {data_collection: "deny"}` on every request and `zdr: true` in uat and prod
+  (`AI_PROVIDER_DATA_COLLECTION`, `AI_PROVIDER_ZDR`), so only providers that do not train on or retain prompts serve it. A
+  model without such an endpoint is skipped and the next one in the route is tried. Also set the account-level privacy
+  options in OpenRouter (see `docs/runbooks/production-readiness.md`, section 10) and see the ai-gateway README.
 - **Cost:** pay per token; set a credit limit on the key.
 
 ### Social sign-in (optional): identity

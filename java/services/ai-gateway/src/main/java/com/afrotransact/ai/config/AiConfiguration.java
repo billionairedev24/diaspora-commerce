@@ -98,7 +98,8 @@ class AiConfiguration {
         AiProperties.Lola lola = props.lola();
         return new AiSettings(budgets, lola.maxToolRounds(), lola.memoryTurns(), lola.searchResults(),
                 lola.maxRecipeItems(), props.maxInputChars(), lola.maxCompletionTokens(),
-                props.embeddings().dimensions());
+                props.embeddings().dimensions(), "deny".equals(props.providerPrivacy().dataCollection()),
+                props.providerPrivacy().zeroDataRetention());
     }
 
     @Bean

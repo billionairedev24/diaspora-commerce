@@ -17,9 +17,12 @@ import com.afrotransact.ai.domain.BudgetLimits;
  * @param maxInputChars      longest accepted user input
  * @param maxCompletionTokens completion limit for Lola rounds
  * @param embeddingDimensions requested embedding dimensions (0 = model default)
+ * @param denyDataCollection  send OpenRouter {@code provider.data_collection=deny} (no storing or training on prompts)
+ * @param zeroDataRetention   send OpenRouter {@code provider.zdr=true} (zero-data-retention endpoints only)
  */
 public record AiSettings(Map<AiFeature, BudgetLimits> budgets, int maxToolRounds, int memoryTurns, int searchResults,
-                         int maxRecipeItems, int maxInputChars, int maxCompletionTokens, int embeddingDimensions) {
+                         int maxRecipeItems, int maxInputChars, int maxCompletionTokens, int embeddingDimensions,
+                         boolean denyDataCollection, boolean zeroDataRetention) {
 
     public AiSettings {
         Map<AiFeature, BudgetLimits> copy = new EnumMap<>(AiFeature.class);

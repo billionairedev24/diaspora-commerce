@@ -115,6 +115,8 @@ origins, storefront origin, OIDC issuer and callback (`<PUBLIC_WEB_URL>/api/bff/
 | `NEWSLETTER_CONFIRM_URL`, `NEWSLETTER_UNSUBSCRIBE_URL` | `<PUBLIC_WEB_URL>/newsletter/{confirm,unsubscribe}` | content |
 | `BOOKINGS_MANAGE_URL_BASE` | `<PUBLIC_WEB_URL>/account/appointments/` | bookings |
 | `OPENROUTER_REFERER` | `PUBLIC_WEB_URL` | ai-gateway |
+| `AI_PROVIDER_DATA_COLLECTION` | `deny` (`deny` or `allow`; OpenRouter `provider.data_collection`) | ai-gateway |
+| `AI_PROVIDER_ZDR` | `false` locally and in dev, `true` in uat and prod (OpenRouter `provider.zdr`) | ai-gateway |
 | `MCP_ALLOWED_ORIGINS` | `PUBLIC_WEB_URL` + `https://developers.<PLATFORM_DOMAIN>` (local: + MCP inspector) | mcp-server |
 | `MCP_PUBLIC_URL` | set per environment in `values-<env>.yaml` (own host) | mcp-server |
 | `PUBLIC_BASE_URL` | `<API_BASE_URL>/notifications`, `<API_BASE_URL>/carrier-gateway` | notifications, carrier-gateway |
