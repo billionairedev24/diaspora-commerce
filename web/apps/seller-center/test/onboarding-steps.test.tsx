@@ -4,8 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { OnboardingView, OnboardingWizard } from '@/components/onboarding/OnboardingView';
-import { agreementKeys, ComplianceStep } from '@/components/onboarding/steps/ComplianceStep';
 import { Stepper } from '@/components/onboarding/Stepper';
+import { agreementKeys, ComplianceStep } from '@/components/onboarding/steps/ComplianceStep';
 import { Header } from '@/components/shell/Header';
 import { PortalShell } from '@/components/shell/PortalShell';
 

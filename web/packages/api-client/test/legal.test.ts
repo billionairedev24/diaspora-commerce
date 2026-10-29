@@ -9,8 +9,8 @@ import {
   LEGAL_DOCUMENT_KEYS,
   LEGAL_DOCUMENT_TITLES,
   LEGAL_GROUPS,
-  legalGroupTitle,
   legalDocumentKeyOf,
+  legalGroupTitle,
   legalKeys,
   type LegalPage,
   type PrivacyRequestReceipt

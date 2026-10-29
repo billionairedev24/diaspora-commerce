@@ -6,7 +6,6 @@ import { Check } from '@phosphor-icons/react/ssr';
 import { useImperativeHandle } from 'react';
 
 import { sellerApi } from '@/lib/api';
-import { useStorefrontUrl } from '@/lib/runtime-config';
 import {
   BEAUTY_CATEGORIES,
   type ComplianceValues,
@@ -21,6 +20,7 @@ import {
   toComplianceInput,
   validateCompliance
 } from '@/lib/onboarding-form';
+import { useStorefrontUrl } from '@/lib/runtime-config';
 
 import { Cell, DocumentField, FieldGrid, SectionTitle, STATE_OPTIONS, StepErrors, type StepProps, useStepForm } from '../WizardKit';
 
