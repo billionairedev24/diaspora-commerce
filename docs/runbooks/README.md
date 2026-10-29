@@ -43,3 +43,4 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 | [PostgresDown](PostgresDown.md) | page |
 | [SearchLatencyBudgetBurn](SearchLatencyBudgetBurn.md) | page / ticket |
 | [ServiceDown](ServiceDown.md) | page |
+| [TransferReversalRefused](TransferReversalRefused.md) | ticket |

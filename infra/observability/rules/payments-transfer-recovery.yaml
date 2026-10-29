@@ -1,0 +1,31 @@
+# Refunds Stripe would not take back from sellers' transfers (counter payments_transfer_reversals_refused_total{code},
+# payments_transfer_recoveries_total{outcome}, set by the payments service). Each refused reversal is money the platform
+# paid to a customer and a seller already paid out: it is recovered from the seller's next transfers or resolved by Finance.
+groups:
+  - name: afrotransact-payments-transfer-recovery
+    rules:
+      - alert: TransferReversalRefused
+        expr: |
+          sum by (env, code) (increase(payments_transfer_reversals_refused_total[1h])) > 0
+        for: 5m
+        labels:
+          severity: ticket
+          team: payments
+        annotations:
+          summary: "Stripe refused {{ $value }} transfer reversal(s) for refunds in the last hour ({{ $labels.code }})"
+          description: "A refund debited a seller whose balance had already been paid out, so Stripe would not take the transfer back. The customer was refunded; the seller owes the platform (Payouts → Refund recoveries). Finance recovers it from their next transfers, or resolves it with four eyes."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/TransferReversalRefused.md
+          dashboard: /d/at-platform-overview
+
+      - alert: TransferReversalRefusedUnexpectedly
+        expr: |
+          sum by (env) (increase(payments_transfer_reversals_refused_total{code!="balance_insufficient"}[1h])) > 0
+        for: 5m
+        labels:
+          severity: ticket
+          team: payments
+        annotations:
+          summary: "Stripe refused a transfer reversal for a reason other than an empty balance"
+          description: "Not the usual case of a seller who was already paid out: check the code on the Refund recoveries table (an already-reversed or missing transfer points at our own data)."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/TransferReversalRefused.md
+          dashboard: /d/at-platform-overview
