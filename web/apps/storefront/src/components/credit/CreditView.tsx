@@ -136,7 +136,7 @@ export function CreditView() {
           help={t('credit.redeem.hint')}
           message={message}
           button={
-            <Button type="submit" loading={redeem.isPending} disabled={!complete} data-testid="credit-redeem-button">
+            <Button type="submit" variant={complete ? 'primary' : 'neutral'} loading={redeem.isPending} disabled={!complete} data-testid="credit-redeem-button">
               {t('credit.redeem.button')}
             </Button>
           }

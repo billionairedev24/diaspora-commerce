@@ -359,7 +359,7 @@ export function LinkGroup({ title, children }: { title: ReactNode; children: Rea
 }
 
 /** Class for the link inside a LinkEntry. */
-export const linkEntryClassName = cx(styles.rowLink, styles.linkItemName);
+export const linkEntryClassName = styles.linkItemLink ?? '';
 
 export interface LinkEntryProps {
   /** The link itself (a Next <Link> or <a>) with className={linkEntryClassName}; its text is the name. */

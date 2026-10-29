@@ -115,7 +115,7 @@
 .flat .page, .flat .section { max-width: none; }
 .flat .card { border: 0; border-radius: 0; background: transparent; overflow: visible; }
 .flat .cardHead { padding: 0 0 var(--at-space-2); border-bottom: 1px solid var(--at-color-border); }
-.flat .h2 { font-family: var(--at-font-heading); font-size: var(--at-text-xl); }
+.flat .h2 { font-family: var(--at-font-display); font-size: var(--at-text-xl); }
 .flat .cardBody { padding: var(--at-space-3) 0 0; }
 .flat .row { padding-inline: 0; }
 .flat .form { padding-inline: 0; max-width: 40rem; }
