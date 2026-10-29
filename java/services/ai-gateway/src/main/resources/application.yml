@@ -121,6 +121,12 @@ at:
     embeddings:
       # Must match the dense_vector dims of the search index.
       dimensions: ${EMBEDDING_DIMENSIONS:1536}
+    # Sent to OpenRouter as provider preferences on every chat, stream and embeddings request (privacy notice, "AI features").
+    provider-privacy:
+      # deny = only providers that do not store prompts or train on them; allow = OpenRouter default.
+      data-collection: ${AI_PROVIDER_DATA_COLLECTION:deny}
+      # true = only zero-data-retention endpoints; a model without one fails and the router tries the next candidate.
+      zero-data-retention: ${AI_PROVIDER_ZDR:false}
     # Task → OpenRouter models in fallback order. DEFAULT: the cheapest capable models for every text task, so a fresh
     # install never spends on premium models by accident (Gemini 2.5 Flash-Lite $0.10 / $0.40, then GPT-5 Nano $0.05 / $0.40
     # per million tokens in / out). Each task can be raised with one variable, comma-separated in fallback order, e.g.

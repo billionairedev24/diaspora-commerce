@@ -1,5 +1,8 @@
 # Production: reference pages off (published on developers.afrotransact.com), sampled traces.
 at:
+  ai:
+    provider-privacy:
+      zero-data-retention: ${AI_PROVIDER_ZDR:true}
   api-docs:
     enabled: false
 springdoc:
