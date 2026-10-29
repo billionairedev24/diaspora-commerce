@@ -60,7 +60,7 @@ Marketing messages are sent only between 9 am and 8 pm in your local time. Deliv
 
 ## Who sends and who sees
 
-Our messaging providers, such as Twilio (and Amazon Web Services as a backup route), carry the messages. They may see the message content and your number so that they can deliver, and they may not use them for their own marketing. WhatsApp messages are carried by WhatsApp (Meta), which has its own terms and privacy policy. WhatsApp messages from businesses are sent only from message templates approved by WhatsApp, and WhatsApp may process the content under its own policies.
+Our messaging providers, such as Twilio (and Amazon Web Services as a backup route), carry the messages. They may see the message content and your number so that they can deliver, and they may not use them for their own marketing. WhatsApp messages are carried by WhatsApp (Meta), which has its own terms and privacy policy. WhatsApp messages from businesses are sent only from message templates approved by WhatsApp, and WhatsApp may process the content under its own policies. [[LEGAL: Q15 WhatsApp Business account name, the number we message from, whether WhatsApp is switched on at launch (it is off by default), and the exact WhatsApp opt-in wording]]
 
 ## Consent records
 
