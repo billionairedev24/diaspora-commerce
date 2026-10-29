@@ -107,7 +107,7 @@ func categoryRequestsResource() *staffResource {
 			{key: "reject", label: "Reject", tone: "danger", permission: permTaxonomy, level: domain.LevelApprove, when: inState("PENDING_REVIEW"),
 				form: func(context.Context, staffCtx, jobj) *domain.Form {
 					return &domain.Form{Title: "Reject the category request", SubmitLabel: "Reject",
-						Intro: "The seller sees your reason. Products they built against this request are rejected with it.",
+						Intro:  "The seller sees your reason. Products they built against this request are rejected with it.",
 						Fields: []domain.FormField{withMax(withHelp(ff("note", "Reason", "textarea", true), "At least 3 characters"), 1000)}}
 				},
 				run: func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {

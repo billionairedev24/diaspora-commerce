@@ -386,6 +386,21 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(p, "/v1/shipments/"):
 		writeJ(w, 200, map[string]any{"outcome": "OK"})
 	// catalog
+	case p == "/v1/category-requests":
+		// The review queue: one pending request per status filter the table asks for.
+		req := map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000e1", "reference": "REQ-000001", "orgId": "org-1", "path": "Fashion › Women › Bridal sets",
+			"parentPath": "Fashion › Women", "name": "Bridal sets", "exampleProduct": "Aso-ebi set", "detailsNeeded": "Pieces", "status": "PENDING_REVIEW",
+			"createdAt": now, "productsWaiting": 1}
+		if r.URL.Query().Get("status") == "PENDING_REVIEW" {
+			writeJ(w, 200, []any{req})
+		} else {
+			writeJ(w, 200, []any{})
+		}
+	case strings.HasPrefix(p, "/v1/category-requests/"):
+		writeJ(w, 200, map[string]any{"request": map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000e1", "reference": "REQ-000001", "orgId": "org-1",
+			"path": "Fashion › Women › Bridal sets", "parentPath": "Fashion › Women", "name": "Bridal sets", "exampleProduct": "Aso-ebi set", "detailsNeeded": "Pieces",
+			"status": "PENDING_REVIEW", "createdAt": now, "productsWaiting": 1}, "products": []any{map[string]any{"id": "prd-1", "atin": "AT0001", "title": "Aso-ebi set"}},
+			"suggestedParent": nil})
 	case p == "/v1/products":
 		writeJ(w, 200, page(map[string]any{"id": "prd-1", "atin": "AT0001", "title": "Shea butter", "status": "IN_REVIEW", "ownerOrgId": "org-1",
 			"variants": []any{map[string]any{"atin": "AT0001-1", "sku": "SHEA", "status": "IN_REVIEW"}}}))

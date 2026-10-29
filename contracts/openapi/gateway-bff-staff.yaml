@@ -135,6 +135,13 @@ tags:
       charges, milestones, landed cost), goods receipts (counts, over-receipt approval, validation, completion,
       claims), supplier invoices (three-way match) and the GL. Module `retail`: VIEW to read, EDIT to change, APPROVE
       for PO approval, over-receipts and invoice exceptions.
+  - name: Taxonomy
+    description: |
+      Catalog → Categories: the department › category › product type tree with product counts, the details (attributes)
+      each product type asks sellers for, retire and restore, reordering and the audit trail, over catalog's
+      `/v1/taxonomy/*` with the staff member's token. Module `catalog` (VIEW to read, EDIT to change) and permission
+      `catalog:taxonomy`. Every change carries a reason; edits send the version they loaded as `If-Match`. The seller
+      category-request queue is the `category-requests` table of Resources (approve creates the category and its product type).
 security:
   - sessionCookie: []
 paths:
@@ -254,7 +261,7 @@ paths:
       description: |
         Upstreams per resource — users: identity `GET /v1/admin/users`; roles: identity `GET /v1/admin/roles`;
         applications: seller `GET /v1/applications`; orders: orders `GET /v1/admin/orders`; products: catalog
-        `GET /v1/products`; moderation: trust-ops `GET /v1/moderation/items`; claims: trust-ops `GET /v1/claims`;
+        `GET /v1/products`; category-requests: catalog `GET /v1/category-requests` (actions approve, reject); moderation: trust-ops `GET /v1/moderation/items`; claims: trust-ops `GET /v1/claims`;
         returns: tax-returns `GET /v1/returns`; payouts: payments `GET /v1/payouts/requests`; inventory: inventory
         `GET /v1/lots`; purchase-orders: retail `GET /v1/purchase-orders`; routes: fulfilment `GET /v1/dispatch/routes` (create = the route builder
         `POST /v1/dispatch/routes/build`); dispatch-shipments: fulfilment `GET /v1/dispatch/shipments`; sos-alerts: fulfilment
@@ -5387,6 +5394,298 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/tree:
+    get:
+      tags: [Taxonomy]
+      operationId: getStaffTaxonomyTree
+      security: [{sessionCookie: []}]
+      summary: The whole category tree with retired nodes, product counts and the pending-request count
+      description: catalog `GET /v1/taxonomy/tree` (module `catalog` VIEW and permission `catalog:taxonomy`).
+      responses:
+        '200': {description: Tree, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxonomyTree'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/nodes:
+    post:
+      tags: [Taxonomy]
+      operationId: createStaffTaxonomyNode
+      security: [{sessionCookie: []}]
+      summary: Create a department, a category or a product type
+      description: |
+        catalog `POST /v1/taxonomy/nodes` (EDIT). A product type uses an existing schema (`productType`) or defines a new
+        one (`newProductType`). Every change carries a reason. 422 for duplicate names or codes, a wrong parent level or a
+        retired parent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffTaxonomyCreateNode'}
+      responses:
+        '201': {description: Created node, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxonomyNode'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/nodes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/TaxonomyNodeId'
+    patch:
+      tags: [Taxonomy]
+      operationId: renameStaffTaxonomyNode
+      security: [{sessionCookie: []}]
+      summary: Rename a node; the paths below it follow (If-Match = the node's version)
+      description: catalog `PATCH /v1/taxonomy/nodes/{id}`. A save in which the name did not change is a 422.
+      parameters:
+        - $ref: '#/components/parameters/TaxonomyIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, reason]
+              properties:
+                name: {type: string, minLength: 2, maxLength: 80}
+                reason: {$ref: '#/components/schemas/StaffTaxonomyReason'}
+      responses:
+        '200': {description: Node, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxonomyNode'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/nodes/{id}/move:
+    parameters:
+      - $ref: '#/components/parameters/TaxonomyNodeId'
+    post:
+      tags: [Taxonomy]
+      operationId: moveStaffTaxonomyNode
+      security: [{sessionCookie: []}]
+      summary: Move a category to another department or a product type to another category (If-Match = the node's version)
+      description: catalog `POST /v1/taxonomy/nodes/{id}/move`. Products follow the node; departments cannot move.
+      parameters:
+        - $ref: '#/components/parameters/TaxonomyIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [parentId, reason]
+              properties:
+                parentId: {type: string, format: uuid}
+                reason: {$ref: '#/components/schemas/StaffTaxonomyReason'}
+      responses:
+        '200': {description: Node, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxonomyNode'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/nodes/{id}/retire:
+    parameters:
+      - $ref: '#/components/parameters/TaxonomyNodeId'
+    post:
+      tags: [Taxonomy]
+      operationId: retireStaffTaxonomyNode
+      security: [{sessionCookie: []}]
+      summary: Retire a node and what is under it (soft; If-Match = the node's version)
+      description: |
+        catalog `POST /v1/taxonomy/nodes/{id}/retire`. A retired node stays on the products that already use it but cannot
+        be chosen for new ones. 409 while the node or anything under it has products: move its product types elsewhere first.
+      parameters:
+        - $ref: '#/components/parameters/TaxonomyIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffTaxonomyReasonBody'}
+      responses:
+        '200': {description: Node, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxonomyNode'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/nodes/{id}/restore:
+    parameters:
+      - $ref: '#/components/parameters/TaxonomyNodeId'
+    post:
+      tags: [Taxonomy]
+      operationId: restoreStaffTaxonomyNode
+      security: [{sessionCookie: []}]
+      summary: Bring a retired node back, with what was retired with it (If-Match = the node's version)
+      description: catalog `POST /v1/taxonomy/nodes/{id}/restore`. 422 while its parent is still retired.
+      parameters:
+        - $ref: '#/components/parameters/TaxonomyIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffTaxonomyReasonBody'}
+      responses:
+        '200': {description: Node, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxonomyNode'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/reorder:
+    post:
+      tags: [Taxonomy]
+      operationId: reorderStaffTaxonomy
+      security: [{sessionCookie: []}]
+      summary: Set the display order of the children of a node (or of the departments)
+      description: |
+        catalog `POST /v1/taxonomy/reorder`. `ids` is every child of the parent, retired ones included; 412 when the list
+        changed since it was loaded, 422 when the order did not change.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids, reason]
+              properties:
+                parentId: {type: [string, 'null'], format: uuid, description: The category or department whose children are ordered; null orders the departments}
+                ids: {type: array, minItems: 2, maxItems: 500, items: {type: string, format: uuid}}
+                reason: {$ref: '#/components/schemas/StaffTaxonomyReason'}
+      responses:
+        '200': {description: The children in their new order, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxonomyNodes'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/product-types:
+    get:
+      tags: [Taxonomy]
+      operationId: listStaffTaxonomyProductTypes
+      security: [{sessionCookie: []}]
+      summary: Product-type schemas with where they are used
+      description: catalog `GET /v1/taxonomy/product-types`.
+      responses:
+        '200': {description: Product types, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxonomyProductTypes'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Taxonomy]
+      operationId: createStaffTaxonomyProductType
+      security: [{sessionCookie: []}]
+      summary: Create a product-type schema
+      description: catalog `POST /v1/taxonomy/product-types`. Variation options are copied from `basedOn` (default the placeholder type).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/StaffTaxonomyNewProductType'
+                - type: object
+                  required: [label, reason]
+                  properties:
+                    reason: {$ref: '#/components/schemas/StaffTaxonomyReason'}
+      responses:
+        '201': {description: Created product type, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxonomyProductType'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/product-types/{code}:
+    parameters:
+      - $ref: '#/components/parameters/TaxonomyTypeCode'
+    get:
+      tags: [Taxonomy]
+      operationId: getStaffTaxonomyProductType
+      security: [{sessionCookie: []}]
+      summary: One product type with every attribute, including those that do not apply
+      description: catalog `GET /v1/taxonomy/product-types/{code}`.
+      responses:
+        '200': {description: Product type, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxonomyProductType'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    patch:
+      tags: [Taxonomy]
+      operationId: updateStaffTaxonomyProductType
+      security: [{sessionCookie: []}]
+      summary: Edit a product type's label, identifier rule, traits or attributes (If-Match = the schema's version)
+      description: |
+        catalog `PATCH /v1/taxonomy/product-types/{code}`. Only the fields sent change; `attributes`, when sent, is the whole
+        new list (order matters: it is the order of the seller's form). The sales-tax question (`tax_class`) is owned by
+        tax-returns: its wording and choices cannot be edited. A save in which nothing changed is a 422.
+      parameters:
+        - $ref: '#/components/parameters/TaxonomyIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                label: {type: string, minLength: 2, maxLength: 80}
+                identifierRule: {$ref: '#/components/schemas/StaffTaxonomyIdentifierRule'}
+                traits: {$ref: '#/components/schemas/StaffTaxonomyTraits'}
+                attributes: {type: array, maxItems: 40, items: {$ref: '#/components/schemas/StaffTaxonomyAttribute'}}
+                reason: {$ref: '#/components/schemas/StaffTaxonomyReason'}
+      responses:
+        '200': {description: Product type, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxonomyProductType'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/audit:
+    get:
+      tags: [Taxonomy]
+      operationId: listStaffTaxonomyAudit
+      security: [{sessionCookie: []}]
+      summary: Who changed the taxonomy, what and why, newest first (people by name)
+      description: catalog `GET /v1/taxonomy/audit`. `subject` narrows it to one node, product type or category request.
+      parameters:
+        - {name: subject, in: query, required: false, schema: {type: string, maxLength: 80}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200': {description: Changes, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxonomyAudit'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/requests/{id}/approval-preview:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Taxonomy]
+      operationId: previewStaffCategoryRequestApproval
+      security: [{sessionCookie: []}]
+      summary: What approving a category request with these choices would create (creates nothing)
+      description: |
+        catalog `POST /v1/category-requests/{id}/approval-preview`. Takes the values of the `approve` action's form
+        (`parentCategoryId`, `categoryName`, `productType` or `__new__` with `basedOn`). The approval itself is the
+        `approve` action of the `category-requests` table.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffCategoryApprovalChoice'}
+      responses:
+        '200': {description: Plan, content: {application/json: {schema: {$ref: '#/components/schemas/StaffCategoryApprovalPlan'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     sessionCookie:
@@ -5395,6 +5694,9 @@ components:
       name: at_session
       description: Opaque BFF session id (HttpOnly, Secure, SameSite=Lax). Tokens stay server-side.
   parameters:
+    TaxonomyNodeId: {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    TaxonomyTypeCode: {name: code, in: path, required: true, schema: {type: string, pattern: '^[a-z][a-z0-9_]{1,39}$'}}
+    TaxonomyIfMatch: {name: If-Match, in: header, required: true, schema: {type: string, maxLength: 40}, description: The version of the node or schema as loaded (optimistic locking); 412 VERSION_CONFLICT when someone changed it since.}
     Sort:
       name: sort
       in: query
@@ -5445,6 +5747,170 @@ components:
         application/problem+json:
           schema: {$ref: '#/components/schemas/Problem'}
   schemas:
+    # ── taxonomy (Catalog → Categories)
+    StaffTaxonomyReason: {type: string, minLength: 3, maxLength: 1000, description: Why the change is made; recorded in the audit trail with the person's name}
+    StaffTaxonomyReasonBody:
+      type: object
+      required: [reason]
+      properties:
+        reason: {$ref: '#/components/schemas/StaffTaxonomyReason'}
+    StaffTaxonomyIdentifierRule: {type: string, enum: [GTIN, ISBN]}
+    StaffTaxonomyLevel: {type: string, enum: [DEPARTMENT, CATEGORY, PRODUCT_TYPE]}
+    StaffTaxonomyNode:
+      type: object
+      required: [id, parentId, code, name, level, productType, productTypeLabel, path, position, active, retiredAt, retiredReason, version, productCount, subtreeProductCount, childCount]
+      properties:
+        id: {type: string, format: uuid}
+        parentId: {type: [string, 'null'], format: uuid}
+        code: {type: string, description: Stable machine code, example: fashion-women-dresses}
+        name: {type: string}
+        level: {$ref: '#/components/schemas/StaffTaxonomyLevel'}
+        productType: {type: [string, 'null'], description: The product-type schema a product-type node uses}
+        productTypeLabel: {type: [string, 'null']}
+        path: {type: string, example: Fashion › Women › Dresses}
+        position: {type: integer}
+        active: {type: boolean, description: False once retired}
+        retiredAt: {type: [string, 'null'], format: date-time}
+        retiredReason: {type: [string, 'null']}
+        version: {type: integer, format: int64, description: Send as If-Match when changing the node}
+        productCount: {type: integer, format: int64, description: Products directly on the node}
+        subtreeProductCount: {type: integer, format: int64, description: Products on the node and everything under it}
+        childCount: {type: integer}
+    StaffTaxonomyNodes:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffTaxonomyNode'}}
+    StaffTaxonomyTree:
+      type: object
+      required: [nodes, pendingRequests, canEdit, canDecide]
+      properties:
+        nodes: {type: array, items: {$ref: '#/components/schemas/StaffTaxonomyNode'}}
+        pendingRequests: {type: integer, format: int64}
+        canEdit: {type: boolean, description: The caller may change the tree (module catalog EDIT)}
+        canDecide: {type: boolean, description: The caller may approve and reject category requests (module catalog APPROVE)}
+    StaffTaxonomyTraits:
+      type: object
+      description: What a product type implies for the seller's form and upload template
+      properties:
+        food: {type: boolean}
+        perishable: {type: boolean, description: Only food can be perishable}
+        regulated: {type: boolean}
+        preorder: {type: boolean}
+    StaffTaxonomyAttribute:
+      type: object
+      description: One detail a product type asks sellers for. `applies` false keeps the definition but stops asking (brand is just an attribute; a Books type has none).
+      required: [key, label, kind]
+      properties:
+        key: {type: string, pattern: '^[a-z][a-z0-9_]{1,39}$'}
+        label: {type: string, minLength: 1, maxLength: 120}
+        kind: {type: string, enum: [TEXT, MULTILINE, ENUM, NUMBER]}
+        options: {type: array, maxItems: 60, items: {type: string, maxLength: 80}, description: 'The allowed values of a choice (ENUM); empty for other kinds'}
+        units: {type: array, maxItems: 8, items: {type: string, maxLength: 20}, description: 'The units of a NUMBER; the first is the default'}
+        required: {type: boolean}
+        section: {type: string, enum: [DETAILS, FOOD, REGULATED], description: Where the seller's form shows it; FOOD needs the food trait and REGULATED the regulated trait}
+        help: {type: [string, 'null'], maxLength: 200}
+        applies: {type: boolean, default: true}
+        multiline: {type: boolean, description: Read-only echo of kind MULTILINE}
+    StaffTaxonomyTypeUse:
+      type: object
+      required: [nodeId, path, active]
+      properties:
+        nodeId: {type: string, format: uuid}
+        path: {type: string}
+        active: {type: boolean}
+    StaffTaxonomyProductType:
+      type: object
+      required: [code, label, identifierRule, traits, attributes, themes, version, productCount, usedBy]
+      properties:
+        code: {type: string}
+        label: {type: string}
+        identifierRule: {$ref: '#/components/schemas/StaffTaxonomyIdentifierRule'}
+        traits: {$ref: '#/components/schemas/StaffTaxonomyTraits'}
+        attributes: {type: array, items: {$ref: '#/components/schemas/StaffTaxonomyAttribute'}}
+        themes: {type: array, items: {type: object, additionalProperties: true}, description: Variation options (Size × Color…); copied when a type is created}
+        version: {type: integer, format: int64, description: Send as If-Match when editing the schema}
+        updatedAt: {type: [string, 'null'], format: date-time}
+        productCount: {type: integer, format: int64}
+        usedBy: {type: array, items: {$ref: '#/components/schemas/StaffTaxonomyTypeUse'}}
+        canEdit: {type: boolean}
+    StaffTaxonomyProductTypes:
+      type: object
+      required: [items, canEdit]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffTaxonomyProductType'}}
+        canEdit: {type: boolean}
+    StaffTaxonomyNewProductType:
+      type: object
+      required: [identifierRule]
+      properties:
+        code: {type: string, pattern: '^[a-z][a-z0-9_]{1,39}$', description: Derived from the label when blank}
+        label: {type: string, minLength: 2, maxLength: 80}
+        identifierRule: {$ref: '#/components/schemas/StaffTaxonomyIdentifierRule'}
+        traits: {$ref: '#/components/schemas/StaffTaxonomyTraits'}
+        attributes: {type: array, maxItems: 40, items: {$ref: '#/components/schemas/StaffTaxonomyAttribute'}}
+        basedOn: {type: string, description: The product type whose variation options are copied; default the placeholder type}
+    StaffTaxonomyCreateNode:
+      type: object
+      required: [level, name, reason]
+      properties:
+        level: {$ref: '#/components/schemas/StaffTaxonomyLevel'}
+        parentId: {type: string, format: uuid, description: Required for categories (a department) and product types (a category)}
+        name: {type: string, minLength: 2, maxLength: 80}
+        code: {type: string, maxLength: 120, description: Derived from the path when blank}
+        productType: {type: string, description: The existing schema of a product-type node (or newProductType)}
+        newProductType: {$ref: '#/components/schemas/StaffTaxonomyNewProductType'}
+        reason: {$ref: '#/components/schemas/StaffTaxonomyReason'}
+    StaffTaxonomyAuditItem:
+      type: object
+      required: [id, at, actorName, action, actionLabel, subjectKind, subjectLabel, reason, summary]
+      properties:
+        id: {type: string, format: uuid}
+        at: {type: string, format: date-time}
+        actorName: {type: string, description: 'Who made the change, by name'}
+        action: {type: string, example: NODE_RENAMED}
+        actionLabel: {type: string, example: Renamed}
+        subjectKind: {type: string, enum: [NODE, PRODUCT_TYPE, REQUEST]}
+        subjectLabel: {type: string, description: 'The path, product-type label or request as it read at the time'}
+        reason: {type: string}
+        summary: {type: string, description: 'What changed, in a line'}
+    StaffTaxonomyAudit:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffTaxonomyAuditItem'}}
+    StaffCategoryApprovalChoice:
+      type: object
+      required: [parentCategoryId, productType]
+      properties:
+        parentCategoryId: {type: string, format: uuid, description: A department (a category is created for it) or a category}
+        categoryName: {type: string, minLength: 2, maxLength: 80, description: The category created under a department; defaults to the requested name}
+        productType: {type: string, description: 'An existing product type, or `__new__` to create one'}
+        basedOn: {type: string, description: 'With `__new__`, the product type whose details, identifier rule and traits it starts from'}
+        note: {type: string, maxLength: 1000}
+    StaffCategoryApprovalPlan:
+      type: object
+      required: [nodes, productType, productsMoving]
+      properties:
+        nodes:
+          type: array
+          items:
+            type: object
+            required: [level, name, path, created]
+            properties:
+              level: {$ref: '#/components/schemas/StaffTaxonomyLevel'}
+              name: {type: string}
+              path: {type: string}
+              created: {type: boolean, description: False when the category already exists and is reused}
+        productType:
+          type: object
+          required: [code, label, created, attributeCount]
+          properties:
+            code: {type: string}
+            label: {type: string}
+            created: {type: boolean}
+            attributeCount: {type: integer}
+        productsMoving: {type: integer, format: int64, description: Products waiting on the request that move into listing review}
     RunDispatchList:
       type: object
       required: [items, canManage]
@@ -6430,7 +6896,7 @@ components:
     # ── resources
     ResourceKey:
       type: string
-      enum: [users, roles, applications, organisations, connect-accounts, orders, products, moderation, product-reviews, claims, returns, payouts, inventory, purchase-orders,
+      enum: [users, roles, applications, organisations, connect-accounts, orders, products, category-requests, moderation, product-reviews, claims, returns, payouts, inventory, purchase-orders,
         routes, support-cases, audit, markets, site-settings, legal-documents, help-articles, privacy-requests, announcements,
         placements, identity-providers, fee-schedules, tax-rates, tax-codes, tax-rules, tax-review, dispatch-shipments, sos-alerts, vehicle-defects,
         driver-events, pickup-locations, coupons, reconciliation, reconciliation-runs, ledger-adjustments, credit-adjustments, gift-cards, credit-liabilities, money-settings, membership-tiers, memberships, membership-settings, membership-report, referrals, referral-settings, stripe-lookup, payment-settings, tax-settings, maintenance, tax-filings, tax-nexus,

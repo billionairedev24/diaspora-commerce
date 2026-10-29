@@ -56,7 +56,7 @@ const (
 )
 
 var (
-	taxonomyIDRe          = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	taxonomyIDRe    = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 	productTypeRe   = regexp.MustCompile(`^[a-z][a-z0-9_]{1,39}$`)
 	taxonomyLevels  = []string{"DEPARTMENT", "CATEGORY", "PRODUCT_TYPE"}
 	identifierRules = []string{"GTIN", "ISBN"}
@@ -715,4 +715,3 @@ func planLines(plan jobj) []domain.DetailField {
 	}
 	return out
 }
-
