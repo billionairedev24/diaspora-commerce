@@ -16,7 +16,7 @@ export function LolaLauncher() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-pill border-0 bg-primary px-4 py-3 text-sm font-bold text-on-primary shadow-lg hover:bg-primary-hover"
+        className="fixed right-4 bottom-[calc(1rem+var(--at-bottom-bar-h,0px))] z-40 inline-flex items-center gap-2 rounded-pill border-0 bg-primary px-4 py-3 text-sm font-bold text-on-primary shadow-lg hover:bg-primary-hover"
         aria-haspopup="dialog"
       >
         <Sparkle size={18} weight="fill" aria-hidden /> {t('sc.lola.launch')}

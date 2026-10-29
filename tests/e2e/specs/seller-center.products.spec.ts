@@ -4,7 +4,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 import { SELLER_ORG, setActiveOrg } from '../support/seller';
 
-/* Seller Center products (S307, S308) against the mock BFF: adding a product on the one-step form (one column of sections, the
+/* Seller Center products (S307, S308) against the mock BFF: adding a product on the one-step form (wide cards of sections, a section navigator, the
    searchable category and brand comboboxes, type-driven food fields, image upload with alt text, readiness panel, S309), and a bulk upload whose file has errors, is fixed and
    imported. The mock is process-wide state, so each journey uses its own SKUs. */
 
@@ -45,7 +45,7 @@ test.describe('seller center · products', () => {
     const panel = page.getByRole('complementary', { name: 'Listing readiness' });
     await expect(panel.getByTestId('readiness')).toContainText('things missing');
 
-    // One column of sections; the category is a searchable combobox over the full path, chosen from the keyboard.
+    // Wide cards of sections; the category is a searchable combobox over the full path, chosen from the keyboard.
     await expect(page.getByRole('form', { name: 'Product' }).getByRole('heading', { level: 2 })).toHaveText(['Basics', 'Photos']);
     const category = page.getByRole('combobox', { name: 'Category' });
     await category.fill('pantry spices');
@@ -81,11 +81,33 @@ test.describe('seller center · products', () => {
     await page.getByLabel('Handling time (business days)').selectOption('3');
 
     await expect(panel.getByTestId('readiness')).toHaveText('Ready to publish');
-    await expect(panel).toContainText('Draft saved');
-    await panel.getByTestId('pf-primary').click();
+    await expect(page.getByTestId('save-state')).toContainText('Draft saved');
+    // The toast lasts a few seconds and the listings page compiles on first visit in dev: start watching before the click.
+    const toast = expect(page.getByText('Submitted for review')).toBeVisible();
+    await page.getByTestId('pf-primary').click();
+    await toast;
     await expect(page).toHaveURL(/\/listings$/);
-    await expect(page.getByText('Submitted for review')).toBeVisible();
     await expect(page.getByRole('table', { name: 'Listings' })).toContainText('Yaji Suya Spice, Hand-Ground, 4 oz');
+  });
+
+  test('a book gets book fields and no Brand, and the quality panel jumps to a missing field', async ({ page }) => {
+    await page.goto('/listings/new');
+    const category = page.getByRole('combobox', { name: 'Category' });
+    await category.fill('cookbooks');
+    await page.getByRole('option', { name: /African & Caribbean cooking/ }).click();
+    await expect(page.getByLabel('Author', { exact: true })).toBeVisible();
+    const form = page.getByRole('form', { name: 'Product' });
+    for (const label of ['Publisher', 'Language', 'Pages', 'ISBN-13']) await expect(form.getByLabel(label, { exact: true })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: /Brand/ })).toHaveCount(0);
+    await expect(page.getByText('Brand', { exact: false })).toHaveCount(0);
+
+    // The navigator lists the sections with what is left in each; the panel jumps to a missing field and focuses it.
+    const nav = page.getByRole('navigation', { name: 'Sections' });
+    await expect(nav.getByRole('link', { name: /Details/ })).toContainText('4 to do');
+    const panel = page.getByRole('complementary', { name: 'Listing readiness' });
+    await panel.getByTestId('missing-list').getByRole('link', { name: /Publisher/ }).click();
+    await expect(page.getByLabel('Publisher', { exact: true })).toBeFocused();
+    await expect(page.getByTestId('listing-preview')).toBeVisible();
   });
 
   test('bulk upload with errors, fix, import', async ({ page }) => {

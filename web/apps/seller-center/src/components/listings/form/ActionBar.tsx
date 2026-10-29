@@ -2,7 +2,7 @@
 
 import { Button, cx } from '@afrotransact/ui';
 import { CaretUp, CheckCircle, WarningCircle } from '@phosphor-icons/react/ssr';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 import { useT } from '@/i18n/t';
 
@@ -32,10 +32,26 @@ interface Props {
 export function ActionBar({ problems, tips, percent, preview, saveState, primaryLabel, onPrimary, primaryDisabled, onSaveDraft, saveDraftDisabled, busy, savingDraft, onGo }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  /** The "Ask Lola" button is fixed in the same corner: publish this bar's height so it sits above the bar and never covers Submit. */
+  const bar = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = bar.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty('--at-bottom-bar-h', `${el.offsetHeight}px`);
+    publish();
+    if (typeof ResizeObserver === 'undefined') return () => root.style.removeProperty('--at-bottom-bar-h');
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty('--at-bottom-bar-h');
+    };
+  }, []);
   const ready = problems.length === 0;
   const heading = ready ? t('sc.pf.ready.ready') : t('sc.pf.ready.missing', { count: problems.length });
   return (
-    <div role="region" aria-label={t('sc.pf.bar.label')}
+    <div ref={bar} role="region" aria-label={t('sc.pf.bar.label')}
       className="sticky bottom-0 z-30 -mx-4 border-t border-border bg-surface px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] shadow-lg sm:-mx-8 sm:px-8">
       {open ? (
         <div id="pf-quality-sheet" className="mb-2 flex max-h-[55vh] flex-col gap-3 overflow-y-auto xl:hidden">
