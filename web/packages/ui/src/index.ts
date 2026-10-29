@@ -40,6 +40,43 @@ export { Menu, MenuGroup, MenuItem, type MenuItemProps, type MenuProps, MenuSepa
 export { type TabItem, Tabs, type TabsProps } from './overlay/Tabs';
 export { type ToastAction, type ToastMessage, ToastProvider, useToast } from './overlay/Toast';
 export { QR_QUIET_ZONE, QrCodeImage, type QrCodeImageProps, type QrMatrix, qrMatrix, qrPath } from './security/QrCodeImage';
+export {
+  BigFigure,
+  type BreadcrumbItem,
+  type DataColumn,
+  DataTable,
+  type DataTableProps,
+  type DefinitionItem,
+  DefinitionList,
+  EmptyState,
+  type EmptyStateProps,
+  fieldWidth,
+  FlatPage,
+  type FlatPageProps,
+  FormActions,
+  FormFields,
+  InlineFormRow,
+  type InlineFormRowProps,
+  LinkEntry,
+  linkEntryClassName,
+  type LinkEntryProps,
+  LinkGrid,
+  LinkGroup,
+  Message,
+  PageHeader,
+  type PageHeaderProps,
+  Pager,
+  Row,
+  RowList,
+  type RowProps,
+  Section,
+  type SectionProps,
+  StatusText,
+  type StatusTone,
+  textLinkClassName,
+  TextLinkButton,
+  type TextLinkButtonProps
+} from './flat/FlatPage';
 export { BackofficeFrame, type BackofficeFrameProps } from './shell/BackofficeFrame';
 export { createNavGuard, destinationKey, LOADING_STALE_MS, NAV_LOOP_LIMIT, NAV_LOOP_WINDOW_MS, type NavGuard, type NavGuardOptions, type NavLoop, useNavLoop } from './shell/nav-guard';
 export { UserMenu, type UserMenuLink, type UserMenuProps } from './shell/UserMenu';
