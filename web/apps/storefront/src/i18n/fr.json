@@ -1700,5 +1700,6 @@
   "acct.fact.address": "Par défaut : {line}",
   "acct.fact.noAddress": "Aucune adresse enregistrée",
   "acct.fact.card": "Par défaut : {card}",
-  "acct.fact.noCard": "Aucun moyen de paiement enregistré"
+  "acct.fact.noCard": "Aucun moyen de paiement enregistré",
+  "footer.giftCards": "Cartes cadeaux et crédit"
 }

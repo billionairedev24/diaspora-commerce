@@ -1700,5 +1700,6 @@
   "acct.fact.address": "Predeterminada: {line}",
   "acct.fact.noAddress": "Aún no hay direcciones guardadas",
   "acct.fact.card": "Predeterminada: {card}",
-  "acct.fact.noCard": "Aún no hay métodos de pago guardados"
+  "acct.fact.noCard": "Aún no hay métodos de pago guardados",
+  "footer.giftCards": "Tarjetas de regalo y crédito"
 }

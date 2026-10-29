@@ -37,6 +37,7 @@ describe('avatar menu variants', () => {
       'Get help with an order',
       'Addresses2',
       'Payment methods3',
+      'Gift cards & credit',
       'Login & security',
       'Ask Lola',
       'Sell on AfroTransact',

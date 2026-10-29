@@ -1700,5 +1700,6 @@
   "acct.fact.address": "Àkọ́kọ́: {line}",
   "acct.fact.noAddress": "Kò sí àdírẹ́sì tí a fi pamọ́ síbẹ̀",
   "acct.fact.card": "Àkọ́kọ́: {card}",
-  "acct.fact.noCard": "Kò sí ọ̀nà ìsanwó tí a fi pamọ́ síbẹ̀"
+  "acct.fact.noCard": "Kò sí ọ̀nà ìsanwó tí a fi pamọ́ síbẹ̀",
+  "footer.giftCards": "Káàdì ẹ̀bùn àti owó ìdókòwò"
 }

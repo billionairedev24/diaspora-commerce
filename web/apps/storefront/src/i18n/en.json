@@ -1693,5 +1693,6 @@
   "acct.fact.address": "Default: {line}",
   "acct.fact.noAddress": "No address saved yet",
   "acct.fact.card": "Default: {card}",
-  "acct.fact.noCard": "No payment method saved yet"
+  "acct.fact.noCard": "No payment method saved yet",
+  "footer.giftCards": "Gift cards & credit"
 }

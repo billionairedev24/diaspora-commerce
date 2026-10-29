@@ -43,6 +43,7 @@ export const FOOTER_COLUMNS: Array<{ title: MessageKey; links: FooterLink[] }> =
     links: [
       { label: 'footer.account', href: '/account' },
       { label: 'footer.orders', href: '/orders' },
+      { label: 'footer.giftCards', href: '/account/credit' },
       { label: 'footer.shipping', href: '/help/shipping' },
       { label: 'footer.orderHelp', href: '/account/help' },
       { label: 'footer.helpCenter', href: '/help' },

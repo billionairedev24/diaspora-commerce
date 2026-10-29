@@ -1700,5 +1700,6 @@
   "acct.fact.address": "الافتراضي: {line}",
   "acct.fact.noAddress": "لا يوجد عنوان محفوظ بعد",
   "acct.fact.card": "الافتراضية: {card}",
-  "acct.fact.noCard": "لا توجد وسيلة دفع محفوظة بعد"
+  "acct.fact.noCard": "لا توجد وسيلة دفع محفوظة بعد",
+  "footer.giftCards": "بطاقات الهدايا والرصيد"
 }
