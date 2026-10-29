@@ -1,55 +1,47 @@
 'use client';
 
-import { CustomerNotificationsScreen, ProfileScreen, SecurityScreen, useAccountT } from '@afrotransact/account';
+import { CustomerNotificationsScreen, flatAccountClassName, ProfileScreen, SecurityScreen, useAccountT } from '@afrotransact/account';
 import { legalHref } from '@afrotransact/api-client';
-import Link from 'next/link';
+import { FlatPage } from '@afrotransact/ui';
 import { type ReactNode } from 'react';
 
 import { AccountEnv } from './AccountEnv';
-import styles from './Pages.module.css';
+import { AccountHeader } from './AccountHeader';
 
-/** "Your Account › Section" breadcrumb and the section heading (Shop design). */
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  const t = useAccountT();
+/** "Your account › Section", the page title and the shared settings screens in their flat (no boxed cards) variant. */
+export function SettingsPage({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className={styles.accountPage}>
-      <nav className={styles.crumb} aria-label={t('hub.crumb')}>
-        <Link href="/account">{t('hub.title')}</Link>
-        <span aria-hidden>›</span>
-        <span aria-current="page" className={styles.crumbCurrent}>
-          {title}
-        </span>
-      </nav>
-      <h1 className={styles.h1}>{title}</h1>
-      {children}
-    </div>
+    <FlatPage>
+      <AccountHeader title={title} />
+      <div className={flatAccountClassName}>{children}</div>
+    </FlatPage>
   );
 }
 
 function SecurityContent() {
   const t = useAccountT();
   return (
-    <Section title={t('hub.securityTitle')}>
+    <SettingsPage title={t('hub.securityTitle')}>
       <SecurityScreen audience="customer" heading={false} />
-    </Section>
+    </SettingsPage>
   );
 }
 
 function ProfileContent() {
   const t = useAccountT();
   return (
-    <Section title={t('hub.profile')}>
+    <SettingsPage title={t('hub.profile')}>
       <ProfileScreen heading={false} />
-    </Section>
+    </SettingsPage>
   );
 }
 
 function NotificationsContent() {
   const t = useAccountT();
   return (
-    <Section title={t('hub.notifications')}>
+    <SettingsPage title={t('hub.notifications')}>
       <CustomerNotificationsScreen heading={false} links={{ privacyChoices: legalHref('privacy-choices'), smsTerms: legalHref('sms-terms'), privacy: legalHref('privacy') }} />
-    </Section>
+    </SettingsPage>
   );
 }
 

@@ -15,7 +15,7 @@ import {
   isApiError,
   uploadHelpEvidence
 } from '@afrotransact/api-client';
-import { Button, buttonClassName, CheckCircle, Field, Skeleton, UploadSimple, WarningCircle, X } from '@afrotransact/ui';
+import { Button, buttonClassName, CheckCircle, Field, FlatPage, FormActions, Message, Skeleton, textLinkClassName, TextLinkButton, UploadSimple, WarningCircle, X } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type ChangeEvent, type DragEvent, type FormEvent, useEffect, useId, useRef, useState } from 'react';
@@ -25,9 +25,8 @@ import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 
-import { AccountCrumb } from './AccountCrumb';
+import { AccountHeader } from './AccountHeader';
 import help from './HelpRequests.module.css';
-import styles from './Pages.module.css';
 
 interface Photo {
   id: string;
@@ -209,38 +208,33 @@ export function HelpNewView({ orderNumber }: { orderNumber: string }) {
 
   if (done) {
     return (
-      <div className={styles.page}>
-        <AccountCrumb>{t('hr.new.crumb')}</AccountCrumb>
-        <section className={`${styles.card} ${help.done}`} role="status" data-testid="help-request-sent">
-          <h1 className={styles.h2} ref={doneHeading} tabIndex={-1}>
+      <FlatPage>
+        <AccountHeader title={t('hr.title')} crumb={t('hr.new.crumb')} via={[{ label: t('hr.title'), href: '/account/help' }]} />
+        <section role="status" data-testid="help-request-sent" aria-labelledby="hr-done-title" className={help.form}>
+          <h2 id="hr-done-title" ref={doneHeading} tabIndex={-1} className={help.doneTitle}>
             <CheckCircle weight="fill" aria-hidden /> {t('hr.done.title')}
-          </h1>
-          <p className={styles.muted}>{t('hr.done.body', { reference: done.reference })}</p>
-          <div className={styles.actions}>
-            <Link href="/account/help" className={buttonClassName({ size: 'sm' })}>
+          </h2>
+          <Message tone="muted">{t('hr.done.body', { reference: done.reference })}</Message>
+          <FormActions>
+            <Link href="/account/help" className={buttonClassName({ size: 'md' })}>
               {t('hr.done.view')}
             </Link>
-          </div>
+          </FormActions>
         </section>
-      </div>
+      </FlatPage>
     );
   }
 
   const notFound = order.isError && isApiError(order.error) && order.error.status === 404;
   const uploading = photos.some((p) => p.state === 'uploading');
   return (
-    <div className={styles.page}>
-      <AccountCrumb>{t('hr.new.crumb')}</AccountCrumb>
-      <h1 className={styles.h1}>{t('hr.new.title', { number: orderNumber })}</h1>
+    <FlatPage>
+      <AccountHeader title={t('hr.new.title', { number: orderNumber })} crumb={t('hr.new.crumb')} via={[{ label: t('hr.title'), href: '/account/help' }]} />
       <p className={help.policy}>{t('hr.policy')}</p>
       {order.isPending && <Skeleton height={160} />}
-      {order.isError && (
-        <p className={styles.error} role="alert">
-          {notFound ? t('hr.new.notFound') : t('acct.loadError')}
-        </p>
-      )}
+      {order.isError && <Message tone="error">{notFound ? t('hr.new.notFound') : t('acct.loadError')}</Message>}
       {order.isSuccess && (
-        <form className={styles.form} onSubmit={(e) => void submit(e)} noValidate aria-label={t('hr.new.title', { number: orderNumber })}>
+        <form className={help.form} onSubmit={(e) => void submit(e)} noValidate aria-label={t('hr.new.title', { number: orderNumber })}>
           <FormErrors errors={errors} ids={FIELD_IDS} submitCount={submitCount} />
           {shipments.length > 1 && (
             <fieldset className={help.choices} id={FIELD_IDS.shipmentId}>
@@ -253,11 +247,7 @@ export function HelpNewView({ orderNumber }: { orderNumber: string }) {
               ))}
             </fieldset>
           )}
-          {shipments.length === 1 && (
-            <p className={styles.muted}>
-              {t('hr.new.packageOption', { items: shipments[0]?.items ?? '', seller: shipments[0]?.sellerName ?? '' })}
-            </p>
-          )}
+          {shipments.length === 1 && <Message tone="muted">{t('hr.new.packageOption', { items: shipments[0]?.items ?? '', seller: shipments[0]?.sellerName ?? '' })}</Message>}
           <fieldset className={help.choices} id={FIELD_IDS.type} tabIndex={-1} aria-describedby={errors.type ? 'hr-type-err' : undefined}>
             <legend className={help.legend}>{t('hr.new.type')}</legend>
             {HELP_REQUEST_TYPES.map((v) => (
@@ -275,7 +265,7 @@ export function HelpNewView({ orderNumber }: { orderNumber: string }) {
               </label>
             ))}
             {errors.type && (
-              <p id="hr-type-err" className={styles.error}>
+              <p id="hr-type-err" className={help.fieldError}>
                 {errors.type}
               </p>
             )}
@@ -294,9 +284,11 @@ export function HelpNewView({ orderNumber }: { orderNumber: string }) {
               />
             )}
           </Field>
-          <div className={styles.form} role="group" aria-labelledby="hr-photos-label">
-            <strong id="hr-photos-label">{t('hr.new.photos')}</strong>
-            <p id={dropHint} className={styles.muted}>
+          <div className={help.choices} role="group" aria-labelledby="hr-photos-label">
+            <strong id="hr-photos-label" className={help.legend}>
+              {t('hr.new.photos')}
+            </strong>
+            <p id={dropHint} className={help.fieldHelp}>
               {t('hr.new.photosHelp', { max: HELP_EVIDENCE_MAX_FILES })}
             </p>
             <div
@@ -328,9 +320,9 @@ export function HelpNewView({ orderNumber }: { orderNumber: string }) {
                 data-testid="photo-input"
               />
             </div>
-            {errors.photos && <p className={styles.error}>{errors.photos}</p>}
+            {errors.photos && <p className={help.fieldError}>{errors.photos}</p>}
             {photoNotes.map((n) => (
-              <p key={n} className={styles.error} role="alert">
+              <p key={n} className={help.fieldError} role="alert">
                 {n}
               </p>
             ))}
@@ -361,11 +353,7 @@ export function HelpNewView({ orderNumber }: { orderNumber: string }) {
                       )}
                     </span>
                     <span className={help.fileActions}>
-                      {p.state === 'error' && (
-                        <button type="button" className="link-button" onClick={() => retry(p)}>
-                          {t('hr.new.retry')}
-                        </button>
-                      )}
+                      {p.state === 'error' && <TextLinkButton onClick={() => retry(p)}>{t('hr.new.retry')}</TextLinkButton>}
                       <button type="button" className={help.iconButton} onClick={() => remove(p)} aria-label={t('hr.new.remove', { name: p.name })}>
                         <X aria-hidden />
                       </button>
@@ -378,19 +366,17 @@ export function HelpNewView({ orderNumber }: { orderNumber: string }) {
               {announce}
             </p>
           </div>
-          {sendError && (
-            <p className={styles.error} role="alert">
-              {sendError}
-            </p>
-          )}
-          <div className={styles.actions}>
+          {sendError && <Message tone="error">{sendError}</Message>}
+          <FormActions>
             <Button type="submit" loading={sending} disabled={uploading}>
               {sending ? t('hr.new.sending') : t('hr.new.submit')}
             </Button>
-            <Link href="/account/help">{t('common.cancel')}</Link>
-          </div>
+            <Link href="/account/help" className={textLinkClassName}>
+              {t('common.cancel')}
+            </Link>
+          </FormActions>
         </form>
       )}
-    </div>
+    </FlatPage>
   );
 }

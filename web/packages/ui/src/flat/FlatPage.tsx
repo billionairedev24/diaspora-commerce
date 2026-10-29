@@ -126,11 +126,11 @@ export interface RowProps {
 export function Row({ title, detail, actions, testId }: RowProps) {
   return (
     <li className={styles.row} data-testid={testId}>
-      <span className={styles.rowMain}>
-        <span className={styles.rowTitle}>{title}</span>
-        {detail ? <span className={styles.rowDetail}>{detail}</span> : null}
-      </span>
-      {actions ? <span className={styles.rowActions}>{actions}</span> : null}
+      <div className={styles.rowMain}>
+        <div className={styles.rowTitle}>{title}</div>
+        {detail ? <div className={styles.rowDetail}>{detail}</div> : null}
+      </div>
+      {actions ? <div className={styles.rowActions}>{actions}</div> : null}
     </li>
   );
 }
