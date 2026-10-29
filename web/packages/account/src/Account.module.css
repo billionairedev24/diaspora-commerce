@@ -109,6 +109,30 @@
 .choiceTitle { font-weight: var(--at-weight-semibold); font-size: var(--at-text-md); }
 .choiceSub { font-size: var(--at-text-xs); color: var(--at-color-text-muted); font-variant-numeric: tabular-nums; }
 
+/* Flat variant (the storefront's Your Account): the same blocks without boxes. Sections are a heading over a hairline,
+   rows are separated by hairlines, secondary buttons read as text links, statuses are plain words. Opt in by wrapping
+   the screens in an element with this class (flatAccountClassName); the back offices keep the card look. */
+.flat .page, .flat .section { max-width: none; }
+.flat .card { border: 0; border-radius: 0; background: transparent; overflow: visible; }
+.flat .cardHead { padding: 0 0 var(--at-space-2); border-bottom: 1px solid var(--at-color-border); }
+.flat .h2 { font-family: var(--at-font-heading); font-size: var(--at-text-xl); }
+.flat .cardBody { padding: var(--at-space-3) 0 0; }
+.flat .row { padding-inline: 0; }
+.flat .form { padding-inline: 0; max-width: 40rem; }
+.flat .form [data-at-field] { max-width: 24rem; }
+.flat .note { padding-inline: 0; background: transparent; border-top: 0; }
+.flat .empty { padding-inline: 0; }
+.flat .identity { padding-inline: 0; }
+.flat .pill { height: auto; padding: 0; border: 0; border-radius: 0; background: none; color: var(--at-color-link); font-weight: var(--at-weight-regular); font-size: var(--at-text-md); }
+.flat .status { padding: 0; border-radius: 0; background: none; letter-spacing: 0; text-transform: none; font-size: var(--at-text-sm); }
+.flat .matrix th, .flat .matrix td { padding-inline: var(--at-space-3); }
+.flat .matrix thead th { background: none; text-transform: none; letter-spacing: 0; font-size: var(--at-text-sm); }
+.flat .readonlyValue { background: none; padding-inline: 0; min-height: 0; }
+.flat .keyBox { background: none; padding-inline: 0; }
+@media (hover: hover) {
+  .flat .pill:hover { background: none; color: var(--at-color-link-hover); text-decoration: underline; }
+}
+
 /* Back-office layout: title, then the sections as tabs (the same look as the module pages' tabs, e.g. Inventory),
    then the section, full width. No second sidebar next to the app's own. */
 .shell { display: flex; flex-direction: column; gap: var(--at-space-5); min-width: 0; }
