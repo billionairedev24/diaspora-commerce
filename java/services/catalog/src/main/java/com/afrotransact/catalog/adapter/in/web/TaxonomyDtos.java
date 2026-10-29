@@ -88,10 +88,11 @@ final class TaxonomyDtos {
     }
 
     @Schema(name = "TaxonomyTraits")
-    record TraitsBody(boolean food, boolean perishable, boolean regulated, boolean preorder) {
+    record TraitsBody(Boolean food, Boolean perishable, Boolean regulated, Boolean preorder) {
 
         ProductTypeTraits toDomain() {
-            return new ProductTypeTraits(food, perishable, regulated, preorder);
+            return new ProductTypeTraits(Boolean.TRUE.equals(food), Boolean.TRUE.equals(perishable),
+                    Boolean.TRUE.equals(regulated), Boolean.TRUE.equals(preorder));
         }
     }
 
