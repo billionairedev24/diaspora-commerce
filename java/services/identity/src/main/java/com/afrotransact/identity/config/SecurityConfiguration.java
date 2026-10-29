@@ -1,5 +1,6 @@
 package com.afrotransact.identity.config;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -18,12 +19,14 @@ import com.afrotransact.identity.adapter.in.security.LoginTicketAuthenticationPr
 import com.afrotransact.identity.adapter.in.security.MfaAwareAuthenticationSuccessHandler;
 import com.afrotransact.identity.adapter.in.security.MfaChallengeAccessDeniedHandler;
 import com.afrotransact.identity.adapter.in.security.PromptParameterFilter;
+import com.afrotransact.identity.adapter.in.security.SessionTimeoutFilter;
 import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAuthenticationConverter;
 import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAuthenticationProvider;
 import com.afrotransact.identity.adapter.in.security.TrustedBrowserCookie;
 import com.afrotransact.identity.adapter.out.passkey.SignCountVerifyingRelyingParty;
 import com.afrotransact.identity.adapter.out.passkey.WebAuthnPasskeyAssertions;
 import com.afrotransact.identity.adapter.out.passkey.WebAuthnPasskeyRegistrations;
+import com.afrotransact.identity.application.AuthSettingsService;
 import com.afrotransact.identity.application.FederatedLoginService;
 import com.afrotransact.identity.application.FirstPartySignInService;
 import com.afrotransact.identity.application.IdentityProviderService;
@@ -89,7 +92,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 class SecurityConfiguration {
 
     private static final String[] PUBLIC_BROWSER_PATHS = {
-        "/", "/login", "/login/mfa", "/login/mfa/**", "/login/forgot", "/signup", "/signup/**", "/assets/**",
+        "/", "/login", "/login/mfa", "/login/mfa/**", "/login/forgot", "/login/forgot/**", "/signup", "/signup/**", "/assets/**",
         "/error", "/favicon.ico", "/.well-known/appspecific/**",
         "/actuator/health/**", "/actuator/info", "/actuator/prometheus",
         "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs", "/redoc"
@@ -102,7 +105,8 @@ class SecurityConfiguration {
                                                  SecurityContextRepository contexts, RequestCache requestCache,
                                                  FirstPartySignInService firstParty, UserDetailsService accounts,
                                                  AuthorizationServerSettings settings,
-                                                 IdentityProviderService identityProviders)
+                                                 IdentityProviderService identityProviders,
+                                                 AuthSettingsService authSettings, Clock clock)
             throws Exception {
         http.oauth2AuthorizationServer(as -> {
             http.securityMatcher(as.getEndpointsMatcher());
@@ -131,6 +135,8 @@ class SecurityConfiguration {
                 SecurityContextHolderFilter.class);
         http.addFilterAfter(new PromptParameterFilter(settings.getAuthorizationEndpoint(), contexts),
                 LoginTicketAuthenticationFilter.class);
+        // Session timeouts of the auth settings (S291), applied before the session's security context is read.
+        http.addFilterBefore(new SessionTimeoutFilter(authSettings, clock), SecurityContextHolderFilter.class);
         return http.build();
     }
 
@@ -143,7 +149,8 @@ class SecurityConfiguration {
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.POST, "/v1/accounts", "/v1/accounts/verification",
-                                "/v1/accounts/verification/resend", "/v1/invitations/lookup").permitAll()
+                                "/v1/accounts/verification/resend", "/v1/invitations/lookup", "/v1/password-reset",
+                                "/v1/password-reset/confirm").permitAll()
                         .requestMatchers(HttpMethod.GET, "/v1/identity-providers").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(rs -> rs.jwt(j -> j.jwtAuthenticationConverter(jwtConverter())));
@@ -156,7 +163,8 @@ class SecurityConfiguration {
                                      TrustedBrowserCookie trustedBrowser, SecurityContextRepository contexts,
                                      RequestCache requestCache, ClientRegistrationRepository registrations,
                                      IdentityProviderService providers, FederatedLoginService federated,
-                                     SignInProtectionService protection)
+                                     SignInProtectionService protection, AuthSettingsService authSettings,
+                                     Clock clock)
             throws Exception {
         HostedLoginProtection hostedProtection = new HostedLoginProtection(protection);
         MfaAwareAuthenticationSuccessHandler success = new MfaAwareAuthenticationSuccessHandler(signIn,
@@ -165,6 +173,7 @@ class SecurityConfiguration {
                         .anyRequest().authenticated())
                 .securityContext(c -> c.securityContextRepository(contexts))
                 .requestCache(r -> r.requestCache(requestCache))
+                .addFilterBefore(new SessionTimeoutFilter(authSettings, clock), SecurityContextHolderFilter.class)
                 .addFilterBefore(hostedProtection, UsernamePasswordAuthenticationFilter.class)
                 .formLogin(f -> f.loginPage("/login").successHandler(success).failureHandler(hostedProtection)
                         .permitAll())

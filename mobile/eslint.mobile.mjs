@@ -24,5 +24,11 @@ export default [
     files: ['src/**/*.{ts,tsx}'],
     plugins: { 'at-mobile': at },
     rules: { 'at-mobile/no-raw-hex': 'error' }
+  },
+  {
+    // Documented exception (same as web/packages/ui PaymentBrandMarks.tsx): card network and wallet marks keep their
+    // owners' colours. Only this file may hold them.
+    files: ['src/ui/PaymentMarks.tsx'],
+    rules: { 'at-mobile/no-raw-hex': 'off' }
   }
 ];

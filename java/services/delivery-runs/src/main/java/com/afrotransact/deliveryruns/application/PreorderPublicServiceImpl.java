@@ -10,7 +10,6 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.deliveryruns.domain.Coverage;
-import com.afrotransact.deliveryruns.domain.PaymentSettings;
 import com.afrotransact.deliveryruns.domain.PreorderResolver;
 import com.afrotransact.deliveryruns.domain.PreorderResolver.Eligibility;
 import com.afrotransact.deliveryruns.domain.PreorderResolver.ProductFacts;
@@ -61,17 +60,23 @@ class PreorderPublicServiceImpl implements PreorderPublicService {
     public List<OpenWindow> open() {
         Instant now = Instant.now(clock);
         Coverage coverage = support.coverage();
-        PaymentSettings payment = coverage.settings().payment();
         return resolver.openList(windows.findPublished(), coverage, now).stream()
                 .map(w -> new OpenWindow(w, w.status(now),
-                        w.details().door() ? w.doorFee(payment).orElse(null) : null,
-                        w.details().pickup() ? w.pickupFee(payment) : null))
+                        w.details().door() ? w.doorFee(coverage.fees()).orElse(null) : null,
+                        w.details().pickup() ? w.pickupFee(coverage.fees()) : null))
                 .toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public EligibilityResult eligibility(String country, String region, String city, List<String> atins) {
+        return eligibility(country, region, city, atins, 0);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public EligibilityResult eligibility(String country, String region, String city, List<String> atins,
+                                         int earlyAccessHours) {
         permissions.require(DeliveryRunsPermissions.RESERVE);
         Set<String> wanted = new LinkedHashSet<>();
         for (String a : atins == null ? List.<String>of() : atins) {
@@ -82,7 +87,8 @@ class PreorderPublicServiceImpl implements PreorderPublicService {
         if (wanted.isEmpty() || wanted.size() > MAX_ATINS) {
             throw new RuleViolation("delivery-runs.invalid-atins", "Send between 1 and " + MAX_ATINS + " ATINs");
         }
-        Resolution r = resolveAt(country, region, city, Instant.now(clock));
+        Instant now = Instant.now(clock);
+        Resolution r = resolveAt(country, region, city, now).forEarlyAccess(now, earlyAccessHours);
         Map<String, ProductFacts> facts = r.on() && r.window() != null ? catalog.facts(wanted) : Map.of();
         List<Eligibility> items = wanted.stream().map(atin -> {
             ProductFacts f = facts.get(atin);

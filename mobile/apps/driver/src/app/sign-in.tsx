@@ -1,47 +1,64 @@
-/* S081 "Sign in to drive": the work email is passed as login_hint; password, 6-digit code and passkeys run on
-   identity's hosted pages (OIDC + PKCE, client driver-app).
+/* S081 "Sign in to drive": work email, password and the 6-digit code are entered right here (BFF → identity first-party
+   sign-in, then this app's own authorization-code + PKCE tokens, client driver-app); no hosted page or browser.
    Welcome: full-bleed imagery (a clip or photo from assets/hero, else the drawn hand-over-at-the-door art) fading to
    black, with the sign-in form on a white sheet below it. */
 import { StatusBar } from 'expo-status-bar';
-import { FingerprintIcon as Fingerprint, WarningCircleIcon as WarningCircle } from 'phosphor-react-native';
+import { InfoIcon as Info, WarningCircleIcon as WarningCircle } from 'phosphor-react-native';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SignInCancelled } from '@/auth/oidc';
 import { DriverHeroArt } from '@/brand/DriverHeroArt';
 import { Hero } from '@/brand/Hero';
 import heroPhoto from '@/brand/heroPhoto';
 import heroVideo from '@/brand/heroVideo';
 import { env } from '@/config/env';
+import { type Factors, signInMessage } from '@/domain/nativeSignIn';
+import { SecondFactorView } from '@/features/auth/SecondFactorView';
 import { useT } from '@/i18n';
 import { useDriver } from '@/session/DriverProvider';
 import { c, sp, t } from '@/theme';
 import { Logo } from '@/ui/Logo';
 import { AppText, Banner, Button, Field } from '@/ui/primitives';
+import { useKeyboardHeight } from '@/ui/useKeyboardHeight';
 
 export default function SignIn() {
   const tr = useT();
-  const { signIn } = useDriver();
+  const { signInWithPassword, cancelSignIn, notice } = useDriver();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [factors, setFactors] = useState<Factors | null>(null);
+  const [message, setMessage] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const go = async () => {
     const e = email.trim().toLowerCase();
-    if (e && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(e)) return setErr(tr('dr.signIn.enterWorkEmail'));
+    if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(e)) return setErr(tr('dr.signIn.enterWorkEmail'));
+    if (!password) return setErr(tr('dr.signIn.enterPassword'));
     setErr('');
+    setMessage('');
     setBusy(true);
     try {
-      await signIn(e || undefined);
+      const step = await signInWithPassword(e, password);
+      if (step.kind === 'second-factor') setFactors(step.factors);
     } catch (x) {
-      if (!(x instanceof SignInCancelled)) setErr(x instanceof Error ? x.message : tr('dr.signIn.failed'));
+      setErr(signInMessage(x, tr('dr.signIn.failed')));
     } finally {
       setBusy(false);
     }
   };
-  const heroHeight = Math.max(280, Math.round(height * 0.46));
+  const backToPassword = (m?: string) => {
+    cancelSignIn();
+    setFactors(null);
+    setPassword('');
+    setMessage(m ?? '');
+  };
+  const keyboard = useKeyboardHeight();
+  // With the keyboard up the picture gives way to the form, and the form lifts above the keyboard.
+  const heroHeight = keyboard > 0 ? insets.top + 96 : Math.max(280, Math.round(height * 0.46));
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
@@ -53,13 +70,19 @@ export default function SignIn() {
           </View>
         </Hero>
       </View>
-      <ScrollView style={styles.sheet} contentContainerStyle={[styles.sheetBody, { paddingBottom: insets.bottom + sp['6'] }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      <ScrollView style={styles.sheet} contentContainerStyle={[styles.sheetBody, { paddingBottom: Math.max(insets.bottom, keyboard) + sp['6'] }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+        {factors ? <SecondFactorView factors={factors} onBack={backToPassword} /> : (<>
         <AppText color={c.textMuted}>{tr('dr.signIn.useYourAfrotransactStaffAccount')}</AppText>
-        <Field label={tr('dr.signIn.workEmail')} value={email} onChangeText={(v) => { setEmail(v); setErr(''); }} placeholder={tr('dr.signIn.youAfrotransactCom')} keyboardType="email-address" autoCapitalize="none" autoComplete="username" onSubmitEditing={() => void go()} />
-        <AppText variant="small" color={c.textMuted}>{tr('dr.signIn.yourPasswordAnd6Digit')}</AppText>
+        {notice ? <Banner tone="info" icon={Info}>{notice}</Banner> : null}
+        {message ? <Banner tone="info" icon={Info}>{message}</Banner> : null}
+        <Field label={tr('dr.signIn.workEmail')} value={email} onChangeText={(v) => { setEmail(v); setErr(''); }} placeholder={tr('dr.signIn.youAfrotransactCom')} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="username" textContentType="username" returnKeyType="next" />
+        <Field label={tr('dr.signIn.password')} value={password} onChangeText={(v) => { setPassword(v); setErr(''); }} secureTextEntry={!showPassword} autoCapitalize="none" autoCorrect={false} autoComplete="current-password" textContentType="password" returnKeyType="go" onSubmitEditing={() => void go()} />
+        <Pressable accessibilityRole="button" onPress={() => setShowPassword((v) => !v)} hitSlop={10}>
+          <AppText variant="small" style={{ textDecorationLine: 'underline' }}>{showPassword ? tr('dr.signIn.hidePassword') : tr('dr.signIn.showPassword')}</AppText>
+        </Pressable>
         {err ? <Banner tone="danger" icon={WarningCircle}>{err}</Banner> : null}
         <Button label={busy ? tr('dr.signIn.signingIn') : tr('dr.signIn.signIn')} loading={busy} onPress={() => void go()} />
-        <Button kind="outline" icon={Fingerprint} label={tr('dr.signIn.signInWithPasskey')} disabled={busy} onPress={() => void go()} />
+        </>)}
         {env.mocks ? (
           <View style={styles.demo}>
             <AppText variant="small" style={{ fontWeight: t.fontWeight.bold }}>{tr('dr.signIn.demoAccountsDevMocks')}</AppText>

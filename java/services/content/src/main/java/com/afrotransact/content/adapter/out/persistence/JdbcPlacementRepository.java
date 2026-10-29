@@ -81,6 +81,11 @@ class JdbcPlacementRepository implements PlacementRepository {
     }
 
     @Override
+    public boolean deleteById(String id) {
+        return jdbc.sql("delete from placement where id = :id").param("id", id).update() == 1;
+    }
+
+    @Override
     public boolean update(Placement p) {
         return jdbc.sql("""
                 update placement set name = :name, status = :status, priority = :priority,

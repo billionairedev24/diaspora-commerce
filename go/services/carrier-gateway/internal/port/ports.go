@@ -76,6 +76,8 @@ type LabelRepository interface {
 	// Release deletes a purchasing row after a failed purchase so the key can be retried.
 	Release(ctx context.Context, id string) error
 	Get(ctx context.Context, id string) (domain.LabelRecord, error)
+	// ByTracking is the newest purchased label of a tracking number (domain.ErrNotFound when none).
+	ByTracking(ctx context.Context, carrier domain.CarrierCode, trackingNumber string) (domain.LabelRecord, error)
 	// MarkVoided sets status voided, stops tracking the label and writes the carrier.label.voided outbox row, in
 	// one transaction. Only a purchased label can be voided (domain.ErrConflict otherwise), so the event is
 	// written once.

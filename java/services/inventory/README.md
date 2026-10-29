@@ -61,6 +61,31 @@ reason and can **never take on hand below reserved** (`422 inventory.below-reser
 receipt (`422 inventory.lot-rejected`). Staff can quarantine, release, write off (partial or full), cycle-count and
 transfer lots — all with reasons.
 
+## Cost currencies and exchange rates (ADR 0005 §7)
+
+Customers pay in US dollars; stock is sourced and received in the currency actually paid (`COST_CURRENCIES`, default
+USD, MXN, NGN, GHS, CAD, EUR, GBP, ZAR, KES, XOF; USD is always accepted). A lot keeps its **unit landed cost in that
+currency** (`unitLandedCostMinor`, `currency`), the **rate to USD** used when it was received (`fxRateToUsd` = US dollars
+per 1 unit, with `fxRateDate` and `fxRateSource`) and the **USD value fixed at that moment** (`unitCostUsdMinor`, half-even
+to the cent). A later rate change never moves it. The cost may be itemised as goods / freight / duty / other (all in the
+lot's currency; they must add up to the unit cost, default all goods).
+
+- **Rate at receiving** (`POST /v1/receipts`, and the dock count of an AfroTransact-owned retail ASN): the rate the receiver or sender
+  enters (`ENTERED`), else the latest row of the exchange-rate table on or before the receiving day (`TABLE`), else
+  `422 inventory.invalid-cost` naming `lines[i].fxRateToUsd`. USD is rate 1 (`BASE`). A sender that already valued the
+  cost (retail-service books landed cost in USD) may also send `unitCostUsdMinor` so the USD value ties to its GL.
+  Seller (FBA) units carry no cost: a cost on them is refused (`inventory.fba-cost-not-allowed`).
+- **Exchange rates** (staff, `inventory:read`; changes `inventory:adjust`): `GET /v1/currencies`, `GET /v1/exchange-rates`,
+  `GET /v1/exchange-rates/current?asOf=` (what receiving suggests per currency), `PUT /v1/exchange-rates/{currency}/{date}`
+  (create or replace; a reason of 3 to 500 characters is required) and `GET /v1/exchange-rates/history`. Every change is
+  an append-only row (`exchange_rate_audit`) with who, the old and new rate and the reason.
+- **In USD, with the original alongside**: `GET /v1/overview` values stock per status **and currency paid**
+  (`valueMinor` in that currency, `valueUsdMinor` in US cents) and per node in USD with `byCurrency`; reservation
+  allocations carry `unitCostUsdMinor`, and a commit returns `cogsUsdMinor` (what margin and retail's COGS posting use) next to
+  `cogs` per currency paid. `inventory.lot.*` events carry `unitCostUsdMinor` and `fxRateToUsd`.
+- Migration V7 backfills existing lots and allocations as USD at rate 1 (everything was costed in the retail base
+  currency; FBA stock at zero).
+
 ## Send stock to AfroTransact (S257, FBA inbound)
 
 Extends the `POST /v1/inbound` ASN (still available for single-SKU expected units) into inbound shipments:
@@ -174,7 +199,7 @@ Consumed (group `inventory-service`, inbox-deduplicated, `CONSUMERS_ENABLED`): `
 `CATALOG_URL` (unit labels), `CARRIER_GATEWAY_URL` (labels, tracking), `AUTH_TOKEN_URL`, `INVENTORY_CLIENT_ID`
 (`inventory-service`, scopes `catalog:read catalog:write shipping:label`). Tunables (`at.inventory.*`): `retail-org-id`
 (`RETAIL_ORG_ID`), `reservation-ttl` (`RESERVATION_TTL`, 15m), `fefo-min-remaining-days` (7),
-`shelf-life.min-days` (90), `shelf-life.min-fraction` (0.5), `jobs.enabled`, `jobs.*-cron`, `jobs.zone`.
+`cost-currencies` (`COST_CURRENCIES`, ISO 4217 list), `shelf-life.min-days` (90), `shelf-life.min-fraction` (0.5), `jobs.enabled`, `jobs.*-cron`, `jobs.zone`.
 
 ## Needed from other services (S257 / S067)
 

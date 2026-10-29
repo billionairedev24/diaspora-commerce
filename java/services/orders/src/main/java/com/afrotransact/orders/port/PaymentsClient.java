@@ -62,13 +62,36 @@ public interface PaymentsClient {
      *
      * @param shopperId the customer's AfroTransact id (token subject): payments puts the shopper's Stripe Customer on
      *                  the PaymentIntent so the mobile PaymentSheet lists their saved cards (S245); null for none
+     * @param useCredit S320: pay with the shopper's AfroTransact credit first; the PaymentIntent is for the rest and
+     *                  there is none when credit pays everything
+     * @param membershipWaivers S323: the shipping fees the shopper's membership waived, recorded by payments as the
+     *                  benefits used
      */
     record NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,
                      Map<String, String> metadata, List<Line> lines, String shopperId,
-                     List<String> paymentMethodTypes, boolean offSession, boolean saveForOffSession) {
+                     List<String> paymentMethodTypes, boolean offSession, boolean saveForOffSession,
+                     boolean useCredit, List<WaivedFee> membershipWaivers) {
 
         public NewIntent {
             paymentMethodTypes = paymentMethodTypes == null ? List.of() : List.copyOf(paymentMethodTypes);
+            membershipWaivers = membershipWaivers == null ? List.of() : List.copyOf(membershipWaivers);
+        }
+
+        /** An intent with no membership waivers. */
+        public NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,
+                         Map<String, String> metadata, List<Line> lines, String shopperId,
+                         List<String> paymentMethodTypes, boolean offSession, boolean saveForOffSession,
+                         boolean useCredit) {
+            this(orderId, amountMinor, currency, placedAt, metadata, lines, shopperId, paymentMethodTypes, offSession,
+                    saveForOffSession, useCredit, List.of());
+        }
+
+        /** An intent that does not use credit. */
+        public NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,
+                         Map<String, String> metadata, List<Line> lines, String shopperId,
+                         List<String> paymentMethodTypes, boolean offSession, boolean saveForOffSession) {
+            this(orderId, amountMinor, currency, placedAt, metadata, lines, shopperId, paymentMethodTypes, offSession,
+                    saveForOffSession, false);
         }
 
         /** An intent that does not save the payment method. */
@@ -88,6 +111,10 @@ public interface PaymentsClient {
                          Map<String, String> metadata, List<Line> lines) {
             this(orderId, amountMinor, currency, placedAt, metadata, lines, null);
         }
+    }
+
+    /** A shipping fee waived by the shopper's membership: the shipment, the benefit and the amount. */
+    record WaivedFee(String ref, String benefit, long amountMinor, String tierCode) {
     }
 
     /**
@@ -115,8 +142,19 @@ public interface PaymentsClient {
         }
     }
 
-    /** Payment as returned by payments (status AUTHORIZED once the shopper confirmed). */
-    record Intent(String paymentId, String status, String clientSecret, long amountMinor, String failureMessage) {
+    /**
+     * Payment as returned by payments (status AUTHORIZED once the shopper confirmed).
+     *
+     * @param creditMinor the part of the order paid with AfroTransact credit (S320); the card pays the rest, and a
+     *                    payment that credit pays in full is AUTHORIZED at once with no client secret
+     */
+    record Intent(String paymentId, String status, String clientSecret, long amountMinor, String failureMessage,
+                  long creditMinor) {
+
+        /** An intent paid without credit. */
+        public Intent(String paymentId, String status, String clientSecret, long amountMinor, String failureMessage) {
+            this(paymentId, status, clientSecret, amountMinor, failureMessage, 0);
+        }
     }
 
     /** Capture of one shipment. */

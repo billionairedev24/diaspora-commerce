@@ -33,6 +33,13 @@ final class Fixtures {
                 Map.of("facebook", "https://www.facebook.com/groups/bastrop-afro"), policy, 7, true);
     }
 
+    /** A doorstep radius location named {@code name} in Texas (the fake geo puts every one 32 road miles from the hub). */
+    static LocationCommand town(String slug, String name) {
+        return new LocationCommand(slug, name, "us", "tx", "America/Chicago", AreaKind.RADIUS, null, null,
+                30.1105, -97.3153, 12.0, null, null, 799L, "USD", 2, null, null, DropMode.DOORSTEP, null, null,
+                Map.of(), CutoffPolicy.CANCEL, 7, true);
+    }
+
     /** Polygon location (geo zone registered from GeoJSON) around Elgin. */
     static LocationCommand elgin(String slug) {
         return new LocationCommand(slug, "Elgin", "US", "TX", "America/Chicago", AreaKind.POLYGON, null,
@@ -51,6 +58,6 @@ final class Fixtures {
         Instant cutoff = now.plus(cutoffIn);
         Instant start = cutoff.plus(Duration.ofDays(2));
         return new RunCommand(locationId, start, start.plus(Duration.ofHours(4)), cutoff, null,
-                cutoff.plus(Duration.ofHours(12)), null, null, minOrders, null, null, null, null, null, null);
+                cutoff.plus(Duration.ofHours(12)), null, null, minOrders, null, null, null, null, null, null, null);
     }
 }

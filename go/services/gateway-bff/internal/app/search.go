@@ -24,21 +24,37 @@ type searchServiceImpl struct {
 	estimator domain.Estimator
 	market    string
 	clock     Clock
+	services  port.CustomerBookingsClient
 }
 
 var _ SearchService = (*searchServiceImpl)(nil)
 
 // NewSearchService returns the SearchService. offers is optional: with it, cards carry the offer count, the lowest
 // price across sellers and the buy box winner (one batch call per page).
-func NewSearchService(search port.SearchClient, offers port.StorefrontOffersClient, location LocationService, estimator domain.Estimator, market string, clock Clock) SearchService {
-	return &searchServiceImpl{search: search, offers: offers, location: location, estimator: estimator, market: market, clock: clock}
+func NewSearchService(search port.SearchClient, offers port.StorefrontOffersClient, location LocationService, estimator domain.Estimator, market string, clock Clock, opts ...SearchOption) SearchService {
+	s := &searchServiceImpl{search: search, offers: offers, location: location, estimator: estimator, market: market, clock: clock}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
+
+// SearchOption configures the SearchService.
+type SearchOption func(*searchServiceImpl)
+
+// WithServices makes a text search also return the services that match its words (bookings' public search).
+func WithServices(b port.CustomerBookingsClient) SearchOption {
+	return func(s *searchServiceImpl) { s.services = b }
+}
+
+// maxServiceHits is how many matching services ride along with the first page of a text search.
+const maxServiceHits = 4
 
 // toParams translates BFF filters to search-service parameters (price bucket → min/max, fastest → relevance
 // with a local re-sort, maxDays ≥ 1).
 func toParams(q domain.SearchQuery, market string) (port.SearchParams, error) {
 	p := port.SearchParams{Q: strings.TrimSpace(q.Q), Market: market, Department: q.Department, Community: q.Community,
-		Fulfilment: q.Fulfilment, SellerKind: q.SellerKind, MinRating: q.MinRating, Sort: q.Sort, Page: q.Page, Size: q.Size, Ads: q.Ads}
+		Fulfilment: q.Fulfilment, SellerKind: q.SellerKind, SellerID: q.SellerID, MinRating: q.MinRating, Sort: q.Sort, Page: q.Page, Size: q.Size, Ads: q.Ads}
 	if q.Price != "" {
 		b, ok := domain.PriceBucketByID(q.Price)
 		if !ok {
@@ -82,9 +98,36 @@ func (s *searchServiceImpl) Search(ctx context.Context, c *domain.Caller, q doma
 	}
 	size := firstPositive(res.Size, q.Size, domain.DefaultSearchSize)
 	return domain.SearchPage{
-		Hits: hits, Total: res.Total, Page: res.Page, Size: size, PageCount: domain.PageCount(res.Total, size),
+		Services: s.matchingServices(ctx, q, loc.ZIP),
+		Hits:     hits, Total: res.Total, Page: res.Page, Size: size, PageCount: domain.PageCount(res.Total, size),
 		Facets: facetsFrom(res.Facets), DeliverToLabel: loc.Label, TookMs: res.TookMs, SearchID: res.SearchID, Sponsored: sponsored,
 	}, nil
+}
+
+// matchingServices are the services matching the typed words (best effort: the products are what was asked for, so a
+// slow or failing bookings service never fails the search). Only the first page of a text search carries them.
+func (s *searchServiceImpl) matchingServices(ctx context.Context, q domain.SearchQuery, zip string) []domain.SearchServiceHit {
+	out := []domain.SearchServiceHit{}
+	text := strings.TrimSpace(q.Q)
+	if s.services == nil || text == "" || q.Page > 0 {
+		return out
+	}
+	if !zip5.MatchString(zip) {
+		zip = ""
+	}
+	list, err := s.services.Search(ctx, text, "", zip)
+	if err != nil {
+		return out
+	}
+	for _, l := range list {
+		if len(out) == maxServiceHits {
+			break
+		}
+		out = append(out, domain.SearchServiceHit{ServiceID: l.ServiceID, OrgID: l.OrgID, Name: l.Name, ProviderName: l.ProviderName,
+			Category: l.Category, DurationMinutes: l.DurationMinutes, PriceFromMinor: l.PriceFromMinor,
+			Currency: firstNonEmpty(l.Currency, domain.Currency), Location: l.Location})
+	}
+	return out
 }
 
 func firstPositive(vals ...int) int {

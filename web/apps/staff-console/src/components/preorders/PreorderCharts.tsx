@@ -94,3 +94,6 @@ export function HBars({ title, rows, color, labelWidth = 130, valueText }: { tit
 }
 
 export const channelRows = (s: PreorderSummary) => s.byChannel.map((c) => ({ k: PREORDER_CHANNEL_LABEL[c.channel], n: c.count }));
+
+/** Orders per message of the window (utm_source / utm_content): the UTM campaign is `preorder-<code>` for all of them. */
+export const campaignRows = (s: PreorderSummary) => s.byCampaign.map((c) => ({ k: `${c.utmSource} / ${c.utmContent}`, n: c.orders }));

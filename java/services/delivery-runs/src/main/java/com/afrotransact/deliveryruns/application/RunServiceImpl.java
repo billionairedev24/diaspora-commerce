@@ -6,37 +6,46 @@ import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import com.afrotransact.deliveryruns.domain.AreaKey;
 import com.afrotransact.deliveryruns.domain.Capacity;
 import com.afrotransact.deliveryruns.domain.CutoffPolicy;
 import com.afrotransact.deliveryruns.domain.DeliveryWindow;
 import com.afrotransact.deliveryruns.domain.DropMode;
+import com.afrotransact.deliveryruns.domain.FeeSnapshot;
 import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.LocationDetails;
 import com.afrotransact.deliveryruns.domain.PickupPoint;
+import com.afrotransact.deliveryruns.domain.PreorderLine;
 import com.afrotransact.deliveryruns.domain.PreorderOrder;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
 import com.afrotransact.deliveryruns.domain.RouteEstimate;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
 import com.afrotransact.deliveryruns.domain.Run;
+import com.afrotransact.deliveryruns.domain.RunAction;
 import com.afrotransact.deliveryruns.domain.RunEconomics;
 import com.afrotransact.deliveryruns.domain.RunEconomicsCalculator;
 import com.afrotransact.deliveryruns.domain.RunOrder;
 import com.afrotransact.deliveryruns.domain.RunOrderStatus;
 import com.afrotransact.deliveryruns.domain.RunStatus;
 import com.afrotransact.deliveryruns.domain.RunTerms;
+import com.afrotransact.deliveryruns.domain.SellerPickupSchedule;
 import com.afrotransact.deliveryruns.port.GeoGateway;
 import com.afrotransact.deliveryruns.port.GeoUnavailableException;
 import com.afrotransact.deliveryruns.port.LocationRepository;
+import com.afrotransact.deliveryruns.port.RunActionLog;
 import com.afrotransact.deliveryruns.port.RunOrderRepository;
 import com.afrotransact.deliveryruns.port.RunRepository;
+import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.slf4j.Logger;
@@ -59,10 +68,12 @@ class RunServiceImpl implements RunService {
     private final PermissionChecker permissions;
     private final Clock clock;
     private final PreorderHandover preorders;
+    private final RunActionLog actionLog;
 
     RunServiceImpl(RunRepository runs, RunOrderRepository runOrders, LocationRepository locations, GeoGateway geo,
                    RunEconomicsCalculator economics, RunLifecycle lifecycle, DeliveryRunsSettings settings,
-                   PermissionChecker permissions, Clock clock, PreorderHandover preorders) {
+                   PermissionChecker permissions, Clock clock, PreorderHandover preorders, RunActionLog actionLog) {
+        this.actionLog = actionLog;
         this.runs = runs;
         this.runOrders = runOrders;
         this.locations = locations;
@@ -153,7 +164,7 @@ class RunServiceImpl implements RunService {
     @Override
     @Transactional
     public Run extend(UUID id, ExtendCommand command) {
-        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Actor actor = permissions.require(DeliveryRunsPermissions.MANAGE);
         Run run = lock(id);
         Instant now = Instant.now(clock);
         if (command.cutoffAt() == null) {
@@ -167,25 +178,40 @@ class RunServiceImpl implements RunService {
                 : run.terms().sellerPickupAt() == null ? null : run.terms().sellerPickupAt().plus(shift);
         Run extended = run.extend(command.cutoffAt(), window, pickup, now);
         String reason = command.reason() == null || command.reason().isBlank() ? "STAFF" : command.reason().trim();
-        return lifecycle.extended(location(run.locationId()), extended, run.status(), run.terms().cutoffAt(), reason);
+        return lifecycle.extended(location(run.locationId()), extended, run.status(), run.terms().cutoffAt(),
+                new RunDecision(actor.subject(), reason), now);
     }
 
     @Override
     @Transactional
     public Run cancel(UUID id, String reason) {
-        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Actor actor = permissions.require(DeliveryRunsPermissions.MANAGE);
         Run run = lock(id);
-        return lifecycle.cancel(location(run.locationId()), run, reason, Instant.now(clock));
+        return lifecycle.cancel(location(run.locationId()), run, new RunDecision(actor.subject(), reason),
+                Instant.now(clock));
     }
 
     @Override
     @Transactional
-    public Run confirm(UUID id) {
-        permissions.require(DeliveryRunsPermissions.MANAGE);
+    public Run confirm(UUID id, String reason) {
+        Actor actor = permissions.require(DeliveryRunsPermissions.MANAGE);
         Run run = lock(id);
+        if (!run.minimumMet() && (reason == null || reason.isBlank())) {
+            throw new RuleViolation("delivery-runs.reason-required",
+                    "Confirming a run below its minimum needs a reason");
+        }
         Instant now = Instant.now(clock);
         Run cutOff = run.status().takesOrders() ? run.cutOff(now) : run;
-        return lifecycle.confirm(location(run.locationId()), cutOff, run.status(), now);
+        return lifecycle.confirm(location(run.locationId()), cutOff, run.status(), now,
+                new RunDecision(actor.subject(), reason));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RunAction> actions(UUID id) {
+        permissions.require(DeliveryRunsPermissions.READ);
+        find(id);
+        return actionLog.findByRun(id);
     }
 
     @Override
@@ -194,7 +220,7 @@ class RunServiceImpl implements RunService {
         permissions.require(DeliveryRunsPermissions.MANAGE);
         Run run = lock(id);
         return lifecycle.moved(location(run.locationId()), run.startCollecting(Instant.now(clock)), run.status(),
-                null, false);
+                DeliveryRunsEvents.RUN_COLLECTING, false);
     }
 
     @Override
@@ -221,7 +247,7 @@ class RunServiceImpl implements RunService {
         permissions.require(DeliveryRunsPermissions.READ);
         Location location = location(c.locationId());
         LocationDetails d = location.details();
-        long fee = c.feeMinor() == null ? d.defaultFeeMinor() : c.feeMinor();
+        long fee = c.feeMinor() == null ? defaultFee(location, d.currency()) : c.feeMinor();
         int min = c.minOrders() == null ? d.defaultMinOrders() : c.minOrders();
         Integer capacity = c.capacityOrders() == null ? d.defaultCapacity().maxOrders() : c.capacityOrders();
         DropMode mode = c.dropMode() == null ? d.dropMode() : c.dropMode();
@@ -275,9 +301,10 @@ class RunServiceImpl implements RunService {
         boolean pickupOnly = !w.details().door() && w.details().pickup();
         PickupPoint point = pickupOnly ? location.details().pickupPoint() : null;
         DropMode mode = point != null ? DropMode.PICKUP_POINT : DropMode.DOORSTEP;
-        long fee = w.doorFee(preorders.settings().settings().payment()).map(m -> m.minor())
+        long fee = w.doorFee(preorders.fees().current()).map(FeeSnapshot::amountMinor)
                 .orElse(location.details().defaultFeeMinor());
-        RunTerms terms = new RunTerms(new DeliveryWindow(start, end), cutoff, null, null, fee,
+        Instant sellerPickup = SellerPickupSchedule.at(cutoff, start, preorders.sellerPickupLead());
+        RunTerms terms = new RunTerms(new DeliveryWindow(start, end), cutoff, null, sellerPickup, fee,
                 w.details().currency(), 1, Capacity.UNLIMITED, mode, point, CutoffPolicy.CANCEL, 1);
         List<PreorderOrder> paid = new ArrayList<>();
         for (PreorderOrder o : preorders.orders().findByWindow(w.id())) {
@@ -294,27 +321,43 @@ class RunServiceImpl implements RunService {
             slots.add(runOrders.insert(RunOrder.reserve(UUID.randomUUID(), run.id(), o.orderId(), customer, 1, null,
                     now).confirm(code, now)));
         }
-        preorders.events().run(DeliveryRunsEvents.RUN_CONFIRMED, location, run, null, null, "PREORDER " + w.code(),
-                slots);
+        preorders.events().run(DeliveryRunsEvents.RUN_CONFIRMED, location, run, null, null, PreorderDeliveryDayService.REASON_PREFIX + w.code(),
+                slots, sellersOf(paid));
         LOG.info("Pre-order {} handed {} orders to run {} at {}", w.code(), slots.size(), run.id(), location.slug());
         return Optional.of(run);
     }
 
+    /** The sellers a run collects from, with the orders and units each has to pack (largest first). */
+    static List<RunEventPayload.SellerRef> sellersOf(List<PreorderOrder> orders) {
+        Map<String, int[]> counts = new LinkedHashMap<>();
+        Map<String, String> names = new HashMap<>();
+        for (PreorderOrder o : orders) {
+            Set<String> seen = new HashSet<>();
+            for (PreorderLine l : o.lines()) {
+                if (l.sellerOrgId() == null || l.sellerOrgId().isBlank() || l.qty() < 1) {
+                    continue;
+                }
+                int[] c = counts.computeIfAbsent(l.sellerOrgId(), k -> new int[2]);
+                if (seen.add(l.sellerOrgId())) {
+                    c[0]++;
+                }
+                c[1] += l.qty();
+                if (l.sellerName() != null && !l.sellerName().isBlank()) {
+                    names.putIfAbsent(l.sellerOrgId(), l.sellerName());
+                }
+            }
+        }
+        return counts.entrySet().stream()
+                .map(e -> new RunEventPayload.SellerRef(e.getKey(), names.get(e.getKey()), e.getValue()[0],
+                        e.getValue()[1]))
+                .sorted(Comparator.comparingInt(RunEventPayload.SellerRef::units).reversed()
+                        .thenComparing(RunEventPayload.SellerRef::sellerOrgId))
+                .toList();
+    }
+
     /** The window's location, else the active location named like its first target city in that state. */
     private Optional<Location> windowLocation(PreorderWindow w) {
-        if (w.details().locationId() != null) {
-            return locations.findById(w.details().locationId()).filter(Location::active);
-        }
-        Optional<AreaKey> city = w.details().targets().stream().filter(AreaKey::isCity).findFirst();
-        if (city.isEmpty()) {
-            return Optional.empty();
-        }
-        AreaKey k = city.get();
-        return locations.findAll(true).stream()
-                .filter(l -> l.name().equalsIgnoreCase(k.city())
-                        && k.region().equalsIgnoreCase(l.details().state() == null ? "" : l.details().state())
-                        && k.country().equals(l.details().market().toUpperCase(Locale.ROOT)))
-                .findFirst();
+        return preorders.fees().distances().locate(w);
     }
 
     private RunTerms terms(Location location, RunCommand c) {
@@ -328,11 +371,21 @@ class RunServiceImpl implements RunService {
         Capacity capacity = c.capacityOrders() == null && c.capacityPackages() == null ? d.defaultCapacity()
                 : new Capacity(c.capacityOrders(), c.capacityPackages());
         return new RunTerms(new DeliveryWindow(c.windowStart(), c.windowEnd()), c.cutoffAt(), c.opensAt(),
-                c.sellerPickupAt(), c.feeMinor() == null ? d.defaultFeeMinor() : c.feeMinor(),
+                c.sellerPickupAt(), c.feeMinor() == null ? defaultFee(location, c.currency() == null ? d.currency()
+                : c.currency()) : c.feeMinor(),
                 c.currency() == null ? d.currency() : c.currency(),
                 c.minOrders() == null ? d.defaultMinOrders() : c.minOrders(), capacity, mode, point,
                 c.cutoffPolicy() == null ? d.defaultCutoffPolicy() : c.cutoffPolicy(),
-                c.extendDays() == null ? d.defaultExtendDays() : c.extendDays());
+                c.extendDays() == null ? d.defaultExtendDays() : c.extendDays(), c.notes());
+    }
+
+    /**
+     * A run staff schedule without naming a fee costs what the AfroTransact delivery rule says for the distance of
+     * the location (ADR 0005 §3); the default of the location only applies when no rule can price it.
+     */
+    private long defaultFee(Location location, String currency) {
+        return preorders.fees().doorFeeAt(location, currency).map(FeeSnapshot::amountMinor)
+                .orElse(location.details().defaultFeeMinor());
     }
 
     private RouteEstimate route(Location location) {

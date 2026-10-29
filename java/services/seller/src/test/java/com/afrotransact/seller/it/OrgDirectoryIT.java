@@ -76,4 +76,37 @@ class OrgDirectoryIT extends SellerIntegrationTest {
         TestActors.as(TestActors.staff("ops-dir", OrgDirectoryService.DIRECTORY_READ, SellerPermissions.SELLERS_ENFORCE));
         assertThat(get("/v1/orgs/directory").status()).isEqualTo(200);
     }
+
+    @Test
+    void identityReadsOrganisationsAsItMirrorsThemWithTheirOwners() {
+        String id = "org_zzmir" + unique("").substring(1, 7);
+        org(id, "SELLER", "Malo Branding LLC", "Malo Branding", "APPROVED");
+        Timestamp now = Timestamp.from(Instant.now());
+        jdbc.sql("""
+                insert into org_member (org_id, user_id, role_key, created_at, updated_at)
+                values (:org, :user, 'seller.owner', :now, :now), (:org, :staff, 'seller.catalog', :now, :now)
+                """).params(Map.of("org", id, "user", "11111111-2222-3333-4444-555555555555",
+                "staff", "99999999-2222-3333-4444-555555555555", "now", now)).update();
+        TestActors.as(TestActors.service("identity-service", OrgDirectoryService.DIRECTORY_READ));
+
+        Response one = get("/v1/orgs/" + id + "/mirror");
+        assertThat(one.status()).as(one.body().toString()).isEqualTo(200);
+        assertThat(one.body().path("orgId").asString()).isEqualTo(id);
+        assertThat(one.body().path("status").asString()).isEqualTo("APPROVED");
+        assertThat(one.body().path("kind").asString()).isEqualTo("SELLER");
+        assertThat(one.body().path("displayName").asString()).isEqualTo("Malo Branding");
+        assertThat(one.body().path("ownerUserIds").toString()).isEqualTo("[\"11111111-2222-3333-4444-555555555555\"]");
+        assertThat(one.body().path("occurredAt").asString()).isNotBlank();
+
+        Response approved = get("/v1/orgs/mirror?size=500&status=APPROVED,SUSPENDED");
+        assertThat(approved.status()).isEqualTo(200);
+        List<String> ids = new ArrayList<>();
+        approved.body().path("items").forEach(i -> ids.add(i.path("orgId").asString()));
+        assertThat(ids).contains(id).isSorted();
+
+        assertThat(get("/v1/orgs/org_zznope/mirror").status()).isEqualTo(404);
+        TestActors.as(TestActors.member("u-mir", id, "seller.owner"));
+        assertThat(get("/v1/orgs/" + id + "/mirror").status()).isEqualTo(403);
+        assertThat(get("/v1/orgs/mirror").status()).isEqualTo(403);
+    }
 }

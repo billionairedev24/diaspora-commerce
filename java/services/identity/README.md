@@ -19,7 +19,7 @@ claims with `JwtActorResolver` (java/libs/platform-security) or `auth.Require` (
 | RBAC | Permissions, roles per portal (account, platform, seller, provider), multiple roles + direct grants per user, enable/disable, module access matrix (none/view/edit/approve/full), append-only change log (DB trigger rejects UPDATE/DELETE). |
 | MFA | TOTP (RFC 6238, otpauth URI for the QR code, replay-protected; secrets encrypted at rest, see [Data protection](#data-protection-s202)), SMS codes (outbox event), 10 hashed recovery codes, "trust this browser" for 30 days. Staff always need a second factor (SMS to the phone on file if nothing is enrolled) and cannot turn MFA off. Passkey sign-ins skip the prompt (phishing-resistant). |
 | Passkeys | Spring Security 7 `webAuthn()` with JDBC repositories (`user_entities`, `user_credentials`): `/webauthn/register/options`, `/webauthn/register`, `/webauthn/authenticate/options`, `/login/webauthn`, management page `/webauthn/register`. The first-party apps and the mobile apps register over the API with the user's bearer token (S016, see [Passkeys over the API](#passkeys-over-the-api-s016)). `PasskeyService` lists, renames and removes them and refuses to remove the last sign-in method. The signature counter is enforced (a counter that does not increase is rejected as a cloned authenticator). |
-| Hosted pages (SSO) | The only place credentials are entered, for every app: `/login` (email + password, passkey, configured social providers), `/signup` (+ `/signup/verify` email code, then the pending authorization continues signed in), `/login/mfa`, `/login/forgot` (support page: no online password reset yet), branded `error` page. Server-rendered Thymeleaf with the AfroTransact design tokens (`static/assets/tokens.css` + self-hosted Figtree, copies of `@afrotransact/tokens`, checked by `DesignTokensSyncTest`). Branded per app from the saved authorization request (client id, or for `gateway-bff` the origin of its redirect URI: storefront, Seller Center, staff console; no self sign-up for staff/drivers). OIDC `prompt=create` opens sign-up, `prompt=login` asks again despite the SSO session, `login_hint` prefills the email, `idp_hint` goes straight to an enabled provider, `invitation` joins an organisation on sign-up. `/connect/logout` (RP-initiated logout) ends the identity session, also for a stale ID token (then only registered post-logout URIs are honoured). |
+| Hosted pages (SSO) | The only place credentials are entered, for every app: `/login` (email + password, passkey, configured social providers), `/signup` (+ `/signup/verify` email code, then the pending authorization continues signed in), `/login/mfa`, `/login/forgot` (+ `/login/forgot/code`: password reset with an emailed or texted code, S300), branded `error` page. Server-rendered Thymeleaf with the AfroTransact design tokens (`static/assets/tokens.css` + self-hosted Figtree, copies of `@afrotransact/tokens`, checked by `DesignTokensSyncTest`). Branded per app from the saved authorization request (client id, or for `gateway-bff` the origin of its validated redirect URI: storefront, Seller Center, staff console, following `PUBLIC_WEB_URL` / `SELLER_CENTER_URL` / `STAFF_CONSOLE_URL`; no self sign-up for staff/drivers); without a request, or for an unknown client or origin, the pages are neutral AfroTransact pages (never another app's branding). OIDC `prompt=create` opens sign-up, `prompt=login` asks again despite the SSO session, `login_hint` prefills the email, `idp_hint` goes straight to an enabled provider, `invitation` joins an organisation on sign-up. `/connect/logout` (RP-initiated logout) ends the identity session, also for a stale ID token (then only registered post-logout URIs are honoured), and returns each web app to its own landing (`<app>/api/bff/v1/auth/signed-out/<app>`, see [Sign-out and password reset](#sign-out-and-password-reset-s300)). |
 | Social login | Google (OIDC) via its own consent page; Apple (OIDC, form_post) and Facebook registrations exist but are disabled by default. A provider is offered only when it has client credentials **and** is enabled in `identity_provider` (`PUT /v1/admin/identity-providers/{id}`). Accounts created from provider-verified emails skip email verification; a verified email matching an existing account links to it; signing in with a provider while already signed in links it. |
 | First-party sign-in | `gateway-bff` only: password, TOTP/SMS/recovery-code and passkey steps as JSON (`/v1/auth/*`), ending in a one-time **login ticket** that the BFF redeems on the normal authorization-code flow (`/oauth2/authorize?…&login_ticket=…`). See [First-party sign-in](#first-party-sign-in-s209). |
 | Brute-force protection | Per account (normalised email, also for unknown emails) and per IP: 5 / 30 failures within 15 min lock for 15 min, doubling per consecutive lockout up to 4 h (`at.identity.sign-in-protection`). Applies to the first-party API **and** the hosted `/login` and `/login/mfa` pages. 429 `identity.sign-in-locked` + `Retry-After`; append-only `sign_in_audit`; `identity.sign-in.locked` events. |
@@ -210,6 +210,56 @@ passwords. Public clients (web apps, mobile) use PKCE; the client setting
 `settings.client.afrotransact.public-refresh-tokens` lets a public client receive rotating refresh tokens
 (Spring Authorization Server does not issue them to public clients by default).
 
+## Sign-out and password reset (S300)
+
+**Single sign-out, back to the app.** Each web app signs out through gateway-bff (`POST /v1/auth/sign-out`), which
+revokes its tokens and sends the browser to `/connect/logout` with `id_token_hint`, `client_id=gateway-bff`, the app's
+own `post_logout_redirect_uri` and the page as `state`. The `gateway-bff` client registers one post-logout URI per app,
+built from the same variables as its callbacks (so a moved port such as Seller Center on :3010, and LAN mode, follow
+along): `${PUBLIC_WEB_URL}/api/bff/v1/auth/signed-out/storefront`, `${SELLER_CENTER_URL}/api/bff/v1/auth/signed-out/seller-center`,
+`${STAFF_CONSOLE_URL}/api/bff/v1/auth/signed-out/staff-console`. An unregistered URI is never followed: the browser is
+signed out and lands on `/login?logout`, a neutral page. The BFF's landing then shows the storefront signed out (the
+page, or home, with a "You're signed out" toast; no sign-in wall), or starts Seller Center's or the staff console's own
+sign-in (`prompt=login`, `notice=signed_out`): identity's page branded for that app, saying "You've been signed out",
+returning to the app afterwards.
+
+**Branding.** Identity pages are branded from the saved authorization request only. Before S300 a page opened without
+one fell back to the storefront's copy, and Seller Center and the staff console were told apart only by comparing the
+callback's origin with the configured URLs; the back-office apps' sign-outs returned to their home pages, which then
+asked to sign in again (the staff console with "Use your @afrotransact.com staff account", leading to the staff-branded
+identity page). Now there is a neutral brand (`auth.neutral.*`) for pages without an app, the staff brand needs a staff
+console request (its callback origin, or the `staff-console` client), and every app has its own post-logout landing.
+The staff console's own "Sign in to the staff console" page is gone too: signed out, it goes straight to identity's
+sign-in like Seller Center (a sign-in that comes back signed out within two minutes shows "Sign-in is temporarily
+unavailable" with Try again instead of looping).
+
+**Forgotten password.** `/login/forgot` (and `POST /v1/password-reset` for the apps):
+
+1. Enter the email. The answer is always the same ("If it has an AfroTransact account, we've sent a code"), whether
+   or not the account exists (no enumeration). An account with a password gets a 6-digit code (10 minutes, single
+   use, at most 5 wrong tries, SHA-256 hashed at rest like every one-time code) by email, and by SMS when the phone is
+   verified: one code, purpose `PASSWORD_RESET` on `identity.verification.requested` (notifications template
+   `identity.password_reset`; locally Mailpit, like sign-in codes). An account that only signs in with Google, Apple or
+   Facebook gets `identity.password-reset.federated` (email: sign in with that provider). Passkeys are unchanged.
+2. `/login/forgot/code`: the code and a new password (the sign-up policy and its live checklist). The password is
+   checked before the code is used, so a weak password does not burn it.
+3. On success the password changes, every refresh token (`oauth2_authorization`), identity browser session
+   (`spring_session`) and trusted browser is revoked (signed out everywhere), `identity.password.changed` is published
+   (email "your password was changed") and the browser lands on the sign-in page of the app that started the flow
+   (the saved request is kept) with a success message and the email filled in.
+
+Limits reuse the sign-in protection's counters under their own keys, for every email with or without an account:
+`reset-request:<email|ip>` (5 requests per email / 30 per IP in 15 minutes) and `reset:<email|ip>` (5 wrong codes per
+email / 30 per IP), then escalating lockouts (429 `identity.reset-locked` + `Retry-After`). Wrong, expired, used and
+unknown codes all answer `identity.invalid-reset-code`. Every request, failure, lockout and completion is in
+`sign_in_audit` (method `PASSWORD_RESET`), the completion also in the access change log (`password.reset`).
+
+**Staff accounts** may use the same self-service reset. There was no admin-only reset rule or admin reset endpoint;
+what protects staff is that they always need a second factor and cannot turn it off. A reset changes only the
+password and forgets trusted browsers, so the next staff sign-in still asks for two-step verification (an attacker
+with the inbox alone cannot get in). The staff-branded pages say so and point to an access administrator for a lost
+authenticator or phone.
+
 ## First-party sign-in (S209)
 
 The web apps no longer use this API: they sign in on the hosted pages above (single sign-on). It remains for
@@ -334,6 +384,8 @@ Full contract: [`contracts/openapi/identity.yaml`](../../../contracts/openapi/id
 | `POST /v1/accounts` | public | Unified sign-up (`intent` = shop/sell/provide) |
 | `POST /v1/accounts/verification` | public | Confirm email with the 6-digit code |
 | `POST /v1/accounts/verification/resend` | public | New code (rate limited) |
+| `POST /v1/password-reset` | public | Ask for a password reset code (always 202, no enumeration; S300) |
+| `POST /v1/password-reset/confirm` | public | New password with the code; signs out everywhere (S300) |
 | `GET /v1/identity-providers` | public | Enabled social providers for sign-in screens |
 | `GET /v1/me`, `PATCH /v1/me` | user | Profile, roles, permissions, orgs, `landing`; complete profile (phone, terms) |
 | `POST /v1/me/roles/seller-applicant`, `…/provider-applicant` | user | Existing customer starts selling / offering services (same account, audited) |
@@ -359,6 +411,8 @@ Full contract: [`contracts/openapi/identity.yaml`](../../../contracts/openapi/id
 | `GET /v1/admin/access-log?userId=` | `access:read` | Append-only change log |
 | `GET /v1/admin/identity-providers`, `PUT /v1/admin/identity-providers/{id}` | read / admin | Identity provider switches |
 | `GET /v1/admin/data-protection`, `POST /v1/admin/data-protection/rotate` | STAFF + `platform.super_admin` | Encryption-key status, re-encrypt MFA secrets under the current key ([Data protection](#data-protection-s202)) |
+| `/v1/admin/identity/**` (clients, sessions, signing-keys, token-inspector, discovery, settings) | `identity:admin` | Identity admin console (S291): OAuth clients, sign-ins, JWKS key rotation, token inspector, auth settings; every change needs a reason and is audited ([guide](../../../docs/engineering/identity-admin.md)) |
+| `POST /v1/admin/identity/step-up` | `identity:admin` | Re-enter the staff member's password; returns a 5-minute proof for the `X-Step-Up` header that rotate-key, sign-out-everywhere, revoke-a-client, disable-a-client and change-settings need (or a sign-in younger than `at.identity.step-up.fresh-sign-in`, 5 min) |
 | `PUT /v1/orgs/{orgId}` | `orgs:manage` (seller service) | Mirror seller/provider orgs and approval status |
 | `GET /v1/orgs/{orgId}/roles` | team reader | S245: roles assignable in the organisation `{orgId, kind, roles: [{key, portal, name, description, permissions}]}` — seller roles for SELLER, provider roles for PROVIDER, both for BOTH (Seller Center role pickers and nav groups) |
 | `GET /v1/orgs/{orgId}/members` | team reader (below) | Member directory `{orgId, items: [{userId, firstName, lastName, name, email, roleKey, roleLabel, status ACTIVE/DISABLED, joinedAt}]}` |
@@ -391,7 +445,10 @@ notifications service: `recipient`, `channel` email/sms, `code`, `expiresInMinut
 `identity.notification-preferences.updated` (the switches, `locale`, `timeZone`), `identity.user.phone-verified`
 (`userId`, `phone`, `verifiedAt`), `identity.invitation.created` (key = org id; `token`, `acceptUrl`, `email`,
 `recipient.email`, org and role names, `expiresAt`, `inviterName`; never log it), `identity.invitation.revoked` (key =
-org id) and `identity.invitation.accepted` (key = user id). Phone verification codes go out as
+org id), `identity.invitation.accepted` (key = user id), `identity.password-reset.federated` (S300: a reset asked for
+an account without a password; `recipient.email`, `providers`) and `identity.password.changed` (S300: `method` RESET,
+`changedAt`, `sessionsRevoked`). Password reset codes are `identity.verification.requested` with `purpose:
+PASSWORD_RESET` (email, and sms to a verified phone). Phone verification codes go out as
 `identity.verification.requested` with `channel: sms` and `purpose: PHONE_VERIFICATION`. Schemas: [`contracts/asyncapi/fragments/identity.yaml`](../../../contracts/asyncapi/fragments/identity.yaml).
 
 ### Consumed (consumer group `identity-service`, inbox-deduplicated, `CONSUMERS_ENABLED`)
@@ -528,7 +585,7 @@ never requests it). `orders-service`: `offers:read` (reads the offer's `inventor
 | `platform.inventory_manager` (Inventory Manager) | platform | `reports:read`, `orders:read`, `inventory:read`, `inventory:adjust`, `inventory:scan`, `inventory:receive`, `retail:purchase`, `labels:print` |
 | `platform.dispatcher` (Dispatcher) | platform | `reports:read`, `orders:read`, `orders:manage`, `delivery:dispatch`, `pickup:manage`, `inventory:read` |
 | `platform.product_owner` (Product Owner) | platform | `reports:read`, `config:edit`, `flags:manage`, `markets:manage`, `fees:manage`, `coupons:manage`, `content:manage`, `catalog:moderate`, `orders:read`, `orgs:read`, `payouts:read`, `inventory:read`, `access:read`, `audit:read`, `ai:manage` |
-| `platform.developer` (Developer) | platform | `reports:read`, `orders:read`, `config:edit`, `flags:manage`, `developer:manage`, `shipping:manage`, `labels:print`, `access:read`, `access:admin`, `audit:read`, `ai:manage`, `markets:manage`, `fees:manage`, `coupons:manage`, `pickup:manage` |
+| `platform.developer` (Developer) | platform | Same integrations focus as before, plus **VIEW on every staff console module** (V28) and **EDIT** on marketing/catalog/orders for incident fixes; `users:read`, `orgs:read`, `inventory:read`. Payout approve and dispute approve stay with Finance/Trust. Senior/junior developer split is planned later. |
 | `platform.auditor` (Auditor (read-only)) | platform | `reports:read`, `orders:read`, `orgs:read`, `payouts:read`, `ledger:read`, `inventory:read`, `audit:read`, `access:read`, `users:read` |
 | `platform.driver` (Driver) | platform | `delivery:operate` |
 | `seller.owner` (Owner) | seller | `catalog:write`, `labels:print`, `orders:read`, `orders:update-status`, `returns:manage`, `refunds:issue`, `inventory:read`, `inventory:adjust`, `ads:manage`, `store:design`, `reviews:respond`, `payouts:read`, `billing:manage`, `team:manage`, `compliance:manage`, `support:respond`, `reports:read` |

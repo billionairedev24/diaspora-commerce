@@ -111,3 +111,16 @@ func TestMarketCode(t *testing.T) {
 		}
 	}
 }
+
+func TestServiceClientChangeGivesEachClientTheServiceRelation(t *testing.T) {
+	got := domain.ServiceClientChange([]string{"orders-service", " ", "tax-returns-service "})
+	want := []domain.Tuple{
+		{User: "client:orders-service", Relation: "service", Object: "platform:afrotransact"},
+		{User: "client:tax-returns-service", Relation: "service", Object: "platform:afrotransact"}}
+	if !reflect.DeepEqual(got.Writes, want) || len(got.Deletes) != 0 {
+		t.Fatalf("change = %+v", got)
+	}
+	if !domain.ServiceClientChange(nil).Empty() {
+		t.Fatal("no clients is no change")
+	}
+}

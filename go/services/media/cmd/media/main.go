@@ -31,6 +31,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/pgrepo"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/s3store"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/uploadthing"
+	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/urlfetch"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/config"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/domain"
@@ -94,7 +95,9 @@ func run() error {
 		stores[domain.Purpose(purpose)] = st
 	}
 	repo := pgrepo.New(pool)
-	opts := []app.Option{app.WithLogger(log), moderation(cfg, log)}
+	// S308: catalog-service imports the images of bulk product uploads from their URLs (public addresses only).
+	opts := []app.Option{app.WithLogger(log), moderation(cfg, log), app.WithFetcher(urlfetch.New(urlfetch.Options{})),
+		app.WithLibrary(repo)}
 	if o, err := links(cfg, log); err != nil {
 		return err
 	} else if o != nil {

@@ -40,6 +40,10 @@ import java.util.Objects;
  * @param localDelivery       AfroTransact Delivery from the seller's store (S255): pickup, distance and quote
  *                            snapshot; null for every other shipment
  * @param preorder            the pre-order window of a PREORDER shipment (S272); null for every other shipment
+ * @param feeRule             the delivery fee rule that priced the shipping (ADR 0005 §3): method, rule version, band
+ *                            and amount at checkout; null when no staff rule applied (flat rates, seller store)
+ * @param membershipWaiver    the shipping fee the customer's membership waived (S323): tier, benefit and amount;
+ *                            {@code shippingMinor} is what was charged after it; null when nothing was waived
  */
 public record Shipment(String id, String orderId, int seq, String sellerOrgId, String sellerName,
                        FulfilmentType fulfilmentType, String nodeId, DeliveryMethod deliveryMethod,
@@ -48,7 +52,39 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
                        String handoverCodeSealed, ShipmentStatus status, long shippingMinor, String carrier,
                        String trackingNumber, LocalDate promisedFrom, LocalDate promisedBy, String captureId,
                        Instant capturedAt, Instant deliveredAt, Instant lastExternalEventAt, Instant statusChangedAt,
-                       List<OrderLine> lines, long version, LocalDelivery localDelivery, PreorderPackage preorder) {
+                       List<OrderLine> lines, long version, LocalDelivery localDelivery, PreorderPackage preorder,
+                       FeeRuleSnapshot feeRule, MembershipWaiver membershipWaiver) {
+
+    /** A shipment whose delivery fee was not waived by a membership. */
+    public Shipment(String id, String orderId, int seq, String sellerOrgId, String sellerName,
+                    FulfilmentType fulfilmentType, String nodeId, DeliveryMethod deliveryMethod, String serviceLevel,
+                    String pickupLocationId, DeliveryPreferences preferences, boolean perishable,
+                    boolean handoverRequired, String handoverCodeHash, String handoverCodeSealed,
+                    ShipmentStatus status, long shippingMinor, String carrier, String trackingNumber,
+                    LocalDate promisedFrom, LocalDate promisedBy, String captureId, Instant capturedAt,
+                    Instant deliveredAt, Instant lastExternalEventAt, Instant statusChangedAt, List<OrderLine> lines,
+                    long version, LocalDelivery localDelivery, PreorderPackage preorder, FeeRuleSnapshot feeRule) {
+        this(id, orderId, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, deliveryMethod, serviceLevel,
+                pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash, handoverCodeSealed,
+                status, shippingMinor, carrier, trackingNumber, promisedFrom, promisedBy, captureId, capturedAt,
+                deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, localDelivery, preorder, feeRule,
+                null);
+    }
+
+    /** A shipment that has no fee rule snapshot. */
+    public Shipment(String id, String orderId, int seq, String sellerOrgId, String sellerName,
+                    FulfilmentType fulfilmentType, String nodeId, DeliveryMethod deliveryMethod, String serviceLevel,
+                    String pickupLocationId, DeliveryPreferences preferences, boolean perishable,
+                    boolean handoverRequired, String handoverCodeHash, String handoverCodeSealed,
+                    ShipmentStatus status, long shippingMinor, String carrier, String trackingNumber,
+                    LocalDate promisedFrom, LocalDate promisedBy, String captureId, Instant capturedAt,
+                    Instant deliveredAt, Instant lastExternalEventAt, Instant statusChangedAt, List<OrderLine> lines,
+                    long version, LocalDelivery localDelivery, PreorderPackage preorder) {
+        this(id, orderId, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, deliveryMethod, serviceLevel,
+                pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash, handoverCodeSealed,
+                status, shippingMinor, carrier, trackingNumber, promisedFrom, promisedBy, captureId, capturedAt,
+                deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, localDelivery, preorder, null);
+    }
 
     /** A shipment that is not a pre-order. */
     public Shipment(String id, String orderId, int seq, String sellerOrgId, String sellerName,
@@ -124,7 +160,7 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
                 serviceLevel, pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash,
                 handoverCodeSealed, status, shippingMinor, carrier, trackingNumber, promisedFrom, promisedBy,
                 captureId, capturedAt, deliveredAt, lastExternalEventAt, statusChangedAt, lines, version,
-                localDelivery, updated);
+                localDelivery, updated, feeRule, membershipWaiver);
     }
 
     /** AfroTransact Delivery from the seller's store (S255): seller-packed, collected by an AfroTransact driver. */
@@ -182,12 +218,18 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
                 && (reason == null || reason.isBlank())) {
             throw new OrdersRuleViolation("orders.reason-required", "A reason is required to set " + to.wire());
         }
+        if (to == ShipmentStatus.DELIVERED && source == TransitionSource.API
+                && deliveryMethod == DeliveryMethod.AFROTRANSACT_DELIVERY && (reason == null || reason.isBlank())) {
+            // Our drivers prove a delivery with a photo and a handover; staff confirming it without them say why.
+            throw new OrdersRuleViolation("orders.reason-required",
+                    "Say why you are confirming this delivery without the driver's proof");
+        }
         Instant eventTime = external && externalEventAt != null ? externalEventAt : at;
         Shipment next = new Shipment(id, orderId, seq, sellerOrgId, sellerName, fulfilmentType, nodeId,
                 deliveryMethod, serviceLevel, pickupLocationId, preferences, perishable, handoverRequired,
                 handoverCodeHash, handoverCodeSealed, to, shippingMinor, carrier, trackingNumber, promisedFrom,
                 promisedBy, captureId, capturedAt, to == ShipmentStatus.DELIVERED ? eventTime : deliveredAt,
-                external ? eventTime : lastExternalEventAt, at, lines, version, localDelivery, preorder);
+                external ? eventTime : lastExternalEventAt, at, lines, version, localDelivery, preorder, feeRule, membershipWaiver);
         StatusChange change = new StatusChange(id, eventId, status, to, actor.kind(), actor.id(), actor.orgId(),
                 reason == null || reason.isBlank() ? null : reason.trim(), source, eventTime);
         return new TransitionResult(next, change, TransitionDecision.Kind.ALLOW, null);
@@ -205,7 +247,7 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
                 serviceLevel, pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash,
                 handoverCodeSealed, status, shippingMinor, newCarrier, newTrackingNumber, promisedFrom, promisedBy,
                 captureId, capturedAt, deliveredAt, lastExternalEventAt, statusChangedAt, lines, version,
-                localDelivery, preorder);
+                localDelivery, preorder, feeRule, membershipWaiver);
     }
 
     /** Marks this shipment's amount captured by payments. */
@@ -214,6 +256,6 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
                 serviceLevel, pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash,
                 handoverCodeSealed, status, shippingMinor, carrier, trackingNumber, promisedFrom, promisedBy,
                 newCaptureId, at, deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, localDelivery,
-                preorder);
+                preorder, feeRule, membershipWaiver);
     }
 }

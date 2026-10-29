@@ -5,6 +5,7 @@
 import { http, HttpResponse, type JsonBodyType } from 'msw';
 
 import {
+  type CostComponents,
   type CycleCount,
   type CycleCountLine,
   type GoodsReceipt,
@@ -17,7 +18,8 @@ import {
   type RetailItem,
   type RetailShipment,
   type Supplier,
-  type SupplierInvoice
+  type SupplierInvoice,
+  usdMinorOf
 } from '../inventory-hub';
 import { bffProblemType } from '../problem-types';
 
@@ -52,6 +54,38 @@ function must<T>(v: T | undefined): T {
   if (v === undefined) throw new Error('mock seed row missing');
   return v;
 }
+/** What one unit of a lot cost: in the currency paid, the rate to USD fixed at receiving and the USD value. */
+export interface LotCostInfo {
+  unitMinor: number;
+  currency: string;
+  rate: number;
+  rateDate: string;
+  source: Lot['fxRateSource'];
+  usdMinor: number;
+  components: CostComponents;
+}
+const usdCost = (unitMinor: number, rateDate: string): LotCostInfo => ({ unitMinor, currency: 'USD', rate: 1, rateDate, source: 'BASE', usdMinor: unitMinor, components: { goodsMinor: unitMinor, freightMinor: 0, dutyMinor: 0, otherMinor: 0 } });
+const costFields = (c: LotCostInfo) => ({
+  unitLandedCostMinor: c.unitMinor, currency: c.currency, fxRateToUsd: c.rate, fxRateDate: c.rateDate, fxRateSource: c.source, unitCostUsdMinor: c.usdMinor, costComponents: c.components
+});
+const costOf = (l: Lot): LotCostInfo => ({
+  unitMinor: l.unitLandedCostMinor, currency: l.currency, rate: l.fxRateToUsd, rateDate: l.fxRateDate ?? '', source: l.fxRateSource, usdMinor: l.unitCostUsdMinor,
+  components: l.costComponents ?? { goodsMinor: l.unitLandedCostMinor, freightMinor: 0, dutyMinor: 0, otherMinor: 0 }
+});
+
+/** Currencies stock can be received in (the service's `at.inventory.cost-currencies`). */
+export const MOCK_COST_CURRENCIES = [
+  { code: 'USD', name: 'US Dollar', minorUnits: 2, base: true }, { code: 'MXN', name: 'Mexican Peso', minorUnits: 2, base: false },
+  { code: 'NGN', name: 'Nigerian Naira', minorUnits: 2, base: false }, { code: 'GHS', name: 'Ghanaian Cedi', minorUnits: 2, base: false },
+  { code: 'CAD', name: 'Canadian Dollar', minorUnits: 2, base: false }, { code: 'EUR', name: 'Euro', minorUnits: 2, base: false },
+  { code: 'GBP', name: 'British Pound', minorUnits: 2, base: false }, { code: 'ZAR', name: 'South African Rand', minorUnits: 2, base: false },
+  { code: 'KES', name: 'Kenyan Shilling', minorUnits: 2, base: false }, { code: 'XOF', name: 'West African CFA Franc', minorUnits: 0, base: false }
+];
+
+/** The staff-managed rates the receiving form suggests (the staff mock serves the table; tests may pass their own). */
+export type HubRate = { currency: string; rateDate: string; rateToUsd: number };
+export type HubRates = (request: Request) => HubRate[];
+
 const uuid = (n: number, prefix = '0') => `${prefix.padEnd(8, '0').slice(0, 8)}-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 function seed(now: Date): HubDb {
@@ -63,8 +97,8 @@ function seed(now: Date): HubDb {
     { id: 'LAX-FC', name: 'Los Angeles FC', kind: 'FULFILMENT_CENTRE', country: 'US', active: true }
   ];
   db.suppliers = [
-    { id: uuid(1, 'aaaa0001'), code: 'SUP-ACC', name: 'Accra Spice Co.', country: 'GH', city: 'Tema', currency: 'GHS', paymentTerms: 'Net 30', leadTimeDays: 35, status: 'APPROVED', canReceivePurchaseOrders: true, scorecard: { receipts: 6, onTimePercent: 92, defectPercent: 0.8 }, version: 0 },
-    { id: uuid(2, 'aaaa0001'), code: 'SUP-LAG', name: 'Lagos Pepper Works', country: 'NG', city: 'Lagos', currency: 'NGN', paymentTerms: 'Net 45 · 30% deposit', leadTimeDays: 42, status: 'APPROVED', canReceivePurchaseOrders: true, scorecard: { receipts: 3, onTimePercent: 88, defectPercent: 1.4 }, version: 0 }
+    { id: uuid(1, 'aaaa0001'), code: 'SUP-ACC', name: 'Accra Spice Co.', country: 'GH', city: 'Tema', currency: 'GHS', paymentTerms: 'Net 30', leadTimeDays: 35, status: 'APPROVED', contacts: [], canReceivePurchaseOrders: true, scorecard: { receipts: 6, onTimePercent: 92, defectPercent: 0.8 }, version: 0 },
+    { id: uuid(2, 'aaaa0001'), code: 'SUP-LAG', name: 'Lagos Pepper Works', country: 'NG', city: 'Lagos', currency: 'NGN', paymentTerms: 'Net 45 · 30% deposit', leadTimeDays: 42, status: 'APPROVED', contacts: [], canReceivePurchaseOrders: true, scorecard: { receipts: 3, onTimePercent: 88, defectPercent: 1.4 }, version: 0 }
   ];
   const item = (n: number, sku: string, gtin: string, name: string, atin: string | null, storage: string, shelf: number, priceMinor: number, listing: RetailItem['listingStatus'], casePack: number, sup: number): RetailItem => ({
     id: uuid(n, 'bbbb0001'), sku, gtin, gtin14: gtin.padStart(14, '0'), name, category: 'Groceries', atin, primarySupplierId: must(db.suppliers[sup]).id,
@@ -77,11 +111,11 @@ function seed(now: Date): HubDb {
     item(3, 'AT-OKR-200085', '086001200083', 'AfroTransact Brand Chopped Okra, Frozen', null, 'FROZEN', 270, 499, 'DRAFT', 20, 1)
   ];
   db.offers = { ATJOLLOF01: { inventorySku: 'AT-JOL-200061', status: 'ACTIVE', priceMinor: 649 }, ATSHITO001: { inventorySku: 'AT-SHI-200078', status: 'ACTIVE', priceMinor: 899 } };
-  const lot = (sku: string, lotNo: string, nodeId: string, qty: number, expIn: number | null, status: Lot['status'] = 'SELLABLE', reserved = 0, owner = RETAIL_ORG, bin = 'A-01-01'): Lot => {
+  const lot = (sku: string, lotNo: string, nodeId: string, qty: number, expIn: number | null, status: Lot['status'] = 'SELLABLE', reserved = 0, owner = RETAIL_ORG, bin = 'A-01-01', cost: LotCostInfo = usdCost(312, iso(addDays(now, -40)))): Lot => {
     const exp = expIn === null ? null : iso(addDays(now, expIn));
     return {
       id: uuid(++db.seq, 'cccc0001'), sku, lotNo, nodeId, ownerOrg: owner, bin, qtyOnHand: qty, qtyReserved: reserved, qtyAvailable: status === 'SELLABLE' ? qty - reserved : 0,
-      mfgDate: iso(addDays(now, -60)), expDate: exp, receivedAt: addDays(now, -40).toISOString(), unitLandedCostMinor: 312, currency: 'USD', status, reason: null,
+      mfgDate: iso(addDays(now, -60)), expDate: exp, receivedAt: addDays(now, -40).toISOString(), ...costFields(cost), status, reason: null,
       markdownFlag: expIn !== null && expIn <= 30 ? 'WITHIN_30' : expIn !== null && expIn <= 60 ? 'WITHIN_60' : 'NONE', receiptRef: 'GRN-SEED', version: 0
     };
   };
@@ -89,6 +123,10 @@ function seed(now: Date): HubDb {
     lot('AT-JOL-200061', 'JOL-2604', 'HOU-FC', 48, 22, 'SELLABLE', 4, RETAIL_ORG, 'A-01-02'),
     lot('AT-JOL-200061', 'JOL-2607', 'HOU-FC', 120, 260, 'SELLABLE', 0, RETAIL_ORG, 'A-01-03'),
     lot('AT-JOL-200061', 'JOL-2609', 'EWR-FC', 72, 400, 'SELLABLE', 0, RETAIL_ORG, 'B-02-01'),
+    // Sourced in Mexico and paid in pesos: MXN 120.00 a unit at 0.0577 USD = $6.92 (goods 100.00, freight 15.00, duty 4.00, other 1.00).
+    lot('AT-JOL-200061', 'JOL-MX-2610', 'HOU-FC', 60, 330, 'SELLABLE', 0, RETAIL_ORG, 'A-01-04', {
+      unitMinor: 12_000, currency: 'MXN', rate: 0.0577, rateDate: iso(addDays(now, -12)), source: 'TABLE', usdMinor: 692, components: { goodsMinor: 10_000, freightMinor: 1_500, dutyMinor: 400, otherMinor: 100 }
+    }),
     lot('AT-SHI-200078', 'SHI-2511', 'HOU-FC', 30, 48, 'SELLABLE', 2, RETAIL_ORG, 'A-02-01'),
     lot('AT-SHI-200078', 'SHI-2509-DMG', 'HOU-FC', 3, 48, 'DAMAGED', 0, RETAIL_ORG, 'Q-01-01'),
     lot('AT-SHI-200078', 'SHI-2503', 'ATL-FC', 6, -3, 'EXPIRED', 0, RETAIL_ORG, 'A-04-02'),
@@ -131,7 +169,8 @@ function seed(now: Date): HubDb {
     etd: iso(addDays(now, -10)), eta: iso(addDays(now, 9)), stage: 'DEPARTED', stageLabel: 'Departed origin', asnLocked: true,
     lines: [{ lineNo: 1, poLineNo: 1, itemId: must(db.items[0]).id, sku: 'AT-JOL-200061', qty: 240, lotNo: 'JOL-2610', mfgDate: iso(addDays(now, -20)), expDate: iso(addDays(now, 540)) }],
     cartons: [], documents: [{ name: 'Commercial invoice', status: 'OK', reference: 'CI-0322' }, { name: 'Bill of lading', status: 'OK', reference: 'MSCU4829137' }, { name: 'FDA prior notice', status: 'MISSING', reference: null }],
-    milestones: [{ stage: 'BOOKED', at: addDays(now, -15).toISOString(), by: 'Kemi Adebayo' }, { stage: 'DEPARTED', at: addDays(now, -10).toISOString(), by: 'Kemi Adebayo' }], version: 3
+    milestones: [{ stage: 'BOOKED', at: addDays(now, -15).toISOString(), by: 'Kemi Adebayo' }, { stage: 'DEPARTED', at: addDays(now, -10).toISOString(), by: 'Kemi Adebayo' }],
+    charges: [{ type: 'FREIGHT', amountMinor: 184000, currency: 'USD', basis: null, reference: 'MSC freight invoice 4412' }], version: 3
   }];
   db.movements = db.lots.map((l, i) => ({ id: i + 1, occurredAt: l.receivedAt ?? now.toISOString(), type: 'RECEIVE', sku: l.sku, nodeId: l.nodeId, ownerOrg: l.ownerOrg, lotId: l.id, lotNo: l.lotNo, qty: l.qtyOnHand, reference: 'GRN-SEED', actor: 'Ama Owusu', reason: null }));
   return db;
@@ -165,7 +204,23 @@ const notFound = (what: string) => new HubProblem(404, 'NOT_FOUND', 'Not found',
 const invalid = (detail: string, errors: Record<string, string>) => new HubProblem(422, 'VALIDATION_FAILED', 'Validation failed', detail, errors);
 const conflict = (detail: string) => new HubProblem(409, 'CONFLICT', 'Conflict', detail);
 
+/** Organisation names by id: the BFF puts the name next to every ownerOrg of a relayed document (ownerOrgName). */
+const ORG_NAMES: Record<string, string> = { [RETAIL_ORG]: 'AfroTransact Retail', org_mamatees_pantry: "Mama Tee's Pantry" };
+
+function nameOwners(v: unknown): void {
+  if (Array.isArray(v)) {
+    v.forEach(nameOwners);
+  } else if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    if (typeof o.ownerOrg === 'string' && o.ownerOrg && o.ownerOrgName === undefined) o.ownerOrgName = ORG_NAMES[o.ownerOrg] ?? 'Unknown seller';
+    // The mock's order ids are order numbers already; the BFF resolves real ids to the number.
+    if (typeof o.orderId === 'string' && o.orderNumber === undefined && o.orderId.startsWith('AT-')) o.orderNumber = o.orderId;
+    Object.values(o).forEach(nameOwners);
+  }
+}
+
 export type HubLevel = 'VIEW' | 'EDIT' | 'APPROVE';
+
 /** The caller's access (throws a problem Response-able error) and, for sellers, the organisation lists are limited to. */
 export type HubGate = (request: Request, area: 'inventory' | 'retail' | 'fba', level: HubLevel) => { ownerOrg: string | null; actor: string } | { status: number; code: string; title: string; detail: string };
 
@@ -184,7 +239,9 @@ function handler(gate: HubGate, area: 'inventory' | 'retail' | 'fba', level: Hub
     try {
       const out = await fn({ db: getHubDb(), ownerOrg: g.ownerOrg, actor: g.actor, request, now: new Date(), url: new URL(request.url) }, { id: flat.id ?? '', action: flat.action ?? '' });
       if (out instanceof Response) return out;
-      const res = HttpResponse.json(out as JsonBodyType, { status });
+      const named = structuredClone(out);
+      nameOwners(named);
+      const res = HttpResponse.json(named as JsonBodyType, { status });
       const version = (out as { version?: number } | null)?.version;
       if (typeof version === 'number') res.headers.set('ETag', `"${version}"`);
       return res;
@@ -283,11 +340,12 @@ function planLines(ctx: Ctx, raw: unknown): InboundLine[] {
   return out;
 }
 
-function addLot(ctx: Ctx, sku: string, lotNo: string, nodeId: string, owner: string | null, qty: number, mfg: string | null, exp: string | null, bin: string | null, status: Lot['status'], ref: string, cost = 0): Lot {
+function addLot(ctx: Ctx, sku: string, lotNo: string, nodeId: string, owner: string | null, qty: number, mfg: string | null, exp: string | null, bin: string | null, status: Lot['status'], ref: string, cost: number | LotCostInfo = 0): Lot {
+  const info = typeof cost === 'number' ? usdCost(cost, today(ctx)) : cost;
   if (ctx.db.lots.some((l) => l.sku === sku && l.lotNo === lotNo && l.nodeId === nodeId)) throw conflict(`Lot ${lotNo} of ${sku} already exists at ${nodeId}.`);
   const l: Lot = {
     id: uuid(++ctx.db.seq, 'cccc0001'), sku, lotNo, nodeId, ownerOrg: owner, bin, qtyOnHand: qty, qtyReserved: 0, qtyAvailable: status === 'SELLABLE' ? qty : 0, mfgDate: mfg, expDate: exp,
-    receivedAt: ctx.now.toISOString(), unitLandedCostMinor: cost, currency: 'USD', status, reason: status === 'SELLABLE' ? null : 'Received damaged', markdownFlag: 'NONE', receiptRef: ref, version: 0
+    receivedAt: ctx.now.toISOString(), ...costFields(info), status, reason: status === 'SELLABLE' ? null : 'Received damaged', markdownFlag: 'NONE', receiptRef: ref, version: 0
   };
   ctx.db.lots.push(l);
   move(ctx, l, 'RECEIVE', qty, ref, null);
@@ -402,7 +460,50 @@ function inventoryRoutes(W: string, gate: HubGate, area: 'inventory' | 'fba') {
 
 /* ── Staff-only inventory routes ── */
 
-function staffInventoryRoutes(W: string, gate: HubGate) {
+/** The cost of a received line as inventory values it: the receiver's rate, else the table's latest on or before today. */
+function receivedCost(ctx: Ctx, s: InboundShipment, l: Record<string, unknown>, i: number, rates: HubRate[], errors: Record<string, string>): LotCostInfo | null {
+  const c = l.cost as Record<string, unknown> | undefined | null;
+  if (!c) return null;
+  const f = `lines[${i}].cost`;
+  if (s.source === 'FBA') {
+    errors[f] = 'Seller units carry no cost on AfroTransact’s books';
+    return null;
+  }
+  const currency = String(c.currency ?? '').toUpperCase();
+  const unit = Number(c.unitLandedCostMinor);
+  if (!MOCK_COST_CURRENCIES.some((x) => x.code === currency)) errors[`${f}.currency`] = `${currency || 'That'} is not a currency stock is received in`;
+  if (!Number.isInteger(unit) || unit < 0) errors[`${f}.unitLandedCostMinor`] = 'Must be ≥ 0';
+  const parts = (c.costComponents as Partial<CostComponents> | undefined) ?? undefined;
+  const components: CostComponents = { goodsMinor: parts?.goodsMinor ?? unit, freightMinor: parts?.freightMinor ?? 0, dutyMinor: parts?.dutyMinor ?? 0, otherMinor: parts?.otherMinor ?? 0 };
+  if (parts && components.goodsMinor + components.freightMinor + components.dutyMinor + components.otherMinor !== unit) errors[`${f}.costComponents`] = 'Goods, freight, duty and other must add up to the unit cost';
+  if (Object.keys(errors).length) return null;
+  if (currency === 'USD') return { ...usdCost(unit, today(ctx)), components };
+  let rate = typeof c.fxRateToUsd === 'number' ? c.fxRateToUsd : null;
+  let rateDate = typeof c.fxRateDate === 'string' && c.fxRateDate ? c.fxRateDate : today(ctx);
+  let source: LotCostInfo['source'] = 'ENTERED';
+  if (rate === null) {
+    const suggested = rates.filter((r) => r.currency === currency && r.rateDate <= today(ctx)).sort((a, b) => b.rateDate.localeCompare(a.rateDate))[0];
+    if (!suggested) {
+      errors[`${f}.fxRateToUsd`] = `No ${currency} rate on file: enter the rate to USD`;
+      return null;
+    }
+    rate = suggested.rateToUsd;
+    rateDate = suggested.rateDate;
+    source = 'TABLE';
+  }
+  if (!(rate > 0)) {
+    errors[`${f}.fxRateToUsd`] = 'The exchange rate must be greater than 0';
+    return null;
+  }
+  const usdMinor = usdMinorOf(unit, currency, rate);
+  if (usdMinor === null) {
+    errors[`${f}.fxRateToUsd`] = 'The exchange rate must be greater than 0';
+    return null;
+  }
+  return { unitMinor: unit, currency, rate, rateDate, source, usdMinor, components };
+}
+
+function staffInventoryRoutes(W: string, gate: HubGate, rates: HubRates) {
   const h = (level: HubLevel, fn: Fn, status = 200) => handler(gate, 'inventory', level, fn, status);
   const reasonOf = async (ctx: Ctx) => {
     const b = await bodyOf(ctx.request);
@@ -414,6 +515,13 @@ function staffInventoryRoutes(W: string, gate: HubGate) {
     http.get(`${W}/flow`, h('VIEW', (ctx) => flowOf(ctx))),
     http.get(`${W}/trace`, h('VIEW', (ctx) => traceOf(ctx))),
     http.get(`${W}/overview`, h('VIEW', (ctx) => overviewOf(ctx))),
+    http.get(`${W}/currencies`, h('VIEW', () => ({ items: MOCK_COST_CURRENCIES }))),
+    http.get(`${W}/exchange-rates/current`, h('VIEW', (ctx) => {
+      const asOf = ctx.url.searchParams.get('asOf') || today(ctx);
+      const latest = new Map<string, HubRate>();
+      rates(ctx.request).filter((r) => r.rateDate <= asOf).sort((a, b) => a.rateDate.localeCompare(b.rateDate)).forEach((r) => latest.set(r.currency, r));
+      return { items: [...latest.values()] };
+    })),
     http.post(
       `${W}/inbound/:id/receipts`,
       h('EDIT', async (ctx, p) => {
@@ -431,14 +539,15 @@ function staffInventoryRoutes(W: string, gate: HubGate) {
           if (!sku) errors[`lines[${i}].sku`] = 'Scan the unit label or give the SKU';
           const exp = (l.expDate as string | undefined) || line?.expDate || null;
           if (exp && exp < today(ctx)) errors[`lines[${i}].expDate`] = `Lot expired on ${exp}`;
+          const cost = receivedCost(ctx, s, l, i, rates(ctx.request), errors);
           if (Object.keys(errors).length || !sku) return;
           const good = Number(l.qtyGood ?? 0);
           const damaged = Number(l.qtyDamaged ?? 0);
           const lotNo = String(l.lotNo || line?.lotNo || ref).toUpperCase();
           const mfg = (l.mfgDate as string | undefined) || line?.mfgDate || null;
           const bin = (l.bin as string | undefined) || 'R-01-01';
-          if (good > 0) lots.push(addLot(ctx, sku, lotNo, s.nodeId, s.ownerOrg ?? null, good, mfg, exp, bin, l.holdReason ? 'QUARANTINE' : 'SELLABLE', ref));
-          if (damaged > 0) lots.push(addLot(ctx, sku, `${lotNo}-DMG`, s.nodeId, s.ownerOrg ?? null, damaged, mfg, exp, 'Q-01-01', 'DAMAGED', ref));
+          if (good > 0) lots.push(addLot(ctx, sku, lotNo, s.nodeId, s.ownerOrg ?? null, good, mfg, exp, bin, l.holdReason ? 'QUARANTINE' : 'SELLABLE', ref, cost ?? 0));
+          if (damaged > 0) lots.push(addLot(ctx, sku, `${lotNo}-DMG`, s.nodeId, s.ownerOrg ?? null, damaged, mfg, exp, 'Q-01-01', 'DAMAGED', ref, cost ?? 0));
           if (line) {
             line.receivedGood += good;
             line.receivedDamaged += damaged;
@@ -542,7 +651,7 @@ function staffInventoryRoutes(W: string, gate: HubGate) {
       syncLot(lot);
       move(ctx, lot, 'TRANSFER_OUT', -qty, `TRF-${lot.lotNo}`, reason);
       const existing = ctx.db.lots.find((l) => l.sku === lot.sku && l.lotNo === lot.lotNo && l.nodeId === to);
-      const dest = existing ?? addLot(ctx, lot.sku, lot.lotNo, to, lot.ownerOrg ?? null, 0, lot.mfgDate ?? null, lot.expDate ?? null, typeof b.toBin === 'string' ? b.toBin : null, 'SELLABLE', `TRF-${lot.lotNo}`, lot.unitLandedCostMinor);
+      const dest = existing ?? addLot(ctx, lot.sku, lot.lotNo, to, lot.ownerOrg ?? null, 0, lot.mfgDate ?? null, lot.expDate ?? null, typeof b.toBin === 'string' ? b.toBin : null, 'SELLABLE', `TRF-${lot.lotNo}`, costOf(lot));
       dest.qtyOnHand += qty;
       syncLot(dest);
       move(ctx, dest, 'TRANSFER_IN', qty, `TRF-${lot.lotNo}`, reason);
@@ -642,6 +751,14 @@ function summarize(c: CycleCount) {
   c.netVariance = counted.reduce((a, l) => a + l.variance, 0);
 }
 
+/** The stock split by the currency it was paid in: the amount in it and in US cents. */
+function currencies(ls: Lot[]) {
+  return [...new Set(ls.map((l) => l.currency))].sort().map((currency) => {
+    const of = ls.filter((l) => l.currency === currency);
+    return { currency, units: of.reduce((a, l) => a + l.qtyOnHand, 0), valueMinor: of.reduce((a, l) => a + l.qtyOnHand * l.unitLandedCostMinor, 0), valueUsdMinor: of.reduce((a, l) => a + l.qtyOnHand * l.unitCostUsdMinor, 0) };
+  });
+}
+
 function overviewOf(ctx: Ctx) {
   const t = today(ctx);
   const days = (l: Lot) => (l.expDate ? Math.round((Date.parse(l.expDate) - Date.parse(t)) / 86_400_000) : null);
@@ -654,15 +771,15 @@ function overviewOf(ctx: Ctx) {
   return {
     byStatus: statuses.map((s) => {
       const ls = live.filter((l) => l.status === s);
-      return { status: s, currency: 'USD', units: ls.reduce((a, l) => a + l.qtyOnHand, 0), lots: ls.length, valueMinor: ls.reduce((a, l) => a + l.qtyOnHand * l.unitLandedCostMinor, 0) };
-    }),
+      return currencies(ls).map((c) => ({ status: s, currency: c.currency, units: c.units, lots: ls.filter((l) => l.currency === c.currency).length, valueMinor: c.valueMinor, valueUsdMinor: c.valueUsdMinor }));
+    }).flat(),
     expiry: buckets.map(([bucket, f]) => {
       const ls = live.filter((l) => f(days(l)));
       return { bucket, units: ls.reduce((a, l) => a + l.qtyOnHand, 0), lots: ls.length };
     }),
     nodes: ctx.db.nodes.map((n) => {
       const ls = live.filter((l) => l.nodeId === n.id);
-      return { nodeId: n.id, name: n.name, lots: ls.length, units: ls.reduce((a, l) => a + l.qtyOnHand, 0), sellableUnits: ls.filter((l) => l.status === 'SELLABLE').reduce((a, l) => a + l.qtyOnHand, 0), blockedUnits: ls.filter((l) => l.status !== 'SELLABLE').reduce((a, l) => a + l.qtyOnHand, 0), valueMinor: ls.reduce((a, l) => a + l.qtyOnHand * l.unitLandedCostMinor, 0), currency: 'USD', reserved: ls.reduce((a, l) => a + l.qtyReserved, 0), inbound: ctx.db.inbound.filter((s) => s.nodeId === n.id && s.status === 'SHIPPED').reduce((a, s) => a + s.expectedUnits, 0) };
+      return { nodeId: n.id, name: n.name, lots: ls.length, units: ls.reduce((a, l) => a + l.qtyOnHand, 0), sellableUnits: ls.filter((l) => l.status === 'SELLABLE').reduce((a, l) => a + l.qtyOnHand, 0), blockedUnits: ls.filter((l) => l.status !== 'SELLABLE').reduce((a, l) => a + l.qtyOnHand, 0), valueMinor: ls.reduce((a, l) => a + l.qtyOnHand * l.unitCostUsdMinor, 0), currency: 'USD', byCurrency: currencies(ls), reserved: ls.reduce((a, l) => a + l.qtyReserved, 0), inbound: ctx.db.inbound.filter((s) => s.nodeId === n.id && s.status === 'SHIPPED').reduce((a, s) => a + s.expectedUnits, 0) };
     }),
     inbound: { openShipments: ctx.db.inbound.filter((s) => s.status === 'SHIPPED' || s.status === 'RECEIVING').length, expectedUnits: ctx.db.inbound.reduce((a, s) => a + s.expectedUnits, 0), receivedUnits: ctx.db.inbound.reduce((a, s) => a + s.receivedUnits, 0), withDiscrepancies: ctx.db.inbound.filter((s) => s.discrepancy).length },
     reservations: { held: 2, heldUnits: live.reduce((a, l) => a + l.qtyReserved, 0) },
@@ -790,14 +907,30 @@ function retailRoutes(W: string, gate: HubGate) {
       if (!/^SUP-[A-Z0-9]{2,12}$/.test(code)) throw invalid('Invalid supplier', { code: 'SUP- and 2 to 12 letters or digits' });
       if (ctx.db.suppliers.some((x) => x.code === code)) throw conflict(`${code} already exists.`);
       const n = ++ctx.db.seq;
-      const sup: Supplier = { id: uuid(n, 'aaaa0001'), code, name: String(b.name ?? ''), country: String(b.country ?? ''), city: (b.city as string | undefined) ?? null, currency: String(b.currency ?? 'USD'), paymentTerms: (b.paymentTerms as string | undefined) ?? null, leadTimeDays: Number(b.leadTimeDays ?? 0), status: 'ONBOARDING', canReceivePurchaseOrders: false, scorecard: { receipts: 0, onTimePercent: null, defectPercent: null }, version: 0 };
+      const sup: Supplier = { id: uuid(n, 'aaaa0001'), code, contacts: ((b.contacts as { name: string; role?: string; email?: string; phone?: string }[] | undefined) ?? []).map((c) => ({ name: c.name, role: c.role ?? null, email: c.email ?? null, phone: c.phone ?? null })), name: String(b.name ?? ''), country: String(b.country ?? ''), city: (b.city as string | undefined) ?? null, currency: String(b.currency ?? 'USD'), paymentTerms: (b.paymentTerms as string | undefined) ?? null, leadTimeDays: Number(b.leadTimeDays ?? 0), status: 'ONBOARDING', canReceivePurchaseOrders: false, scorecard: { receipts: 0, onTimePercent: null, defectPercent: null }, version: 0 };
       ctx.db.suppliers.push(sup);
       return sup;
     }, 201)),
+    http.put(`${W}/suppliers/:id`, h('EDIT', async (ctx, p) => {
+      const sup = ctx.db.suppliers.find((x) => x.id === p.id);
+      if (!sup) throw notFound('supplier');
+      const b = await bodyOf(ctx.request);
+      if (!String(b.name ?? '').trim()) throw invalid('Invalid supplier', { name: 'Required' });
+      sup.name = String(b.name);
+      sup.city = (b.city as string | undefined) ?? null;
+      sup.currency = String(b.currency ?? sup.currency);
+      sup.paymentTerms = (b.paymentTerms as string | undefined) ?? null;
+      sup.leadTimeDays = Number(b.leadTimeDays ?? sup.leadTimeDays);
+      sup.contacts = ((b.contacts as { name: string; role?: string; email?: string; phone?: string }[] | undefined) ?? []).map((c) => ({ name: c.name, role: c.role ?? null, email: c.email ?? null, phone: c.phone ?? null }));
+      sup.version += 1;
+      return sup;
+    })),
     http.post(`${W}/suppliers/:id/status`, h('APPROVE', async (ctx, p) => {
       const sup = ctx.db.suppliers.find((x) => x.id === p.id);
       if (!sup) throw notFound('supplier');
-      sup.status = String((await bodyOf(ctx.request)).status ?? sup.status);
+      const body = await bodyOf(ctx.request);
+      sup.statusReason = (body.reason as string | undefined) ?? null;
+      sup.status = String(body.status ?? sup.status);
       sup.canReceivePurchaseOrders = sup.status === 'APPROVED' || sup.status === 'ON_WATCH';
       sup.version += 1;
       return sup;
@@ -915,7 +1048,7 @@ function retailRoutes(W: string, gate: HubGate) {
           const pl = must(po.lines.find((x) => x.lineNo === Number(l.poLineNo)) ?? po.lines[0]);
           return { lineNo: i + 1, poLineNo: pl.lineNo, itemId: pl.itemId, sku: pl.sku, qty: Number(l.qty), lotNo: (l.lotNo as string | undefined) ?? null, mfgDate: (l.mfgDate as string | undefined) ?? null, expDate: (l.expDate as string | undefined) ?? null };
         }),
-        cartons: [], documents: [{ name: 'Commercial invoice', status: 'MISSING', reference: null }, { name: 'Packing list', status: 'PENDING', reference: null }], milestones: [{ stage: 'BOOKED', at: ctx.now.toISOString(), by: ctx.actor }], version: 0
+        cartons: [], charges: [], documents: [{ name: 'Commercial invoice', status: 'MISSING', reference: null }, { name: 'Packing list', status: 'PENDING', reference: null }], milestones: [{ stage: 'BOOKED', at: ctx.now.toISOString(), by: ctx.actor }], version: 0
       };
       po.shipmentBooked = true;
       ctx.db.shipments.unshift(s);
@@ -929,6 +1062,14 @@ function retailRoutes(W: string, gate: HubGate) {
       recompute(must(ctx.db.inbound[0]));
       return s;
     }, 201)),
+    http.put(`${W}/shipments/:id/charges`, h('EDIT', async (ctx, p) => {
+      const s = ctx.db.shipments.find((x) => x.id === p.id);
+      if (!s) throw notFound('shipment');
+      const body = (await bodyOf(ctx.request)) as { charges?: { type: string; amountMinor: number; currency: string; basis?: string; reference?: string }[] };
+      s.charges = (body.charges ?? []).map((c) => ({ type: c.type, amountMinor: c.amountMinor, currency: c.currency, basis: c.basis ?? null, reference: c.reference ?? null }));
+      s.version += 1;
+      return s;
+    })),
     http.post(`${W}/shipments/:id/advance`, h('EDIT', (ctx, p) => {
       const s = ctx.db.shipments.find((x) => x.id === p.id);
       if (!s) throw notFound('shipment');
@@ -1095,8 +1236,8 @@ function retailRoutes(W: string, gate: HubGate) {
 }
 
 /** Staff console routes: `W` is the staff prefix (e.g. "*\/v1/staff"). */
-export function inventoryHubHandlers(W: string, gate: HubGate) {
-  return [...staffInventoryRoutes(`${W}/inventory`, gate), ...inventoryRoutes(`${W}/inventory`, gate, 'inventory'), ...retailRoutes(`${W}/retail`, gate)];
+export function inventoryHubHandlers(W: string, gate: HubGate, rates: HubRates = () => []) {
+  return [...staffInventoryRoutes(`${W}/inventory`, gate, rates), ...inventoryRoutes(`${W}/inventory`, gate, 'inventory'), ...retailRoutes(`${W}/retail`, gate)];
 }
 
 /** Seller Center routes: `W` is the seller prefix (e.g. "*\/v1/seller"); the gate names the active organisation. */

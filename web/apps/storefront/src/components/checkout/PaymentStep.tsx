@@ -1,0 +1,135 @@
+'use client';
+
+import { type CheckoutSummary, type PaymentMethod } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
+import { PoweredByStripe, ShieldCheck } from '@afrotransact/ui';
+import { type RefObject } from 'react';
+
+import { AcceptedPaymentsHint } from '@/components/payments/AcceptedPaymentsHint';
+import { PaymentChip } from '@/components/payments/PaymentChip';
+import { type PaymentElementChange, PaymentElementField, type PaymentElementHandle } from '@/components/payments/PaymentElementField';
+import { type MessageKey, type Translator, useT } from '@/i18n/t';
+
+import styles from './Checkout.module.css';
+
+const pmSub = (t: Translator<MessageKey>, pm: PaymentMethod) => (pm.expires ? t('pay.expires', { date: pm.expires }) : pm.type === 'us_bank_account' ? t('pay.bankAccount') : t('pay.wallet'));
+
+const TYPE_NAMES: Record<string, string> = {
+  card: 'Card', link: 'Link', cashapp: 'Cash App Pay', amazon_pay: 'Amazon Pay', klarna: 'Klarna', affirm: 'Affirm', afterpay_clearpay: 'Afterpay',
+  us_bank_account: 'US bank account', google_pay: 'Google Pay', apple_pay: 'Apple Pay', samsung_pay: 'Samsung Pay', paypal: 'PayPal', revolut_pay: 'Revolut Pay'
+};
+
+/** "Klarna", "Google Pay" … for the method chosen in the Payment Element. */
+export const newMethodName = (type: string | null) => (type ? (TYPE_NAMES[type] ?? type.replace(/_/g, ' ')) : 'Card');
+
+type Props = {
+  s: CheckoutSummary;
+  total: number;
+  payWith: 'saved' | 'new' | null;
+  setPayWith: (v: 'saved' | 'new') => void;
+  pmId: string | null;
+  setPmId: (id: string) => void;
+  save: boolean;
+  setSave: (v: boolean) => void;
+  newMethod: PaymentElementChange;
+  onNewMethod: (c: PaymentElementChange) => void;
+  payEl: RefObject<PaymentElementHandle | null>;
+  methodTypes: string[] | undefined;
+  /** The shopper's AfroTransact credit applied to this order (S320); absent without credit. */
+  credit?: { availableMinor: number; appliedMinor: number; cardDueMinor: number; use: boolean; setUse: (v: boolean) => void } | null;
+};
+
+/**
+ * Payment section: with methods on file they are listed (the default is chosen) and the form stays closed until the
+ * shopper picks "Use a different payment method"; with none on file the form is open. The Stripe Payment Element is
+ * always mounted (deferred mode), only hidden while a saved method is chosen, so Place order can confirm it.
+ */
+export function PaymentStep({ s, total, payWith, setPayWith, pmId, setPmId, save, setSave, newMethod: _newMethod, onNewMethod, payEl, methodTypes, credit }: Props) {
+  const t = useT();
+  const fmt = useFormatters();
+  const saved = s.paymentMethods;
+  const creditPaysAll = !!credit?.use && credit.appliedMinor > 0 && credit.cardDueMinor === 0;
+  const formOpen = !creditPaysAll && (saved.length === 0 || payWith === 'new');
+  const cardTotal = credit?.use && credit.cardDueMinor > 0 ? credit.cardDueMinor : total;
+
+  return (
+    <div className={styles.payment} id="co-payment">
+      {credit && credit.availableMinor > 0 && (
+        <div className={styles.credit} data-testid="checkout-credit">
+          <label className={styles.save}>
+            <input type="checkbox" checked={credit.use} onChange={(e) => credit.setUse(e.target.checked)} data-testid="checkout-use-credit" />
+            <span>
+              {t('co.credit.use', { amount: fmt.money(credit.availableMinor) })}
+              <small>{t('co.credit.hint')}</small>
+            </span>
+          </label>
+          {credit.use && credit.appliedMinor > 0 && (
+            <p className={styles.creditSplit} role="status" data-testid="checkout-credit-split">
+              {creditPaysAll ? t('co.credit.paysAll', { credit: fmt.money(credit.appliedMinor) }) : t('co.credit.paysPart', { credit: fmt.money(credit.appliedMinor), card: fmt.money(credit.cardDueMinor) })}
+            </p>
+          )}
+          {credit.use && credit.appliedMinor === 0 && <p className={styles.creditSplit}>{t('co.credit.tiny')}</p>}
+        </div>
+      )}
+      {saved.length > 0 && !creditPaysAll && (
+        <fieldset className={styles.saved}>
+          <legend className={styles.legend}>{t('co.savedMethods')}</legend>
+          {saved.map((p) => (
+            <label key={p.id} className={styles.choiceCompact} data-testid="checkout-payment">
+              <input
+                type="radio"
+                name="paym"
+                checked={payWith === 'saved' && p.id === pmId}
+                onChange={() => {
+                  setPayWith('saved');
+                  setPmId(p.id);
+                }}
+              />
+              <PaymentChip method={p} />
+              <span className={styles.choiceText}>
+                <strong>{p.label}</strong> <span className={styles.muted}>{pmSub(t, p)}</span>
+              </span>
+              {p.isDefault && <span className={styles.tag}>{t('pay.default')}</span>}
+            </label>
+          ))}
+          <label className={styles.choiceCompact} data-testid="checkout-use-new">
+            <input type="radio" name="paym" checked={payWith === 'new'} onChange={() => setPayWith('new')} />
+            <strong>{t('co.useNewMethod')}</strong>
+          </label>
+        </fieldset>
+      )}
+
+      <div className={payWith === 'new' ? styles.newMethodOn : styles.newMethod} data-testid="checkout-new-method" hidden={!formOpen}>
+        {saved.length === 0 ? <span className={styles.legend}>{t('co.payWith')}</span> : null}
+        <PaymentElementField
+          ref={payEl}
+          publishableKey={s.publishableKey ?? ''}
+          amountMinor={cardTotal}
+          currency={s.currency}
+          save={save}
+          stripeCustomerId={s.stripeCustomerId}
+          paymentMethodTypes={methodTypes}
+          onChange={(c) => {
+            onNewMethod(c);
+            if (!c.empty) setPayWith('new');
+          }}
+        />
+        <label className={styles.save}>
+          <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
+          <span>
+            {t('co.saveForLater')}
+            <small>{t('co.saveForLaterHint')}</small>
+          </span>
+        </label>
+      </div>
+
+      <div className={styles.paymentFoot}>
+        {formOpen ? <AcceptedPaymentsHint /> : null}
+        <p className={styles.secureText}>
+          <ShieldCheck aria-hidden /> <span>{creditPaysAll ? t('co.credit.chargeNote') : `${t('pay.storedByStripe')} ${t('co.chargeNote')}`}</span>
+        </p>
+        {creditPaysAll ? null : <PoweredByStripe height={22} />}
+      </div>
+    </div>
+  );
+}

@@ -41,10 +41,11 @@ describe('Pre-orders back office (S274)', () => {
     nav.set('/preorders');
     await renderScreen(<PreordersView screen={{ kind: 'list' }} />);
     const table = await screen.findByRole('table', { name: 'Pre-orders' });
-    await waitFor(() => expect(within(table).getAllByTestId('preorder-row')).toHaveLength(8));
-    await waitFor(() => expect(screen.getByTestId('tab-count-all')).toHaveTextContent('8'));
+    await waitFor(() => expect(within(table).getAllByTestId('preorder-row')).toHaveLength(9));
+    await waitFor(() => expect(screen.getByTestId('tab-count-all')).toHaveTextContent('9'));
     expect(screen.getByTestId('tab-count-open')).toHaveTextContent('1');
     expect(screen.getByTestId('tab-count-upcoming')).toHaveTextContent('3');
+    expect(screen.getByTestId('tab-count-decision')).toHaveTextContent('1');
     expect(screen.getByTestId('tab-count-closed')).toHaveTextContent('2');
     expect(screen.getByTestId('tab-count-draft')).toHaveTextContent('1');
     const row = (name: string) => within(table).getByRole('link', { name }).closest('tr') as HTMLElement;
@@ -54,6 +55,10 @@ describe('Pre-orders back office (S274)', () => {
     expect(row('Laredo Pre-order #1')).toHaveTextContent('Area off');
     expect(row('Midland–Odessa Pre-order #2')).toHaveTextContent('Draft');
     expect(row('Lubbock Pre-order #6')).toHaveTextContent('Delivered');
+    expect(row('Odessa Pre-order #1')).toHaveTextContent('Needs a decision');
+    expect(row('Odessa Pre-order #1')).toHaveTextContent(/\d+ of 10/);
+    expect(row('Lubbock Pre-order #7')).toHaveTextContent('140 of 100');
+    expect(screen.getByTestId('decision-notice')).toHaveTextContent('1 pre-order closed below its minimum and needs a decision.');
     expect(screen.getByRole('tab', { name: /Scheduled/ })).toHaveAttribute('href', '/preorders?status=upcoming');
     expect(screen.getByRole('button', { name: 'Open a pre-order' })).toBeEnabled();
   });
@@ -103,6 +108,8 @@ describe('Pre-orders back office (S274)', () => {
     nav.set('/preorders/lbk-7');
     await renderScreen(<PreordersView screen={{ kind: 'detail', id: 'lbk-7' }} />);
     expect(await screen.findByTestId('kpi-Pre-orders')).toHaveTextContent(/\d+/);
+    // Orders that came from the window's own messages are credited to their UTM campaign (S262).
+    expect(await screen.findByRole('region', { name: 'UTM campaign preorder-LBK-7' })).toHaveTextContent(/(email|sms|push) \/ announce/);
     expect(screen.getByRole('tab', { name: 'Orders (142)' })).toHaveAttribute('href', '/preorders/lbk-7?tab=orders');
     nav.set('/preorders/lbk-7?tab=orders');
     await waitFor(() => expect(screen.getAllByTestId('order-row')).toHaveLength(12));
@@ -119,13 +126,13 @@ describe('Pre-orders back office (S274)', () => {
     expect(await screen.findByRole('heading', { name: 'Edit · Midland–Odessa Pre-order #2' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Comms/ }));
     const preview = await screen.findByTestId('sms-preview');
-    await waitFor(() => expect(preview).toHaveTextContent(/\/pre-orders\?src=sms&po=[A-Z]{3}-\d+&cr=announce/));
+    await waitFor(() => expect(preview).toHaveTextContent(/\/pre-orders\?src=sms&po=[A-Z]{3}-\d+&cr=announce&utm_source=sms&utm_medium=sms&utm_campaign=preorder-[A-Z]{3}-\d+&utm_content=announce/));
     expect(preview).not.toHaveTextContent('{link}');
     const sent = preview.textContent ?? '';
-    expect(screen.getByTestId('sms-count')).toHaveTextContent(`${sent.length}/160`);
+    expect(screen.getByTestId('sms-count')).toHaveTextContent(`${sent.length}/306`);
     const box = screen.getByRole('textbox', { name: /SMS copy/ });
     await user.clear(box);
-    await user.type(box, `${'x'.repeat(140)} {{link}`);
+    await user.type(box, `${'x'.repeat(160)} {{link}`);
     expect(screen.getByTestId('sms-count').className).toContain('text-red-600');
   });
 
@@ -175,7 +182,7 @@ describe('Pre-orders back office (S274)', () => {
     expect(within(dialog).getByRole('button', { name: 'Add $20.98 order' })).toBeEnabled(); // $12.99 + $7.99 door
     await user.selectOptions(within(dialog).getByRole('combobox', { name: /^Deliver to/ }), 'new');
     expect(submit()).toBeDisabled(); // a new address must be verified first
-    await user.type(within(dialog).getByRole('textbox', { name: /^Street/ }), '12 Elm St');
+    await user.type(within(dialog).getByRole('combobox', { name: /^Street/ }), '12 Elm St');
     await user.type(within(dialog).getByRole('textbox', { name: /^Postal code/ }), '79101');
     await user.click(within(dialog).getByRole('button', { name: 'Verify address' }));
     expect(await within(dialog).findByRole('button', { name: 'Verified ✓' })).toBeInTheDocument();
@@ -184,12 +191,13 @@ describe('Pre-orders back office (S274)', () => {
     expect(nav.search).toBe('tab=orders');
   });
 
-  it('shows payment & fees read-only below Full access', async () => {
+  it('points the fees to Delivery fees and keeps payment settings read-only below Full access', async () => {
     asRoles('platform.operations_manager');
     nav.set('/preorders/settings');
     await renderScreen(<PreordersView screen={{ kind: 'settings' }} />);
-    expect(await screen.findByRole('textbox', { name: 'USD door delivery fee' })).toBeDisabled();
-    expect(screen.getByRole('textbox', { name: 'USD door delivery fee' })).toHaveValue('7.99');
+    const moved = await screen.findByTestId('fees-moved');
+    expect(within(moved).getByRole('link', { name: 'Open Delivery fees' })).toHaveAttribute('href', '/settings?section=delivery-fees');
+    expect(screen.queryByRole('textbox', { name: 'USD door delivery fee' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save payment & fees' })).not.toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Master switch' })).toBeDisabled();
   });

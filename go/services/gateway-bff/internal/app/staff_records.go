@@ -32,6 +32,10 @@ type StaffRecordsService interface {
 	Update(ctx context.Context, c *domain.Caller, resource, id string, values map[string]any, version string) (domain.RecordDetail, error)
 	Act(ctx context.Context, c *domain.Caller, resource, id, action string, values map[string]any, idem string) (domain.RecordDetail, error)
 	AddNote(ctx context.Context, c *domain.Caller, resource, id, text string) (domain.RecordDetail, error)
+	// Lookup finds drivers or sellers by name for a form's picker (the module of the form, at View).
+	Lookup(ctx context.Context, c *domain.Caller, kind, q string) (domain.LookupResult, error)
+	// FileURL is where to open one file attached to a record (view access; the upstream logs who opened it).
+	FileURL(ctx context.Context, c *domain.Caller, resource, id, fileID string) (string, error)
 }
 
 // staffQueryInput is the table query as the HTTP adapter parsed it.
@@ -167,7 +171,7 @@ func rowOf(r *staffResource, o jobj) domain.Row {
 			cells[c.Key] = cellValue(at(o, c.Key))
 		}
 	}
-	return domain.Row{ID: r.id(o), Cells: cells, Tone: domain.StatusTone(r.statusOf(o))}
+	return domain.Row{ID: r.id(o), Cells: cells, Tone: domain.StatusTone(r.statusOf(o)), Search: r.searchIDs(o)}
 }
 
 func (s *staffRecordsImpl) Get(ctx context.Context, c *domain.Caller, name, id string) (domain.RecordDetail, error) {
@@ -176,6 +180,17 @@ func (s *staffRecordsImpl) Get(ctx context.Context, c *domain.Caller, name, id s
 		return domain.RecordDetail{}, err
 	}
 	return s.sheet(ctx, r, sc, id)
+}
+
+func (s *staffRecordsImpl) FileURL(ctx context.Context, c *domain.Caller, name, id, fileID string) (string, error) {
+	r, sc, err := s.open(ctx, c, name, domain.LevelView)
+	if err != nil {
+		return "", err
+	}
+	if r.file == nil {
+		return "", notFoundResource()
+	}
+	return r.file(ctx, sc, id, fileID)
 }
 
 func (s *staffRecordsImpl) sheet(ctx context.Context, r *staffResource, sc staffCtx, id string) (domain.RecordDetail, error) {
@@ -200,8 +215,9 @@ func (s *staffRecordsImpl) detail(ctx context.Context, r *staffResource, sc staf
 	if r.sections != nil {
 		d.Sections = r.sections(o)
 	} else {
-		d.Sections = autoSections(o, r.statusKey)
+		d.Sections = autoSections(o, r.statusKey, r.nameSkips()...)
 	}
+	d.Sections = r.nameSections(o, d.Sections)
 	if r.tables != nil {
 		d.Tables = r.tables(o)
 	}
@@ -220,7 +236,7 @@ func (s *staffRecordsImpl) detail(ctx context.Context, r *staffResource, sc staf
 			d.Version = &v
 		}
 	}
-	for _, a := range r.actions {
+	for _, a := range r.actionList(o) {
 		d.Actions = append(d.Actions, actionView(ctx, r, sc, a, o))
 	}
 	if r.edit != nil && sc.access.Can(r.edit.permission) && sc.access.Allows(r.module, domain.LevelEdit) {
@@ -270,20 +286,23 @@ func (s *staffRecordsImpl) Act(ctx context.Context, c *domain.Caller, name, id, 
 		return domain.RecordDetail{}, err
 	}
 	sc.idem = idem
-	idx := slices.IndexFunc(r.actions, func(a staffAction) bool { return a.key == action })
-	if idx < 0 {
-		return domain.RecordDetail{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such action.")
-	}
-	a := r.actions[idx]
 	o, err := r.get(ctx, sc, id)
 	if err != nil {
 		return domain.RecordDetail{}, err
 	}
+	actions := r.actionList(o)
+	idx := slices.IndexFunc(actions, func(a staffAction) bool { return a.key == action })
+	if idx < 0 {
+		return domain.RecordDetail{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such action.")
+	}
+	a := actions[idx]
 	if reason, perm := actionReason(r, sc, a, o); reason != "" {
 		if perm {
 			return domain.RecordDetail{}, domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Forbidden", reason)
 		}
-		return domain.RecordDetail{}, domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Not possible now", reason)
+		if a.settled == nil || !a.settled(o) {
+			return domain.RecordDetail{}, domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Not possible now", reason)
+		}
 	}
 	if values == nil {
 		values = map[string]any{}
@@ -293,10 +312,26 @@ func (s *staffRecordsImpl) Act(ctx context.Context, c *domain.Caller, name, id, 
 			return domain.RecordDetail{}, domain.ValidationProblem(errs)
 		}
 	}
+	var once domain.OneTimeSecret
+	sc.reveal = &once
 	if err := a.run(ctx, sc, o, values); err != nil {
 		return domain.RecordDetail{}, err
 	}
-	return s.sheet(ctx, r, sc, id)
+	if a.removes {
+		yes := true
+		return domain.RecordDetail{Resource: name, ID: id, Title: "Deleted", Subtitle: "", Removed: &yes, Sections: []domain.DetailSection{},
+			Tables: []domain.DetailTable{}, Activity: []domain.ActivityEntry{}, Notes: []domain.Note{}, Actions: []domain.RecordAction{}, Links: []domain.RecordLink{}}, nil
+	}
+	d, err := s.sheet(ctx, r, sc, id)
+	return withReveal(d, err, &once)
+}
+
+// withReveal attaches a secret to a sheet that an action or creation just produced.
+func withReveal(d domain.RecordDetail, err error, once *domain.OneTimeSecret) (domain.RecordDetail, error) {
+	if err == nil && once.Value != "" {
+		d.Reveal = once
+	}
+	return d, err
 }
 
 func (s *staffRecordsImpl) Create(ctx context.Context, c *domain.Caller, name string, values map[string]any, idem string) (domain.RecordDetail, error) {
@@ -318,11 +353,14 @@ func (s *staffRecordsImpl) Create(ctx context.Context, c *domain.Caller, name st
 	if errs := domain.ValidateForm(r.create.form(ctx, sc), values); len(errs) > 0 {
 		return domain.RecordDetail{}, domain.ValidationProblem(errs)
 	}
+	var once domain.OneTimeSecret
+	sc.reveal = &once
 	id, err := r.create.create(ctx, sc, values)
 	if err != nil {
 		return domain.RecordDetail{}, err
 	}
-	return s.sheet(ctx, r, sc, id)
+	d, err := s.sheet(ctx, r, sc, id)
+	return withReveal(d, err, &once)
 }
 
 func (s *staffRecordsImpl) Update(ctx context.Context, c *domain.Caller, name, id string, values map[string]any, version string) (domain.RecordDetail, error) {
@@ -348,8 +386,12 @@ func (s *staffRecordsImpl) Update(ctx context.Context, c *domain.Caller, name, i
 	if values == nil {
 		values = map[string]any{}
 	}
-	if errs := domain.ValidateForm(r.edit.form(o), values); len(errs) > 0 {
+	form := r.edit.form(o)
+	if errs := domain.ValidateForm(form, values); len(errs) > 0 {
 		return domain.RecordDetail{}, domain.ValidationProblem(errs)
+	}
+	if !domain.FormChanged(form, values) {
+		return domain.RecordDetail{}, domain.ValidationProblem(map[string]string{form.ChangeKeys[0]: "Nothing has changed. Change it to save."})
 	}
 	if version == "" && r.version != nil {
 		version = r.version(o)

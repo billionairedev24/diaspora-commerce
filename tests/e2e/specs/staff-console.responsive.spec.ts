@@ -13,6 +13,19 @@ const openFirstRow = async (page: Page) => {
   await page.locator('tbody tr[data-row-id], [data-row-id]').first().click();
 };
 
+const openFirstRun = async (page: Page) => {
+  await page.getByRole('button', { name: /^Open the .* run on / }).first().click();
+};
+const openNewRun = async (page: Page) => {
+  await page.getByRole('button', { name: 'New run' }).click();
+};
+const openNewLocation = async (page: Page) => {
+  await page.getByRole('button', { name: 'Add location' }).click();
+};
+const openEditLocation = async (page: Page) => {
+  await page.getByRole('button', { name: 'Edit location' }).click();
+};
+
 const tabs = (base: string, label: string, values: string[]): AuditRoute[] => values.map((v, i) => ({ label: `${label} · ${v}`, path: i === 0 ? base : `${base}?tab=${v}` }));
 
 const ROUTES: AuditRoute[] = [
@@ -28,7 +41,7 @@ const ROUTES: AuditRoute[] = [
   ...tabs('/support', 'support', ['cases', 'customer']),
   ...tabs('/users', 'users', ['users', 'roles']),
   { label: 'payouts', path: '/payouts' },
-  ...tabs('/fees', 'fees', ['fee-schedules', 'tax-rates']),
+  ...tabs('/fees', 'fees', ['fee-schedules', 'commission', 'connection-fees', 'negotiated', 'calculator', 'tax-rates']),
   ...tabs('/marketing', 'marketing', ['announcements', 'placements']),
   ...tabs('/disputes', 'disputes', ['claims', 'returns']),
   { label: 'audit', path: '/audit' },
@@ -41,6 +54,11 @@ const ROUTES: AuditRoute[] = [
   { label: 'new pre-order', path: '/preorders/new' },
   ...tabs('/preorders/ama-4', 'pre-order', ['overview', 'orders', 'creatives', 'analytics']),
   { label: 'edit pre-order', path: '/preorders/ama-4/edit' },
+  { label: 'delivery runs', path: '/preorders/runs' },
+  { label: 'delivery run sheet', path: '/preorders/runs', open: { label: 'sheet', run: openFirstRun } },
+  { label: 'new delivery run sheet', path: '/preorders/runs', open: { label: 'sheet', run: openNewRun } },
+  { label: 'new delivery location sheet', path: '/preorders/runs', open: { label: 'sheet', run: openNewLocation } },
+  { label: 'edit delivery location sheet', path: '/preorders/runs', open: { label: 'sheet', run: openEditLocation } },
   { label: 'account', path: '/account' },
   { label: 'account security', path: '/account/security' },
   { label: 'account notifications', path: '/account/notifications' },

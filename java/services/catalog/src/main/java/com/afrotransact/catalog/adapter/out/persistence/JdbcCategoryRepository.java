@@ -40,7 +40,8 @@ class JdbcCategoryRepository implements CategoryRepository {
     @Override
     public Optional<ProductType> findProductType(String code) {
         return jdbc.sql("""
-                select code, label, identifier_rule, attributes::text as attributes, themes::text as themes
+                select code, label, identifier_rule, attributes::text as attributes, themes::text as themes,
+                       traits::text as traits
                 from product_type where code = :code
                 """).param("code", code).query(this::mapType).optional();
     }
@@ -48,7 +49,8 @@ class JdbcCategoryRepository implements CategoryRepository {
     @Override
     public List<ProductType> findAllProductTypes() {
         return jdbc.sql("""
-                select code, label, identifier_rule, attributes::text as attributes, themes::text as themes
+                select code, label, identifier_rule, attributes::text as attributes, themes::text as themes,
+                       traits::text as traits
                 from product_type order by code
                 """).query(this::mapType).list();
     }
@@ -81,6 +83,6 @@ class JdbcCategoryRepository implements CategoryRepository {
     private ProductType mapType(ResultSet rs, int rowNum) throws SQLException {
         return new ProductType(rs.getString("code"), rs.getString("label"),
                 json.attributes(rs.getString("attributes")), json.themes(rs.getString("themes")),
-                IdentifierRule.valueOf(rs.getString("identifier_rule")));
+                IdentifierRule.valueOf(rs.getString("identifier_rule")), json.traits(rs.getString("traits")));
     }
 }

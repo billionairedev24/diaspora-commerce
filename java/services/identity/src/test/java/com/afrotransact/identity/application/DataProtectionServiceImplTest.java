@@ -87,6 +87,34 @@ class DataProtectionServiceImplTest {
     }
 
     @Test
+    void rotationAlsoReSealsTheActiveSigningKeyAndStatusCountsItWithTheTotpSecrets() {
+        caller = staff(RoleKeys.SUPER_ADMIN);
+        when(secrets.totpSecretsNotSealedUnder(eq("kek-2"), isNull(), anyInt())).thenReturn(List.of());
+        when(secrets.signingKeysByKey()).thenReturn(Map.of("kek-1", 1L));
+        when(secrets.resealActiveSigningKey()).thenReturn(true);
+
+        assertThat(service.status().secretsByKey()).containsEntry("kek-2", 3L).containsEntry("kek-1", 1L);
+        ResealReport report = service.rotate();
+
+        assertThat(report.resealed()).isEqualTo(1);
+        assertThat(report.failed()).isZero();
+        verify(secrets).resealActiveSigningKey();
+        assertThat(report.remaining()).containsEntry("kek-1", 1L);
+    }
+
+    @Test
+    void aSigningKeyThatCannotBeOpenedIsReportedNotFatal() {
+        caller = staff(RoleKeys.SUPER_ADMIN);
+        when(secrets.totpSecretsNotSealedUnder(eq("kek-2"), isNull(), anyInt())).thenReturn(List.of());
+        when(secrets.resealActiveSigningKey()).thenThrow(new SecretCipherException("Unknown data-protection key id"));
+
+        ResealReport report = service.rotate();
+
+        assertThat(report.failed()).isEqualTo(1);
+        assertThat(report.resealed()).isZero();
+    }
+
+    @Test
     void startUpMigrationOnlySealsPlaintextRowsWithoutACaller() {
         caller = null;
         UUID legacy = UUID.randomUUID();

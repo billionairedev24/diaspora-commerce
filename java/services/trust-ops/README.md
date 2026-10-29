@@ -26,6 +26,12 @@ providers) and `design/backoffice-data.js`.
   down in catalog (`POST /v1/products/{id}/takedown` with the reason code and note, audited as
   `trustops.listing.taken_down`). If catalog refuses, the item stays open; a takedown made directly in catalog
   (`catalog.product.taken_down`) closes it.
+- **Product review moderation (S324).** catalog's `catalog.review.submitted` (reviews that failed the automatic checks,
+  and the first report of a published review) on `at.product-review.events` queues a `PRODUCT_REVIEW` item with the
+  stars, title, text, photos, the automatic flags and the reports (inbox consumer `trust-ops:product-reviews`). **Allow**
+  publishes it (catalog `POST /v1/product-reviews/{id}/approve`; a reported review stays public with no call) and
+  **remove** rejects or removes it with a review reason code. catalog's own `rejected|removed|published` events close the
+  item. See [docs/engineering/product-reviews.md](../../../docs/engineering/product-reviews.md).
 - **Booking review moderation (S243).** bookings-service keeps every customer review `PENDING` until it is
   moderated. Its `booking.review.submitted` (on `at.bookings.events`) queues a `SERVICE_REVIEW` item (`?type=`)
   with the review (booking id = review id, provider organisation, service, rating, text, public reviewer name, and
@@ -151,6 +157,7 @@ Consumed (each listener has its own consumer group and inbox consumer, so they n
 |---|---|---|
 | `-moderation` | `at.product.events` | `catalog.product.created` (IN_REVIEW), `catalog.product.flagged`, `catalog.product.approved\|rejected\|taken_down` |
 | `-reviews` | `at.bookings.events` | `booking.review.submitted` (PENDING), `booking.review.approved\|rejected` (every other bookings event is ignored) |
+| `-product-reviews` | `at.product-review.events` | `catalog.review.submitted\|published\|rejected\|removed\|deleted` (S324) |
 | `-seller-health` | `at.order.events` | `orders.order.placed`, `orders.shipment.delivered\|cancelled\|status_changed` |
 | `-support` | `at.ai-handoff.events` | `ai.handoff.requested` |
 | `-audit` | `TRUSTOPS_AUDIT_TOPICS` (default identity, seller-application, seller-compliance, payout, mcp-tool, order) | `TRUSTOPS_AUDIT_EVENT_TYPES`: role / permission grants and revokes, user disable / enable, seller application decisions, payout holds and listing hides, payout lifecycle, `mcp.tool.invoked`, and shipment status changes / cancellations made by `PLATFORM_ADMIN` or `FULFILMENT_OPS` |

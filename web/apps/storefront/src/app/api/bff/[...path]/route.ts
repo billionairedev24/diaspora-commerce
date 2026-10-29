@@ -1,3 +1,4 @@
+import { forwardBffProxyRequestHeaders, forwardBffProxyResponseHeaders } from '@afrotransact/api-client/correlation';
 import { bffProblemType } from '@afrotransact/api-client/problem-types';
 import { type NextRequest } from 'next/server';
 
@@ -8,9 +9,6 @@ import { bffOrigin, mocksEnabled } from '@/lib/config';
 
 export const dynamic = 'force-dynamic';
 
-const FORWARD_REQUEST = ['accept', 'accept-language', 'content-type', 'cookie', 'idempotency-key', 'if-none-match', 'origin', 'user-agent', 'x-request-id'];
-const FORWARD_RESPONSE = ['cache-control', 'content-type', 'etag', 'location', 'retry-after', 'x-request-id'];
-
 async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }): Promise<Response> {
   if (mocksEnabled()) {
     const { handleMockRequest } = await import('@afrotransact/api-client/mocks/runtime');
@@ -19,10 +17,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const { path } = await ctx.params;
   const target = `${bffOrigin().replace(/\/$/, '')}/${path.map(encodeURIComponent).join('/')}${req.nextUrl.search}`;
   const headers = new Headers();
-  FORWARD_REQUEST.forEach((h) => {
-    const v = req.headers.get(h);
-    if (v) headers.set(h, v);
-  });
+  forwardBffProxyRequestHeaders(req.headers, headers);
   const fwdFor = req.headers.get('x-forwarded-for') ?? req.headers.get('cf-connecting-ip');
   if (fwdFor) headers.set('x-forwarded-for', fwdFor);
   let upstream: Response;
@@ -41,10 +36,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
     );
   }
   const out = new Headers();
-  FORWARD_RESPONSE.forEach((h) => {
-    const v = upstream.headers.get(h);
-    if (v) out.set(h, v);
-  });
+  forwardBffProxyResponseHeaders(upstream.headers, out);
   upstream.headers.getSetCookie().forEach((c) => out.append('set-cookie', c));
   return new Response(upstream.body, { status: upstream.status, headers: out });
 }

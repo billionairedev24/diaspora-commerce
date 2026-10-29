@@ -3,7 +3,7 @@
 import { useRouter } from 'expo-router';
 import { CaretLeftIcon as CaretLeft } from 'phosphor-react-native';
 import { type ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useT } from '@/i18n';
@@ -22,10 +22,12 @@ export interface ScreenProps {
   inTabs?: boolean;
   /** Content padding for the scroll body (default 16). */
   padded?: boolean;
+  /** Pull-to-refresh for the scroll body (lists pass their own `refreshControl`). */
+  refresh?: { refreshing: boolean; onRefresh: () => void };
   children: ReactNode;
 }
 
-export function Screen({ header, footer, body = 'scroll', inTabs = false, padded = true, children }: ScreenProps) {
+export function Screen({ header, footer, body = 'scroll', inTabs = false, padded = true, refresh, children }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const bottom = inTabs ? 0 : insets.bottom;
   return (
@@ -41,6 +43,7 @@ export function Screen({ header, footer, body = 'scroll', inTabs = false, padded
           alwaysBounceHorizontal={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          refreshControl={refresh ? <RefreshControl refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} tintColor={c.text} colors={[c.text]} /> : undefined}
         >
           {children}
         </ScrollView>

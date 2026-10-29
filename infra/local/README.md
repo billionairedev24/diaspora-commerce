@@ -44,7 +44,7 @@ one-shot init jobs below. If 5432 is already taken on your machine: `POSTGRES_HO
 
 - **Databases** (`postgres/init-databases.sh`, first start of an empty volume): one database **and** one login role per
   service — identity, catalog, offers, inventory, orders, payments, seller, retail, fulfilment, bookings, trustops,
-  taxreturns, content, ai, cart, geo, storefront, media, notifications, carriers, temporal (+ `temporal_visibility`),
+  taxreturns, content, ai, cart, geo, media, notifications, carriers, temporal (+ `temporal_visibility`),
   openfga. Password = name. `geo` has PostGIS + pg_trgm. A `monitoring` role (pg_monitor) feeds the exporter.
   Adding a service: append it to `SERVICES` in the script, then `make reset && make up`.
 - **Kafka topics** (`kafka/topics.txt` → `kafka-init`): `at.<aggregate>.events` and `at.<aggregate>.events.dlq` for

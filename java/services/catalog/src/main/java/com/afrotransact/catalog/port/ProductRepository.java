@@ -1,7 +1,10 @@
 package com.afrotransact.catalog.port;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.catalog.domain.Atin;
@@ -16,7 +19,25 @@ public interface ProductRepository {
     /** Updates the product if {@code product.version()} still matches; returns the stored copy with version + 1. */
     Product update(Product product);
 
+    /**
+     * Like {@link #update} and also writes the variants: existing ids are updated, new ones inserted (new ATINs) and
+     * variants no longer present deleted.
+     */
+    Product updateWithVariants(Product product);
+
     Optional<Product> findById(UUID id);
+
+    /** The organisation's product that has a variant with this seller SKU. */
+    Optional<Product> findBySellerSku(String orgId, String sellerSku);
+
+    /** The organisation's products that use the SKUs: SKU → product id and product type. */
+    Map<String, SkuOwner> productsBySku(String orgId, Collection<String> sellerSkus);
+
+    /** Which of the SKUs the organisation already uses. */
+    Set<String> takenSellerSkus(String orgId, Collection<String> sellerSkus);
+
+    /** Which of the GTINs already have a product page (any owner). */
+    Set<String> existingGtins(Collection<String> gtins);
 
     Optional<Product> findByAtin(Atin atin);
 
@@ -40,7 +61,18 @@ public interface ProductRepository {
 
     ProductPage search(ProductQuery query);
 
+    /**
+     * Sets the quantity of the owner's variant with this ATIN to what the offers service holds (it changes with
+     * every sale, cancellation and stock count) and bumps the product's version, so a form opened before the change
+     * is refused instead of saving a stale number. Returns false when nothing changed. Publishes no event.
+     */
+    boolean mirrorVariantQuantity(String ownerOrg, String variantAtin, int quantity);
+
     boolean sellerSkuTaken(String orgId, String sellerSku);
+
+    /** The product a seller SKU belongs to. */
+    record SkuOwner(UUID productId, String productTypeCode) {
+    }
 
     /** Filter for listing products. Null fields are ignored. */
     record ProductQuery(String ownerOrgId, ProductStatus status, String text, int page, int size) {

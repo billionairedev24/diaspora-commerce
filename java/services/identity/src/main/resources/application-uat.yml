@@ -3,6 +3,9 @@ at:
   api-docs:
     enabled: true
   identity:
+    seller-sync:
+      # In-cluster service name of seller-service (organisation reconcile).
+      seller-url: ${SELLER_URL:http://seller:8080}
     issuer: ${AUTH_ISSUER_URL:https://auth.uat.afrotransact.com}
     home-url: ${HOME_URL:${PUBLIC_WEB_URL:https://uat.afrotransact.com}}
     invitations:
@@ -60,19 +63,20 @@ at:
         # GATEWAY_BFF_CLIENT_SECRET (BFF_CLIENT_SECRET still accepted). The web apps' only OAuth client: authorization
         # code + PKCE + refresh tokens through identity's hosted sign-in (single sign-on). Each app has its own callback
         # on its own origin (<app>/api/bff proxies to the BFF), so its session cookie stays first-party, and its own
-        # post-logout page (RP-initiated logout, /connect/logout). Client credentials with scope auth:first-party call
+        # post-logout landing (RP-initiated logout, /connect/logout), <app>/api/bff/v1/auth/signed-out/<app>: the BFF then
+        # shows the storefront signed out or starts that app's own branded sign-in. Client credentials with scope auth:first-party call
         # the first-party sign-in API (/v1/auth/*).
         secret: ${GATEWAY_BFF_CLIENT_SECRET:${BFF_CLIENT_SECRET:}}
         grant-types: [authorization_code, refresh_token, client_credentials]
         redirect-uris: ["${PUBLIC_WEB_URL:https://uat.afrotransact.com}/api/bff/v1/auth/oidc/callback", "${SELLER_CENTER_URL:https://seller.uat.afrotransact.com}/api/bff/v1/auth/oidc/callback", "${STAFF_CONSOLE_URL:https://admin.uat.afrotransact.com}/api/bff/v1/auth/oidc/callback"]
-        post-logout-redirect-uris: ["${PUBLIC_WEB_URL:https://uat.afrotransact.com}/", "${SELLER_CENTER_URL:https://seller.uat.afrotransact.com}/", "${STAFF_CONSOLE_URL:https://admin.uat.afrotransact.com}/"]
-        scopes: [openid, profile, email, phone, offline_access, "auth:first-party", "shipping:rate", "tax:quote", "payments:fees.read", "sellers:ship-from.read", "orders:pay-link"]
+        post-logout-redirect-uris: ["${PUBLIC_WEB_URL:https://uat.afrotransact.com}/api/bff/v1/auth/signed-out/storefront", "${SELLER_CENTER_URL:https://seller.uat.afrotransact.com}/api/bff/v1/auth/signed-out/seller-center", "${STAFF_CONSOLE_URL:https://admin.uat.afrotransact.com}/api/bff/v1/auth/signed-out/staff-console"]
+        scopes: [openid, profile, email, phone, offline_access, "auth:first-party", "shipping:rate", "tax:quote", "payments:fees.read", "sellers:ship-from.read", "orders:pay-link", "media:read"]
       - client-id: seller-service
         name: Seller service
         type: confidential
         secret: ${SELLER_SERVICE_CLIENT_SECRET:}
         grant-types: [client_credentials]
-        scopes: [orgs:manage, users:read, "inventory:storage.read", "ads:spend.read", "ai:usage.read"]
+        scopes: [orgs:manage, users:read, "inventory:storage.read", "ads:spend.read", "ai:usage.read", "payments:plan-fees", "payments:connected-accounts"]
       - client-id: orders-service
         name: Orders service
         type: confidential
@@ -109,7 +113,7 @@ at:
         type: confidential
         secret: ${PAYMENTS_CLIENT_SECRET}
         grant-types: [client_credentials]
-        scopes: [orgs:read]
+        scopes: [orgs:read, "seller:billing"]
       - client-id: notifications-service
         name: Notifications service
         type: confidential
@@ -151,7 +155,14 @@ at:
         type: confidential
         secret: ${OFFERS_CLIENT_SECRET}
         grant-types: [client_credentials]
-        scopes: [catalog:read, "sellers:ship-from.read"]
+        scopes: [catalog:read, "sellers:ship-from.read", "sellers:entitlements.read"]
+      # S308: catalog-service copies the images of bulk product uploads through media (POST /v1/assets/import).
+      - client-id: catalog-service
+        name: Catalog service
+        type: confidential
+        secret: ${CATALOG_CLIENT_SECRET:}
+        grant-types: [client_credentials]
+        scopes: ["media:import", "orders:purchase-check"]
       - client-id: retail-service
         name: AfroTransact Retail service
         type: confidential

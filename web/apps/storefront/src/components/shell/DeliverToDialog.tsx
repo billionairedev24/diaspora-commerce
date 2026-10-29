@@ -1,6 +1,6 @@
 'use client';
 
-import { cartKeys, isApiError, preorderKeys, productKeys, searchKeys, siteKeys, ZipSchema } from '@afrotransact/api-client';
+import { addressLookup, cartKeys, isApiError, preorderKeys, productKeys, searchKeys, siteKeys, ZipSchema } from '@afrotransact/api-client';
 import { AddressAutocomplete, type AddressSuggestionItem, Button, Crosshair, Dialog, type SearchAddresses, useToast } from '@afrotransact/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -12,7 +12,8 @@ import { browserApi } from '@/lib/api/browser';
 import styles from './DeliverToDialog.module.css';
 
 /** Pluggable address search backed by the BFF geo endpoint (Google Places / OSM in production, fixtures in mocks). */
-export const bffAddressSearch: SearchAddresses = async (q, { signal }) => (await browserApi().searchAddresses(q, signal)).suggestions;
+/** Street suggestions through the BFF (geo: Google Places with session tokens, else OSM); picked Google suggestions resolve on pick. */
+export const bffAddressSearch: SearchAddresses = (q, options) => addressLookup(browserApi())(q, options);
 
 /** "Choose your location": current location, or an address/ZIP with autocomplete. */
 export function DeliverToDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {

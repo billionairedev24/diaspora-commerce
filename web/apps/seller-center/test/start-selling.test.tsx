@@ -60,10 +60,9 @@ describe('Start selling arrival in Seller Center', () => {
         <OnboardingView />
       </PortalShell>
     );
-    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/onboarding'));
-    expect(state.starts).toBe(1);
-    // /onboarding resumes the wizard at its first incomplete step.
+    // Resumes the wizard directly at its first incomplete step (one hop, no intermediate bounce).
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/onboarding/business'));
+    expect(state.starts).toBe(1);
     cleanup();
     nav.pathname = '/onboarding/business';
     renderWithProviders(

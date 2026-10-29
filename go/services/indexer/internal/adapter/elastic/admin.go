@@ -65,6 +65,14 @@ func (a *indexAdminImpl) EnsureIndex(ctx context.Context, market string) error {
 			return fmt.Errorf("create %s: status %d: %s", name, status, body)
 		}
 	}
+	if status != http.StatusNotFound {
+		// An index created by an earlier release: add the fields introduced since (strict mapping).
+		if pm, body, err := a.call(ctx, http.MethodPut, "/"+name+"/_mapping", []byte(searchindex.LateMappings)); err != nil {
+			return err
+		} else if pm >= 300 {
+			return fmt.Errorf("put mapping %s: status %d: %s", name, pm, body)
+		}
+	}
 	alias, err := json.Marshal(map[string]any{"actions": []any{map[string]any{"add": map[string]string{
 		"index": name, "alias": searchindex.Alias(market)}}}})
 	if err != nil {

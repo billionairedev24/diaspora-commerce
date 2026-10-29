@@ -318,15 +318,10 @@ test('customer.houston completes the whole application; staff approve it in the 
     }
     await next(page);
 
-    // 5 · Payouts (linked to the Stripe account)
+    // 5 · Payouts: read-only, the bank Stripe's onboarding (here the local stand-in) collected.
     await onStep(page, 'payouts', 'Payouts');
-    if (await page.getByLabel('Routing number').isVisible().catch(() => false)) {
-      await page.getByLabel('Account holder name').fill('Adaeze’s Pantry LLC');
-      await page.getByLabel('Routing number').fill('021000021');
-      await page.getByLabel('Account type').selectOption('checking');
-      await page.getByLabel('Account number', { exact: true }).fill('000123456789');
-      await page.getByLabel('Confirm account number').fill('000123456789');
-    }
+    await expect(page.getByText(/••6789/).first()).toBeVisible();
+    await expect(page.getByLabel('Routing number')).toHaveCount(0);
     await shot(page, 'wizard-5-payouts.png');
     await next(page);
 

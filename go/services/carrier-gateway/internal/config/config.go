@@ -24,6 +24,9 @@ type Config struct {
 	// APIBaseURL + "/carrier-gateway"; APIBaseURL is the shared API_BASE_URL (docs/engineering/environments.md).
 	PublicBaseURL string `yaml:"publicBaseUrl" env:"PUBLIC_BASE_URL"`
 	APIBaseURL    string `yaml:"apiBaseUrl" env:"API_BASE_URL"`
+	// LocalTestCarriers stands in a test carrier (rates, PDF labels marked TEST, scripted tracking) for every
+	// enabled carrier without credentials. Local only: config/local.yaml turns it on; dev, uat and prod never do.
+	LocalTestCarriers bool `yaml:"localTestCarriers" env:"LOCAL_TEST_CARRIERS"`
 
 	Kafka struct {
 		Enabled bool     `yaml:"enabled" env:"KAFKA_ENABLED"`

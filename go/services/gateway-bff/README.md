@@ -19,8 +19,10 @@ served at `/openapi.yaml`, `/docs`, `/redoc`) and
   session then signs the person in to every app without another prompt. The callback exchanges the code, verifies the
   ID token (JWKS, audience, nonce), **rotates the session id**, carries the guest ZIP over, merges the guest cart
   (`POST /v1/cart/merge`) and redirects to the app origin + `returnTo` path. `POST /v1/auth/sign-out` revokes the
-  tokens, ends the session and answers `{redirectTo}`: identity's `/connect/logout` (RP-initiated logout, back to the
-  calling app's home page) so the identity session ends too. Tokens live in Valkey, **AES-256-GCM encrypted at rest** (key derived from `SESSION_SIGNING_KEY`, bound
+  tokens, ends the session and answers `{redirectTo}`: identity's `/connect/logout` (RP-initiated logout) so the
+  identity session ends too, returning to the calling app's `GET /v1/auth/signed-out/{app}` (S300): the storefront
+  page (`returnTo`, guest pages only) with `signedOut=1` for the "You're signed out" toast, or Seller Center's / the
+  staff console's own branded sign-in (`prompt=login`, `notice=signed_out`) that brings the person back there. Tokens live in Valkey, **AES-256-GCM encrypted at rest** (key derived from `SESSION_SIGNING_KEY`, bound
   to the record key); the browser only holds `at_session` = opaque id + HMAC (HttpOnly, Secure, SameSite=Lax).
   Access tokens are refreshed 30 s before expiry under a Valkey lock (identity's refresh tokens are single use);
   `invalid_grant` signs the customer out but keeps guest state. Sign-out revokes refresh and access tokens.
@@ -78,7 +80,8 @@ served at `/openapi.yaml`, `/docs`, `/redoc`) and
 | `GET /v1/account/payment-methods`, `POST …/setup-intents`, `POST …/{id}/default`, `DELETE …/{id}` | payments `GET /v1/customers/me/payment-methods` (array of display data → label + MM/YY), `POST /v1/customers/me/setup-intents {types}` (+ `STRIPE_PUBLISHABLE_KEY`), `POST …/{id}/default`, `DELETE …/{id}` (`payments.default-method-required` → 409) | live |
 | `POST /v1/account/payment-sheet` (customer app PaymentSheet) | payments `POST /v1/customers/me/ephemeral-keys` (planned) | **pending (payments: no ephemeral keys)** → 503 |
 | `GET /v1/account/orders`, `GET …/{orderNumber}`, `GET …/{orderNumber}/tracking`, `POST …/shipments/{id}/cancel` | orders `GET /v1/orders?customer=me`, `GET /v1/orders/{number}` (shipments, lines, timeline, handover codes), `POST /v1/orders/{n}/shipments/{s}/cancel` (`orders.cancel-window-closed` → 409); tracking adds carrier-gateway `GET /v1/tracking/{carrier}/{number}` scans with a `shipping:rate` service token (best effort); order detail adds `shipments[].returnable/returnWindowEndsAt/problemReportOnly` (orders) and charged/refunded/refundable + shipping tax per line from payments `GET /v1/payments?orderId=` (best effort, read only after the order read proves ownership) | live |
-| `GET /v1/account/orders/{orderNumber}/returnable`, `GET/POST /v1/account/returns` (`?orderNumber=`), `GET …/{rmaId}` (id or RMA number), `POST …/{rmaId}/cancel` | orders `GET /v1/orders/{number}` (order id) + tax-returns `GET /v1/returns/eligibility?orderId=`, `POST /v1/returns` (Idempotency-Key, client's or derived; no `returnFrom` — tax-returns defaults it to the order address), `GET /v1/returns[?orderId=]`, `GET /v1/returns/{id}` or `/number/{number}` + `/refund-quote`, `POST …/cancel`; the app's `{orderNumber, atin, reason}` maps to one unit with the first allowed method | live |
+| `POST /v1/me/help-requests/uploads`, `POST …/uploads/{assetId}/complete` | media `POST /v1/uploads` (purpose `return-photo`: private, JPEG/PNG/WebP/HEIC ≤ 10 MB, with the customer's own token) + `POST /v1/assets/{id}/complete`; the BFF remembers (Valkey, 24 h) which assets the customer asked for, so only those can be attached | live |
+| `POST /v1/me/help-requests` (Idempotency-Key required), `GET /v1/me/help-requests[?cursor=&limit=]`, `GET …/{id}` | trust-ops `POST /v1/claims`, `GET /v1/claims/mine`, `GET /v1/claims/{id}` with the customer's token. There is no self-service return or refund: staff decide the claim in the disputes tooling (`POST /v1/claims/{id}/decision`). Orders proves ownership (404 otherwise) and supplies orderId, amount (the shipment's items, or the order total), currency and seller; statuses are mapped to RECEIVED / IN_REVIEW / RESOLVED / CLOSED / WITHDRAWN and only the staff note and refund amount are shown, never ids or staff names. The Idempotency-Key is remembered per customer for 24 h (trust-ops has none) | live |
 | `GET /v1/checkout/summary` | cart (selected lines) + identity addresses + payments; per package: carrier-gateway `GET /v1/pickup-locations?postalPrefix=` (platform points for AfroTransact packages, `ownerOrg=` for sellers), geo `GET /v1/zones/covering?type=DELIVERY` (AfroTransact Delivery only where the zone of the package's FC covers the address), promise `POST /v1/promises` (dates per option, FC origins) | live (each delivery fact best effort; seller packages keep the estimate — no ship-from ZIP); tax shown as "calculated when you place your order" |
 | `POST /v1/checkout/orders`, `GET /v1/checkout/orders/{n}`, `POST …/{n}/confirm` | orders `POST /v1/checkout` (Idempotency-Key relayed, selections mapped to upper-case preferences, lines from the selected cart, optional `couponCode`), `GET /v1/checkout/{n}`, `POST /v1/checkout/{n}/confirm`; the PaymentIntent client secret is always returned (`awaiting_payment`) | live (`orders.coupon-not-applicable` → 422 field error, 402 → `PAYMENT_DECLINED`) |
 | `GET/PUT /v1/account/notification-preferences`, `GET /v1/account/security`, `PUT /v1/account/password`, `POST/DELETE /v1/account/mfa/{totp,sms}`, `…/confirm`, `POST /v1/account/mfa/recovery-codes`, `DELETE /v1/account/{passkeys,sessions,devices,linked-accounts}/{id}`, `POST /v1/account/sessions/revoke-others` | identity `/v1/me/mfa…`, `/v1/me/passkeys`, `/v1/me/sessions`, `/v1/me/devices`, `/v1/me/linked-accounts`, `/v1/me/password`, `/v1/me/notification-preferences` (customer token); passkeys are registered on identity's hosted `/webauthn/register` (`passkeyRegistrationUrl`) | live |
@@ -87,6 +90,19 @@ served at `/openapi.yaml`, `/docs`, `/redoc`) and
 | `POST /v1/lola/chat` (SSE), `GET /v1/lola/sessions/{id}/messages` | ai-gateway `POST /v1/lola/chat` streamed byte for byte (token relayed, deliver-to ZIP and language added, flushed per chunk; the route is a `httpserver.Stream` route, exempt from the shared server's 30 s write timeout), `GET /v1/lola/sessions/{id}/messages` | live (429 `ai.budget-exceeded` → `RATE_LIMITED` + Retry-After) |
 | `GET /v1/careers/jobs`, `POST /v1/careers/jobs/{id}/applications` | content careers (open roles only; `resumeAssetId` required, `CAR-######` receipts) | live |
 | `POST /v1/careers/uploads`, `POST /v1/careers/uploads/{assetId}/complete` | media `POST /v1/uploads`, `POST /v1/assets/{id}/complete` (PDF ≤ 5 MB; guests use the BFF's client-credentials token; purpose `kyc-document` until media adds a résumé purpose) | live |
+
+### Product reviews (S324)
+
+| BFF operation | Upstream(s) |
+|---|---|
+| `GET /v1/products/{atin}/reviews` (public, sorted, paged, with the rating) | catalog `GET /v1/public/products/{atin}/reviews` |
+| `GET\|POST /v1/products/{atin}/reviews`, `GET\|PUT\|DELETE .../reviews/mine` | catalog `/v1/products/{atin}/reviews[/mine]` with the customer's token; the reviewer name comes from the session |
+| `POST /v1/reviews/{reviewId}/reports` | catalog `POST /v1/product-reviews/{id}/reports` |
+| `POST /v1/review-photos/uploads[/{assetId}/complete]` | media `POST /v1/uploads` (purpose `storefront`) and `.../complete`; a review only accepts `READY` assets or photos it already has |
+| Seller Center `GET /v1/seller/reviews`, `POST .../{id}/reply`, `.../reports` | catalog `/v1/seller/reviews`, `/v1/product-reviews/{id}/reply|reports` (module key `reviews`, identity `sListings`) |
+| Staff resource `product-reviews` and the moderation queue | catalog `/v1/product-reviews`, trust-ops `/v1/moderation/items` |
+
+`ProductDetail.product.rating` and `reviewCount` come from catalog's rating. Details: [docs/engineering/product-reviews.md](../../../docs/engineering/product-reviews.md).
 
 ## Seller Center & Provider Hub endpoints → upstreams
 
@@ -181,8 +197,8 @@ environment's own hosts under `platform:` as the fallback (`config/local.yaml`: 
 the CORS/CSRF origins (storefront, Seller Center, staff console), the storefront origin (`PUBLIC_WEB_URL`), the OIDC
 issuer and browser URL (`AUTH_ISSUER_URL`) and the per-app OIDC redirect URIs
 `<PUBLIC_WEB_URL|SELLER_CENTER_URL|STAFF_CONSOLE_URL>/api/bff/v1/auth/oidc/callback` (`Config.RedirectURIs`; each
-cookie stays first-party on its app's host; identity registers the same three for `gateway-bff`, plus the three home
-pages as post-logout redirect URIs). `WEB_ORIGINS`, `WEB_PUBLIC_ORIGIN`, `OIDC_ISSUER`, `OIDC_PUBLIC_URL` and `OIDC_REDIRECT_URI` override
+cookie stays first-party on its app's host; identity registers the same three for `gateway-bff`, plus the three
+`<app>/api/bff/v1/auth/signed-out/<app>` landings as post-logout redirect URIs, `Config.AppOrigins`). `WEB_ORIGINS`, `WEB_PUBLIC_ORIGIN`, `OIDC_ISSUER`, `OIDC_PUBLIC_URL` and `OIDC_REDIRECT_URI` override
 the derived values. Problem types are `https://developers.afrotransact.com/problems/bff.<code>` (`go/pkg/problem`).
 
 Local defaults: upstreams on their `infra/local/PORTS.md` ports, storefront `http://localhost:3000`, Seller Center

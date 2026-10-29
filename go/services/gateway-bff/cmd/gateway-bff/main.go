@@ -102,22 +102,30 @@ func run() error {
 	content := upstreams.NewContent(client("content", up.Content), cache, cfg.Cache.DefaultTTL)
 	clientCreds := upstreams.IdentityOptions{ClientID: cfg.OIDC.ClientID, ClientSecret: cfg.OIDC.ClientSecret}
 	serviceTokens := upstreams.NewServiceTokens(identityClient, clientCreds)
-	media := upstreams.NewMedia(client("media", up.Media))
+	mediaClient := client("media", up.Media)
+	media := upstreams.NewMedia(mediaClient)
+	proofLinks := upstreams.NewProofLinks(mediaClient, serviceTokens)
 	payments := upstreams.NewPayments(paymentsClient)
 	promise := upstreams.NewPromise(client("promise", up.Promise))
 	orders := upstreams.NewOrders(ordersClient)
 	notifications := upstreams.NewNotifications(client("notifications", up.Notifications))
+	sellerCases := upstreams.NewSellerCases(client("tax-returns", up.TaxReturns), client("trust-ops", up.TrustOps))
 	sellerDeps := app.SellerDeps{
+		Cases: sellerCases, Content: content,
 		Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", up.Seller)), Addresses: identity,
-		Content: content,
 		Catalog: upstreams.NewSellerCatalog(catalogClient, cache, cfg.Cache.ReferenceTTL),
 		Stock:   upstreams.NewStock(inventoryClient), Offers: upstreams.NewOffers(offersClient),
-		InventoryAPI: upstreams.NewStaffUpstream(inventoryClient),
-		Media:        media, Orders: upstreams.NewSellerOrders(ordersClient),
-		Carrier: upstreams.NewCarrier(client("carrier-gateway", up.Carrier)), Payouts: upstreams.NewPayouts(paymentsClient),
-		Fees:       upstreams.NewFees(paymentsClient, serviceTokens),
-		Storefront: upstreams.NewStorefront(client("storefront", up.Storefront)), Bookings: upstreams.NewBookings(client("bookings", up.Bookings), nil),
-		Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL, Log: log, PublishableKey: cfg.Stripe.PublishableKey,
+		InventoryAPI: upstreams.NewStaffUpstream(inventoryClient), RunPickups: upstreams.NewStaffUpstream(deliveryRunsClient),
+		Media: media, ProofLinks: proofLinks, Orders: upstreams.NewSellerOrders(ordersClient),
+		Carrier: upstreams.NewCarrier(client("carrier-gateway", up.Carrier)), Payouts: upstreams.NewPayouts(paymentsClient), TaxStatements: upstreams.NewTaxStatements(client("tax-returns", up.TaxReturns)),
+		Fees:     upstreams.NewFees(paymentsClient, serviceTokens),
+		Bookings: upstreams.NewBookings(client("bookings", up.Bookings), nil),
+		Reviews:  upstreams.NewReviews(catalogClient),
+		Cache:    cache, MatrixTTL: cfg.Cache.DefaultTTL, Log: log, PublishableKey: cfg.Stripe.PublishableKey,
+
+		// S307/S308: product edits, form drafts and bulk uploads at catalog; the AI listing writer at ai-gateway.
+		Listing: upstreams.NewSellerListing(catalogClient), Writer: upstreams.NewListingWriter(client("ai-gateway", up.AIGateway)),
+		ListingCache: app.NewListingCache(time.Now),
 	}
 	verifier := upstreams.NewTokenVerifier(cfg.OIDC.Issuer, cfg.OIDC.Audience, cfg.OIDC.ClientID,
 		&http.Client{Timeout: up.Identity.Timeout, Transport: otelhttp.NewTransport(http.DefaultTransport)})
@@ -130,22 +138,35 @@ func run() error {
 	sellerDeps.Location = tz
 	estimator := domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: cfg.Commerce.SellerShippingMinor,
 		FreeShippingThresholdMinor: cfg.Commerce.FreeShippingThresholdMinor, Location: tz})
+	// ADR 0005 §3: the carrier estimate in the cart and checkout follows the staff-managed carrier rule (read from
+	// delivery-runs every 30 s; the flat configured fee applies until a rule is read).
+	if setter, ok := estimator.(domain.CarrierRuleSetter); ok {
+		go app.NewCarrierRuleSync(upstreams.NewPublicDeliveryFees(deliveryRunsClient), setter, domain.Currency, 30*time.Second, log).Run(ctx)
+	}
 	sellers := app.SellerDirectory{RetailOrgID: cfg.Commerce.RetailOrgID, Names: cfg.Commerce.SellerNames}
 	sessions := app.NewSessionService(store, identity, verifier, app.SessionOptions{SigningKey: cfg.Session.SigningKey,
 		IdleTTL: cfg.Session.IdleTTL, VerifyBearer: cfg.OIDC.VerifyBearer, Log: log})
+	// An approval identity missed is repaired on the way (healOrg) and the session's tokens rotated.
+	sellerDeps.Sessions = sessions
 	location := app.NewLocationService(geo, content, sessions, app.LocationOptions{DefaultZIP: cfg.Commerce.DefaultZip,
-		DefaultCity: cfg.Commerce.DefaultCity, DefaultState: cfg.Commerce.DefaultState, Log: log})
+		DefaultCity: cfg.Commerce.DefaultCity, DefaultState: cfg.Commerce.DefaultState,
+		Country: cfg.Market, // market codes are ISO countries (us): address suggestions are restricted to it
+		Log:     log})
 	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Selection: store,
 		Sessions: sessions, Estimator: estimator, Log: log, Location: location, Market: cfg.Market})
+	maintenance := app.NewMaintenanceService(valkey.NewMaintenance(rdb), nil, log)
 	services := httpapi.Services{
-		Sessions: sessions,
+		Sessions: sessions, Maintenance: maintenance,
 		Auth: app.NewAuthService(sessions, store, store, identity, verifier, cart, payments, app.AuthOptions{
 			IdentityPublicURL: cfg.OIDC.PublicURL, ClientID: cfg.OIDC.ClientID, RedirectURI: cfg.OIDC.RedirectURI,
-			RedirectURIs: cfg.RedirectURIs(), Scopes: cfg.OIDC.Scopes, WebOrigin: cfg.Web.PublicOrigin, Log: log}),
+			RedirectURIs: cfg.RedirectURIs(), AppOrigins: cfg.AppOrigins(), BFFPath: cfg.Web.BFFPath,
+			Scopes: cfg.OIDC.Scopes, WebOrigin: cfg.Web.PublicOrigin, Applications: sellerDeps.Sellers, OrgSync: sellerDeps.Orgs, Log: log}),
+		Native: app.NewNativeAuthService(upstreams.NewNativeSignIn(identityClient, serviceTokens), app.NativeAuthOptions{}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory,
 			Offers: storefrontOffers, Location: location, Estimator: estimator, Sellers: sellers, Market: cfg.Market, Log: log}),
 		Location: location,
-		Search:   app.NewSearchService(search, storefrontOffers, location, estimator, cfg.Market, nil),
+		Search: app.NewSearchService(search, storefrontOffers, location, estimator, cfg.Market, nil,
+			app.WithServices(upstreams.NewCustomerBookings(client("bookings", up.Bookings)))),
 		Products: app.NewProductService(app.ProductDeps{Catalog: catalog, Inventory: inventory, Promise: promise, Offers: storefrontOffers,
 			Notifications: notifications, Location: location, Estimator: estimator, Sellers: sellers, Log: log}),
 		Cart:     carts,
@@ -155,30 +176,45 @@ func run() error {
 		// Pre-orders (delivery-runs public routes; resolution and open list cached for 30 s).
 		Preorders: app.NewPreorderService(upstreams.NewPreorders(deliveryRunsClient, cache, 30*time.Second), location, cfg.Market,
 			app.WithPreorderCatalog(catalog)),
+		RunAlerts: app.NewRunAlertService(upstreams.NewRunAlerts(deliveryRunsClient), location, cfg.Market),
 		// Seller Center & Provider Hub
-		SellerShell:     app.NewSellerShellService(sellerDeps),
-		SellerDashboard: app.NewSellerDashboardService(sellerDeps),
-		SellerOrders:    app.NewSellerOrdersService(sellerDeps),
-		SellerCatalog:   app.NewSellerCatalogService(sellerDeps),
-		SellerMoney:     app.NewSellerMoneyService(sellerDeps),
-		SellerFees:      app.NewSellerFeesService(sellerDeps),
-		SellerTeam:      app.NewSellerTeamService(sellerDeps),
-		ProviderHub:     app.NewProviderHubService(sellerDeps),
-		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),
-		SellerOffers:    app.NewSellerOffersService(sellerDeps),
-		SellerFba:       app.NewSellerFbaService(sellerDeps),
+		SellerShell:        app.NewSellerShellService(sellerDeps),
+		SellerDashboard:    app.NewSellerDashboardService(sellerDeps),
+		SellerOrders:       app.NewSellerOrdersService(sellerDeps),
+		SellerCatalog:      app.NewSellerCatalogService(sellerDeps),
+		SellerListing:      app.NewSellerListingService(sellerDeps),
+		SellerMoney:        app.NewSellerMoneyService(sellerDeps),
+		SellerFees:         app.NewSellerFeesService(sellerDeps),
+		SellerTeam:         app.NewSellerTeamService(sellerDeps),
+		ProviderHub:        app.NewProviderHubService(sellerDeps),
+		SellerShipFrom:     app.NewSellerShipFromService(sellerDeps),
+		SellerRunPickups:   app.NewSellerRunPickupsService(sellerDeps),
+		SellerBusinessPage: app.NewSellerBusinessPageService(sellerDeps),
+		SellerOffers:       app.NewSellerOffersService(sellerDeps),
+		SellerCoupons:      app.NewSellerCouponsService(sellerDeps),
+		SellerCases:        app.NewSellerCasesService(sellerDeps),
+		SellerReviews:      app.NewSellerReviewsService(sellerDeps),
+		SellerTax:          app.NewSellerTaxService(sellerDeps),
+		SellerFba:          app.NewSellerFbaService(sellerDeps),
 	}
+	// Lola in Seller Center: looks things up through the seller services above, as the signed-in seller.
+	services.SellerAssistant = app.NewSellerAssistantService(sellerDeps, app.AssistantDeps{Model: upstreams.NewAssistantModel(client("ai-gateway", up.AIGateway)),
+		Counter: store, Orders: services.SellerOrders, Catalog: services.SellerCatalog, Fees: services.SellerFees, Money: services.SellerMoney, Coupons: services.SellerCoupons, Cases: sellerCases,
+		Shell: services.SellerShell, Dashboard: services.SellerDashboard})
 	// Storefront account, checkout payment, services & bookings, Lola (cmd/gateway-bff/shopper.go).
 	services.Shopper = shopperServices(cfg, client, shopperClients{payments: paymentsClient, orders: ordersClient, identity: identityClient,
-		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers}, services, log)
+		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers, proofLinks: proofLinks, media: media, receipts: store}, services, log)
 	// Staff console (cmd/gateway-bff/staff.go).
 	var exportDeps app.ExportDeps
 	if services.Staff, exportDeps, services.SellerExportFiles, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient,
-		inventory: inventoryClient, payments: paymentsClient, orders: ordersClient, deliveryRuns: deliveryRunsClient, offers: offersClient}, rdb, cache, log); err != nil {
+		inventory: inventoryClient, payments: paymentsClient, orders: ordersClient, deliveryRuns: deliveryRunsClient, offers: offersClient,
+		proofLinks: proofLinks}, rdb, cache, store, maintenance, log); err != nil {
 		return err
 	}
 	// Seller Center exports share the staff console's job store, renderer and file directory.
 	services.SellerExports = app.NewSellerExportsService(sellerDeps, exportDeps)
+	// Bulk product uploads (S308): catalog parses and imports; the BFF links reports under the same app path.
+	services.SellerImports = app.NewSellerImportService(sellerDeps, exportDeps.BasePath)
 
 	openapi, err := gatewaybff.Files.ReadFile("api/openapi.yaml")
 	if err != nil {
@@ -191,7 +227,7 @@ func run() error {
 	mediaFrom, mediaTo := cfg.MediaRewrite()
 	httpapi.New(services, store, httpapi.SecurityOptions{
 		MediaRewriteFrom: mediaFrom, MediaRewriteTo: mediaTo,
-		AllowedOrigins: cfg.Web.Origins, CookieName: cfg.Session.CookieName, CookieSecure: cfg.Session.CookieSecure,
+		AllowedOrigins: cfg.Web.Origins, LocalDev: loader.Env() == "local", CookieName: cfg.Session.CookieName, CookieSecure: cfg.Session.CookieSecure,
 		CookieDomain: cfg.Session.CookieDomain, TrustForwarded: cfg.RateLimit.TrustForwarded, MaxBodyBytes: int64(cfg.RateLimit.MaxBodyBytes),
 		AuthPerMinute: cfg.RateLimit.AuthPerMinute, LookupPerMinute: cfg.RateLimit.LookupPerMinute,
 	}, log).Register(srv.Mux())

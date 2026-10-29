@@ -12,11 +12,14 @@ use the **manual payout schedule**; sellers are paid **on request**.
 
 | Table | What it holds |
 |---|---|
-| `payment` (+ `payment_line`) | One primary payment per order: Stripe PaymentIntent (manual capture), amount, status, fee-schedule version, lines (seller org, category, FBA/self, qty, items/shipping/tax, jurisdiction) with capture and refund state. Off-session follow-up charges of the same order have `parent_payment_id` (V5) |
+| `payment` (+ `payment_line`) | One primary payment per order: Stripe PaymentIntent (manual capture), amount, status, fee-schedule version, lines (seller org, category, FBA/self, qty, items/shipping/tax, jurisdiction) with capture and refund state and the rate snapshot taken at intent creation (fee kind, rate, source, plan, negotiated rate id/until; V15). Off-session follow-up charges of the same order have `parent_payment_id` (V5) |
 | `payment_capture` | One per shipment: amount, Stripe fee (actual from the charge's balance transactions, or estimate), charge id, journal |
 | `payment_refund` | Line-level refunds with commission returned per line; PENDING until Stripe confirms (`charge.refunded`) |
 | `journal_entry` / `journal_line` | **Append-only double-entry ledger** (triggers reject UPDATE/DELETE/TRUNCATE; a *deferred constraint trigger* rejects any journal that does not balance per currency or has < 2 lines) |
 | `fee_schedule` (+ `_rate`, `_override`) | Immutable, versioned commission % per category, seller overrides, card fee, FBA fee per unit, refund-commission policy, `effective_from` |
+| `fee_schedule_plan_rate`, `fee_schedule_connection_fee` (+ `_rate`) | Plan rates (plan → category → bps, `*` = the plan's other categories) per section `COMMISSION` / `CONNECTION_FEE`, and the service connection-fee section (default + category rates), immutable with their version (V15). See [commission and connection fees](../../../docs/engineering/commission-and-connection-fees.md) |
+| `negotiated_rate`, `negotiated_rate_audit` | Rates negotiated with one organisation (COMMISSION / CONNECTION_FEE, optional category, dates, required reason, negotiated by, reference; optimistic `version`) and their append-only CREATED / ENDED / EXPIRED trail (V15) |
+| `org_plan` | Each organisation's current plan (projection of `seller.subscription.changed`, fallback read of seller-service's billing API) for plan rates (V15) |
 | `fee_schedule_cancellation` | Append-only withdrawal of a scheduled version before it takes effect (who, when, why; V7). The version row is kept and skipped when picking the version in force |
 | `settlement`, `settlement_transfer`, `transfer_reversal` | Settlement hold per order, Connect transfers (`transfer_group` = order id) and reversals |
 | `payout_request` | Payout requests (unique per org per day, failed excluded) |
@@ -33,10 +36,10 @@ use the **manual payout schedule**; sellers are paid **on request**.
 
 `1000` Stripe clearing · `1050` Operating bank · `1100` Chargeback receivable · `1200:<org>` Provider fees receivable · `1400` Retail purchases released for payment · `2000:<org>` Seller payable · `2100:<jurisdiction>` Sales tax
 payable (attributed to the seller) · `2200` Customer refunds payable · `2300:<org>` Chargeback reserve · `2400` Carrier
-labels payable · `2500:<supplier>` Retail supplier payables · `4000` Commission · `4100` FBA fees · `4200` AfroTransact shipping (marketplace sellers' FBA and
+labels payable · `2500:<supplier>` Retail supplier payables · `4000` Commission (product sales) · `4050` Service connection fees (bookings, V15) · `4100` FBA fees · `4200` AfroTransact shipping (marketplace sellers' FBA and
 AfroTransact Delivery lines) · `4250` Local delivery fees (sellers' AfroTransact Delivery pickup fees, S255) ·
-`4300` Provider late-cancellation fees · `4400` AfroTransact Retail sales · `4500` Shipping label handling · `5000`
-Stripe fees · `5100` Chargeback losses.
+`4300` Provider late-cancellation fees · `4400` AfroTransact Retail sales · `4500` Shipping label handling · `4600`
+Seller plan fees collected from earnings (S298) · `5000` Stripe fees · `5100` Chargeback losses.
 
 `4400` holds AfroTransact Retail's net (items + all its shipping − its Stripe-fee share); its lines carry the Retail
 org id for attribution. Retail is the merchant of record, so there is never a `2000:<retail>` payable, a `2300` reserve,
@@ -44,8 +47,8 @@ a transfer, a reversal or a payout for it. Staff see Retail revenue as its own `
 
 | Event | Journal |
 |---|---|
-| Capture (per shipment) | Dr 1000 (charge − fee), Dr 5000 (AfroTransact's fee share) / Cr 2000 sellers' net, Cr 4400 Retail's net, Cr 2100 tax, Cr 4000, Cr 4100, Cr 4200, Cr 4250 |
-| Refund | Dr 2100 tax, Dr 2000 (items + own shipping − commission returned − delivery fee returned), Dr 4000 (commission returned), Dr 4200, Dr 4250 (delivery fee returned, customer fault) / Cr 2200; Retail lines: Dr 4400 (items + shipping), Dr 2100 / Cr 2200 |
+| Capture (per shipment) | Dr 1000 (charge − fee), Dr 5000 (AfroTransact's fee share) / Cr 2000 sellers' net, Cr 4400 Retail's net, Cr 2100 tax, Cr 4000 (product lines), Cr 4050 (service lines' connection fee), Cr 4100, Cr 4200, Cr 4250 |
+| Refund | Dr 2100 tax, Dr 2000 (items + own shipping − commission returned − delivery fee returned), Dr 4000 (commission returned), Dr 4050 (connection fee returned, service lines), Dr 4200, Dr 4250 (delivery fee returned, customer fault) / Cr 2200; Retail lines: Dr 4400 (items + shipping), Dr 2100 / Cr 2200 |
 | Refund paid by Stripe | Dr 2200 / Cr 1000 |
 | Transfer after the hold | Dr 2000 / Cr 1000 · reversal: Dr 1000 / Cr 2000 |
 | Chargeback opened | Dr 1100 + Dr 5100 (dispute fee) / Cr 1000; Dr 2000 / Cr 2300 per responsible seller (Retail's part stays in 1100) |
@@ -55,6 +58,9 @@ a transfer, a reversal or a payout for it. Staff see Retail revenue as its own `
 | Shipping label charged to a seller (S256) | Dr 2000:<org> (cost + handling, no order) / Cr 2400 (carrier cost), Cr 4500 (handling) |
 | Label voided | Dr 2400, Dr 4500 / Cr 2000:<org> (once per label) |
 | Label balance settled at a transfer | Dr 2000:<org> on the order / Cr 2000:<org> unattributed (recovery; the opposite for a credit owed back) |
+| Plan invoice withheld from earnings (S298) | Dr 2000:<org> (no order) / Cr 4600 (`PLAN_FEE_WITHHELD`, key `plan-fee:<invoice>`) |
+| Plan fee released (invoice voided / refunded) | Dr 4600 / Cr 2000:<org> (`PLAN_FEE_RELEASED`, key `plan-fee-release:<release key>`) |
+| Plan fee settled at a transfer | Dr 2000:<org> on the order / Cr 2000:<org> unattributed (`PLAN_FEE_SETTLED`, one deduction per order; the opposite to pay a released fee back) |
 | Retail supplier invoices released (S226) | Dr 1400 / Cr 2500:<supplier> (lines attributed to Retail's org) |
 | Supplier paid by Finance | Dr 2500:<supplier> / Cr 1050 |
 | Authorisation released | — (authorisations never reach the ledger; 1000 moves only at capture) |
@@ -206,12 +212,16 @@ RFC 9457 problems with `code` `payments.*`. Reference pages `/swagger-ui.html`, 
 | `GET /v1/fee-schedules` · `/active?at=` · `POST /v1/fee-schedules` | read / `payments:configure` (Super Admin, Finance) |
 | `POST /v1/fee-schedules/{id}/cancel {reason}` | `payments:configure`: only before `effectiveFrom` (`409 payments.fee-schedule-in-force` after, `409 payments.fee-schedule-cancelled` twice). Marks the version cancelled (`cancelledAt/By`, `cancelReason`), never deletes it; cancelled versions never apply and don't block the next version's date. Audited (row + `audit.payments.fee-schedules` log) |
 | `POST /v1/delivery-pricing/quote` | orders (`payments:service`), services `payments:fees.read`, staff `payments:read`: AfroTransact Delivery customer charge + seller fee (S255) |
-| `GET /v1/fee-schedules/effective?category=&orgId=&at=` | services (`payments:service`) or staff `payments:read`: commission bps (override / category / default / retail), card fee estimate |
+| `GET /v1/fee-schedules/effective?category=&orgId=&at=&kind=PRODUCT\|SERVICE` | services (`payments:service`) or staff `payments:read`: commission (PRODUCT) or connection fee (SERVICE) bps with its source (NEGOTIATED / PLAN / CATEGORY / DEFAULT / RETAIL), plan code, negotiated rate id and end, card fee estimate. No `kind`: category `services` counts as SERVICE |
+| `GET /v1/orgs/{orgId}/rate-card?kind=&at=` | the organisation's members, services, staff `payments:read`: every category's rate with its source, the plan and the negotiated rates (Seller Center fees, Provider Hub) |
+| `GET /v1/negotiated-rates?orgId=&type=&status=` · `GET …/{id}` · `POST /v1/negotiated-rates` · `POST …/{id}/end {reason}` | read `payments:read` / write `payments:configure`: negotiated commission and connection fees with a required reason (409 `payments.negotiated-rate-overlap`, 422 `payments.negotiated-rate-backdated`), audited (`negotiated_rate_audit` + `audit.payments.negotiated-rates` log) |
 | `GET /v1/payouts/balance` · `POST /v1/payouts/requests` | org members / owner & finance roles with `payouts:request`. The balance carries `deliveryFeesMinor` (S259): AfroTransact Delivery pickup fees the organisation paid on captured lines, net of fees given back by customer-fault refunds (from 4250 lines attributed to it), next to `labelChargesMinor` and `providerFeesMinor` |
 | `GET /v1/payouts/provider-fees?orgId=` | org members (own org) / staff |
 | `GET /v1/payouts/label-charges?orgId=&status=&from=&to=&limit=` | org members (own org) / staff: shipping labels charged to the organisation (S256) with tracking number, shipment, order, cost, handling, status; filters `status` CHARGED / CREDITED, purchased in `[from, to)`, `limit` ≤ 200 |
 | `GET /v1/payouts/statement?orgId=&currency=&from=&to=&limit=&kind=` | org members (own org) / staff: the seller statement (`kind` repeatable, e.g. `kind=LABEL_CHARGE&kind=LABEL_CREDIT`) — movements of `2000:<org>` (captures, refunds, transfers, chargebacks, `LABEL_CHARGE` / `LABEL_CREDIT` with labelId, shipmentId, trackingNumber), signed (credit to the seller positive), newest first, default last 90 days |
 | `GET /v1/payouts/requests?status=&orgId=` · `POST …/{id}/approve` · `/hold` · `/release` | Finance `payouts:approve` |
+| `POST /v1/orgs/{orgId}/plan-fee-withholdings` (Idempotency-Key `plan-fee-<invoice>`) · `POST …/{invoiceId}/release` (Idempotency-Key `plan-fee-release-<invoice or credit note>`) | the seller service only (SERVICE, `payments:plan-fees`): withhold a plan invoice from the organisation's earnings (S298) and release it again |
+| `GET /v1/orgs/{orgId}/plan-fee-withholdings?limit=` | the seller service, the organisation's members who see payouts, staff `payments:read`: plan fees with the transfers that settled them ("Plan fee (invoice …)") |
 | `GET /v1/reconciliation/runs` · `POST /v1/reconciliation/runs {date}` | `payments:read` / `payments:configure` |
 | `PUT/GET /v1/connected-accounts/{orgId}` | seller service or `payments:configure` |
 | `GET /v1/customers/me/payment-methods` · `POST /v1/customers/me/setup-intents` · `POST …/{id}/default` · `DELETE …/{id}` | the shopper (CUSTOMER token relayed by gateway-bff) |
@@ -268,6 +278,33 @@ balance transaction, matched 1:1 by reconciliation with the collection journal. 
 OUTSTANDING, is retried with backoff after each settlement run, and is subtracted from the payout balance so it can
 never be paid out first. Account debits need Express / Custom accounts (platform-controlled), which matches
 AfroTransact's manual payout schedule.
+
+### Plan fees paid from earnings (S298)
+
+Sellers who chose "Pay your plan from your sales" (seller service, `EARNINGS_FIRST`) have each renewal invoice taken
+from their earnings before Stripe charges the card. The seller service asks
+`POST /v1/orgs/{orgId}/plan-fee-withholdings {invoiceId, invoiceNumber, amountMinor, currency}` while the invoice is
+still a draft; it then credits the Stripe customer balance by what was withheld, so the card pays only the rest.
+
+- **What may be withheld:** the organisation's positive payable on orders whose settlement hold started (order or
+  shipment delivered: matured but untransferred, or still in the hold), never orders with an `OPEN` dispute, less
+  outstanding label charges and earlier plan fees not yet recovered (`EarningsPool`). Up to `amountMinor`: `WITHHELD`
+  with `withheldMinor` (possibly less, the card pays the rest) or `DECLINED` with a reason when nothing is available.
+  Captured but undelivered orders don't count (they can still be refunded before delivery).
+- **Idempotency:** one `plan_fee_withholding` row per invoice id; the key must be `plan-fee-<invoice>`; a replay answers
+  the first decision, the same invoice with another amount is `409 payments.idempotency-conflict`. Each step runs in a
+  SERIALIZABLE transaction, so two invoices can't claim the same earnings.
+- **Ledger:** Dr `2000:<org>` without an order / Cr `4600`: like a label charge, the organisation owes it, not an order.
+  Before each Connect transfer settlement pays back released fees, then recovers withheld fees oldest first
+  (`PLAN_FEE_SETTLED`, a reclass inside `2000:<org>`, one `plan_fee_deduction` per order: the "Plan fee (invoice …)"
+  line of that settlement), then settles label charges. The transfer is smaller by the fee.
+- **Balance:** `planFeesMinor` is what is still to settle. It comes out of the amounts on hold (it was taken from
+  them); only the part those no longer cover (refunds after the withholding) reserves `availableMinor`.
+- **Release:** `POST …/{invoiceId}/release {amountMinor?, reason}` (voided or deleted invoice: everything; credit note
+  refunded out of band: that amount) posts Dr `4600` / Cr `2000:<org>` once per key (`plan_fee_release`). Whatever
+  was already recovered is paid back with the next transfer.
+- **Statement:** `PLAN_FEE_WITHHELD` / `PLAN_FEE_RELEASED` lines say "Plan fee (invoice …)"; settlements net to zero on
+  `2000:<org>` and appear as deductions of `GET /v1/orgs/{orgId}/plan-fee-withholdings`.
 
 ### Shipping labels charged to sellers (S256)
 
@@ -346,6 +383,11 @@ CHARGES_DISABLED; null when not paused).
 
 `booking.cancelled` on `at.bookings.events` (late provider cancellations, see above).
 
+`seller.subscription.changed` (listener `SellerSubscriptionEventListener`, inbox consumer `payments.seller-subscription`)
+keeps `org_plan` current: an older event never overrides a newer one, CANCELED / PENDING_ACTIVATION mean no plan.
+Organisations not seen yet are read once from seller-service `GET /v1/orgs/{orgId}/billing` (stored as of the epoch, so
+any event replaces it); without either, plan rates are skipped and the category / default rate applies.
+
 `carrier.label.purchased|voided` on `at.carrier-shipment.events` (shipping labels charged to sellers, see above; tracking
 and pickup events on that topic are ignored).
 
@@ -364,7 +406,7 @@ later; today the payment run is Finance's.
 ## Jobs & metrics
 
 Webhook inbox (`WEBHOOK_INTERVAL`, 1 s) · settlement transfers, then outstanding provider fees (`SETTLEMENT_CRON`,
-every 15 min) · reconciliation
+every 15 min) · negotiated-rate expiry audit (`NEGOTIATED_RATE_EXPIRY_CRON`, every 5 min) · reconciliation
 of yesterday (`RECONCILIATION_CRON`, 03:10): ledger 1000 per Stripe object vs Stripe balance transactions
 (platform payouts / top-ups excluded). Metrics: `payments_reconciliation_drift_minor`, `payments_webhooks_total`,
 `payments_transfers_total`.
@@ -378,12 +420,13 @@ of yesterday (`RECONCILIATION_CRON`, 03:10): ledger 1000 per Stripe object vs St
 | `STRIPE_MULTICAPTURE` | `false` (default): every checkout intent is a single-capture intent, captured once when the order's first shipment ships (all its lines; Stripe releases nothing). `true` only once Stripe enabled multicapture (flexible payments, IC+) on the account: intents ask for `request_multicapture=if_available` and each shipment is captured separately. If Stripe still answers "This account is not eligible for the requested card features", payments creates the intent without it (key `<orderId>:create-intent:single`) and stops asking until restart. `payment.multicapture` records what each intent allows; single-capture orders are settled with the order, not per shipment |
 | `DB_URL`, `DB_USER`, `DB_PASSWORD`, `KAFKA_BOOTSTRAP`, `AUTH_ISSUER_URL` | infrastructure |
 | `RETAIL_ORG_ID` | AfroTransact Retail org (merchant of record: no commission, FBA fee, transfer or payout; sales to 4400) |
+| `SELLER_URL`, `PAYMENTS_CLIENT_ID` (`payments-service`), `PAYMENTS_CLIENT_SECRET` (secret), `SELLER_TIMEOUT` (3s) | seller-service billing API (identity client scope `seller:billing`) for organisations' plans before their first `seller.subscription.changed`; blank `SELLER_URL` = no fallback |
 | `SUPPLIER_PAYMENT_TERMS_DAYS` | days from `retail.payment.released` to a supplier payment's due date when retail sends none (30) |
 | `FGA_ENABLED`, `FGA_ENFORCE`, `FGA_API_URL`, `FGA_STORE_ID`, `FGA_STORE_NAME`, `FGA_MODEL_ID`, `FGA_API_TOKEN` (secret), `FGA_TIMEOUT`, `FGA_CACHE_TTL` | OpenFGA relationship checks (S248) |
 | `SETTLEMENT_HOLD` (7d), `PAYOUT_MINIMUM_MINOR` (2500), `PAYMENTS_ZONE` | business settings |
 
 Local: `local` profile uses Stripe **test mode** on api.stripe.com — export a real `sk_test_…` key and run
-`stripe listen --forward-to localhost:8105/v1/webhooks/stripe` for the webhook secret. Test cards:
+`stripe listen --events payment_intent.succeeded,payment_intent.amount_capturable_updated,payment_intent.payment_failed,payment_intent.requires_action,payment_intent.canceled,charge.refunded,charge.dispute.created,charge.dispute.closed,transfer.reversed,payout.paid,payout.failed,setup_intent.succeeded,setup_intent.requires_action,payment_method.attached,payment_method.detached --forward-to localhost:8105/v1/webhooks/stripe` for the webhook secret (the CLI needs `--events`; never `--all-thin`: thin events are a different payload this endpoint rejects with 400). Test cards:
 `4000 0027 6000 3184` (3-D Secure → `REQUIRES_ACTION`), `4000 0000 0000 9995` (declined → `FAILED`).
 
 ## Build, test, deploy

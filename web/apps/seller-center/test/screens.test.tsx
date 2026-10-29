@@ -3,6 +3,9 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { DisputesView } from '@/components/cases/DisputesView';
+import { ReturnsView } from '@/components/cases/ReturnsView';
+import { CouponsView } from '@/components/growth/CouponsView';
 import { PayoutsView } from '@/components/money/PayoutsView';
 import { OrdersView } from '@/components/orders/OrdersView';
 import { EarningsView, ProviderFeesCard } from '@/components/provider/EarningsView';
@@ -25,6 +28,25 @@ describe('Seller Center screens (against the seller mocks)', () => {
     expect(table.closest('[class*="overflow-x-auto"]')).toBeNull();
   });
 
+  it('lists returns and opens one with its items, refund and reason', async () => {
+    await renderScreen(<ReturnsView />);
+    await userEvent.click(await screen.findByRole('button', { name: 'RMA-5E11E5A1' }));
+    const sheet = await screen.findByRole('dialog');
+    expect(within(sheet).getByText(/2 × Garri 2kg/)).toBeInTheDocument();
+    expect(within(sheet).getByText(/damaged/i)).toBeInTheDocument();
+    expect(within(sheet).getByText(/\$17\.98/)).toBeInTheDocument();
+  });
+
+  it('lists disputes with the response deadline and never names the buyer', async () => {
+    await renderScreen(<DisputesView />);
+    expect(await screen.findByText('Waiting for your response', { selector: 'span' })).toBeInTheDocument();
+    expect(await screen.findByText('At risk')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'CLM-1001' }));
+    const sheet = await screen.findByRole('dialog');
+    expect(within(sheet).getByText(/different brand/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/customerId/);
+  });
+
   it('shows every seller role as a capability card and highlights the member’s own role', async () => {
     await renderScreen(<TeamView />);
     const own = await screen.findByText('Your role');
@@ -37,10 +59,17 @@ describe('Seller Center screens (against the seller mocks)', () => {
     expect(await screen.findAllByText(/paused/i)).not.toHaveLength(0);
   });
 
-  it('shows outstanding provider fees next to commission, Stripe and late-cancel fees', async () => {
+  it('names each order on hold by its order number, never by payments’ id', async () => {
+    await renderScreen(<PayoutsView />);
+    const holds = await screen.findAllByTestId('hold-order');
+    expect(holds.map((h) => h.textContent)).toEqual(['AT-2026-400160', 'AT-2026-400197']);
+    expect(screen.queryByText(/ord-400160/)).not.toBeInTheDocument();
+  });
+
+  it('shows outstanding provider fees next to the connection fee, Stripe and late-cancel fees', async () => {
     await renderScreen(<EarningsView />, PROVIDER_ORG);
     const totals = await screen.findByLabelText('Earnings totals');
-    expect(within(totals).getByText(/Commission/)).toBeInTheDocument();
+    expect(within(totals).getByText(/Connection fee/)).toBeInTheDocument();
     expect(within(totals).getByText('Stripe card fees')).toBeInTheDocument();
     expect(within(totals).getByText('Late-cancel fees')).toBeInTheDocument();
     expect(await screen.findByText(/outstanding\./)).toBeInTheDocument();
@@ -67,5 +96,24 @@ describe('Seller Center screens (against the seller mocks)', () => {
     await user.type(partial, '48');
     await user.click(screen.getByRole('button', { name: 'Save policy' }));
     expect(await screen.findByText('Must be less than the free-cancellation window')).toBeInTheDocument();
+  });
+
+  it('renders coupons in TanStack DataTable with create and delete buttons', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<CouponsView />);
+    expect(await screen.findByRole('table', { name: 'Coupons' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New seller coupon' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Delete coupon ADE10/i })).toBeInTheDocument();
+
+    // Clicking delete opens confirmation dialog
+    await user.click(screen.getByRole('button', { name: /Delete coupon ADE10/i }));
+    const dialog = await screen.findByRole('dialog', { name: /Delete ADE10/ });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText(/Customers will no longer be able to use it/)).toBeInTheDocument();
+
+    // Confirm deletion
+    const deleteBtn = within(dialog).getByRole('button', { name: 'Delete' });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.queryByText('ADE10')).not.toBeInTheDocument());
   });
 });

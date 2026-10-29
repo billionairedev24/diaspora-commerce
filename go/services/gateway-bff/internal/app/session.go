@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"github.com/golang-jwt/jwt/v5"
 	"log/slog"
 	"strings"
 	"time"
@@ -37,6 +38,10 @@ type SessionService interface {
 	Cookie(c *domain.Caller) string
 	// IdleTTL is how long an untouched session lives (cookie Max-Age).
 	IdleTTL() time.Duration
+	// RefreshNow rotates the web session's tokens now, whatever their expiry, because their claims are stale (identity
+	// just added the person to an approved organisation). The caller's bearer token becomes the new access token.
+	// False when there is nothing to refresh (an app bearer, a guest, no refresh token) or identity refused.
+	RefreshNow(ctx context.Context, c *domain.Caller) bool
 }
 
 // SessionOptions configure sessions.
@@ -139,7 +144,14 @@ func (s *sessionServiceImpl) resolveApp(ctx context.Context, c *domain.Caller, i
 	if s.o.VerifyBearer {
 		sub, _, err := s.verifier.VerifyAccess(ctx, in.BearerToken)
 		if err != nil {
-			return nil, domain.NewProblem(401, domain.CodeUnauthenticated, "Sign in required", "Invalid or expired token.").WithCause(err)
+			s.o.Log.Warn("app bearer token rejected", "error", err)
+			detail := "Invalid or expired token."
+			if errors.Is(err, jwt.ErrTokenInvalidIssuer) {
+				// Said plainly because it is the usual local-development cause: the app signed in at another identity
+				// address than the one this stack was started with.
+				detail = "The app signed in at a different identity address than this server expects (local: restart the stack with the same MOBILE_HOST)."
+			}
+			return nil, domain.NewProblem(401, domain.CodeUnauthenticated, "Sign in required", detail).WithCause(err)
 		}
 		c.Subject = sub
 	} else {
@@ -157,13 +169,33 @@ func (s *sessionServiceImpl) resolveApp(ctx context.Context, c *domain.Caller, i
 	return c, nil
 }
 
+func (s *sessionServiceImpl) RefreshNow(ctx context.Context, c *domain.Caller) bool {
+	if c == nil || c.App || c.Session == nil || !c.Session.Tokens.Valid() || c.Session.Tokens.RefreshToken == "" {
+		return false
+	}
+	stale := c.Session.Tokens.AccessToken
+	s.refresh(ctx, c, true)
+	if !c.Session.Authenticated() || c.Session.Tokens.AccessToken == stale {
+		return false
+	}
+	c.BearerToken = c.Session.Tokens.AccessToken
+	return true
+}
+
 // refreshIfNeeded rotates the access token shortly before it expires. One replica refreshes (Valkey lock); others
 // wait for the new token, because identity's refresh tokens are single-use.
 func (s *sessionServiceImpl) refreshIfNeeded(ctx context.Context, c *domain.Caller) {
+	s.refresh(ctx, c, false)
+}
+
+// refresh rotates the tokens when they are about to expire, or now when force is set (stale claims). A rotation
+// another request made meanwhile (the session in the store has another access token) counts as done.
+func (s *sessionServiceImpl) refresh(ctx context.Context, c *domain.Caller, force bool) {
 	now := s.o.Clock.now()
-	if !c.Session.Tokens.NeedsRefresh(now, s.o.RefreshSkew) {
+	if !force && !c.Session.Tokens.NeedsRefresh(now, s.o.RefreshSkew) {
 		return
 	}
+	stale := c.Session.Tokens.AccessToken
 	key := "web:" + c.Session.ID
 	unlock, ok, err := s.store.Lock(ctx, "refresh:"+c.Session.ID, 10*time.Second)
 	if err != nil {
@@ -177,7 +209,8 @@ func (s *sessionServiceImpl) refreshIfNeeded(ctx context.Context, c *domain.Call
 	defer unlock()
 	if fresh, err := s.store.Load(ctx, key); err == nil && fresh != nil {
 		c.Session = fresh
-		if !fresh.Tokens.NeedsRefresh(now, s.o.RefreshSkew) {
+		rotated := fresh.Tokens.Valid() && fresh.Tokens.AccessToken != stale
+		if (!force && !fresh.Tokens.NeedsRefresh(now, s.o.RefreshSkew)) || (force && rotated) {
 			return
 		}
 	}

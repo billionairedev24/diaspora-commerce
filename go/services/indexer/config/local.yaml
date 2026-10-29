@@ -7,6 +7,10 @@ kafka:
   brokers: [localhost:9092]
   group: indexer
   topics: [at.product.events, at.inventory.events, at.offers.events, at.seller-org.events]
+# SEARCH_PROVIDER=meilisearch switches the engine (tools/dev/local.sh starts it; the key is the local compose default).
+meilisearch:
+  url: http://localhost:7700
+  apiKey: local-meili-master-key
 elasticsearch:
   urls: [http://localhost:9200]
   refresh: true

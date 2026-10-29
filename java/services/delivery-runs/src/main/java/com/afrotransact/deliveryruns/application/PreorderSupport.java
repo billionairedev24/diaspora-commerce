@@ -11,6 +11,7 @@ import com.afrotransact.deliveryruns.domain.AreaKey;
 import com.afrotransact.deliveryruns.domain.Coverage;
 import com.afrotransact.deliveryruns.domain.Markets;
 import com.afrotransact.deliveryruns.domain.Money;
+import com.afrotransact.deliveryruns.domain.FeeSnapshot;
 import com.afrotransact.deliveryruns.domain.PaymentSettings;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
@@ -31,13 +32,23 @@ class PreorderSupport {
     private final PreorderSettingsRepository settings;
     private final PreorderOrderRepository orders;
     private final String pageUrl;
+    private final int defaultMinOrders;
+    private final FeeBook fees;
 
     PreorderSupport(PreorderWindowRepository windows, PreorderSettingsRepository settings,
-                    PreorderOrderRepository orders, DeliveryRunsSettings runSettings, PreorderOptions options) {
+                    PreorderOrderRepository orders, DeliveryRunsSettings runSettings, PreorderOptions options,
+                    FeeBook fees) {
+        this.fees = fees;
+        this.defaultMinOrders = options.defaultMinOrders();
         this.windows = windows;
         this.settings = settings;
         this.orders = orders;
         this.pageUrl = runSettings.publicWebUrl() + options.pagePath();
+    }
+
+    /** Minimum order count a new window starts with. */
+    int defaultMinOrders() {
+        return defaultMinOrders;
     }
 
     /** Storefront pre-order page, the base of the tracked SMS link ({@code <PUBLIC_WEB_URL>/pre-orders}). */
@@ -46,7 +57,7 @@ class PreorderSupport {
     }
 
     Coverage coverage() {
-        return new Coverage(settings.settings(), settings.areas());
+        return new Coverage(settings.settings(), settings.areas(), fees.current());
     }
 
     PreorderWindow find(UUID id) {
@@ -74,8 +85,9 @@ class PreorderSupport {
         PaymentSettings payment = coverage.settings().payment();
         WindowTotals t = totals.getOrDefault(w.id(), new WindowTotals(0, 0));
         boolean areaOff = !coverage.settings().enabled() || coverage.allTargetsOff(w.details().targets());
-        return new WindowView(w, w.status(now), w.publishChecks(payment, pageUrl), w.doorFee(payment).orElse(null),
-                w.pickupFee(payment), payment.pickupWindow(), t.orders(),
+        FeeSnapshot door = w.details().door() ? w.doorFee(coverage.fees()).orElse(null) : null;
+        return new WindowView(w, w.status(now), w.publishChecks(coverage.fees(), pageUrl), door,
+                w.pickupFee(coverage.fees()), payment.pickupWindow(), t.orders(),
                 t.revenueMinor(), areaOff, WindowSwitch.of(w, coverage, now));
     }
 
@@ -83,8 +95,11 @@ class PreorderSupport {
         return view(w, coverage(), orders.totals(List.of(w.id())), now);
     }
 
-    /** Builds validated details from a command; null flags take the wizard's defaults. */
-    static WindowDetails details(WindowCommand c) {
+    /**
+     * Builds validated details from a command; null flags take the wizard's defaults and a null minimum takes
+     * {@code defaultMin} (the configured default on create, the window's current minimum on edit).
+     */
+    static WindowDetails details(WindowCommand c, int defaultMin) {
         List<AreaKey> targets = c.targets() == null ? List.of()
                 : c.targets().stream().map(AreaKey::parse).toList();
         String currency = Markets.currencyOf(targets.isEmpty() ? null : targets.get(0).country());
@@ -102,6 +117,6 @@ class PreorderSupport {
                 new Money(c.socialBudgetMinor() == null ? 0 : c.socialBudgetMinor(), currency), c.comms(),
                 c.doorFeeOverrideMinor() == null ? null : new Money(c.doorFeeOverrideMinor(), currency),
                 c.pickupFeeOverrideMinor() == null ? null : new Money(c.pickupFeeOverrideMinor(), currency),
-                c.locationId());
+                c.locationId(), c.minOrders() == null ? defaultMin : c.minOrders());
     }
 }

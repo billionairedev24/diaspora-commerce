@@ -1,6 +1,7 @@
+import { fonts } from './generated/fonts';
 import { cssVariables, resolvedVariables, tokens } from './generated/tokens';
 
-export { cssVariables, resolvedVariables, tokens };
+export { cssVariables, fonts, resolvedVariables, tokens };
 
 /** Name of any declared token, e.g. "--at-color-canvas". */
 export type TokenName = keyof typeof cssVariables;

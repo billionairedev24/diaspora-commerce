@@ -1,46 +1,132 @@
 'use client';
 
-import { Button } from '@afrotransact/ui';
+import { Button, type NavLoop } from '@afrotransact/ui';
 import { HourglassMedium, SignOut, WarningCircle } from '@phosphor-icons/react/ssr';
-import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { type ReactNode, useEffect, useState } from 'react';
 
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { loginHref, signOutEverywhere } from '@/lib/auth';
+import { navGuard } from '@/lib/nav-guard';
 import { type ApplyRole } from '@/lib/onboarding-entry';
 import { useStorefrontUrl } from '@/lib/runtime-config';
 
-/* The shell's waiting and failure states. Loading always ends: after a while the page offers Retry and Sign out, an
-   error offers the same, and a sign-in that comes back still signed out is not retried in a loop. */
+/* The shell's waiting and failure states. Loading always ends: after a while the page offers Try again, Go to
+   storefront and Sign out, an error offers the same, a sign-in that comes back still signed out is not retried in a
+   loop, and redirects that go round in circles stop with a panel naming where they went (navGuard). */
 
 /** How long the shell waits quietly before it says so and offers a way out. */
 export const SLOW_AFTER_MS = 10_000;
 
 function SignOutButton() {
-  const storefrontUrl = useStorefrontUrl();
   return (
-    <Button variant="neutral" size="sm" onClick={() => void signOutEverywhere(storefrontUrl)}>
+    <Button variant="neutral" size="sm" onClick={() => void signOutEverywhere()}>
       <SignOut size={16} aria-hidden /> Sign out
     </Button>
   );
 }
 
-/** A spinner that, after {@link SLOW_AFTER_MS}, explains itself and offers Retry and Sign out. */
-export function ShellLoading({ label, onRetry, slowAfterMs = SLOW_AFTER_MS }: { label: string; onRetry: () => void; slowAfterMs?: number }) {
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setSlow(true), slowAfterMs);
-    return () => clearTimeout(t);
-  }, [slowAfterMs]);
-  if (!slow) return <Spinner label={label} />;
+const LINK_BUTTON = 'inline-flex items-center rounded-pill border border-border px-4 py-1.5 text-sm font-semibold text-text no-underline hover:no-underline';
+
+function StorefrontLink() {
+  const storefrontUrl = useStorefrontUrl();
+  return (
+    <a className={LINK_BUTTON} href={storefrontUrl}>
+      Go to storefront
+    </a>
+  );
+}
+
+function SlowPanel({ children }: { children: ReactNode }) {
   return (
     <div role="alert" className="flex flex-col items-center gap-3 rounded-md border border-border bg-surface px-6 py-10 text-center">
       <HourglassMedium size={36} aria-hidden className="text-muted" />
       <strong className="text-lg">This is taking longer than usual</strong>
       <p className="m-0 max-w-[60ch] text-sm text-muted">AfroTransact isn’t answering right now. Try again, or sign out and come back later.</p>
+      <div className="flex flex-wrap justify-center gap-2">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * A spinner that, after {@link SLOW_AFTER_MS}, explains itself and offers Try again, Go to storefront and Sign out.
+ * The wait is measured from the first loader of the streak (navGuard.loadingSince), not from this one: a shell that
+ * keeps unmounting its loader (another branch, a redirect, a full page load in a loop) still says so in time. Before
+ * the page's scripts run, CSS alone reveals the same note after 10 s, so a page that never hydrates has a way out too.
+ */
+export function ShellLoading({ label, onRetry, slowAfterMs = SLOW_AFTER_MS }: { label: string; onRetry: () => void; slowAfterMs?: number }) {
+  const pathname = usePathname();
+  const [hydrated, setHydrated] = useState(false);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    setHydrated(true);
+    const since = navGuard.loadingSince();
+    const t = setTimeout(() => setSlow(true), Math.max(0, slowAfterMs - (Date.now() - since)));
+    // Keep the streak alive while this loader is on screen.
+    const beat = setInterval(() => navGuard.loadingSince(), 2_000);
+    return () => {
+      clearTimeout(t);
+      clearInterval(beat);
+    };
+  }, [slowAfterMs]);
+  if (!hydrated) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Spinner label={label} />
+        <div className="at-shell-slow-nojs">
+          <SlowPanel>
+            {/* No scripts yet: plain links (this page again, and the storefront). */}
+            <a className={LINK_BUTTON} href={pathname}>
+              Try again
+            </a>
+            <StorefrontLink />
+          </SlowPanel>
+        </div>
+      </div>
+    );
+  }
+  if (!slow) return <Spinner label={label} />;
+  return (
+    <SlowPanel>
+      <Button
+        size="sm"
+        onClick={() => {
+          navGuard.reset();
+          onRetry();
+        }}
+      >
+        Try again
+      </Button>
+      <StorefrontLink />
+      <SignOutButton />
+    </SlowPanel>
+  );
+}
+
+/**
+ * The shell stopped a redirect loop (navGuard): where it kept being sent, with Try again (counts start over), Go to
+ * storefront and Sign out.
+ */
+export function ShellLooped({ loop }: { loop: NavLoop }) {
+  return (
+    <div className="mx-auto flex w-[min(600px,100%)] flex-col items-center gap-4 px-4 py-16 text-center" role="alert">
+      <WarningCircle size={40} aria-hidden className="text-warning" />
+      <h1 className="m-0 text-2xl font-bold">Seller Center keeps redirecting</h1>
+      <p className="m-0 text-muted">
+        We stopped after being sent to <code className="break-all">{loop.destination}</code> {loop.count} times in {Math.round(loop.windowMs / 1000)} seconds. Try
+        again, or sign out and sign in again.
+      </p>
       <div className="flex flex-wrap justify-center gap-2">
-        <Button size="sm" onClick={onRetry}>
+        <Button
+          size="sm"
+          onClick={() => {
+            navGuard.reset();
+            window.location.reload();
+          }}
+        >
           Try again
         </Button>
+        <StorefrontLink />
         <SignOutButton />
       </div>
     </div>
@@ -98,8 +184,11 @@ export function AutoSignIn({ role, label }: { role: ApplyRole | null; label: str
       setLooped(true);
       return;
     }
+    const to = loginHref(window.location.href, role ? { intent: role === 'provider' ? 'provide' : 'sell' } : {});
+    // A sign-in that keeps coming back (each time after the 2-minute guard was cleared) is a loop too: the shell shows it.
+    if (!navGuard.allow(to)) return;
     writeAttempt(Date.now());
-    window.location.assign(loginHref(window.location.href, role ? { intent: role === 'provider' ? 'provide' : 'sell' } : {}));
+    window.location.assign(to);
   }, [role]);
   if (!looped) {
     return (
@@ -118,6 +207,7 @@ export function AutoSignIn({ role, label }: { role: ApplyRole | null; label: str
       <div className="flex flex-wrap justify-center gap-2">
         <Button
           onClick={() => {
+            navGuard.reset();
             writeAttempt(Date.now());
             window.location.assign(loginHref(window.location.href, role ? { intent: role === 'provider' ? 'provide' : 'sell' } : {}));
           }}

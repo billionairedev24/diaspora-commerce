@@ -1,11 +1,15 @@
 import { z } from 'zod';
 
 import { PreorderAttributionSchema, PreorderConfirmationSchema } from '../preorders';
-import { AddressSchema, PaymentMethodSchema, ReturnSummarySchema } from './account';
+import { AddressSchema, PaymentMethodSchema } from './account';
 import { CartPackageSchema } from './cart';
-import { MinorSchema } from './common';
+import { ProductSummarySchema } from './catalog';
+import { DeliveryFeeRuleRefSchema, MinorSchema } from './common';
+import { CheckoutCreditSchema } from './credit';
+import { RailSchema } from './home';
+import { MembershipSavingsSchema, OrderMembershipWaiverSchema } from './membership';
 
-/* Storefront account (address input, order detail & tracking, returns, login & security), checkout, services &
+/* Storefront account (address input, order detail & tracking, login & security), checkout, services &
    bookings and Lola — contracts/openapi/gateway-bff.yaml. */
 
 const nullableString = z.string().nullable();
@@ -44,6 +48,8 @@ export type TimelineEvent = z.infer<typeof TimelineEventSchema>;
 export const OrderLineViewSchema = z.object({
   lineId: z.string(),
   atin: z.string(),
+  /** The product page's ATIN (atin is the variant's): "Rate this item" opens its reviews (S324). */
+  productAtin: z.string().optional(),
   title: z.string(),
   imageUrl: nullableString,
   quantity: z.number().int(),
@@ -58,6 +64,18 @@ export type OrderLineView = z.infer<typeof OrderLineViewSchema>;
 export const OrderPickupSchema = z.object({ id: z.string(), name: z.string(), address: z.string(), hours: z.string(), ready: z.string(), setBy: z.enum(['platform', 'seller']) });
 export type OrderPickup = z.infer<typeof OrderPickupSchema>;
 
+/** How our driver handed a parcel over (photo, who received it); the links last about five minutes. */
+export const DeliveryProofSchema = z.object({
+  method: z.enum(['CUSTOMER', 'SOMEONE_ELSE', 'SAFE_PLACE']),
+  recipientName: nullableString,
+  relationship: nullableString,
+  safePlace: nullableString,
+  photoUrl: nullableString,
+  signatureUrl: nullableString,
+  at: z.string()
+});
+export type DeliveryProof = z.infer<typeof DeliveryProofSchema>;
+
 export const ShipmentDetailSchema = z.object({
   shipmentId: z.string(),
   label: z.string(),
@@ -67,20 +85,28 @@ export const ShipmentDetailSchema = z.object({
   sellerName: z.string(),
   deliveryMethod: DeliveryMethodSchema,
   cancellable: z.boolean(),
+  /** When Cancel stops being offered (before packing, inside the cancellation window); null when it is not offered. */
+  cancellableUntil: z.string().nullable().optional(),
   carrier: nullableString,
   trackingNumber: nullableString,
   promisedFrom: nullableString,
   promisedBy: nullableString,
   deliveredAt: nullableString,
+  /** How our driver handed it over; null for carrier, pickup and by-hand deliveries. */
+  proof: DeliveryProofSchema.nullable().optional(),
   deliveryCode: nullableString,
   lines: z.array(OrderLineViewSchema),
   timeline: z.array(TimelineEventSchema),
-  /** Returns (S148/S166): "Return items" when returnable; "Report a problem" when only that is possible. */
+  /** A problem can be reported (there is no self-service return); problemReportOnly: reporting is the only route. */
   returnable: z.boolean().optional(),
   returnWindowEndsAt: z.string().nullable().optional(),
   problemReportOnly: z.boolean().optional(),
   /** AfroTransact Delivery from the seller's store (S255), as charged at checkout. */
   localDelivery: z.object({ roadMiles: z.number().nullable(), durationMinutes: z.number().nullable(), chargeMinor: MinorSchema }).nullable().optional(),
+  /** The delivery fee rule the shipping was charged by when the order was placed (later edits never change it). */
+  deliveryFeeRule: DeliveryFeeRuleRefSchema.nullable().optional(),
+  /** The shipping fee the shopper's membership waived on this shipment, with the tier and benefit (S323). */
+  membershipWaiver: OrderMembershipWaiverSchema.nullable().optional(),
   /** Pickup shipments: where to collect it. */
   pickup: OrderPickupSchema.nullable().optional()
 });
@@ -101,82 +127,14 @@ export const OrderDetailSchema = z.object({
   shipments: z.array(ShipmentDetailSchema),
   /** What was charged and refunded (payments); absent when payments cannot answer. */
   payment: z
-    .object({ status: z.string(), capturedMinor: MinorSchema, refundedMinor: MinorSchema, refundableMinor: MinorSchema, shippingTaxMinor: MinorSchema })
+    .object({ status: z.string(), capturedMinor: MinorSchema, refundedMinor: MinorSchema, refundableMinor: MinorSchema, shippingTaxMinor: MinorSchema,
+      /** The part paid with AfroTransact credit; the card paid the rest (S320). */
+      creditMinor: MinorSchema.default(0),
+      /** The card part of this order's refunds comes back as credit (staff chose it, with a reason; customers cannot choose). */
+      cardRefundsAsCredit: z.boolean().default(false) })
     .optional()
 });
 export type OrderDetail = z.infer<typeof OrderDetailSchema>;
-
-/* ── Returns ───────────────────────────────────────────────────── */
-
-export const RETURN_REASONS = [
-  'DAMAGED',
-  'DEFECTIVE',
-  'WRONG_ITEM',
-  'NOT_AS_DESCRIBED',
-  'MISSING_PARTS',
-  'EXPIRED_OR_SPOILED',
-  'ARRIVED_LATE',
-  'NO_LONGER_NEEDED',
-  'ORDERED_BY_MISTAKE',
-  'BETTER_PRICE_AVAILABLE'
-] as const;
-export const ReturnReasonSchema = z.enum(RETURN_REASONS);
-export type ReturnReason = z.infer<typeof ReturnReasonSchema>;
-/** Reasons the seller is at fault for (food/perishables can only be reported with these). */
-export const SELLER_FAULT_REASONS: readonly ReturnReason[] = ['DAMAGED', 'DEFECTIVE', 'WRONG_ITEM', 'EXPIRED_OR_SPOILED', 'NOT_AS_DESCRIBED', 'MISSING_PARTS', 'ARRIVED_LATE'];
-
-export const ReturnMethodSchema = z.enum(['DROP_OFF', 'DRIVER_PICKUP', 'NO_RETURN']);
-export type ReturnMethod = z.infer<typeof ReturnMethodSchema>;
-
-export const ReturnableLineSchema = z.object({
-  lineId: z.string(),
-  atin: z.string(),
-  title: z.string(),
-  quantity: z.number().int(),
-  maxQuantity: z.number().int(),
-  unitPriceMinor: MinorSchema,
-  eligible: z.boolean(),
-  reportProblemOnly: z.boolean(),
-  sellerFaultOnly: z.boolean(),
-  windowEndsAt: nullableString,
-  methods: z.array(ReturnMethodSchema),
-  ineligibleReason: nullableString
-});
-export type ReturnableLine = z.infer<typeof ReturnableLineSchema>;
-
-export const ReturnEligibilitySchema = z.object({
-  orderNumber: z.string(),
-  currency: z.string(),
-  shipments: z.array(z.object({ shipmentId: z.string(), sellerName: z.string(), deliveredAt: nullableString, lines: z.array(ReturnableLineSchema) }))
-});
-export type ReturnEligibility = z.infer<typeof ReturnEligibilitySchema>;
-
-export const StartReturnRequestSchema = z.object({
-  orderNumber: z.string().min(1),
-  shipmentId: z.string().min(1),
-  method: ReturnMethodSchema,
-  lines: z
-    .array(z.object({ lineId: z.string().min(1), quantity: z.number().int().min(1), reason: ReturnReasonSchema, comment: z.string().max(500).optional() }))
-    .min(1, 'Choose at least one item')
-});
-export type StartReturnRequest = z.infer<typeof StartReturnRequestSchema>;
-
-export const RefundQuoteSchema = z.object({
-  itemsMinor: MinorSchema,
-  shippingMinor: MinorSchema,
-  taxMinor: MinorSchema,
-  restockingFeeMinor: MinorSchema,
-  totalMinor: MinorSchema
-});
-export type RefundQuote = z.infer<typeof RefundQuoteSchema>;
-
-export const ReturnDetailSchema = ReturnSummarySchema.extend({
-  lines: z.array(
-    z.object({ lineId: z.string(), atin: z.string(), title: z.string(), quantity: z.number().int(), unitPriceMinor: MinorSchema, reason: z.string(), outcome: nullableString })
-  ),
-  quote: RefundQuoteSchema.nullable()
-});
-export type ReturnDetail = z.infer<typeof ReturnDetailSchema>;
 
 /* ── Login & security ──────────────────────────────────────────── */
 
@@ -252,9 +210,35 @@ export type CheckoutLocalDelivery = z.infer<typeof CheckoutLocalDeliverySchema>;
 
 export const CheckoutPackageSchema = CartPackageSchema.extend({
   pickupPoints: z.array(PickupPointSchema).optional(),
-  localDelivery: CheckoutLocalDeliverySchema.optional()
+  localDelivery: CheckoutLocalDeliverySchema.optional(),
+  /** The part of this package's delivery fee the shopper's membership waives (S323); 0 or absent for none. */
+  membershipWaivedMinor: MinorSchema.optional()
 });
 export type CheckoutPackage = z.infer<typeof CheckoutPackageSchema>;
+
+export const CheckoutCouponSellerShareSchema = z.object({
+  sellerOrgId: z.string(),
+  sellerName: z.string().optional(),
+  discountMinor: MinorSchema,
+  funding: z.enum(['platform', 'seller'])
+});
+export type CheckoutCouponSellerShare = z.infer<typeof CheckoutCouponSellerShareSchema>;
+
+export const CheckoutCouponSchema = z.object({
+  code: z.string(),
+  applicable: z.boolean(),
+  rejection: z.string().nullable().optional(),
+  message: z.string().optional(),
+  discountMinor: MinorSchema,
+  shippingDiscountMinor: MinorSchema,
+  funding: z.enum(['platform', 'seller']).optional(),
+  fundedByOrg: z.string().optional(),
+  offerDiscounts: z
+    .array(z.object({ offerId: z.string(), sellerOrgId: z.string().optional(), discountMinor: MinorSchema }))
+    .optional(),
+  sellerShares: z.array(CheckoutCouponSellerShareSchema).optional()
+});
+export type CheckoutCoupon = z.infer<typeof CheckoutCouponSchema>;
 
 export const CheckoutSummarySchema = z.object({
   packages: z.array(CheckoutPackageSchema),
@@ -262,12 +246,23 @@ export const CheckoutSummarySchema = z.object({
   paymentMethods: z.array(PaymentMethodSchema),
   subtotalMinor: MinorSchema,
   shippingMinor: MinorSchema,
+  discountMinor: MinorSchema.default(0),
+  shippingDiscountMinor: MinorSchema.default(0),
+  coupon: CheckoutCouponSchema.nullish(),
   taxMinor: MinorSchema,
   taxRateLabel: z.string(),
   totalMinor: MinorSchema,
   currency: z.string(),
   sellerCount: z.number().int(),
-  publishableKey: z.string().optional()
+  publishableKey: z.string().optional(),
+  stripeCustomerId: z.string().optional(),
+  crossSell: RailSchema.nullish(),
+  /** What the shopper's AfroTransact credit would pay of this order; absent without credit (S320). */
+  credit: CheckoutCreditSchema.nullish(),
+  /** The delivery fee the membership waives on this order: shippingMinor stays as priced, totalMinor is lower by this (S323). */
+  membershipWaivedMinor: MinorSchema.default(0),
+  /** "Fee waived: membership", or for a shopper who is not a member "Join Plus to save $X on this order"; absent when there is nothing to say. */
+  membership: MembershipSavingsSchema.nullish()
 });
 export type CheckoutSummary = z.infer<typeof CheckoutSummarySchema>;
 
@@ -298,6 +293,8 @@ export const PlaceOrderRequestSchema = z.object({
   newPaymentMethod: z.boolean().optional(),
   /** With newPaymentMethod: keep it on the shopper's Stripe Customer (setup_future_usage=off_session). */
   savePaymentMethod: z.boolean().optional(),
+  /** Pay with AfroTransact credit first; with enough credit no payment method is needed (S320). */
+  useCredit: z.boolean().optional(),
   gift: z.boolean().optional(),
   couponCode: z.string().max(20).optional(),
   deliverySelections: z.array(DeliverySelectionSchema),
@@ -310,6 +307,8 @@ export const OrderConfirmationSchema = z.object({
   orderNumber: z.string(),
   status: z.enum(['placed', 'awaiting_payment', 'processing', 'requires_action']),
   paymentClientSecret: nullableString.optional(),
+  /** The part of the total paid with credit (S320). */
+  creditMinor: MinorSchema.optional(),
   totalMinor: MinorSchema,
   currency: z.string(),
   shipments: z.array(z.object({ shipmentId: z.string(), label: z.string(), eta: z.string(), deliveryCode: nullableString.optional() })),
@@ -421,23 +420,27 @@ export const ProviderPageSchema = z.object({
   policy: ServicePolicySchema,
   instantBooking: z.boolean(),
   team: z.array(ServiceMemberSchema),
-  services: z.array(ServiceDetailSchema),
-  design: z
-    .object({
-      slug: z.string(),
-      tagline: z.string(),
-      layout: z.enum(['CLASSIC', 'GALLERY_FIRST', 'STORY']),
-      header: z.enum(['COVER', 'BAND']),
-      buttonShape: z.enum(['ROUNDED', 'SQUARE']),
-      coverUrl: nullableString,
-      tokens: z.record(z.string(), z.string()),
-      social: z.array(z.object({ network: z.string(), url: z.string() })),
-      gallery: z.array(z.object({ url: z.string(), caption: z.string() })),
-      featured: z.array(z.object({ id: z.string(), headline: z.string(), body: z.string(), url: nullableString, serviceId: nullableString }))
-    })
-    .nullable()
+  services: z.array(ServiceDetailSchema)
 });
 export type ProviderPage = z.infer<typeof ProviderPageSchema>;
+
+/** A business's plain public page: made from its application, never edited as a page. */
+export const BusinessPageSchema = z.object({
+  slug: z.string(),
+  kind: z.enum(['SELLER', 'PROVIDER']),
+  name: z.string(),
+  description: nullableString,
+  /** #rrggbb, or null for the platform colour. */
+  brandColor: nullableString,
+  logoUrl: nullableString,
+  contactEmail: nullableString,
+  /** False until the business is approved: keep the page out of search engines. */
+  indexable: z.boolean(),
+  services: z.array(z.object({ serviceId: z.string(), name: z.string(), durationMinutes: z.number().int(), priceMinor: z.number().int(), currency: z.string() })),
+  /** A seller's live products (at most twelve); empty for providers. */
+  products: z.array(ProductSummarySchema)
+});
+export type BusinessPage = z.infer<typeof BusinessPageSchema>;
 
 export const CancellationQuoteSchema = z.object({
   refundSharePercent: z.number().int(),

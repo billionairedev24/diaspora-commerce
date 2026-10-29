@@ -63,6 +63,10 @@ type BookingCard struct {
 	ExpiresAt       *time.Time `json:"expiresAt"`
 	ProposedStartAt *time.Time `json:"proposedStartAt"`
 	AllowedActions  []string   `json:"allowedActions"`
+	// ServiceCategory selects the connection fee; TakeHome is what the provider keeps at the booking's price
+	// ("You keep $X after the 8% connection fee"), set on booking requests when payments can say.
+	ServiceCategory *string          `json:"serviceCategory"`
+	TakeHome        *BookingTakeHome `json:"takeHome"`
 }
 
 // Normalize fills labels, duration and allowed actions the screens rely on.
@@ -456,6 +460,9 @@ type Earnings struct {
 	Totals            EarningsTotals `json:"totals"`
 	Rows              []EarningsRow  `json:"rows"`
 	ProviderFees      ProviderFees   `json:"providerFees"`
+	// ConnectionFee is the provider's connection fee now, per service category, with where it comes from (nil when
+	// payments could not say).
+	ConnectionFee *SellerRateCard `json:"connectionFee"`
 }
 
 // Total recomputes totals from the rows (net = collected − commission − card fees − late-cancel fees). Held money
@@ -473,85 +480,4 @@ func (e *Earnings) Total() {
 		e.Totals.LateCancelFeesMinor += r.LateCancelFeeMinor
 		e.Totals.NetMinor += r.NetMinor
 	}
-}
-
-// SocialLink is a link on the public page (shown publicly once approved).
-type SocialLink struct {
-	Network string `json:"network"`
-	URL     string `json:"url"`
-	Status  string `json:"status"`
-}
-
-// GalleryItem is a photo with its caption.
-type GalleryItem struct {
-	AssetID string `json:"assetId"`
-	URL     string `json:"url"`
-	Caption string `json:"caption"`
-}
-
-// FeaturedPost is a featured-work post.
-type FeaturedPost struct {
-	ID        string  `json:"id"`
-	Headline  string  `json:"headline"`
-	Body      string  `json:"body"`
-	ServiceID *string `json:"serviceId"`
-	Published bool    `json:"published"`
-}
-
-// PublicPage is the storefront/public-page draft.
-type PublicPage struct {
-	Kind         string         `json:"kind"`
-	Slug         string         `json:"slug"`
-	Name         string         `json:"name"`
-	Tagline      string         `json:"tagline"`
-	Status       string         `json:"status"`
-	PublishedAt  *time.Time     `json:"publishedAt"`
-	PrimaryColor string         `json:"primaryColor"`
-	AccentColor  string         `json:"accentColor"`
-	Layout       string         `json:"layout"`
-	Header       string         `json:"header"`
-	ButtonShape  string         `json:"buttonShape"`
-	GallerySize  int            `json:"gallerySize"`
-	Gallery      []GalleryItem  `json:"gallery"`
-	Featured     []FeaturedPost `json:"featured"`
-	Social       []SocialLink   `json:"social"`
-	PublicPath   string         `json:"publicPath"`
-}
-
-// PublicPageInput changes the draft; nil fields are kept.
-type PublicPageInput struct {
-	Name         *string        `json:"name"`
-	Tagline      *string        `json:"tagline"`
-	PrimaryColor *string        `json:"primaryColor"`
-	AccentColor  *string        `json:"accentColor"`
-	Layout       *string        `json:"layout"`
-	Header       *string        `json:"header"`
-	ButtonShape  *string        `json:"buttonShape"`
-	GallerySize  *int           `json:"gallerySize"`
-	Featured     []FeaturedPost `json:"featured"`
-	Social       []SocialLink   `json:"social"`
-}
-
-var socialHosts = map[string][]string{
-	"instagram": {"instagram.com"}, "tiktok": {"tiktok.com"}, "facebook": {"facebook.com", "fb.com"}, "youtube": {"youtube.com", "youtu.be"},
-	"whatsapp": {"wa.me", "whatsapp.com"}, "x": {"x.com", "twitter.com"}, "linkedin": {"linkedin.com"},
-}
-
-// SocialURLMatches checks that a link belongs to its network (websites accept any https URL).
-func SocialURLMatches(network, url string) bool {
-	u := strings.ToLower(strings.TrimSpace(url))
-	if !strings.HasPrefix(u, "https://") {
-		return false
-	}
-	if network == "website" {
-		return len(u) > len("https://")
-	}
-	hosts, ok := socialHosts[network]
-	if !ok {
-		return false
-	}
-	host := strings.TrimPrefix(u, "https://")
-	host, _, _ = strings.Cut(host, "/")
-	host = strings.TrimPrefix(host, "www.")
-	return slices.Contains(hosts, host)
 }

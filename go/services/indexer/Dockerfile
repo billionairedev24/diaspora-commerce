@@ -2,7 +2,7 @@
 # Build context: go/   (docker build -f services/indexer/Dockerfile go)
 FROM golang:1.27.2 AS build
 WORKDIR /src
-ENV CGO_ENABLED=0 GOWORK=off GOFLAGS=-trimpath
+ENV CGO_ENABLED=0 GOWORK=off GOFLAGS="-trimpath -buildvcs=false"
 COPY pkg/go.mod pkg/go.sum ./pkg/
 COPY services/indexer/go.mod services/indexer/go.sum ./services/indexer/
 WORKDIR /src/services/indexer

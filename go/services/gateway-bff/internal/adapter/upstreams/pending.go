@@ -124,7 +124,7 @@ func placementsFrom(in []servedPlacement) domain.Placements {
 				p.Banners = append(p.Banners, domain.Banner{ID: sp.ID, Slot: b.Position, Advertiser: adv, Title: b.Title, Sub: b.Sub,
 					CTA: b.CTA, Href: b.Href, ImageURL: b.ImageURL})
 			}
-		case "home_product_row":
+		case "home_product_row", "checkout_cross_sell":
 			var r struct {
 				Title string   `json:"title"`
 				Href  string   `json:"href"`
@@ -134,9 +134,14 @@ func placementsFrom(in []servedPlacement) domain.Placements {
 			if json.Unmarshal(sp.Payload, &r) == nil && r.Title != "" {
 				src := domain.RailSource{Kind: "search", Query: r.Query, Limit: 12}
 				if len(r.SKUs) > 0 {
-					src = domain.RailSource{Kind: "atins", ATINs: r.SKUs, Limit: 24}
+					src = domain.RailSource{Kind: "atins", ATINs: r.SKUs, Limit: 12}
 				}
-				p.Rails = append(p.Rails, domain.RailPlacement{ID: sp.ID, Title: r.Title, Href: r.Href, Source: src})
+				rp := domain.RailPlacement{ID: sp.ID, Title: r.Title, Href: r.Href, Source: src}
+				if sp.Slot == "checkout_cross_sell" {
+					p.CheckoutCrossSell = append(p.CheckoutCrossSell, rp)
+				} else {
+					p.Rails = append(p.Rails, rp)
+				}
 			}
 		}
 	}
@@ -210,13 +215,10 @@ var _ port.PaymentsClient = (*paymentsImpl)(nil)
 // NewPayments returns the payments client (saved payment methods and SetupIntents of the token's customer).
 func NewPayments(c httpclient.Client) port.PaymentsClient { return &paymentsImpl{c: c} }
 
-func (p *paymentsImpl) PaymentMethods(ctx context.Context, bearer string) ([]domain.PaymentMethod, error) {
-	res, err := call(ctx, p.c, httpclient.Request{Path: "/v1/customers/me/payment-methods", Bearer: bearer}, nil)
-	if err != nil {
-		return nil, err
-	}
-	items, _, err := itemsOf[domain.PaymentMethod](res.Body)
-	return items, err
+func (p *paymentsImpl) PaymentMethods(ctx context.Context, bearer string) (port.Wallet, error) {
+	var out port.Wallet
+	_, err := call(ctx, p.c, httpclient.Request{Path: "/v1/customers/me/payment-methods", Bearer: bearer}, &out)
+	return out, err
 }
 
 func (p *paymentsImpl) SetupIntent(ctx context.Context, bearer string) (domain.SetupIntent, error) {
@@ -307,21 +309,6 @@ func (o *ordersImpl) CancelShipment(ctx context.Context, bearer, order, shipment
 	var out domain.OrderSummary
 	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Bearer: bearer,
 		Path: "/v1/orders/" + url.PathEscape(order) + "/shipments/" + url.PathEscape(shipment) + "/cancel"}, &out)
-	return out, err
-}
-
-func (o *ordersImpl) Returns(ctx context.Context, bearer string) (domain.Page[domain.ReturnSummary], error) {
-	res, err := call(ctx, o.c, httpclient.Request{Path: "/v1/returns", Query: url.Values{"customer": {"me"}}, Bearer: bearer}, nil)
-	if err != nil {
-		return domain.Page[domain.ReturnSummary]{}, err
-	}
-	items, next, err := itemsOf[domain.ReturnSummary](res.Body)
-	return domain.Page[domain.ReturnSummary]{Items: items, NextCursor: next}, err
-}
-
-func (o *ordersImpl) StartReturn(ctx context.Context, bearer string, r domain.StartReturn) (domain.ReturnSummary, error) {
-	var out domain.ReturnSummary
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/returns", Bearer: bearer, JSON: r}, &out)
 	return out, err
 }
 

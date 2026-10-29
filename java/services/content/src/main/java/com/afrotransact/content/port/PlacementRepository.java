@@ -23,4 +23,7 @@ public interface PlacementRepository {
 
     /** Saves when the stored version equals {@code placement.version()}; returns false on a concurrent change. */
     boolean update(Placement placement);
+
+    /** Hard delete; returns false when no row matched. */
+    boolean deleteById(String id);
 }

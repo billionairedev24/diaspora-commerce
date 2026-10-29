@@ -23,3 +23,4 @@
 .secondary { color: var(--at-color-text-muted); }
 .footer { display: block; padding: var(--at-space-1) var(--at-space-3) var(--at-space-2); font-size: var(--at-text-2xs); color: var(--at-color-text-subtle); }
 .status { padding: var(--at-space-2) var(--at-space-3); font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
+.resolving { display: block; margin-top: var(--at-space-1); font-size: var(--at-text-xs); color: var(--at-color-text-muted); }

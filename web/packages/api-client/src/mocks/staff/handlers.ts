@@ -24,6 +24,7 @@ import {
   type NotificationTemplateVariant,
   type NotificationTemplateVersion,
   type NotificationTestSendResult,
+  type OneTimeSecret,
   type PickupAssignmentList,
   type PickupAssignResult,
   type PickupList,
@@ -32,22 +33,34 @@ import {
   type ResourceKey,
   ResourceKeySchema,
   type ResourcePage,
+  RUN_LIFECYCLE,
+  type RunDispatch,
+  type RunDispatchList,
+  RunDispatchStatusSchema,
   type ShipFromLocation,
+  type StaffAssistantStatus,
   type StaffDashboard,
   type StaffSession,
   type SupportActionResult
 } from '../../schemas/staff';
 import { validateStaffForm } from '../../validation/staff-form';
+import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
 import { exportFileOf, type MockExportColumn } from '../export-file';
 import { type HubGate, inventoryHubHandlers } from '../inventory-hub';
 import { parseSort, queryRows, type SortKey } from '../table';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
-import { createFeeSchedule, feeRecords, feesOverview, feeView, quoteDelivery, searchFeeOrgs } from './fees';
+import { canAdvance, planRun } from './dispatch';
+import { feeRateHandlers } from './fee-rates';
+import { activeFeeSchedule, createFeeSchedule, FEE_ORGS, feeRecords, feesOverview, feeView, MOCK_RETAIL_ORG_ID, quoteDelivery, searchFeeOrgs } from './fees';
+import { identityDocuments, inspectToken, retireActiveKeys, sessionsToDrop, stepUpErrors } from './identity';
+import { MOCK_DRIVERS } from './lookups';
 import { marketHandlers } from './markets';
 import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODULE, roleLabel } from './model';
 import { type MockTemplateRow } from './notification-templates';
+import { planHandlers } from './plans';
 import { ordersOf, PREORDER_ORDER_COLUMNS, preorderHandlers, preorderOrderRow } from './preorders';
 import { type ActionCtx, detailKind, humanize, type MockAction, RESOURCES, toneOf } from './resources';
+import { runHandlers } from './runs';
 import { staffSettingsHandlers } from './settings';
 import { MockRenderError, renderPart, type TemplatePart } from './template-render';
 
@@ -95,7 +108,12 @@ interface Ctx {
   request: Request;
   now: Date;
   action: ActionCtx;
+  /** The secret the current action or creation shows once (never stored in a record). */
+  once: { current: OneTimeSecret | null };
 }
+
+/** The sheet an action or creation produced, with the secret it shows once. */
+const withReveal = (ctx: Ctx, d: RecordDetail): RecordDetail => (ctx.once.current ? { ...d, reveal: ctx.once.current } : d);
 
 function context(request: Request): Ctx {
   const db = getStaffDb();
@@ -105,7 +123,11 @@ function context(request: Request): Ctx {
   const roles = cookie ? cookie.split(',').map((r) => r.trim()).filter(Boolean) : DEFAULT_ROLES;
   const now = new Date();
   const actor = `${db.user.firstName} ${db.user.lastName}`;
-  return { db, roles, permissions: permissionsOf(roles), request, now, action: { actor, actorId: db.user.id, now, refundLimit: refundLimit(roles) } };
+  const once: Ctx['once'] = { current: null };
+  const showOnce = (label: string, value: string, note: string) => {
+    once.current = { label, value, note };
+  };
+  return { db, roles, permissions: permissionsOf(roles), request, now, once, action: { actor, actorId: db.user.id, now, refundLimit: refundLimit(roles), showOnce } };
 }
 
 function requireModule(ctx: Ctx, resource: ResourceKey, min: AccessLevel = 'VIEW') {
@@ -177,7 +199,9 @@ const display = (v: Scalar): string => (v === null ? '—' : typeof v === 'boole
 const rowOf = (resource: ResourceKey, r: MockRecord) => ({
   id: r.id,
   record: r,
-  cells: Object.fromEntries(RESOURCES[resource].columns.map((c) => [c.key, c.key === 'id' ? r.id : cellOf(r.fields[c.key] ?? null)]))
+  cells: Object.fromEntries(RESOURCES[resource].columns.map((c) => [c.key, c.key === 'id' ? r.id : cellOf(r.fields[c.key] ?? null)])),
+  // The ids behind the names stay searchable though the table does not show them.
+  search: Object.keys(RESOURCES[resource].ids ?? {}).flatMap((k) => (r.fields[k] ? [String(r.fields[k])] : []))
 });
 
 /** One search over every column the table shows, then the sort (or the resource's default order), as the BFF does. */
@@ -208,13 +232,19 @@ function actionView(ctx: Ctx, resource: ResourceKey, r: MockRecord, a: MockActio
 function detail(ctx: Ctx, resource: ResourceKey, r: MockRecord): RecordDetail {
   const def = RESOURCES[resource];
   const keys = Object.keys(r.fields);
-  const grouped = def.sections ?? [['Details', keys]];
+  // Ids of people and organisations are not part of the sheet's body: the name is, and the id sits apart under "IDs".
+  const idLabels = def.ids ?? {};
+  const grouped = def.sections ?? [['Details', keys.filter((k) => !(k in idLabels))]];
   const used = new Set(grouped.flatMap(([, ks]) => ks));
-  const rest = keys.filter((k) => !used.has(k));
+  const rest = keys.filter((k) => !used.has(k) && !(k in idLabels));
   const sections = [...grouped, ...(def.sections && rest.length ? ([['More', rest]] as [string, string[]][]) : [])].map(([title, ks]) => ({
     title,
     fields: ks.filter((k) => k in r.fields).map((k) => ({ label: humanize(k), value: display(r.fields[k] ?? null), kind: detailKind(k, def.statusKey) }))
   }));
+  const idFields = Object.entries(idLabels)
+    .filter(([k]) => r.fields[k])
+    .map(([k, label]) => ({ label: `${label} ID`, value: String(r.fields[k]), kind: 'mono' as const }));
+  if (idFields.length) sections.push({ title: 'IDs', fields: idFields });
   const status = def.statusKey ? (r.fields[def.statusKey] as string | null) ?? null : null;
   const canEdit = !!def.edit && ctx.permissions.includes(def.edit.permission) && allows(ctx.roles, RESOURCE_MODULE[resource], 'EDIT');
   return {
@@ -276,6 +306,12 @@ function page(ctx: Ctx, resource: ResourceKey): ResourcePage {
 
 function audit(ctx: Ctx, action: string, entityId: string, summary: string) {
   ctx.db.audit.unshift({ at: ctx.now.toISOString(), actor: ctx.action.actor, action, summary, entityId });
+}
+
+/* ── Lola ── */
+
+function assistantStatus(ctx: Ctx, used = ctx.db.lolaUsed): StaffAssistantStatus {
+  return { dailyMessages: 200, used, remaining: Math.max(0, 200 - used), tools: ['staff_overview', 'search_records', 'get_record', 'seller_payouts', 'seller_account_health', 'open_record'] };
 }
 
 /* ── dashboard ── */
@@ -342,7 +378,13 @@ function customer360(ctx: Ctx, id: string): Customer360 {
   const orders = records(ctx, 'orders').filter((o) => o.fields.customerId === id);
   const orderNumbers = new Set(orders.map((o) => o.id));
   const perms = ctx.permissions;
+  // The membership gives support the priority flag (S323); only a live membership counts.
+  const mem = records(ctx, 'memberships').find((m) => m.fields.customerId === id && ['TRIALING', 'ACTIVE', 'PAST_DUE'].includes(String(m.fields.status)));
+  const tier = mem ? records(ctx, 'membership-tiers').find((t) => t.id === mem.fields.tierCode) : undefined;
   return {
+    membership: mem
+      ? { tierName: String(mem.fields.tierName), status: String(mem.fields.status) as 'TRIALING' | 'ACTIVE' | 'PAST_DUE', prioritySupport: tier?.fields.prioritySupport === true }
+      : null,
     customer: { id, name: String(u.fields.name), email: String(u.fields.email), enabled: u.fields.enabled === true, emailVerified: u.fields.emailVerified === true, roles: String(u.fields.roles).split(', ') },
     orders: orders.map((o) => ({
       id: o.id,
@@ -539,7 +581,7 @@ function createTemplateVersion(ctx: Ctx, key: string, b: z.infer<typeof VersionB
   }
   const version = Math.max(0, ...templateRows(ctx, key).filter((x) => x.locale === b.locale && x.channel === b.channel).map((x) => x.version)) + 1;
   const row: MockTemplateRow = { key, locale: b.locale, channel: b.channel, version, category: b.category, subject: b.subject, bodyHtml: b.bodyHtml,
-    bodyText: b.bodyText, createdBy: ctx.db.user.id, createdAt: ctx.now.toISOString() };
+    bodyText: b.bodyText, createdBy: ctx.action.actor, createdAt: ctx.now.toISOString() };
   ctx.db.templates.rows.push(row);
   audit(ctx, 'notifications.template.version_created', key, `Created ${key} ${b.channel} ${b.locale} v${version}`);
   const { key: _key, ...out } = row;
@@ -570,6 +612,16 @@ const FeeDraftBody = z.object({
     })
     .nullable()
     .optional(),
+  planRates: z.array(z.object({ planCode: z.string(), category: z.string(), bps: z.number().int() })).nullable().optional(),
+  planFba: z.array(z.object({ planCode: z.string(), feeMinor: z.number().int() })).nullable().optional(),
+  connectionFee: z
+    .object({
+      defaultBps: z.number().int(),
+      categoryRates: z.array(z.object({ category: z.string(), bps: z.number().int() })),
+      planRates: z.array(z.object({ planCode: z.string(), category: z.string(), bps: z.number().int() }))
+    })
+    .nullable()
+    .optional(),
   note: z.string()
 });
 
@@ -580,6 +632,12 @@ function requireFeesConfigure(ctx: Ctx) {
   if (!ctx.permissions.includes('payments:configure')) throw forbidden('This needs the payments:configure permission.');
 }
 
+function requireTaxConfigure(ctx: Ctx) {
+  if (!allows(ctx.roles, 'fees', 'EDIT')) throw forbidden('Your roles can’t change fees, commissions & tax.');
+  if (!ctx.permissions.includes('tax:configure')) throw forbidden('This needs the tax:configure permission.');
+}
+
+const canManageRuns = (ctx: Ctx) => ctx.permissions.includes('delivery:dispatch') && allows(ctx.roles, 'dispatch', 'EDIT');
 const canAssignPickups = (ctx: Ctx) => ctx.permissions.includes('delivery:dispatch') && allows(ctx.roles, 'dispatch', 'EDIT');
 
 function syncFeeRecords(ctx: Ctx) {
@@ -602,6 +660,15 @@ const hubGate: HubGate = (request, area, level) => {
 };
 
 export const staffHandlers = [
+  // Address fields (Google-like: resolved when picked), as the shopper mocks answer.
+  http.get('*/v1/geo/address-suggestions', ({ request }) => {
+    const p = new URL(request.url).searchParams;
+    return HttpResponse.json(mockAddressSuggestions(p.get('q') ?? '', p.get('sessionToken')));
+  }),
+  http.get('*/v1/geo/address-suggestions/:id', ({ params }) => {
+    const a = mockResolveAddress(decodeURIComponent(String(params.id ?? '')));
+    return a ? HttpResponse.json(a) : HttpResponse.json({ status: 404, title: 'Not found' }, { status: 404 });
+  }),
   http.get(
     `${W}/session`,
     route((ctx): StaffSession => {
@@ -633,6 +700,29 @@ export const staffHandlers = [
       return dashboard(ctx, range);
     })
   ),
+  /* ── Lola (read-only) ── */
+  http.get(
+    `${W}/assistant`,
+    route((ctx) => assistantStatus(ctx))
+  ),
+  http.post(
+    `${W}/assistant/chat`,
+    route(async (ctx) => {
+      const b = await json(ctx.request, z.object({ message: z.string().trim().min(1, 'Type a question for Lola').max(1500) }).passthrough());
+      const text = b.message.toLowerCase();
+      const used = ++ctx.db.lolaUsed;
+      const status = assistantStatus(ctx, used);
+      if (text.includes('paid') || text.includes('payout')) {
+        return {
+          answer: 'Kente Naturals has $780.00 on hold. AT-2026-000777 ($700.00) is released on 2030-01-05; AT-2026-000778 ($80.00) is not delivered yet. Payouts are paused: Stripe needs overdue information.',
+          steps: [{ tool: 'seller_payouts', label: 'Checking payouts of Kente Naturals' }, { tool: 'seller_account_health', label: 'Checking account health of Kente Naturals' }],
+          links: [{ label: 'Open Kente Naturals Stripe account', resource: 'connect-accounts', id: 'org-9' }],
+          status
+        };
+      }
+      return { answer: 'Ask me about queues, orders, applications and payouts.', steps: [], links: [], status };
+    })
+  ),
   /* ── resources ── */
   http.get(
     `${W}/resources/:resource`,
@@ -651,14 +741,17 @@ export const staffHandlers = [
       requireModule(ctx, resource, 'EDIT');
       if (!ctx.permissions.includes(def.permission)) throw forbidden(`Needs the ${def.permission} permission.`);
       const { values } = await json(ctx.request, ValuesBody);
-      const errors = validateForm(def.form, values);
+      const errors = { ...validateForm(def.form, values), ...stepUpErrors(def.form, values) };
       if (Object.keys(errors).length) throw invalid(errors);
       const rec = def.build(values, `${resource}-${ctx.db.seq++}`, ctx.action);
-      if (records(ctx, resource).some((r) => r.id === rec.id)) throw conflict('That record already exists.');
+      // A rate set for a currency and day that already has one replaces it (the reason is in the audit trail).
+      if (resource === 'exchange-rates') ctx.db.records[resource] = records(ctx, resource).filter((r) => r.id !== rec.id);
+      else if (records(ctx, resource).some((r) => r.id === rec.id)) throw conflict('That record already exists.');
       records(ctx, resource).unshift(rec);
       if (resource === 'announcements') records(ctx, 'placements').unshift(rec);
       audit(ctx, `${resource}.created`, rec.id, `Created ${RESOURCES[resource].titleOf(rec)}`);
-      return detail(ctx, resource, rec);
+      if (resource === 'signing-keys') retireActiveKeys(records(ctx, resource), rec.id, ctx.now);
+      return withReveal(ctx, detail(ctx, resource, rec));
     }, 201)
   ),
   http.get(
@@ -681,10 +774,11 @@ export const staffHandlers = [
       const { values, version } = await json(ctx.request, ValuesBody);
       const current = rec.fields.version === undefined || rec.fields.version === null ? null : String(rec.fields.version);
       if (version && current && version !== current) throw conflict('Someone else changed this record. Reload and try again.');
-      const errors = validateForm(def.form(rec), values);
+      const editForm = def.form(rec);
+      const errors = { ...validateForm(editForm, values), ...stepUpErrors(editForm, values) };
       if (Object.keys(errors).length) throw invalid(errors);
-      def.apply(rec, values);
-      rec.activity.unshift({ at: ctx.now.toISOString(), actor: ctx.action.actor, text: 'Edited' });
+      def.apply(rec, values, ctx.action);
+      if (resource !== 'exchange-rates') rec.activity.unshift({ at: ctx.now.toISOString(), actor: ctx.action.actor, text: 'Edited' });
       audit(ctx, `${resource}.updated`, rec.id, `Edited ${RESOURCES[resource].titleOf(rec)}`);
       return detail(ctx, resource, rec);
     })
@@ -700,16 +794,48 @@ export const staffHandlers = [
       const view = actionView(ctx, resource, rec, def);
       if (!view.allowed) {
         const permissionIssue = !ctx.permissions.includes(def.permission) || (view.reason ?? '').startsWith('Needs');
-        throw permissionIssue ? forbidden(view.reason ?? 'Not allowed.') : conflict(view.reason ?? 'Not possible now.');
+        if (permissionIssue) throw forbidden(view.reason ?? 'Not allowed.');
+        // Already past this action (a stale sheet, a second click): the caller's own repeat is answered with the
+        // record; anyone else is told who did it and when (the BFF's ALREADY_DONE).
+        const done = def.already?.(rec, ctx.action) ?? null;
+        if (done?.mine) return detail(ctx, resource, rec);
+        if (done) throw new StaffProblem(409, 'ALREADY_DONE', 'Already done', done.message);
+        throw conflict(view.reason ?? 'Not possible now.');
       }
       const { values } = await json(ctx.request, ValuesBody);
       if (view.form) {
-        const errors = validateForm(view.form, values);
+        const errors = { ...validateForm(view.form, values), ...stepUpErrors(view.form, values) };
         if (Object.keys(errors).length) throw invalid(errors);
       }
       def.apply(rec, values, ctx.action);
       audit(ctx, `${resource}.${def.key}`, rec.id, `${def.label}: ${RESOURCES[resource].titleOf(rec)}`);
-      return detail(ctx, resource, rec);
+      // A revoke takes the sign-ins it covers with it (all of a client's, or all of a person's).
+      const sessions = records(ctx, 'identity-sessions');
+      sessionsToDrop(resource, def.key, rec, sessions).forEach((s) => sessions.splice(sessions.indexOf(s), 1));
+      if (def.removes) {
+        const list = records(ctx, resource);
+        const idx = list.indexOf(rec);
+        if (idx >= 0) list.splice(idx, 1);
+        return { resource, id: rec.id, title: 'Deleted', subtitle: '', status: null, tone: null, sections: [], tables: [], activity: [], notes: [], notesEnabled: false, actions: [], editForm: null, links: [], version: null, removed: true };
+      }
+      return withReveal(ctx, detail(ctx, resource, rec));
+    })
+  ),
+  /* ── Identity & access: token inspector and published documents (S291) ── */
+  http.post(
+    `${W}/identity/token-inspector`,
+    route(async (ctx) => {
+      requireModule(ctx, 'oauth-clients', 'EDIT');
+      if (!ctx.permissions.includes('identity:admin')) throw forbidden('This needs the identity:admin permission.');
+      const { token } = await json(ctx.request, z.object({ token: z.string().max(16_384, 'Paste a token of up to 16,384 characters').min(1, 'Paste a JWT') }));
+      return inspectToken(token, ctx.now, records(ctx, 'signing-keys').filter((k) => k.fields.status !== 'RETIRED').map((k) => String(k.fields.kid)));
+    })
+  ),
+  http.get(
+    `${W}/identity/documents`,
+    route((ctx) => {
+      requireModule(ctx, 'oauth-clients');
+      return identityDocuments(records(ctx, 'signing-keys'));
     })
   ),
   http.post(
@@ -922,6 +1048,22 @@ export const staffHandlers = [
     })
   ),
   http.get(
+    `${W}/lookups/:kind`,
+    route((ctx, p) => {
+      const kind = p.kind;
+      if (kind !== 'drivers' && kind !== 'sellers') throw notFound('There is nothing to search for there.');
+      requireModule(ctx, kind === 'drivers' ? 'routes' : 'stripe-lookup');
+      const q = (query(ctx).get('q') ?? '').trim();
+      if (q.length === 1 || q.length > 120) throw invalid({ q: 'Type 2 to 120 characters' });
+      const needle = q.toLowerCase();
+      const items =
+        kind === 'drivers'
+          ? MOCK_DRIVERS.filter((d) => !needle || d.name.toLowerCase().includes(needle))
+          : FEE_ORGS.filter((o) => o.id !== MOCK_RETAIL_ORG_ID && (!needle || o.name.toLowerCase().includes(needle))).map((o) => ({ id: o.id, name: o.name, detail: o.kind.toLowerCase() }));
+      return { kind, items: items.slice(0, 20) };
+    })
+  ),
+  http.get(
     `${W}/fees/orgs`,
     route((ctx) => {
       requireModule(ctx, 'fee-schedules');
@@ -979,6 +1121,20 @@ export const staffHandlers = [
       return quoteDelivery(ctx.db.feeSchedules, ctx.now, b.sellerOrgId, b.distanceMiles, b.packages ?? 1);
     })
   ),
+  http.post(
+    `${W}/tax-rates/import`,
+    route(async (ctx) => {
+      requireTaxConfigure(ctx);
+      const b = await json(ctx.request, z.object({ csv: z.string().trim().min(1, 'Paste or upload a CSV file') }));
+      const lines = b.csv.split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith('kind,'));
+      audit(ctx, 'tax-rates.import', 'csv', `Imported ${lines.length} row(s) from CSV`);
+      return {
+        statesUpserted: lines.filter((l) => /^STATE,/i.test(l)).length,
+        localsUpserted: lines.filter((l) => /^LOCAL,/i.test(l)).length,
+        warnings: []
+      };
+    })
+  ),
   /* ── dispatch: seller pickups (S255) ── */
   http.get(
     `${W}/dispatch/pickups`,
@@ -1017,12 +1173,12 @@ export const staffHandlers = [
       pickup.routeId = b.routeId;
       pickup.status = 'ROUTED';
       d.assignments.push({
-        id: `pa-${ctx.db.seq++}`, shipmentId: pickup.shipmentId, routeId: b.routeId, driverId: driver?.driverId ?? null, mode: 'DISPATCH_OVERRIDE', reason: b.reason,
-        previousRouteId: previous, straightMiles: driver?.straightLineMiles ?? null, roadMiles: driver?.roadMiles ?? null, distanceMethod: driver?.distanceMethod ?? null,
+        id: `pa-${ctx.db.seq++}`, shipmentId: pickup.shipmentId, routeId: b.routeId, routeName: driver?.routeName ?? null, driverId: driver?.driverId ?? null, driverName: driver?.driverName ?? null, mode: 'DISPATCH_OVERRIDE', reason: b.reason,
+        previousRouteId: previous, previousRouteName: Object.values(d.suggestions).flat().find((x) => x.routeId === previous)?.routeName ?? null, straightMiles: driver?.straightLineMiles ?? null, roadMiles: driver?.roadMiles ?? null, distanceMethod: driver?.distanceMethod ?? null,
         actor: ctx.action.actor, createdAt: ctx.now.toISOString()
       });
       audit(ctx, 'pickup.dispatch_assigned', pickup.shipmentId, `Assigned ${pickup.orderNumber} pickup to ${b.routeId}: ${b.reason}`);
-      return { shipmentId: pickup.shipmentId, routeId: b.routeId, routeName: driver?.routeName ?? null, driverId: driver?.driverId ?? null, status: 'ASSIGNED' };
+      return { shipmentId: pickup.shipmentId, routeId: b.routeId, routeName: driver?.routeName ?? null, driverId: driver?.driverId ?? null, driverName: driver?.driverName ?? null, status: 'ASSIGNED' };
     })
   ),
   http.get(
@@ -1031,6 +1187,62 @@ export const staffHandlers = [
       requireModule(ctx, 'routes');
       if (!ctx.db.dispatch.suggestions[p.id ?? '']) throw notFound('No such pickup.');
       return { items: ctx.db.dispatch.assignments.filter((a) => a.shipmentId === p.id).sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')) };
+    })
+  ),
+  /* ── dispatch: delivery runs (S264) ── */
+  http.get(
+    `${W}/dispatch/runs`,
+    route((ctx): RunDispatchList => {
+      const status = query(ctx).get('status');
+      const parsed = status ? RunDispatchStatusSchema.safeParse(status) : null;
+      if (parsed && !parsed.success) throw invalid({ status: 'Unknown status' });
+      requireModule(ctx, 'routes');
+      const can = canManageRuns(ctx);
+      const items = ctx.db.dispatch.runs
+        .filter((r) => !parsed || r.status === parsed.data)
+        .sort((a, b) => b.serviceDate.localeCompare(a.serviceDate))
+        .map((r): RunDispatch => ({ ...r, routes: r.routes.map((x) => ({ ...x, stops: [] })), orders: null, canManage: can }));
+      return { items, canManage: can };
+    })
+  ),
+  http.get(
+    `${W}/dispatch/runs/:id`,
+    route((ctx, p): RunDispatch => {
+      requireModule(ctx, 'routes');
+      const run = ctx.db.dispatch.runs.find((r) => r.runId === p.id);
+      if (!run) throw notFound('No such run.');
+      return { ...run, canManage: canManageRuns(ctx) };
+    })
+  ),
+  http.post(
+    `${W}/dispatch/runs/:id/plan`,
+    route((ctx, p): RunDispatch => {
+      requireModule(ctx, 'routes', 'EDIT');
+      if (!ctx.permissions.includes('delivery:dispatch')) throw forbidden('This needs the delivery:dispatch permission.');
+      const d = ctx.db.dispatch;
+      const at = d.runs.findIndex((r) => r.runId === p.id);
+      const run = d.runs[at];
+      if (!run) throw notFound('No such run.');
+      if (run.runStatus === 'CANCELLED') throw conflict('This run was cancelled.');
+      const planned = run.routes.length > 0 ? run : planRun(run);
+      d.runs[at] = planned;
+      audit(ctx, 'run.planned', planned.runId, `Planned the routes of the ${planned.town} run`);
+      return { ...planned, canManage: true };
+    })
+  ),
+  http.post(
+    `${W}/dispatch/runs/:id/advance`,
+    route(async (ctx, p): Promise<RunDispatch> => {
+      const steps = RUN_LIFECYCLE.filter((s) => s !== 'CONFIRMED');
+      const b = await json(ctx.request, z.object({ to: z.enum(steps as ['COLLECTING', 'OUT_FOR_DELIVERY', 'COMPLETED'], { error: 'Choose collecting, out for delivery or completed' }) }));
+      requireModule(ctx, 'routes', 'EDIT');
+      if (!ctx.permissions.includes('delivery:dispatch')) throw forbidden('This needs the delivery:dispatch permission.');
+      const run = ctx.db.dispatch.runs.find((r) => r.runId === p.id);
+      if (!run) throw notFound('No such run.');
+      if (!canAdvance(run, b.to)) throw conflict('That step does not follow where the run is now.');
+      run.runStatus = b.to;
+      audit(ctx, 'run.advanced', run.runId, `Moved the ${run.town} run to ${b.to}`);
+      return { ...run, canManage: true };
     })
   ),
   http.get(
@@ -1090,10 +1302,16 @@ export const staffHandlers = [
   ),
   /* ── pre-orders (S274): delivery-runs' staff API through the BFF ── */
   ...preorderHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
+  /* Run economics and advertorials (S263, S265) */
+  ...runHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Settings → Markets & locations (location tree) and the shared place pickers */
   ...marketHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
+  /* Plans & billing (S292–S297): the seller service's catalogue, trials, rewards and per-seller billing */
+  ...planHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
+  ...feeRateHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }, (ctx) => activeFeeSchedule(ctx.db.feeSchedules, ctx.now)),
   /* Inventory hub and AfroTransact Retail (1P) (S281) */
-  ...inventoryHubHandlers(W, hubGate),
+  ...inventoryHubHandlers(W, hubGate, (request) =>
+    records(context(request), 'exchange-rates').map((r) => ({ currency: String(r.fields.currency), rateDate: String(r.fields.rateDate), rateToUsd: Number(r.fields.rateToUsd) }))),
   /* Anything else under /v1/staff is not part of the contract. */
   http.all(`${W}/*`, () => problemResponse(notFound('No such staff route.'))),
   /* My account (profile, sign-in & security, alerts, preferences): /v1/account/… */

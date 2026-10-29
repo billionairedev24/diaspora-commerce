@@ -10,10 +10,9 @@ import java.util.Set;
 
 import com.afrotransact.seller.domain.RequirementsSnapshot;
 import com.afrotransact.seller.port.AccountSession;
-import com.afrotransact.seller.port.BankAccountDetails;
 import com.afrotransact.seller.port.CreateConnectedAccount;
 import com.afrotransact.seller.port.GatewayException;
-import com.afrotransact.seller.port.SubscriptionSnapshot;
+import com.afrotransact.seller.port.PlanPaymentsGateway;
 import org.junit.jupiter.api.Test;
 
 class LocalTestStripeConnectTest {
@@ -36,15 +35,8 @@ class LocalTestStripeConnectTest {
         assertThat(snap.chargesEnabled()).isTrue();
         assertThat(snap.payoutsEnabled()).isTrue();
         assertThat(snap.open()).isEmpty();
-    }
-
-    @Test
-    void bankAccountsKeepOnlyTheLastFourAndNeverPrintTheNumbers() {
-        String account = connect.createAccount(new CreateConnectedAccount("org_2", "app_2", "US", null, "company",
-                "k"));
-        BankAccountDetails bank = new BankAccountDetails("Ade LLC", "company", "021000021", "000123456789");
-        assertThat(connect.attachBankAccount(account, bank).last4()).isEqualTo("6789");
-        assertThat(bank.toString()).doesNotContain("000123456789").doesNotContain("021000021").contains("6789");
+        assertThat(snap.payoutBank().last4()).as("the bank Stripe's onboarding would collect").isEqualTo("6789");
+        assertThat(snap.payoutBank().usable()).isTrue();
     }
 
     @Test
@@ -54,14 +46,18 @@ class LocalTestStripeConnectTest {
     }
 
     @Test
-    void billingStandInStartsTrialsWithoutCharging() {
-        LocalTestStripeBilling billing = new LocalTestStripeBilling(clock);
-        String customer = billing.createCustomer("org_1", "Ade", null, "customer-org_1");
+    void planPaymentsStandInChargesUnlessTheMethodIsADecline() {
+        LocalTestPlanPayments payments = new LocalTestPlanPayments();
+        String customer = payments.ensureCustomer("org_1", "Ade", null);
         assertThat(customer).startsWith("cus_local_");
-        SubscriptionSnapshot trial = billing.createSubscription(customer, "seller_growth_monthly", 30, "sub-org_1");
-        assertThat(trial.status()).isEqualTo("trialing");
-        assertThat(trial.trialEnd()).isEqualTo(Instant.parse("2026-11-09T12:00:00Z"));
-        assertThat(billing.createSubscription(customer, "seller_starter_monthly", 0, "sub-org_2").status())
-                .isEqualTo("active");
+        PlanPaymentsGateway.Charge ok = payments.charge(customer, "pm_card_visa", 3900, "USD", "inv_1", "Plan",
+                "inv-inv_1-a0");
+        assertThat(ok.status()).isEqualTo(PlanPaymentsGateway.Status.SUCCEEDED);
+        assertThat(payments.charge(customer, "pm_card_visa", 3900, "USD", "inv_1", "Plan", "inv-inv_1-a0")
+                .reference()).as("same key, same attempt").isEqualTo(ok.reference());
+        PlanPaymentsGateway.Charge declined = payments.charge(customer, "pm_card_chargeCustomerFail", 3900, "USD",
+                "inv_2", "Plan", "inv-inv_2-a0");
+        assertThat(declined.status()).isEqualTo(PlanPaymentsGateway.Status.FAILED);
+        assertThat(declined.failureCode()).isEqualTo("card_declined");
     }
 }

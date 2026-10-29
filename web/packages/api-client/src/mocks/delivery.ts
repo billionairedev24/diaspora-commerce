@@ -12,23 +12,61 @@ export const FREE_SHIPPING_THRESHOLD_MINOR = 4900;
 export interface ShipFrom { fulfilment: 'AFROTRANSACT' | 'SELLER' | 'AFROTRANSACT_DELIVERY'; city: string }
 
 /** AfroTransact Delivery from the seller's store (S255): payments' seed pricing (V9) and service radius. */
-export const LOCAL_DELIVERY = { baseMinor: 499, perMileMinor: 85, minMinor: 599, maxMinor: 2499, maxRadiusMiles: 25, detour: 1.3 } as const;
+export type PlatformDeliveryPricingMode = 'FLAT' | 'PER_WEIGHT' | 'DISTANCE';
+
+export interface PlatformDeliveryConfig {
+  mode: PlatformDeliveryPricingMode;
+  flatFeeMinor: number;
+  baseMinor: number;
+  perLbMinor: number;
+  perMileMinor: number;
+  minMinor: number;
+  maxMinor: number;
+  maxRadiusMiles: number;
+  detour: number;
+}
+
+export const platformDeliveryConfig: PlatformDeliveryConfig = {
+  mode: 'DISTANCE',
+  flatFeeMinor: 599,
+  baseMinor: 499,
+  perLbMinor: 50,
+  perMileMinor: 85,
+  minMinor: 599,
+  maxMinor: 2499,
+  maxRadiusMiles: 25,
+  detour: 1.3
+};
+
+export function setPlatformDeliveryPricing(config: Partial<PlatformDeliveryConfig>) {
+  Object.assign(platformDeliveryConfig, config);
+}
+
+export const LOCAL_DELIVERY = platformDeliveryConfig;
 
 export interface LocalQuote {
   available: boolean;
   roadMiles: number;
   durationMinutes: number;
   chargeMinor: number;
+  pricingMode?: PlatformDeliveryPricingMode;
 }
 
 /** Road distance store → shopper (geodesic × detour, like geo's last resort) and the customer charge. */
-export function localDeliveryQuote(storeCity: string, metro: string): LocalQuote {
+export function localDeliveryQuote(storeCity: string, metro: string, weightLbs = 1.0): LocalQuote {
   const straight = miles(geoOf(storeCity), geoOf(metro));
-  const roadMiles = Math.round((straight * LOCAL_DELIVERY.detour + 7.4) * 10) / 10;
+  const roadMiles = Math.round((straight * platformDeliveryConfig.detour + 7.4) * 10) / 10;
   const durationMinutes = Math.round((roadMiles / 25) * 60);
-  const raw = LOCAL_DELIVERY.baseMinor + Math.floor(LOCAL_DELIVERY.perMileMinor * roadMiles + 0.5);
-  const chargeMinor = Math.min(LOCAL_DELIVERY.maxMinor, Math.max(LOCAL_DELIVERY.minMinor, raw));
-  return { available: roadMiles <= LOCAL_DELIVERY.maxRadiusMiles, roadMiles, durationMinutes, chargeMinor };
+  let raw: number;
+  if (platformDeliveryConfig.mode === 'FLAT') {
+    raw = platformDeliveryConfig.flatFeeMinor;
+  } else if (platformDeliveryConfig.mode === 'PER_WEIGHT') {
+    raw = platformDeliveryConfig.baseMinor + Math.floor(platformDeliveryConfig.perLbMinor * Math.max(0.1, weightLbs) + 0.5);
+  } else {
+    raw = platformDeliveryConfig.baseMinor + Math.floor(platformDeliveryConfig.perMileMinor * roadMiles + 0.5);
+  }
+  const chargeMinor = Math.min(platformDeliveryConfig.maxMinor, Math.max(platformDeliveryConfig.minMinor, raw));
+  return { available: roadMiles <= platformDeliveryConfig.maxRadiusMiles, roadMiles, durationMinutes, chargeMinor, pricingMode: platformDeliveryConfig.mode };
 }
 
 export function miles(a: [number, number], b: [number, number]): number {
@@ -134,7 +172,7 @@ export function deliveryOptions(pkg: { from: ShipFrom; sellerName: string; slowe
     free: freeCarrier
   });
   if (isAT) out.push({ key: 'express', label: 'UPS Next Day Air', eta: dayLabel(pkg.expressDays, now), feeMinor: 799, free: false });
-  const zoneOk = ['Houston, TX', 'Edison, NJ', 'Newark, NJ', 'Atlanta, GA'].some(near);
+  const zoneOk = ['Houston, TX', 'Edison, NJ', 'Newark, NJ', 'Atlanta, GA', 'Dallas, TX'].some(near);
   const srcOk = isAT ? FULFILMENT_CENTRES.some(([, c]) => near(c)) : near(pkg.from.city);
   if (zoneOk && srcOk) {
     const free = isAT && pkg.subtotalMinor >= 3500;

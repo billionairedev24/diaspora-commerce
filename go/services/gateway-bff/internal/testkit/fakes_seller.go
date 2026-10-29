@@ -14,8 +14,13 @@ import (
 const (
 	SellerOrgID   = "11111111-1111-1111-1111-111111111111"
 	ProviderOrgID = "22222222-2222-2222-2222-222222222222"
-	PendingOrgID  = "33333333-3333-3333-3333-333333333333"
+	// RunPickupID is the delivery run the fake delivery-runs lists for the seller.
+	RunPickupID  = "8c1f0e52-3a47-4d0e-9b6a-5d2e7c1a9f10"
+	PendingOrgID = "33333333-3333-3333-3333-333333333333"
 )
+
+// HeldAssetID is an image media is still checking or refused (status FLAGGED, no public URL).
+const HeldAssetID = "asset-held"
 
 // MissingAssetID is an upload media does not know (POST /v1/assets/{id}/complete answers 404).
 const MissingAssetID = "asset-missing"
@@ -52,19 +57,18 @@ func (u *Upstreams) orgByID(id string) (MemberOrg, bool) {
 }
 
 type sellerState struct {
+	drafts        map[string]map[string]any
 	plan          string
+	planFeeMode   string
 	defaultPM     string
 	listingStatus map[string]string
 	shipStatus    string
 	tracking      string
-	storefront    map[string]any
 }
 
 func newSellerState() *sellerState {
-	return &sellerState{plan: "seller_growth", defaultPM: "aaaaaaaa-0000-0000-0000-000000000001", listingStatus: map[string]string{"prod-1": "LIVE"},
-		shipStatus: "placed", storefront: map[string]any{"orgId": SellerOrgID, "kind": "SELLER", "slug": "ade-s-kitchen", "name": "Ade's Kitchen",
-			"tagline": "Home-style Nigerian pantry", "theme": map[string]any{"primary": "#0A8264", "accent": "#FFD400"}, "status": "DRAFT",
-			"social": []any{map[string]any{"network": "instagram", "url": "https://instagram.com/adeskitchen", "status": "APPROVED"}}, "version": 3}}
+	return &sellerState{drafts: map[string]map[string]any{}, plan: "seller_growth", planFeeMode: "EARNINGS_FIRST", defaultPM: "aaaaaaaa-0000-0000-0000-000000000001", listingStatus: map[string]string{"prod-1": "LIVE"},
+		shipStatus: "placed"}
 }
 
 func bearerSub(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -80,7 +84,9 @@ func (u *Upstreams) sellerRoutes(mux *http.ServeMux) {
 	u.identitySellerRoutes(mux)
 	u.sellerServiceRoutes(mux)
 	u.catalogSellerRoutes(mux)
+	u.catalogListingRoutes(mux)
 	u.moneyRoutes(mux)
+	u.libraryRoutes(mux)
 	if u.opts.SellerPending {
 		u.ordersRoutes(mux)
 		u.bookingsRoutes(mux)
@@ -90,6 +96,32 @@ func (u *Upstreams) sellerRoutes(mux *http.ServeMux) {
 func (u *Upstreams) identitySellerRoutes(mux *http.ServeMux) {
 	u.teamRoutes(mux)
 	u.phoneRoutes(mux)
+	mux.HandleFunc("POST /v1/orgs/{id}/sync", func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := bearerSub(w, r); !ok {
+			return
+		}
+		id := r.PathValue("id")
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		truth, ok := u.SellerTruth[id]
+		if !ok {
+			problem(w, 404, "identity.org-not-found", "Organisation not found", nil)
+			return
+		}
+		repaired := true
+		for i, o := range u.MemberOrgs {
+			if o.ID == id {
+				repaired = o != truth
+				u.MemberOrgs = append(u.MemberOrgs[:i:i], u.MemberOrgs[i+1:]...)
+				break
+			}
+		}
+		u.MemberOrgs = append(u.MemberOrgs, truth)
+		if u.ActiveOrgID == "" {
+			u.ActiveOrgID = id
+		}
+		writeJSON(w, 200, map[string]any{"orgId": id, "status": truth.Status, "repaired": repaired})
+	})
 	mux.HandleFunc("PUT /v1/me/active-org", func(w http.ResponseWriter, r *http.Request) {
 		sub, ok := bearerSub(w, r)
 		if !ok {
@@ -127,6 +159,7 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/orgs/{id}", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		o, ok := u.orgByID(r.PathValue("id"))
+		truth, known := u.SellerTruth[r.PathValue("id")]
 		u.mu.Unlock()
 		if !ok {
 			problem(w, 404, "seller.org-not-found", "No such organisation", nil)
@@ -135,6 +168,9 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 		status := o.Status
 		if status == "PENDING" {
 			status = "INFO_REQUESTED"
+		}
+		if known {
+			status = truth.Status // the seller service is ahead of identity's copy
 		}
 		writeJSON(w, 200, map[string]any{"id": o.ID, "kind": o.Kind, "displayName": o.Name, "legalName": o.Name + " LLC", "country": "US", "status": status,
 			"members": []map[string]any{{"userId": "user-1", "roleKey": o.Role, "createdAt": "2026-04-10T12:00:00Z"},
@@ -236,14 +272,10 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 				return
 			}
 			u.Application["owners"] = b["owners"]
-		case "payouts":
-			acct, _ := b["accountNumber"].(string)
-			if acct == "" {
-				problem(w, 422, "seller.invalid-application", "Some fields are invalid", map[string]any{"fieldErrors": map[string]string{"payouts.accountNumber": "4 to 17 digits"}})
-				return
-			}
-			u.Application["payouts"] = map[string]any{"accountHolderName": b["accountHolderName"], "accountType": b["accountType"], "bankName": "STRIPE TEST BANK",
-				"routingLast4": "0021", "accountLast4": acct[len(acct)-4:], "externalAccountLinked": true}
+		case "stripe-verification", "payouts":
+			// Stripe-collected accounts: Stripe's embedded components collect these, never a step body.
+			problem(w, 422, "seller.step-managed-by-stripe", "Stripe collects this in its embedded components", nil)
+			return
 		case "plan":
 			if c, _ := b["planCode"].(string); c == "" {
 				problem(w, 422, "seller.invalid-application", "Some fields are invalid", map[string]any{"fieldErrors": map[string]string{"plan.planCode": "Choose a plan"}})
@@ -252,6 +284,8 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 			b["planName"] = "Seller Growth"
 			b["firstCharge"] = map[string]any{"chargeOn": "2026-11-09", "amountCents": 3900, "sentence": "Free for 30 days. First charge of $39.00 on Nov 9, 2026."}
 			u.Application["plan"] = b
+			// S298: the Plan step offers paying the plan from sales.
+			u.Application["planFeeCollectionOption"] = map[string]any{"available": true, "platformDefault": "EARNINGS_FIRST"}
 		case "catalog-compliance":
 			if fp, ok := b["foodPermit"].(map[string]any); ok {
 				if t, _ := fp["permitType"].(string); !slices.Contains([]string{"FOOD_ESTABLISHMENT", "COTTAGE_FOOD", "FDA_FACILITY", "FOOD_HANDLER"}, t) {
@@ -294,8 +328,10 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 		}
 		u.Application["stripe"] = map[string]any{"accountId": "acct_local_1", "detailsSubmitted": true, "chargesEnabled": true, "payoutsEnabled": true,
 			"identityStatus": "verified", "taxIdStatus": "verified", "currentlyDue": []string{}}
+		// The payout bank Stripe's embedded onboarding collected, mirrored read-only.
+		u.Application["payouts"] = map[string]any{"bankName": "STRIPE TEST BANK", "accountLast4": "6789", "externalAccountLinked": true, "bankStatus": "new"}
 		done, _ := u.Application["completedSteps"].([]string)
-		u.Application["completedSteps"] = append(done, "stripe-verification")
+		u.Application["completedSteps"] = append(done, "stripe-verification", "payouts")
 		writeJSON(w, 200, u.Application)
 	})
 	mux.HandleFunc("POST /v1/applications/me/submit", func(w http.ResponseWriter, r *http.Request) {
@@ -347,24 +383,109 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(w, 200, map[string]any{"accountId": "acct_1", "orgId": r.PathValue("id"), "status": "ACTION_NEEDED", "chargesEnabled": true,
 			"payoutsEnabled": true, "payoutsPaused": false, "listingsHidden": false, "openItems": 2, "currentDeadline": "2026-10-24T00:00:00Z",
-			"requirements": []map[string]any{{"requirement": "company.tax_id", "bucket": "currently_due"}, {"requirement": "external_account", "bucket": "past_due"}}})
+			"payoutBank": map[string]any{"id": "ba_1", "bankName": "STRIPE TEST BANK", "last4": "6789", "status": "errored"},
+			"requirements": []map[string]any{{"requirement": "company.tax_id", "bucket": "currently_due", "form": map[string]any{"component": "account_onboarding"}},
+				{"requirement": "external_account", "bucket": "past_due", "form": map[string]any{"component": "account_management"}}}})
+	})
+	mux.HandleFunc("POST /v1/orgs/{id}/stripe/account-session", func(w http.ResponseWriter, r *http.Request) {
+		if u.AccountHealthForbidden {
+			problem(w, 403, "seller.org-role-required", "Only the organisation's finance or owner can do this", nil)
+			return
+		}
+		if r.PathValue("id") == PendingOrgID {
+			problem(w, 404, "seller.no-connected-account", "No Stripe account yet", nil)
+			return
+		}
+		u.mu.Lock()
+		local := u.StripeLocalTest
+		u.mu.Unlock()
+		//nolint:gosec // a test fixture, not a credential
+		writeJSON(w, 200, map[string]any{"accountId": "acct_1", "clientSecret": "accs_secret_org", "expiresAt": "2026-10-10T13:00:00Z", "localTest": local})
 	})
 	billing := func() map[string]any {
 		return map[string]any{"orgId": SellerOrgID, "planCode": u.seller.plan, "planName": "Seller Growth", "cadence": "QUARTERLY", "status": "ACTIVE",
 			"price": map[string]any{"cadence": "QUARTERLY", "months": 3, "totalCents": 11115, "perMonthCents": 3705, "savingCents": 585,
 				"perMonthLabel": "$37.05/mo", "billedLabel": "Billed $111.15 every 3 months", "savingLabel": "Save $5.85 vs monthly"},
 			"currentPeriodEnd": "2027-01-10T00:00:00Z", "nextChargeAt": "2027-01-10T00:00:00Z", "nextChargeCents": 11115, "nextChargeLabel": "$111.15 on Jan 10, 2027",
-			"cancelAtPeriodEnd": false, "paymentMethods": u.paymentMethodsJSON()}
+			"cancelAtPeriodEnd": false, "paymentMethods": u.paymentMethodsJSON(), "planVersion": 2, "creditBalanceCents": 2500,
+			"trialSource": "CAMPAIGN",
+			"chargeGate": map[string]any{"mode": "START_AFTER", "metric": "GROSS_SALES", "threshold": 100000, "progress": 42000, "since": "2026-10-01T00:00:00Z",
+				"until": nil, "reasonCode": "PROMOTION", "note": "Launch partner", "setAt": "2026-10-01T00:00:00Z", "metAt": nil,
+				"label": "Charging starts after $1,000 in sales — you're at $420"},
+			"entitlements": entitlementsOfPlan(u.seller.plan)}
 	}
+	mux.HandleFunc("GET /v1/returns", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"items": []map[string]any{{"id": "rma-1", "number": "RMA-5E11E5", "orderNumber": "AT-2026-000123", "status": "RECEIVED",
+			"method": "DROP_OFF", "refundState": "PENDING", "estimateMinor": 2599, "createdAt": "2026-10-20T09:00:00Z",
+			"lines": []map[string]any{{"title": "Garri 2kg", "quantity": 2, "reason": "DAMAGED"}}}}})
+	})
+	mux.HandleFunc("GET /v1/tax/sellers/{orgId}/statement", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"month": r.URL.Query().Get("month"), "sellerOrgId": r.PathValue("orgId"), "rows": []map[string]any{
+			{"jurisdiction": "US-TX", "currency": "USD", "orders": 3, "grossSalesMinor": 30000, "taxableSalesMinor": 25000, "taxCollectedMinor": 2063, "taxRefundedMinor": 536, "netTaxMinor": 1527},
+			{"jurisdiction": "US-NY", "currency": "USD", "orders": 1, "grossSalesMinor": 10000, "taxableSalesMinor": 10000, "taxCollectedMinor": 888, "taxRefundedMinor": 0, "netTaxMinor": 888}}})
+	})
+	mux.HandleFunc("GET /v1/tax/sellers/{orgId}/statement/export", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/csv")
+		_, _ = w.Write([]byte("jurisdiction,orders,tax_collected\nUS-TX,3,20.63\n"))
+	})
+	mux.HandleFunc("GET /v1/claims/seller/{orgId}", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"items": []map[string]any{{"reference": "CLM-1001", "type": "NOT_AS_DESCRIBED", "status": "AWAITING_SELLER",
+			"orderNumber": "AT-2026-000123", "amountMinor": 4599, "description": "The jollof was stale", "customerId": "cust-secret", "escalated": false,
+			"sla": map[string]any{"dueAt": "2026-10-28T10:00:00Z", "state": "AT_RISK"}, "openedAt": "2026-10-25T09:00:00Z"}}, "total": 1})
+	})
 	mux.HandleFunc("GET /v1/orgs/{id}/billing", func(w http.ResponseWriter, _ *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
 		writeJSON(w, 200, billing())
 	})
+	invoice := func(status string) map[string]any {
+		return map[string]any{"id": "inv_s3", "number": "AT-INV-2026-1003", "periodStart": "2026-07-10T00:00:00Z", "periodEnd": "2026-10-10T00:00:00Z",
+			"subtotalCents": 11115, "discountCents": 0, "amountDueCents": 11115, "amountPaidCents": 11115, "currency": "USD", "status": status,
+			"billingReason": "subscription_cycle", "planCode": "seller_growth", "cadence": "QUARTERLY", "dueAt": "2026-10-10T00:00:00Z",
+			"paidAt": "2026-10-10T00:00:05Z", "attempts": 0, "nextAttemptAt": nil, "lastError": nil, "createdAt": "2026-10-10T00:00:00Z",
+			"lines": []any{map[string]any{"kind": "PLAN", "description": "Seller Growth plan — quarterly (Jul 10, 2026 – Oct 9, 2026)",
+				"amountCents": 11115, "quantity": nil, "metered": false, "meter": nil, "periodStart": nil, "periodEnd": nil}},
+			"payments": []any{
+				map[string]any{"id": "pay_1", "source": "CREDIT", "amountCents": 2000, "status": "APPLIED", "note": "Platform credit", "createdAt": "2026-10-10T00:00:01Z"},
+				map[string]any{"id": "pay_2", "source": "EARNINGS", "amountCents": 7000, "status": "APPLIED", "note": nil, "createdAt": "2026-10-10T00:00:02Z"},
+				map[string]any{"id": "pay_3", "source": "CARD", "amountCents": 2115, "status": "APPLIED", "note": "Visa ••4242", "createdAt": "2026-10-10T00:00:05Z"}},
+			"meteredAmountCents": 0, "paidFromCreditCents": 2000, "paidFromSalesCents": 7000, "paidByCardCents": 2115, "waivedCents": 0}
+	}
 	mux.HandleFunc("GET /v1/orgs/{id}/billing/invoices", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, []map[string]any{{"id": "in_s3", "number": "AT-0003", "periodStart": "2026-07-10T00:00:00Z", "periodEnd": "2026-10-10T00:00:00Z",
-			"amountDueCents": 11115, "amountPaidCents": 11115, "currency": "usd", "status": "paid", "invoicePdf": "https://files.example/in_s3.pdf",
-			"hostedInvoiceUrl": "https://invoice.example/in_s3", "createdAt": "2026-10-10T00:00:00Z"}})
+		writeJSON(w, 200, []map[string]any{invoice("paid")})
+	})
+	mux.HandleFunc("POST /v1/orgs/{id}/billing/invoices/{invoice}/retry", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, invoice("paid"))
+	})
+	mux.HandleFunc("GET /v1/orgs/{id}/billing/invoices/{invoice}/document", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html;charset=UTF-8")
+		_, _ = w.Write([]byte("<!doctype html><html><body><h1>AfroTransact invoice AT-INV-2026-1003</h1></body></html>"))
+	})
+	// S298: how the organisation pays its plan.
+	planFees := func() map[string]any {
+		return map[string]any{"orgId": SellerOrgID, "available": true, "mode": u.seller.planFeeMode, "effective": u.seller.planFeeMode,
+			"source": "SELLER", "changedAt": "2026-10-11T10:00:00Z", "changedBy": "user-1", "platformDefault": "EARNINGS_FIRST",
+			"appliesFromInvoiceAt": "2027-01-10T00:00:00Z", "appliesFromLabel": "Applies from your next invoice, on Jan 10, 2027",
+			"inProgressInvoiceId": nil, "history": []any{}}
+	}
+	mux.HandleFunc("GET /v1/orgs/{id}/billing/plan-fee-collection", func(w http.ResponseWriter, _ *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		writeJSON(w, 200, planFees())
+	})
+	mux.HandleFunc("PUT /v1/orgs/{id}/billing/plan-fee-collection", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			Mode string `json:"mode"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		if u.PlanFeeCollectionOff {
+			problem(w, 409, "seller.earnings-collection-off", "Paying plans from sales is switched off on this platform", nil)
+			return
+		}
+		u.seller.planFeeMode = b.Mode
+		writeJSON(w, 200, planFees())
 	})
 	mux.HandleFunc("GET /v1/plans", func(w http.ResponseWriter, _ *http.Request) {
 		price := func(cad string, months int, total, per, save int64) map[string]any {
@@ -377,6 +498,63 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 			{"code": "seller_growth", "kind": "SELLER", "name": "Seller Growth", "tagline": "Most popular", "monthlyCents": 3900, "trialDays": 30,
 				"features": []string{"Up to 1,000 listings"}, "prices": []any{price("MONTHLY", 1, 3900, 3900, 0), price("QUARTERLY", 3, 11115, 3705, 585), price("ANNUAL", 12, 39000, 3250, 7800)}},
 		})
+	})
+	// S292–S297: the plans this organisation may choose, rewards, previews and adding a payment method.
+	mux.HandleFunc("GET /v1/orgs/{id}/billing/plans", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, []map[string]any{
+			{"code": "seller_essentials", "kind": "SELLER", "name": "Seller Essentials", "tagline": "Start selling", "monthlyCents": 0, "trialDays": 0,
+				"features": []string{"Up to 50 listings"}, "version": 1, "visibility": "PUBLIC", "entitlements": entitlementsOfPlan("seller_essentials"), "prices": []any{}},
+			{"code": "seller_pro", "kind": "SELLER", "name": "Seller Pro", "tagline": "For established brands", "monthlyCents": 12900, "trialDays": 14,
+				"features": []string{"Unlimited listings"}, "version": 1, "visibility": "PUBLIC", "entitlements": entitlementsOfPlan("seller_pro"), "prices": []any{}},
+			{"code": "seller_growth", "kind": "SELLER", "name": "Seller Growth", "tagline": "Most popular", "monthlyCents": 3900, "trialDays": 60,
+				"features": []string{"Up to 1,000 listings"}, "version": 2, "visibility": "PUBLIC",
+				"entitlements": entitlementsOfPlan("seller_growth"), "prices": []any{
+					map[string]any{"cadence": "QUARTERLY", "months": 3, "totalCents": 11115, "perMonthCents": 3705, "savingCents": 585,
+						"perMonthLabel": "$37.05/mo", "billedLabel": "Billed $111.15 every 3 months", "savingLabel": "Save $5.85 vs monthly"}}},
+			{"code": "seller_partner", "kind": "SELLER", "name": "Growth Partner", "tagline": "Invited", "monthlyCents": 2900, "trialDays": 30,
+				"features": []string{"Priority support"}, "version": 1, "visibility": "INVITE_ONLY",
+				"entitlements": entitlementsOfPlan("seller_pro"), "prices": []any{}},
+		})
+	})
+	mux.HandleFunc("GET /v1/orgs/{id}/billing/rewards", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, map[string]any{
+			"available": []any{map[string]any{"ruleId": "6d1c0b6a-0000-4000-8000-000000000001", "name": "First $1,000", "description": nil,
+				"metric": "GROSS_SALES", "value": 64000, "threshold": 100000, "percent": 64, "qualifies": false,
+				"label": "$640 of $1,000 in sales → 1 month free", "rewardLabel": "1 month free",
+				"conditionLabel": "$1,000 in sales within 60 days of approval", "endsAt": nil, "comparison": "AT_LEAST",
+				"windowAnchor": "APPROVAL", "windowDays": 60, "pending": false, "checkAt": nil, "windowClosesAt": nil},
+				// S299: low-sales relief, decided once 24 h before the trial ends.
+				map[string]any{"ruleId": "6d1c0b6a-0000-4000-8000-000000000002", "name": "Low-sales relief", "description": nil,
+					"metric": "GROSS_SALES", "value": 20000, "threshold": 100000, "percent": 20, "qualifies": false,
+					"label": "$200 in sales so far (less than $1,000 → 1 month free)", "rewardLabel": "1 month free",
+					"conditionLabel": "less than $1,000 in sales in the first 30 days of the subscription", "endsAt": nil,
+					"comparison": "LESS_THAN", "windowAnchor": "SUBSCRIPTION_START", "windowDays": 30, "pending": true,
+					"checkAt": "2026-11-08T10:00:00Z", "windowClosesAt": "2026-11-09T10:00:00Z"}},
+			"earned": []any{map[string]any{"id": "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "orgId": SellerOrgID, "source": "RULE",
+				"type": "CREDIT", "summary": "$25 credit", "note": "Two orders", "status": "APPLIED", "creditCents": 2500, "freeDays": nil,
+				"createdAt": "2026-10-01T10:00:00Z", "appliedAt": "2026-10-01T10:00:01Z", "ruleComparison": "AT_LEAST", "newTrialEnd": nil},
+				map[string]any{"id": "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4e", "orgId": SellerOrgID, "source": "RULE",
+					"type": "FREE_DAYS", "summary": "1 month free", "note": "Low-sales relief", "status": "APPLIED", "creditCents": nil,
+					"freeDays": 30, "createdAt": "2026-10-08T10:00:00Z", "appliedAt": "2026-10-08T10:00:01Z", "ruleComparison": "LESS_THAN",
+					"previousTrialEnd": "2026-10-09T10:00:00Z", "newTrialEnd": "2026-11-08T10:00:00Z"}},
+		})
+	})
+	mux.HandleFunc("GET /v1/orgs/{id}/billing/plan/preview", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("planCode") == "nope" {
+			problem(w, 422, "seller.unknown-plan", "Plan nope is not available", map[string]any{"fieldErrors": map[string]string{"planCode": "Unknown"}})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"change": "IMMEDIATE_UPGRADE", "planCode": r.URL.Query().Get("planCode"), "planName": "Seller Pro",
+			"cadence": "QUARTERLY", "effectiveAt": "2026-10-10T00:00:00Z", "amountDueNowCents": 1734, "nextChargeCents": 36765,
+			"nextChargeAt": "2027-01-10T00:00:00Z", "trialing": false})
+	})
+	mux.HandleFunc("POST /v1/orgs/{id}/billing/setup-intents", func(w http.ResponseWriter, _ *http.Request) {
+		//nolint:gosec // a test fixture, not a credential
+		writeJSON(w, 201, map[string]any{"customerId": "cus_1", "setupIntentId": "seti_1", "clientSecret": "seti_1_secret_test"})
+	})
+	mux.HandleFunc("POST /v1/orgs/{id}/billing/payment-methods", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 201, map[string]any{"id": "aaaaaaaa-0000-0000-0000-000000000009", "kind": "CARD", "brand": "visa", "last4": "4242",
+			"expMonth": 12, "expYear": 2030, "verified": true, "receivesPayouts": false, "isDefault": false, "label": "Visa ••4242"})
 	})
 	mux.HandleFunc("POST /v1/orgs/{id}/billing/plan", func(w http.ResponseWriter, r *http.Request) {
 		var b struct {
@@ -406,30 +584,6 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 			return
 		}
 		writeJSON(w, 200, u.paymentMethodsJSON()[:1])
-	})
-	// storefront service
-	mux.HandleFunc("GET /v1/storefronts/me/draft", func(w http.ResponseWriter, _ *http.Request) {
-		u.mu.Lock()
-		defer u.mu.Unlock()
-		writeJSON(w, 200, u.seller.storefront)
-	})
-	mux.HandleFunc("PUT /v1/storefronts/me/draft", func(w http.ResponseWriter, r *http.Request) {
-		var doc map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&doc); err != nil {
-			problem(w, 422, "storefront.invalid", "Invalid draft", nil)
-			return
-		}
-		u.mu.Lock()
-		defer u.mu.Unlock()
-		u.seller.storefront = doc
-		writeJSON(w, 200, doc)
-	})
-	mux.HandleFunc("POST /v1/storefronts/me/publish", func(w http.ResponseWriter, _ *http.Request) {
-		u.mu.Lock()
-		defer u.mu.Unlock()
-		u.seller.storefront["status"] = "PUBLISHED"
-		u.seller.storefront["publishedAt"] = "2026-10-10T12:00:00Z"
-		w.WriteHeader(200)
 	})
 }
 
@@ -491,8 +645,10 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 			return
 		}
 		writeJSON(w, 200, map[string]any{"code": "grocery", "label": "packaged food", "identifierRule": "GTIN",
-			"attributes": []map[string]any{{"key": "brand", "label": "Brand", "required": true}, {"key": "allergens", "label": "Allergens (FALCPA)", "options": []string{"None", "Contains peanuts"}, "required": true}},
-			"themes":     []map[string]any{{"name": "Net weight", "dimensions": []map[string]any{{"name": "Net weight", "options": []string{"1 lb", "5 lb"}}}}}})
+			"attributes": []map[string]any{{"key": "brand", "label": "Brand", "required": true}, {"key": "allergens", "label": "Allergens (FALCPA)", "options": []string{"None", "Contains peanuts"}, "required": true, "kind": "ENUM", "section": "FOOD"},
+				{"key": "shelf", "label": "Shelf life", "required": true, "kind": "NUMBER", "units": []string{"days", "months"}, "section": "FOOD", "help": "Unopened"}},
+			"themes": []map[string]any{{"name": "Net weight", "dimensions": []map[string]any{{"name": "Net weight", "options": []string{"1 lb", "5 lb"}}}}},
+			"traits": map[string]any{"food": true, "perishable": false, "regulated": false, "preorder": true}})
 	})
 	mux.HandleFunc("GET /v1/identifiers/gtin/{code}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"digits": r.PathValue("code"), "valid": true, "message": "Valid GTIN-13"})
@@ -571,6 +727,34 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 			"nodeId": "ATL-FC", "ownerOrg": SellerOrgID, "qtyOnHand": 11, "qtyReserved": 1, "qtyAvailable": 10, "expDate": "2027-09-01",
 			"status": "SELLABLE", "markdownFlag": "NONE", "version": 0}}, "total": 1, "page": 0, "size": 50})
 	})
+	// delivery-runs' pick lists for the active organisation (S264); orgId is always the active org's
+	runPickup := func() map[string]any {
+		return map[string]any{"runId": RunPickupID, "town": "Lubbock", "state": "TX", "timeZone": "America/Chicago", "runStatus": "CONFIRMED",
+			"windowStart": "2026-11-07T15:00:00Z", "windowEnd": "2026-11-07T19:00:00Z", "sellerPickupAt": "2026-11-06T16:00:00Z", "dropMode": "DOORSTEP",
+			"orders": 2, "units": 5, "collectedOrders": 1,
+			"items": []map[string]any{{"atin": "AT00000042", "name": "Palm oil 1L", "units": 3}, {"atin": "AT00000043", "name": "Gari 1kg", "units": 2}},
+			"bags": []map[string]any{
+				{"orderNumber": "LBK-1001", "stage": "COLLECTED", "units": 3, "lines": []map[string]any{{"atin": "AT00000042", "name": "Palm oil 1L", "units": 3}}},
+				{"orderNumber": "LBK-1002", "stage": "PENDING", "units": 2, "lines": []map[string]any{{"atin": "AT00000043", "name": "Gari 1kg", "units": 2}}}}}
+	}
+	mux.HandleFunc("GET /v1/seller/run-pickups", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("orgId") != SellerOrgID {
+			writeJSON(w, 403, map[string]any{"status": 403, "title": "orgId must be the active org", "code": "test.owner"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"items": []map[string]any{runPickup()}})
+	})
+	mux.HandleFunc("GET /v1/seller/run-pickups/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("orgId") != SellerOrgID {
+			writeJSON(w, 403, map[string]any{"status": 403, "title": "orgId must be the active org", "code": "test.owner"})
+			return
+		}
+		if r.PathValue("id") != RunPickupID {
+			writeJSON(w, 404, map[string]any{"status": 404, "title": "No such run", "code": "delivery-runs.not-found"})
+			return
+		}
+		writeJSON(w, 200, runPickup())
+	})
 	// seller ship-from addresses (one org's list, default first)
 	shipFrom := []map[string]any{}
 	listShipFrom := func(w http.ResponseWriter, status int) {
@@ -584,6 +768,30 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(w, status, out)
 	}
+	// Business page settings: the plain public page's description, logo and brand colour (owner/admin change them).
+	page := map[string]any{"orgId": SellerOrgID, "slug": "ades-kitchen", "kind": "SELLER", "name": "Ade's Kitchen",
+		"description": "", "brandColor": "", "logoUrl": "", "contactEmail": "ade@example.com", "approved": true}
+	mux.HandleFunc("GET /v1/orgs/{id}/business-page", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		if r.PathValue("id") != SellerOrgID {
+			problem(w, 403, "seller.org-role-required", "not your organisation", nil)
+			return
+		}
+		writeJSON(w, 200, page)
+	})
+	mux.HandleFunc("PUT /v1/orgs/{id}/business-page", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		var b map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if c := b["brandColor"]; c != "" && (len(c) != 7 || c[0] != '#') {
+			problem(w, 422, "seller.invalid-branding", "The page details are not valid", map[string]any{"brandColor": "Use a colour like #1a7f4b"})
+			return
+		}
+		page["description"], page["brandColor"], page["logoUrl"] = b["description"], b["brandColor"], b["logoUrl"]
+		writeJSON(w, 200, page)
+	})
 	mux.HandleFunc("GET /v1/orgs/{id}/ship-from-addresses", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
@@ -699,6 +907,17 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		writeJSON(w, 201, map[string]any{"asset": map[string]any{"id": "asset-1", "status": "PENDING"}, "upload": map[string]any{"method": "PUT",
 			"url": "https://uploads.example/asset-1", "headers": map[string]string{"Content-Type": "image/webp"}, "publicUrl": "https://img.example/asset-1.webp", "expiresAt": "2026-10-10T12:15:00Z"}})
 	})
+	mux.HandleFunc("GET /v1/assets/{id}", func(w http.ResponseWriter, r *http.Request) {
+		switch r.PathValue("id") {
+		case MissingAssetID:
+			problem(w, 404, "media.asset-not-found", "No such upload", nil)
+		case HeldAssetID:
+			writeJSON(w, 200, map[string]any{"id": HeldAssetID, "purpose": "storefront", "contentType": "image/webp", "status": "FLAGGED"})
+		default:
+			writeJSON(w, 200, map[string]any{"id": r.PathValue("id"), "url": ReviewPhotoURL, "purpose": "storefront", "contentType": "image/webp",
+				"bytes": 182000, "width": 1600, "height": 1600, "status": "READY"})
+		}
+	})
 	mux.HandleFunc("POST /v1/assets/{id}/complete", func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("id") == MissingAssetID {
 			problem(w, 404, "media.asset-not-found", "No such upload", nil)
@@ -706,10 +925,27 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(w, 200, map[string]any{"id": r.PathValue("id"), "url": "https://img.example/asset-1.webp", "contentType": "image/webp", "bytes": 182000, "width": 1600, "height": 1600, "status": "READY"})
 	})
-	mux.HandleFunc("POST /v1/rates", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, map[string]any{"quotes": []map[string]any{
+	mux.HandleFunc("POST /v1/rates", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Carriers []string `json:"carriers"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		allQuotes := []map[string]any{
+			{"carrier": "usps", "service": "USPS_GROUND_ADVANTAGE", "serviceName": "USPS Ground Advantage", "amountMinor": 845, "currency": "USD", "transitDays": 4},
+			{"carrier": "usps", "service": "PRIORITY_MAIL", "serviceName": "USPS Priority Mail", "amountMinor": 1250, "currency": "USD", "transitDays": 2},
 			{"carrier": "ups", "service": "03", "serviceName": "UPS Ground", "amountMinor": 1189, "currency": "USD", "transitDays": 3},
-			{"carrier": "usps", "service": "USPS_GROUND_ADVANTAGE", "serviceName": "USPS Ground Advantage", "amountMinor": 845, "currency": "USD", "transitDays": 4}}, "partial": false})
+			{"carrier": "ups", "service": "02", "serviceName": "UPS 2nd Day Air", "amountMinor": 2250, "currency": "USD", "transitDays": 2},
+			{"carrier": "fedex", "service": "FEDEX_GROUND", "serviceName": "FedEx Ground", "amountMinor": 1145, "currency": "USD", "transitDays": 4},
+			{"carrier": "fedex", "service": "FEDEX_2_DAY", "serviceName": "FedEx 2Day", "amountMinor": 2095, "currency": "USD", "transitDays": 2},
+			{"carrier": "dhl", "service": "P", "serviceName": "DHL Express Worldwide", "amountMinor": 3495, "currency": "USD", "transitDays": 3},
+		}
+		selected := []map[string]any{}
+		for _, q := range allQuotes {
+			if len(req.Carriers) == 0 || slices.Contains(req.Carriers, q["carrier"].(string)) {
+				selected = append(selected, q)
+			}
+		}
+		writeJSON(w, 200, map[string]any{"quotes": selected, "partial": false})
 	})
 	// Customer pickup locations (sellers' own, kind SELLER): kept per id for the test run.
 	pickups := map[string]map[string]any{}
@@ -800,18 +1036,88 @@ func (u *Upstreams) feeRoutes(mux *http.ServeMux) {
 		if q.Get("orgId") == SellerOrgID && cat == "groceries" {
 			bps, source = 600, "OVERRIDE"
 		}
+		kind, plan := strings.ToUpper(firstNonEmptyStr(q.Get("kind"), "PRODUCT")), ""
+		if kind == "SERVICE" {
+			// Connection fees: Provider Studio's plan rate (8 %) for the provider, the 10 % default otherwise.
+			bps, source, fba = 1000, "DEFAULT", 0
+			if q.Get("orgId") == ProviderOrgID {
+				bps, source, plan = 800, "PLAN", "provider_studio"
+			}
+		}
 		writeJSON(w, 200, map[string]any{"feeScheduleId": fmt.Sprintf("fee-%d", version), "version": version, "effectiveFrom": from, "currency": "USD",
 			"category": cat, "orgId": q.Get("orgId"), "commissionBps": bps, "commissionSource": source, "cardPctBps": 290, "cardFixedMinor": 30,
-			"fbaPerUnitMinor": fba, "reverseCommissionOnRefund": true})
+			"fbaPerUnitMinor": fba, "reverseCommissionOnRefund": true, "kind": kind, "planCode": nilIfEmpty(plan)})
 	})
+	// The organisation's rate card per kind: the seller is on Seller Growth with a negotiated groceries rate until the
+	// end of the year; the provider on Provider Studio (8 % connection fee, hair & beauty negotiated at 7 %).
+	mux.HandleFunc("GET /v1/orgs/{id}/rate-card", func(w http.ResponseWriter, r *http.Request) {
+		if !service(w, r) {
+			return
+		}
+		org, kind := r.PathValue("id"), strings.ToUpper(firstNonEmptyStr(r.URL.Query().Get("kind"), "PRODUCT"))
+		until := "2026-12-31T23:59:59Z"
+		rate := func(cat string, bps int, source, plan string, negotiated bool) map[string]any {
+			m := map[string]any{"category": cat, "bps": bps, "source": source, "planCode": nilIfEmpty(plan), "negotiatedRateId": nil, "negotiatedUntil": nil}
+			if negotiated {
+				m["negotiatedRateId"], m["negotiatedUntil"] = "nr-1", until
+			}
+			return m
+		}
+		card := map[string]any{"orgId": org, "kind": kind, "feeScheduleId": "fee-1", "version": 1, "effectiveFrom": "2020-01-01T00:00:00Z",
+			"at": "2026-10-12T00:00:00Z", "currency": "USD", "cardPctBps": 290, "cardFixedMinor": 30, "fbaPerUnitMinor": 0,
+			"reverseCommissionOnRefund": true, "retail": false}
+		if kind == "SERVICE" {
+			card["planCode"] = "provider_studio"
+			card["otherRate"] = rate("", 800, "PLAN", "provider_studio", false)
+			card["categories"] = []any{rate("hair & beauty", 700, "OVERRIDE", "provider_studio", true)}
+			card["negotiated"] = []any{map[string]any{"id": "nr-2", "orgId": org, "type": "CONNECTION_FEE", "category": "hair & beauty", "rateBps": 700,
+				"startsAt": "2026-10-01T00:00:00Z", "endsAt": until, "status": "ACTIVE"}}
+		} else {
+			card["planCode"] = "seller_growth"
+			card["fbaPerUnitMinor"] = 325
+			card["otherRate"] = rate("", 1000, "PLAN", "seller_growth", false)
+			card["categories"] = []any{rate("fashion", 1200, "PLAN", "seller_growth", false), rate("groceries", 600, "OVERRIDE", "seller_growth", true)}
+			card["negotiated"] = []any{map[string]any{"id": "nr-1", "orgId": org, "type": "COMMISSION", "category": "groceries", "rateBps": 600,
+				"startsAt": "2026-10-01T00:00:00Z", "endsAt": until, "status": "ACTIVE"}}
+		}
+		writeJSON(w, 200, card)
+	})
+}
+
+func firstNonEmptyStr(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
+}
+
+func nilIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func (u *Upstreams) moneyRoutes(mux *http.ServeMux) {
 	u.feeRoutes(mux)
 	mux.HandleFunc("GET /v1/payouts/balance", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"orgId": SellerOrgID, "currency": "USD", "availableMinor": 128455, "onHoldMinor": 52725, "requestedOrInTransitMinor": 0,
-			"paidMinor": 932210, "providerFeesMinor": 1500, "minimumPayoutMinor": 2500, "canRequestToday": true,
-			"payoutsPaused": true, "payoutsPausedReason": "AUTO_PAST_DUE", "onHold": []map[string]any{{"orderId": "AT-2026-000123", "amountMinor": 52725}}})
+			"paidMinor": 932210, "providerFeesMinor": 1500, "planFeesMinor": 0, "minimumPayoutMinor": 2500, "canRequestToday": true,
+			"payoutsPaused": true, "payoutsPausedReason": "AUTO_PAST_DUE", "onHold": []map[string]any{{"orderId": "o1", "amountMinor": 52725, "releaseAt": "2026-10-24T10:00:00Z"}, {"orderId": "o-older", "amountMinor": 8000}}})
+	})
+	// S298: plan invoices paid from sales (a DECLINED one took nothing and is not shown).
+	mux.HandleFunc("GET /v1/orgs/{id}/plan-fee-withholdings", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, []map[string]any{
+			{"id": "pf-2", "orgId": SellerOrgID, "invoiceId": "in_s4", "invoiceNumber": nil, "currency": "USD", "requestedMinor": 11115,
+				"withheldMinor": 0, "releasedMinor": 0, "settledMinor": 0, "outstandingMinor": 0, "status": "DECLINED",
+				"reason": "No delivered, undisputed earnings to collect from", "label": "Plan fee (invoice in_s4)", "createdAt": "2026-10-11T00:00:00Z",
+				"updatedAt": "2026-10-11T00:00:00Z", "deductions": []any{}},
+			{"id": "pf-1", "orgId": SellerOrgID, "invoiceId": "in_s3", "invoiceNumber": "AT-0003", "currency": "USD", "requestedMinor": 11115,
+				"withheldMinor": 9000, "releasedMinor": 0, "settledMinor": 9000, "outstandingMinor": 0, "status": "WITHHELD",
+				"reason": "Only $90.00 of $111.15 was available; the card pays the rest", "label": "Plan fee (invoice AT-0003)",
+				"createdAt": "2026-10-10T00:00:00Z", "updatedAt": "2026-10-12T00:00:00Z", "deductions": []any{map[string]any{
+					"orderId": "o1", "amountMinor": 9000, "at": "2026-10-12T00:00:00Z",
+					"label": "Plan fee (invoice AT-0003) deducted from order AT-2026-000123"}}}})
 	})
 	mux.HandleFunc("GET /v1/payouts/provider-fees", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, []map[string]any{
@@ -843,13 +1149,21 @@ func (u *Upstreams) moneyRoutes(mux *http.ServeMux) {
 
 // ---------------------------------------------------------------- services still being built (SellerPending)
 
+// carrierFor is the carrier of a recorded tracking number: the fake only ever buys USPS labels.
+func carrierFor(tracking string) any {
+	if tracking == "" {
+		return nil
+	}
+	return "usps"
+}
+
 func (u *Upstreams) orderJSON() map[string]any {
 	st := u.seller.shipStatus
 	next := map[string][]string{"placed": {"confirmed", "cancelled"}, "confirmed": {"packed"}, "packed": {"ready"}}[st]
 	return map[string]any{"id": "o1", "orderNumber": "AT-2026-000123", "status": "in_progress", "placedAt": "2026-10-09T15:00:00Z", "currency": "USD", "totalMinor": 5437,
 		"shipTo": "Houston, TX", "shippingAddress": map[string]any{"fullName": "Adaeze Nwosu", "phone": "+17135550142", "line1": "9800 Westheimer Rd", "city": "Houston", "state": "TX", "postalCode": "77042", "country": "US"},
 		"shipments": []map[string]any{{"id": "sh-1", "shipmentId": "sh-1", "label": "Shipment 1 of 1 · Seller", "sellerOrgId": SellerOrgID, "fulfilmentType": "SELLER_FULFILLED",
-			"deliveryMethod": "CARRIER", "status": st, "items": "Ofada rice ×2", "itemsMinor": 4998, "shippingMinor": 0, "totalMinor": 5437, "carrier": nil, "trackingNumber": u.seller.tracking,
+			"deliveryMethod": "CARRIER", "status": st, "items": "Ofada rice ×2", "itemsMinor": 4998, "shippingMinor": 0, "totalMinor": 5437, "carrier": carrierFor(u.seller.tracking), "trackingNumber": u.seller.tracking,
 			"nextActions": next, "lines": []map[string]any{{"variantAtin": "ATADEV0001", "title": "Ofada Rice · 5 lb", "quantity": 2, "unitPriceMinor": 2499, "itemsMinor": 4998}},
 			"timeline": []map[string]any{{"from": "pending_payment", "to": "placed", "actorType": "SYSTEM", "at": "2026-10-09T15:00:00Z"}}},
 			// AfroTransact Delivery from the seller's store (S255): the seller packs, a driver collects.
@@ -868,7 +1182,7 @@ func (u *Upstreams) ordersRoutes(mux *http.ServeMux) {
 		defer u.mu.Unlock()
 		o := u.orderJSON()
 		sh := o["shipments"].([]map[string]any)[0]
-		writeJSON(w, 200, map[string]any{"items": []any{map[string]any{"orderNumber": o["orderNumber"], "orderStatus": o["status"], "placedAt": o["placedAt"],
+		writeJSON(w, 200, map[string]any{"items": []any{map[string]any{"orderId": o["id"], "orderNumber": o["orderNumber"], "orderStatus": o["status"], "placedAt": o["placedAt"],
 			"shipTo": o["shippingAddress"], "shipment": sh}}, "nextCursor": nil, "total": 1})
 	})
 	mux.HandleFunc("GET /v1/orders/{number}", func(w http.ResponseWriter, r *http.Request) {
@@ -1098,4 +1412,16 @@ func (u *Upstreams) bookingsRoutes(mux *http.ServeMux) {
 			{"bookingId": "23970", "reference": "BK-23970", "customer": "Ama K.", "serviceName": "Cornrows", "startAt": "2026-10-05T15:00:00Z", "status": "CANCELLED_PROVIDER",
 				"collectedMinor": 0, "commissionBps": 1000, "commissionMinor": 0, "cardFeesMinor": 0, "providerFeeMinor": 1500, "netMinor": -1500}}})
 	})
+}
+
+// entitlementsOfPlan are the seeded plans' entitlements (staff can change them per plan).
+func entitlementsOfPlan(plan string) map[string]any {
+	switch {
+	case strings.HasSuffix(plan, "_pro"):
+		return map[string]any{"listings": nil, "listingsUnlimited": true, "aiListingWriter": true, "lolaTier": "PRO", "bulkUpload": true, "imageLibrary": true, "coupons": true}
+	case strings.HasSuffix(plan, "_growth"):
+		return map[string]any{"listings": 1000, "listingsUnlimited": false, "aiListingWriter": true, "lolaTier": "GROWTH", "bulkUpload": true, "imageLibrary": true, "coupons": true}
+	default:
+		return map[string]any{"listings": 50, "listingsUnlimited": false, "aiListingWriter": false, "lolaTier": "ESSENTIALS", "bulkUpload": false, "imageLibrary": false, "coupons": false}
+	}
 }

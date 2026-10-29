@@ -18,6 +18,7 @@ type SearchParams struct {
 	Community  string
 	Fulfilment string
 	SellerKind string
+	SellerID   string
 	MinRating  *float64
 	MinPrice   int64
 	MaxPrice   int64
@@ -112,6 +113,8 @@ type CatalogProduct struct {
 	} `json:"images"`
 	VariationTheme string           `json:"variationTheme"`
 	Variants       []CatalogVariant `json:"variants"`
+	// Rating is the average over the product's published, verified-purchase reviews (S324); zeros without any.
+	Rating UpRating `json:"rating"`
 }
 
 // CatalogVariantView is a variant with its product (GET /v1/public/variants/{atin}).
@@ -149,6 +152,8 @@ type CartOwner struct {
 	Country string
 	Region  string
 	City    string
+	// Zip is the 5-digit ZIP of the delivery place: delivery runs are found by it (S261).
+	Zip string
 }
 
 // UpstreamCartLine is a cart-service line. OfferID is the offers-service offer of the line (empty for lines added
@@ -296,6 +301,9 @@ type IdentityMe struct {
 	// Phone is E.164; PhoneVerified says whether the SMS check (S234) passed.
 	Phone         string `json:"phone"`
 	PhoneVerified bool   `json:"phoneVerified"`
+	// PrincipalType (STAFF, SELLER_MEMBER, …) and Orgs feed the account menu's back offices.
+	PrincipalType string      `json:"principalType"`
+	Orgs          []MemberOrg `json:"orgs"`
 }
 
 // PhoneCodeSent is identity's POST /v1/me/phone/verification answer.
@@ -447,7 +455,7 @@ type ContentConsent struct {
 
 // PaymentsClient manages the customer's saved Stripe payment methods.
 type PaymentsClient interface {
-	PaymentMethods(ctx context.Context, bearer string) ([]domain.PaymentMethod, error)
+	PaymentMethods(ctx context.Context, bearer string) (Wallet, error)
 	SetupIntent(ctx context.Context, bearer string) (domain.SetupIntent, error)
 	DeletePaymentMethod(ctx context.Context, bearer, id string) error
 }
@@ -477,13 +485,11 @@ type OrderLine struct {
 	PackageID   string `json:"packageId"`
 }
 
-// OrdersClient calls the orders service (orders, shipment cancel, returns).
+// OrdersClient calls the orders service (orders, shipment cancel).
 type OrdersClient interface {
 	List(ctx context.Context, bearer, cursor string, limit int) (domain.Page[domain.OrderSummary], error)
 	Place(ctx context.Context, bearer, idempotencyKey string, req domain.PlaceOrderRequest, lines []OrderLine) (PlaceOrderResult, error)
 	CancelShipment(ctx context.Context, bearer, orderNumber, shipmentID string) (domain.OrderSummary, error)
-	Returns(ctx context.Context, bearer string) (domain.Page[domain.ReturnSummary], error)
-	StartReturn(ctx context.Context, bearer string, r domain.StartReturn) (domain.ReturnSummary, error)
 }
 
 // StockAlertInput arms a back-in-stock alert (notifications POST /v1/stock-alerts).
@@ -594,6 +600,9 @@ type AuthRequest struct {
 	Origin string `json:"origin,omitempty"`
 	// RedirectURI is the callback sent to identity, needed again for the code exchange.
 	RedirectURI string `json:"redirectUri,omitempty"`
+	// Retried marks a sign-in an app restarted after a failed one; a second failure stops at the storefront's error page
+	// instead of looping.
+	Retried bool `json:"retried,omitempty"`
 }
 
 // Challenge is a pending sign-up verification.

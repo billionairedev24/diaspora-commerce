@@ -56,10 +56,73 @@ Spring Boot 4.1 · Java 25 · PostgreSQL · local port **8101**.
     owner organisation and variant ATIN in `unit_label` (V5), so units of different sellers never mix and platform
     stock without a GTIN is labelled at receiving.
 
+- **One-step product form (S307)**:
+  - *Product types* carry `traits` (food, perishable, regulated, preorder) and attribute metadata: kind
+    `TEXT|MULTILINE|ENUM|NUMBER`, `units` (e.g. shelf life in days or months; "12" is stored as "12 days"),
+    `section` `DETAILS|FOOD|REGULATED` and `help`. Seller Center builds its conditional sections from them.
+  - *Listings* carry `listing` details: description (≤ 5,000), condition, keywords (≤ 20), fulfilment
+    `SELLER|AFROTRANSACT` (AfroTransact needs package dimensions and weight), handling days (1–30) and ship-from.
+  - *Variants* carry a compare-at price (it must be above the price) and their own images.
+  - A product without variations is one variant with an empty theme.
+  - `PUT /v1/products/{id}` edits a listing:
+    - a rejected listing goes back to review (`catalog.product.resubmitted`, which trust-ops queues again);
+    - a live listing keeps its variants (set stock to 0 instead) and its category;
+    - changed price, condition, fulfilment or ship-from publishes `catalog.product.terms_changed`, so offers-service
+      revises the seller's offers.
+  - *Drafts* (`/v1/product-drafts`, table `product_draft`) store the form's input as JSON (≤ 256 KB). They are
+    versioned for autosave (409 on a stale version) and there is one per product for edits. Submitting with
+    `draftId` deletes the draft in the same transaction.
+- **Bulk upload (S308)** (`/v1/imports`; the design is in [ADR 0003](../../../docs/adr/0003-bulk-product-upload-in-catalog.md)):
+  - **Templates.** `GET /v1/imports/template?productType=|categoryId=&format=xlsx|csv` returns a generic or
+    per-product-type template, generated with Apache POI.
+    - The `Products` sheet's header row marks required columns with `*` and carries a note on each header.
+    - Columns:
+      - `Parent SKU`, `SKU`, `Category`, `Title` and `Brand`;
+      - `Description`, `Condition`, `Image URLs` and `Search keywords`;
+      - `Price (USD)`, `Compare-at price (USD)`, `Quantity`, the barcode (or `ISBN-13`) and `No barcode`;
+      - the type's `Variation` and one column per dimension;
+      - one column per attribute, plus a `… unit` column for numbers with units. The generic template has
+        `Options` and `Attributes` as `key: value; …` instead;
+      - `Fulfilment`, `Handling time (days)`, the package length, width, height and weight, and
+        `Pre-order eligible`.
+    - Dropdowns come from a hidden `Lists` sheet. Whole and decimal numbers are validated.
+    - The workbook also has an `Instructions` sheet and an `Example` sheet.
+    - The CSV version writes the instructions as `#` lines above the header.
+    - Headers are matched by label or key, so columns can be reordered.
+  - **Limits.** 10 MB, 5,000 rows, 200 columns, 5,000 characters per cell, 10 images and 200 variants per product.
+    The streaming reader enforces zip-bomb limits. `.xls` is refused.
+  - **Upload.** `POST /v1/imports` (multipart `file`, `mode=CREATE|UPDATE`, optional `productType`) validates
+    every row:
+    - required fields, enums, numbers and units, GTIN check digits;
+    - duplicate SKUs in the file and against the seller's listings (Create), unknown SKUs (Update);
+    - https image links and compare-at prices.
+
+    It answers with the counts. `GET /v1/imports/{id}/rows?status=&outcome=` returns the preview: cells and
+    per-column messages. `GET /v1/imports/{id}/report?format=` returns the uploaded columns plus `Row`,
+    `Row status`, `Result` and `Errors`, with formula-like cells prefixed `'`.
+  - **Import.** `POST /v1/imports/{id}/start {validOnly}` returns 409 `catalog.import-has-errors` unless
+    `validOnly` is set. It runs the background job:
+    - one product group per step, images copied through media (`POST /v1/assets/import` with the
+      `catalog-service` client token), each product in a savepoint;
+    - idempotent per `(import, SKU)` and resumed by `ImportResumeJob` when stalled (2 min);
+    - `catalog.import.completed` is published on `at.product-import.events`, and notifications emails and pushes
+      the uploader for imports of 100 rows or more.
+
+    `GET /v1/imports` lists the upload history.
+
 Validation of a submission (`DefaultProductDraftPolicy`) returns every failing field at once
 (`fieldErrors` in the RFC 9457 problem): title 10–200 chars, required details, 1–10 JPG/PNG/WebP images ≤ 8 MB
 with a main image ≥ 1000×1000, variation values from the theme, unique SKUs, valid GTIN check digit (with a
 suggested correction) or exemption, ISBN-13 for books, price > 0.
+
+- **Verified-purchase product reviews (S324).** A customer with a delivered order line for the ATIN (asked from
+  orders-service through the `PurchaseVerifier` port, `HttpPurchaseVerifier`) rates it 1–5 stars with a title, text and up
+  to 5 photos: one review per customer and product, editable for 30 days, deletable. `DefaultReviewContentPolicy`
+  (profanity, links, e-mail, phone) publishes a clean review or holds it `PENDING` for trust-ops; staff approve, reject
+  with a reason or remove (`/v1/product-reviews/{id}/approve|reject|remove`); customers and sellers report; the seller
+  replies once (`/v1/seller/reviews`). `product_rating` (average, count, 1–5 breakdown) is rewritten in the transaction of
+  every status change and published as `catalog.product.rating_changed`. Public: `/v1/public/products/{atin}/rating|reviews`.
+  See [docs/engineering/product-reviews.md](../../../docs/engineering/product-reviews.md).
 
 ## API
 
@@ -67,6 +130,10 @@ suggested correction) or exemption, ISBN-13 for books, price > 0.
 |---|---|---|
 | GET | `/v1/categories`, `/v1/product-types`, `/v1/product-types/{code}` | public |
 | POST | `/v1/products` | `catalog:write` |
+| PUT | `/v1/products/{id}` (S307) | `catalog:write` (owner) |
+| GET/POST/GET/PUT/DELETE | `/v1/product-drafts`, `/v1/product-drafts/{id}` (S307) | `catalog:write` (own org) |
+| GET | `/v1/imports/template?productType=&categoryId=&format=` (S308) | `catalog:write` |
+| POST/GET | `/v1/imports` (multipart upload / history), `/v1/imports/{id}`, `/{id}/rows`, `/{id}/report`, POST `/{id}/start` (S308) | `catalog:write` (own org) |
 | GET | `/v1/products`, `/v1/products/{id}`, `/v1/products/atin/{atin}` | `catalog:write` (own org; staff all) |
 | POST | `/v1/products/{id}/approve`, `/reject` | `catalog:moderate` |
 | POST | `/v1/products/{id}/pause`, `/resume` | `catalog:write` (owner) |
@@ -109,7 +176,9 @@ Interactive docs when running: `/swagger-ui.html`, `/docs` (Scalar), `/redoc`.
 
 ## Events (transactional outbox → `at.product.events`, `at.category-request.events`)
 
-`catalog.product.created|approved|rejected|paused|resumed|hidden|restored|flagged|taken_down|reinstated`,
+`catalog.product.created|updated|terms_changed|resubmitted|approved|rejected|paused|resumed|hidden|restored|flagged|taken_down|reinstated`,
+`catalog.import.completed` (on `at.product-import.events`),
+`catalog.product.rating_changed` and `catalog.review.submitted|published|updated|rejected|removed|deleted|reported|replied` (S324; the review events are on `at.product-review.events`),
 `catalog.category-request.created|approved|rejected` —
 see [`contracts/asyncapi/fragments/catalog.yaml`](../../../contracts/asyncapi/fragments/catalog.yaml). Product payloads
 carry `sellerHidden` (true while the owner's listings are hidden).
@@ -159,6 +228,9 @@ Known gaps:
 | `PRODUCT_DATA_ORDER`, `PRODUCT_DATA_CACHE_TTL`, `PRODUCT_DATA_MISS_TTL` | GTIN prefill provider order (`GS1,OPEN_FOOD_FACTS`) and cache (7d / 1d) |
 | `GS1_ENABLED`, `GS1_API_KEY` (secret), `GS1_BASE_URL`, `GS1_TIMEOUT` | Verified by GS1 (off by default; needs a key) |
 | `OFF_ENABLED`, `OFF_BASE_URL`, `OFF_USER_AGENT`, `OFF_TIMEOUT` | Open Food Facts (on by default, 3 s) |
+| `MEDIA_URL`, `MEDIA_TIMEOUT` | media-service for bulk-upload images (S308) |
+| `CATALOG_CLIENT_ID`, `CATALOG_CLIENT_SECRET` (secret) | catalog's client-credentials token (`media:import`) |
+| `IMPORT_NOTIFY_MIN_ROWS` | rows from which a finished import notifies the uploader (100) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACE_SAMPLING` | tracing |
 
 Profiles: `local` (security off, debug logs), `dev`, `uat`, `prod` (API reference pages off).
@@ -174,7 +246,10 @@ cd java && ./mvnw -B -f services/catalog/pom.xml verify     # checkstyle, unit, 
 Libraries added for S031/S032: `spring-boot-starter-restclient` (provider calls), Apache PDFBox 3.0.8 (PDF labels);
 test-only ZXing core 3.5.4 (every barcode test decodes the generated symbol, so it is known to scan) and WireMock
 3.13.2 (providers). The ZPL output is pinned by snapshots in `src/test/resources/labels`.
-Migrations: `V5__barcode_prefill_and_unit_labels.sql` (`product_data_lookup`, `unit_label`, `unit_label_seq`).
+Apache POI 5.4.1 (`poi-ooxml`) for bulk upload templates and parsing (S308, see ADR 0003).
+Migrations: `V8__one_step_form_and_bulk_upload.sql` (product-type traits and attribute metadata, listing details,
+variant compare-at and images, `product_draft`, `product_import`, `product_import_row`);
+`V5__barcode_prefill_and_unit_labels.sql` (`product_data_lookup`, `unit_label`, `unit_label_seq`).
 
 ### Test notes
 

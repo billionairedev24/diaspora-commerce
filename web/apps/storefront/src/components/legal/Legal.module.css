@@ -3,7 +3,16 @@
 
 .layout { display: flex; flex-wrap: wrap; gap: var(--at-space-8); align-items: flex-start; padding: var(--at-space-8) 0; }
 
-.docsNav { flex: 0 1 260px; position: sticky; top: calc(var(--at-sticky-header-h, var(--at-space-16)) + var(--at-space-4)); display: flex; flex-direction: column; gap: var(--at-space-2); }
+.docsNav { flex: 0 1 260px; position: sticky; top: var(--at-space-6); display: flex; flex-direction: column; gap: var(--at-space-2); }
+.brandBlock { display: flex; flex-direction: column; gap: var(--at-space-2); padding-bottom: var(--at-space-4); margin-bottom: var(--at-space-2); border-bottom: 1px solid var(--at-color-border); }
+.brandLink { display: inline-flex; align-items: center; gap: var(--at-space-2); color: var(--at-color-text); text-decoration: none; }
+@media (hover: hover) {
+  .brandLink:hover { text-decoration: none; opacity: 0.85; }
+}
+.backLink { display: inline-flex; align-items: center; font-size: var(--at-text-sm); color: var(--at-color-link); text-decoration: none; }
+@media (hover: hover) {
+  .backLink:hover { text-decoration: underline; color: var(--at-color-link-hover); }
+}
 .eyebrow { margin: 0; font-size: var(--at-text-xs); font-weight: var(--at-weight-bold); letter-spacing: var(--at-tracking-caps); text-transform: uppercase; color: var(--at-color-text-muted); }
 .docsList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .centerLink { align-self: flex-start; min-height: 44px; display: inline-flex; align-items: center; font-weight: var(--at-weight-bold); }

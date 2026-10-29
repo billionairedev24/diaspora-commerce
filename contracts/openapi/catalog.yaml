@@ -26,10 +26,26 @@ tags:
   description: 'Barcode labels (S032): Code 128, GS1-128 and EAN-13 as SVG, PNG, ZPL or PDF'
 - name: Products
   description: Product builder, listing moderation and lookup
+- name: Product drafts
+  description: Autosaved drafts of the one-step product form (S307)
 - name: Identifiers
   description: GTIN / ISBN checks and GTIN prefill for the product builder, GTIN lookups by service clients
 - name: Listing reports
   description: Shoppers report a live listing (signed in); reports reach the trust-ops moderation queue through catalog.product.flagged
+- name: Product reviews
+  description: 'Verified-purchase ratings and reviews (S324): customers who received a product review it once, public reads
+    of the published reviews and the rating, and reports'
+- name: Seller reviews
+  description: The product owner sees the published reviews of its products and replies once to each (catalog:write). Sellers
+    cannot edit or hide a review; they can report it.
+- name: Review moderation
+  description: Trust and safety staff and the trust-ops service client (catalog:moderate) approve, reject and remove product
+    reviews. Decisions are idempotent; the product's rating follows each decision.
+- name: Image library
+  description: 'Library images (media) matched to listings by SKU file names: attach matching images, image usage (S310)'
+- name: Bulk upload
+  description: 'Upload templates, .xlsx/.csv uploads with row validation, preview, error report and the background import
+    (S308). Limits: 10 MB and 5,000 rows per file'
 paths:
   /v1/categories:
     get:
@@ -207,6 +223,324 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/GtinPrefill'
+  /v1/image-library/attach:
+    post:
+      tags:
+      - Image library
+      summary: Attach matching library images to the organisation's listings by SKU
+      description: 'Looks up the organisation''s library images (media) for the SKUs of its listings (all, or those in
+        skus) and applies them: SKU.MAIN and SKU.PT01-PT08 of the first of a product''s SKUs that has a MAIN image
+        replace the product images in that order; on products with several variants a variant SKU''s MAIN sets that
+        variant''s image. Images held by moderation are skipped. Each changed product is validated again like an edit
+        (catalog.product.updated); taken-down listings and products whose new main image is under 1000 px are skipped
+        with a reason. Products without matches are left unchanged. 503 catalog.media-unavailable when media cannot
+        be reached.'
+      operationId: attachLibraryImages
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachLibraryImagesRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AttachLibraryImagesResult'
+  /v1/image-library/usage:
+    post:
+      tags:
+      - Image library
+      summary: Which of the organisation's SKUs use these image URLs, and which of these SKUs exist
+      description: For the image library page (used by). An image counts for every SKU of a product whose images
+        include it and for the variant whose image or swatch it is.
+      operationId: imageUsage
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImageUsageRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ImageUsage'
+  /v1/brands:
+    get:
+      tags:
+      - Products
+      summary: Brands for the product form's brand combobox
+      description: The organisation's brands (from its products' brand attribute) with how many of its products use
+        each, most used first; q filters by prefix of the name or of a word (case-insensitive).
+      operationId: listBrands
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 80
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+          maximum: 50
+          minimum: 1
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BrandList'
+  /v1/imports:
+    get:
+      tags:
+      - Bulk upload
+      summary: The organisation's uploads, newest first (upload history)
+      operationId: listImports
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductImportPage'
+    post:
+      tags:
+      - Bulk upload
+      summary: Upload and validate a .xlsx or .csv file
+      description: 'Every row is validated (required fields, allowed values, numbers and units, GTIN check digit, duplicate
+        SKUs in the file and against the organisation''s listings, image URL format). 422 catalog.upload-rejected when the
+        file cannot be read (format, 10 MB, 5,000 rows, missing required columns); nothing is stored then. Starts nothing:
+        see POST /v1/imports/{id}/start.'
+      operationId: uploadImport
+      parameters:
+      - name: mode
+        in: query
+        required: false
+        schema:
+          type: string
+          default: CREATE
+          enum:
+          - CREATE
+          - UPDATE
+      - name: productType
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: uploadedByName
+        in: query
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductImport'
+  /v1/imports/template:
+    get:
+      tags:
+      - Bulk upload
+      summary: Download an upload template
+      description: 'Generated from the product type definitions: a product type''s template (productType, or the product type
+        of categoryId) or the generic one. xlsx: Products sheet with required columns marked *, a note per column and dropdowns;
+        Instructions, Example and hidden Lists sheets. csv: "#" comment lines and the header row.'
+      operationId: importTemplate
+      parameters:
+      - name: productType
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: categoryId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+          default: xlsx
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: byte
+  /v1/imports/{id}:
+    get:
+      tags:
+      - Bulk upload
+      summary: An upload with its validation counts and import progress
+      operationId: getImport
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductImport'
+  /v1/imports/{id}/report:
+    get:
+      tags:
+      - Bulk upload
+      summary: Download the error report
+      description: The uploaded rows with Row, Row status, Result and Errors columns; cells starting with = + - @ are prefixed
+        with ' (formula injection)
+      operationId: importReport
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+          default: xlsx
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: byte
+  /v1/imports/{id}/rows:
+    get:
+      tags:
+      - Bulk upload
+      summary: Rows of an upload (preview)
+      description: In file order; status filters the preview (ERROR = errors only), outcome the import result
+      operationId: importRows
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - VALID
+          - WARNING
+          - ERROR
+      - name: outcome
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - CREATED
+          - UPDATED
+          - FAILED
+          - SKIPPED
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductImportRowPage'
+  /v1/imports/{id}/start:
+    post:
+      tags:
+      - Bulk upload
+      summary: Start the import
+      description: Runs in the background (poll GET /v1/imports/{id}); resumable and idempotent per row. 409 catalog.import-has-errors
+        when rows have errors and validOnly is false; starting again returns the upload as it is.
+      operationId: startImport
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartImportRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductImport'
   /v1/labels:
     post:
       tags:
@@ -372,6 +706,302 @@ paths:
               schema:
                 type: string
                 format: binary
+  /v1/product-drafts:
+    get:
+      tags:
+      - Product drafts
+      summary: The organisation's drafts, most recently saved first
+      operationId: listDrafts
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductDraftSummary'
+    post:
+      tags:
+      - Product drafts
+      summary: Save a new draft (Save draft, or the first autosave)
+      operationId: createDraft
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDraftRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductDraft'
+  /v1/product-drafts/{id}:
+    get:
+      tags:
+      - Product drafts
+      summary: Get a draft with its payload
+      operationId: getDraft
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductDraft'
+    put:
+      tags:
+      - Product drafts
+      summary: Autosave a draft
+      description: 409 catalog.draft-changed when the draft was saved elsewhere since version
+      operationId: saveDraft
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveDraftRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductDraft'
+    delete:
+      tags:
+      - Product drafts
+      summary: Discard a draft
+      operationId: deleteDraft
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+  /v1/product-reviews:
+    get:
+      tags:
+      - Review moderation
+      summary: Product reviews by state, newest first (catalog:moderate)
+      operationId: listProductReviews
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - PUBLISHED
+          - REJECTED
+          - REMOVED
+          - DELETED
+      - name: atin
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductReviewPage'
+  /v1/product-reviews/{reviewId}:
+    get:
+      tags:
+      - Review moderation
+      summary: One product review (catalog:moderate)
+      operationId: getProductReview
+      parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductReview'
+  /v1/product-reviews/{reviewId}/approve:
+    post:
+      tags:
+      - Review moderation
+      summary: Publish a review
+      description: A pending review becomes public and counts in the rating; also reinstates a rejected or removed one. Approving
+        a published review changes nothing. catalog.review.published.
+      operationId: approveProductReview
+      parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewApproveRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductReview'
+  /v1/product-reviews/{reviewId}/reject:
+    post:
+      tags:
+      - Review moderation
+      summary: Reject a review that is waiting for moderation
+      description: The customer sees the reason and may edit the review (which goes back to moderation). 409 catalog.review-not-pending
+        for a published review - remove it instead. 422 without a note for reasonCode OTHER. catalog.review.rejected.
+      operationId: rejectProductReview
+      parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewRemoveRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductReview'
+  /v1/product-reviews/{reviewId}/remove:
+    post:
+      tags:
+      - Review moderation
+      summary: Take a review down, published or not
+      description: It stops being public and counting in the rating; the customer sees the reason. catalog.review.removed.
+      operationId: removeProductReview
+      parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewRemoveRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductReview'
+  /v1/product-reviews/{reviewId}/reply:
+    post:
+      tags:
+      - Seller reviews
+      summary: Reply to a published review, once (catalog:write, members of the owning organisation)
+      description: 409 catalog.review-not-published before approval, 409 catalog.review-already-replied the second time; catalog.review.replied.
+        The reply is public and cannot be edited.
+      operationId: replyToProductReview
+      parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewReplyRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerReview'
+  /v1/product-reviews/{reviewId}/reports:
+    post:
+      tags:
+      - Product reviews
+      summary: Report a published review (signed-in customer, or a member of the product's seller)
+      description: 'One report per reporter and review: a repeated report returns 200 with created=false. The first report
+        of a text queues the review in trust-ops (catalog.review.reported); sellers can report but never edit or hide a review.'
+      operationId: reportProductReview
+      parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewReportRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReviewReportResult'
   /v1/product-types:
     get:
       tags:
@@ -494,6 +1124,97 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Product'
+  /v1/products/{atin}/reviews:
+    post:
+      tags:
+      - Product reviews
+      summary: Review a product I received (signed-in customer)
+      description: 403 catalog.review-not-verified-purchase without a delivered order line for the product; 409 catalog.review-already-exists
+        the second time. The review is published at once or, when the automatic checks (profanity, links, personal data) flag
+        it, waits for moderation (status PENDING). Publishes catalog.review.published or catalog.review.submitted.
+      operationId: writeProductReview
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WriteReviewRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OwnReview'
+  /v1/products/{atin}/reviews/mine:
+    get:
+      tags:
+      - Product reviews
+      summary: 'My standing with a product: may I review it, and my review (signed-in customer)'
+      description: eligible is true when orders-service says the customer received the product and they have no live review
+        yet. A review in any state is returned, with the moderation reason when it was refused or removed. 503 catalog.purchase-check-unavailable
+        when orders cannot answer.
+      operationId: myProductReview
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MyReview'
+    put:
+      tags:
+      - Product reviews
+      summary: Edit my review within 30 days (signed-in customer)
+      description: The checks run again. 409 catalog.review-edit-window-closed after the window. An edit of a rejected or
+        removed review always goes back to moderation.
+      operationId: editProductReview
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditReviewRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OwnReview'
+    delete:
+      tags:
+      - Product reviews
+      summary: Delete my review (signed-in customer)
+      description: Any time. The rating is recomputed; the customer can review the product again.
+      operationId: deleteProductReview
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: No Content
   /v1/products/{id}:
     get:
       tags:
@@ -507,6 +1228,35 @@ paths:
         schema:
           type: string
           format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Product'
+    put:
+      tags:
+      - Products
+      summary: Edit a product (one-step form in edit mode)
+      description: Owner or staff. The whole content is validated again; variants are matched by sellerSku (new SKUs get ATINs;
+        a published listing keeps its category and variants). A rejected listing goes back to review. Publishes catalog.product.updated,
+        plus catalog.product.terms_changed when prices, quantities or listing terms changed and catalog.product.resubmitted
+        when a rejected listing is resubmitted. 409 when version is stale.
+      operationId: updateProduct
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+        required: true
       responses:
         '200':
           description: OK
@@ -575,6 +1325,34 @@ paths:
         schema:
           type: string
           format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Product'
+  /v1/products/{id}/preorder-flags:
+    put:
+      tags:
+      - Products
+      summary: Set the pre-order flags of a product (S272)
+      description: 'preorderEligible: may be sold in a community pre-order window (default true for food). shipsNow: always
+        ships now by carrier, never as a pre-order. Owner or staff; publishes catalog.product.updated.'
+      operationId: preorderFlags
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreorderFlagsRequest'
+        required: true
       responses:
         '200':
           description: OK
@@ -655,34 +1433,6 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Product'
-  /v1/products/{id}/preorder-flags:
-    put:
-      tags:
-      - Products
-      summary: Set the pre-order flags of a product (S272)
-      description: 'preorderEligible: may be sold in a community pre-order window (default true for food). shipsNow:
-        always ships now by carrier, never as a pre-order. Owner or staff; publishes catalog.product.updated.'
-      operationId: preorderFlags
-      parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PreorderFlagsRequest'
-        required: true
-      responses:
-        '200':
-          description: OK
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/Product'
   /v1/products/{id}/takedown:
     post:
       tags:
@@ -731,6 +1481,81 @@ paths:
               schema:
                 $ref: '#/components/schemas/PublicProduct'
       security: []
+  /v1/public/products/{atin}/rating:
+    get:
+      tags:
+      - Product reviews
+      summary: 'A live product''s rating: average, count and star breakdown'
+      operationId: productRating
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductRating'
+      security: []
+  /v1/public/products/{atin}/reviews:
+    get:
+      tags:
+      - Product reviews
+      summary: Published reviews of a live product, with its rating
+      description: Sorted NEWEST (default), HIGHEST or LOWEST, optionally only reviews with the given stars. Reviewers show
+        as first name and last initial, always Verified purchase.
+      operationId: publicProductReviews
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: stars
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 5
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          default: NEWEST
+          enum:
+          - NEWEST
+          - HIGHEST
+          - LOWEST
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 10
+          maximum: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PublicReviewPage'
+      security: []
   /v1/public/products/{atin}/reports:
     post:
       tags:
@@ -778,6 +1603,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/PublicVariant'
       security: []
+  /v1/seller/reviews:
+    get:
+      tags:
+      - Seller reviews
+      summary: Published reviews of my products, newest first (catalog:write)
+      description: Sellers see their own organisation; staff name it with orgId. The customer's identity is left out. unanswered=true
+        lists reviews without a reply.
+      operationId: listSellerReviews
+      parameters:
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: unanswered
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerReviewPage'
   /v1/variants/{atin}:
     get:
       tags:
@@ -802,6 +1668,411 @@ paths:
                 $ref: '#/components/schemas/VariantLookup'
 components:
   schemas:
+    ListingDetails:
+      type: object
+      description: Description, condition, search keywords, fulfilment, package, handling time and ship-from
+      properties:
+        description:
+          type: string
+          maxLength: 5000
+          minLength: 0
+        condition:
+          type: string
+          enum:
+          - NEW
+          - RENEWED
+          - USED_LIKE_NEW
+          - USED_VERY_GOOD
+          - USED_GOOD
+          - USED_ACCEPTABLE
+        keywords:
+          type: array
+          items:
+            type: string
+            maxLength: 40
+            minLength: 0
+          maxItems: 20
+          minItems: 0
+        fulfilment:
+          type: string
+          enum:
+          - SELLER
+          - AFROTRANSACT
+        packaging:
+          $ref: '#/components/schemas/PackageDimensions'
+        handlingDays:
+          type: integer
+          format: int32
+          description: Business days from order to dispatch, 1–30 (default 2)
+        shipFrom:
+          $ref: '#/components/schemas/ShipFrom'
+    PackageDimensions:
+      type: object
+      description: Packed size (inches) and weight (pounds)
+      properties:
+        lengthIn:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+        widthIn:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+        heightIn:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+        weightLb:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+    ProductImage:
+      type: object
+      properties:
+        url:
+          type: string
+          minLength: 1
+        width:
+          type: integer
+          format: int32
+          minimum: 0
+        height:
+          type: integer
+          format: int32
+          minimum: 0
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        contentType:
+          type: string
+          minLength: 1
+        alt:
+          type: string
+          maxLength: 200
+          description: Optional alternative text (what the picture shows), stored with the image
+      required:
+      - contentType
+      - url
+    ShipFrom:
+      type: object
+      description: The seller's ship-from location (snapshot)
+      properties:
+        locationId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        label:
+          type: string
+          maxLength: 80
+          minLength: 0
+        city:
+          type: string
+          maxLength: 80
+          minLength: 0
+        region:
+          type: string
+          maxLength: 80
+          minLength: 0
+        country:
+          type: string
+          maxLength: 2
+          minLength: 0
+        postalCode:
+          type: string
+          maxLength: 12
+          minLength: 0
+    UpdateProductRequest:
+      type: object
+      description: The whole editable content of a product (one-step form in edit mode). Variants are matched by sellerSku;
+        a published listing keeps its category and variants
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 200
+          minLength: 10
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImage'
+          maxItems: 10
+          minItems: 0
+        variationTheme:
+          type: string
+          maxLength: 60
+          minLength: 0
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariantRequest'
+          maxItems: 200
+          minItems: 0
+        preorderEligible:
+          type: boolean
+        shipsNow:
+          type: boolean
+        listing:
+          $ref: '#/components/schemas/ListingDetails'
+        version:
+          type: integer
+          format: int64
+          description: The version the edit is based on (409 when the product changed since)
+        draftId:
+          type: string
+          format: uuid
+      required:
+      - images
+      - title
+      - variants
+    VariantRequest:
+      type: object
+      properties:
+        options:
+          type: object
+          additionalProperties:
+            type: string
+        sellerSku:
+          type: string
+          minLength: 1
+        gtin:
+          type: string
+        gtinExempt:
+          type: boolean
+        priceMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        quantity:
+          type: integer
+          format: int32
+          minimum: 0
+        compareAtMinor:
+          type: integer
+          format: int64
+          description: '"Was" price shown struck through; above priceMinor'
+          exclusiveMinimum: 0
+        images:
+          type: array
+          description: Images of this variant only (e.g. its colour)
+          items:
+            $ref: '#/components/schemas/ProductImage'
+          maxItems: 5
+          minItems: 0
+      required:
+      - options
+      - sellerSku
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        ownerKind:
+          type: string
+        ownerOrgId:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+        categoryRequestId:
+          type: string
+          format: uuid
+        productType:
+          type: string
+        title:
+          type: string
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImage'
+        variationTheme:
+          type: string
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Variant'
+        status:
+          type: string
+        moderationNote:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+        preorderEligible:
+          type: boolean
+        shipsNow:
+          type: boolean
+        listing:
+          $ref: '#/components/schemas/ListingDetails'
+    Variant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        sellerSku:
+          type: string
+        gtin:
+          type: string
+        gtinExempt:
+          type: boolean
+        options:
+          type: object
+          additionalProperties:
+            type: string
+        priceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        compareAtMinor:
+          type: integer
+          format: int64
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImage'
+    PreorderFlagsRequest:
+      type: object
+      description: Pre-order flags of a product (S272)
+      properties:
+        preorderEligible:
+          type: boolean
+        shipsNow:
+          type: boolean
+      required:
+      - preorderEligible
+      - shipsNow
+    JsonNode:
+      type: object
+      properties:
+        empty:
+          type: boolean
+        array:
+          type: boolean
+        'null':
+          type: boolean
+        object:
+          type: boolean
+        float:
+          type: boolean
+        valueNode:
+          type: boolean
+        container:
+          type: boolean
+        missingNode:
+          type: boolean
+        nodeType:
+          type: string
+          enum:
+          - ARRAY
+          - BINARY
+          - BOOLEAN
+          - MISSING
+          - 'NULL'
+          - NUMBER
+          - OBJECT
+          - POJO
+          - STRING
+        string:
+          type: boolean
+        integralNumber:
+          type: boolean
+        pojo:
+          type: boolean
+        floatingPointNumber:
+          type: boolean
+        short:
+          type: boolean
+        int:
+          type: boolean
+        long:
+          type: boolean
+        double:
+          type: boolean
+        bigDecimal:
+          type: boolean
+        bigInteger:
+          type: boolean
+        textual:
+          type: boolean
+          deprecated: true
+        boolean:
+          type: boolean
+        binary:
+          type: boolean
+        number:
+          type: boolean
+        embeddedValue:
+          type: boolean
+    SaveDraftRequest:
+      type: object
+      description: 'Autosave: replaces the payload when version still matches'
+      properties:
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+        title:
+          type: string
+          maxLength: 200
+          minLength: 0
+        categoryPath:
+          type: string
+          maxLength: 400
+          minLength: 0
+        payload:
+          $ref: '#/components/schemas/JsonNode'
+      required:
+      - payload
+    ProductDraft:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        categoryPath:
+          type: string
+        payload:
+          $ref: '#/components/schemas/JsonNode'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
     ReportListingRequest:
       type: object
       description: Reason code required; details required for OTHER
@@ -867,7 +2138,8 @@ components:
           type: boolean
     CreateProductRequest:
       type: object
-      description: Exactly one of categoryId or categoryRequestId
+      description: 'Exactly one of categoryId or categoryRequestId. variationTheme empty (or absent) = a product without variations:
+        exactly one variant without options'
       properties:
         categoryId:
           type: string
@@ -891,7 +2163,8 @@ components:
           minItems: 0
         variationTheme:
           type: string
-          minLength: 1
+          maxLength: 60
+          minLength: 0
         variants:
           type: array
           items:
@@ -908,152 +2181,16 @@ components:
         shipsNow:
           type: boolean
           description: Always ships now by carrier (never a pre-order); default false
+        listing:
+          $ref: '#/components/schemas/ListingDetails'
+        draftId:
+          type: string
+          format: uuid
+          description: The saved draft this submission comes from; deleted with the submission
       required:
       - images
       - title
       - variants
-      - variationTheme
-    PreorderFlagsRequest:
-      type: object
-      description: Pre-order flags of a product (S272)
-      properties:
-        preorderEligible:
-          type: boolean
-        shipsNow:
-          type: boolean
-      required:
-      - preorderEligible
-      - shipsNow
-    ProductImage:
-      type: object
-      properties:
-        url:
-          type: string
-          minLength: 1
-        width:
-          type: integer
-          format: int32
-          minimum: 0
-        height:
-          type: integer
-          format: int32
-          minimum: 0
-        bytes:
-          type: integer
-          format: int64
-          minimum: 0
-        contentType:
-          type: string
-          minLength: 1
-      required:
-      - contentType
-      - url
-    VariantRequest:
-      type: object
-      properties:
-        options:
-          type: object
-          additionalProperties:
-            type: string
-        sellerSku:
-          type: string
-          minLength: 1
-        gtin:
-          type: string
-        gtinExempt:
-          type: boolean
-        priceMinor:
-          type: integer
-          format: int64
-          minimum: 0
-        quantity:
-          type: integer
-          format: int32
-          minimum: 0
-      required:
-      - options
-      - sellerSku
-    Product:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        atin:
-          type: string
-        ownerKind:
-          type: string
-        ownerOrgId:
-          type: string
-        categoryId:
-          type: string
-          format: uuid
-        categoryRequestId:
-          type: string
-          format: uuid
-        productType:
-          type: string
-        title:
-          type: string
-        attributes:
-          type: object
-          additionalProperties:
-            type: string
-        images:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProductImage'
-        variationTheme:
-          type: string
-        variants:
-          type: array
-          items:
-            $ref: '#/components/schemas/Variant'
-        status:
-          type: string
-        moderationNote:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-        version:
-          type: integer
-          format: int64
-        preorderEligible:
-          type: boolean
-          description: May be sold in a community pre-order window (S272); default true for food product types
-        shipsNow:
-          type: boolean
-          description: Always ships now by carrier, never as a pre-order (shea, fabric …)
-    Variant:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        atin:
-          type: string
-        sellerSku:
-          type: string
-        gtin:
-          type: string
-        gtinExempt:
-          type: boolean
-        options:
-          type: object
-          additionalProperties:
-            type: string
-        priceMinor:
-          type: integer
-          format: int64
-        currency:
-          type: string
-        quantity:
-          type: integer
-          format: int32
     TakedownRequest:
       type: object
       description: Reason code required; note required for OTHER
@@ -1122,6 +2259,27 @@ components:
           minLength: 0
       required:
       - reasonCode
+    CreateDraftRequest:
+      type: object
+      description: 'A new draft; with productId it is the unsaved edit of that product (one per product: saving another replaces
+        it)'
+      properties:
+        productId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 200
+          minLength: 0
+        categoryPath:
+          type: string
+          maxLength: 400
+          minLength: 0
+        payload:
+          $ref: '#/components/schemas/JsonNode'
+          description: The form's product input as entered (need not be valid)
+      required:
+      - payload
     LabelRequest:
       type: object
       description: 'One label. UNIT/SHELF/CUSTOM: Code 128 of `data` (or EAN-13 of `gtin`); RETAIL: EAN-13 / UPC-A of `gtin`
@@ -1227,6 +2385,96 @@ components:
           - A4
       required:
       - labels
+    ProductImport:
+      type: object
+      description: 'A bulk upload: validation counts and import progress'
+      properties:
+        id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        fileName:
+          type: string
+        format:
+          type: string
+          enum:
+          - XLSX
+          - CSV
+        mode:
+          type: string
+          enum:
+          - CREATE
+          - UPDATE
+        productType:
+          type: string
+        status:
+          type: string
+          enum:
+          - VALIDATED
+          - QUEUED
+          - RUNNING
+          - COMPLETED
+          - FAILED
+        validOnly:
+          type: boolean
+        totalRows:
+          type: integer
+          format: int32
+        validRows:
+          type: integer
+          format: int32
+        warningRows:
+          type: integer
+          format: int32
+        errorRows:
+          type: integer
+          format: int32
+        productCount:
+          type: integer
+          format: int32
+        processedRows:
+          type: integer
+          format: int32
+        createdProducts:
+          type: integer
+          format: int32
+        updatedProducts:
+          type: integer
+          format: int32
+        failedRows:
+          type: integer
+          format: int32
+        header:
+          type: array
+          items:
+            type: string
+        fileWarnings:
+          type: array
+          items:
+            type: string
+        uploadedBy:
+          type: string
+        uploadedByName:
+          type: string
+        notifySeller:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+    StartImportRequest:
+      type: object
+      description: 'validOnly: import the valid and warning rows and skip the rows with errors (required when the upload has
+        errors)'
+      properties:
+        validOnly:
+          type: boolean
     CreateCategoryRequest:
       type: object
       properties:
@@ -1345,10 +2593,473 @@ components:
             $ref: '#/components/schemas/Variant'
         preorderEligible:
           type: boolean
-          description: May be sold in a community pre-order window (S272); default true for food product types
         shipsNow:
           type: boolean
-          description: Always ships now by carrier, never as a pre-order (shea, fabric …)
+        rating:
+          $ref: '#/components/schemas/ProductRating'
+    ReviewPhoto:
+      type: object
+      description: 'A review photo: the public https URL media-service gave the uploaded, moderated image'
+      properties:
+        url:
+          type: string
+          maxLength: 1024
+      required:
+      - url
+    WriteReviewRequest:
+      type: object
+      description: 'Stars are required; title, text and up to 5 photos are optional. reviewerName is the shopper''s account
+        name: only the first name and last initial are kept'
+      properties:
+        reviewerName:
+          type: string
+          maxLength: 200
+        rating:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 5
+        title:
+          type: string
+          maxLength: 120
+        text:
+          type: string
+          maxLength: 4000
+        photos:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/ReviewPhoto'
+      required:
+      - rating
+    EditReviewRequest:
+      type: object
+      description: The whole review again (stars, title, text, photos)
+      properties:
+        rating:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 5
+        title:
+          type: string
+          maxLength: 120
+        text:
+          type: string
+          maxLength: 4000
+        photos:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/ReviewPhoto'
+      required:
+      - rating
+    ReviewReportRequest:
+      type: object
+      description: Report a published review
+      properties:
+        reasonCode:
+          $ref: '#/components/schemas/ReviewReasonCode'
+        details:
+          type: string
+          maxLength: 500
+      required:
+      - reasonCode
+    ReviewReasonCode:
+      type: string
+      description: Why a review is reported or removed (OTHER needs a note when removing)
+      enum:
+      - ABUSIVE
+      - PERSONAL_INFORMATION
+      - SPAM
+      - OFF_TOPIC
+      - CONFLICT_OF_INTEREST
+      - OTHER
+    ReviewReportResult:
+      type: object
+      properties:
+        created:
+          type: boolean
+        reports:
+          type: integer
+          format: int32
+      required:
+      - created
+      - reports
+    ReviewReplyRequest:
+      type: object
+      description: The product owner's single public reply
+      properties:
+        text:
+          type: string
+          maxLength: 1000
+          minLength: 1
+      required:
+      - text
+    ReviewApproveRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 500
+    ReviewRemoveRequest:
+      type: object
+      description: reasonCode is required; note is required for OTHER
+      properties:
+        reasonCode:
+          $ref: '#/components/schemas/ReviewReasonCode'
+        note:
+          type: string
+          maxLength: 500
+      required:
+      - reasonCode
+    ProductRating:
+      type: object
+      description: Average stars over published reviews, the count and how many reviews gave 1, 2, 3, 4 and 5 stars
+      properties:
+        average:
+          type: number
+          description: Two decimals; 0 without reviews
+        count:
+          type: integer
+          format: int32
+        breakdown:
+          type: array
+          description: Counts for 1, 2, 3, 4 and 5 stars, in that order
+          items:
+            type: integer
+            format: int32
+          maxItems: 5
+          minItems: 5
+      required:
+      - average
+      - breakdown
+      - count
+    ReviewReply:
+      type: object
+      properties:
+        text:
+          type: string
+        at:
+          type: string
+          format: date-time
+      required:
+      - at
+      - text
+    ReviewModeration:
+      type: object
+      description: 'The last moderation decision: why a review was refused or removed'
+      properties:
+        by:
+          type: string
+        at:
+          type: string
+          format: date-time
+        reasonCode:
+          $ref: '#/components/schemas/ReviewReasonCode'
+        note:
+          type: string
+    PublicReview:
+      type: object
+      description: A published review as shoppers see it - Verified purchase, the reviewer's first name and last initial only
+      properties:
+        id:
+          type: string
+          format: uuid
+        reviewerName:
+          type: string
+        rating:
+          type: integer
+          format: int32
+        title:
+          type: string
+        text:
+          type: string
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewPhoto'
+        verifiedPurchase:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        reply:
+          $ref: '#/components/schemas/ReviewReply'
+      required:
+      - createdAt
+      - id
+      - photos
+      - rating
+      - reviewerName
+      - verifiedPurchase
+    PublicReviewPage:
+      type: object
+      description: One page of published reviews and the product's rating
+      properties:
+        rating:
+          $ref: '#/components/schemas/ProductRating'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicReview'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+      required:
+      - items
+      - page
+      - rating
+      - size
+      - total
+    OwnReview:
+      type: object
+      description: The customer's own review in any state; moderation says why it was refused
+      properties:
+        id:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        productTitle:
+          type: string
+        reviewerName:
+          type: string
+        rating:
+          type: integer
+          format: int32
+        title:
+          type: string
+        text:
+          type: string
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewPhoto'
+        status:
+          type: string
+          enum:
+          - PENDING
+          - PUBLISHED
+          - REJECTED
+          - REMOVED
+          - DELETED
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        editableUntil:
+          type: string
+          format: date-time
+        editable:
+          type: boolean
+        moderation:
+          $ref: '#/components/schemas/ReviewModeration'
+        reply:
+          $ref: '#/components/schemas/ReviewReply'
+      required:
+      - atin
+      - createdAt
+      - editable
+      - editableUntil
+      - id
+      - photos
+      - productTitle
+      - rating
+      - reviewerName
+      - status
+      - updatedAt
+    MyReview:
+      type: object
+      description: 'What the signed-in customer can do about a product: eligible means they received it and have not reviewed
+        it yet; reason says why not (not-purchased, already-reviewed)'
+      properties:
+        eligible:
+          type: boolean
+        reason:
+          type: string
+        review:
+          $ref: '#/components/schemas/OwnReview'
+      required:
+      - eligible
+    SellerReview:
+      type: object
+      description: A published review of the organisation's product, with the customer's identity left out
+      properties:
+        id:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        productTitle:
+          type: string
+        reviewerName:
+          type: string
+        rating:
+          type: integer
+          format: int32
+        title:
+          type: string
+        text:
+          type: string
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewPhoto'
+        verifiedPurchase:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        reportCount:
+          type: integer
+          format: int32
+        reply:
+          $ref: '#/components/schemas/ReviewReply'
+      required:
+      - atin
+      - createdAt
+      - id
+      - photos
+      - productTitle
+      - rating
+      - reportCount
+      - reviewerName
+      - verifiedPurchase
+    SellerReviewPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellerReview'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+      required:
+      - items
+      - page
+      - size
+      - total
+    ProductReview:
+      type: object
+      description: A review for moderation - the author's id, the delivering order, what the automatic checks found and the
+        decision
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        productTitle:
+          type: string
+        sellerOrgId:
+          type: string
+        customerId:
+          type: string
+        reviewerName:
+          type: string
+        orderNumber:
+          type: string
+        rating:
+          type: integer
+          format: int32
+        title:
+          type: string
+        text:
+          type: string
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewPhoto'
+        status:
+          type: string
+          enum:
+          - PENDING
+          - PUBLISHED
+          - REJECTED
+          - REMOVED
+          - DELETED
+        flags:
+          type: array
+          items:
+            type: string
+            enum:
+            - PROFANITY
+            - LINK
+            - EMAIL
+            - PHONE
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        reportCount:
+          type: integer
+          format: int32
+        moderation:
+          $ref: '#/components/schemas/ReviewModeration'
+        reply:
+          $ref: '#/components/schemas/ReviewReply'
+        version:
+          type: integer
+          format: int64
+      required:
+      - atin
+      - createdAt
+      - customerId
+      - flags
+      - id
+      - orderNumber
+      - photos
+      - productId
+      - productTitle
+      - rating
+      - reportCount
+      - reviewerName
+      - sellerOrgId
+      - status
+      - updatedAt
+      - version
+    ProductReviewPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductReview'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+      required:
+      - items
+      - page
+      - size
+      - total
     PublicVariant:
       type: object
       properties:
@@ -1387,8 +3098,29 @@ components:
           type: boolean
         multiline:
           type: boolean
+        kind:
+          type: string
+          enum:
+          - TEXT
+          - MULTILINE
+          - ENUM
+          - NUMBER
+        units:
+          type: array
+          items:
+            type: string
+        section:
+          type: string
+          enum:
+          - DETAILS
+          - FOOD
+          - REGULATED
+        help:
+          type: string
     ProductType:
       type: object
+      description: Attributes carry kind (TEXT, MULTILINE, ENUM, NUMBER), units, the form section (DETAILS, FOOD, REGULATED)
+        and a help line; traits decide the conditional form sections
       properties:
         code:
           type: string
@@ -1404,6 +3136,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/VariationTheme'
+        traits:
+          $ref: '#/components/schemas/ProductTypeTraits'
+    ProductTypeTraits:
+      type: object
+      properties:
+        food:
+          type: boolean
+        perishable:
+          type: boolean
+        regulated:
+          type: boolean
+        preorder:
+          type: boolean
     VariationDimension:
       type: object
       properties:
@@ -1422,6 +3167,168 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/VariationDimension'
+    ProductDraftSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        categoryPath:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    ProductImportPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImport'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    ImportRowMessage:
+      type: object
+      description: column = the column key (price, attr:material); null for the row
+      properties:
+        column:
+          type: string
+        columnIndex:
+          type: integer
+          format: int32
+        severity:
+          type: string
+          enum:
+          - ERROR
+          - WARNING
+        message:
+          type: string
+    ProductImportRow:
+      type: object
+      properties:
+        rowNumber:
+          type: integer
+          format: int32
+        groupKey:
+          type: string
+        sku:
+          type: string
+        status:
+          type: string
+          enum:
+          - VALID
+          - WARNING
+          - ERROR
+        outcome:
+          type: string
+          enum:
+          - PENDING
+          - CREATED
+          - UPDATED
+          - FAILED
+          - SKIPPED
+        outcomeNote:
+          type: string
+        productId:
+          type: string
+          format: uuid
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImportRowMessage'
+        cells:
+          type: array
+          items:
+            type: string
+        images:
+          type: array
+          description: The row's images as the preview shows them (S310)
+          items:
+            $ref: '#/components/schemas/ImportRowImage'
+    ImportRowImage:
+      type: object
+      description: 'One image of an upload row: where it comes from (LINK = an https URL cell, FILE = a library file name
+        in an image cell, SKU = a library file named after the SKU) and what was found (FOUND = a library image, LINK = a
+        link copied when the import runs, HELD = a library image held by moderation, MISSING = no such library image,
+        BAD_LINK = not a usable https link)'
+      properties:
+        slot:
+          type: string
+          enum:
+          - MAIN
+          - PT01
+          - PT02
+          - PT03
+          - PT04
+          - PT05
+          - PT06
+          - PT07
+          - PT08
+          - SWCH
+        source:
+          type: string
+          enum:
+          - LINK
+          - FILE
+          - SKU
+        ref:
+          type: string
+          description: The link, the file name or the matched library file name
+        state:
+          type: string
+          enum:
+          - FOUND
+          - LINK
+          - HELD
+          - MISSING
+          - BAD_LINK
+        url:
+          type: string
+          description: Thumbnail of a FOUND library image
+        width:
+          type: integer
+          format: int32
+        height:
+          type: integer
+          format: int32
+        message:
+          type: string
+      required:
+      - ref
+      - slot
+      - source
+      - state
+    ProductImportRowPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImportRow'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
     GtinCheck:
       type: object
       properties:
@@ -1503,6 +3410,112 @@ components:
           type: string
         path:
           type: string
+    AttachLibraryImagesRequest:
+      type: object
+      properties:
+        skus:
+          type: array
+          description: Only listings with one of these SKUs (any variant); empty = every listing of the organisation
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 5000
+    AttachLibraryImagesResult:
+      type: object
+      properties:
+        productsUpdated:
+          type: integer
+          format: int32
+        imagesAttached:
+          type: integer
+          format: int32
+        skipped:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttachSkipped'
+      required:
+      - imagesAttached
+      - productsUpdated
+      - skipped
+    AttachSkipped:
+      type: object
+      properties:
+        sku:
+          type: string
+        reason:
+          type: string
+      required:
+      - reason
+      - sku
+    ImageUsageRequest:
+      type: object
+      properties:
+        urls:
+          type: array
+          items:
+            type: string
+            maxLength: 2048
+          maxItems: 500
+        skus:
+          type: array
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 500
+    ImageUsage:
+      type: object
+      properties:
+        usage:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImageUse'
+        knownSkus:
+          type: array
+          description: The requested SKUs that are SKUs of the organisation's listings (as stored)
+          items:
+            type: string
+      required:
+      - knownSkus
+      - usage
+    ImageUse:
+      type: object
+      properties:
+        url:
+          type: string
+        skus:
+          type: array
+          items:
+            type: string
+      required:
+      - skus
+      - url
+    BrandList:
+      type: object
+      properties:
+        brands:
+          type: array
+          items:
+            $ref: '#/components/schemas/Brand'
+      required:
+      - brands
+    Brand:
+      type: object
+      properties:
+        name:
+          type: string
+        source:
+          type: string
+          description: OWN = used by the organisation's products, CATALOG = live products of other sellers
+          enum:
+          - OWN
+          - CATALOG
+        products:
+          type: integer
+          format: int32
+      required:
+      - name
+      - products
+      - source
   securitySchemes:
     bearer:
       type: http

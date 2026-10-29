@@ -2,13 +2,14 @@
   "name": "@afrotransact/customer-app",
   "version": "2.0.0",
   "private": true,
-  "description": "AfroTransact customer app (Expo / React Native, expo-router). Epic E26, stories S163–S168.",
+  "description": "AfroTransact customer app (Expo / React Native, expo-router). Epic E26, stories S163\u2013S168.",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
     "start:mock": "EXPO_PUBLIC_APP_ENV=local EXPO_PUBLIC_MOCKS=1 expo start",
-    "ios": "expo start --ios",
-    "android": "expo start --android",
+    "smoke": "node scripts/smoke.mjs",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
     "web": "expo start --web",
     "export:web": "expo export --platform web --output-dir dist",
     "doctor": "expo-doctor",
@@ -64,7 +65,7 @@
     "eslint": "^9.39.5",
     "openapi-typescript": "^7.13.0",
     "sharp": "0.35.5",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "vitest": "5.0.3"
   },
   "expo": {

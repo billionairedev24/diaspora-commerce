@@ -89,6 +89,9 @@ func TestContractConformance(t *testing.T) {
 	b.do("PUT", "/v1/delivery-location", map[string]any{"zip": "77042"})
 	b.do("PUT", "/v1/delivery-location", map[string]any{"zip": "99999"})
 	b.do("GET", "/v1/geo/address-suggestions?q=9800", nil)
+	b.do("GET", "/v1/geo/address-suggestions?q=9800&sessionToken=no%20spaces", nil)
+	b.do("GET", "/v1/geo/address-suggestions/g%3AChIJpeckham?sessionToken=tok_12345678", nil)
+	b.do("GET", "/v1/geo/address-suggestions/o%3A1?sessionToken=x", nil)
 	b.do("GET", "/v1/search?q=shea&sort=price_asc&page=0&size=12", nil)
 	b.do("GET", "/v1/search?sort=nope", nil)
 	b.do("GET", "/v1/search/suggestions?q=jol", nil)
@@ -128,6 +131,10 @@ func TestContractConformance(t *testing.T) {
 	b.do("GET", "/v1/auth/login?returnTo=/account&prompt=create&login_hint=ada%40example.com&invitation=inv-1", nil)
 	b.do("GET", "/v1/auth/login?returnTo="+url.QueryEscape(testkit.SellerCenterOrigin+"/orders"), nil)
 	b.do("POST", "/v1/auth/sign-out", nil)
+	b.do("POST", "/v1/auth/sign-out", map[string]any{"returnTo": "/deals"})
+	b.do("GET", "/v1/auth/signed-out/storefront?state=%2Fdeals", nil)
+	b.do("GET", "/v1/auth/signed-out/seller-center", nil)
+	b.do("GET", "/v1/auth/signed-out/nope", nil)
 	// Account (signed in).
 	b.do("GET", "/v1/account/addresses", nil)
 	mustStatus(t, signIn(t, bff, b, "/"), 302)
@@ -178,7 +185,7 @@ func TestContractConformance(t *testing.T) {
 	for _, op := range []string{"getSiteConfig", "getHome", "subscribeNewsletter", "getDeliveryLocation", "setDeliveryLocation",
 		"suggestAddresses", "search", "suggest", "getProduct", "createStockAlert", "getCart", "addToCart", "updateCartLine",
 		"removeCartLine", "selectAllCartLines", "saveForLater", "moveToCart", "removeSaved", "getMe", "startHostedLogin",
-		"startSocialLogin", "signOut", "listAddresses",
+		"startSocialLogin", "signOut", "signedOut", "listAddresses",
 		"createAddress", "deleteAddress", "listPaymentMethods", "createSetupIntent", "getCheckoutSummary", "placeOrder",
 		"listLegalDocuments", "getLegalDocument", "getCookiePolicy", "recordConsent", "submitPrivacyRequest",
 		"listHelpArticles", "getHelpArticle",

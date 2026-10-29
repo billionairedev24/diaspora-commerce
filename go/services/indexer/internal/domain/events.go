@@ -5,15 +5,17 @@ import "time"
 
 // Event types handled by the projector.
 const (
-	ProductCreated      = "catalog.product.created"
-	ProductApproved     = "catalog.product.approved"
-	ProductRejected     = "catalog.product.rejected"
-	ProductPaused       = "catalog.product.paused"
-	ProductResumed      = "catalog.product.resumed"
-	ProductHidden       = "catalog.product.hidden"
-	ProductRestored     = "catalog.product.restored"
-	ProductTakenDown    = "catalog.product.taken_down"
-	ProductReinstated   = "catalog.product.reinstated"
+	ProductCreated    = "catalog.product.created"
+	ProductApproved   = "catalog.product.approved"
+	ProductRejected   = "catalog.product.rejected"
+	ProductPaused     = "catalog.product.paused"
+	ProductResumed    = "catalog.product.resumed"
+	ProductHidden     = "catalog.product.hidden"
+	ProductRestored   = "catalog.product.restored"
+	ProductTakenDown  = "catalog.product.taken_down"
+	ProductReinstated = "catalog.product.reinstated"
+	// RatingChanged is catalog's catalog.product.rating_changed (S324): a product's average rating or review count moved.
+	RatingChanged       = "catalog.product.rating_changed"
 	AvailabilityChanged = "inventory.availability.changed"
 	BuyBoxChanged       = "offers.buybox.changed"
 	SellerOrgApproved   = "seller.org.approved"
@@ -44,6 +46,22 @@ type ProductEvent struct {
 	Brand string `json:"brand"`
 	// Communities are the diaspora communities the product is tagged with.
 	Communities []string `json:"communities"`
+	// Description is the shopper description and Keywords the seller's search keywords: both are searched.
+	Description string   `json:"description"`
+	Keywords    []string `json:"keywords"`
+}
+
+// RatingEvent mirrors catalog-service's catalog.product.rating_changed payload (CatalogProductRatingChanged).
+type RatingEvent struct {
+	ProductID  string `json:"productId"`
+	ATIN       string `json:"atin"`
+	OwnerOrgID string `json:"ownerOrgId"`
+	// Average is the mean of the published reviews' stars, two decimals (0 without reviews).
+	Average float64 `json:"average"`
+	// Count is the number of published reviews.
+	Count int `json:"count"`
+	// Breakdown holds the reviews that gave 1, 2, 3, 4 and 5 stars.
+	Breakdown []int `json:"breakdown"`
 }
 
 // SellerOrgEvent mirrors seller-service's seller.org.approved / seller.org.updated payload (fields the indexer uses).

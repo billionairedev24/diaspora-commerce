@@ -19,13 +19,15 @@ import java.util.Set;
  * @param kpis            pre-orders, cancelled, customers, units, revenue, average order, late adds
  * @param byDay           paid pre-orders per day from the opening day to two days after close (or today)
  * @param byChannel       pre-orders per attribution channel, most first
+ * @param byCampaign      pre-orders that came from one of the window's own messages, per UTM source, medium,
+ *                        campaign and content ({@link PreorderUtm}), most first
  * @param topProducts     the 8 products with the most units
  * @param fulfilmentSplit door vs pickup
  * @param placements      per placement: creative present and attributed pre-orders
  */
 public record PreorderSummary(Kpis kpis, List<DayCount> byDay, List<ChannelCount> byChannel,
-                              List<ProductUnits> topProducts, FulfilmentSplit fulfilmentSplit,
-                              List<PlacementRow> placements) {
+                              List<CampaignCount> byCampaign, List<ProductUnits> topProducts,
+                              FulfilmentSplit fulfilmentSplit, List<PlacementRow> placements) {
 
     public static final int TOP_PRODUCTS = 8;
 
@@ -55,6 +57,10 @@ public record PreorderSummary(Kpis kpis, List<DayCount> byDay, List<ChannelCount
     }
 
     public record ChannelCount(AttributionChannel channel, String label, int orders) {
+    }
+
+    /** Orders credited to one announcement campaign: the UTM tags of the message link the shopper came from. */
+    public record CampaignCount(String utmSource, String utmMedium, String utmCampaign, String utmContent, int orders) {
     }
 
     public record ProductUnits(String atin, String name, String seller, int units) {
@@ -130,6 +136,7 @@ public record PreorderSummary(Kpis kpis, List<DayCount> byDay, List<ChannelCount
                 .sorted(Map.Entry.<AttributionChannel, Integer>comparingByValue().reversed()
                         .thenComparing(Map.Entry.comparingByKey()))
                 .map(e -> new ChannelCount(e.getKey(), e.getKey().label(), e.getValue())).toList();
+        List<CampaignCount> byCampaign = campaigns(window, paid);
         List<ProductUnits> top = productUnits(paid).stream().limit(TOP_PRODUCTS).toList();
         int pickup = paid.size() - door;
         FulfilmentSplit split = new FulfilmentSplit(door, pickup,
@@ -143,7 +150,20 @@ public record PreorderSummary(Kpis kpis, List<DayCount> byDay, List<ChannelCount
             int n = (int) paid.stream().filter(o -> p.credited().contains(o.channel())).count();
             rows.add(new PlacementRow(p.key(), p.name(), present, null, null, null, n));
         }
-        return new PreorderSummary(kpis, byDay(window, paid, now), byChannel, top, split, rows);
+        return new PreorderSummary(kpis, byDay(window, paid, now), byChannel, byCampaign, top, split, rows);
+    }
+
+    /** Paid orders per UTM campaign of the window's own messages, most orders first. */
+    static List<CampaignCount> campaigns(PreorderWindow window, List<PreorderOrder> paid) {
+        Map<PreorderUtm.Tags, Integer> counts = new LinkedHashMap<>();
+        for (PreorderOrder o : paid) {
+            PreorderUtm.ofTrackingTag(o.trackingTag(), window.code()).ifPresent(t -> counts.merge(t, 1, Integer::sum));
+        }
+        return counts.entrySet().stream()
+                .sorted(Map.Entry.<PreorderUtm.Tags, Integer>comparingByValue().reversed()
+                        .thenComparing(e -> e.getKey().source()).thenComparing(e -> e.getKey().content()))
+                .map(e -> new CampaignCount(e.getKey().source(), e.getKey().medium(), e.getKey().campaign(),
+                        e.getKey().content(), e.getValue())).toList();
     }
 
     /** Units per product over orders that count (picking list), most units first, then by name. */

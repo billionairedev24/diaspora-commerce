@@ -21,8 +21,9 @@ type Props = { searchParams: Promise<SearchParams> };
  */
 export default async function SignInPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const { href, error } = hostedLoginTarget(sp, 'signin');
-  if (!error) redirect(href);
+  const { href, error, returnTo } = hostedLoginTarget(sp, 'signin');
+  const isExternal = Boolean(returnTo && (/^https?:\/\//i.test(returnTo) || returnTo.startsWith('//')));
+  if (!error || isExternal) redirect(href);
   const t = await getT();
   return (
     <AuthShell mode="signin">

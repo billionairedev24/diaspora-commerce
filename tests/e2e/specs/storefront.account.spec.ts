@@ -13,7 +13,7 @@ test.describe('storefront · your account', () => {
 
   test('hub tiles lead to every customer area @a11y', async ({ page }, testInfo) => {
     await expect(page.getByRole('heading', { level: 1, name: 'Your Account' })).toBeVisible();
-    for (const name of ['Login & security', 'Your orders', 'Returns & refunds', 'Your addresses', 'Your payments', 'Your appointments', 'Your profile', 'Notifications & privacy']) {
+    for (const name of ['Login & security', 'Your orders', 'Get help with an order', 'Your addresses', 'Your payments', 'Your appointments', 'Your profile', 'Notifications & privacy']) {
       await expect(page.getByRole('main').getByRole('link', { name: new RegExp(`^${name}`) })).toBeVisible();
     }
     await expect(page.getByRole('main').getByRole('button', { name: /^Ask Lola/ })).toBeVisible();

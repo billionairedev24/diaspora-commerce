@@ -26,6 +26,14 @@ final class StripeStubs {
                 intent(piId, amount, "requires_payment_method", null, 0));
     }
 
+    /** The PaymentIntent of a gift card purchase by this customer (metadata kind=gift_card). */
+    void giftCardIntent(String afroCustomerId, String piId, long amount) {
+        json(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
+                .withRequestBody(WireMock.containing("metadata[kind]=gift_card"))
+                .withRequestBody(WireMock.containing("metadata[afrotransact_customer_id]=" + afroCustomerId)),
+                intent(piId, amount, "requires_payment_method", null, 0));
+    }
+
     void retrieveIntent(String piId, long amount, String status) {
         json(WireMock.get(WireMock.urlPathEqualTo("/v1/payment_intents/" + piId)),
                 intent(piId, amount, status, null, 0));
@@ -56,6 +64,32 @@ final class StripeStubs {
                         .withBody("{\"error\":{\"type\":\"card_error\",\"code\":\"authentication_required\","
                                 + "\"decline_code\":\"authentication_required\",\"message\":\"Your card was "
                                 + "declined. This transaction requires authentication.\",\"payment_intent\":"
+                                + intent(piId, amount, "requires_payment_method", null, 0) + "}}")));
+    }
+
+    /**
+     * The off-session PaymentIntent of a membership fee (S323) for this customer. {@code keyPattern} is a regular
+     * expression for the Idempotency-Key of the intent call, e.g. {@code .*:join:intent},
+     * {@code .*:upgrade:.*:intent} or {@code .*:renew:[0-9]+:1:intent}.
+     */
+    void membershipIntent(String afroCustomerId, String keyPattern, String piId, long amount, String status) {
+        json(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
+                .withHeader("Idempotency-Key", WireMock.matching(keyPattern))
+                .withRequestBody(WireMock.containing("metadata[afrotransact_customer_id]=" + afroCustomerId))
+                .withRequestBody(WireMock.containing("metadata[kind]=membership")),
+                intent(piId, amount, status, null, 0));
+    }
+
+    /** The card is declined for a membership fee. */
+    void membershipDeclined(String afroCustomerId, String keyPattern, String piId, long amount) {
+        server.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
+                .withHeader("Idempotency-Key", WireMock.matching(keyPattern))
+                .withRequestBody(WireMock.containing("metadata[afrotransact_customer_id]=" + afroCustomerId))
+                .withRequestBody(WireMock.containing("metadata[kind]=membership"))
+                .willReturn(WireMock.aResponse().withStatus(402).withHeader("Content-Type", "application/json")
+                        .withBody("{\"error\":{\"type\":\"card_error\",\"code\":\"card_declined\","
+                                + "\"decline_code\":\"insufficient_funds\",\"message\":\"Your card has "
+                                + "insufficient funds.\",\"payment_intent\":"
                                 + intent(piId, amount, "requires_payment_method", null, 0) + "}}")));
     }
 
@@ -137,6 +171,27 @@ final class StripeStubs {
                 .withRequestBody(WireMock.containing("customer=" + stripeCustomerId)),
                 "{\"id\":\"" + setupIntentId + "\",\"object\":\"setup_intent\",\"client_secret\":\"" + setupIntentId
                         + "_secret_abc\",\"status\":\"requires_payment_method\"}");
+    }
+
+    /**
+     * What Stripe holds for a Customer: {@code GET /v1/customers/{id}} with its default payment method and
+     * {@code GET /v1/customers/{id}/payment_methods} with the attached methods (one page).
+     */
+    void customerWallet(String stripeCustomerId, String defaultPaymentMethodId, String... methodsJson) {
+        json(WireMock.get(WireMock.urlPathEqualTo("/v1/customers/" + stripeCustomerId)),
+                "{\"id\":\"" + stripeCustomerId + "\",\"object\":\"customer\",\"invoice_settings\":"
+                        + "{\"default_payment_method\":" + (defaultPaymentMethodId == null ? "null"
+                        : "\"" + defaultPaymentMethodId + "\"") + "}}");
+        json(WireMock.get(WireMock.urlPathEqualTo("/v1/customers/" + stripeCustomerId + "/payment_methods")),
+                "{\"object\":\"list\",\"url\":\"/v1/customers/" + stripeCustomerId + "/payment_methods\","
+                        + "\"has_more\":false,\"data\":[" + String.join(",", methodsJson) + "]}");
+    }
+
+    /** Stripe cannot be reached for the Customer's payment methods. */
+    void customerWalletDown(String stripeCustomerId) {
+        server.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/customers/" + stripeCustomerId + "/payment_methods"))
+                .willReturn(WireMock.aResponse().withStatus(500).withHeader("Content-Type", "application/json")
+                        .withBody("{\"error\":{\"type\":\"api_error\",\"message\":\"Stripe is down\"}}")));
     }
 
     void paymentMethod(String pmJson, String pmId) {

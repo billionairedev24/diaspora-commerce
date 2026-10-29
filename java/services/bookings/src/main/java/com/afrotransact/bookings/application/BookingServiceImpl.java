@@ -21,7 +21,6 @@ import com.afrotransact.bookings.domain.BookingStatus;
 import com.afrotransact.bookings.domain.BookingsRuleViolation;
 import com.afrotransact.bookings.domain.BookingsStateConflict;
 import com.afrotransact.bookings.domain.CancellationQuote;
-import com.afrotransact.bookings.domain.FeeSchedule;
 import com.afrotransact.bookings.domain.MoneyMove;
 import com.afrotransact.bookings.domain.Party;
 import com.afrotransact.bookings.domain.Provider;
@@ -128,7 +127,8 @@ class BookingServiceImpl implements BookingService {
         PaymentsClient.Intent intent = payments.createIntent(new PaymentsClient.CreateIntent(stored.reference(),
                 provider.orgId(), snapshot.priceMinor(), snapshot.currency(), intentLines(snapshot),
                 Map.of("bookingId", stored.id().toString(), "kind", "booking", "serviceId",
-                        offering.id().toString()), now, customer.subject(), true),
+                        offering.id().toString()), now, customer.subject(), true,
+                        fees.paymentCategory(provider.orgId(), snapshot.category())),
                 stored.reference() + ":create-intent");
         stored.attachPayment(intent.id(), intent.clientSecret());
         Booking saved = bookings.update(stored);
@@ -232,10 +232,9 @@ class BookingServiceImpl implements BookingService {
     public EarningsView earnings(String orgId, Instant from, Instant to) {
         ProviderScope scope = access.provider(orgId, BookingsPermissions.READ);
         Provider p = providers.find(orgId).orElseThrow(() -> ProviderSetupServiceImpl.notFound(orgId));
-        FeeSchedule schedule = fees.forOrg(orgId);
         List<EarningsView.Row> rows = scoped(scope, bookings.forProvider(orgId, from, to, null, null)).stream()
                 .filter(b -> b.status() != BookingStatus.PENDING_PAYMENT)
-                .map(b -> new EarningsView.Row(b, takeHome.earnings(schedule, b)))
+                .map(b -> new EarningsView.Row(b, takeHome.earnings(fees.forOrg(orgId, b.service().category()), b)))
                 .toList();
         long collected = 0;
         long commission = 0;

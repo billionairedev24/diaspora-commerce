@@ -274,7 +274,7 @@ pnpm --filter @afrotransact/ui visual:update
 - Opt a story out with the `skip-visual` tag, e.g. for something that cannot be made deterministic. Prefer making
   it deterministic: fixed data, and a `play` that waits for the final state, as the Toast story does.
 - **Font rendering caveat**: baselines are rendered in `mcr.microsoft.com/playwright:v1.56.1-noble` (Chromium 1194,
-  the `@playwright/test` 1.56.1 build), which is also what CI runs. Figtree is bundled (`@fontsource`), but glyph
+  the `@playwright/test` 1.56.1 build), which is also what CI runs. Inter and Fraunces are bundled (`@fontsource`), but glyph
   rasterisation and fallback fonts (Arabic in the RTL stories, symbols) come from the OS. Against the dev
   container's own Chromium (same build, other system fonts), 13 of 69 stories differ by ~1% of pixels. So update
   baselines with the `:docker` scripts or the CI label, never from macOS/Windows or a bare host. Bump the image tag

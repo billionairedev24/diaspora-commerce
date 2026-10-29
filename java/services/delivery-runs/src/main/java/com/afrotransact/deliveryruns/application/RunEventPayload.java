@@ -44,6 +44,8 @@ import com.afrotransact.deliveryruns.domain.PickupPoint;
  * @param locationUrl       storefront location page
  * @param whatsappInviteUrl the location's WhatsApp community invite link
  * @param orders            affected orders (confirmed, cancelled, out_for_delivery, completed); null otherwise
+ * @param sellers           the sellers to collect from, with their order and unit counts (confirmed pre-order runs:
+ *                          notifications tells each seller the pickup time); null otherwise
  */
 public record RunEventPayload(UUID runId, String status, String previousStatus, UUID locationId, String locationSlug,
                               String town, String market, String state, String timeZone, Instant windowStart,
@@ -52,7 +54,22 @@ public record RunEventPayload(UUID runId, String status, String previousStatus, 
                               String currency, String feeDisplay, String dropMode, PickupPoint pickupPoint,
                               int minOrders, int reservedOrders, Integer capacityOrders, int extensions, String reason,
                               String runUrl, Map<String, String> links, String locationUrl, String whatsappInviteUrl,
-                              List<OrderRef> orders) {
+                              List<OrderRef> orders, List<SellerRef> sellers) {
+
+    /** A payload without the seller list. */
+    public RunEventPayload(UUID runId, String status, String previousStatus, UUID locationId, String locationSlug,
+                           String town, String market, String state, String timeZone, Instant windowStart,
+                           Instant windowEnd, Instant cutoffAt, Instant previousCutoffAt, Instant sellerPickupAt,
+                           String deliveryDay, String windowDisplay, String cutoffDisplay, long feeMinor,
+                           String currency, String feeDisplay, String dropMode, PickupPoint pickupPoint,
+                           int minOrders, int reservedOrders, Integer capacityOrders, int extensions, String reason,
+                           String runUrl, Map<String, String> links, String locationUrl, String whatsappInviteUrl,
+                           List<OrderRef> orders) {
+        this(runId, status, previousStatus, locationId, locationSlug, town, market, state, timeZone, windowStart,
+                windowEnd, cutoffAt, previousCutoffAt, sellerPickupAt, deliveryDay, windowDisplay, cutoffDisplay,
+                feeMinor, currency, feeDisplay, dropMode, pickupPoint, minOrders, reservedOrders, capacityOrders,
+                extensions, reason, runUrl, links, locationUrl, whatsappInviteUrl, orders, null);
+    }
 
     /**
      * An order on the run.
@@ -64,5 +81,16 @@ public record RunEventPayload(UUID runId, String status, String previousStatus, 
      * @param handoverCode pickup-point handover code (CONFIRMED pickup-point runs)
      */
     public record OrderRef(String orderId, String customerId, int packages, String status, String handoverCode) {
+    }
+
+    /**
+     * A seller the run collects from.
+     *
+     * @param sellerOrgId seller organisation
+     * @param sellerName  display name (null when unknown)
+     * @param orders      run orders with lines of this seller
+     * @param units       units to pick
+     */
+    public record SellerRef(String sellerOrgId, String sellerName, int orders, int units) {
     }
 }

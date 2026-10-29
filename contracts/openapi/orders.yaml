@@ -209,6 +209,35 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/OrderLookup'
+  /v1/lookup/customers/{customerId}/purchases/{atin}:
+    get:
+      tags:
+      - Order lookup
+      summary: Did the customer receive this product? (SERVICE with orders:purchase-check)
+      description: 'S324 verified-purchase reviews: catalog-service asks before it accepts a review. delivered is true when
+        a shipment of the customer''s with a line for the product ATIN is DELIVERED (returned and cancelled shipments do not
+        count); the delivering order is returned, never its contents or address. Also open to SERVICE principals with orders:lookup
+        and to staff with orders:read; 403 orders.lookup-forbidden for anyone else.'
+      operationId: purchase
+      parameters:
+      - name: customerId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: atin
+        in: path
+        description: Product ATIN (case-insensitive)
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PurchaseCheck'
   /v1/orders:
     get:
       tags:
@@ -795,9 +824,18 @@ components:
           minLength: 1
         reason:
           type: string
-          description: Required for cancelled and delivery_failed
+          description: >-
+            Required for cancelled and delivery_failed. Staff confirming a pickup or AfroTransact Delivery order as
+            delivered without the code or the driver's proof say why here.
           maxLength: 500
           minLength: 0
+        handoverCode:
+          type: string
+          pattern: ^\d{4}$
+          description: >-
+            The customer's 4-digit code. Handing a pickup order over (delivered) needs it; the seller must give it
+            (409 orders.handover-code-invalid when it does not match, 422 orders.handover-code-required when missing),
+            staff may give a reason instead.
       required:
       - to
     DeliveryPreferences:
@@ -858,6 +896,52 @@ components:
           type: string
         productType:
           type: string
+    DeliveryFeeRuleView:
+      type: object
+      description: 'The staff delivery fee rule that priced this shipment''s shipping (ADR 0005 §3), as it was at checkout:
+        later edits of the rule never change it. Absent when flat rates applied or for AfroTransact Delivery from a
+        seller''s store (see localDelivery).'
+      properties:
+        method:
+          type: string
+          description: AFROTRANSACT_DELIVERY, CARRIER or PICKUP
+        ruleId:
+          type: string
+          description: The rule (absent when staff set the fee on the window and no rule existed)
+        ruleVersion:
+          type: integer
+          format: int64
+          description: The version applied
+        currency:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+          description: The fee that applied (a pre-order's fee is shared by its sellers' shipments)
+        source:
+          type: string
+          description: RULE, WINDOW_OVERRIDE, CARRIER_QUOTE or CARRIER_FALLBACK
+        band:
+          type: string
+          description: The distance band applied ("10–40 mi"), or the free-over threshold
+        distanceMiles:
+          type: number
+          description: The distance the band was chosen by
+    MembershipWaiverView:
+      type: object
+      description: 'A shipping fee the customer''s membership waived (S323): the tier and the benefit that did it and the
+        fee that was not charged. shippingMinor of the shipment is what was charged after it. Not shown to sellers.'
+      properties:
+        tierCode:
+          type: string
+        tierName:
+          type: string
+        benefit:
+          type: string
+          description: FREE_DELIVERY or FREE_SHIPPING
+        waivedMinor:
+          type: integer
+          format: int64
     LocalDeliveryView:
       type: object
       properties:
@@ -981,6 +1065,10 @@ components:
         missedChoice:
           type: string
           description: REFUND | WAIT (null until answered)
+        kind:
+          type: string
+          enum: [WINDOW, RUN]
+          description: WINDOW, or RUN for a delivery run staff scheduled (S261); windowId is then the run id and cancellableUntil its cutoff
     MissedDeliveryRequest:
       type: object
       properties:
@@ -1271,6 +1359,13 @@ components:
           type: boolean
         cancellable:
           type: boolean
+          description: >-
+            The customer may cancel now: the shipment is not packed yet (placed or confirmed) and the cancellation window
+            (30 minutes after placing by default; a pre-order's window until it closes) has not ended.
+        cancellableUntil:
+          type: string
+          format: date-time
+          description: When the customer's Cancel stops being offered. Absent when it is not offered now.
         nextActions:
           type: array
           items:
@@ -1296,6 +1391,10 @@ components:
           $ref: '#/components/schemas/LocalDeliveryView'
         preorder:
           $ref: '#/components/schemas/PreorderView'
+        deliveryFeeRule:
+          $ref: '#/components/schemas/DeliveryFeeRuleView'
+        membershipWaiver:
+          $ref: '#/components/schemas/MembershipWaiverView'
     TimelineEntry:
       type: object
       properties:
@@ -1312,6 +1411,36 @@ components:
         at:
           type: string
           format: date-time
+        proof:
+          $ref: '#/components/schemas/DeliveryProof'
+    DeliveryProof:
+      type: object
+      description: >-
+        What the driver app recorded for this step: how the parcel was handed over, to whom, where it was left, why a
+        delivery failed, and the media assets of the proof photo and the signature. The driver's GPS position is
+        returned to staff only. Absent for carrier events and for steps staff took by hand.
+      properties:
+        handoverMethod:
+          type: string
+          enum: [CUSTOMER, SOMEONE_ELSE, SAFE_PLACE]
+        recipientName:
+          type: string
+        relationship:
+          type: string
+        safePlace:
+          type: string
+        failureReason:
+          type: string
+        photoAssetId:
+          type: string
+        signatureAssetId:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
     TrackingRequest:
       type: object
       description: Carrier label of a seller-fulfilled carrier shipment
@@ -1404,6 +1533,11 @@ components:
           type: string
         paymentClientSecret:
           type: string
+        creditMinor:
+          type: integer
+          format: int64
+          description: The part of the total paid with AfroTransact credit (S320); the card pays the rest. An order that
+            credit pays in full has no clientSecret and needs no card.
         totalMinor:
           type: integer
           format: int64
@@ -1444,6 +1578,10 @@ components:
           type: integer
           format: int32
           description: Units of the same order that ship now
+        kind:
+          type: string
+          enum: [WINDOW, RUN]
+          description: WINDOW, or RUN for a delivery run staff scheduled (S261); windowId is then the run id and closesAt its cutoff
     Shipment:
       type: object
       properties:
@@ -1522,6 +1660,12 @@ components:
           type: boolean
           description: 'Paid with a new method from Stripe''s Payment Element: save it on the shopper''s Stripe Customer
             for future purchases (the PaymentIntent gets setup_future_usage=off_session)'
+        useCredit:
+          type: boolean
+          description: 'S320: pay with the shopper''s AfroTransact credit first. Credit is spent, up to the order total,
+            in the step that creates the payment (once per order, never more than the balance); the card pays only the
+            rest, and an order that credit pays in full needs no card (the answer has no clientSecret). Credit can
+            only buy products and services: it is never paid out, refunded to a card or transferred.'
       required:
       - addressId
     DeliverySelection:
@@ -1613,6 +1757,9 @@ components:
     SellerShipmentView:
       type: object
       properties:
+        orderId:
+          type: string
+          description: The order's id, which payments reports against held funds (screens show the order number)
         orderNumber:
           type: string
         orderStatus:
@@ -1777,6 +1924,22 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Recipient'
+    PurchaseCheck:
+      type: object
+      description: Whether a customer received a product (S324)
+      properties:
+        delivered:
+          type: boolean
+        orderId:
+          type: string
+          description: The delivering order (null when not delivered)
+        orderNumber:
+          type: string
+        shipmentId:
+          type: string
+        deliveredAt:
+          type: string
+          format: date-time
     OrderLookup:
       type: object
       properties:

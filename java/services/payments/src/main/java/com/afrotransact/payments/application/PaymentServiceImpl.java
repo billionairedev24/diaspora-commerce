@@ -15,6 +15,8 @@ import java.util.UUID;
 
 import com.afrotransact.payments.domain.Capture;
 import com.afrotransact.payments.domain.CapturePlan;
+import com.afrotransact.payments.domain.CreditKind;
+import com.afrotransact.payments.domain.CreditSource;
 import com.afrotransact.payments.domain.FeeSchedule;
 import com.afrotransact.payments.domain.Journal;
 import com.afrotransact.payments.domain.Money;
@@ -48,6 +50,8 @@ import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.platform.web.error.NotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -59,7 +63,11 @@ import org.springframework.stereotype.Service;
 @Service
 class PaymentServiceImpl implements PaymentService {
 
+    private static final Logger LOG = LoggerFactory.getLogger(PaymentServiceImpl.class);
+
     private static final int MAX_LINES = 200;
+    /** Stripe cannot charge less than 0.50: credit leaves at least this on the card, or pays everything. */
+    private static final long MIN_CARD_MINOR = 50;
 
     private final PaymentRepository payments;
     private final FeeScheduleRepository feeSchedules;
@@ -75,13 +83,19 @@ class PaymentServiceImpl implements PaymentService {
     private final PaymentsAccess access;
     private final DomainEventPublisher events;
     private final PaymentsSettings settings;
+    private final OrgPlanService orgPlans;
+    private final LineRates lineRates;
+    private final CreditLedger credit;
+    private final MembershipBenefitsService membership;
     private final Clock clock;
 
     PaymentServiceImpl(PaymentRepository payments, FeeScheduleRepository feeSchedules,
                        SettlementRepository settlements, StripeGateway stripe, PaymentSplitter splitter,
                        LedgerPoster ledger, IdempotencyStore idempotency, PaymentStatusUpdater statuses,
                        WalletSync wallet, WalletRepository savedMethods, MoneyTransactions tx, PaymentsAccess access,
-                       DomainEventPublisher events, PaymentsSettings settings, Clock clock) {
+                       DomainEventPublisher events, PaymentsSettings settings, OrgPlanService orgPlans,
+                       LineRates lineRates, CreditLedger credit, MembershipBenefitsService membership,
+                       Clock clock) {
         this.payments = payments;
         this.feeSchedules = feeSchedules;
         this.settlements = settlements;
@@ -96,6 +110,10 @@ class PaymentServiceImpl implements PaymentService {
         this.access = access;
         this.events = events;
         this.settings = settings;
+        this.orgPlans = orgPlans;
+        this.lineRates = lineRates;
+        this.credit = credit;
+        this.membership = membership;
         this.clock = clock;
     }
 
@@ -104,6 +122,8 @@ class PaymentServiceImpl implements PaymentService {
         access.service();
         CreatePaymentCommand cmd = validate(raw);
         String fingerprint = Fingerprint.of(cmd);
+        // Plans are read before the money transaction: a first sight of an organisation may ask the seller service.
+        Map<String, String> plans = orgPlans.plansOf(LineRates.orgsOf(cmd.lines()));
         return tx.serializable(() -> {
             Optional<StoredRef> prior = idempotency.claim("payment-create", idempotencyKey, fingerprint,
                     StoredRef.class);
@@ -122,8 +142,13 @@ class PaymentServiceImpl implements PaymentService {
             UUID paymentId = Fingerprint.id("payment", cmd.orderId());
             StripeCustomer saved = cmd.offSession() ? savedCustomer(cmd.shopperId()) : null;
             String stripeCustomer = saved != null ? saved.stripeCustomerId() : stripeCustomerFor(cmd);
+            List<OrderLine> priced = lineRates.snapshot(schedule, cmd.lines(), placedAt, plans);
             Payment payment = Payment.create(paymentId, cmd.orderId(), stripeCustomer, cmd.amount(), schedule.id(),
-                    placedAt, cmd.metadata(), cmd.lines(), now);
+                    placedAt, cmd.metadata(), priced, now);
+            if (cmd.shopperId() != null && !cmd.shopperId().isBlank()) {
+                // the shopper who placed the order, kept for credit refunds and the membership cashback (S323)
+                payment = payment.withCredit(Money.zero(cmd.amount().currency()), cmd.shopperId());
+            }
             if (!payments.claim(payment)) {
                 throw new PaymentsStateConflict("payments.payment-in-flight", "The payment of order "
                         + cmd.orderId() + " is being created; retry");
@@ -134,10 +159,24 @@ class PaymentServiceImpl implements PaymentService {
             if (cmd.shopperId() != null && !cmd.shopperId().isBlank()) {
                 metadata.put("afrotransact_customer_id", cmd.shopperId());
             }
+            // the delivery fees the shopper's membership waived are the benefits used on this order (S323)
+            membership.recordWaivers(cmd.shopperId(), cmd.orderId(), cmd.amount().currency(), cmd.membershipWaivers());
             if (saved != null) {
                 return offSessionCreate(payment, saved, metadata, idempotencyKey, now);
             }
-            IntentSnapshot intent = stripe.createIntent(new StripeGateway.CreateIntent(cmd.amount(),
+            if (cmd.useCredit()) {
+                payment = applyCredit(payment, cmd);
+            }
+            if (payment.paidWithCreditOnly()) {
+                // Credit pays the whole order: there is no card to authorise, so the payment is authorised at once.
+                Payment stored = payments.update(payment.authorisedByCredit(now));
+                statuses.publish(PaymentsEvents.INTENT_CREATED, stored);
+                statuses.publish(PaymentsEvents.INTENT_SUCCEEDED, stored);
+                idempotency.complete("payment-create", idempotencyKey, new StoredRef(stored.id()));
+                return new PaymentResult(stored, false);
+            }
+            metadata.put("credit_minor", Long.toString(payment.credit().minor()));
+            IntentSnapshot intent = stripe.createIntent(new StripeGateway.CreateIntent(payment.cardAmount(),
                     payment.customerId(), cmd.paymentMethodTypes(), "AfroTransact order " + cmd.orderId(), metadata,
                     cmd.orderId(), cmd.saveForOffSession()), cmd.orderId() + ":create-intent");
             Payment stored = payments.update(payment.withIntent(intent.id(), intent.clientSecret(),
@@ -146,6 +185,24 @@ class PaymentServiceImpl implements PaymentService {
             idempotency.complete("payment-create", idempotencyKey, new StoredRef(stored.id()));
             return new PaymentResult(stored, false);
         });
+    }
+
+    /**
+     * Spends the shopper's credit on the order, first and in this transaction: the ledger locks the shopper's credit,
+     * so two orders never spend the same credit, and the order id keys the spend, so a retried checkout never spends
+     * twice. Credit leaves at least 0.50 for the card, or pays the whole order.
+     */
+    private Payment applyCredit(Payment payment, CreatePaymentCommand cmd) {
+        if (cmd.shopperId() == null || cmd.shopperId().isBlank()) {
+            throw new PaymentsRuleViolation("payments.invalid-request", "Credit belongs to a signed-in shopper",
+                    Map.of("shopperId", "Required to use credit"));
+        }
+        CreditLedger.Spend spend = credit.spend(new CreditLedger.SpendCommand(cmd.shopperId(), cmd.amount(),
+                MIN_CARD_MINOR, cmd.orderId(), cmd.shopperId(), "spend:" + cmd.orderId()));
+        if (!spend.spent().isPositive()) {
+            return payment;
+        }
+        return payment.withCredit(spend.spent(), cmd.shopperId());
     }
 
     /**
@@ -202,7 +259,7 @@ class PaymentServiceImpl implements PaymentService {
     }
 
     private PaymentResult replayCreate(Payment existing, CreatePaymentCommand cmd, String idempotencyKey) {
-        List<OrderLine> lines = existing.lines().stream().map(PaymentLine::line).toList();
+        List<OrderLine> lines = existing.lines().stream().map(pl -> pl.line().withoutRate()).toList();
         if (!existing.amount().equals(cmd.amount()) || !lines.equals(cmd.lines())) {
             throw new PaymentsStateConflict("payments.order-already-paid", "Order " + cmd.orderId()
                     + " already has a payment with different amount or lines");
@@ -311,20 +368,32 @@ class PaymentServiceImpl implements PaymentService {
             boolean finalCapture = plan.finalCapture();
             UUID captureId = Fingerprint.id("capture", p.id().toString(), cmd.shipmentId());
             Payment capturable = p;
-            IntentSnapshot captured = stripe.capture(p.stripePaymentIntentId(), amount, plan.stripeFinalCapture(),
-                    Map.of("order_id", p.orderId(), "shipment_id", cmd.shipmentId()),
-                    p.stripeKeyPrefix() + ":capture:" + cmd.shipmentId());
+            // The part of the order paid with credit is not charged to the card: the card is captured for the rest.
+            Money creditShare = p.creditShareOf(amount, creditCaptured(p));
+            Money cardShare = amount.minus(creditShare);
+            // A method charged when confirmed (US bank account / ACH: no manual capture) has nothing to capture at
+            // Stripe; the shipment's capture is then recorded against the charge that already settled.
+            String chargeId = null;
+            if (cardShare.isPositive()) {
+                IntentSnapshot live = stripe.retrieveIntent(p.stripePaymentIntentId());
+                IntentSnapshot captured = chargedUpfront(live, p) ? live
+                        : stripe.capture(p.stripePaymentIntentId(), cardShare, plan.stripeFinalCapture(),
+                        Map.of("order_id", p.orderId(), "shipment_id", cmd.shipmentId()),
+                        p.stripeKeyPrefix() + ":capture:" + cmd.shipmentId());
+                chargeId = captured.latestChargeId();
+            }
             FeeSchedule schedule = schedule(p);
-            Fee fee = captureFee(p, captured.latestChargeId(), amount, schedule);
+            Fee fee = cardShare.isPositive() ? captureFee(p, chargeId, cardShare, schedule)
+                    : new Fee(Money.zero(p.currency()), false);
             PaymentSplit split = splitter.split(lines, schedule, fee.amount());
             Instant now = Instant.now(clock);
             UUID journalId = Fingerprint.id("journal", "capture", captureId.toString());
             Journal journal = Postings.capture(journalId, now, "capture:" + captureId, p.orderId(),
-                    p.id().toString(), captured.latestChargeId(), split);
+                    p.id().toString(), chargeId, split, creditShare);
             ledger.post(journal, actor.subject());
             Capture capture = new Capture(captureId, p.id(), cmd.shipmentId(), amount, fee.amount(), fee.estimated(),
-                    captured.latestChargeId(), finalCapture, lines.stream().map(OrderLine::lineId).toList(),
-                    journalId, now);
+                    chargeId, finalCapture, lines.stream().map(OrderLine::lineId).toList(),
+                    journalId, now, creditShare);
             payments.insertCapture(capture);
             Payment stored = payments.update(capturable.capture(captureId, amount, split.lines(), finalCapture, now));
             settlements.reopen(p.orderId(), now);
@@ -407,6 +476,7 @@ class PaymentServiceImpl implements PaymentService {
             if (p.stripePaymentIntentId() != null) {
                 stripe.cancel(p.stripePaymentIntentId(), p.stripeKeyPrefix() + ":cancel");
             }
+            returnUncapturedCredit(p, "Order " + p.orderId() + " was cancelled before it was paid");
             Payment stored = payments.update(canceled);
             statuses.publish(PaymentsEvents.INTENT_CANCELED, stored);
             return stored;
@@ -436,7 +506,11 @@ class PaymentServiceImpl implements PaymentService {
             Payment released = p.releaseRemaining(now);
             if (p.stripePaymentIntentId() != null) {
                 IntentSnapshot intent = stripe.retrieveIntent(p.stripePaymentIntentId());
-                if (p.captured().isZero()) {
+                if (chargedUpfront(intent, p)) {
+                    // Charged when confirmed (ACH): nothing is held at Stripe; giving the money back is a refund.
+                    LOG.warn("Payment {} of order {} was charged up front; releasing {} needs a refund",
+                            p.id(), p.orderId(), p.uncaptured());
+                } else if (p.captured().isZero()) {
                     if (!"canceled".equals(intent.status())) {
                         stripe.cancel(p.stripePaymentIntentId(), p.stripeKeyPrefix() + ":cancel");
                     }
@@ -448,6 +522,7 @@ class PaymentServiceImpl implements PaymentService {
             }
             // An authorisation never reaches the ledger (1000 Stripe clearing moves only at capture), so releasing
             // its rest posts no journal: a memo journal would not match any Stripe balance transaction.
+            returnUncapturedCredit(p, "The rest of order " + p.orderId() + " was released");
             Payment stored = payments.update(released);
             if (stored.status() == PaymentStatus.CANCELED) {
                 statuses.publish(PaymentsEvents.INTENT_CANCELED, stored);
@@ -505,17 +580,39 @@ class PaymentServiceImpl implements PaymentService {
                 throw new PaymentsRuleViolation("payments.invalid-refund", "The refund amount must be positive");
             }
             Instant now = Instant.now(clock);
-            StripeGateway.RefundSnapshot stripeRefund = stripe.refund(p.stripePaymentIntentId(), amount,
+            // Each part goes back to what paid it: the credit part as credit, the card part to the card. Only staff
+            // (with a reason) may take the card part as credit instead; never the other way round.
+            Money creditPart = p.creditPartOf(amount, creditRefunded(p));
+            boolean cardAsCredit = (cmd.cardAsCredit() || p.cardRefundsAsCredit())
+                    && amount.minus(creditPart).isPositive();
+            Money toCredit = cardAsCredit ? amount : creditPart;
+            Money toCard = amount.minus(toCredit);
+            if (toCredit.isPositive() && shopperOf(p) == null) {
+                throw new PaymentsRuleViolation("payments.no-credit-account", "This order was not paid by a "
+                        + "signed-in shopper, so there is no credit account to refund to",
+                        Map.of("cardAsCredit", "Not available"));
+            }
+            StripeGateway.RefundSnapshot stripeRefund = toCard.isPositive()
+                    ? stripe.refund(p.stripePaymentIntentId(), toCard,
                     Map.of("order_id", p.orderId(), "refund_id", refundId.toString()),
-                    p.stripeKeyPrefix() + ":refund:" + refundId);
-            Refund refund = new Refund(refundId, p.id(), p.orderId(), stripeRefund.id(), amount,
-                    RefundStatus.PENDING, cmd.reason(), lines, now, null);
+                    p.stripeKeyPrefix() + ":refund:" + refundId) : null;
+            Refund refund = new Refund(refundId, p.id(), p.orderId(),
+                    stripeRefund == null ? "credit:" + refundId : stripeRefund.id(), amount, RefundStatus.PENDING,
+                    cmd.reason(), lines, now, null, creditPart, cardAsCredit);
             ledger.post(Postings.refund(Fingerprint.id("journal", "refund", refundId.toString()), now,
-                    "refund:" + refundId, p.orderId(), p.id().toString(), stripeRefund.id(), lines,
-                    settings.retailOrgId()),
+                    "refund:" + refundId, p.orderId(), p.id().toString(),
+                    stripeRefund == null ? null : stripeRefund.id(), lines, settings.retailOrgId(), toCredit),
                     actor.subject());
             payments.insertRefund(refund);
-            if ("succeeded".equals(stripeRefund.status())) {
+            if (toCredit.isPositive()) {
+                credit.add(new CreditLedger.Add(shopperOf(p), CreditKind.REFUND, toCredit, CreditSource.REFUND,
+                        refundReason(p, cmd, cardAsCredit), cmd.chosenBy() != null && cardAsCredit ? cmd.chosenBy()
+                        : actor.subject(), p.orderId(), refundId.toString(), "refund:" + refundId, false));
+            }
+            if (stripeRefund == null) {
+                refund = refund.settled(now);
+                payments.updateRefund(refund);
+            } else if ("succeeded".equals(stripeRefund.status())) {
                 refund = settleRefund(refund, now, actor.subject());
             }
             Payment stored = payments.update(p.refund(refund, now));
@@ -623,7 +720,8 @@ class PaymentServiceImpl implements PaymentService {
         }
         return new CreatePaymentCommand(cmd.orderId().trim(), cmd.customerId(), cmd.amount(),
                 cmd.paymentMethodTypes(), cmd.placedAt(), cmd.metadata(), cmd.lines(),
-                cmd.shopperId() == null ? null : cmd.shopperId().trim(), cmd.saveForOffSession(), cmd.offSession());
+                cmd.shopperId() == null ? null : cmd.shopperId().trim(), cmd.saveForOffSession(), cmd.offSession(),
+                cmd.useCredit(), cmd.membershipWaivers());
     }
 
     private static NotFoundException notFound(String what) {
@@ -650,5 +748,54 @@ class PaymentServiceImpl implements PaymentService {
 
     /** Stripe fee of a capture. */
     private record Fee(Money amount, boolean estimated) {
+    }
+
+    /** The intent was charged in full when confirmed (a method without manual capture, e.g. US bank account). */
+    private static boolean chargedUpfront(IntentSnapshot intent, Payment p) {
+        return intent != null && "succeeded".equals(intent.status()) && intent.amountCapturable() == 0
+                && intent.amountReceived() >= p.cardAmount().minor();
+    }
+
+    /** The credit that the captures of this payment already took. */
+    private Money creditCaptured(Payment p) {
+        return payments.captures(p.id()).stream().map(Capture::credit).reduce(Money.zero(p.currency()), Money::plus);
+    }
+
+    /** The credit part of the earlier refunds of this payment (what originally paid with credit and went back). */
+    private Money creditRefunded(Payment p) {
+        return payments.refunds(p.id()).stream().map(Refund::credit).reduce(Money.zero(p.currency()), Money::plus);
+    }
+
+    /**
+     * Credit that was spent on an order but never captured (the order was cancelled, or the rest of its authorisation
+     * released) goes back to the shopper. It was never revenue, so nothing is booked in the general ledger. Keyed by
+     * the order, so a replay returns it once.
+     */
+    private void returnUncapturedCredit(Payment p, String reason) {
+        if (!p.credit().isPositive() || shopperOf(p) == null) {
+            return;
+        }
+        Money left = p.credit().minus(creditCaptured(p));
+        if (left.isPositive()) {
+            credit.add(new CreditLedger.Add(shopperOf(p), CreditKind.REFUND, left, CreditSource.REFUND, reason,
+                    "system:payments", p.orderId(), p.id().toString(), "return:" + p.orderId(), false));
+        }
+    }
+
+    /** The customer whose credit this order used or is refunded to: the payment's shopper, else the order's customer. */
+    private static String shopperOf(Payment p) {
+        if (p.shopperId() != null && !p.shopperId().isBlank()) {
+            return p.shopperId();
+        }
+        String fromOrder = p.metadata().get("customer_id");
+        return fromOrder == null || fromOrder.isBlank() ? p.metadata().get("afrotransact_customer_id") : fromOrder;
+    }
+
+    private static String refundReason(Payment p, RefundCommand cmd, boolean cardAsCredit) {
+        String base = "Refund on order " + p.orderId();
+        if (cardAsCredit) {
+            base += ", card part taken as credit" + (cmd.chosenBy() == null ? "" : " by " + cmd.chosenBy());
+        }
+        return cmd.reason() == null || cmd.reason().isBlank() ? base : base + ": " + cmd.reason();
     }
 }

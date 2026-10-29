@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { type FeeConnectionDraft, FeeConnectionFeeSchema, type FeeDraftPlanRate, FeePlanRateSchema, FeePlanSchema } from '../fee-rates';
 import { type ExportDataset, type ExportFormat, type TableExportQuery } from './exports';
 import { AccessLevelSchema, ChartSpecSchema, KpiSchema } from './seller';
 
@@ -11,8 +12,8 @@ const nullableString = z.string().nullable();
 /* ── Shell ─────────────────────────────────────────────── */
 
 export const StaffModuleKeySchema = z.enum([
-  'dash', 'exports', 'orders', 'catalog', 'inventory', 'retail', 'dispatch', 'apps', 'support', 'rbac', 'payouts', 'fees', 'marketing', 'disputes',
-  'audit', 'markets', 'siteCfg', 'dev', 'notifications', 'preorders'
+  'dash', 'exports', 'orders', 'catalog', 'inventory', 'retail', 'dispatch', 'orgs', 'apps', 'support', 'rbac', 'payouts', 'fees', 'marketing', 'disputes',
+  'audit', 'markets', 'siteCfg', 'dev', 'identity', 'notifications', 'preorders', 'plans'
 ]);
 export type StaffModuleKey = z.infer<typeof StaffModuleKeySchema>;
 
@@ -49,6 +50,28 @@ export type StaffSession = z.infer<typeof StaffSessionSchema>;
 
 /* ── Dashboard ─────────────────────────────────────────── */
 
+/** Lola in the staff console: read-only, one level for every staff member. */
+export const StaffAssistantStatusSchema = z.object({
+  dailyMessages: z.number().int(),
+  used: z.number().int(),
+  remaining: z.number().int(),
+  tools: z.array(z.string())
+});
+export type StaffAssistantStatus = z.infer<typeof StaffAssistantStatusSchema>;
+export const StaffAssistantReplySchema = z.object({
+  answer: z.string(),
+  steps: z.array(z.object({ tool: z.string(), label: z.string() })),
+  /** Records she points at; the console opens one when the member taps its button. */
+  links: z.array(z.object({ label: z.string(), resource: z.string(), id: z.string() })),
+  status: StaffAssistantStatusSchema
+});
+export type StaffAssistantReply = z.infer<typeof StaffAssistantReplySchema>;
+export interface StaffAssistantChatRequest {
+  message: string;
+  history?: { role: 'user' | 'assistant'; content: string }[];
+  language?: string;
+}
+
 export const StaffDashboardSchema = z.object({
   rangeDays: z.number().int(),
   generatedAt: z.string(),
@@ -60,9 +83,11 @@ export type StaffDashboard = z.infer<typeof StaffDashboardSchema>;
 /* ── Resources (server-driven tables and detail sheets) ── */
 
 export const ResourceKeySchema = z.enum([
-  'users', 'roles', 'applications', 'orders', 'products', 'moderation', 'claims', 'returns', 'payouts', 'inventory', 'purchase-orders', 'routes',
-  'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'help-articles', 'privacy-requests', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates',
-  'dispatch-shipments', 'sos-alerts', 'vehicle-defects', 'driver-events', 'pickup-locations'
+  'users', 'roles', 'applications', 'organisations', 'connect-accounts', 'orders', 'products', 'moderation', 'product-reviews', 'claims', 'returns', 'payouts', 'inventory', 'purchase-orders', 'routes',
+  'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'help-articles', 'privacy-requests', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates', 'tax-codes', 'tax-rules', 'tax-review',
+  'dispatch-shipments', 'sos-alerts', 'vehicle-defects', 'driver-events', 'pickup-locations', 'coupons',
+  'reconciliation', 'reconciliation-runs', 'ledger-adjustments', 'credit-adjustments', 'gift-cards', 'credit-liabilities', 'money-settings', 'membership-tiers', 'memberships', 'membership-settings', 'membership-report', 'referrals', 'referral-settings', 'stripe-lookup', 'payment-settings', 'tax-settings', 'maintenance', 'tax-filings', 'tax-nexus',
+  'oauth-clients', 'identity-sessions', 'signing-keys', 'auth-settings', 'exchange-rates'
 ]);
 export type ResourceKey = z.infer<typeof ResourceKeySchema>;
 
@@ -83,11 +108,21 @@ export const FieldValueSchema = z.union([z.string(), z.number(), z.boolean(), z.
 export type FieldValue = z.infer<typeof FieldValueSchema>;
 export const FieldTypeSchema = z.enum(['text', 'textarea', 'number', 'money', 'select', 'multiselect', 'toggle', 'date', 'datetime', 'email', 'password']);
 export type FieldType = z.infer<typeof FieldTypeSchema>;
+/** The searchable pickers of forms: staff choose a driver or a seller by name, the form sends the id. */
+export const LOOKUP_KINDS = ['drivers', 'sellers'] as const;
+export const LookupKindSchema = z.enum(LOOKUP_KINDS);
+export type LookupKind = z.infer<typeof LookupKindSchema>;
+export const LookupResultSchema = z.object({ kind: LookupKindSchema, items: z.array(z.object({ id: z.string(), name: z.string(), detail: z.string().optional() })) });
+export type LookupResult = z.infer<typeof LookupResultSchema>;
+export type LookupHit = LookupResult['items'][number];
+
 export const FormFieldSchema = z.object({
   key: z.string(),
   label: z.string(),
   type: FieldTypeSchema,
   required: z.boolean(),
+  /** A text field that is a picker (GET /v1/staff/lookups/{kind}). */
+  lookup: LookupKindSchema.optional(),
   options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
   min: z.number().optional(),
   max: z.number().optional(),
@@ -95,10 +130,12 @@ export const FormFieldSchema = z.object({
   pattern: z.string().optional(),
   help: z.string().optional(),
   placeholder: z.string().optional(),
-  value: FieldValueSchema.optional()
+  value: FieldValueSchema.optional(),
+  /** The group the field belongs to: the form shows a heading when it changes from one field to the next. */
+  section: z.string().optional()
 });
 export type FormField = z.infer<typeof FormFieldSchema>;
-export const StaffFormSchema = z.object({ title: z.string(), submitLabel: z.string(), fields: z.array(FormFieldSchema) });
+export const StaffFormSchema = z.object({ title: z.string(), submitLabel: z.string(), intro: z.string().optional(), fields: z.array(FormFieldSchema), changeKeys: z.array(z.string()).optional() });
 export type StaffForm = z.infer<typeof StaffFormSchema>;
 
 export const ResourcePageSchema = z.object({
@@ -127,7 +164,7 @@ export type ResourcePage = z.infer<typeof ResourcePageSchema>;
 export const DetailFieldSchema = z.object({
   label: z.string(),
   value: z.string(),
-  kind: z.enum(['text', 'mono', 'money', 'date', 'datetime', 'status', 'link']),
+  kind: z.enum(['text', 'mono', 'money', 'date', 'datetime', 'status', 'link', 'image']),
   href: z.string().optional()
 });
 export type DetailField = z.infer<typeof DetailFieldSchema>;
@@ -150,8 +187,12 @@ export const RecordActionSchema = z.object({
   form: StaffFormSchema.nullable()
 });
 export type RecordAction = z.infer<typeof RecordActionSchema>;
-export const RecordLinkSchema = z.object({ label: z.string(), href: z.string() });
+export const RecordLinkSchema = z.object({ label: z.string(), href: z.string(), external: z.boolean().optional() });
 export type RecordLink = z.infer<typeof RecordLinkSchema>;
+
+/** A secret shown once, right after it was created (a new OAuth client secret): never cached, stored or logged. */
+export const OneTimeSecretSchema = z.object({ label: z.string(), value: z.string(), note: z.string() });
+export type OneTimeSecret = z.infer<typeof OneTimeSecretSchema>;
 
 export const RecordDetailSchema = z.object({
   resource: ResourceKeySchema,
@@ -168,11 +209,34 @@ export const RecordDetailSchema = z.object({
   actions: z.array(RecordActionSchema),
   editForm: StaffFormSchema.nullable(),
   links: z.array(RecordLinkSchema),
-  version: nullableString
+  version: nullableString,
+  removed: z.boolean().optional(),
+  reveal: OneTimeSecretSchema.optional()
 });
 export type RecordDetail = z.infer<typeof RecordDetailSchema>;
 
 export type RecordValues = Record<string, FieldValue>;
+
+/* ── Identity & access (S291): token inspector and published documents ─────────────── */
+
+export const IdentityTokenInspectionSchema = z.object({
+  wellFormed: z.boolean(),
+  header: z.record(z.string(), z.unknown()).default({}),
+  claims: z.record(z.string(), z.unknown()).default({}),
+  scopes: z.array(z.string()).default([]),
+  keyId: nullableString.optional(),
+  issuedAt: nullableString.optional(),
+  expiresAt: nullableString.optional(),
+  expired: z.boolean().nullable().optional(),
+  signatureValid: z.boolean(),
+  issuerValid: z.boolean(),
+  valid: z.boolean(),
+  problems: z.array(z.string())
+});
+export type IdentityTokenInspection = z.infer<typeof IdentityTokenInspectionSchema>;
+
+export const IdentityDocumentsSchema = z.object({ discovery: z.record(z.string(), z.unknown()), jwks: z.record(z.string(), z.unknown()) });
+export type IdentityDocuments = z.infer<typeof IdentityDocumentsSchema>;
 
 /* ── Exports (shared schemas in ./exports) ─────────────────── */
 
@@ -252,6 +316,8 @@ export type AuditLine = z.infer<typeof AuditLineSchema>;
 
 export const Customer360Schema = z.object({
   customer: z.object({ id: z.string(), name: z.string(), email: z.string(), enabled: z.boolean(), emailVerified: z.boolean(), roles: z.array(z.string()) }),
+  /** The customer's membership (S323): priority support; null when not a member. */
+  membership: z.object({ tierName: z.string(), status: z.enum(['TRIALING', 'ACTIVE', 'PAST_DUE']), prioritySupport: z.boolean() }).nullable(),
   orders: z.array(SupportOrderSchema),
   bookings: z.array(SupportBookingSchema),
   claims: z.array(SupportClaimSchema),
@@ -317,7 +383,7 @@ export const FeeOverrideSchema = z.object({
 export type FeeOverride = z.infer<typeof FeeOverrideSchema>;
 
 /* AfroTransact Delivery from the seller's store (S255): amounts in minor units, distances in road miles. */
-export const DeliveryTariffModeSchema = z.enum(['FLAT', 'DISTANCE']);
+export const DeliveryTariffModeSchema = z.enum(['FLAT', 'DISTANCE', 'PER_WEIGHT']);
 export type DeliveryTariffMode = z.infer<typeof DeliveryTariffModeSchema>;
 export const DeliveryBandSchema = z.object({ fromMiles: z.number(), toMiles: z.number(), feeMinor: z.number().int() });
 export type DeliveryBand = z.infer<typeof DeliveryBandSchema>;
@@ -327,6 +393,7 @@ export const DeliveryTariffSchema = z.object({
   flatPerPackageMinor: nullableInt,
   baseMinor: nullableInt,
   perMileMinor: nullableInt,
+  perLbMinor: nullableInt.optional(),
   bands: z.array(DeliveryBandSchema),
   minMinor: nullableInt,
   maxMinor: nullableInt
@@ -369,6 +436,13 @@ export interface DeliveryQuoteRequest {
   at?: string | null;
 }
 
+export const TaxRatesImportResultSchema = z.object({
+  statesUpserted: z.number().int().nonnegative(),
+  localsUpserted: z.number().int().nonnegative(),
+  warnings: z.array(z.string())
+});
+export type TaxRatesImportResult = z.infer<typeof TaxRatesImportResultSchema>;
+
 export const FeeScheduleViewSchema = z.object({
   id: z.string(),
   version: z.number().int(),
@@ -383,6 +457,12 @@ export const FeeScheduleViewSchema = z.object({
   fbaPerUnitMinor: z.number().int(),
   reverseCommissionOnRefund: z.boolean(),
   deliveryPricing: DeliveryPricingSchema.nullable(),
+  /** Product commission per plan, after negotiated rates and before category rates. */
+  planRates: z.array(FeePlanRateSchema).default([]),
+  /** FBA fee per unit of the plans that have their own; the others pay fbaPerUnitMinor. */
+  planFba: z.array(z.object({ planCode: z.string(), planName: z.string(), feeMinor: z.number().int() })).default([]),
+  /** Connection fees on service bookings; null for versions created before they existed. */
+  connectionFee: FeeConnectionFeeSchema.nullable().default(null),
   note: nullableString,
   createdBy: z.string(),
   createdAt: nullableString,
@@ -409,7 +489,12 @@ export const FeesOverviewSchema = z.object({
   retail: FeeRetailSchema,
   limits: FeeLimitsSchema,
   exampleSaleMinor: z.number().int(),
-  reverseOnRefundHelp: z.string()
+  reverseOnRefundHelp: z.string(),
+  /** The plan catalogue with what each plan advertises against the configured rates. */
+  plans: z.array(FeePlanSchema).default([]),
+  plansAvailable: z.boolean().default(false),
+  planWarnings: z.array(z.string()).default([]),
+  serviceCategories: z.array(FeeCategorySchema).default([])
 });
 export type FeesOverview = z.infer<typeof FeesOverviewSchema>;
 export const FeeOrgHitSchema = z.object({
@@ -438,6 +523,12 @@ export interface FeeScheduleDraft {
   reverseCommissionOnRefund: boolean;
   /** Omitted or null = carried over from the latest live version. */
   deliveryPricing?: DeliveryPricingDraft | null;
+  /** Omitted or null = carried over from the latest live version; [] = no plan rates. */
+  planRates?: FeeDraftPlanRate[] | null;
+  /** FBA fee per unit per plan; plans left out pay fbaPerUnitMinor. Omitted or null = carried over; [] = none. */
+  planFba?: { planCode: string; feeMinor: number }[] | null;
+  /** Omitted or null = carried over from the latest live version. */
+  connectionFee?: FeeConnectionDraft | null;
   note: string;
 }
 
@@ -463,6 +554,7 @@ export const PickupListSchema = z.object({ items: z.array(PickupRowSchema), canA
 export type PickupList = z.infer<typeof PickupListSchema>;
 export const DriverSuggestionSchema = z.object({
   driverId: z.string(),
+  driverName: z.string(),
   routeId: z.string(),
   routeName: z.string(),
   zone: z.string(),
@@ -487,6 +579,7 @@ export const PickupAssignResultSchema = z.object({
   routeId: z.string(),
   routeName: nullableString,
   driverId: nullableString,
+  driverName: nullableString,
   status: z.string()
 });
 export type PickupAssignResult = z.infer<typeof PickupAssignResultSchema>;
@@ -494,10 +587,13 @@ export const PickupAssignmentSchema = z.object({
   id: z.string(),
   shipmentId: z.string(),
   routeId: z.string(),
+  routeName: nullableString,
   driverId: nullableString,
+  driverName: nullableString,
   mode: z.enum(['AUTO_NEAREST', 'DISPATCH_OVERRIDE']),
   reason: nullableString,
   previousRouteId: nullableString,
+  previousRouteName: nullableString,
   straightMiles: z.number().nullable(),
   roadMiles: z.number().nullable(),
   distanceMethod: nullableString,
@@ -507,6 +603,108 @@ export const PickupAssignmentSchema = z.object({
 export type PickupAssignment = z.infer<typeof PickupAssignmentSchema>;
 export const PickupAssignmentListSchema = z.object({ items: z.array(PickupAssignmentSchema) });
 export type PickupAssignmentList = z.infer<typeof PickupAssignmentListSchema>;
+
+/* ── Dispatch: delivery runs (S264) — a closed pre-order window's paid orders, planned into routes ── */
+
+export const RUN_DISPATCH_STATUSES = ['PENDING', 'PLANNED', 'CANCELLED'] as const;
+export const RunDispatchStatusSchema = z.enum(RUN_DISPATCH_STATUSES);
+export type RunDispatchStatus = z.infer<typeof RunDispatchStatusSchema>;
+/** The run's lifecycle in delivery-runs, in the order a run moves through it. */
+export const RUN_LIFECYCLE = ['CONFIRMED', 'COLLECTING', 'OUT_FOR_DELIVERY', 'COMPLETED'] as const;
+export const RunLifecycleSchema = z.enum([...RUN_LIFECYCLE, 'CANCELLED']);
+export type RunLifecycle = z.infer<typeof RunLifecycleSchema>;
+export const RunPickupPointSchema = z.object({
+  name: z.string(),
+  line1: z.string(),
+  city: z.string(),
+  state: z.string(),
+  postalCode: z.string(),
+  hours: z.string(),
+  notes: z.string()
+});
+export type RunPickupPoint = z.infer<typeof RunPickupPointSchema>;
+export const RunDispatchProgressSchema = z.object({
+  orders: z.number().int(),
+  bags: z.number().int(),
+  pickupStops: z.number().int(),
+  pickupsDone: z.number().int(),
+  bagsCollected: z.number().int(),
+  dropStops: z.number().int(),
+  dropsDone: z.number().int(),
+  dropsFailed: z.number().int(),
+  bagsDelivered: z.number().int(),
+  unrouted: z.number().int()
+});
+export type RunDispatchProgress = z.infer<typeof RunDispatchProgressSchema>;
+export const RunOrderProgressSchema = z.object({
+  orders: z.number().int(),
+  pending: z.number().int(),
+  collected: z.number().int(),
+  outForDelivery: z.number().int(),
+  failed: z.number().int(),
+  delivered: z.number().int(),
+  returned: z.number().int(),
+  lastDeliveredAt: nullableString
+});
+export type RunOrderProgress = z.infer<typeof RunOrderProgressSchema>;
+export const RunDispatchStopSchema = z.object({
+  id: z.string(),
+  sequence: z.number().int(),
+  kind: z.enum(['PICKUP', 'DROPOFF']),
+  name: z.string(),
+  status: z.enum(['PENDING', 'ARRIVED', 'DONE', 'FAILED', 'RETRY', 'SKIPPED', 'REASSIGNED', 'CANCELLED']),
+  orderNumber: nullableString,
+  addressLine: nullableString,
+  handoverRequired: z.boolean(),
+  note: nullableString
+});
+export type RunDispatchStop = z.infer<typeof RunDispatchStopSchema>;
+export const RunDispatchRouteSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.enum(['PLANNED', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']),
+  driverId: nullableString,
+  driverName: nullableString,
+  vehicleId: nullableString,
+  blocked: z.boolean(),
+  packages: z.number().int(),
+  bagsCollected: z.number().int(),
+  bagsDelivered: z.number().int(),
+  pickupStops: z.number().int(),
+  pickupsDone: z.number().int(),
+  dropStops: z.number().int(),
+  dropsDone: z.number().int(),
+  dropsFailed: z.number().int(),
+  stops: z.array(RunDispatchStopSchema)
+});
+export type RunDispatchRoute = z.infer<typeof RunDispatchRouteSchema>;
+export const RunDispatchSchema = z.object({
+  runId: z.string(),
+  town: z.string(),
+  state: z.string(),
+  timeZone: z.string(),
+  serviceDate: z.string(),
+  windowStart: z.string(),
+  windowEnd: z.string(),
+  sellerPickupAt: nullableString,
+  dropMode: z.enum(['DOORSTEP', 'PICKUP_POINT']),
+  pickupPoint: RunPickupPointSchema.nullable(),
+  status: RunDispatchStatusSchema,
+  runStatus: RunLifecycleSchema.nullable(),
+  planError: nullableString,
+  plannedAt: nullableString,
+  progress: RunDispatchProgressSchema,
+  orders: RunOrderProgressSchema.nullable(),
+  routes: z.array(RunDispatchRouteSchema),
+  canManage: z.boolean()
+});
+export type RunDispatch = z.infer<typeof RunDispatchSchema>;
+export const RunDispatchListSchema = z.object({ items: z.array(RunDispatchSchema), canManage: z.boolean() });
+export type RunDispatchList = z.infer<typeof RunDispatchListSchema>;
+export type RunAdvanceStep = Exclude<(typeof RUN_LIFECYCLE)[number], 'CONFIRMED'>;
+export interface RunAdvanceRequest {
+  to: RunAdvanceStep;
+}
 export const StaffPickupWindowSchema = z.object({
   day: z.enum(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']),
   opens: z.string(),

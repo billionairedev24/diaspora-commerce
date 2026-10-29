@@ -2,7 +2,7 @@
 # Build context: go/   (docker build -f services/promise/Dockerfile go)
 FROM golang:1.27.2 AS build
 WORKDIR /src
-ENV CGO_ENABLED=0 GOWORK=off GOFLAGS=-trimpath
+ENV CGO_ENABLED=0 GOWORK=off GOFLAGS="-trimpath -buildvcs=false"
 COPY pkg/go.mod pkg/go.sum ./pkg/
 COPY services/promise/go.mod services/promise/go.sum ./services/promise/
 WORKDIR /src/services/promise

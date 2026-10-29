@@ -9,10 +9,13 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.deliveryruns.application.AttributionService;
 import com.afrotransact.deliveryruns.application.OrderPlaced;
 import com.afrotransact.deliveryruns.application.PreorderProjectionService;
+import com.afrotransact.deliveryruns.application.RunProgressService;
 import com.afrotransact.deliveryruns.domain.PreorderFulfilment;
 import com.afrotransact.deliveryruns.domain.PreorderLine;
+import com.afrotransact.deliveryruns.domain.RefundStatus;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
 import org.slf4j.Logger;
@@ -27,8 +30,10 @@ import tools.jackson.databind.json.JsonMapper;
  * Consumes {@code orders.order.placed} (pre-order packages: {@code fulfilmentType=PREORDER} with a {@code windowId},
  * read from {@code packages[]} or {@code shipments[]}; attribution {@code {src, cr, po}}), {@code
  * orders.shipment.cancelled} and {@code orders.order.cancelled} (placed orders) from {@code at.order.events} into the
- * pre-order projection. Malformed messages are logged and skipped; use-case failures propagate so the container
- * retries the record.
+ * pre-order projection, and the PREORDER shipments' {@code orders.shipment.status_changed} / {@code
+ * orders.shipment.delivered} into the run's delivery progress (S264: the run starts collecting, goes out for delivery
+ * and completes from what the driver does, and a delivery starts the seller payout hold in orders / payments).
+ * Malformed messages are logged and skipped; use-case failures propagate so the container retries the record.
  */
 @Component
 class OrderEventsListener {
@@ -36,15 +41,24 @@ class OrderEventsListener {
     static final String ORDER_PLACED = "orders.order.placed";
     static final String SHIPMENT_CANCELLED = "orders.shipment.cancelled";
     static final String ORDER_CANCELLED = "orders.order.cancelled";
+    static final String SHIPMENT_STATUS_CHANGED = "orders.shipment.status_changed";
+    static final String SHIPMENT_DELIVERED = "orders.shipment.delivered";
+    static final String REFUND_SETTLED = "orders.preorder.refund_settled";
+    static final String REFUND_FAILED = "orders.preorder.refund_failed";
     static final String PREORDER = "PREORDER";
 
     private static final Logger LOG = LoggerFactory.getLogger(OrderEventsListener.class);
 
     private final PreorderProjectionService projection;
+    private final RunProgressService progress;
+    private final AttributionService attribution;
     private final JsonMapper json;
 
-    OrderEventsListener(PreorderProjectionService projection, JsonMapper json) {
+    OrderEventsListener(PreorderProjectionService projection, RunProgressService progress,
+                        AttributionService attribution, JsonMapper json) {
         this.projection = projection;
+        this.progress = progress;
+        this.attribution = attribution;
         this.json = json;
     }
 
@@ -53,7 +67,9 @@ class OrderEventsListener {
             autoStartup = "${at.consumers.enabled:true}")
     void onMessage(ConsumerRecord<String, String> rec) {
         String type = header(rec, "event-type").orElse("");
-        if (!ORDER_PLACED.equals(type) && !SHIPMENT_CANCELLED.equals(type) && !ORDER_CANCELLED.equals(type)) {
+        if (!ORDER_PLACED.equals(type) && !SHIPMENT_CANCELLED.equals(type) && !ORDER_CANCELLED.equals(type)
+                && !REFUND_SETTLED.equals(type) && !REFUND_FAILED.equals(type)
+                && !SHIPMENT_STATUS_CHANGED.equals(type) && !SHIPMENT_DELIVERED.equals(type)) {
             return;
         }
         Optional<UUID> eventId = header(rec, "event-id").flatMap(OrderEventsListener::uuid);
@@ -75,7 +91,10 @@ class OrderEventsListener {
     /** Dispatches one parsed event (package-private for tests). */
     void handle(String type, UUID eventId, JsonNode n) {
         switch (type) {
-            case ORDER_PLACED -> placed(eventId, n).ifPresent(e -> projection.onOrderPlaced(eventId, e));
+            case ORDER_PLACED -> {
+                attribute(n);
+                placed(eventId, n).ifPresent(e -> projection.onOrderPlaced(eventId, e));
+            }
             case SHIPMENT_CANCELLED -> {
                 String orderId = text(n, "orderId");
                 String shipmentId = text(n, "shipmentId");
@@ -84,6 +103,22 @@ class OrderEventsListener {
                     return;
                 }
                 projection.onShipmentCancelled(eventId, orderId, shipmentId, instant(n, "cancelledAt"));
+                progress.onShipmentCancelled(eventId, orderId, shipmentId, instant(n, "cancelledAt"));
+            }
+            case SHIPMENT_STATUS_CHANGED -> {
+                String orderId = text(n, "orderId");
+                if (orderId == null || !PREORDER.equalsIgnoreCase(text(n, "fulfilmentType"))) {
+                    return;
+                }
+                progress.onShipmentMoved(eventId, orderId, text(n, "shipmentId"), text(n, "to"),
+                        instant(n, "occurredAt"));
+            }
+            case SHIPMENT_DELIVERED -> {
+                String orderId = text(n, "orderId");
+                if (orderId == null || !PREORDER.equalsIgnoreCase(text(n, "fulfilmentType"))) {
+                    return;
+                }
+                progress.onShipmentDelivered(eventId, orderId, text(n, "shipmentId"), instant(n, "deliveredAt"));
             }
             case ORDER_CANCELLED -> {
                 String orderId = text(n, "orderId");
@@ -92,10 +127,38 @@ class OrderEventsListener {
                 }
                 projection.onOrderCancelled(eventId, orderId, instant(n, "cancelledAt"));
             }
+            case REFUND_SETTLED, REFUND_FAILED -> refund(type, eventId, n);
             default -> {
                 // other order events are not needed
             }
         }
+    }
+
+    /**
+     * Remembers the advertorial an order came from ({@code attribution.cr=adv-...}) whatever the order carries: the
+     * run slot it takes is joined at read time (S263), so it does not matter which of the two arrives first.
+     */
+    private void attribute(JsonNode n) {
+        JsonNode a = n.path("attribution");
+        String creative = a.isObject() ? text(a, "cr") : null;
+        String orderId = text(n, "orderId");
+        Instant placedAt = instant(n, "placedAt");
+        if (creative != null && orderId != null && placedAt != null) {
+            attribution.orderPlaced(orderId, creative, text(a, "src"), placedAt);
+        }
+    }
+
+    private void refund(String type, UUID eventId, JsonNode n) {
+        String orderId = text(n, "orderId");
+        if (orderId == null) {
+            LOG.warn("Skipping {} {}: orderId missing", type, eventId);
+            return;
+        }
+        RefundStatus status = REFUND_FAILED.equals(type) ? RefundStatus.FAILED : "VOIDED".equalsIgnoreCase(
+                text(n, "status")) ? RefundStatus.VOIDED : RefundStatus.REFUNDED;
+        JsonNode amount = n.path("amountMinor");
+        projection.onRefund(eventId, orderId, status, amount.isNumber() ? amount.asLong() : null, text(n, "error"),
+                instant(n, "at"));
     }
 
     /** The order's pre-order packages; empty when it has none (most orders). */
@@ -108,6 +171,11 @@ class OrderEventsListener {
             boolean isPreorder = PREORDER.equalsIgnoreCase(text(p, "fulfilmentType")) || windowId != null
                     && pre.isObject();
             if (!isPreorder || windowId == null) {
+                continue;
+            }
+            if ("RUN".equalsIgnoreCase(text(pre, "source"))) {
+                // S261: an order on a staff-scheduled run holds a slot on it (orders reserved it through the slot
+                // API); there is no pre-order window to project it into.
                 continue;
             }
             Optional<UUID> wid = uuid(windowId);
@@ -123,7 +191,10 @@ class OrderEventsListener {
             for (JsonNode l : p.path("lines")) {
                 String atin = text(l, "variantAtin") != null ? text(l, "variantAtin") : text(l, "atin");
                 String name = text(l, "title") != null ? text(l, "title") : text(l, "name");
-                lines.add(new PreorderLine(atin, name, text(p, "sellerOrgId"), text(p, "sellerName"),
+                // A window's package mixes sellers: the line names its own, the package's first seller is the fallback.
+                String seller = text(l, "sellerOrgId") != null ? text(l, "sellerOrgId") : text(p, "sellerOrgId");
+                String sellerName = text(l, "sellerOrgId") != null ? text(l, "sellerName") : text(p, "sellerName");
+                lines.add(new PreorderLine(atin, name, seller, sellerName,
                         l.path("quantity").asInt(l.path("qty").asInt(1))));
             }
             packages.add(new OrderPlaced.Package(text(p, "shipmentId") != null ? text(p, "shipmentId")

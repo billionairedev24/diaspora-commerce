@@ -4,7 +4,7 @@
 #              coverage gate (tools/quality/coverage_report.sh, thresholds in coverage-thresholds.conf)
 #   contract : OpenAPI breaking-change diff vs the base branch (oasdiff)
 #   security : gitleaks, Trivy filesystem scan (HIGH/CRITICAL), Semgrep, optional CodeQL
-#   helm     : chart lint + template (dev/uat/prod x none/aws/gcp/azure) + kubeconform
+#   helm     : chart lint + template (dev/uat/prod x none/aws/gcp/azure/ovh) + kubeconform
 #   image    : multi-arch build -> GHCR, Trivy image scan, Syft SBOM, cosign keyless sign (main only)
 name: _java-service
 
@@ -26,7 +26,7 @@ on:
       image-max-mb:
         description: Image size budget in MB (uncompressed linux/amd64); per-service overrides live in tools/ci/gen_workflows.py.
         type: string
-        default: "450"
+        default: "220"
     outputs:
       image:
         description: Image repository (ghcr.io/<owner>/<repo>/<service>).
@@ -57,6 +57,8 @@ jobs:
       exists: ${{ steps.check.outputs.exists }}
     steps:
       - uses: actions/checkout@v7
+      - name: No duplicate Flyway versions
+        run: tools/dev/check_migrations.sh
       - id: check
         run: |
           if [[ -f "$SERVICE_DIR/pom.xml" ]]; then

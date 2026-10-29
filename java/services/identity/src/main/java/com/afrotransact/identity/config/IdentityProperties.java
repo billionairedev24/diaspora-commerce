@@ -21,12 +21,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *                          comma-separated lists; blanks are dropped, see {@link #splitEntries})
  * @param social            social provider client credentials, keyed by provider id (google, apple, facebook)
  * @param bootstrapAdmin    first super administrator (created when missing; leave email blank to skip)
- * @param clients           OAuth clients seeded at start-up (upserted by client id)
+ * @param clients           OAuth clients created at start-up when missing (never overwritten: the staff console owns them after that)
  * @param firstParty        first-party sign-in API (clients allowed to call it and redeem login tickets)
  * @param signInProtection  brute-force protection limits (per account and per IP)
  * @param invitations       organisation invitations (Seller Center accept page)
  * @param dataProtection    encryption at rest of MFA secrets (key-encryption key provider and keys)
  * @param pages             hosted sign-in pages: the apps they brand themselves for and their legal/support links
+ * @param auth              defaults of the authentication settings the staff console can override (S291)
  */
 @ConfigurationProperties(prefix = "at.identity")
 public record IdentityProperties(
@@ -45,7 +46,8 @@ public record IdentityProperties(
         SignInProtection signInProtection,
         Invitations invitations,
         DataProtection dataProtection,
-        Pages pages) {
+        Pages pages,
+        Auth auth) {
 
     public IdentityProperties {
         homeUrl = homeUrl == null ? "/" : homeUrl;
@@ -58,11 +60,36 @@ public record IdentityProperties(
         social = social == null ? Map.of() : Map.copyOf(social);
         bootstrapAdmin = bootstrapAdmin == null ? new BootstrapAdmin(null, null, null, null, null) : bootstrapAdmin;
         clients = clients == null ? List.of() : List.copyOf(clients);
-        firstParty = firstParty == null ? new FirstParty(null) : firstParty;
+        firstParty = firstParty == null ? new FirstParty(null, null) : firstParty;
         signInProtection = signInProtection == null ? new SignInProtection(null, null) : signInProtection;
         invitations = invitations == null ? new Invitations(null) : invitations;
         dataProtection = dataProtection == null ? new DataProtection(null, null, null, null, null) : dataProtection;
         pages = pages == null ? new Pages(null, null, null, null, null, null, null, null) : pages;
+        auth = auth == null ? new Auth(null, null, null, null, null, null) : auth;
+    }
+
+    /**
+     * Defaults of the settings in Staff console > Developer > Identity and access > Settings; what an admin stores
+     * there wins, a setting left unset uses these.
+     *
+     * @param passwordMinLength     shortest password (default 12)
+     * @param mfaRequiredAccount    require a second factor of customers who can answer one (default off)
+     * @param mfaRequiredSeller     the same for seller members (default off)
+     * @param mfaRequiredProvider   the same for service-provider members (default off)
+     * @param sessionIdleTimeout    hosted sign-in session idle timeout (default 30 minutes)
+     * @param sessionAbsoluteTimeout hosted sign-in session lifetime (default 24 hours)
+     */
+    public record Auth(Integer passwordMinLength, Boolean mfaRequiredAccount, Boolean mfaRequiredSeller,
+                       Boolean mfaRequiredProvider, Duration sessionIdleTimeout, Duration sessionAbsoluteTimeout) {
+
+        public Auth {
+            passwordMinLength = passwordMinLength == null ? Integer.valueOf(12) : passwordMinLength;
+            mfaRequiredAccount = mfaRequiredAccount != null && mfaRequiredAccount;
+            mfaRequiredSeller = mfaRequiredSeller != null && mfaRequiredSeller;
+            mfaRequiredProvider = mfaRequiredProvider != null && mfaRequiredProvider;
+            sessionIdleTimeout = sessionIdleTimeout == null ? Duration.ofMinutes(30) : sessionIdleTimeout;
+            sessionAbsoluteTimeout = sessionAbsoluteTimeout == null ? Duration.ofHours(24) : sessionAbsoluteTimeout;
+        }
     }
 
     /**
@@ -153,11 +180,17 @@ public record IdentityProperties(
     public record Invitations(String acceptUrl) {
     }
 
-    /** @param clientIds confidential clients allowed to use the first-party sign-in API (default gateway-bff) */
-    public record FirstParty(List<String> clientIds) {
+    /**
+     * @param clientIds       confidential clients allowed to use the first-party sign-in API (default gateway-bff)
+     * @param nativeClientIds public native-app clients a login ticket may be issued for (default customer-app,
+     *                        driver-app)
+     */
+    public record FirstParty(List<String> clientIds, List<String> nativeClientIds) {
 
         public FirstParty {
             clientIds = clientIds == null || clientIds.isEmpty() ? List.of("gateway-bff") : List.copyOf(clientIds);
+            nativeClientIds = nativeClientIds == null || nativeClientIds.isEmpty()
+                    ? List.of("customer-app", "driver-app") : List.copyOf(nativeClientIds);
         }
     }
 

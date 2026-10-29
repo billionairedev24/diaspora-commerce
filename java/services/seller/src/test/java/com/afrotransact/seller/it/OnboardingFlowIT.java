@@ -17,7 +17,7 @@ import tools.jackson.databind.JsonNode;
 
 /**
  * S089–S098 end to end over HTTP: prefilled draft, autosave and resume, entity-aware validation, Stripe Connect
- * account + Account Session (asserted on WireMock), payouts, plan, permits, submit, two-step review with flag /
+ * account + Account Session (asserted on WireMock), payouts mirrored from Stripe, plan, permits, submit, two-step review with flag /
  * send back / request info / resubmit, same-person approval refused, final approval by a second person, org approved,
  * outbox events, subscription activation, SSN encryption and PII masking with access logging.
  */
@@ -47,11 +47,9 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         assertThat(started.text("/status")).isEqualTo("DRAFT");
         assertThat(started.text("/business/phone")).isEqualTo("+17132490142");
         assertThat(started.text("/business/contactEmail")).isEqualTo("adaeze@example.com");
-        assertThat(started.text("/payouts/accountHolderName")).isEqualTo("Adaeze Nwosu");
+        assertThat(started.body().path("payouts").isNull()).as("Stripe collects the payout account").isTrue();
         assertThat(strings(started.body().path("prefilledFields"))).containsExactlyInAnyOrder("business.contactEmail",
-                "business.phone", "businessDetails.legalFirstName", "businessDetails.legalLastName",
-                "payouts.accountHolderName");
-        // A prefilled account holder name is not a payout account: Payouts stays incomplete until Stripe links one.
+                "business.phone", "businessDetails.legalFirstName", "businessDetails.legalLastName");
         assertThat(strings(started.body().path("completedSteps"))).doesNotContain("payouts", "stripe-verification");
         Response resumed = post("/v1/applications/me", Map.of("kind", "SELLER"));
         assertThat(resumed.status()).isEqualTo(200);
@@ -111,16 +109,23 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         assertThat(accountId).startsWith("acct_");
         LoggedRequest create = StripeStub.requests(STRIPE, "POST", "/v1/accounts").stream()
                 .filter(r -> StripeStub.decoded(r).contains("metadata[org_id]=" + orgId)).findFirst().orElseThrow();
-        assertThat(StripeStub.decoded(create)).contains("controller[fees][payer]=application",
-                "controller[losses][payments]=application", "controller[requirement_collection]=stripe",
+        assertThat(StripeStub.decoded(create)).contains("controller[fees][payer]=account",
+                "controller[losses][payments]=stripe", "controller[requirement_collection]=stripe",
                 "controller[stripe_dashboard][type]=none", "settings[payouts][schedule][interval]=manual",
                 "capabilities[card_payments][requested]=true", "capabilities[transfers][requested]=true",
                 "business_type=individual", "country=US");
-        assertThat(create.getHeader("Idempotency-Key")).isEqualTo("connect-account-" + orgId);
+        assertThat(create.getHeader("Idempotency-Key")).isEqualTo("connect-account-v3-" + orgId);
         assertThat(create.getHeader("Authorization")).isEqualTo("Bearer sk_test_seller_it");
-        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/account_sessions")).anySatisfy(b -> assertThat(b)
-                .contains("account=" + accountId, "components[account_onboarding][enabled]=true",
-                        "components[account_management][enabled]=true"));
+        // Stripe-collected account: every component keeps Stripe's defaults, so Stripe collects the payout bank
+        // account and the components agree on external_account_collection (Stripe refuses a mismatch, and refuses
+        // false on an account whose requirements Stripe collects).
+        List<String> sessions = StripeStub.bodies(STRIPE, "POST", "/v1/account_sessions").stream()
+                .filter(b -> b.contains("account=" + accountId)).toList();
+        assertThat(sessions).isNotEmpty().allSatisfy(b -> assertThat(b)
+                .contains("components[account_onboarding][enabled]=true",
+                        "components[account_management][enabled]=true",
+                        "components[notification_banner][enabled]=true")
+                .doesNotContain("external_account_collection").doesNotContain("[features]"));
         assertThat(post("/v1/applications/me/stripe/account-session", Map.of()).text("/accountId"))
                 .isEqualTo(accountId);
 
@@ -129,36 +134,22 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         assertThat(refreshed.text("/stripe/identityStatus")).isEqualTo("verified");
         assertThat(refreshed.text("/stripe/taxIdStatus")).isEqualTo("verified");
 
-        // Payouts: routing checksum, matching account numbers, bank token forwarded to Stripe.
-        Response mismatch = put("/v1/applications/me/steps/payouts", Map.of("routingNumber", "021000021",
-                "accountNumber", "000123456789", "accountNumberConfirmation", "000123456780"));
-        assertThat(mismatch.status()).isEqualTo(422);
-        assertThat(mismatch.body().path("fieldErrors").has("payouts.accountNumberConfirmation")).isTrue();
-        Response payouts = put("/v1/applications/me/steps/payouts", Map.of("accountHolderName", "Adaeze Nwosu",
-                "accountType", "checking", "bankName", "Chase", "routingNumber", "021000021",
-                "accountNumber", "000123456789", "accountNumberConfirmation", "000123456789",
-                "externalAccountToken", "btok_us_verified"));
-        assertThat(payouts.status()).isEqualTo(200);
-        assertThat(payouts.text("/payouts/accountLast4")).isEqualTo("6789");
-        assertThat(payouts.body().at("/payouts/externalAccountLinked").asBoolean()).isTrue();
-        assertThat(strings(payouts.body().path("prefilledFields"))).contains("payouts.accountHolderName");
-        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/accounts/" + accountId + "/external_accounts"))
-                .anySatisfy(b -> assertThat(b).contains("external_account=btok_us_verified"));
-        assertThat(strings(payouts.body().path("completedSteps"))).contains("payouts");
-
-        // Without a client-side token the numbers go to Stripe once (as the payout account) and are never stored.
+        // Payouts: the bank account Stripe collected in its onboarding, mirrored read-only (never typed here).
+        assertThat(refreshed.text("/payouts/bankName")).isEqualTo("STRIPE TEST BANK");
+        assertThat(refreshed.text("/payouts/accountLast4")).isEqualTo("6789");
+        assertThat(refreshed.text("/payouts/bankStatus")).isEqualTo("new");
+        assertThat(refreshed.body().at("/payouts/externalAccountLinked").asBoolean()).isTrue();
+        assertThat(strings(refreshed.body().path("completedSteps"))).contains("stripe-verification", "payouts");
         Response typed = put("/v1/applications/me/steps/payouts", Map.of("accountHolderName", "Adaeze Nwosu",
-                "accountType", "checking", "routingNumber", "021000021", "accountNumber", "000987654321",
-                "accountNumberConfirmation", "000987654321"));
-        assertThat(typed.status()).isEqualTo(200);
-        assertThat(typed.body().at("/payouts/externalAccountLinked").asBoolean()).isTrue();
-        assertThat(typed.body().toString()).doesNotContain("000987654321");
+                "routingNumber", "021000021", "accountNumber", "000987654321"));
+        assertThat(typed.status()).isEqualTo(422);
+        assertThat(typed.text("/code")).isEqualTo("seller.step-managed-by-stripe");
+        assertThat(StripeStub.requests(STRIPE, "POST", "/v1/accounts/" + accountId + "/external_accounts"))
+                .as("the platform never attaches a bank account").isEmpty();
+        assertThat(StripeStub.requests(STRIPE, "POST", "/v1/accounts/" + accountId))
+                .as("nor updates the Stripe-collected account").isEmpty();
         assertThat(jdbc.sql("select data::text from application where id = :id").param("id", appId)
-                .query(String.class).single()).doesNotContain("000987654321").doesNotContain("000123456789");
-        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/accounts/" + accountId + "/external_accounts"))
-                .anySatisfy(b -> assertThat(b).contains("external_account[routing_number]=021000021",
-                        "external_account[account_number]=000987654321",
-                        "external_account[account_holder_type]=individual"));
+                .query(String.class).single()).doesNotContain("000987654321");
 
         Response plan = put("/v1/applications/me/steps/plan", Map.of("planCode", "seller_growth",
                 "cadence", "quarterly", "paymentMethodKind", "card", "stripePaymentMethodId", "pm_card_visa",
@@ -289,18 +280,20 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         assertThat(orgApproved.path("applicantUserId").asString()).isEqualTo(user);
         assertThat(orgApproved.path("legalName").asString()).isEqualTo("Adaeze Nwosu");
 
-        // Subscription created at Stripe with the plan's trial; card attached as default.
+        // The subscription starts with the plan's trial (30 days) on our own RRULE schedule: no Stripe Billing
+        // subscription, customer or price exists; the first invoice is issued when the trial ends.
         assertThat(jdbc.sql("select status from subscription where org_id = :o").param("o", orgId)
                 .query(String.class).single()).isEqualTo("TRIALING");
-        String customer = jdbc.sql("select stripe_customer_id from subscription where org_id = :o").param("o", orgId)
-                .query(String.class).single();
-        assertThat(customer).startsWith("cus_");
-        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/customers")).anySatisfy(b -> assertThat(b)
-                .contains("metadata[org_id]=" + orgId));
-        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/subscriptions")).anySatisfy(b -> assertThat(b)
-                .contains("customer=" + customer, "trial_period_days=30",
-                        "metadata[plan_lookup_key]=seller_growth_quarterly"));
-        assertThat(StripeStub.requests(STRIPE, "POST", "/v1/payment_methods/pm_card_visa/attach")).isNotEmpty();
+        assertThat(jdbc.sql("select anchor_date = trial_ends_at from subscription where org_id = :o")
+                .param("o", orgId).query(Boolean.class).single()).isTrue();
+        assertThat(jdbc.sql("select (trial_ends_at between now() + interval '29 days' and now() + interval '31 "
+                + "days') from subscription where org_id = :o").param("o", orgId).query(Boolean.class).single())
+                .isTrue();
+        assertThat(jdbc.sql("select count(*) from invoice where org_id = :o").param("o", orgId).query(Long.class)
+                .single()).isZero();
+        assertThat(StripeStub.requests(STRIPE, "POST", "/v1/subscriptions")).isEmpty();
+        assertThat(jdbc.sql("select count(*) from payment_method where org_id = :o and is_default").param("o", orgId)
+                .query(Long.class).single()).isEqualTo(1);
         assertThat(events(SellerEvents.SUBSCRIPTION_CHANGED, orgId)).isEqualTo(1);
         assertThat(lastEvent(SellerEvents.SUBSCRIPTION_CHANGED, orgId).path("change").asString())
                 .isEqualTo("ACTIVATED");
@@ -325,7 +318,7 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         assertThat(started.text("/businessDetails/address/country")).isEqualTo("US");
         assertThat(strings(started.body().path("prefilledFields"))).containsExactlyInAnyOrder("business.contactEmail",
                 "business.phone", "business.storeName", "businessDetails.legalFirstName",
-                "businessDetails.legalLastName", "businessDetails.address", "payouts.accountHolderName");
+                "businessDetails.legalLastName", "businessDetails.address");
 
         // Idempotent: the second click resumes the same application and ignores a different prefill.
         Response again = post("/v1/applications/me", Map.of("kind", "PROVIDER",
@@ -350,9 +343,8 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         assertThat(partial.status()).isEqualTo(201);
         assertThat(partial.text("/businessDetails/legalFirstName")).isEqualTo("Tolu");
         assertThat(partial.text("/business/contactEmail")).isEqualTo("tolu@example.com");
-        assertThat(partial.text("/payouts/accountHolderName")).isEqualTo("Tolu Bello");
         assertThat(strings(partial.body().path("prefilledFields"))).containsExactlyInAnyOrder("business.contactEmail",
-                "businessDetails.legalFirstName", "businessDetails.legalLastName", "payouts.accountHolderName");
+                "businessDetails.legalFirstName", "businessDetails.legalLastName");
 
         // Resuming fills answers that are still empty (the address saved since), never the ones given.
         Response resumed = post("/v1/applications/me", Map.of("kind", "SELLER", "prefill", Map.of("givenName", "Other",

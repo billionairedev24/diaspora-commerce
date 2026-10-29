@@ -10,6 +10,7 @@ import { useMemo, useState } from 'react';
 
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { useT } from '@/i18n/t';
 import { dateTime, humanize, idempotencyKey, money, shortDate } from '@/lib/format';
 import { exportDataset } from '@/lib/table-export';
 
@@ -28,6 +29,7 @@ type Action = 'quarantine' | 'release' | 'transfer' | 'write-off' | 'adjust' | n
 
 /** One lot: batch, dates, receipt, movements trace, related lots and its actions (quarantine, release, transfer, write-off, count). */
 export function LotSheet({ id, onClose }: { id: string | null; onClose: () => void }) {
+  const t = useT();
   const api = useHub();
   const { inventoryEdit, inventoryApprove } = useHubAccess();
   const trace = useQuery({ ...inventoryHubQueries.lotTrace(api, id ?? ''), enabled: id !== null });
@@ -67,7 +69,7 @@ export function LotSheet({ id, onClose }: { id: string | null; onClose: () => vo
   const rank = siblings.data ? pickRanks(siblings.data.items.filter((l) => l.nodeId === lot?.nodeId)).get(lot?.id ?? '') : undefined;
   const days = daysToExpiry(lot?.expDate, todayIso());
   return (
-    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={lot ? `Lot ${lot.lotNo}` : 'Lot'} className="w-[min(100vw,640px)]">
+    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={lot ? `Lot ${lot.lotNo}` : 'Lot'}>
       {trace.isPending ? <Spinner /> : null}
       {trace.isError ? <ErrorState error={trace.error} onRetry={() => void trace.refetch()} /> : null}
       {lot && trace.data ? (
@@ -83,12 +85,24 @@ export function LotSheet({ id, onClose }: { id: string | null; onClose: () => vo
               ['SKU', lot.sku],
               ['Batch / lot', lot.lotNo],
               ['Fulfilment centre · bin', `${lot.nodeId} · ${lot.bin ?? '—'}`],
-              ['Owner', lot.ownerOrg ?? '—'],
+              ['Owner', lot.ownerOrgName ?? '—'],
               ['On hand · reserved · available', `${lot.qtyOnHand} · ${lot.qtyReserved} · ${lot.qtyAvailable}`],
               ['Made', shortDate(lot.mfgDate)],
               ['Expires', shortDate(lot.expDate)],
               ['Received', `${dateTime(lot.receivedAt)} · ${lot.receiptRef ?? '—'}`],
-              ['Landed cost', `${money(lot.unitLandedCostMinor, lot.currency)} / unit`],
+              [t('st.lot.costPaid'), `${money(lot.unitLandedCostMinor, lot.currency)} / unit`],
+              ...(lot.currency === 'USD'
+                ? []
+                : [
+                    [t('st.lot.rate'), t('st.lot.rateValue', { currency: lot.currency, rate: String(lot.fxRateToUsd), date: shortDate(lot.fxRateDate), source: t(`st.lot.source.${lot.fxRateSource}`) })],
+                    [t('st.lot.costUsd'), `${money(lot.unitCostUsdMinor)} / unit`]
+                  ]),
+              ...(lot.costComponents && (lot.costComponents.freightMinor || lot.costComponents.dutyMinor || lot.costComponents.otherMinor)
+                ? [[t('st.lot.components'), t('st.lot.componentsValue', {
+                    goods: money(lot.costComponents.goodsMinor, lot.currency), freight: money(lot.costComponents.freightMinor, lot.currency),
+                    duty: money(lot.costComponents.dutyMinor, lot.currency), other: money(lot.costComponents.otherMinor, lot.currency)
+                  })]]
+                : []),
               ['Reason', lot.reason ?? '—']
             ].map(([k, v]) => (
               <div key={k} className="contents">
@@ -167,7 +181,7 @@ export function LotSheet({ id, onClose }: { id: string | null; onClose: () => vo
               <h3 className="m-0 text-sm font-bold">Orders holding or shipped from this lot</h3>
               {trace.data.orders.map((o) => (
                 <span key={o.orderId}>
-                  {o.orderId} · {o.qty ?? ''} units · {o.status ?? ''}
+                  {o.orderNumber ?? ''} · {o.qty ?? ''} units · {o.status ?? ''}
                 </span>
               ))}
             </section>

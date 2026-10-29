@@ -16,6 +16,7 @@ import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ReleaseRequest;
 import com.afrotransact.payments.application.CaptureCommand;
 import com.afrotransact.payments.application.CaptureResult;
 import com.afrotransact.payments.application.CreatePaymentCommand;
+import com.afrotransact.payments.application.MembershipBenefitsService;
 import com.afrotransact.payments.application.OffSessionChargeService;
 import com.afrotransact.payments.application.OffSessionCommand;
 import com.afrotransact.payments.application.OrderRefundCommand;
@@ -70,7 +71,10 @@ class PaymentController {
         PaymentResult result = payments.create(new CreatePaymentCommand(body.orderId(), body.customerId(),
                 Money.of(body.amountMinor(), currency), body.paymentMethodTypes(), body.placedAt(), body.metadata(),
                 body.lines().stream().map(l -> l.toLine(currency)).toList(), body.shopperId(),
-                Boolean.TRUE.equals(body.saveForOffSession()), Boolean.TRUE.equals(body.offSession())),
+                Boolean.TRUE.equals(body.saveForOffSession()), Boolean.TRUE.equals(body.offSession()),
+                Boolean.TRUE.equals(body.useCredit()), body.membershipWaivers() == null ? List.of()
+                : body.membershipWaivers().stream().map(w -> new MembershipBenefitsService.AppliedWaiver(w.ref(),
+                w.benefit(), w.amountMinor(), w.tierCode())).toList()),
                 idempotencyKey);
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
                 .body(PaymentResponse.of(result.payment(), result.replayed()));
@@ -183,7 +187,8 @@ class PaymentController {
         RefundResult result = payments.refund(id, new RefundCommand(body.lines().stream()
                 .map(l -> new RefundCommand.Line(l.lineId(), money(l.itemsMinor(), currency),
                         money(l.shippingMinor(), currency), money(l.taxMinor(), currency))).toList(),
-                body.reason(), body.fault()), idempotencyKey);
+                body.reason(), body.fault(), Boolean.TRUE.equals(body.cardAsCredit()), body.chosenBy()),
+                idempotencyKey);
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
                 .body(RefundResponse.of(result.refund(), result.reversals(), result.replayed()));
     }
@@ -199,7 +204,8 @@ class PaymentController {
             @RequestHeader(IDEMPOTENCY_KEY) @NotBlank @Size(max = 160) String idempotencyKey,
             @Valid @RequestBody OrderRefundRequest body) {
         RefundResult result = orderRefunds.refundByOrder(new OrderRefundCommand(orderId, body.lineIds(),
-                body.amountMinor(), body.reason(), body.fault()), idempotencyKey);
+                body.amountMinor(), body.reason(), body.fault(), Boolean.TRUE.equals(body.cardAsCredit()),
+                body.chosenBy()), idempotencyKey);
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
                 .body(RefundResponse.of(result.refund(), result.reversals(), result.replayed()));
     }

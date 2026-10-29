@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"slices"
@@ -37,6 +38,13 @@ type StaffServices struct {
 	Markets app.StaffMarketsService
 	// Inventory serves the Inventory hub and AfroTransact Retail (1P) workspace (S281); routes are registered when it is set.
 	Inventory app.StaffInventoryService
+	// Plans serves Plans & billing (S292–S297); routes are registered when it is set.
+	Plans app.StaffPlansService
+	// Identity serves the token inspector and published documents of Identity & access (S291); routes are registered when
+	// it is set.
+	Identity app.StaffIdentityService
+	// Assistant is Lola in the staff console (read-only); routes are registered when it is set.
+	Assistant app.StaffAssistantService
 	// Files serves exports kept by the BFF itself (nil when exports live in media).
 	Files port.LocalExportFiles
 }
@@ -47,13 +55,20 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 		return
 	}
 	route("GET /v1/staff/session", h.staffSession)
+	if s.Assistant != nil {
+		route("GET /v1/staff/assistant", h.staffAssistantStatus)
+		route("POST /v1/staff/assistant/chat", h.staffAssistantChat)
+	}
+	h.registerStaffPlans(route)
 	route("GET /v1/staff/dashboard", h.staffDashboard)
+	route("GET /v1/staff/lookups/{kind}", h.staffLookup)
 	route("GET /v1/staff/resources/{resource}", h.staffList)
 	route("POST /v1/staff/resources/{resource}", h.staffCreate)
 	route("GET /v1/staff/resources/{resource}/{id}", h.staffRecord)
 	route("PATCH /v1/staff/resources/{resource}/{id}", h.staffUpdate)
 	route("POST /v1/staff/resources/{resource}/{id}/actions/{action}", h.staffAction)
 	route("POST /v1/staff/resources/{resource}/{id}/notes", h.staffNote)
+	route("GET /v1/staff/resources/{resource}/{id}/files/{fileId}", h.staffFile)
 	route("GET /v1/staff/exports", h.staffExports)
 	route("POST /v1/staff/exports", h.staffCreateExport)
 	route("GET /v1/staff/exports/{exportId}", h.staffExport)
@@ -70,8 +85,18 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 		route("POST /v1/staff/fees/schedules", h.staffCreateFeeSchedule)
 		route("POST /v1/staff/fees/schedules/{scheduleId}/cancel", h.staffCancelFeeSchedule)
 		route("POST /v1/staff/fees/delivery-quote", h.staffDeliveryQuote)
+		route("POST /v1/staff/tax-rates/import", h.staffTaxRatesImport)
+		route("GET /v1/staff/fees/negotiated-rates", h.staffNegotiatedRates)
+		route("POST /v1/staff/fees/negotiated-rates", h.staffCreateNegotiatedRate)
+		route("POST /v1/staff/fees/negotiated-rates/{rateId}/end", h.staffEndNegotiatedRate)
+		route("GET /v1/staff/fees/calculator", h.staffFeeCalculator)
+		route("POST /v1/staff/fees/orgs/{orgId}/negotiated-plan", h.staffNegotiatePlan)
 	}
 	if s.Dispatch != nil {
+		route("GET /v1/staff/dispatch/runs", h.staffRuns)
+		route("GET /v1/staff/dispatch/runs/{runId}", h.staffRun)
+		route("POST /v1/staff/dispatch/runs/{runId}/plan", h.staffPlanRun)
+		route("POST /v1/staff/dispatch/runs/{runId}/advance", h.staffAdvanceRun)
 		route("GET /v1/staff/dispatch/pickups", h.staffPickups)
 		route("GET /v1/staff/dispatch/pickups/{shipmentId}/driver-suggestions", h.staffPickupSuggestions)
 		route("POST /v1/staff/dispatch/pickups/{shipmentId}/assign", h.staffAssignPickup)
@@ -93,6 +118,10 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	}
 	if s.Markets != nil {
 		h.registerStaffMarkets(route)
+	}
+	if s.Identity != nil {
+		route("POST /v1/staff/identity/token-inspector", h.staffInspectToken)
+		route("GET /v1/staff/identity/documents", h.staffIdentityDocuments)
 	}
 }
 
@@ -162,6 +191,11 @@ func (h *handlersImpl) staffList(w http.ResponseWriter, r *http.Request) {
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
+func (h *handlersImpl) staffLookup(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Records.Lookup(r.Context(), callerFrom(r.Context()), r.PathValue("kind"), r.URL.Query().Get("q"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
 type recordValues struct {
 	Values  map[string]any `json:"values"`
 	Version *string        `json:"version"`
@@ -190,6 +224,24 @@ func (h *handlersImpl) staffRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := h.s.Staff.Records.Get(r.Context(), callerFrom(r.Context()), name, r.PathValue("id"))
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// staffFile sends the reviewer to one file attached to a record (an application's document): the upstream answers with
+// a short-lived signed URL and logs the access.
+func (h *handlersImpl) staffFile(w http.ResponseWriter, r *http.Request) {
+	name, err := staffResource(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	u, err := h.s.Staff.Records.FileURL(r.Context(), callerFrom(r.Context()), name, r.PathValue("id"), r.PathValue("fileId"))
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	h.finish(w, callerFrom(r.Context()))
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, u, http.StatusFound)
 }
 
 func (h *handlersImpl) staffUpdate(w http.ResponseWriter, r *http.Request) {
@@ -409,6 +461,82 @@ func (h *handlersImpl) staffDeliveryQuote(w http.ResponseWriter, r *http.Request
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
+func (h *handlersImpl) staffTaxRatesImport(w http.ResponseWriter, r *http.Request) {
+	if h.s.Staff.Fees == nil {
+		h.reply(w, r, http.StatusNotFound, nil, domain.NewProblem(http.StatusNotFound, "NOT_FOUND", "Not available", ""))
+		return
+	}
+	var b struct {
+		Csv string `json:"csv"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Fees.ImportTaxRates(r.Context(), callerFrom(r.Context()), b.Csv)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffNegotiatedRates(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	page, perr := intParam(q.Get("page"), 0)
+	size, serr := intParam(q.Get("size"), 25)
+	if perr != nil || serr != nil {
+		h.reply(w, r, 0, nil, domain.ValidationProblem(map[string]string{"page": "Use whole numbers for page and size"}))
+		return
+	}
+	v, err := h.s.Staff.Fees.NegotiatedRates(r.Context(), callerFrom(r.Context()), app.NegotiatedRateQuery{OrgID: q.Get("orgId"),
+		Type: strings.ToUpper(q.Get("type")), Status: strings.ToUpper(q.Get("status")), Q: q.Get("q"), Page: page, Size: size})
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func intParam(s string, def int) (int, error) {
+	if s == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, fmt.Errorf("not a whole number: %w", err)
+	}
+	return n, nil
+}
+
+func (h *handlersImpl) staffCreateNegotiatedRate(w http.ResponseWriter, r *http.Request) {
+	var b domain.NegotiatedRateDraft
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Fees.CreateNegotiatedRate(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) staffEndNegotiatedRate(w http.ResponseWriter, r *http.Request) {
+	var b domain.NegotiatedRateEnd
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Fees.EndNegotiatedRate(r.Context(), callerFrom(r.Context()), r.PathValue("rateId"), b.Reason)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffFeeCalculator(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	v, err := h.s.Staff.Fees.Calculate(r.Context(), callerFrom(r.Context()), q.Get("orgId"), q.Get("category"), q.Get("kind"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffNegotiatePlan(w http.ResponseWriter, r *http.Request) {
+	var b domain.NegotiatedPlanDraft
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Fees.NegotiatePlan(r.Context(), callerFrom(r.Context()), r.PathValue("orgId"), b)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
 // ---------------------------------------------------------------- dispatch: seller pickups (S255)
 
 func (h *handlersImpl) staffPickups(w http.ResponseWriter, r *http.Request) {
@@ -433,6 +561,33 @@ func (h *handlersImpl) staffAssignPickup(w http.ResponseWriter, r *http.Request)
 
 func (h *handlersImpl) staffPickupAssignments(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Staff.Dispatch.Assignments(r.Context(), callerFrom(r.Context()), r.PathValue("shipmentId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// ---------------------------------------------------------------- dispatch: delivery runs (S264)
+
+func (h *handlersImpl) staffRuns(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Dispatch.Runs(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("status"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffRun(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Dispatch.Run(r.Context(), callerFrom(r.Context()), r.PathValue("runId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffPlanRun(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Dispatch.PlanRun(r.Context(), callerFrom(r.Context()), r.PathValue("runId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffAdvanceRun(w http.ResponseWriter, r *http.Request) {
+	var b domain.RunAdvanceRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Dispatch.AdvanceRun(r.Context(), callerFrom(r.Context()), r.PathValue("runId"), b)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
@@ -480,5 +635,22 @@ func (h *handlersImpl) staffTemplateTestSend(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	v, err := h.s.Staff.Notifications.TestSend(r.Context(), callerFrom(r.Context()), r.PathValue("key"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// ---------------------------------------------------------------- Lola (staff)
+
+func (h *handlersImpl) staffAssistantStatus(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Assistant.Status(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffAssistantChat(w http.ResponseWriter, r *http.Request) {
+	var b domain.AssistantChatRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Assistant.Chat(r.Context(), callerFrom(r.Context()), b)
 	h.reply(w, r, http.StatusOK, v, err)
 }

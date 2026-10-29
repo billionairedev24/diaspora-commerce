@@ -5,6 +5,8 @@
    build that leaves a URL unset (REQUIRED_URL_VARS). EXPO_PUBLIC_* values are inlined at build time, so they must be
    read with static property access. */
 
+import { metroHost } from './devHost';
+
 export type AppEnv = 'local' | 'dev' | 'uat' | 'prod';
 
 export interface EnvConfig {
@@ -90,5 +92,6 @@ export const env: EnvConfig = resolveEnv({
   stripePublishableKey: process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY,
   stripeMerchantId: process.env.EXPO_PUBLIC_STRIPE_MERCHANT_ID,
   mocks: process.env.EXPO_PUBLIC_MOCKS,
-  devHost: process.env.EXPO_PUBLIC_DEV_HOST
+  // An explicit EXPO_PUBLIC_DEV_HOST wins; otherwise a development phone uses the machine that serves its JS.
+  devHost: process.env.EXPO_PUBLIC_DEV_HOST || metroHost()
 });

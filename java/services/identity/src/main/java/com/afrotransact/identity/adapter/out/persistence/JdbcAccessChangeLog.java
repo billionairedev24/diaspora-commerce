@@ -29,7 +29,7 @@ class JdbcAccessChangeLog implements AccessChangeLog {
                 .param("user", targetUserId)
                 .param("role", targetRole)
                 .param("subject", subject)
-                .param("detail", detail == null ? null : detail.substring(0, Math.min(500, detail.length())))
+                .param("detail", detail == null ? null : detail.substring(0, Math.min(2000, detail.length())))
                 .update();
     }
 

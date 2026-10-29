@@ -296,3 +296,35 @@ func TestBothOrganisationsUseSellerCenter(t *testing.T) {
 		t.Fatalf("%v", summary(inv.enqueued))
 	}
 }
+
+func TestPreorderCancelledByAfroTransactPromisesAFullRefund(t *testing.T) {
+	for name, tc := range map[string]struct {
+		captured bool
+		actor    string
+		want     string
+	}{
+		"captured":   {true, "PLATFORM_ADMIN", "AfroTransact cancelled this pre-order. We're refunding the full $27.99, delivery fee included"},
+		"authorised": {false, "PLATFORM_ADMIN", "AfroTransact cancelled this pre-order. You haven't been charged"},
+		"own":        {true, "CUSTOMER", "We're refunding $27.99 to your original payment method"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := newFakeStore()
+			res := &fakeResolver{contacts: map[string]port.Contact{"cust-1": ada()}}
+			ing := newIngest(store, res, "refundNote")
+			handle(t, ing, "orders.shipment.cancelled", map[string]any{"orderId": "o-1", "orderNumber": "AT-2026-7KQ3MD",
+				"customerId": "cust-1", "shipmentId": "s-1", "currency": "USD", "totalMinor": 2799, "captured": tc.captured,
+				"actorType": tc.actor, "fulfilmentType": "PREORDER", "windowId": "w-1", "reason": "Pre-order window cancelled: low demand"})
+			if len(store.enqueued) == 0 {
+				t.Fatal("no notification")
+			}
+			for _, n := range store.enqueued {
+				if !strings.Contains(n.BodyText, tc.want) {
+					t.Errorf("%s body %q lacks %q", n.Channel, n.BodyText, tc.want)
+				}
+				if strings.Contains(n.BodyText, "low demand") {
+					t.Errorf("the staff reason must not reach the customer: %q", n.BodyText)
+				}
+			}
+		})
+	}
+}

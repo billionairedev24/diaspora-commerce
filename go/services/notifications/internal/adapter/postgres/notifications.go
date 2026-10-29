@@ -245,9 +245,19 @@ func (s *notificationStoreImpl) MarkSent(ctx context.Context, id string, r domai
 				UNION ALL SELECT dr.status FROM delivery_receipt dr
 					WHERE dr.provider = $2 AND dr.provider_message_id = $3 AND $3 <> '') x
 				ORDER BY status_rank(s) DESC LIMIT 1),
-			provider = $2, provider_message_id = $3, sent_at = $4, updated_at = now(), last_error = NULL
-		WHERE id = $1`, id, r.Provider, r.ProviderMessageID, r.AcceptedAt)
+			provider = $2, provider_message_id = $3, sent_at = $4, updated_at = now(), last_error = NULL,
+			-- A gift card code is a bearer secret (S321: payments keeps only its hash): once the email is handed to the
+			-- provider the stored copy shows the code masked.
+			body_html = CASE WHEN n.template_key = 'payment.gift_card.delivered' THEN regexp_replace(n.body_html, $5, $6, 'g') ELSE n.body_html END,
+			body_text = CASE WHEN n.template_key = 'payment.gift_card.delivered' THEN regexp_replace(n.body_text, $5, $6, 'g') ELSE n.body_text END
+		WHERE id = $1`, id, r.Provider, r.ProviderMessageID, r.AcceptedAt, giftCardCodePattern, giftCardCodeMask)
 }
+
+// giftCardCodePattern matches a gift card code as payments generates it (four groups of four, A-Z and 0-9).
+const (
+	giftCardCodePattern = `[A-Z0-9]{4}(-[A-Z0-9]{4}){3}`
+	giftCardCodeMask    = `••••-••••-••••-••••`
+)
 
 func (s *notificationStoreImpl) Reschedule(ctx context.Context, id string, at time.Time, reason string) error {
 	return s.exec(ctx, `UPDATE notification SET next_attempt_at = $2, status_detail = $3, updated_at = now()

@@ -14,6 +14,11 @@ spring:
       maximum-pool-size: ${DB_POOL_SIZE:10}
   flyway:
     locations: classpath:db/platform,classpath:db/migration
+  servlet:
+    multipart:
+      # S308 bulk upload: 10 MB per file (ImportLimits.MAX_FILE_BYTES), a little more for the form fields.
+      max-file-size: 10MB
+      max-request-size: 11MB
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
     producer:
@@ -101,6 +106,35 @@ at:
       page-size: ${LISTING_ENFORCEMENT_PAGE_SIZE:500}
       stall-after: 2m          # a running run with no page committed for this long is resumed by the job
       resume-interval: 60s
+    # S308 bulk upload: the background import notifies the seller for uploads of at least notify-min-rows rows;
+    # a queued or running import without progress for stall-after is resumed by another pod.
+    imports:
+      notify-min-rows: ${IMPORT_NOTIFY_MIN_ROWS:100}
+      stall-after: 2m
+      resume-interval: 60s
+    # S308: images of bulk uploads are copied from their URLs by media-service (POST /v1/assets/import).
+    media:
+      base-url: ${MEDIA_URL:http://localhost:8207}
+      timeout: ${MEDIA_TIMEOUT:30s}
+    # catalog-service's own client-credentials token (identity client catalog-service, scope media:import).
+    oauth:
+      issuer-url: ${AUTH_ISSUER_URL:http://localhost:8100}
+      token-path: /oauth2/token
+      client-id: ${CATALOG_CLIENT_ID:catalog-service}
+      client-secret: ${CATALOG_CLIENT_SECRET:local-catalog-service-secret}
+      scopes: media:import orders:purchase-check
+    # S324 verified-purchase product reviews: catalog asks orders-service whether the customer received the product
+    # (GET /v1/lookup/customers/{customerId}/purchases/{atin}, scope orders:purchase-check).
+    orders:
+      base-url: ${ORDERS_URL:http://localhost:8104}
+      timeout: ${ORDERS_TIMEOUT:3s}
+    reviews:
+      # A review can be edited for this long after it was written (then it is final).
+      edit-window: ${REVIEWS_EDIT_WINDOW:30d}
+      # Photos must be https URLs on one of these hosts (empty = any https host); media-service publishes review photos.
+      photo-hosts: ${REVIEWS_PHOTO_HOSTS:}
+      # Extra words (comma-separated) that send a review to moderation, on top of the built-in profanity list.
+      extra-blocked-words: ${REVIEWS_EXTRA_BLOCKED_WORDS:}
     # S031 GTIN prefill: providers in lookup order, cached per GTIN in product_data_lookup.
     product-data:
       order: ${PRODUCT_DATA_ORDER:GS1,OPEN_FOOD_FACTS}

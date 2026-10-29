@@ -31,7 +31,7 @@ in the gateway-bff). The legal center groups them:
 | Privacy and cookies | `privacy`, `cookies`, `privacy-choices`, `sms-terms`, `subprocessors` |
 | Policies | `community-guidelines`, `ip-policy`, `prohibited-items`, `accessibility` |
 
-Every key is seeded (V5 for the first nine, V12 for the other twelve) so that a link to any of them renders from day one; the
+Every key is seeded (V5 for the first nine, V13 for the other twelve) so that a link to any of them renders from day one; the
 loader replaces the seeded drafts. `python3 tools/legal/build_seed.py --list` shows the seeded version of each key and whether a
 written file exists.
 

@@ -3,7 +3,7 @@
 import { bffProblemType, type Cart, type CartPackage, type DeliveryPromise, type ProductDetail, type ProductSummary, type SearchPage } from '@afrotransact/api-client';
 
 import { type Booking, type CheckoutSummary, type OrderConfirmation, type OrderTracking } from '../types';
-import { mockDb, type MockLine, type MockShipment, nextId, productByAtin } from './db';
+import { mockDb, type MockLine, type MockReview, type MockShipment, nextId, productByAtin } from './db';
 import { type FixtureProduct, PRODUCTS, PROVIDERS, USER } from './fixtures';
 import { atZoned } from './zoned';
 
@@ -14,6 +14,14 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const noContent = () => new Response(null, { status: 204 });
 const problem = (status: number, title: string, code: string, detail?: string) =>
   new Response(JSON.stringify({ type: bffProblemType(code), title, status, code, detail: detail ?? title }), { status, headers: { 'Content-Type': 'application/problem+json' } });
+
+/** The signed-in shopper's credit ledger, newest first: a gift card redeemed, then part of an order paid with it. */
+function mockCreditEntries() {
+  return [
+    { id: 'cre_2', kind: 'SPEND', source: 'ORDER', amountMinor: -1250, currency: 'USD', balanceAfterMinor: 3750, createdAt: '2026-10-20T15:04:00Z' },
+    { id: 'cre_1', kind: 'GRANT', source: 'GIFT_CARD', amountMinor: 5000, currency: 'USD', balanceAfterMinor: 5000, createdAt: '2026-10-12T09:30:00Z' }
+  ];
+}
 
 const TAX_RATE = 0.0825;
 const FREE_THRESHOLD = 3500;
@@ -54,7 +62,7 @@ function search(q: string, page: number, size: number): SearchPage {
   const hits = PRODUCTS.filter((p) => words.every((w) => `${p.title} ${p.sellerName} ${p.department}`.toLowerCase().includes(w)));
   const slice = hits.slice(page * size, page * size + size).map(summaryOf);
   const facet = { department: [], community: [], fulfilment: [], sellerKind: [], rating: [], price: [], delivery: [] };
-  return { hits: slice, total: hits.length, page, size, pageCount: Math.ceil(hits.length / size), facets: facet, deliverToLabel: 'Houston 77032', tookMs: 3 };
+  return { hits: slice, total: hits.length, page, size, pageCount: Math.ceil(hits.length / size), facets: facet, deliverToLabel: 'Houston 77032', tookMs: 3, services: [] };
 }
 
 function packageKey(p: FixtureProduct) {
@@ -251,8 +259,75 @@ const LABEL: Record<string, string> = { REQUESTED: 'Awaiting provider', CONFIRME
 
 /* ── Routes ────────────────────────────────────────────────────────────────── */
 
+/** A product the shopper has received (a delivered shipment holds it): the backend's rule for who can review (S324). */
+function receivedAtin(atin: string): boolean {
+  return mockDb().orders.some((o) => o.shipments.some((s) => s.status === 'delivered' && s.items.some((it) => it.atin === atin)));
+}
+
+const EDIT_WINDOW_MS = 30 * 86_400_000;
+
+function ownReview(r: MockReview) {
+  const editableUntil = new Date(new Date(r.createdAt).getTime() + EDIT_WINDOW_MS);
+  return { id: r.id, reviewerName: `${USER.firstName} ${USER.lastName.charAt(0)}.`, rating: r.rating, title: r.title, text: r.text, photos: [] as Array<{ url: string }>, status: r.status, createdAt: r.createdAt,
+    updatedAt: r.updatedAt, editableUntil: editableUntil.toISOString(), editable: editableUntil.getTime() > Date.now(), moderation: null, reply: null };
+}
+
+/** The automatic checks of catalog (links, e-mail addresses, phone numbers, profanity): a flagged review waits for staff. */
+const flagged = (...parts: Array<string | null | undefined>) => /https?:\/\/|www\.|\S+@\S+\.\S+|(?:\+?\d[\s().-]?){9,}|\b(?:damn|shit|fuck)\w*/i.test(parts.filter(Boolean).join(' '));
+
+function readReview(body: unknown): { rating: number; title: string | null; text: string | null } | Response {
+  const b = (body ?? {}) as { rating?: unknown; title?: unknown; text?: unknown };
+  if (typeof b.rating !== 'number' || !Number.isInteger(b.rating) || b.rating < 1 || b.rating > 5) {
+    return new Response(JSON.stringify({ type: bffProblemType('VALIDATION_FAILED'), title: 'Check your review', status: 422, code: 'VALIDATION_FAILED', errors: { rating: 'Choose 1 to 5 stars' } }), { status: 422, headers: { 'Content-Type': 'application/problem+json' } });
+  }
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  return { rating: b.rating, title: str(b.title), text: str(b.text) };
+}
+
 const ROUTES: Array<[string, string, Handler]> = [
-  ['GET', '/v1/me', () => json({ authenticated: true, user: { id: USER.id, firstName: USER.firstName, lastName: USER.lastName, email: USER.email, initials: 'AO', roles: ['account.customer'] }, counts: { orders: mockDb().orders.length, returns: mockDb().returns.length, addresses: mockDb().addresses.length, paymentMethods: mockDb().paymentMethods.length } })],
+  ['GET', '/v1/products/:atin/reviews', ({ params }) => {
+    const own = mockDb().reviews[params.atin ?? ''];
+    const published = own?.status === 'PUBLISHED' ? [own] : [];
+    const breakdown = [1, 2, 3, 4, 5].map((n) => published.filter((r) => r.rating === n).length);
+    const count = published.length;
+    return json({ rating: { average: count ? published.reduce((a, r) => a + r.rating, 0) / count : 0, count, breakdown },
+      items: published.map((r) => ({ id: r.id, reviewerName: ownReview(r).reviewerName, rating: r.rating, title: r.title, text: r.text, photos: [], verifiedPurchase: true, createdAt: r.createdAt, reply: null })),
+      total: count, page: 0, size: 10 });
+  }],
+  ['GET', '/v1/products/:atin/reviews/mine', ({ params }) => {
+    const atin = params.atin ?? '';
+    const own = mockDb().reviews[atin];
+    if (own) return json({ eligible: false, reason: 'already-reviewed', review: ownReview(own) });
+    const eligible = receivedAtin(atin);
+    return json({ eligible, reason: eligible ? null : 'not-purchased', review: null });
+  }],
+  ['POST', '/v1/products/:atin/reviews', ({ params, body }) => {
+    const atin = params.atin ?? '';
+    if (!receivedAtin(atin)) return problem(403, 'Only buyers can review', 'REVIEW_NOT_VERIFIED_PURCHASE', 'Only customers who received this item can review it.');
+    if (mockDb().reviews[atin]) return problem(409, 'Already reviewed', 'REVIEW_ALREADY_EXISTS', 'You have already reviewed this item.');
+    const input = readReview(body);
+    if (input instanceof Response) return input;
+    const now = new Date().toISOString();
+    const review: MockReview = { id: `00000000-0000-4000-8000-${String(mockDb().seq++).padStart(12, '0')}`, ...input, status: flagged(input.title, input.text) ? 'PENDING' : 'PUBLISHED', createdAt: now, updatedAt: now };
+    mockDb().reviews[atin] = review;
+    return json(ownReview(review), 201);
+  }],
+  ['PUT', '/v1/products/:atin/reviews/mine', ({ params, body }) => {
+    const own = mockDb().reviews[params.atin ?? ''];
+    if (!own) return problem(404, 'No review', 'NOT_FOUND', 'You have not reviewed this item.');
+    if (!ownReview(own).editable) return problem(409, 'Editing is closed', 'REVIEW_EDIT_WINDOW_CLOSED', 'Reviews can be edited for 30 days after you wrote them.');
+    const input = readReview(body);
+    if (input instanceof Response) return input;
+    Object.assign(own, input, { status: flagged(input.title, input.text) ? 'PENDING' : 'PUBLISHED', updatedAt: new Date().toISOString() });
+    return json(ownReview(own));
+  }],
+  ['DELETE', '/v1/products/:atin/reviews/mine', ({ params }) => {
+    const db = mockDb();
+    if (!db.reviews[params.atin ?? '']) return problem(404, 'No review', 'NOT_FOUND', 'You have not reviewed this item.');
+    delete db.reviews[params.atin ?? ''];
+    return noContent();
+  }],
+  ['GET', '/v1/me', () => json({ authenticated: true, user: { id: USER.id, firstName: USER.firstName, lastName: USER.lastName, email: USER.email, initials: 'AO', roles: ['account.customer'] }, counts: { orders: mockDb().orders.length, addresses: mockDb().addresses.length, paymentMethods: mockDb().paymentMethods.length } })],
   ['GET', '/v1/search', ({ url }) => json(search(url.searchParams.get('q') ?? '', Number(url.searchParams.get('page') ?? 0), Number(url.searchParams.get('size') ?? 24)))],
   ['GET', '/v1/products/:atin', ({ params }) => { const p = productByAtin(params.atin ?? ''); return p ? json(detailOf(p)) : problem(404, 'Product not found', 'NOT_FOUND'); }],
   ['GET', '/v1/cart', () => json(buildCart())],
@@ -280,21 +355,54 @@ const ROUTES: Array<[string, string, Handler]> = [
   }],
   ['DELETE', '/v1/cart/items/:lineId', ({ params }) => { const db = mockDb(); db.lines = db.lines.filter((l) => l.lineId !== params.lineId); return json(buildCart()); }],
   ['GET', '/v1/account/addresses', () => json({ items: mockDb().addresses, nextCursor: null })],
+  ['POST', '/v1/account/addresses', ({ body }) => {
+    const db = mockDb();
+    const b = (body ?? {}) as Partial<(typeof db.addresses)[number]> & { acceptUnverified?: boolean };
+    // A street number of 0 stands in for an address the geo service can't verify (try it, then "Keep mine").
+    if (!b.acceptUnverified && /^0\b/.test(b.line1 ?? '')) {
+      return new Response(JSON.stringify({ type: bffProblemType('VALIDATION'), title: 'Check the address', status: 422, code: 'VALIDATION', errors: { line1: 'We couldn’t find that street number.' } }), { status: 422, headers: { 'Content-Type': 'application/problem+json' } });
+    }
+    const first = db.addresses.length === 0;
+    if (b.isDefault || first) db.addresses.forEach((a) => { a.isDefault = false; });
+    const a = { id: nextId('a'), name: b.name ?? '', phone: b.phone ?? '', line1: b.line1 ?? '', line2: b.line2 ?? '', city: b.city ?? '', state: b.state ?? '', zip: b.zip ?? '', isDefault: !!b.isDefault || first, verified: !b.acceptUnverified };
+    db.addresses.push(a);
+    return json(a, 201);
+  }],
+  ['PATCH', '/v1/account/addresses/:id', ({ params, body }) => {
+    const db = mockDb();
+    const a = db.addresses.find((x) => x.id === params.id);
+    if (!a) return problem(404, 'Address not found', 'NOT_FOUND');
+    const b = (body ?? {}) as Partial<typeof a>;
+    if (b.isDefault) db.addresses.forEach((x) => { x.isDefault = false; });
+    Object.assign(a, { name: b.name ?? a.name, phone: b.phone ?? a.phone, line1: b.line1 ?? a.line1, line2: b.line2 ?? '', city: b.city ?? a.city, state: b.state ?? a.state, zip: b.zip ?? a.zip, isDefault: b.isDefault ?? a.isDefault });
+    return json(a);
+  }],
+  ['POST', '/v1/account/addresses/:id/default', ({ params }) => {
+    const db = mockDb();
+    const a = db.addresses.find((x) => x.id === params.id);
+    if (!a) return problem(404, 'Address not found', 'NOT_FOUND');
+    db.addresses.forEach((x) => { x.isDefault = x.id === a.id; });
+    return json(a);
+  }],
+  ['DELETE', '/v1/account/addresses/:id', ({ params }) => {
+    const db = mockDb();
+    db.addresses = db.addresses.filter((x) => x.id !== params.id);
+    if (db.addresses.length && !db.addresses.some((x) => x.isDefault)) db.addresses[0]!.isDefault = true;
+    return noContent();
+  }],
+  ['GET', '/v1/account/credit', ({ url }) => {
+    const entries = mockCreditEntries();
+    const before = url.searchParams.get('before');
+    const from = before ? entries.findIndex((e) => e.id === before) + 1 : 0;
+    const page = entries.slice(from, from + 20);
+    const next = from + 20 < entries.length ? page[page.length - 1]!.id : null;
+    return json({ balanceMinor: entries[0]?.balanceAfterMinor ?? 0, currency: 'USD', entries: page, nextBefore: next });
+  }],
   ['GET', '/v1/account/payment-methods', () => json({ items: mockDb().paymentMethods, nextCursor: null })],
   ['POST', '/v1/account/payment-methods/setup-intents', () => json({ clientSecret: `seti_mock_${nextId('')}_secret_mock`, publishableKey: 'pk_test_mock' }, 201)],
   ['DELETE', '/v1/account/payment-methods/:id', ({ params }) => { const db = mockDb(); db.paymentMethods = db.paymentMethods.filter((m) => m.id !== params.id); return noContent(); }],
   ['GET', '/v1/account/orders', () => json({ items: mockDb().orders.map((o) => ({ orderNumber: o.orderNumber, placedAt: o.placedAt, totalMinor: o.totalMinor, currency: 'USD', shipTo: o.shipTo, status: o.status, shipments: o.shipments.map((s) => ({ shipmentId: s.shipmentId, label: s.label, status: s.status, items: s.items.map((it) => `${productByAtin(it.atin)?.title ?? it.atin}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(', ') })) })), nextCursor: null })],
   ['GET', '/v1/account/orders/:orderNumber/tracking', ({ params }) => { const t = tracking(params.orderNumber ?? ''); return t ? json(t) : problem(404, 'Order not found', 'NOT_FOUND'); }],
-  ['GET', '/v1/account/returns', () => json({ items: mockDb().returns, nextCursor: null })],
-  ['POST', '/v1/account/returns', ({ body }) => {
-    const b = body as { orderNumber: string; atin: string; reason: string };
-    const p = productByAtin(b.atin);
-    if (!p) return problem(422, 'Unknown item', 'VALIDATION');
-    const r = { rmaId: `RMA-${100000 + mockDb().seq}`, orderNumber: b.orderNumber, title: p.title, status: 'started', refundMinor: p.priceMinor, atin: b.atin };
-    nextId('r');
-    mockDb().returns.push(r);
-    return json(r, 201);
-  }],
   ['GET', '/v1/checkout/summary', () => { const s = checkoutSummary(); return s ? json(s) : problem(409, 'Your cart is empty', 'CART_EMPTY'); }],
   ['POST', '/v1/checkout/orders', ({ body }) => placeOrder(body as Parameters<typeof placeOrder>[0])],
   /* identity */

@@ -101,6 +101,45 @@ class EventListenersIT extends OffersIntegrationTest {
     }
 
     @Test
+    void listingTermsFromTheProductFormReachTheSellersOffers() {
+        String product = atin();
+        String small = atin();
+        String large = atin();
+        String payload = """
+                {"productId":"%s","atin":"%s","ownerKind":"SELLER","ownerOrgId":"%s","status":"LIVE",
+                 "title":"Suya Pepper","categoryId":null,"productTypeCode":"grocery","condition":"NEW",
+                 "fulfilment":"SELLER","handlingDays":4,
+                 "shipFrom":{"locationId":"loc-1","label":"Houston","city":"Houston","region":"TX","country":"US","postalCode":"77002"},
+                 "variants":[{"atin":"%s","sellerSku":"SUYA-8","gtin":null,"priceMinor":899,"currency":"USD","quantity":40,
+                              "compareAtMinor":1199}]}
+                """.formatted(UUID.randomUUID(), product, LAGOS, small);
+        catalogListener.onMessage(record("at.product.events", "catalog.product.created", UUID.randomUUID(), payload));
+        TestActors.as(TestActors.seller(LAGOS));
+        OfferView created = offers.list(null, product, null, 0, 10).items().getFirst();
+        assertThat(created.offer().listPriceMinor()).isEqualTo(1199L);
+        assertThat(created.offer().handlingDays()).isEqualTo(4);
+        assertThat(created.offer().shipFrom().label()).isEqualTo("Houston, TX");
+
+        String changed = payload.replace("\"priceMinor\":899", "\"priceMinor\":799")
+                .replace("\"quantity\":40", "\"quantity\":12").replace("\"handlingDays\":4", "\"handlingDays\":2")
+                .replace("\"compareAtMinor\":1199}]", "\"compareAtMinor\":1199},"
+                        + "{\"atin\":\"" + large + "\",\"sellerSku\":\"SUYA-16\",\"gtin\":null,\"priceMinor\":1499,"
+                        + "\"currency\":\"USD\",\"quantity\":5,\"compareAtMinor\":null}]");
+        UUID terms = UUID.randomUUID();
+        catalogListener.onMessage(record("at.product.events", "catalog.product.terms_changed", terms, changed));
+        catalogListener.onMessage(record("at.product.events", "catalog.product.terms_changed", terms, changed));
+        List<OfferView> mine = offers.list(null, product, null, 0, 10).items();
+        assertThat(mine).hasSize(2);
+        OfferView updated = mine.stream().filter(v -> v.offer().atin().equals(small)).findFirst().orElseThrow();
+        assertThat(updated.offer().priceMinor()).isEqualTo(799);
+        assertThat(updated.offer().sellerQuantity()).isEqualTo(12);
+        assertThat(updated.offer().handlingDays()).isEqualTo(2);
+        assertThat(outboxTypes(small)).containsOnlyOnce("offers.offer.created", "offers.offer.updated");
+        assertThat(outboxTypes(large)).containsOnlyOnce("offers.offer.created");
+        TestActors.reset();
+    }
+
+    @Test
     void inventoryAvailabilityIsVersionedAndDeduplicated() {
         String product = atin();
         String variant = atin();

@@ -110,8 +110,9 @@ func siteSettingsResource() *staffResource {
 			return staffList{items: []jobj{o}, total: &one}, nil
 		},
 		get:        get,
+		names:      []nameRef{personRef("updatedBy", "Updated by")},
 		titleOf:    func(jobj) string { return "Contacts & social links" },
-		subtitleOf: func(o jobj) string { return "Revision " + jstr(o, "revision") + " · " + jstr(o, "updatedBy") },
+		subtitleOf: func(o jobj) string { return "Revision " + jstr(o, "revision") + " · " + jstr(o, "updatedByName") },
 		sections: func(o jobj) []domain.DetailSection {
 			links := domain.DetailSection{Title: "Social links", Fields: []domain.DetailField{}}
 			for _, s := range objs(o, "socials") {
@@ -135,7 +136,7 @@ func siteSettingsResource() *staffResource {
 		edit: &staffEdit{permission: "content:site.edit",
 			form: func(o jobj) domain.Form {
 				fields := []domain.FormField{
-					withValue(withPattern(ff("supportPhone", "Support phone (E.164)", "text", true), `^\+[1-9][0-9]{7,14}$`, "Use the international format, e.g. +18324300000"), jstr(o, "contacts.supportPhone")),
+					withValue(withPattern(ff("supportPhone", "Support phone (E.164)", "text", true), `^\+[1-9][0-9]{7,14}$`, "Use the international format, e.g. +18324300000. Customers and sellers who tap the WhatsApp chat button reach this number, so it must be a number WhatsApp can message."), jstr(o, "contacts.supportPhone")),
 					withValue(withMax(ff("supportPhoneDisplay", "Phone as shown", "text", true), 30), jstr(o, "contacts.supportPhoneDisplay")),
 					withValue(ff("supportEmail", "Support email", "email", true), jstr(o, "contacts.emails.support")),
 					withValue(withMax(ff("smsProgramName", "SMS program name", "text", true), 60), jstr(o, "smsProgramName")),
@@ -279,6 +280,33 @@ func legalResource() *staffResource {
 
 // ---------------------------------------------------------------- announcements, placements and ads (content)
 
+func placementStaffActions(key string, act func(string, func(jobj) jobj) func(context.Context, staffCtx, jobj, jobj) error) []staffAction {
+	actions := []staffAction{
+		{key: "submit", label: "Send for review", tone: "primary", permission: "content:placements.edit", confirm: "Send this placement for review?", when: inState("DRAFT", "REJECTED"), run: act("/submit", func(jobj) jobj { return nil })},
+		{key: "approve", label: "Approve", tone: "primary", permission: "content:placements.approve", level: domain.LevelApprove, confirm: "Approve and schedule?", when: inState("IN_REVIEW", "SUBMITTED"), run: act("/approve", func(jobj) jobj { return nil })},
+		{key: "reject", label: "Reject", tone: "danger", permission: "content:placements.approve", level: domain.LevelApprove, form: noteForm("Reject back to draft", "Reject", true), when: inState("IN_REVIEW", "SUBMITTED"),
+			run: act("/reject", func(v jobj) jobj { return jobj{"note": vs(v, "note")} })},
+		{key: "end", label: "End now", tone: "danger", permission: "content:placements.edit", also: []string{"content:placements.approve"}, confirm: "End this placement now?", when: inState("SCHEDULED", "LIVE"),
+			run: act("/end", func(jobj) jobj { return nil })},
+	}
+	if key != "placements" {
+		return actions
+	}
+	actions = append(actions, staffAction{
+		key: "delete", label: "Delete", tone: "danger", permission: "advert:delete", confirm: "Permanently delete this advert?",
+		when: func(sc staffCtx, o jobj) string {
+			if !boolean(o, "paid") {
+				return "Only paid adverts can be deleted."
+			}
+			return inState("DRAFT", "ENDED")(sc, o)
+		}, removes: true,
+		run: func(ctx context.Context, sc staffCtx, o jobj, _ jobj) error {
+			return sc.call(ctx, sc.up.Content, port.StaffCall{Method: http.MethodDelete, Path: "/v1/placements/" + url.PathEscape(jstr(o, "id"))}, nil)
+		},
+	})
+	return actions
+}
+
 func placementsResource(key string) *staffResource {
 	announcements := key == "announcements"
 	title := "Placements & ads"
@@ -342,6 +370,7 @@ func placementsResource(key string) *staffResource {
 			return jpage(raw).items, nil
 		}),
 		get:     getByPath("/v1/placements/", upContent),
+		names:   []nameRef{personRef("createdBy", "Created by"), personRef("submittedBy", "Submitted by"), personRef("approvedBy", "Approved by")},
 		titleOf: func(o jobj) string { return jstr(o, "name") },
 		subtitleOf: func(o jobj) string {
 			s := jstr(o, "slot")
@@ -351,14 +380,7 @@ func placementsResource(key string) *staffResource {
 			return s
 		},
 		version: func(o jobj) string { return jstr(o, "version") },
-		actions: []staffAction{
-			{key: "submit", label: "Send for review", tone: "primary", permission: "content:placements.edit", confirm: "Send this placement for review?", when: inState("DRAFT", "REJECTED"), run: act("/submit", func(jobj) jobj { return nil })},
-			{key: "approve", label: "Approve", tone: "primary", permission: "content:placements.approve", level: domain.LevelApprove, confirm: "Approve and schedule?", when: inState("IN_REVIEW", "SUBMITTED"), run: act("/approve", func(jobj) jobj { return nil })},
-			{key: "reject", label: "Reject", tone: "danger", permission: "content:placements.approve", level: domain.LevelApprove, form: noteForm("Reject back to draft", "Reject", true), when: inState("IN_REVIEW", "SUBMITTED"),
-				run: act("/reject", func(v jobj) jobj { return jobj{"note": vs(v, "note")} })},
-			{key: "end", label: "End now", tone: "danger", permission: "content:placements.edit", also: []string{"content:placements.approve"}, confirm: "End this placement now?", when: inState("SCHEDULED", "LIVE"),
-				run: act("/end", func(jobj) jobj { return nil })},
-		},
+		actions: placementStaffActions(key, act),
 		edit: &staffEdit{permission: "content:placements.edit",
 			form: func(o jobj) domain.Form {
 				return domain.Form{Title: "Edit draft", SubmitLabel: "Save draft", Fields: baseFields(o)}
@@ -434,7 +456,8 @@ func identityProvidersResource() *staffResource {
 	}
 	return &staffResource{
 		key: "identity-providers", module: "dev", title: "Identity providers", status: status,
-		columns: []domain.Column{col("displayName", "Provider", "strong", 30), col("configured", "Configured", "text", 20), col("updatedBy", "Changed by", "text", 25), col("status", "Sign-in button", "status", 25)},
+		columns: []domain.Column{col("displayName", "Provider", "strong", 30), col("configured", "Configured", "text", 20), col("updatedByName", "Changed by", "text", 25), col("status", "Sign-in button", "status", 25)},
+		names:   []nameRef{personRef("updatedBy", "Changed by")},
 		cells:   func(o jobj) map[string]any { return map[string]any{"status": status(o)} },
 		list:    list, get: findIn(list, "id"),
 		titleOf: func(o jobj) string { return jstr(o, "displayName") },
@@ -500,6 +523,7 @@ func privacyRequestsResource() *staffResource {
 		idOf:    func(o jobj) string { return jstr(o, "reference") },
 		list:    listAll(load),
 		get:     getByPath("/v1/privacy/requests/", upContent),
+		names:   []nameRef{personRef("resolvedBy", "Resolved by")},
 		titleOf: func(o jobj) string { return jstr(o, "reference") + " · " + domain.Humanize(jstr(o, "type")) },
 		subtitleOf: func(o jobj) string {
 			return jstr(o, "email") + " · " + jstr(o, "state") + " · due " + jstr(o, "dueAt")

@@ -76,6 +76,11 @@ class JdbcLedgerRepository implements LedgerRepository {
         return journals("where e.order_id = :v", orderId);
     }
 
+    @Override
+    public List<Journal> journalsByStripeRef(String stripeRef) {
+        return journals("where e.stripe_ref = :v", stripeRef);
+    }
+
     private List<Journal> journals(String where, Object value) {
         List<Row> rows = jdbc.sql("""
                 select e.id, e.journal_key, e.type, e.order_id, e.payment_id, e.stripe_ref, e.description,
@@ -177,7 +182,13 @@ class JdbcLedgerRepository implements LedgerRepository {
         JdbcClient.StatementSpec spec = jdbc.sql("""
                 select e.id, e.type, e.occurred_at, e.order_id, e.description, l.currency,
                        sum(case l.side when 'C' then l.amount_minor else -l.amount_minor end) as amount,
-                       c.label_id, c.shipment_id, c.tracking_number, c.carrier
+                       c.label_id, c.shipment_id, c.tracking_number, c.carrier,
+                       (select coalesce(sum(case f.side when 'C' then f.amount_minor else -f.amount_minor end), 0)
+                          from journal_line f where f.journal_id = e.id and f.account_code = :commissionCode
+                           and f.org_id = :org and f.currency = l.currency) as commission,
+                       (select coalesce(sum(case f.side when 'C' then f.amount_minor else -f.amount_minor end), 0)
+                          from journal_line f where f.journal_id = e.id and f.account_code = :connectionCode
+                           and f.org_id = :org and f.currency = l.currency) as connection_fee
                 from journal_line l
                 join journal_entry e on e.id = l.journal_id
                 left join label_charge c on c.charge_journal_id = e.id or c.credit_journal_id = e.id
@@ -190,6 +201,8 @@ class JdbcLedgerRepository implements LedgerRepository {
                 limit :limit
                 """.formatted(kindFilter))
                 .param("code", Chart.SELLER_PAYABLE.code()).param("org", orgId).param("currency", currency)
+                .param("commissionCode", Chart.COMMISSION_REVENUE.code())
+                .param("connectionCode", Chart.CONNECTION_FEE_REVENUE.code())
                 .param("from", Sql.ts(from)).param("to", Sql.ts(to)).param("limit", limit);
         if (!kindFilter.isEmpty()) {
             spec = spec.param("kinds", kinds.stream().map(Enum::name).toList());
@@ -198,7 +211,9 @@ class JdbcLedgerRepository implements LedgerRepository {
                         JournalType.valueOf(rs.getString("type")), Sql.instant(rs, "occurred_at"),
                         rs.getString("order_id"), rs.getString("description"),
                         Money.of(rs.getLong("amount"), rs.getString("currency")), rs.getString("label_id"),
-                        rs.getString("shipment_id"), rs.getString("tracking_number"), rs.getString("carrier")))
+                        rs.getString("shipment_id"), rs.getString("tracking_number"), rs.getString("carrier"),
+                        Money.of(rs.getLong("commission"), rs.getString("currency")),
+                        Money.of(rs.getLong("connection_fee"), rs.getString("currency"))))
                 .list();
     }
 

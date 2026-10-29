@@ -136,7 +136,7 @@ func (s *sellerShellImpl) SaveOnboardingBusiness(ctx context.Context, c *domain.
 	body := port.SellerApplicationBiz{Offering: strings.ToUpper(strings.TrimSpace(in.Offering)),
 		EntityType: strings.ToLower(strings.TrimSpace(in.EntityType)), Country: strings.ToUpper(strings.TrimSpace(in.Country)),
 		StoreName: strings.TrimSpace(in.StoreName), ContactEmail: strings.TrimSpace(in.ContactEmail), Phone: strings.TrimSpace(in.Phone),
-		Website: strings.TrimSpace(in.Website)}
+		Description: strings.TrimSpace(in.Description), BrandColor: strings.TrimSpace(in.BrandColor), LogoURL: strings.TrimSpace(in.LogoURL)}
 	a, err := s.r.d.Sellers.SaveApplicationStep(ctx, c.BearerToken, "business", body)
 	if err != nil {
 		return domain.OnboardingStatus{}, mapErr("seller", err)
@@ -170,28 +170,15 @@ func (s *sellerShellImpl) SaveOnboardingOwners(ctx context.Context, c *domain.Ca
 	return s.saveStep(ctx, c, "owners", map[string]any{"owners": owners})
 }
 
-// SaveOnboardingPayouts sends the payout bank account to Stripe through the seller service (which keeps the last 4
-// digits only). The step is complete once Stripe accepted it.
-func (s *sellerShellImpl) SaveOnboardingPayouts(ctx context.Context, c *domain.Caller, in domain.OnboardingPayoutsInput) (domain.OnboardingStatus, error) {
-	digits := func(v string) string {
-		return strings.Map(func(r rune) rune {
-			if r >= '0' && r <= '9' {
-				return r
-			}
-			return -1
-		}, v)
-	}
-	body := port.SellerApplicationPayoutsStep{AccountHolderName: strings.TrimSpace(in.AccountHolderName),
-		AccountType: strings.ToLower(strings.TrimSpace(in.AccountType)), RoutingNumber: digits(in.RoutingNumber),
-		AccountNumber: digits(in.AccountNumber), AccountNumberConfirmation: digits(in.AccountNumberConfirmation)}
-	return s.saveStep(ctx, c, "payouts", body)
-}
-
 // SaveOnboardingPlan autosaves "Plan": plan, cadence and (for paid plans) the card tokenised by Stripe.js.
 func (s *sellerShellImpl) SaveOnboardingPlan(ctx context.Context, c *domain.Caller, in domain.OnboardingPlanInput) (domain.OnboardingStatus, error) {
 	body := port.SellerApplicationPlanStep{PlanCode: strings.TrimSpace(in.PlanCode), Cadence: strings.ToUpper(strings.TrimSpace(in.Cadence)),
 		PaymentMethodKind: strings.ToUpper(strings.TrimSpace(in.PaymentMethodKind)), StripePaymentMethodID: strings.TrimSpace(in.StripePaymentMethodID),
-		CardBrand: strings.ToLower(strings.TrimSpace(in.CardBrand)), CardLast4: strings.TrimSpace(in.CardLast4), CardExpMonth: in.CardExpMonth, CardExpYear: in.CardExpYear}
+		CardBrand: strings.ToLower(strings.TrimSpace(in.CardBrand)), CardLast4: strings.TrimSpace(in.CardLast4), CardExpMonth: in.CardExpMonth, CardExpYear: in.CardExpYear,
+		PromoCode: strings.ToUpper(strings.TrimSpace(in.PromoCode)), PlanFeeCollection: strings.ToUpper(strings.TrimSpace(in.PlanFeeCollection))}
+	if body.PlanFeeCollection != "" && body.PlanFeeCollection != domain.PlanFeeEarningsFirst && body.PlanFeeCollection != domain.PlanFeeCard {
+		return domain.OnboardingStatus{}, domain.ValidationProblem(map[string]string{"planFeeCollection": "Choose EARNINGS_FIRST or CARD"})
+	}
 	return s.saveStep(ctx, c, "plan", body)
 }
 
@@ -294,15 +281,34 @@ func (s *sellerShellImpl) OnboardingStripeSession(ctx context.Context, c *domain
 	if err != nil {
 		return domain.OnboardingStripeSession{}, mapErr("seller", err)
 	}
+	return s.stripeSessionOf(se)
+}
+
+// stripeSessionOf adds the publishable key Connect.js needs; a real session can't load without one.
+func (s *sellerShellImpl) stripeSessionOf(se port.SellerAccountSession) (domain.OnboardingStripeSession, error) {
 	out := domain.OnboardingStripeSession{AccountID: se.AccountID, ClientSecret: se.ClientSecret, PublishableKey: s.r.d.PublishableKey, LocalTest: se.LocalTest}
 	if se.ExpiresAt != nil {
 		out.ExpiresAt = strPtr(se.ExpiresAt.UTC().Format(time.RFC3339))
 	}
 	if !se.LocalTest && strings.TrimSpace(s.r.d.PublishableKey) == "" {
 		return domain.OnboardingStripeSession{}, domain.NewProblem(http.StatusServiceUnavailable, "STRIPE_NOT_CONFIGURED", "Stripe isn't configured",
-			"Stripe verification can't load: the BFF has no Stripe publishable key (STRIPE_PUBLISHABLE_KEY).")
+			"Stripe's embedded components can't load: the BFF has no Stripe publishable key (STRIPE_PUBLISHABLE_KEY).")
 	}
 	return out, nil
+}
+
+// SellerStripeSession is an Account Session for the active organisation's owner or finance member (Account health):
+// Stripe's embedded components answer what Stripe needs and change the payout bank account.
+func (s *sellerShellImpl) SellerStripeSession(ctx context.Context, c *domain.Caller) (domain.OnboardingStripeSession, error) {
+	sc, err := s.r.require(ctx, c, "", "", "")
+	if err != nil {
+		return domain.OnboardingStripeSession{}, err
+	}
+	se, err := s.r.d.Sellers.OrgStripeSession(ctx, c.BearerToken, sc.org.ID)
+	if err != nil {
+		return domain.OnboardingStripeSession{}, mapErr("seller", err)
+	}
+	return s.stripeSessionOf(se)
 }
 
 // RefreshOnboardingStripe re-reads verification results from Stripe (after the embedded component closes).
@@ -449,7 +455,10 @@ func onboardingForm(a port.SellerApplication, status string) domain.OnboardingFo
 		Editable:   status == "DRAFT" || status == "INFO_REQUESTED"}
 	if b := a.Business; b != nil {
 		f.Business = domain.OnboardingBusiness{Offering: strPtr(strings.ToUpper(b.Offering)), EntityType: strPtr(strings.ToUpper(b.EntityType)),
-			Country: strPtr(b.Country), StoreName: strPtr(b.StoreName), ContactEmail: strPtr(b.ContactEmail), Phone: strPtr(b.Phone), Website: strPtr(b.Website)}
+			Country: strPtr(b.Country), StoreName: strPtr(b.StoreName), ContactEmail: strPtr(b.ContactEmail), Phone: strPtr(b.Phone)}
+		if br := b.Branding; br != nil {
+			f.Business.Description, f.Business.BrandColor, f.Business.LogoURL = strPtr(br.Description), strPtr(br.BrandColor), strPtr(br.LogoURL)
+		}
 	}
 	if d := a.BusinessDetails; d != nil {
 		f.Details = domain.OnboardingDetails{LegalFirstName: strPtr(d.LegalFirstName), LegalLastName: strPtr(d.LegalLastName), LegalName: strPtr(d.LegalName),
@@ -462,14 +471,20 @@ func onboardingForm(a port.SellerApplication, status string) domain.OnboardingFo
 			Email: strPtr(o.Email), OwnershipPercent: o.OwnershipPercent, SignificantControl: o.SignificantControl, DateOfBirth: strPtr(o.DateOfBirth),
 			Address: onboardingAddressOf(o.Address)})
 	}
-	if p := a.Payouts; p != nil {
-		f.Payouts = domain.OnboardingPayouts{AccountHolderName: strPtr(p.AccountHolderName), AccountType: strPtr(p.AccountType), BankName: strPtr(p.BankName),
-			RoutingLast4: strPtr(p.RoutingLast4), AccountLast4: strPtr(p.AccountLast4), Linked: p.ExternalAccountLinked}
-	}
+	f.Payouts = payoutsOf(a)
 	if p := a.Plan; p != nil {
 		f.Plan = domain.OnboardingPlan{PlanCode: strPtr(p.PlanCode), PlanName: strPtr(p.PlanName), Cadence: strPtr(strings.ToUpper(p.Cadence)),
 			PaymentMethodKind: strPtr(strings.ToUpper(p.PaymentMethodKind)), CardBrand: strPtr(p.CardBrand), CardLast4: strPtr(p.CardLast4),
-			CardExpMonth: p.CardExpMonth, CardExpYear: p.CardExpYear, FirstCharge: firstChargeOf(p.FirstCharge)}
+			CardExpMonth: p.CardExpMonth, CardExpYear: p.CardExpYear, FirstCharge: firstChargeOf(p.FirstCharge),
+			PlanFeeCollection: strPtr(strings.ToUpper(p.PlanFeeCollection))}
+	}
+	// S298: whether the Plan step offers paying the plan from sales; without the seller's answer, the card.
+	f.Plan.PlanFeeCollectionDefault = domain.PlanFeeCard
+	if o := a.PlanFeeCollectionOption; o != nil {
+		f.Plan.PlanFeeCollectionAvailable = o.Available
+		if o.PlatformDefault == domain.PlanFeeEarningsFirst {
+			f.Plan.PlanFeeCollectionDefault = domain.PlanFeeEarningsFirst
+		}
 	}
 	if c := a.Compliance; c != nil {
 		f.Compliance.Categories = append(f.Compliance.Categories, c.Categories...)
@@ -508,7 +523,7 @@ var wizardSteps = []wizardStep{
 	{"BUSINESS_DETAILS", "business-details", "Business details & TIN", "Legal name, EIN and registered address"},
 	{"OWNERS", "owners", "Owners", "Everyone with 25%+ and a control person"},
 	{"STRIPE_VERIFICATION", "stripe-verification", "Stripe verification", "Identity and tax ID checked by Stripe"},
-	{"PAYOUTS", "payouts", "Payouts", "Bank account for your payouts"},
+	{"PAYOUTS", "payouts", "Payouts", "The bank account Stripe pays out to"},
 	{"PLAN", "plan", "Plan", "Choose a subscription"},
 	{"CATALOG_COMPLIANCE", "catalog-compliance", "Catalog, permits & licences", "Categories, permits and agreements"},
 	{"REVIEW", "review", "Review & submit", "Check everything before our team reviews it"},
@@ -571,6 +586,30 @@ func stripeStatus(st *port.SellerApplicationStripe) domain.OnboardingStripe {
 		out.Status = "VERIFIED"
 	default:
 		out.Status = "PENDING"
+	}
+	return out
+}
+
+// payoutsOf is "Payouts" as Stripe holds it: Stripe collects the bank account in its embedded onboarding (the account
+// is Stripe-collected), so the step only shows the bank name, last 4 and status, and what to do next.
+func payoutsOf(a port.SellerApplication) domain.OnboardingPayouts {
+	out := domain.OnboardingPayouts{Status: domain.PayoutsNotStarted}
+	if p := a.Payouts; p != nil {
+		out.BankName, out.AccountLast4, out.BankStatus, out.Linked = strPtr(p.BankName), strPtr(p.AccountLast4), strPtr(p.BankStatus), p.ExternalAccountLinked
+	}
+	done := slices.ContainsFunc(a.CompletedSteps, func(k string) bool { return stepKey(k) == "PAYOUTS" })
+	failed := a.Payouts != nil && (a.Payouts.BankStatus == "errored" || a.Payouts.BankStatus == "verification_failed")
+	switch {
+	case done:
+		out.Status = domain.PayoutsReady
+	case a.Stripe == nil || a.Stripe.AccountID == "":
+		out.Status = domain.PayoutsNotStarted
+	case failed:
+		out.Status = domain.PayoutsFailed
+	case out.AccountLast4 == nil:
+		out.Status = domain.PayoutsNeedsBank
+	default:
+		out.Status = domain.PayoutsVerifying
 	}
 	return out
 }
@@ -653,19 +692,23 @@ func (s *sellerShellImpl) Onboarding(ctx context.Context, c *domain.Caller) (dom
 }
 
 // applicantSession is the session of someone whose application is not approved yet: identity does not list the
-// DRAFT organisation, so it comes from the seller service's application (only Onboarding is open).
-func (s *sellerShellImpl) applicantSession(ctx context.Context, c *domain.Caller, out domain.SellerSession) (domain.SellerSession, bool) {
+// DRAFT organisation, so it comes from the seller service's application (only Onboarding is open). approvedOrg is
+// the organisation of an application the seller service approved that identity does not list yet (to repair).
+func (s *sellerShellImpl) applicantSession(ctx context.Context, c *domain.Caller, out domain.SellerSession) (domain.SellerSession, bool, string) {
 	a, err := s.r.d.Sellers.Application(ctx, c.BearerToken)
 	if err != nil || a.OrgID == "" {
-		return out, false
+		return out, false, ""
 	}
 	kind := normalizeKind(a.Kind)
 	if kind == "" {
 		kind = domain.OrgKindSeller
 	}
 	status := orgStatus(a.Status)
-	if status == domain.OrgApproved || status == "REJECTED" {
-		return out, false // approved: identity lists it once the approval event arrives; rejected: nothing to resume
+	if status == domain.OrgApproved {
+		return out, false, a.OrgID // approved: identity lists it once it has the approval (repaired on the way)
+	}
+	if status == "REJECTED" {
+		return out, false, "" // nothing to resume
 	}
 	role := "seller.owner"
 	if kind == domain.OrgKindProvider {
@@ -682,5 +725,5 @@ func (s *sellerShellImpl) applicantSession(ctx context.Context, c *domain.Caller
 	out.AccessNote = "Token scope: onboarding only"
 	out.NavGroups = domain.Navigation(domain.Access{Kind: kind, Role: role}, false, nil)
 	out.Landing = domain.Landing(out.NavGroups)
-	return out, true
+	return out, true, ""
 }

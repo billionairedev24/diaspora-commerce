@@ -1,8 +1,8 @@
 'use client';
 
-import { type FieldValue, isApiError, type RecordAction, type RecordDetail, type ResourceKey, type StaffForm,staffKeys, staffQueries } from '@afrotransact/api-client';
-import { Button, Dialog, Sheet, useToast } from '@afrotransact/ui';
-import { LockSimple, PencilSimple } from '@phosphor-icons/react/ssr';
+import { definitiveFailure, type FieldValue, isApiError, type OneTimeSecret, type RecordAction, type RecordDetail, type ResourceKey, type StaffForm, staffKeys, staffQueries } from '@afrotransact/api-client';
+import { Button, Dialog, Sheet, SheetTableScroll, useToast } from '@afrotransact/ui';
+import { Check, Copy, LockSimple, PencilSimple } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -10,13 +10,48 @@ import { useState } from 'react';
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { dateTime, humanize, idempotencyKey } from '@/lib/format';
 
 import { Cell, fieldText } from './cells';
 import { FormFields } from './FormFields';
+import { RevealDialog } from './RevealDialog';
 
-type Pending = { kind: 'action'; action: RecordAction } | { kind: 'edit'; form: StaffForm };
+/** An open dialog. An action keeps one Idempotency-Key from opening until it is done, so a retry never repeats it. */
+type Pending = { kind: 'action'; action: RecordAction; key: string } | { kind: 'edit'; form: StaffForm };
+
+/** The BFF's answer when what the action would do already happened (e.g. an application already approved). */
+const isAlreadyDone = (e: unknown): boolean => isApiError(e) && e.status === 409 && e.code === 'ALREADY_DONE';
+
+/**
+ * Copies one identifier (an ID field of the sheet). People read names; the id is there for the rare time one is quoted
+ * to a developer or pasted into a ticket, so it is one tap away and never the headline.
+ */
+function CopyId({ value, label }: { value: string; label: string }) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false); // the value stays selectable next to the button
+    }
+  };
+  return (
+    <button
+      type="button"
+      className="ml-1.5 inline-flex size-6 items-center justify-center rounded-sm align-middle text-muted hover:bg-surface-hover"
+      aria-label={copied ? t('st.sheet.copied') : t('st.sheet.copyId', { label })}
+      title={copied ? t('st.sheet.copied') : t('st.sheet.copyId', { label })}
+      onClick={() => void copy()}
+    >
+      {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
+    </button>
+  );
+}
 
 function Details({ record }: { record: RecordDetail }) {
   return (
@@ -24,6 +59,17 @@ function Details({ record }: { record: RecordDetail }) {
       {record.sections.map((s) => (
         <section key={s.title} aria-label={s.title} className="flex flex-col gap-2">
           <h3 className="m-0 text-sm font-bold">{s.title}</h3>
+          {s.fields.length > 0 && s.fields.every((f) => f.kind === 'image') ? (
+            <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
+              {s.fields.map((f) => (
+                <li key={f.label}>
+                  <a href={f.value} target="_blank" rel="noreferrer" aria-label={f.label}>
+                    <img src={f.value} alt={f.label} loading="lazy" className="size-24 rounded-sm border border-border object-cover" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : (
           <dl className="m-0 grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3 gap-y-1.5 text-sm">
             {s.fields.map((f) => (
               <div key={f.label} className="contents">
@@ -36,12 +82,16 @@ function Details({ record }: { record: RecordDetail }) {
                       {f.value}
                     </a>
                   ) : (
-                    <span className={f.kind === 'mono' ? 'font-mono text-xs' : undefined}>{fieldText(f.kind, f.value)}</span>
+                    <>
+                      <span className={f.kind === 'mono' ? 'font-mono text-xs' : undefined}>{fieldText(f.kind, f.value)}</span>
+                      {s.title === 'IDs' && f.kind === 'mono' && f.value !== '—' ? <CopyId value={f.value} label={f.label} /> : null}
+                    </>
                   )}
                 </dd>
               </div>
             ))}
           </dl>
+          )}
         </section>
       ))}
       {record.tables
@@ -50,10 +100,11 @@ function Details({ record }: { record: RecordDetail }) {
           <section key={t.title} aria-label={t.title} className="flex flex-col gap-2">
             <h3 className="m-0 text-sm font-bold">{t.title}</h3>
             <div className="overflow-hidden rounded-md border border-border">
+              <SheetTableScroll>
               <table className="at-table text-xs" aria-label={t.title}>
                 <colgroup>
                   {t.columns.map((c) => (
-                    <col key={c.key} style={{ width: `${c.width}%` }} />
+                    <col key={c.key} style={{ minWidth: `${Math.max(72, c.width * 8)}px` }} />
                   ))}
                 </colgroup>
                 <thead className="bg-surface-muted text-left">
@@ -77,6 +128,7 @@ function Details({ record }: { record: RecordDetail }) {
                   ))}
                 </tbody>
               </table>
+              </SheetTableScroll>
             </div>
           </section>
         ))}
@@ -87,21 +139,48 @@ function Details({ record }: { record: RecordDetail }) {
 /**
  * Detail sheet of one record: every field, nested tables, activity and notes, and the actions the BFF allows for the
  * staff member's roles (disabled ones say why). Forms are validated before they are sent; the BFF validates again.
+ *
+ * Actions (e.g. application review decisions) run once: one Idempotency-Key per opened dialog, never retried by the
+ * client, every action button disabled while one is in flight. When the BFF answers ALREADY_DONE the current state is
+ * shown as information and the record and its table are refreshed.
  */
-export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; id: string | null; onClose: () => void }) {
+export function RecordSheet({ resource, id, onClose, sharedOpen = false }: { resource: ResourceKey; id: string | null; onClose: () => void; sharedOpen?: boolean }) {
   const api = staffApi();
   const qc = useQueryClient();
   const toast = useToast();
+  const t = useT();
   const [pending, setPending] = useState<Pending | null>(null);
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [info, setInfo] = useState<{ id: string; text: string } | null>(null);
+  /** A secret the action just created (a new OAuth client secret): shown once, kept out of the query cache. */
+  const [reveal, setReveal] = useState<OneTimeSecret | null>(null);
   const q = useQuery({ ...staffQueries.record(api, resource, id ?? ''), enabled: id !== null });
   const record = q.data;
+  // Tables sharing a tab share ?open=: the one that does not hold the record stays closed instead of showing an error.
+  const notHere = sharedOpen && q.isError && isApiError(q.error) && q.error.status === 404;
 
-  const done = (r: RecordDetail, message: string) => {
-    qc.setQueryData(staffKeys.record(resource, r.id), r);
+  /** The record, its table pages and the console's queue counts (nav badges) after a change. */
+  const refresh = () => {
     void qc.invalidateQueries({ queryKey: staffKeys.resource(resource), predicate: (query) => query.queryKey[3] === 'page' });
+    void qc.invalidateQueries({ queryKey: staffKeys.session() });
+  };
+  const done = (r: RecordDetail, message: string) => {
+    if (r.removed) {
+      void qc.removeQueries({ queryKey: staffKeys.record(resource, r.id) });
+      refresh();
+      setPending(null);
+      setInfo(null);
+      toast.show(message);
+      onClose();
+      return;
+    }
+    const { reveal: secret, ...sheet } = r;
+    qc.setQueryData(staffKeys.record(resource, r.id), sheet);
+    if (secret) setReveal(secret);
+    refresh();
     setPending(null);
+    setInfo(null);
     toast.show(message);
   };
   const failed = (e: unknown) => {
@@ -111,15 +190,37 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
     } else setFormError(problemMessage(e));
   };
   const act = useMutation({
-    mutationFn: ({ action, values }: { action: RecordAction; values: Record<string, FieldValue> }) => api.runAction(resource, id ?? '', action.key, values, idempotencyKey()),
-    onSuccess: (r, v) => done(r, `${v.action.label} — done.`),
-    onError: failed
+    mutationFn: ({ action, values, key }: { action: RecordAction; values: Record<string, FieldValue>; key: string }) => api.runAction(resource, id ?? '', action.key, values, key),
+    // A decision is never retried by the client: a retry after a timeout could repeat it (the BFF and the upstream
+    // replay the same Idempotency-Key instead).
+    retry: false,
+    onSuccess: (r, v) => done(r, t('st.recordSheet.actionDone', { action: v.action.label })),
+    onError: (e, v) => {
+      if (isAlreadyDone(e)) {
+        const text = (isApiError(e) && e.problem.detail) || t('st.recordSheet.alreadyDone');
+        setPending(null);
+        setInfo({ id: id ?? '', text });
+        toast.show(text, 'info');
+        void qc.invalidateQueries({ queryKey: staffKeys.record(resource, id ?? '') });
+        refresh();
+        return;
+      }
+      // Only an answer that proves the attempt is over allows a new key; otherwise the next try replays this one.
+      if (definitiveFailure(e)) setPending((p) => (p?.kind === 'action' && p.key === v.key ? { ...p, key: idempotencyKey() } : p));
+      failed(e);
+    }
   });
   const edit = useMutation({
     mutationFn: (values: Record<string, FieldValue>) => api.updateRecord(resource, id ?? '', values, record?.version ?? null),
+    retry: false,
     onSuccess: (r) => done(r, 'Saved.'),
     onError: failed
   });
+  const busy = act.isPending || edit.isPending;
+  const runAction = (action: RecordAction, values: Record<string, FieldValue>) => {
+    if (busy || pending?.kind !== 'action') return;
+    act.mutate({ action, values, key: pending.key });
+  };
   const [note, setNote] = useState('');
   const addNote = useMutation({
     mutationFn: () => api.addNote(resource, id ?? '', note),
@@ -131,14 +232,16 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
   });
 
   const open = (p: Pending) => {
+    if (busy) return;
     setServerErrors({});
     setFormError(null);
+    setInfo(null);
     setPending(p);
   };
   const pendingForm = pending?.kind === 'edit' ? pending.form : pending?.kind === 'action' ? pending.action.form : null;
 
   return (
-    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={record?.title ?? 'Details'} description={record?.subtitle} className="w-[min(560px,100vw)]">
+    <Sheet open={id !== null && !notHere} onOpenChange={(o) => !o && onClose()} title={record?.title ?? 'Details'} description={record?.subtitle}>
       {q.isPending ? <Spinner /> : null}
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {record ? (
@@ -150,10 +253,15 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
             </div>
             {record.subtitle ? <p className="m-0 text-sm text-muted">{record.subtitle}</p> : null}
           </div>
+          {info && info.id === record.id ? (
+            <Notice tone="info" title={t('st.recordSheet.alreadyDoneTitle')}>
+              {info.text}
+            </Notice>
+          ) : null}
           {record.actions.length || record.editForm ? (
             <div role="group" aria-label="Actions" className="flex flex-wrap gap-2">
               {record.editForm ? (
-                <Button variant="neutral" size="sm" icon={<PencilSimple size={14} aria-hidden />} onClick={() => record.editForm && open({ kind: 'edit', form: record.editForm })}>
+                <Button variant="neutral" size="sm" disabled={busy} icon={<PencilSimple size={14} aria-hidden />} onClick={() => record.editForm && open({ kind: 'edit', form: record.editForm })}>
                   Edit
                 </Button>
               ) : null}
@@ -163,10 +271,10 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
                   size="sm"
                   variant={a.tone === 'primary' ? 'primary' : 'neutral'}
                   className={a.tone === 'danger' ? 'text-danger' : undefined}
-                  disabled={!a.allowed}
+                  disabled={!a.allowed || busy}
                   title={a.reason ?? undefined}
                   icon={a.allowed ? undefined : <LockSimple size={14} aria-hidden />}
-                  onClick={() => open({ kind: 'action', action: a })}
+                  onClick={() => open({ kind: 'action', action: a, key: idempotencyKey() })}
                 >
                   {a.label}
                   {a.reason ? <span className="at-visually-hidden"> — {a.reason}</span> : null}
@@ -181,7 +289,7 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
             <ul className="m-0 flex list-none flex-wrap gap-3 p-0 text-sm">
               {record.links.map((l) => (
                 <li key={l.href}>
-                  {l.href.startsWith('/') ? <Link href={l.href}>{l.label}</Link> : <a href={l.href}>{l.label}</a>}
+                  {l.external ? <a href={l.href} target="_blank" rel="noreferrer">{l.label}</a> : l.href.startsWith('/') ? <Link href={l.href}>{l.label}</Link> : <a href={l.href}>{l.label}</a>}
                 </li>
               ))}
             </ul>
@@ -245,11 +353,14 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
           <FormFields
             key={pending?.kind === 'action' ? pending.action.key : 'edit'}
             form={pendingForm}
-            busy={act.isPending || edit.isPending}
+            busy={busy}
             serverErrors={serverErrors}
             error={formError}
             onCancel={() => setPending(null)}
-            onSubmit={(values) => (pending?.kind === 'edit' ? edit.mutate(values) : pending?.kind === 'action' ? act.mutate({ action: pending.action, values }) : undefined)}
+            onSubmit={(values) => {
+              if (pending?.kind === 'action') runAction(pending.action, values);
+              else if (pending?.kind === 'edit' && !busy) edit.mutate(values);
+            }}
           />
         ) : pending?.kind === 'action' ? (
           <div className="flex flex-col gap-4">
@@ -263,13 +374,14 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
               <Button variant="neutral" onClick={() => setPending(null)}>
                 Cancel
               </Button>
-              <Button loading={act.isPending} onClick={() => act.mutate({ action: pending.action, values: {} })}>
+              <Button loading={act.isPending} onClick={() => runAction(pending.action, {})}>
                 {pending.action.label}
               </Button>
             </div>
           </div>
         ) : null}
       </Dialog>
+      <RevealDialog secret={reveal} onClose={() => setReveal(null)} />
     </Sheet>
   );
 }

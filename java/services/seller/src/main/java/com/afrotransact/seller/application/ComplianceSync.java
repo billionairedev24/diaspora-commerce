@@ -13,6 +13,7 @@ import com.afrotransact.seller.domain.ComplianceUpdate;
 import com.afrotransact.seller.domain.ConnectAccount;
 import com.afrotransact.seller.domain.Enforcement;
 import com.afrotransact.seller.domain.PayoutHold;
+import com.afrotransact.seller.domain.PayoutSection;
 import com.afrotransact.seller.domain.RequirementsSnapshot;
 import com.afrotransact.seller.domain.StripeVerification;
 import com.afrotransact.seller.port.ApplicationRepository;
@@ -112,13 +113,19 @@ class ComplianceSync {
         }
     }
 
-    private void refreshApplication(ConnectAccount a, Instant now) {
+    /**
+     * Mirrors the account onto the organisation's application while it is open: Stripe's verification results and the
+     * payout bank account Stripe holds (the wizard's Payouts step is read-only; Stripe collects the bank).
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    void refreshApplication(ConnectAccount a, Instant now) {
         if (a.orgId() == null) {
             return;
         }
         apps.findByOrg(a.orgId()).filter(app -> !app.isApproved()).ifPresent(app -> {
             Application locked = apps.lockById(app.id()).orElse(app);
-            apps.update(locked.withStripe(StripeVerification.from(a.accountId(), a.requirements(), now), now));
+            apps.update(locked.withStripeAccount(StripeVerification.from(a.accountId(), a.requirements(), now),
+                    PayoutSection.fromStripe(a.requirements().payoutBank()), now));
         });
     }
 

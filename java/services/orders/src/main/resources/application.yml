@@ -212,6 +212,8 @@ at:
     topics:
       payment-events: at.payment.events
       carrier-events: at.carrier-shipment.events
+      # ADR 0005: preorder.window.cancelled and delivery-runs.run.cancelled refund every order on them in full.
+      delivery-runs-events: at.delivery-runs.events
     consumers:
       enabled: ${ORDERS_CONSUMERS_ENABLED:true}
     # S272 community pre-orders: cart lines in an open window become a PREORDER package (door or pickup, charged at
@@ -220,6 +222,8 @@ at:
     # late-add-duplicate-window is refused even with another Idempotency-Key.
     preorders:
       enabled: ${PREORDERS_ENABLED:true}
+      # S261: offer the next open delivery run staff scheduled for the address (AfroTransact-held goods) before a window
+      runs-enabled: ${PREORDER_RUNS_ENABLED:true}
       job-batch: 100
       link-expiry-hours: 24
       late-add-duplicate-window: 10m

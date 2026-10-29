@@ -1,5 +1,6 @@
 package com.afrotransact.payments.adapter.in.web;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -15,6 +16,7 @@ import com.afrotransact.payments.adapter.in.web.PaymentsDtos.FeeScheduleRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.FeeScheduleResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.JournalResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.OverrideRequest;
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.RateCardResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ReconcileRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ReconciliationResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.SplitResponse;
@@ -24,6 +26,7 @@ import com.afrotransact.payments.application.LedgerService;
 import com.afrotransact.payments.application.NewFeeScheduleCommand;
 import com.afrotransact.payments.application.ReconciliationService;
 import com.afrotransact.payments.application.SplitService;
+import com.afrotransact.payments.domain.FeeKind;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -47,14 +50,16 @@ class FinanceController {
     private final LedgerService ledger;
     private final ReconciliationService reconciliation;
     private final ConnectedAccountService accounts;
+    private final Clock clock;
 
     FinanceController(SplitService splits, FeeScheduleService fees, LedgerService ledger,
-                      ReconciliationService reconciliation, ConnectedAccountService accounts) {
+                      ReconciliationService reconciliation, ConnectedAccountService accounts, Clock clock) {
         this.splits = splits;
         this.fees = fees;
         this.ledger = ledger;
         this.reconciliation = reconciliation;
         this.accounts = accounts;
+        this.clock = clock;
     }
 
     @Operation(summary = "Payment split of an order (staff, payments:read)",
@@ -78,17 +83,34 @@ class FinanceController {
         return FeeScheduleResponse.of(fees.activeAt(at));
     }
 
-    @Operation(summary = "Effective fees for an organisation and category (payments:service or payments:read)",
-            description = "Commission (seller override, then category, then default), card-fee estimate "
-                    + "(cardPctBps + cardFixedMinor per charge) and FBA fee of the version in force at `at` (default "
-                    + "now). AfroTransact Retail gets zero commission and zero FBA fee (source RETAIL): only its card "
-                    + "fee share applies. Callers such as bookings use it instead of hard-coding fees. "
-                    + "Fee schedules are per currency; there is no market dimension.")
+    @Operation(summary = "Effective fees for an organisation, kind and category (payments:service, "
+            + "payments:fees.read or payments:read)",
+            description = "The commission (kind PRODUCT, default) or connection fee (kind SERVICE: category = the "
+                    + "service's category) of the version in force at `at` (default now), first match wins: an "
+                    + "active negotiated rate of the organisation (its category, then '*'), the organisation's plan "
+                    + "rate (category, then the plan's '*'), the category rate, the default. Plus the card-fee "
+                    + "estimate (cardPctBps + cardFixedMinor per charge) and the FBA fee (products only). AfroTransact "
+                    + "Retail pays none (source RETAIL): only its card fee share applies. Callers such as bookings "
+                    + "use it instead of hard-coding fees. Fee schedules are per currency; there is no market "
+                    + "dimension.")
     @GetMapping("/v1/fee-schedules/effective")
     EffectiveFeesResponse effectiveFees(@RequestParam String category,
                                         @RequestParam(required = false) String orgId,
-                                        @RequestParam(required = false) Instant at) {
-        return EffectiveFeesResponse.of(fees.effective(category, orgId, at));
+                                        @RequestParam(required = false) Instant at,
+                                        @RequestParam(required = false) FeeKind kind) {
+        return EffectiveFeesResponse.of(fees.effective(kind == null ? FeeKind.PRODUCT : kind, category, orgId, at));
+    }
+
+    @Operation(summary = "Every commission or connection-fee rate of an organisation, with its source",
+            description = "kind PRODUCT (default): product commission per category; SERVICE: connection fee per "
+                    + "service category. Each rate says where it comes from (OVERRIDE = negotiated, PLAN, CATEGORY, "
+                    + "DEFAULT, RETAIL), plus the rate of unlisted categories, the organisation's plan and its "
+                    + "negotiated rates that are active or scheduled at `at` (default now). Staff fee readers and "
+                    + "services (payments:read, payments:fees.read), or the organisation's members who see payouts.")
+    @GetMapping("/v1/orgs/{orgId}/rate-card")
+    RateCardResponse rateCard(@PathVariable String orgId, @RequestParam(required = false) FeeKind kind,
+                              @RequestParam(required = false) Instant at) {
+        return RateCardResponse.of(fees.rateCard(orgId, kind, at), Instant.now(clock));
     }
 
     @Operation(summary = "Create a fee schedule version (Super Admin / Finance, payments:configure)",
@@ -100,7 +122,9 @@ class FinanceController {
                 body.categoryBps(), body.defaultCommissionBps(), body.overrides() == null ? List.of()
                 : body.overrides().stream().map(OverrideRequest::toOverride).toList(), body.cardPctBps(),
                 body.cardFixedMinor(), body.fbaPerUnitMinor(), !Boolean.FALSE.equals(body.reverseCommissionOnRefund()),
-                body.note(), body.deliveryPricing() == null ? null : body.deliveryPricing().toCommand())));
+                body.note(), body.deliveryPricing() == null ? null : body.deliveryPricing().toCommand(),
+                body.planBps(), body.connectionFee() == null ? null : body.connectionFee().toTable(),
+                body.planFbaMinor())));
     }
 
     @Operation(summary = "Price an AfroTransact Delivery trip from a seller's store (S255)",

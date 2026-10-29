@@ -13,10 +13,13 @@ import { AppState, Platform } from 'react-native';
 
 import { createDriverApi, type DriverApi } from '@/api/client';
 import { type TokenSource } from '@/api/http';
-import { refreshTokens, revokeTokens, signInWithIdentity, type TokenSet } from '@/auth/oidc';
+import { beginNativeSignIn, type NativeAttempt } from '@/auth/nativeAuth';
+import { refreshTokens, revokeTokens, SessionGone, type TokenSet } from '@/auth/oidc';
 import { secureStorage } from '@/auth/secureStorage';
+import { env } from '@/config/env';
 import { decideAccess } from '@/domain/access';
 import { decodeJwt, isExpiring } from '@/domain/jwt';
+import { type SecondFactor, type SignInStep } from '@/domain/nativeSignIn';
 import { onShift } from '@/domain/shift';
 import { currentFix, ensureLocationPermission, watchForegroundFixes } from '@/lib/location';
 import { capabilities } from '@/platform/runtime';
@@ -49,7 +52,13 @@ interface Ctx {
   /** Manual "no signal" switch (Profile) on top of the real network state. */
   paused: boolean;
   setPaused(p: boolean): void;
-  signIn(email?: string): Promise<void>;
+  /** In-app form: email + password; resolves a second-factor step when the account needs one. */
+  signInWithPassword(email: string, password: string): Promise<SignInStep>;
+  sendSignInCode(): Promise<string>;
+  verifySecondFactor(factor: SecondFactor, code: string, trustDevice: boolean): Promise<SignInStep>;
+  cancelSignIn(): void;
+  /** Set when the session ended on its own (the refresh token was refused). */
+  notice: string;
   signOut(): Promise<void>;
   recheckAccess(): Promise<void>;
 }
@@ -65,6 +74,10 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   const tokens = useRef<TokenSet | null>(null);
   const refreshing = useRef<Promise<string | null> | null>(null);
   const pushToken = useRef<string | null>(null);
+  const attempt = useRef<NativeAttempt | null>(null);
+  const expire = useRef<() => void>(() => undefined);
+  const goneReason = useRef('');
+  const [notice, setNotice] = useState('');
   const [phase, setPhase] = useState<Phase>('booting');
   const [user, setUser] = useState<DriverUser | null>(null);
   const [denied, setDenied] = useState<Ctx['denied']>(null);
@@ -77,16 +90,22 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       if (!tokens.current) return null;
       refreshing.current ??= refreshTokens(tokens.current)
         .then(async (t) => { tokens.current = t; await secureStorage.set(TOKENS, JSON.stringify(t)); return t.accessToken; })
-        .catch(() => null)
+        .catch((e: unknown) => { if (e instanceof SessionGone) { goneReason.current = e.reason; return null; } throw e; })
         .finally(() => { refreshing.current = null; });
       return refreshing.current;
     };
     return {
       refreshAccessToken,
+      onSessionExpired: () => expire.current(),
       getAccessToken: async () => {
         const t = tokens.current;
         if (!t) return null;
-        return isExpiring(t.expiresAt, Date.now()) ? refreshAccessToken() : t.accessToken;
+        if (!isExpiring(t.expiresAt, Date.now())) return t.accessToken;
+        try {
+          return await refreshAccessToken();
+        } catch {
+          return t.accessToken; // identity unreachable: let the request try
+        }
       }
     };
   }, []);
@@ -212,10 +231,10 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     return () => { clearInterval(id); sub.remove(); };
   }, [phase, user, checkAccess, engine]);
 
-  const signIn = useCallback(async (email?: string) => {
-    const t = await signInWithIdentity(email);
+  const startSession = useCallback(async (t: TokenSet) => {
     tokens.current = t;
     await secureStorage.set(TOKENS, JSON.stringify(t));
+    setNotice('');
     const u = userOf(t);
     setUser(u);
     engine.setUser(u.sub);
@@ -223,6 +242,32 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     await checkAccess(u);
     if (engine.getState().route) void engine.record({ type: 'session.signed_in' }).catch(() => undefined);
   }, [engine, checkAccess]);
+
+  const settle = useCallback(async (step: SignInStep): Promise<SignInStep> => {
+    const t = attempt.current?.tokens();
+    if (step.kind === 'done' && t) {
+      attempt.current = null;
+      await startSession(t);
+    }
+    return step;
+  }, [startSession]);
+
+  const signInWithPassword = useCallback(async (email: string, password: string) => {
+    attempt.current = await beginNativeSignIn();
+    return settle(await attempt.current.password(email, password));
+  }, [settle]);
+
+  const sendSignInCode = useCallback(async () => {
+    if (!attempt.current) throw new Error('Start again');
+    return attempt.current.sendSmsCode();
+  }, []);
+
+  const verifySecondFactor = useCallback(async (factor: SecondFactor, code: string, trustDevice: boolean) => {
+    if (!attempt.current) throw new Error('Start again');
+    return settle(await attempt.current.verify(factor, code, trustDevice));
+  }, [settle]);
+
+  const cancelSignIn = useCallback(() => { attempt.current = null; }, []);
 
   const signOut = useCallback(async () => {
     await engine.flush().catch(() => undefined);
@@ -232,12 +277,23 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     setPhase('signed-out');
   }, [clearSession, engine]);
 
+  expire.current = () => {
+    if (phase === 'signed-out' || !tokens.current) return; // the first failure ends the session; the rest must not repeat it
+    void (async () => {
+      await clearSession();
+      setUser(null);
+      setDenied(null);
+      setNotice(`Your session ended. Sign in again.${env.appEnv !== 'prod' && goneReason.current ? ` (${goneReason.current})` : ''}`);
+      setPhase('signed-out');
+    })();
+  };
+
   const value = useMemo<Ctx>(() => ({
     phase, user, denied, engine, sync, api, paused,
     setPaused: (p) => { setPausedState(p); void driverStore.setKv(PAUSED, p); },
-    signIn, signOut,
+    signInWithPassword, sendSignInCode, verifySecondFactor, cancelSignIn, notice, signOut,
     recheckAccess: async () => { if (user) await checkAccess(user); }
-  }), [phase, user, denied, engine, sync, api, paused, signIn, signOut, checkAccess]);
+  }), [phase, user, denied, engine, sync, api, paused, signInWithPassword, sendSignInCode, verifySecondFactor, cancelSignIn, notice, signOut, checkAccess]);
 
   return <DriverContext.Provider value={value}>{children}</DriverContext.Provider>;
 }

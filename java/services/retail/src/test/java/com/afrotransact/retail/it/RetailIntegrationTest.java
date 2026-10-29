@@ -53,20 +53,27 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @Import({TestActors.class, FakeEdi.class})
 abstract class RetailIntegrationTest {
 
+    /** Set {@code AT_IT_POSTGRES_URL} (jdbc:postgresql://…) to run without Docker; user and password from
+     * {@code AT_IT_POSTGRES_USER} / {@code AT_IT_POSTGRES_PASSWORD} (default postgres / empty). */
+    static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
     static final WireMockServer DOWNSTREAM = new WireMockServer(WireMockConfiguration.options().dynamicPort());
 
     static {
-        POSTGRES.start();
+        if (EXTERNAL_DB == null) {
+            POSTGRES.start();
+        }
         DOWNSTREAM.start();
         Stubs.install(DOWNSTREAM);
     }
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.datasource.url", () -> EXTERNAL_DB != null ? EXTERNAL_DB : POSTGRES.getJdbcUrl());
+        registry.add("spring.datasource.username", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_USER", "postgres") : POSTGRES.getUsername());
+        registry.add("spring.datasource.password", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_PASSWORD", "") : POSTGRES.getPassword());
         registry.add("at.retail.catalog.base-url", DOWNSTREAM::baseUrl);
         registry.add("at.retail.inventory.base-url", DOWNSTREAM::baseUrl);
         registry.add("at.retail.media.base-url", DOWNSTREAM::baseUrl);

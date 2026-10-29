@@ -22,7 +22,9 @@
     "./mocks/staff-node": "./src/mocks/staff-node.ts",
     "./generated/gateway-bff-staff": "./src/generated/gateway-bff-staff.ts",
     "./staff-preorders": "./src/staff-preorders.ts",
-    "./staff-markets": "./src/staff-markets.ts"
+    "./staff-delivery-fees": "./src/staff-delivery-fees.ts",
+    "./staff-markets": "./src/staff-markets.ts",
+    "./correlation": "./src/correlation.ts"
   },
   "scripts": {
     "generate": "node scripts/generate.mjs",
@@ -42,8 +44,7 @@
   "devDependencies": {
     "@tanstack/react-query": "^5.104.1",
     "@types/node": "^22.19.0",
-    "openapi-typescript": "^7.13.0",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "vitest": "5.0.3"
   }
 }

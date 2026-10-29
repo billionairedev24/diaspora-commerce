@@ -53,8 +53,12 @@ class InventoryEventsListener {
         for (JsonNode line : root.path("lines")) {
             List<ShippedLine.LotCost> lots = new ArrayList<>();
             for (JsonNode a : line.path("allocations")) {
-                lots.add(new ShippedLine.LotCost(a.path("lotNo").asString(null), a.path("qty").asInt(),
-                        a.path("unitLandedCostMinor").asLong(), a.path("currency").asString(null)));
+                String currency = a.path("currency").asString(null);
+                long unitCost = a.path("unitLandedCostMinor").asLong();
+                Long usd = a.has("unitCostUsdMinor") ? a.path("unitCostUsdMinor").asLong()
+                        : "USD".equals(currency) ? unitCost : null;
+                lots.add(new ShippedLine.LotCost(a.path("lotNo").asString(null), a.path("qty").asInt(), unitCost,
+                        currency, usd));
             }
             lines.add(new ShippedLine(line.path("sku").asString(), line.path("qty").asInt(), lots));
         }

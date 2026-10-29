@@ -187,3 +187,15 @@ func kindFlags(kind string) (products, services bool) {
 		return false, false
 	}
 }
+
+// ServiceClientChange gives each first-party service client the `service` relation on the platform, so FGA enforcement
+// does not block service-to-service calls. Idempotent: writing an existing tuple is not an error.
+func ServiceClientChange(clientIDs []string) Change {
+	var c Change
+	for _, id := range clientIDs {
+		if id = strings.TrimSpace(id); id != "" {
+			c.Writes = append(c.Writes, Tuple{User: "client:" + id, Relation: "service", Object: Platform})
+		}
+	}
+	return c
+}

@@ -26,6 +26,9 @@ type StaffCall struct {
 	IfMatch string
 	// Accept is the media type a streamed document is asked for (default text/csv).
 	Accept string
+	// StepUp is relayed as X-Step-Up: the proof identity issued after the staff member re-entered their password
+	// (identity admin console, S291). Never logged.
+	StepUp string
 	// Slow uses the upstream's slowTimeout (calls that wait for a downstream chain, e.g. late pre-order adds).
 	Slow bool
 }
@@ -63,6 +66,8 @@ type StaffUpstreams struct {
 	Search StaffUpstream
 	// Carrier is carrier-gateway: customer pickup points (Delivery dispatch › Pickup points).
 	Carrier StaffUpstream
+	// Proof signs the links to a delivery's proof photo and signature on an order's sheet (optional: none without it).
+	Proof ProofLinks
 }
 
 // ExportJobStore keeps export jobs (shared by every BFF replica; jobs live 24 hours after they finish).

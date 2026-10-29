@@ -41,6 +41,29 @@ public final class PaymentsEvents {
     /** Finance put a supplier payment on hold or released it (status ON_HOLD / SCHEDULED, key = supplier id). */
     public static final String SUPPLIER_PAYMENT_UPDATED = "payments.supplier_payment.updated";
 
+    /** The gift card email with its code is due (topic at.payment.events, key = gift card id), S321. */
+    public static final String GIFT_CARD_DELIVER = "payments.gift_card.deliver";
+    /** Audit events of gift cards (key = gift card id): issued by staff, redeemed, voided, resent. */
+    public static final String GIFT_CARD_ISSUED = "payments.gift_card.issued";
+    public static final String GIFT_CARD_REDEEMED = "payments.gift_card.redeemed";
+    public static final String GIFT_CARD_VOIDED = "payments.gift_card.voided";
+    public static final String GIFT_CARD_RESENT = "payments.gift_card.resent";
+    /** A gift card was paid for and is active (key = gift card id). */
+    public static final String GIFT_CARD_PURCHASED = "payments.gift_card.purchased";
+    /** A staff grant or correction of credit was posted (key = customer id), S320. */
+    public static final String CREDIT_ADJUSTED = "payments.credit.adjusted";
+    /** A shopper's membership started, renewed, failed, lapsed, ended, changed or got free days (key = customer id). */
+    public static final String MEMBERSHIP_CHANGED = "payments.membership.changed";
+    /** Staff changed a membership tier or the billing rules, with the reason (audit; key = tier code). */
+    public static final String MEMBERSHIP_TIER_CHANGED = "payments.membership.tier_changed";
+
+    /** A referral reward was granted to one side (key = customer id): notifications tells them, S322. */
+    public static final String REFERRAL_REWARDED = "payments.referral.rewarded";
+    /** An abuse check holds a referral for staff (key = referral id). */
+    public static final String REFERRAL_FLAGGED = "payments.referral.flagged";
+    /** Staff approved or rejected a referral, or the system rejected it (key = referral id). */
+    public static final String REFERRAL_DECIDED = "payments.referral.decided";
+
     private PaymentsEvents() {
     }
 }

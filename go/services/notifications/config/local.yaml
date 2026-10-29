@@ -16,6 +16,7 @@ kafka:
     orders: at.order.events
     sellerApplications: at.seller-application.events
     sellerCompliance: at.seller-compliance.events
+    sellerSubscription: at.seller-subscription.events
     payouts: at.payout.events
     bookings: at.bookings.events
     content: at.content.events
@@ -24,12 +25,17 @@ kafka:
     trustOps: at.trustops.events
     retail: at.retail.events
     deliveryRuns: at.delivery-runs.events
-# Pre-order audiences (delivery-runs GET /v1/service/preorders/{id}/audience; the identity client, scope
-# delivery-runs:audience.read).
+# Pre-order and location audiences (delivery-runs GET /v1/service/preorders/{id}/audience and
+# /v1/service/locations/{id}/audience; the identity client, scope delivery-runs:audience.read).
 deliveryRuns:
   enabled: true
   baseUrl: http://localhost:8115
   timeout: 5s
+  # WhatsApp announcements of runs (open, cutoff reminder) as approved templates, only to members who opted in on
+  # WhatsApp. Keep off until afrotransact_run_opened and afrotransact_run_cutoff_reminder are approved in Meta
+  # Business Manager and WHATSAPP_TOKEN + phoneNumberId are set (README, "Delivery runs").
+  whatsapp:
+    enabled: false
 # Recipient lookup by user / org id (client-credentials client notifications-service, scope users:read; the secret
 # comes from NOTIFICATIONS_CLIENT_SECRET).
 identity:

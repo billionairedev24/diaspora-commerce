@@ -71,6 +71,19 @@ class ShipmentTest {
     }
 
     @Test
+    void staffConfirmingADriverDeliveryByHandSayWhy() {
+        Shipment s = Shipments.of(FulfilmentType.FBA_AFROTRANSACT, DeliveryMethod.AFROTRANSACT_DELIVERY,
+                ShipmentStatus.OUT_FOR_DELIVERY);
+        TransitionActor admin = new TransitionActor(ActorKind.PLATFORM_ADMIN, "admin-1", null);
+        assertThatThrownBy(() -> s.transition(ShipmentStatus.DELIVERED, admin, " ", TransitionSource.API, "k", T0,
+                null, POLICY)).isInstanceOf(OrdersRuleViolation.class).hasMessageContaining("proof");
+        TransitionResult r = s.transition(ShipmentStatus.DELIVERED, admin, "Driver's phone died at the door",
+                TransitionSource.API, "k2", T0, null, POLICY);
+        assertThat(r.applied()).isTrue();
+        assertThat(r.change().reason()).isEqualTo("Driver's phone died at the door");
+    }
+
+    @Test
     void sameStatusIsIdempotent() {
         Shipment s = Shipments.of(FulfilmentType.FBA_AFROTRANSACT, DeliveryMethod.CARRIER, ShipmentStatus.PACKED);
         TransitionResult r = s.transition(ShipmentStatus.PACKED,

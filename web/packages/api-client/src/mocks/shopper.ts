@@ -1,8 +1,9 @@
-/* Mock BFF for the storefront's account pages, checkout, returns, login & security, services & bookings and Lola.
+/* Mock BFF for the storefront's account pages, checkout, help requests, login & security, services & bookings and Lola.
    Same routes, shapes and refusals as contracts/openapi/gateway-bff.yaml; state per demo account (shopper-state). */
 import { http, HttpResponse } from 'msw';
 import { z } from 'zod';
 
+import { creditSplit } from '../credit-split';
 import { type PaymentMethod } from '../schemas/account';
 import { type CartPackage } from '../schemas/cart';
 import { type DeliveryOption } from '../schemas/cart';
@@ -19,22 +20,19 @@ import {
   PasswordChangeSchema,
   type PickupPoint,
   PlaceOrderRequestSchema,
-  type ReturnableLine,
-  type ReturnDetail,
-  ReturnReasonSchema,
-  SELLER_FAULT_REASONS,
   type ServiceDetail,
-  type ShipmentDetail,
-  StartReturnRequestSchema
+  type ShipmentDetail
 } from '../schemas/shopper';
+import { checkoutCredit, creditState, spendCredit } from './credit';
 import { getDb, type MockSession } from './db';
 import { addBusinessDays, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, metroOf } from './delivery';
 import { PICKUP_POINTS } from './fixtures/geo';
 import { body, type Ctx, json, problem, readCookie, requireUser, route } from './http-kit';
 import { lolaStream } from './lola';
+import { membershipQuote, membershipState, recordMembershipUse } from './membership';
 import { nextPreorderNumber, preorderCheckoutPackage } from './preorders';
-import { buildCart, MockProblem, sessionLocation } from './service';
-import { account, type AccountState, bookingFor, MOCK_REFUND_QUOTE, type MockOrder, PROVIDERS, seq, SERVICES } from './shopper-state';
+import { buildCart, isGroceryProductType, MockProblem, sessionLocation } from './service';
+import { account, type AccountState, bookingFor, type MockOrder, PROVIDERS, seq, SERVICES } from './shopper-state';
 
 const DEMO_CODE = '246810';
 const MOCK_PUBLISHABLE_KEY = 'pk_test_mock';
@@ -164,74 +162,134 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
     });
 }
 
-function summary(ctx: Ctx, addressId: string | null): CheckoutSummary {
+function packageDeliveryFees(packages: CheckoutSummary['packages'], raw: string | null): number {
+  const byPkg = new Map<string, string>();
+  for (const part of (raw ?? '').split(',')) {
+    const i = part.lastIndexOf(':'); // package ids hold a colon ("seller:FULFILMENT"), option keys never
+    if (i > 0) byPkg.set(part.slice(0, i).trim(), part.slice(i + 1).trim());
+  }
+  return packages.reduce((sum, p) => {
+    const key = byPkg.get(p.packageId) ?? p.deliveryOptions[0]?.key;
+    const opt = p.deliveryOptions.find((o) => o.key === key) ?? p.deliveryOptions[0];
+    return sum + (opt?.feeMinor ?? 0);
+  }, 0);
+}
+
+function mockCouponQuote(code: string, packages: CheckoutPackage[], shipping: number): CheckoutSummary['coupon'] {
+  const normalized = code.trim().toUpperCase();
+  if (!normalized) return undefined;
+  if (normalized === 'EXPIRED1') {
+    return { code: normalized, applicable: false, rejection: 'EXPIRED', message: 'This coupon has expired.', discountMinor: 0, shippingDiscountMinor: 0 };
+  }
+  const subtotal = packages.reduce((s, p) => s + p.subtotalMinor, 0);
+  const sellerShares: NonNullable<CheckoutSummary['coupon']>['sellerShares'] = [];
+  if (normalized === 'WELCOME10') {
+    const discountMinor = Math.round(subtotal * 0.1);
+    packages.forEach((p) => {
+      const amt = Math.round(p.subtotalMinor * 0.1);
+      if (amt > 0) sellerShares.push({ sellerOrgId: p.seller.id, sellerName: p.seller.name, discountMinor: amt, funding: 'platform' });
+    });
+    return {
+      code: normalized,
+      applicable: true,
+      discountMinor,
+      shippingDiscountMinor: 0,
+      funding: 'platform',
+      message: '10% off your order',
+      sellerShares
+    };
+  }
+  if (normalized === 'FREESHIP') {
+    return {
+      code: normalized,
+      applicable: shipping > 0,
+      discountMinor: 0,
+      shippingDiscountMinor: shipping,
+      funding: 'platform',
+      message: shipping > 0 ? 'Free shipping on this order' : 'Add shippable items to use this code',
+      sellerShares: []
+    };
+  }
+  return { code: normalized, applicable: false, rejection: 'NOT_FOUND', message: "We don't recognise that code.", discountMinor: 0, shippingDiscountMinor: 0 };
+}
+
+function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | null, couponCode?: string | null): CheckoutSummary {
   const a = me(ctx);
   const addr = a.addresses.find((x) => x.id === addressId) ?? a.addresses.find((x) => x.isDefault) ?? a.addresses[0];
   const packages = checkoutPackages(ctx.session, addr?.zip.slice(0, 5) ?? ctx.session.zip, ctx.now);
   if (!packages.length) throw new MockProblem(409, 'CART_EMPTY', 'Your cart is empty', 'Select at least one item to check out.', { available: 0, inCart: 0, requested: 0 });
   const subtotal = packages.reduce((s, p) => s + p.subtotalMinor, 0);
-  const shipping = packages.reduce((s, p) => s + (p.deliveryOptions[0]?.feeMinor ?? 0), 0);
-  return { packages, addresses: a.addresses, paymentMethods: a.paymentMethods, subtotalMinor: subtotal, shippingMinor: shipping, taxMinor: 0,
-    taxRateLabel: 'Calculated when you place your order', totalMinor: subtotal + shipping, currency: 'USD',
-    sellerCount: new Set(packages.map((p) => p.seller.id)).size, publishableKey: publishableKey(ctx) };
-}
-
-function confirmation(c: { orderNumber: string; status: OrderConfirmation['status']; clientSecret: string; totalMinor: number; order: MockOrder; preorder?: OrderConfirmation['preorder'] }): OrderConfirmation {
-  return { orderNumber: c.orderNumber, status: c.status, paymentClientSecret: c.clientSecret, totalMinor: c.totalMinor, currency: 'USD',
-    shipments: c.order.shipments.map((s) => ({ shipmentId: s.shipmentId, label: s.label, eta: s.promisedBy ?? '', deliveryCode: s.deliveryCode })), preorder: c.preorder ?? null };
-}
-
-/* ── Returns ───────────────────────────────────────────────────── */
-
-const OPEN_RETURN = new Set(['requested', 'approved', 'auto_approved', 'label_issued', 'in_transit', 'received', 'inspected', 'refunded']);
-
-function returnable(a: AccountState, o: MockOrder, now: Date) {
-  return o.shipments
-    .filter((s) => s.status === 'delivered')
-    .map((s) => ({
-      shipmentId: s.shipmentId,
-      sellerName: s.sellerName,
-      deliveredAt: s.deliveredAt,
-      lines: s.lines.map((l): ReturnableLine => {
-        const returned = a.returns.filter((r) => OPEN_RETURN.has(r.status)).flatMap((r) => r.lines).filter((x) => x.lineId === l.lineId).reduce((n, x) => n + x.quantity, 0);
-        const perishable = o.perishable.has(l.lineId);
-        const windowEnds = new Date(new Date(s.deliveredAt ?? now).getTime() + 30 * 86_400_000);
-        const max = Math.max(0, l.quantity - returned);
-        const open = windowEnds > now;
-        return { lineId: l.lineId, atin: l.atin, title: l.title, quantity: l.quantity, maxQuantity: max, unitPriceMinor: l.unitPriceMinor,
-          eligible: max > 0 && open, reportProblemOnly: perishable, sellerFaultOnly: perishable, windowEndsAt: iso(windowEnds),
-          methods: perishable ? ['NO_RETURN'] : l.unitPriceMinor <= 1000 ? ['DROP_OFF', 'NO_RETURN'] : ['DROP_OFF'],
-          ineligibleReason: max === 0 ? 'Already being returned' : open ? null : 'The return window has closed' };
-      })
-    }));
-}
-
-/** Return button facts per shipment, as orders computes them from tax-returns' eligibility (S148/S166). */
-function returnFacts(a: AccountState, o: MockOrder, shipmentId: string, now: Date) {
-  const lines = returnable(a, o, now).find((s) => s.shipmentId === shipmentId)?.lines ?? [];
-  if (!lines.length) return { returnable: false, returnWindowEndsAt: null, problemReportOnly: false };
-  const eligible = lines.filter((l) => l.eligible);
+  const shipping = packageDeliveryFees(packages, packageDelivery ?? null);
+  // The membership waives delivery fees by the tier's rules (S323); a coupon's free shipping applies to what is left.
+  const savings = membershipQuote(membershipState(a), packages, packageDelivery ?? null);
+  const waived = savings.totalWaivedMinor;
+  const coupon = couponCode ? mockCouponQuote(couponCode, packages, shipping - waived) : undefined;
+  const discountMinor = coupon?.applicable ? coupon.discountMinor : 0;
+  const shippingDiscountMinor = coupon?.applicable ? coupon.shippingDiscountMinor : 0;
+  const netShipping = Math.max(0, shipping - waived - shippingDiscountMinor);
+  const tx = addr?.state === 'TX';
+  const generalSubtotal = packages.reduce(
+    (s, p) => s + p.lines.reduce((n, l) => n + (isGroceryProductType(l.productType) ? 0 : l.lineTotalMinor), 0),
+    0
+  );
+  const stateRate = 0.0625;
+  const localRate = 0.02;
+  const combinedRate = stateRate + localRate;
+  const taxableItems = Math.max(0, generalSubtotal - discountMinor);
+  const taxable = taxableItems + (tx ? netShipping : 0);
+  const taxMinor = tx ? Math.round(taxable * combinedRate) : 0;
+  const taxRateLabel = tx ? `${(combinedRate * 100).toFixed(2)}%` : addr ? 'No sales tax' : 'Add your address to see an estimate';
   return {
-    returnable: eligible.some((l) => !l.reportProblemOnly),
-    returnWindowEndsAt: lines[0]?.windowEndsAt ?? null,
-    problemReportOnly: eligible.length > 0 && eligible.every((l) => l.reportProblemOnly)
+    packages: packages.map((p) => ({ ...p, membershipWaivedMinor: savings.waivers.filter((w) => w.packageId === p.packageId).reduce((n, w) => n + w.waivedMinor, 0) })),
+    addresses: a.addresses,
+    paymentMethods: a.paymentMethods,
+    subtotalMinor: subtotal,
+    shippingMinor: shipping,
+    discountMinor,
+    shippingDiscountMinor,
+    coupon,
+    taxMinor,
+    taxRateLabel,
+    totalMinor: subtotal - discountMinor + netShipping + taxMinor,
+    currency: 'USD',
+    sellerCount: new Set(packages.map((p) => p.seller.id)).size,
+    publishableKey: publishableKey(ctx),
+    credit: checkoutCredit(creditState(a, requireUser(ctx).id), subtotal - discountMinor + netShipping + taxMinor),
+    membershipWaivedMinor: waived,
+    membership: savings.member || savings.upsell ? savings : undefined
   };
 }
 
-/** Payment facts (payments): per-line refunds from refunded returns and cancelled shipments; no tax on delivery in TX. */
-function orderPayment(a: AccountState, o: MockOrder) {
+function confirmation(c: { orderNumber: string; status: OrderConfirmation['status']; clientSecret: string | null; totalMinor: number; order: MockOrder; preorder?: OrderConfirmation['preorder'] }): OrderConfirmation {
+  return { orderNumber: c.orderNumber, status: c.status, paymentClientSecret: c.clientSecret, creditMinor: c.order.creditMinor ?? 0, totalMinor: c.totalMinor, currency: 'USD',
+    shipments: c.order.shipments.map((s) => ({ shipmentId: s.shipmentId, label: s.label, eta: s.promisedBy ?? '', deliveryCode: s.deliveryCode })), preorder: c.preorder ?? null };
+}
+
+/* ── Help ──────────────────────────────────────────────────────── */
+
+/** Report-a-problem facts per shipment (orders): open for 30 days after delivery; food can only be reported. */
+function reportFacts(o: MockOrder, shipmentId: string, now: Date) {
+  const s = o.shipments.find((x) => x.shipmentId === shipmentId);
+  if (!s || s.status !== 'delivered') return { returnable: false, returnWindowEndsAt: null, problemReportOnly: false };
+  const windowEnds = new Date(new Date(s.deliveredAt ?? now).getTime() + 30 * 86_400_000);
+  const open = windowEnds > now;
+  const onlyFood = s.lines.length > 0 && s.lines.every((l) => o.perishable.has(l.lineId));
+  return { returnable: open && !onlyFood, returnWindowEndsAt: iso(windowEnds), problemReportOnly: open && onlyFood };
+}
+
+/** Payment facts (payments): per-line refunds from cancelled shipments; no tax on delivery in TX. */
+function orderPayment(o: MockOrder) {
   const refunded = new Map<string, number>();
-  for (const r of a.returns.filter((x) => x.orderNumber === o.orderNumber && x.status === 'refunded'))
-    for (const l of r.lines) refunded.set(l.lineId, (refunded.get(l.lineId) ?? 0) + l.unitPriceMinor * l.quantity);
   for (const s of o.shipments.filter((x) => x.status === 'cancelled')) for (const l of s.lines) refunded.set(l.lineId, l.itemsMinor);
   const shipments = o.shipments.map((s) => ({
     ...s,
-    ...returnFacts(a, o, s.shipmentId, new Date()),
+    ...reportFacts(o, s.shipmentId, new Date()),
     lines: s.lines.map((l) => ({ ...l, refundedMinor: refunded.get(l.lineId) ?? 0 }))
   }));
   const refundedMinor = [...refunded.values()].reduce((n, x) => n + x, 0);
   const capturedMinor = o.shipments.filter((s) => s.status === 'delivered').reduce((n, s) => n + s.lines.reduce((m, l) => m + l.itemsMinor, 0), 0);
-  return { shipments, payment: { status: capturedMinor ? 'captured' : 'authorized', capturedMinor, refundedMinor, refundableMinor: Math.max(0, capturedMinor - refundedMinor), shippingTaxMinor: 0 } };
+  return { shipments, payment: { status: capturedMinor ? 'captured' : 'authorized', capturedMinor, refundedMinor, refundableMinor: Math.max(0, capturedMinor - refundedMinor), shippingTaxMinor: 0,
+    creditMinor: o.creditMinor ?? 0, cardRefundsAsCredit: o.cardRefundsAsCredit ?? false } };
 }
 
 /* ── Services ──────────────────────────────────────────────────── */
@@ -354,19 +412,26 @@ export const shopperHandlers = [
   })),
 
   /* Orders */
-  http.get('*/v1/account/orders', route((ctx) => json({
-    items: me(ctx).orders.map((o) => ({ orderNumber: o.orderNumber, placedAt: o.placedAt, totalMinor: o.totalMinor, currency: o.currency, shipTo: o.shipTo, status: o.status,
+  http.get('*/v1/account/orders', route((ctx) => {
+    // Cursor paging like the BFF: `limit` per page, the cursor is where the next page starts.
+    const q = new URL(ctx.request.url).searchParams;
+    const limit = Math.min(100, Math.max(1, Number(q.get('limit') ?? 20)));
+    const start = Math.max(0, Number(q.get('cursor') ?? 0) || 0);
+    const all = me(ctx).orders;
+    return json({
+    items: all.slice(start, start + limit).map((o) => ({ orderNumber: o.orderNumber, placedAt: o.placedAt, totalMinor: o.totalMinor, currency: o.currency, shipTo: o.shipTo, status: o.status,
       shipments: o.shipments.map((s) => ({ shipmentId: s.shipmentId, label: s.label, status: s.statusLabel, items: s.items, cancellable: s.cancellable, carrier: s.carrier,
-        trackingNumber: s.trackingNumber, promisedBy: s.promisedBy, deliveredAt: s.deliveredAt, deliveryCode: s.deliveryCode,
-        ...returnFacts(me(ctx), o, s.shipmentId, ctx.now) })) })),
-    nextCursor: null
-  }))),
+        trackingNumber: s.trackingNumber, promisedBy: s.promisedBy, deliveredAt: s.deliveredAt, deliveryCode: s.deliveryCode, sellerName: s.sellerName,
+        lines: s.lines.map((l) => ({ title: l.title, quantity: l.quantity, imageUrl: l.imageUrl, productAtin: l.productAtin ?? l.atin })),
+        ...reportFacts(o, s.shipmentId, ctx.now) })) })),
+    nextCursor: start + limit < all.length ? String(start + limit) : null
+  });
+  })),
   http.get('*/v1/account/orders/:orderNumber', route((ctx, p) => {
     const o = me(ctx).orders.find((x) => x.orderNumber === p.orderNumber);
     if (!o) throw new MockProblem(404, 'ORDER_NOT_FOUND', 'Order not found', 'We couldn’t find that order.');
-    const a = me(ctx);
     const { perishable: _p, ...detail } = o;
-    return json({ ...detail, ...orderPayment(a, o) });
+    return json({ ...detail, ...orderPayment(o) });
   })),
   http.post('*/v1/account/orders/:orderNumber/shipments/:shipmentId/cancel', route((ctx, p) => {
     const o = me(ctx).orders.find((x) => x.orderNumber === p.orderNumber);
@@ -378,84 +443,6 @@ export const shopperHandlers = [
     if (o.shipments.every((x) => x.status === 'cancelled')) o.status = 'cancelled';
     return json({ orderNumber: o.orderNumber, placedAt: o.placedAt, totalMinor: o.totalMinor, currency: o.currency, shipTo: o.shipTo, status: o.status,
       shipments: o.shipments.map((x) => ({ shipmentId: x.shipmentId, label: x.label, status: x.statusLabel, items: x.items, cancellable: x.cancellable })) });
-  })),
-
-  /* Returns */
-  http.get('*/v1/account/orders/:orderNumber/returnable', route((ctx, p) => {
-    const a = me(ctx);
-    const o = a.orders.find((x) => x.orderNumber === p.orderNumber);
-    if (!o) throw new MockProblem(404, 'ORDER_NOT_FOUND', 'Order not found', 'We couldn’t find that order.');
-    return json({ orderNumber: o.orderNumber, currency: o.currency, shipments: returnable(a, o, ctx.now) });
-  })),
-  http.post('*/v1/account/returns', route(async (ctx) => {
-    const a = me(ctx);
-    const raw = (await body(ctx.request, z.looseObject({ orderNumber: z.string().min(1) }))) as Record<string, unknown>;
-    const o = a.orders.find((x) => x.orderNumber === raw.orderNumber);
-    if (!o) throw new MockProblem(404, 'ORDER_NOT_FOUND', 'Order not found', 'We couldn’t find that order.');
-    const shipments = returnable(a, o, ctx.now);
-    let req;
-    if (!raw.lines && typeof raw.atin === 'string') {
-      const reason = ReturnReasonSchema.safeParse(raw.reason);
-      const hit = shipments.flatMap((s) => s.lines.map((l) => ({ s, l }))).find((x) => x.l.atin === raw.atin && x.l.eligible);
-      if (!reason.success) throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'Choose a reason.', { errors: { reason: 'Choose a reason' } });
-      if (!hit) throw new MockProblem(409, 'CONFLICT', 'Not returnable', 'This item can’t be returned.');
-      req = { orderNumber: o.orderNumber, shipmentId: hit.s.shipmentId, method: hit.l.methods[0] ?? 'DROP_OFF', lines: [{ lineId: hit.l.lineId, quantity: 1, reason: reason.data }] };
-    } else {
-      const parsed = StartReturnRequestSchema.safeParse(raw);
-      if (!parsed.success) {
-        const errors: Record<string, string> = {};
-        parsed.error.issues.forEach((i) => { errors[i.path.join('.') || '_'] = i.message; });
-        throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { errors });
-      }
-      req = parsed.data;
-    }
-    const sh = shipments.find((s) => s.shipmentId === req.shipmentId);
-    if (!sh) throw new MockProblem(422, 'VALIDATION_FAILED', 'Can’t start this return', 'That shipment hasn’t been delivered.', { errors: { shipmentId: 'Not delivered' } });
-    const lines = req.lines.map((l, i) => {
-      const line = sh.lines.find((x) => x.lineId === l.lineId);
-      if (!line || !line.eligible || l.quantity > line.maxQuantity) throw new MockProblem(422, 'VALIDATION_FAILED', 'Can’t start this return', `${line?.title ?? 'This item'} can’t be returned.`, { errors: { [`lines.${i}.lineId`]: 'Not returnable' } });
-      if (!line.methods.includes(req.method)) throw new MockProblem(422, 'VALIDATION_FAILED', 'Can’t start this return', 'Choose another return method.', { errors: { method: 'Not available for these items' } });
-      if (line.sellerFaultOnly && !SELLER_FAULT_REASONS.includes(l.reason)) throw new MockProblem(422, 'VALIDATION_FAILED', 'Report a problem', 'Food items can only be reported as damaged, wrong, spoiled or not as described.', { errors: { [`lines.${i}.reason`]: 'Choose what went wrong' } });
-      return { lineId: line.lineId, atin: line.atin, title: line.title, quantity: l.quantity, unitPriceMinor: line.unitPriceMinor, reason: l.reason, outcome: null };
-    });
-    const items = lines.reduce((s, l) => s + l.unitPriceMinor * l.quantity, 0);
-    const refund = Math.round(items * 1.0825);
-    const n = seq();
-    const number = `RMA-${String(n).padStart(8, '0')}`;
-    const noReturn = req.method === 'NO_RETURN';
-    const rma: ReturnDetail = {
-      rmaId: `rma-${n}`, orderNumber: o.orderNumber, title: lines.length > 1 ? `${lines[0]?.title} and ${lines.length - 1} more` : (lines[0]?.title ?? 'Return'),
-      status: noReturn ? 'refunded' : 'auto_approved', refundMinor: refund, number, method: req.method, reason: lines[0]?.reason, refundState: noReturn ? 'ISSUED' : 'NONE',
-      currency: 'USD', cancellable: !noReturn, createdAt: iso(ctx.now), labelUrl: req.method === 'DROP_OFF' ? `https://labels.afrotransact.example/${number}.pdf` : null,
-      qrPayload: req.method === 'DROP_OFF' ? `AFROTRANSACT-RETURN:${number}:9400111899560${n}` : null, handoverCode: req.method === 'DRIVER_PICKUP' ? '482913' : null,
-      dropOffBy: req.method === 'DROP_OFF' ? iso(new Date(ctx.now.getTime() + 14 * 86_400_000)) : null, carrier: req.method === 'DROP_OFF' ? 'usps' : null,
-      trackingNumber: req.method === 'DROP_OFF' ? `9400111899560${n}` : null, lines, quote: null
-    };
-    rma.quote = MOCK_REFUND_QUOTE(rma);
-    a.returns.unshift(rma);
-    const { lines: _l, quote: _q, ...summary } = rma;
-    return json(summary, 201);
-  })),
-  http.get('*/v1/account/returns', route((ctx) => {
-    const a = me(ctx);
-    const orderNumber = new URL(ctx.request.url).searchParams.get('orderNumber');
-    if (orderNumber && !a.orders.some((o) => o.orderNumber === orderNumber)) throw new MockProblem(404, 'ORDER_NOT_FOUND', 'Order not found', 'We couldn’t find that order.');
-    const list = orderNumber ? a.returns.filter((r) => r.orderNumber === orderNumber) : a.returns;
-    return json({ items: list.map(({ lines: _l, quote: _q, ...r }) => r), nextCursor: null });
-  })),
-  http.get('*/v1/account/returns/:rmaId', route((ctx, p) => {
-    const id = String(p.rmaId ?? '');
-    const r = me(ctx).returns.find((x) => x.rmaId === id || (x.number && x.number === id.toUpperCase()));
-    if (!r) throw notFound('return');
-    return json(r);
-  })),
-  http.post('*/v1/account/returns/:rmaId/cancel', route((ctx, p) => {
-    const r = me(ctx).returns.find((x) => x.rmaId === p.rmaId);
-    if (!r) throw notFound('return');
-    if (!r.cancellable) throw new MockProblem(409, 'CONFLICT', 'Can’t change this return', 'This return can no longer be cancelled.');
-    Object.assign(r, { status: 'cancelled', cancellable: false, qrPayload: null, labelUrl: null });
-    const { lines: _l, quote: _q, ...summary } = r;
-    return json(summary);
   })),
 
   /* Login & security */
@@ -524,8 +511,17 @@ export const shopperHandlers = [
     return json(a.prefs);
   })),
 
+  /* What the membership does for the cart (S323) */
+  http.get('*/v1/cart/membership', route((ctx) => {
+    const a = me(ctx);
+    return json(membershipQuote(membershipState(a), checkoutPackages(ctx.session, ctx.session.zip, ctx.now), null));
+  })),
+
   /* Checkout */
-  http.get('*/v1/checkout/summary', route((ctx) => json(summary(ctx, new URL(ctx.request.url).searchParams.get('addressId'))))),
+  http.get('*/v1/checkout/summary', route((ctx) => {
+    const q = new URL(ctx.request.url).searchParams;
+    return json(summary(ctx, q.get('addressId'), q.get('packageDelivery'), q.get('couponCode')));
+  })),
   http.post('*/v1/checkout/orders', route(async (ctx) => {
     const a = me(ctx);
     const key = idemKey(ctx);
@@ -537,7 +533,10 @@ export const shopperHandlers = [
     const addr = a.addresses.find((x) => x.id === req.addressId);
     if (!addr) errors.addressId = 'Choose a delivery address';
     const sources = [!!req.paymentMethodId, !!req.wallet, !!req.newPaymentMethod].filter(Boolean).length;
-    if (!sources) errors.paymentMethodId = 'Choose a payment method';
+    const userId = requireUser(ctx).id;
+    const wallet = creditState(a, userId);
+    const creditPaysAll = !!req.useCredit && wallet.balanceMinor > 0 && summary(ctx, req.addressId).credit?.cardDueMinor === 0;
+    if (!sources && !creditPaysAll) errors.paymentMethodId = 'Choose a payment method';
     else if (sources > 1) errors.paymentMethodId = 'Pay with one of a saved method, a wallet or a new payment method';
     if (req.savePaymentMethod && !req.newPaymentMethod) errors.savePaymentMethod = 'Only a new payment method can be saved';
     if (req.paymentMethodId && !a.paymentMethods.some((x) => x.id === req.paymentMethodId)) errors.paymentMethodId = 'Unknown payment method';
@@ -563,10 +562,13 @@ export const shopperHandlers = [
     if (Object.keys(errors).length) throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { errors });
     const n = seq();
     const orderNumber = `AT-2026-${String(200000 + n).padStart(6, '0')}`;
-    const shipping = s.packages.reduce((sum, p) => {
+    const fees = s.packages.reduce((sum, p) => {
       const sel = req.deliverySelections.find((x) => x.packageId === p.packageId);
       return sum + (p.deliveryOptions.find((o) => o.key === sel?.option)?.feeMinor ?? 0);
     }, 0);
+    // The membership's waiver by the options chosen, recorded on each shipment with the tier and the benefit (S323).
+    const savings = membershipQuote(membershipState(a), s.packages, req.deliverySelections.map((x) => `${x.packageId}:${x.option}`).join(','));
+    const shipping = fees - savings.totalWaivedMinor;
     const tax = Math.round(s.subtotalMinor * (addr?.state === 'TX' ? 0.0825 : addr?.state === 'NY' ? 0.08875 : 0.07));
     const shipments = s.packages.map((p, i): ShipmentDetail => {
       const sel = req.deliverySelections.find((x) => x.packageId === p.packageId);
@@ -578,6 +580,11 @@ export const shopperHandlers = [
         deliveryCode: needsCode ? String(1000 + ((n * 7919) % 9000)) : null,
         lines: p.lines.map((l) => ({ lineId: l.lineId, atin: l.atin, title: l.title, imageUrl: null, quantity: l.quantity, unitPriceMinor: l.priceMinor, itemsMinor: l.lineTotalMinor })),
         timeline: [{ status: 'placed', label: 'Order placed', at: iso(ctx.now) }],
+        deliveryFeeRule: opt?.feeRule ?? null,
+        membershipWaiver: (() => {
+          const w = savings.waivers.find((x) => x.packageId === p.packageId);
+          return w && savings.tierName ? { tierName: savings.tierName, benefit: w.benefit, waivedMinor: w.waivedMinor } : null;
+        })(),
         localDelivery: p.localDelivery?.available
           ? { roadMiles: p.localDelivery.roadMiles, durationMinutes: p.localDelivery.durationMinutes, chargeMinor: p.localDelivery.chargeMinor ?? 0 }
           : null,
@@ -591,7 +598,11 @@ export const shopperHandlers = [
       shippingAddress: addr ? { name: addr.name, line1: addr.line1, line2: addr.line2, city: addr.city, state: addr.state, zip: addr.zip } : null, shipments,
       perishable: new Set(s.packages.flatMap((p) => p.lines.filter((l) => l.perishable).map((l) => l.lineId))) };
     const pre = s.packages.find((p) => p.preorder)?.preorder;
-    const pending = { orderNumber, clientSecret: `pi_mock_${n}_secret_mock`, totalMinor: order.totalMinor, status: 'awaiting_payment' as const, order,
+    // Credit is spent when the order is placed (payments: once per order); full credit needs no card and places at once.
+    const spent = req.useCredit ? spendCredit(wallet, order.totalMinor, ctx.now) : 0;
+    if (spent > 0) order.creditMinor = spent;
+    const byCredit = spent > 0 && creditSplit(spent, order.totalMinor).cardDueMinor === 0 && spent === order.totalMinor;
+    const pending = { orderNumber, clientSecret: byCredit ? null : `pi_mock_${n}_secret_mock`, totalMinor: order.totalMinor, status: (byCredit ? 'placed' : 'awaiting_payment') as 'placed' | 'awaiting_payment', order,
       lineIds: s.packages.flatMap((p) => p.lines.map((l) => l.lineId)),
       attribution: req.attribution ?? null,
       preorder: pre
@@ -599,6 +610,11 @@ export const shopperHandlers = [
             otherItemCount: s.packages.filter((p) => !p.preorder).reduce((a, p) => a + p.itemCount, 0) }
         : null };
     a.checkouts.set(key, pending);
+    recordMembershipUse(membershipState(a), savings, ctx.now);
+    if (byCredit) {
+      a.orders.unshift(order);
+      ctx.session.lines = ctx.session.lines.filter((l) => !pending.lineIds.includes(l.lineId));
+    }
     return json(confirmation(pending), 201);
   })),
   http.get('*/v1/checkout/orders/:orderNumber', route((ctx, p) => {
@@ -686,10 +702,14 @@ export const shopperHandlers = [
     const services = SERVICES.filter((s) => s.orgId === p.orgId);
     const first = services[0] as ServiceDetail;
     return json({ orgId: p.orgId, displayName: prov.displayName, timeZone: 'America/Chicago', location: prov.location, policy: first.policy, instantBooking: first.instantBooking,
-      team: first.team, services, design: { slug: prov.slug, tagline: prov.tagline, layout: prov.layout, header: prov.layout === 'CLASSIC' ? 'BAND' : 'COVER',
-        buttonShape: 'ROUNDED', coverUrl: null, tokens: {}, social: [{ network: 'instagram', url: `https://instagram.com/${prov.slug.replace(/-/g, '')}` }, { network: 'website', url: `https://${prov.slug}.example` }],
-        gallery: [{ url: '', caption: 'Recent work' }, { url: '', caption: 'Studio' }, { url: '', caption: 'Happy clients' }],
-        featured: [{ id: 'f1', headline: `Book ${first.name}`, body: first.description, url: null, serviceId: first.id }] } });
+      team: first.team, services });
+  })),
+  http.get('*/v1/business-pages/:slug', route((_ctx, p) => {
+    const prov = Object.entries(PROVIDERS).find(([, v]) => v.slug === p.slug);
+    if (!prov) throw new MockProblem(404, 'NOT_FOUND', 'Page not found', 'There is no business page at this address.');
+    const services = SERVICES.filter((s) => s.orgId === prov[0]);
+    return json({ slug: prov[1].slug, kind: 'PROVIDER', name: prov[1].displayName, description: prov[1].tagline, brandColor: '#8a3b12', logoUrl: null, contactEmail: 'hello@example.com', indexable: true,
+      services: services.map((s) => ({ serviceId: s.id, name: s.name, durationMinutes: s.durationMinutes, priceMinor: s.priceMinor, currency: s.currency })), products: [] });
   })),
   http.post('*/v1/services/bookings', route(async (ctx) => {
     const a = me(ctx);

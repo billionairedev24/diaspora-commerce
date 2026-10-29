@@ -7,6 +7,8 @@ import java.util.UUID;
 
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.ImageDto;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.VariantResponse;
+import com.afrotransact.catalog.adapter.in.web.ReviewDtos.RatingResponse;
+import com.afrotransact.catalog.application.ProductReviewService;
 import com.afrotransact.catalog.application.PublicCatalogService;
 import com.afrotransact.catalog.application.PublicCatalogService.LiveVariant;
 import com.afrotransact.catalog.domain.Product;
@@ -28,22 +30,27 @@ import org.springframework.web.bind.annotation.RestController;
 class PublicProductController {
 
     private final PublicCatalogService catalog;
+    private final ProductReviewService reviews;
 
-    PublicProductController(PublicCatalogService catalog) {
+    PublicProductController(PublicCatalogService catalog, ProductReviewService reviews) {
         this.catalog = catalog;
+        this.reviews = reviews;
     }
 
     @Schema(name = "PublicProduct")
     record PublicProductResponse(UUID id, String atin, String ownerKind, String sellerOrgId, UUID categoryId,
                                  String productType, String title, Map<String, String> attributes,
                                  List<ImageDto> images, String variationTheme, List<VariantResponse> variants,
-                                 boolean preorderEligible, boolean shipsNow) {
+                                 boolean preorderEligible, boolean shipsNow,
+                                 @Schema(description = "Average stars, review count and star breakdown over the "
+                                         + "product's published reviews (S324); zeros without reviews")
+                                 RatingResponse rating) {
 
-        static PublicProductResponse of(Product p) {
+        static PublicProductResponse of(Product p, RatingResponse rating) {
             return new PublicProductResponse(p.id(), p.atin().value(), p.owner().kind().name(), p.owner().orgId(),
                     p.categoryId(), p.productTypeCode(), p.title(), p.attributes(),
                     p.images().stream().map(ImageDto::of).toList(), p.variationTheme(),
-                    p.variants().stream().map(VariantResponse::of).toList(), p.preorderEligible(), p.shipsNow());
+                    p.variants().stream().map(VariantResponse::of).toList(), p.preorderEligible(), p.shipsNow(), rating);
         }
     }
 
@@ -55,7 +62,7 @@ class PublicProductController {
     @GetMapping("/products/{atin}")
     ResponseEntity<PublicProductResponse> product(@PathVariable String atin) {
         return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofSeconds(60)).cachePublic())
-                .body(PublicProductResponse.of(catalog.liveProduct(atin)));
+                .body(withRating(catalog.liveProduct(atin)));
     }
 
     @Operation(summary = "A live variant (with its product) by variant ATIN — used by cart and checkout")
@@ -63,6 +70,10 @@ class PublicProductController {
     ResponseEntity<PublicVariantResponse> variant(@PathVariable String atin) {
         LiveVariant lv = catalog.liveVariant(atin);
         return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofSeconds(60)).cachePublic())
-                .body(new PublicVariantResponse(PublicProductResponse.of(lv.product()), VariantResponse.of(lv.variant())));
+                .body(new PublicVariantResponse(withRating(lv.product()), VariantResponse.of(lv.variant())));
+    }
+
+    private PublicProductResponse withRating(Product product) {
+        return PublicProductResponse.of(product, RatingResponse.of(reviews.ratingOf(product.id())));
     }
 }

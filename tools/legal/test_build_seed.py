@@ -174,7 +174,7 @@ class BuildSeedTest(unittest.TestCase):
         psql(f"drop database if exists {db}")
         psql(f"create database {db}")
         self.addCleanup(psql, f"drop database if exists {db}")
-        for name in ("V1__content_schema.sql", "V5__seed_legal.sql", "V12__seed_legal_extended.sql"):
+        for name in ("V1__content_schema.sql", "V5__seed_legal.sql", "V13__seed_legal_extended.sql"):
             psql_file(os.path.join(self.migrations, name))
         self.run_tool("ok")
         name = self.generated()[0]

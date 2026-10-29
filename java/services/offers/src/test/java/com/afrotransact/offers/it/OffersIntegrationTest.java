@@ -22,17 +22,21 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
     "at.events.relay-enabled=false", "spring.kafka.bootstrap-servers=localhost:1", "at.consumers.enabled=false",
     "at.offers.retail-org-id=" + OffersIntegrationTest.RETAIL_ORG})
 @ActiveProfiles("local")
-@Import({TestActors.class, StubCatalog.class, StubPickupLocations.class})
+@Import({TestActors.class, StubCatalog.class, StubPickupLocations.class, StubListingEntitlements.class})
 public abstract class OffersIntegrationTest {
 
     public static final String RETAIL_ORG = "org_afrotransactretail01";
     public static final String LAGOS = "org_lagostextilehub00001";
     public static final String MAMATEE = "org_mamateespantry000001";
 
+    /** Set {@code AT_IT_POSTGRES_URL} (jdbc:postgresql://…, with PostGIS) to run without Docker. */
+    static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
 
     static {
-        POSTGRES.start();
+        if (EXTERNAL_DB == null) {
+            POSTGRES.start();
+        }
     }
 
     protected final JdbcClient jdbc;
@@ -43,9 +47,11 @@ public abstract class OffersIntegrationTest {
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.datasource.url", () -> EXTERNAL_DB != null ? EXTERNAL_DB : POSTGRES.getJdbcUrl());
+        registry.add("spring.datasource.username", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_USER", "postgres") : POSTGRES.getUsername());
+        registry.add("spring.datasource.password", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_PASSWORD", "") : POSTGRES.getPassword());
     }
 
     @AfterEach

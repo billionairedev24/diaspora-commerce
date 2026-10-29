@@ -7,6 +7,7 @@ import java.util.Locale;
 import com.afrotransact.orders.domain.ActorKind;
 import com.afrotransact.orders.domain.CourierProofPolicy;
 import com.afrotransact.orders.domain.DeliveryMethod;
+import com.afrotransact.orders.domain.HandoverPolicy;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderLine;
 import com.afrotransact.orders.domain.OrdersRuleViolation;
@@ -29,26 +30,57 @@ class ShipmentServiceImpl implements ShipmentService {
     private final OrderRepository orders;
     private final ShipmentTransitions transitions;
     private final CourierProofPolicy proofs;
+    private final HandoverPolicy handover;
     private final OrderViews views;
+    private final OrdersSettings settings;
     private final Clock clock;
 
     ShipmentServiceImpl(OrdersAccess access, OrderRepository orders, ShipmentTransitions transitions,
-                        CourierProofPolicy proofs, OrderViews views, Clock clock) {
+                        CourierProofPolicy proofs, HandoverPolicy handover, OrderViews views, OrdersSettings settings,
+                        Clock clock) {
         this.access = access;
         this.orders = orders;
         this.transitions = transitions;
         this.proofs = proofs;
+        this.handover = handover;
         this.views = views;
+        this.settings = settings;
         this.clock = clock;
     }
 
     @Override
     @Transactional
-    public ShipmentActionResult transition(String shipmentId, String to, String reason, String idempotencyKey) {
+    public ShipmentActionResult transition(String shipmentId, String to, String reason, String handoverCode,
+                                           String idempotencyKey) {
         ShipmentStatus target = status(to);
         ShipmentTransitions.Outcome outcome = transitions.apply(new ShipmentTransitions.Request(shipmentId, target,
-                (o, s) -> access.transitionActor(o, s), reason, TransitionSource.API, idempotencyKey, null, null, null));
+                (o, s) -> access.transitionActor(o, s), reason, TransitionSource.API, idempotencyKey, null, null,
+                s -> checkPickupHandover(s, target, handoverCode, reason)));
         return result(outcome);
+    }
+
+    /**
+     * Handing a pickup order over is checked against the customer's code, like a driver's delivery. The seller must
+     * have it; staff, who can fix what the people on the spot could not, may confirm with a reason instead.
+     */
+    private void checkPickupHandover(Shipment s, ShipmentStatus target, String code, String reason) {
+        if (target != ShipmentStatus.DELIVERED || s.deliveryMethod() != DeliveryMethod.PICKUP || !s.handoverRequired()
+                || s.status() == ShipmentStatus.DELIVERED || handover.matches(s.id(), code, s.handoverCodeHash())) {
+            return;
+        }
+        Actor actor = access.current();
+        boolean staff = OrdersAccess.superAdmin(actor) || actor.type() == PrincipalType.STAFF
+                || actor.type() == PrincipalType.SERVICE;
+        if (staff && reason != null && !reason.isBlank()) {
+            return;
+        }
+        if (code == null || code.isBlank()) {
+            throw new OrdersRuleViolation("orders.handover-code-required", staff
+                    ? "Enter the customer's 4-digit code, or say why you are confirming the handover without it"
+                    : "Ask the customer for their 4-digit code");
+        }
+        throw new OrdersRuleViolation("orders.handover-code-invalid",
+                "The handover code does not match; ask the customer for the 4-digit code");
     }
 
     @Override
@@ -61,7 +93,7 @@ class ShipmentServiceImpl implements ShipmentService {
         ShipmentTransitions.Outcome outcome = transitions.apply(new ShipmentTransitions.Request(shipmentId,
                 ShipmentStatus.CANCELLED, (o, s) -> new TransitionActor(ActorKind.CUSTOMER, customer.subject(), null),
                 reason == null || reason.isBlank() ? "Cancelled by the customer" : reason, TransitionSource.API,
-                idempotencyKey, null, null, this::preorderStillOpen));
+                idempotencyKey, null, null, s -> cancellableByCustomer(order, s)));
         return views.of(outcome.order(), new Viewer(Viewer.Kind.CUSTOMER, null),
                 orders.history(outcome.order().id()));
     }
@@ -117,9 +149,15 @@ class ShipmentServiceImpl implements ShipmentService {
     }
 
     /** S272: a pre-order is cancelled by the customer (full refund incl. delivery fee) only until its window closes. */
-    private void preorderStillOpen(Shipment s) {
+    private void cancellableByCustomer(Order o, Shipment s) {
         if (s.preorderShipment() && !s.preorder().cancellableAt(Instant.now(clock))) {
             throw TransitionRefused.preorderClosed(s.preorder().closesAt());
+        }
+        if (!s.preorderShipment() && o.placedAt() != null) {
+            Instant expiry = o.placedAt().plus(settings.cancellationWindow());
+            if (Instant.now(clock).isAfter(expiry)) {
+                throw TransitionRefused.cancelWindowExpired(o.placedAt());
+            }
         }
     }
 

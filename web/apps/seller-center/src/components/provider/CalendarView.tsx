@@ -14,6 +14,7 @@ import { useSeller } from '@/lib/session';
 
 import { BookingActions } from './BookingActions';
 
+/** Default hours of the week grid; widened when a booking or open-hours range of the week falls outside them. */
 const START_H = 7;
 const END_H = 22;
 const HOUR_PX = 44;
@@ -27,6 +28,29 @@ const startOfWeek = (d: Date) => {
 };
 const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+const DAY_MIN = 24 * 60;
+
+/** Minutes since local midnight of a booking's start and end (an overnight booking ends at midnight of its first day). */
+export function bookingMinutes(b: Pick<BookingCard, 'startAt' | 'durationMinutes'>): { start: number; end: number } {
+  const s = new Date(b.startAt);
+  const start = s.getHours() * 60 + s.getMinutes();
+  return { start, end: Math.min(DAY_MIN, start + Math.max(0, b.durationMinutes)) };
+}
+
+/**
+ * The hours the week grid shows: 7 a.m. to 10 p.m., widened to whole hours around every booking and open-hours range
+ * of the week. Every block is then drawn inside the grid; a booking outside the default hours (an early start, or a
+ * provider whose time zone differs from the browser's) used to get a negative offset and covered the toolbar above.
+ */
+export function visibleHours(bookings: Pick<BookingCard, 'startAt' | 'durationMinutes'>[], open: { start: string; end: string }[] = []): { start: number; end: number } {
+  let first = START_H * 60;
+  let last = END_H * 60;
+  for (const m of [...bookings.map(bookingMinutes), ...open.map((r) => ({ start: toMin(r.start), end: Math.min(DAY_MIN, toMin(r.end)) }))]) {
+    first = Math.min(first, m.start);
+    last = Math.max(last, m.end);
+  }
+  return { start: Math.max(0, Math.floor(first / 60)), end: Math.min(24, Math.ceil(last / 60)) };
+}
 
 /** Day summary shown on hover/focus: appointments, hours booked, expected revenue and what needs action. */
 export function DaySummaryCard({ s }: { s: DaySummary | undefined }) {
@@ -81,13 +105,19 @@ export function CalendarView() {
   const summary = (d: Date) => q.data?.days.find((s) => s.date === isoDay(d));
   const now = new Date();
   const sel = q.data?.bookings.find((b) => b.id === selected) ?? null;
+  const hoursShown = useMemo(() => visibleHours(q.data?.bookings ?? [], (q.data?.openHours ?? []).flatMap((h) => h.ranges)), [q.data]);
+  const startH = hoursShown.start;
+  const gridPx = (hoursShown.end - startH) * HOUR_PX;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
   const step = (n: number) => setAnchor(mode === 'week' ? addDays(anchor, 7 * n) : new Date(anchor.getFullYear(), anchor.getMonth() + n, 1));
   const title = mode === 'week'
     ? `${range.from.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${range.to.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
     : anchor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   return (
     <ModulePage module="calendar">
-      <div className="flex flex-wrap items-center gap-2">
+      {/* The toolbar sits above the calendar's own layers (blocks, quick views and day summaries stay inside the
+          isolated grid below), so nothing in the calendar can cover the view switcher at any width. */}
+      <div className="relative z-10 flex flex-wrap items-center gap-2 bg-surface">
         <Button size="sm" variant="neutral" aria-label="Previous" onClick={() => step(-1)}><CaretLeft size={16} aria-hidden /></Button>
         <Button size="sm" variant="neutral" onClick={() => setAnchor(new Date())}>Today</Button>
         <Button size="sm" variant="neutral" aria-label="Next" onClick={() => step(1)}><CaretRight size={16} aria-hidden /></Button>
@@ -97,7 +127,7 @@ export function CalendarView() {
       {q.isPending ? <Spinner /> : null}
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {q.data && mode === 'week' ? (
-        <div className="grid grid-cols-[48px_repeat(7,minmax(0,1fr))] rounded-md border border-border text-xs" aria-label="Week calendar" role="grid">
+        <div className="isolate grid grid-cols-[48px_repeat(7,minmax(0,1fr))] rounded-md border border-border text-xs" aria-label="Week calendar" role="grid">
           {/* Rows use display: contents so the cells stay in the CSS grid (ARIA grid > row > cell, WCAG 1.3.1). */}
           <div role="row" className="contents">
           <div role="columnheader"><span className="sr-only">Time</span></div>
@@ -111,24 +141,24 @@ export function CalendarView() {
           ))}
           </div>
           <div role="row" className="contents">
-          <div role="rowheader" aria-label="Hours" className="relative" style={{ height: (END_H - START_H) * HOUR_PX }}>
-            {Array.from({ length: END_H - START_H }, (_, i) => (
-              <span key={i} aria-hidden className="absolute right-1 text-2xs text-muted" style={{ top: i * HOUR_PX - 6 }}>{((START_H + i + 11) % 12) + 1}{START_H + i < 12 ? 'a' : 'p'}</span>
+          <div role="rowheader" aria-label="Hours" className="relative" style={{ height: gridPx }}>
+            {Array.from({ length: hoursShown.end - startH }, (_, i) => (
+              <span key={i} aria-hidden className="absolute right-1 text-2xs text-muted" style={{ top: Math.max(0, i * HOUR_PX - 6) }}>{((startH + i + 11) % 12) + 1}{startH + i < 12 ? 'a' : 'p'}</span>
             ))}
           </div>
           {days.map((d) => {
             const hours = q.data.openHours.find((h) => h.day === DAY_KEYS[d.getDay()]);
             return (
-              <div key={d.toISOString()} role="gridcell" aria-label={d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} className="relative border-t border-l border-border" style={{ height: (END_H - START_H) * HOUR_PX }}>
+              <div key={d.toISOString()} role="gridcell" aria-label={d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} className="relative border-t border-l border-border" style={{ height: gridPx }}>
                 {hours?.ranges.map((r) => (
-                  <span key={r.start} aria-hidden className="absolute inset-x-0 bg-surface-sunken" style={{ top: ((toMin(r.start) - START_H * 60) / 60) * HOUR_PX, height: ((toMin(r.end) - toMin(r.start)) / 60) * HOUR_PX }} />
+                  <span key={r.start} aria-hidden className="absolute inset-x-0 bg-surface-sunken" style={{ top: ((toMin(r.start) - startH * 60) / 60) * HOUR_PX, height: ((Math.min(DAY_MIN, toMin(r.end)) - toMin(r.start)) / 60) * HOUR_PX }} />
                 ))}
-                {isoDay(d) === isoDay(now) ? <span aria-hidden className="absolute inset-x-0 z-10 h-0.5 bg-danger" style={{ top: ((now.getHours() * 60 + now.getMinutes() - START_H * 60) / 60) * HOUR_PX }} /> : null}
+                {isoDay(d) === isoDay(now) && nowMin >= startH * 60 && nowMin <= hoursShown.end * 60 ? <span aria-hidden className="absolute inset-x-0 z-10 h-0.5 bg-danger" style={{ top: ((nowMin - startH * 60) / 60) * HOUR_PX }} /> : null}
                 {byDay(d).map((b) => {
-                  const s = new Date(b.startAt);
-                  const top = ((s.getHours() * 60 + s.getMinutes() - START_H * 60) / 60) * HOUR_PX;
+                  const m = bookingMinutes(b);
+                  const top = ((m.start - startH * 60) / 60) * HOUR_PX;
                   return (
-                    <div key={b.id} className="group absolute inset-x-0.5 z-10" style={{ top, height: Math.max(24, (b.durationMinutes / 60) * HOUR_PX - 2) }}>
+                    <div key={b.id} className="group absolute inset-x-0.5 z-10" style={{ top, height: Math.min(gridPx - top, Math.max(24, ((m.end - m.start) / 60) * HOUR_PX - 2)) }}>
                       <button type="button" onClick={() => setSelected(b.id)} className={cx('h-full w-full overflow-hidden rounded-xs border-l-4 px-1 text-left text-2xs', TONE[b.status] ?? 'border-border bg-surface-muted', !ACTIVE.includes(b.status) && 'opacity-60')}>
                         <strong className="block truncate">{time(b.startAt)} {b.customerName}</strong>
                         <span className="block truncate">{b.serviceName}</span>
@@ -146,7 +176,7 @@ export function CalendarView() {
         </div>
       ) : null}
       {q.data && mode === 'month' ? (
-        <div className="grid grid-cols-7 overflow-hidden rounded-md border border-border text-xs" role="grid" aria-label="Month calendar">
+        <div className="isolate grid grid-cols-7 overflow-hidden rounded-md border border-border text-xs" role="grid" aria-label="Month calendar">
           <div role="row" className="contents">
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => <div key={d} role="columnheader" className="bg-surface-muted p-2 font-semibold">{d}</div>)}
           </div>

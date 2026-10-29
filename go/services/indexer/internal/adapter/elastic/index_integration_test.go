@@ -123,6 +123,27 @@ func TestVersionGuardedProjection(t *testing.T) {
 		t.Fatalf("preserve seller name failed: %+v", got)
 	}
 
+	// S324: the rating comes from catalog's aggregate, survives every product upsert and is version-guarded.
+	rated, err := idx.ApplyRating(ctx, "us", "AT00000001", 4.33, 3, 520)
+	must(t, err)
+	if !rated {
+		t.Fatal("rating should find the product")
+	}
+	must(t, idx.UpsertProduct(ctx, "us", fallback, 530, port.UpsertOptions{PreserveSellerName: true})) // carries rating 0
+	_, err = idx.ApplyRating(ctx, "us", "AT00000001", 1, 1, 510)                                       // older: ignored
+	must(t, err)
+	if got = get(t, es, "AT00000001"); got.Rating != 4.33 || got.ReviewCount != 3 {
+		t.Fatalf("rating = %v (%d reviews), want 4.33 (3)", got.Rating, got.ReviewCount)
+	}
+	_, err = idx.ApplyRating(ctx, "us", "AT00000001", 0, 0, 540) // the last review was removed
+	must(t, err)
+	if got = get(t, es, "AT00000001"); got.Rating != 0 || got.ReviewCount != 0 {
+		t.Fatalf("rating after the last review went = %v (%d reviews)", got.Rating, got.ReviewCount)
+	}
+	if unknown, err := idx.ApplyRating(ctx, "us", "ATZZZZZZZZ", 5, 1, 600); err != nil || unknown {
+		t.Fatalf("unknown product should report not found: %v %v", unknown, err)
+	}
+
 	// S036: embeddings. An upsert carrying a vector stores it; one without keeps it; the backfill finds LIVE
 	// documents without a vector and its write is version-guarded.
 	vec := make([]float32, searchindex.EmbeddingDimensions)

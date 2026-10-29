@@ -31,7 +31,7 @@ import com.afrotransact.seller.domain.OnboardingStep;
 import com.afrotransact.seller.domain.OrgKind;
 import com.afrotransact.seller.domain.Owner;
 import com.afrotransact.seller.domain.PaymentMethodKind;
-import com.afrotransact.seller.domain.PayoutInput;
+import com.afrotransact.seller.domain.PlanFeeCollection;
 import com.afrotransact.seller.domain.PlanSection;
 import com.afrotransact.seller.domain.ReviewAction;
 import com.afrotransact.platform.test.PostgresTestContainer;
@@ -64,7 +64,8 @@ import tools.jackson.databind.json.JsonMapper;
     "at.seller.stripe.secret-key=sk_test_seller_it",
     "at.seller.stripe.connect-webhook-secret=" + SellerIntegrationTest.CONNECT_SECRET,
     "at.seller.stripe.billing-webhook-secret=" + SellerIntegrationTest.BILLING_SECRET,
-    "at.seller.stripe.max-network-retries=0"
+    "at.seller.stripe.max-network-retries=0",
+    "at.seller.billing.sync-on-startup=false"
 })
 @ActiveProfiles("local")
 @Import(TestActors.class)
@@ -72,6 +73,8 @@ abstract class SellerIntegrationTest {
 
     static final String CONNECT_SECRET = "whsec_connect_test_secret";
     static final String BILLING_SECRET = "whsec_billing_test_secret";
+    /** Set {@code AT_IT_POSTGRES_URL} (jdbc:postgresql://…, with PostGIS) to run without Docker. */
+    static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
     static final WireMockServer STRIPE = new WireMockServer(WireMockConfiguration.options().dynamicPort()
             .globalTemplating(true));
@@ -80,16 +83,20 @@ abstract class SellerIntegrationTest {
     static final Address ADDRESS = new Address("9800 Westheimer Rd", null, "Houston", "TX", "77042", "US");
 
     static {
-        POSTGRES.start();
+        if (EXTERNAL_DB == null) {
+            POSTGRES.start();
+        }
         STRIPE.start();
         StripeStub.install(STRIPE);
     }
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.datasource.url", () -> EXTERNAL_DB != null ? EXTERNAL_DB : POSTGRES.getJdbcUrl());
+        registry.add("spring.datasource.username", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_USER", "postgres") : POSTGRES.getUsername());
+        registry.add("spring.datasource.password", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_PASSWORD", "") : POSTGRES.getPassword());
         registry.add("at.seller.stripe.api-base", STRIPE::baseUrl);
         registry.add("at.seller.stripe.files-base", STRIPE::baseUrl);
         registry.add("at.seller.media.base-url", STRIPE::baseUrl);
@@ -97,6 +104,8 @@ abstract class SellerIntegrationTest {
         registry.add("at.seller.metering.inventory-url", STRIPE::baseUrl);
         registry.add("at.seller.metering.content-url", STRIPE::baseUrl);
         registry.add("at.seller.metering.ai-url", STRIPE::baseUrl);
+        // payments-service plan fee withholdings (S298) are stubbed on the same WireMock.
+        registry.add("at.seller.billing.payments-url", STRIPE::baseUrl);
     }
 
     JdbcClient jdbc;
@@ -144,6 +153,31 @@ abstract class SellerIntegrationTest {
 
     /** Same, offering products or products and services (S215: BOTH). */
     String approvedSeller(String user, String planCode, Cadence cadence, Offering offering) {
+        return approvedSeller(user, planCode, cadence, offering, null);
+    }
+
+    /** Same, with a trial campaign's promo code on the plan step (S295). */
+    String approvedSeller(String user, String planCode, Cadence cadence, Offering offering, String promoCode) {
+        return approvedSeller(user, planCode, cadence, offering, promoCode, null);
+    }
+
+    /** Same, with how the plan will be paid chosen on the plan step (S298; null keeps the platform default). */
+    String approvedSeller(String user, String planCode, Cadence cadence, Offering offering, String promoCode,
+                          PlanFeeCollection planFeeCollection) {
+        ApplicationView submitted = submittedApplication(user, planCode, cadence, offering, promoCode,
+                planFeeCollection);
+        String appId = submitted.application().id();
+        TestActors.as(TestActors.staff("reviewer-" + user, SellerPermissions.APPLICATIONS_REVIEW));
+        reviews.review(appId, new ReviewCommand(ReviewAction.APPROVE, "ALL_CHECKS_PASSED", null, null, null));
+        TestActors.as(TestActors.staff("approver-" + user, SellerPermissions.APPLICATIONS_APPROVE));
+        reviews.decide(appId, new ReviewCommand(ReviewAction.FINAL_APPROVE, "ALL_CHECKS_PASSED", null, null, null));
+        TestActors.reset();
+        return submitted.application().orgId();
+    }
+
+    /** Drives an application through onboarding up to submission (PENDING_REVIEW); leaves the applicant signed in. */
+    ApplicationView submittedApplication(String user, String planCode, Cadence cadence, Offering offering,
+                                         String promoCode, PlanFeeCollection planFeeCollection) {
         TestActors.as(TestActors.applicant(user));
         onboarding.start(OrgKind.SELLER);
         onboarding.saveStep(OnboardingStep.BUSINESS, StepInput.business(new BusinessSection(offering,
@@ -154,24 +188,17 @@ abstract class SellerIntegrationTest {
         onboarding.saveStep(OnboardingStep.OWNERS, StepInput.owners(List.of(new Owner("Ade", "Ade", "CEO",
                 "ade@example.com", BigDecimal.valueOf(100), true, LocalDate.of(1981, 1, 1), ADDRESS))));
         stripeOnboarding.accountSession();
+        // Stripe's embedded onboarding collected identity, tax ID and the payout bank (stubbed account).
         stripeOnboarding.refreshVerification();
-        onboarding.saveStep(OnboardingStep.PAYOUTS, StepInput.payouts(new PayoutInput("Store LLC", "checking",
-                "Chase", "021000021", "000123456789", "000123456789", null)));
         onboarding.saveStep(OnboardingStep.PLAN, StepInput.plan(new PlanSection(planCode, cadence,
-                PaymentMethodKind.CARD, "pm_card_" + user.replace("-", ""), "visa", "4242", 12, 2030)));
+                PaymentMethodKind.CARD, "pm_card_" + user.replace("-", ""), "visa", "4242", 12, 2030, promoCode,
+                planFeeCollection)));
         List<ComplianceSection.ServiceLicence> services = offering.includesServices()
                 ? List.of(new ComplianceSection.ServiceLicence("Gele tying", false, null, null, null, null))
                 : List.of();
         onboarding.saveStep(OnboardingStep.CATALOG_COMPLIANCE, StepInput.compliance(new ComplianceSection(
                 List.of("fashion"), null, null, services, null, true, true, "Ade")));
-        ApplicationView submitted = onboarding.submit();
-        String appId = submitted.application().id();
-        TestActors.as(TestActors.staff("reviewer-" + user, SellerPermissions.APPLICATIONS_REVIEW));
-        reviews.review(appId, new ReviewCommand(ReviewAction.APPROVE, "ALL_CHECKS_PASSED", null, null, null));
-        TestActors.as(TestActors.staff("approver-" + user, SellerPermissions.APPLICATIONS_APPROVE));
-        reviews.decide(appId, new ReviewCommand(ReviewAction.FINAL_APPROVE, "ALL_CHECKS_PASSED", null, null, null));
-        TestActors.reset();
-        return submitted.application().orgId();
+        return onboarding.submit();
     }
 
     String accountOf(String orgId) {
@@ -193,6 +220,11 @@ abstract class SellerIntegrationTest {
         return send("POST", path, body, null);
     }
 
+    /** POST with an Idempotency-Key header. */
+    Response post(String path, Object body, String idempotencyKey) {
+        return send("POST", path, body, null, idempotencyKey);
+    }
+
     Response put(String path, Object body) {
         return send("PUT", path, body, null);
     }
@@ -210,6 +242,10 @@ abstract class SellerIntegrationTest {
     }
 
     private Response send(String method, String path, Object body, String signature) {
+        return send(method, path, body, signature, null);
+    }
+
+    private Response send(String method, String path, Object body, String signature, String idempotencyKey) {
         try {
             String raw = body == null ? "" : body instanceof String s ? s : JSON.writeValueAsString(body);
             HttpRequest.Builder b = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
@@ -218,6 +254,9 @@ abstract class SellerIntegrationTest {
                             : HttpRequest.BodyPublishers.ofString(raw, StandardCharsets.UTF_8));
             if (signature != null) {
                 b.header("Stripe-Signature", signature);
+            }
+            if (idempotencyKey != null) {
+                b.header("Idempotency-Key", idempotencyKey);
             }
             HttpResponse<String> r = HTTP.send(b.build(), HttpResponse.BodyHandlers.ofString());
             JsonNode json = r.body() == null || r.body().isBlank() ? JSON.createObjectNode() : JSON.readTree(r.body());

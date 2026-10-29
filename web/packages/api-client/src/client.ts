@@ -1,8 +1,14 @@
 import { type z } from 'zod';
 
+import { type AddressSearchOptions } from './address-lookup';
+import { creditMethods } from './credit-client';
+import { deliveryRunMethods } from './delivery-runs';
 import { type ApiClientOptions, createRequester, joinUrl } from './http';
+import { membershipMethods } from './membership-client';
 import { type PreorderFulfilmentRequest, preorderMethods } from './preorders';
-import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema, type ReturnSummary, ReturnSummarySchema } from './schemas/account';
+import { referralMethods } from './referral-client';
+import { reviewMethods } from './reviews-client';
+import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema } from './schemas/account';
 import { type Me, MeSchema, type PhoneCodeSent, PhoneCodeSentSchema, type PhoneVerification, PhoneVerificationSchema, type SignOutResult, SignOutResultSchema } from './schemas/auth';
 import {
   type ApplicationReceipt,
@@ -18,6 +24,7 @@ import {
 import { type AddToCartRequest, type Cart, CartSchema, type UpdateCartLineRequest } from './schemas/cart';
 import { type ProductDetail, ProductDetailSchema, type StockAlert, StockAlertSchema } from './schemas/catalog';
 import { type HelpArticle, type HelpArticlePage, HelpArticlePageSchema, HelpArticleSchema, type HelpQuery } from './schemas/help';
+import { type HelpEvidenceAsset } from './schemas/help-requests';
 import { type Home, HomeSchema } from './schemas/home';
 import {
   type ConsentRecord,
@@ -34,7 +41,7 @@ import {
   type PrivacyRequestReceipt,
   PrivacyRequestReceiptSchema
 } from './schemas/legal';
-import { type AddressSuggestions, AddressSuggestionsSchema, type DeliveryLocation, DeliveryLocationSchema } from './schemas/location';
+import { type AddressSuggestions, AddressSuggestionsSchema, type DeliveryLocation, DeliveryLocationSchema, type PostalAddress, PostalAddressSchema } from './schemas/location';
 import { type SearchPage, SearchPageSchema, type SearchQuery, type Suggestions, SuggestionsSchema } from './schemas/search';
 import { NewsletterResponseSchema, type SiteConfig, SiteConfigSchema } from './schemas/site';
 import { toApiSearchParams } from './search-params';
@@ -80,8 +87,12 @@ export function createApiClient(options: ApiClientOptions) {
     /** Set the deliver-to location by ZIP or by device coordinates ("Use my current location"). */
     setDeliveryLocation: (input: { zip: string } | { lat: number; lon: number }): Promise<DeliveryLocation> =>
       request('/v1/delivery-location', DeliveryLocationSchema, { method: 'PUT', body: input }),
-    searchAddresses: (q: string, signal?: AbortSignal): Promise<AddressSuggestions> =>
-      request('/v1/geo/address-suggestions', AddressSuggestionsSchema, { query: { q }, signal }),
+    /** One keystroke of an address field; pass the entry's session token (Google Places bills the entry as one session). */
+    searchAddresses: (q: string, signal?: AbortSignal, options: AddressSearchOptions = {}): Promise<AddressSuggestions> =>
+      request('/v1/geo/address-suggestions', AddressSuggestionsSchema, { query: { q, sessionToken: options.sessionToken, country: options.country }, signal }),
+    /** Structured address of a picked suggestion (Google Place Details, closing the session). */
+    resolveAddressSuggestion: (id: string, sessionToken?: string, signal?: AbortSignal): Promise<PostalAddress> =>
+      request(`/v1/geo/address-suggestions/${encodeURIComponent(id)}`, PostalAddressSchema, { query: { sessionToken }, signal }),
 
     /* Search */
     search: (query: SearchQuery, signal?: AbortSignal): Promise<SearchPage> => request('/v1/search', SearchPageSchema, { query: toApiSearchParams(query), signal }),
@@ -107,6 +118,11 @@ export function createApiClient(options: ApiClientOptions) {
 
     /* Pre-orders (S273) */
     ...preorderMethods(request),
+    ...deliveryRunMethods(request),
+    ...creditMethods(request),
+    ...membershipMethods(request),
+    ...referralMethods(request),
+    ...reviewMethods(request),
 
     /* Auth: sign-in and sign-up run on identity's hosted pages (single sign-on), started with a full-page navigation to
        loginUrl(); the BFF keeps the tokens (OIDC authorization code + PKCE). */
@@ -114,8 +130,13 @@ export function createApiClient(options: ApiClientOptions) {
     startPhoneVerification: (): Promise<PhoneCodeSent> => request('/v1/account/phone/verification', PhoneCodeSentSchema, { method: 'POST' }),
     confirmPhoneVerification: (code: string): Promise<PhoneVerification> =>
       request('/v1/account/phone/verification/confirm', PhoneVerificationSchema, { method: 'POST', body: { code } }),
-    /** Ends the BFF session; navigate to redirectTo (when set) to end the identity session too (single sign-out). */
-    signOut: (): Promise<SignOutResult> => request('/v1/auth/sign-out', SignOutResultSchema, { method: 'POST' }),
+    /**
+     * Ends the BFF session; navigate to redirectTo (when set) to end the identity session too (single sign-out), after
+     * which identity returns to this app's signed-out landing. returnTo is the page to come back to (storefront: only
+     * pages a guest may see).
+     */
+    signOut: (input: { returnTo?: string } = {}): Promise<SignOutResult> =>
+      request('/v1/auth/sign-out', SignOutResultSchema, { method: 'POST', body: input.returnTo ? { returnTo: input.returnTo } : {} }),
     /**
      * URL of the BFF's hosted sign-in start (identity's sign-in page, or its sign-up page with prompt 'create').
      * returnTo is a storefront path or an absolute URL on another AfroTransact web app.
@@ -145,8 +166,6 @@ export function createApiClient(options: ApiClientOptions) {
     getAddresses: async (): Promise<Address[]> => (await request('/v1/account/addresses', pageOf(AddressSchema))).items,
     getPaymentMethods: async (): Promise<PaymentMethod[]> => (await request('/v1/account/payment-methods', pageOf(PaymentMethodSchema))).items,
     getOrders: async (): Promise<OrderSummary[]> => (await request('/v1/account/orders', pageOf(OrderSummarySchema))).items,
-    getReturns: async (orderNumber?: string): Promise<ReturnSummary[]> =>
-      (await request('/v1/account/returns', pageOf(ReturnSummarySchema), { query: orderNumber ? { orderNumber } : undefined })).items,
 
     /* Account details, checkout, services & bookings, Lola */
     ...shopperMethods(request, options)
@@ -168,4 +187,40 @@ export async function uploadResume(
   const res = await put(ticket.upload.url, { method: ticket.upload.method, headers: ticket.upload.headers, body: file });
   if (!res.ok) throw new Error(`Upload failed (${res.status})`);
   return api.completeResumeUpload(ticket.assetId);
+}
+
+/** Sends one request body to a signed upload URL; `onProgress` gets 0..1 while the bytes go out. */
+export type PutWithProgress = (url: string, init: { method: string; headers: Record<string, string>; body: Blob }, onProgress: (fraction: number) => void) => Promise<{ ok: boolean; status: number }>;
+
+/** XMLHttpRequest, the only browser API that reports upload progress. */
+const putWithXhr: PutWithProgress = (url, init, onProgress) =>
+  new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(init.method, url);
+    for (const [name, value] of Object.entries(init.headers)) xhr.setRequestHeader(name, value);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
+    };
+    xhr.onload = () => resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status });
+    xhr.onerror = () => reject(new Error('Upload failed'));
+    xhr.onabort = () => reject(new Error('Upload cancelled'));
+    xhr.send(init.body);
+  });
+
+/**
+ * Uploads one help-request evidence photo through the media service's signed upload (ask the BFF for a URL, PUT the
+ * file straight to storage with no BFF credentials, then let media check it). Returns the asset id to send in
+ * `evidenceAssetIds`. Progress is reported as a fraction (0..1) while the file goes out.
+ */
+export async function uploadHelpEvidence(
+  api: Pick<ApiClient, 'requestHelpEvidenceUpload' | 'completeHelpEvidenceUpload'>,
+  file: { name: string; type: string; size: number } & Blob,
+  opts: { onProgress?: (fraction: number) => void; put?: PutWithProgress } = {}
+): Promise<HelpEvidenceAsset> {
+  const onProgress = opts.onProgress ?? (() => undefined);
+  const ticket = await api.requestHelpEvidenceUpload({ fileName: file.name, contentType: file.type, size: file.size });
+  const res = await (opts.put ?? putWithXhr)(ticket.upload.url, { method: ticket.upload.method, headers: ticket.upload.headers, body: file }, onProgress);
+  if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+  onProgress(1);
+  return api.completeHelpEvidenceUpload(ticket.assetId);
 }

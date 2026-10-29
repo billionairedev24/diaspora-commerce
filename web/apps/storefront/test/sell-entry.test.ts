@@ -42,6 +42,16 @@ describe('Start selling / Offer your services entry (S284)', () => {
       vi.stubEnv('SELLER_CENTER_URL', SC);
     });
 
+    it('/sell for an approved seller opens the Seller Center dashboard, not a new application', async () => {
+      getMe.mockResolvedValue({ authenticated: true, user: { backOffices: [{ app: 'seller-center', state: 'active' }] } });
+      await expect(sell()).rejects.toThrow('NEXT_REDIRECT');
+      expect(redirect).toHaveBeenCalledWith(`${SC}/api/bff/v1/auth/login?returnTo=${encodeURIComponent(`${SC}/`)}`);
+      // Offering services is a separate application: still onboarding for the provider role.
+      redirect.mockClear();
+      await expect(provide()).rejects.toThrow('NEXT_REDIRECT');
+      expect(redirect).toHaveBeenCalledWith(`${SC}/api/bff/v1/auth/login?returnTo=${encodeURIComponent(`${SC}/onboarding?role=provider`)}`);
+    });
+
     it('/sell for a signed-in shopper never asks for credentials', async () => {
       getMe.mockResolvedValue({ authenticated: true });
       await expect(sell()).rejects.toThrow('NEXT_REDIRECT');

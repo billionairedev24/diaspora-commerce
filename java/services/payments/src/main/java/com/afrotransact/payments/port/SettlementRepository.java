@@ -1,8 +1,10 @@
 package com.afrotransact.payments.port;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.payments.domain.Money;
@@ -45,6 +47,12 @@ public interface SettlementRepository {
 
     List<SettlementTransfer> transfers(String orderId, String orgId);
 
+    /** Transfers to one organisation, newest first. */
+    List<SettlementTransfer> transfersOf(String orgId, int limit);
+
+    /** Transfers of one order (every seller), oldest first. */
+    List<SettlementTransfer> transfersOfOrder(String orderId);
+
     List<SettlementTransfer> lockTransfers(String orderId, String orgId);
 
     Optional<SettlementTransfer> lockTransferByStripeId(String stripeTransferId);
@@ -55,4 +63,7 @@ public interface SettlementRepository {
 
     /** Σ (transferred − reversed) to the organisation. */
     Money transferredTo(String orgId, String currency);
+
+    /** Those of {@code orderIds} whose settlement hold started: the order or one of its shipments was delivered. */
+    Set<String> delivered(Collection<String> orderIds);
 }

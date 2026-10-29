@@ -115,7 +115,7 @@ class ServiceCatalogServiceImpl implements ServiceCatalogService {
     }
 
     private ServiceView view(ServiceOffering o) {
-        return new ServiceView(o, takeHome.takeHome(fees.forOrg(o.orgId()), o.priceMinor(), o.depositMinor(),
+        return new ServiceView(o, takeHome.takeHome(fees.forOrg(o.orgId(), o.category()), o.priceMinor(), o.depositMinor(),
                 o.currency()));
     }
 }

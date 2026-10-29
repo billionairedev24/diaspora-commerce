@@ -75,12 +75,37 @@ export async function signInWithIdentity(intent: SignInIntent): Promise<TokenSet
   return toTokenSet(tokens);
 }
 
+/** Trades the authorization code from the in-app sign-in (and its PKCE verifier) for this app's own tokens. */
+export async function exchangeSignInCode(code: string, verifier: string): Promise<TokenSet> {
+  const doc = await discovery();
+  const tokens = await AuthSession.exchangeCodeAsync({ clientId: env.oidcClientId, code, redirectUri: redirectUri(), extraParams: { code_verifier: verifier } }, doc);
+  return toTokenSet(tokens);
+}
+
+/** The refresh token is no longer accepted (expired, revoked, already used): the person has to sign in again. A network
+    or server failure is not that: the session is still good and the next request tries again. */
+export class SessionGone extends Error {
+  constructor(readonly reason = 'refresh token refused') {
+    super('Your session ended');
+    this.name = 'SessionGone';
+  }
+}
+
+export function isInvalidGrant(e: unknown): boolean {
+  const code = (e as { code?: string } | null)?.code;
+  return code === 'invalid_grant' || code === 'invalid_token' || code === 'invalid_client' || code === 'unauthorized_client';
+}
+
 export async function refreshTokens(current: TokenSet): Promise<TokenSet> {
   if (env.mocks) return mockTokens();
-  if (!current.refreshToken) throw new Error('No refresh token');
+  if (!current.refreshToken) throw new SessionGone('no refresh token was issued at sign-in');
   const doc = await discovery();
-  const r = await AuthSession.refreshAsync({ clientId: env.oidcClientId, refreshToken: current.refreshToken, scopes: SCOPES }, doc);
-  return toTokenSet(r, current.refreshToken);
+  try {
+    const r = await AuthSession.refreshAsync({ clientId: env.oidcClientId, refreshToken: current.refreshToken, scopes: SCOPES }, doc);
+    return toTokenSet(r, current.refreshToken);
+  } catch (e) {
+    throw isInvalidGrant(e) ? new SessionGone(`identity refused the refresh token (${(e as { code?: string }).code ?? 'invalid_grant'})`) : e;
+  }
 }
 
 /** Revokes the refresh token (best effort) so sign-out ends the session server-side too. */
@@ -106,7 +131,7 @@ function b64url(s: string): string {
   return out;
 }
 
-function mockTokens(): TokenSet {
+export function mockTokens(): TokenSet {
   const exp = Math.floor(Date.now() / 1000) + 300;
   const payload = { sub: 'usr_adaeze', exp, email: 'adaeze@example.com', given_name: 'Adaeze', family_name: 'Okafor', pt: 'CUSTOMER', roles: ['account.customer'] };
   const token = `${b64url('{"alg":"none"}')}.${b64url(JSON.stringify(payload))}.mock`;

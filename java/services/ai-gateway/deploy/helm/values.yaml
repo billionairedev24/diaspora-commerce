@@ -50,6 +50,8 @@ extraEnv:
   PROMISE_URL: http://promise:8080
   ORDERS_URL: http://orders:8080
   BOOKINGS_URL: http://bookings:8080
+  CART_URL: http://cart:8080
+  RETURNS_URL: http://tax-returns:8080
   # Lola streams answers; keep proxies from buffering or timing out the event stream.
   LOLA_SSE_TIMEOUT: 120s
 nodeSelector: {}

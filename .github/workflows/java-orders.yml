@@ -54,7 +54,7 @@ jobs:
     with:
       service: orders
       publish: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
-      image-max-mb: "500"
+      image-max-mb: "270"
 
   deploy-dev:
     needs: pipeline

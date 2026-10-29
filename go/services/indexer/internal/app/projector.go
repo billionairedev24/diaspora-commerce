@@ -70,6 +70,20 @@ func (p *projectorImpl) Handle(ctx context.Context, e events.Envelope) error {
 			return nil
 		}
 		return p.product(ctx, pe, version)
+	case domain.RatingChanged:
+		var re domain.RatingEvent
+		if err := json.Unmarshal(e.Payload, &re); err != nil || re.ATIN == "" {
+			p.log.WarnContext(ctx, "skipping malformed rating event", "event_id", e.ID, "error", err)
+			return nil
+		}
+		found, err := p.index.ApplyRating(ctx, p.market, re.ATIN, re.Average, re.Count, version)
+		if err != nil {
+			return fmt.Errorf("rating %s: %w", re.ATIN, err)
+		}
+		if !found {
+			p.log.InfoContext(ctx, "rating for a product that is not indexed ignored", "atin", re.ATIN)
+		}
+		return nil
 	case domain.AvailabilityChanged:
 		var ae domain.AvailabilityEvent
 		if err := json.Unmarshal(e.Payload, &ae); err != nil {
@@ -133,6 +147,8 @@ func (p *projectorImpl) product(ctx context.Context, pe domain.ProductEvent, ver
 		ATIN:         pe.ATIN,
 		Title:        pe.Title,
 		Brand:        pe.Brand,
+		Description:  pe.Description,
+		Keywords:     pe.Keywords,
 		Communities:  pe.Communities,
 		ImageURL:     pe.ImageURL,
 		Department:   cat.Department,
@@ -155,7 +171,7 @@ func (p *projectorImpl) product(ctx context.Context, pe domain.ProductEvent, ver
 			}
 		}
 	}
-	doc.Embedding = p.embed(ctx, searchindex.EmbeddingText(doc.Title, doc.Brand, doc.CategoryPath, doc.Description))
+	doc.Embedding = p.embed(ctx, searchindex.EmbeddingText(doc.Title, doc.Brand, doc.CategoryPath, strings.TrimSpace(doc.Description+" "+strings.Join(doc.Keywords, " "))))
 	if err := p.index.UpsertProduct(ctx, p.market, doc, version,
 		port.UpsertOptions{PreserveSellerName: !known}); err != nil {
 		return fmt.Errorf("upsert %s: %w", pe.ATIN, err)

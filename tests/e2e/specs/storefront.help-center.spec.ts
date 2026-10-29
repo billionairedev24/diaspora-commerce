@@ -28,7 +28,7 @@ test.describe('storefront · help center', () => {
   test('the hub shows the design copy and the help pages, and a page opens from it', async ({ page }, testInfo) => {
     await page.goto('/help');
     await expect(page.getByRole('heading', { level: 1, name: 'Help center' })).toBeVisible();
-    for (const h of ['Track a package', 'Returns', 'Contact us']) await expect(page.getByRole('heading', { level: 2, name: h, exact: true })).toBeVisible();
+    for (const h of ['Track a package', 'Report a problem', 'Contact us']) await expect(page.getByRole('heading', { level: 2, name: h, exact: true })).toBeVisible();
     const list = page.getByTestId('help-articles');
     await expect(list.getByRole('link')).toHaveCount(5);
     await expect(page.getByRole('navigation', { name: /pagination/i })).toHaveCount(0);

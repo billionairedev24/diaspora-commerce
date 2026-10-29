@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -13,16 +14,26 @@ import (
 // staffResources is the registry of every table of the console.
 func staffResources() map[string]*staffResource {
 	all := []*staffResource{
-		usersResource(), rolesResource(), applicationsResource(), supportCasesResource(), auditResource(),
-		ordersResource(), productsResource(), moderationResource(), inventoryResource(), purchaseOrdersResource(), routesResource(),
-		dispatchShipmentsResource(), sosAlertsResource(), vehicleDefectsResource(), driverEventsResource(), pickupLocationsResource(),
-		claimsResource(), returnsResource(), payoutsResource(), feeSchedulesResource(), taxRatesResource(),
-		marketsResource(), siteSettingsResource(), legalResource(), helpArticlesResource(), privacyRequestsResource(), placementsResource("announcements"), placementsResource("placements"),
-		identityProvidersResource(),
+		usersResource(), rolesResource(), applicationsResource(),
 	}
+	all = append(all, partnersResources()...)
+	all = append(all, ledgerResources()...)
+	all = append(all, creditResources()...)
+	all = append(all, membershipResources()...)
+	all = append(all, referralResources()...)
+	all = append(all, platformSettingsResources()...)
+	all = append(all, identityAdminResources()...)
+	all = append(all,
+		supportCasesResource(), auditResource(),
+		ordersResource(), productsResource(), moderationResource(), productReviewsResource(), inventoryResource(), purchaseOrdersResource(), routesResource(),
+		dispatchShipmentsResource(), sosAlertsResource(), vehicleDefectsResource(), driverEventsResource(), pickupLocationsResource(),
+		claimsResource(), returnsResource(), payoutsResource(), feeSchedulesResource(), taxRatesResource(), taxCodesResource(), taxRulesResource(), taxReviewResource(),
+		marketsResource(), siteSettingsResource(), maintenanceResource(), taxFilingsResource(), taxNexusResource(), taxNexusResource(), legalResource(), helpArticlesResource(), privacyRequestsResource(), placementsResource("announcements"), placementsResource("placements"), couponsResource(),
+		identityProvidersResource(), exchangeRatesResource(),
+	)
 	out := make(map[string]*staffResource, len(all))
 	for _, r := range all {
-		out[r.key] = r
+		out[r.key] = r.withNames()
 	}
 	return out
 }
@@ -66,9 +77,10 @@ func usersResource() *staffResource {
 				return nil
 			}
 			out := []domain.ActivityEntry{}
+			nameAll(ctx, sc, objs(page, "items"), personRef("actorId", "Actor"))
 			for _, e := range objs(page, "items") {
 				text := strings.TrimSpace(domain.Humanize(jstr(e, "action")) + " " + firstNonEmpty(jstr(e, "targetRole"), jstr(e, "subject")) + " " + jstr(e, "detail"))
-				out = append(out, domain.ActivityEntry{At: timeOf(e, "at"), Actor: jstr(e, "actorId"), Text: text})
+				out = append(out, domain.ActivityEntry{At: timeOf(e, "at"), Actor: jstr(e, "actorName"), Text: text})
 			}
 			return out
 		},
@@ -199,56 +211,105 @@ func rolesResource() *staffResource {
 
 // ---------------------------------------------------------------- applications (seller, two-step review)
 
+// staffBFFPath is where each web app proxies the BFF (config.Web.BFFPath default): document links are same-origin URLs
+// that the browser opens with the staff session.
+const staffBFFPath = "/api/bff"
+
 func applicationsResource() *staffResource {
-	reasonOptions := func(ctx context.Context, sc staffCtx) []domain.FieldOption {
+	// A reason fits some decisions only: seller seeds each code for APPROVE, REJECT or ANY, so Approve offers "checks
+	// passed", Reject adds sanctions and duplicates, and the rest offer what can go wrong.
+	fits := func(appliesTo, action string) bool {
+		approval := action == "APPROVE" || action == "FINAL_APPROVE"
+		switch appliesTo {
+		case "APPROVE":
+			return approval
+		case "REJECT":
+			return action == "REJECT"
+		default:
+			return !approval || appliesTo == ""
+		}
+	}
+	reasonOptions := func(ctx context.Context, sc staffCtx, action string) []domain.FieldOption {
 		var codes []jobj
 		opts := []domain.FieldOption{}
 		if sc.get(ctx, sc.up.Seller, "/v1/review-reason-codes", nil, &codes) == nil {
 			for _, c := range codes {
+				if !fits(jstr(c, "appliesTo"), action) {
+					continue
+				}
 				opts = append(opts, domain.FieldOption{Value: jstr(c, "code"), Label: firstNonEmpty(jstr(c, "label"), domain.Humanize(jstr(c, "code")))})
 			}
 		}
 		if len(opts) == 0 {
-			opts = domain.StaffOptions("DOCUMENTS_VERIFIED", "TIN_MISMATCH", "DOCUMENT_UNREADABLE", "PROHIBITED_CATEGORY", "OTHER")
+			opts = domain.StaffOptions("ALL_CHECKS_PASSED", "TIN_MISMATCH", "DOCUMENT_UNREADABLE", "PROHIBITED_CATEGORY", "OTHER")
 		}
 		return opts
 	}
-	decision := func(path, action, title, submit string, noteRequired bool, extra ...domain.FormField) (func(context.Context, staffCtx, jobj) *domain.Form, func(context.Context, staffCtx, jobj, jobj) error) {
-		form := func(ctx context.Context, sc staffCtx, _ jobj) *domain.Form {
-			fields := []domain.FormField{withOptions(ff("reasonCode", "Reason", "select", true), reasonOptions(ctx, sc))}
-			fields = append(fields, extra...)
-			fields = append(fields, withMax(ff("note", "Note", "textarea", noteRequired), 2000))
-			return &domain.Form{Title: title, SubmitLabel: submit, Fields: fields}
+	decision := func(path, action, title, submit, intro string, noteRequired bool, extra ...domain.FormField) (func(context.Context, staffCtx, jobj) *domain.Form, func(context.Context, staffCtx, jobj, jobj) error) {
+		noteLabel := "Note (internal: the applicant does not see it)"
+		if action == "REQUEST_INFO" || action == "REJECT" {
+			noteLabel = "Message to the applicant"
 		}
+		form := func(ctx context.Context, sc staffCtx, _ jobj) *domain.Form {
+			reason := withOptions(ff("reasonCode", "Reason", "select", true), reasonOptions(ctx, sc, action))
+			if len(reason.Options) == 1 {
+				reason.Value = reason.Options[0].Value // Approve has one reason: it is already chosen
+			}
+			fields := []domain.FormField{reason}
+			fields = append(fields, extra...)
+			fields = append(fields, withMax(ff("note", noteLabel, "textarea", noteRequired), 2000))
+			return &domain.Form{Title: title, SubmitLabel: submit, Intro: intro, Fields: fields}
+		}
+		// The console's Idempotency-Key is relayed: seller replays a retried decision instead of refusing it. Slow: a
+		// final approval activates the Stripe subscription before it answers.
 		run := func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {
-			body := jobj{"action": action, "reasonCode": vs(v, "reasonCode"), "note": vs(v, "note")}
+			body := jobj{"action": action, "reasonCode": vs(v, "reasonCode"), "note": vs(v, "note"),
+				"actorName": firstNonEmpty(strings.TrimSpace(sc.me.FirstName+" "+sc.me.LastName), sc.me.Email)}
 			if l := vlist(v, "failedChecks"); len(l) > 0 {
 				body["failedChecks"] = l
 			}
 			if items := vs(v, "requestedItems"); items != "" {
 				body["requestedItems"] = strings.Split(items, "\n")
 			}
-			return sc.post(ctx, sc.up.Seller, "/v1/applications/"+url.PathEscape(jstr(o, "id"))+path, omitEmpty(body), nil)
+			return sc.call(ctx, sc.up.Seller, port.StaffCall{Method: http.MethodPost, Path: "/v1/applications/" + url.PathEscape(jstr(o, "id")) + path,
+				Body: omitEmpty(body), IdempotencyKey: sc.idem, Slow: true}, nil)
 		}
 		return form, run
 	}
-	approveForm, approveRun := decision("/review", "APPROVE", "Approve for final review (step 1)", "Approve", false)
-	flagForm, flagRun := decision("/review", "FLAG", "Flag the application", "Flag", false,
+	approveForm, approveRun := decision("/review", "APPROVE", "Approve for final review (step 1)", "Approve",
+		"The documents and details check out. The application goes to a different approver for the final decision; the applicant is not told yet.", false)
+	flagForm, flagRun := decision("/review", "FLAG", "Flag for senior review", "Flag",
+		"Something does not check out and needs a senior decision. The application moves to the final approver with the failed checks and your note. The applicant is not told, and cannot change anything until someone uses Return to applicant (you can, even though you flagged it).", false,
 		withOptions(ff("failedChecks", "Failed checks", "multiselect", true), domain.StaffOptions("TIN_MISMATCH", "IDENTITY_UNVERIFIED", "DOCUMENT_UNREADABLE", "PROHIBITED_CATEGORY", "ADDRESS_UNVERIFIED")))
-	infoForm, infoRun := decision("/review", "REQUEST_INFO", "Ask the applicant for more", "Send request", false,
+	infoForm, infoRun := decision("/review", "REQUEST_INFO", "Return to the applicant", "Return to applicant",
+		"The applicant is emailed what is missing, with your message, and can edit and resubmit. The review pauses until they do; then it starts again at step 1. You can use this on a flagged application too, including one you flagged: a failed check the applicant can fix (a tax ID that does not match, an unreadable document) is best sent back to them.", true,
 		domain.FormField{Key: "requestedItems", Label: "What is missing (one per line)", Type: "textarea", Required: true})
-	finalForm, finalRun := decision("/decision", "FINAL_APPROVE", "Give final approval (step 2)", "Approve", false)
-	backForm, backRun := decision("/decision", "SEND_BACK", "Send back to step 1", "Send back", true)
-	rejectForm, rejectRun := decision("/decision", "REJECT", "Reject the application", "Reject", true)
-	notReviewer := func(sc staffCtx, o jobj) string {
-		if r := stateReason(jstr(o, "status"), "AWAITING_FINAL_APPROVAL"); r != "" {
+	finalForm, finalRun := decision("/decision", "FINAL_APPROVE", "Give final approval (step 2)", "Approve",
+		"Approves the seller or provider: their account opens and their plan starts. This cannot be undone here.", false)
+	finalInfoForm, finalInfoRun := decision("/decision", "REQUEST_INFO", "Return to the applicant", "Return to applicant",
+		"Use this when a flagged or reviewed application needs the applicant to fix or add something. They are emailed what is missing, with your message, and can edit and resubmit; it then starts again at step 1.", true,
+		domain.FormField{Key: "requestedItems", Label: "What is missing (one per line)", Type: "textarea", Required: true})
+	backForm, backRun := decision("/decision", "SEND_BACK", "Send back to step 1", "Send back",
+		"Returns the application to the reviewer to check again; your note tells them what to look at.", true)
+	rejectForm, rejectRun := decision("/decision", "REJECT", "Reject the application", "Reject",
+		"Declines the application and tells the applicant, with the reason you pick.", true)
+	// Step 2 (final approve, send back, reject) follows seller's state machine: awaiting final approval or flagged,
+	// never by the step-one reviewer.
+	finalStep := func(sc staffCtx, o jobj) string {
+		if r := stateReason(jstr(o, "status"), "AWAITING_FINAL_APPROVAL", "FLAGGED"); r != "" {
 			return r
 		}
 		if rid := jstr(o, "reviewerId"); rid != "" && rid == sc.me.ID {
-			return "You reviewed step 1 — a different approver must give final approval."
+			return "You reviewed step 1 — a different approver must decide step 2."
 		}
 		return ""
 	}
+	// past: the application already went past the action; seller answers a repeat idempotently and names who decided.
+	past := func(statuses ...string) func(jobj) bool {
+		return func(o jobj) bool { return slices.Contains(statuses, strings.ToUpper(jstr(o, "status"))) }
+	}
+	stepOneDone := past("AWAITING_FINAL_APPROVAL", "FLAGGED", "INFO_REQUESTED", "APPROVED", "REJECTED")
+	decided := past("APPROVED", "REJECTED")
 	return &staffResource{
 		key: "applications", module: "apps", title: "Applications", statusKey: "status", exportable: true,
 		columns: []domain.Column{col("reference", "Reference", "mono", 13), col("displayName", "Business", "strong", 25), col("kind", "Kind", "text", 10),
@@ -256,8 +317,34 @@ func applicationsResource() *staffResource {
 		facets: domain.StaffFacets("PENDING_REVIEW", "FLAGGED", "AWAITING_FINAL_APPROVAL", "INFO_REQUESTED", "APPROVED", "REJECTED"),
 		list:   listPaged("/v1/applications", upSeller, nil),
 		get:    getByPath("/v1/applications/", upSeller),
+		names:  []nameRef{personRef("reviewerId", "Reviewer"), personRef("finalApproverId", "Final approver"), orgRef("orgId")},
 		cells: func(o jobj) map[string]any {
 			return map[string]any{"displayName": cellValue(firstNonEmpty(jstr(o, "displayName"), jstr(o, "business.storeName"), jstr(o, "businessDetails.legalName")))}
+		},
+		// The documents the applicant uploaded open in a new tab for the reviewer; seller logs each opening.
+		file: func(ctx context.Context, sc staffCtx, id, assetID string) (string, error) {
+			var doc jobj
+			if err := sc.get(ctx, sc.up.Seller, "/v1/applications/"+url.PathEscape(id)+"/documents/"+url.PathEscape(assetID), nil, &doc); err != nil {
+				return "", err
+			}
+			u := jstr(doc, "url")
+			if u == "" {
+				return "", domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "That document is not available.")
+			}
+			return u, nil
+		},
+		links: func(o jobj) []domain.RecordLink {
+			docs, _ := o["documents"].([]any)
+			out := make([]domain.RecordLink, 0, len(docs))
+			for _, d := range docs {
+				doc, ok := d.(map[string]any)
+				if !ok || jstr(doc, "assetId") == "" {
+					continue
+				}
+				out = append(out, domain.RecordLink{Label: "View " + firstNonEmpty(jstr(doc, "label"), domain.Humanize(jstr(doc, "kind"))),
+					Href: staffBFFPath + "/v1/staff/resources/applications/" + url.PathEscape(jstr(o, "id")) + "/files/" + url.PathEscape(jstr(doc, "assetId")), External: true})
+			}
+			return out
 		},
 		titleOf: func(o jobj) string {
 			return firstNonEmpty(jstr(o, "displayName"), jstr(o, "business.storeName"), jstr(o, "reference"))
@@ -266,12 +353,13 @@ func applicationsResource() *staffResource {
 			return strings.TrimSpace(jstr(o, "reference") + " · " + domain.Humanize(jstr(o, "kind")))
 		},
 		actions: []staffAction{
-			{key: "review-approve", label: "Approve (step 1)", tone: "primary", permission: "applications:review", level: domain.LevelApprove, form: approveForm, when: inState("PENDING_REVIEW", "FLAGGED"), run: approveRun},
-			{key: "review-flag", label: "Flag", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: flagForm, when: inState("PENDING_REVIEW"), run: flagRun},
-			{key: "review-request-info", label: "Request info", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: infoForm, when: inState("PENDING_REVIEW", "FLAGGED"), run: infoRun},
-			{key: "final-approve", label: "Final approval", tone: "primary", permission: "applications:approve", level: domain.LevelApprove, form: finalForm, when: notReviewer, run: finalRun},
-			{key: "send-back", label: "Send back", tone: "neutral", permission: "applications:approve", level: domain.LevelApprove, form: backForm, when: inState("AWAITING_FINAL_APPROVAL"), run: backRun},
-			{key: "reject", label: "Reject", tone: "danger", permission: "applications:approve", level: domain.LevelApprove, form: rejectForm, when: inState("AWAITING_FINAL_APPROVAL", "FLAGGED"), run: rejectRun},
+			{key: "review-approve", label: "Approve (step 1)", tone: "primary", permission: "applications:review", level: domain.LevelApprove, form: approveForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: approveRun},
+			{key: "review-flag", label: "Flag for senior review", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: flagForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: flagRun},
+			{key: "review-request-info", label: "Return to applicant", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: infoForm, when: inState("PENDING_REVIEW", "FLAGGED"), settled: past("INFO_REQUESTED", "AWAITING_FINAL_APPROVAL", "APPROVED", "REJECTED"), run: infoRun},
+			{key: "final-approve", label: "Final approval", tone: "primary", permission: "applications:approve", level: domain.LevelApprove, form: finalForm, when: finalStep, settled: decided, run: finalRun},
+			{key: "final-request-info", label: "Return to applicant (step 2)", tone: "neutral", permission: "applications:approve", level: domain.LevelApprove, form: finalInfoForm, when: finalStep, settled: past("INFO_REQUESTED", "APPROVED", "REJECTED"), run: finalInfoRun},
+			{key: "send-back", label: "Send back", tone: "neutral", permission: "applications:approve", level: domain.LevelApprove, form: backForm, when: finalStep, settled: decided, run: backRun},
+			{key: "reject", label: "Reject", tone: "danger", permission: "applications:approve", level: domain.LevelApprove, form: rejectForm, when: finalStep, settled: decided, run: rejectRun},
 		},
 	}
 }
@@ -281,14 +369,15 @@ func applicationsResource() *staffResource {
 func supportCasesResource() *staffResource {
 	return &staffResource{
 		key: "support-cases", module: "support", title: "Support cases", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("reference", "Case", "mono", 12), col("customerId", "Customer", "mono", 18), col("reason", "Reason", "text", 22),
-			col("assignee", "Assignee", "text", 16), col("openedAt", "Opened", "datetime", 16), col("status", "Status", "status", 16)},
+		columns: []domain.Column{col("reference", "Case", "mono", 12), col("customerName", "Customer", "text", 18), col("reason", "Reason", "text", 22),
+			col("assigneeName", "Assignee", "text", 16), col("openedAt", "Opened", "datetime", 16), col("status", "Status", "status", 16)},
 		facets:  domain.StaffFacets("OPEN", "IN_PROGRESS", "RESOLVED"),
 		list:    listPaged("/v1/support-cases", upTrustOps, nil),
 		get:     getByPath("/v1/support-cases/", upTrustOps),
+		names:   []nameRef{customerRef("customerId"), personRef("assignee", "Assignee")},
 		titleOf: func(o jobj) string { return strings.TrimSpace(jstr(o, "reference") + " · " + jstr(o, "reason")) },
 		subtitleOf: func(o jobj) string {
-			return "Customer " + jstr(o, "customerId") + " · " + domain.Humanize(jstr(o, "source"))
+			return "Customer " + jstr(o, "customerName") + " · " + domain.Humanize(jstr(o, "source"))
 		},
 		links: func(o jobj) []domain.RecordLink {
 			return []domain.RecordLink{{Label: "Open customer 360", Href: "/support?customer=" + url.QueryEscape(jstr(o, "customerId")) + "&case=" + url.QueryEscape(jstr(o, "id"))}}
@@ -314,9 +403,11 @@ func supportCasesResource() *staffResource {
 func auditResource() *staffResource {
 	return &staffResource{
 		key: "audit", module: "audit", title: "Audit log", exportable: true, searchPlaceholder: "Entity id",
-		columns: []domain.Column{col("seq", "#", "number", 8), col("occurredAt", "When", "datetime", 16), col("actorId", "Actor", "strong", 16),
+		columns: []domain.Column{col("seq", "#", "number", 8), col("occurredAt", "When", "datetime", 16), col("actorName", "Actor", "strong", 16),
 			col("action", "Action", "mono", 18), col("entityType", "Entity", "text", 12), col("summary", "Summary", "text", 30)},
-		idOf: func(o jobj) string { return jstr(o, "seq") },
+		idOf:   func(o jobj) string { return jstr(o, "seq") },
+		names:  []nameRef{personRef("actorId", "Actor"), sellerRef("orgId")},
+		search: []string{"entityId"},
 		list: listPaged("/v1/audit/entries", upTrustOps, func(q staffQuery, v url.Values) {
 			v.Del("status")
 			if q.Q != "" {
@@ -326,7 +417,7 @@ func auditResource() *staffResource {
 		get:     getByPath("/v1/audit/entries/", upTrustOps),
 		titleOf: func(o jobj) string { return jstr(o, "action") + " #" + jstr(o, "seq") },
 		subtitleOf: func(o jobj) string {
-			return jstr(o, "actorId") + " · " + jstr(o, "entityType") + " " + jstr(o, "entityId")
+			return jstr(o, "actorName") + " · " + domain.Humanize(jstr(o, "entityType"))
 		},
 	}
 }

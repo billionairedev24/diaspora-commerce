@@ -1,7 +1,7 @@
 'use client';
 
 import { type AccountMessageKey, useAccountT } from '@afrotransact/account';
-import { ArrowUUpLeft, BellRinging, CalendarCheck, CreditCard, IdentificationCard, MapPin, Package, ShieldCheck, Sparkle } from '@phosphor-icons/react';
+import { BellRinging, CalendarCheck, CreditCard, Gift, Headset, IdentificationCard, MapPin, Package, SealCheck, ShareNetwork, ShieldCheck, Sparkle,Truck } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type ReactNode } from 'react';
@@ -44,12 +44,16 @@ export function AccountHome() {
   const tiles: Tile[] = [
     { href: '/account/security', title: 'hub.security', sub: 'hub.securitySub', icon: <ShieldCheck /> },
     { href: '/orders', title: 'hub.orders', sub: 'hub.ordersSub', icon: <Package /> },
-    { href: '/account/returns', title: 'hub.returns', sub: 'hub.returnsSub', icon: <ArrowUUpLeft /> },
+    { href: '/account/help', title: 'hub.help', sub: 'hub.helpSub', icon: <Headset /> },
     { href: '/account/addresses', title: 'hub.addresses', sub: 'hub.addressesSub', icon: <MapPin /> },
     { href: '/account/payments', title: 'hub.payments', sub: 'hub.paymentsSub', icon: <CreditCard /> },
+    { href: '/account/credit', title: 'hub.credit', sub: 'hub.creditSub', icon: <Gift /> },
+    { href: '/account/membership', title: 'hub.membership', sub: 'hub.membershipSub', icon: <SealCheck /> },
+    { href: '/account/refer', title: 'hub.refer', sub: 'hub.referSub', icon: <ShareNetwork /> },
     { href: '/account/bookings', title: 'hub.bookings', sub: 'hub.bookingsSub', icon: <CalendarCheck /> },
     { href: '/account/profile', title: 'hub.profile', sub: 'hub.profileSub', icon: <IdentificationCard /> },
-    { href: '/account/notifications', title: 'hub.notifications', sub: 'hub.notificationsSub', icon: <BellRinging /> }
+    { href: '/account/notifications', title: 'hub.notifications', sub: 'hub.notificationsSub', icon: <BellRinging /> },
+    { href: '/account/delivery-alerts', title: 'hub.deliveryAlerts', sub: 'hub.deliveryAlertsSub', icon: <Truck /> }
   ];
   return (
     <div className={styles.accountPage}>

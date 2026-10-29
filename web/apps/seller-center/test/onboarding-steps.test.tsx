@@ -1,17 +1,28 @@
 import { getSellerDb, PENDING_ORG, resetSellerDb } from '@afrotransact/api-client/mocks/seller';
 import { act, configure, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createRef } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AccountHealthView } from '@/components/onboarding/AccountHealthView';
 import { OnboardingView, OnboardingWizard } from '@/components/onboarding/OnboardingView';
 import { Stepper } from '@/components/onboarding/Stepper';
 import { agreementKeys, ComplianceStep } from '@/components/onboarding/steps/ComplianceStep';
+import { PayoutsStep } from '@/components/onboarding/steps/PayoutsStep';
+import { type StepHandle } from '@/components/onboarding/WizardKit';
 import { Header } from '@/components/shell/Header';
 import { PortalShell } from '@/components/shell/PortalShell';
+import { sellerApi } from '@/lib/api';
 
 import { mockApi } from './mock-api';
 import { renderScreen, renderWithProviders } from './render';
 import { nav } from './setup';
+
+// sellerApi as a spy (the shared setup's mock BFF), so a test can make one call fail.
+vi.mock('@/lib/api', async () => {
+  const { mockApi: api } = await import('./mock-api');
+  return { sellerApi: vi.fn(() => api()) };
+});
 
 // The wizard saves through the in-process mock BFF and the address search debounces: give slow CI machines room.
 configure({ asyncUtilTimeout: 5000 });
@@ -69,11 +80,11 @@ describe('application wizard', () => {
     const summary = (await screen.findByText(/There are 2 problems with this step/)).closest('[role="alert"]') as HTMLElement;
     expect(within(summary).getByText(/There are 2 problems with this step/)).toBeInTheDocument();
     expect(within(summary).getByRole('link', { name: 'Choose your business type' })).toHaveAttribute('href', '#ob-entityType');
-    expect(within(summary).getByRole('link', { name: 'Enter your store name' })).toBeInTheDocument();
+    expect(within(summary).getByRole('link', { name: 'Enter your business name' })).toBeInTheDocument();
     expect(nav.push).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('radio', { name: /Single-member LLC/ }));
-    await user.type(screen.getByLabelText(/Store or business display name/), 'Titi Foods');
+    await user.type(screen.getByLabelText(/Business name/), 'Titi Foods');
     await user.click(screen.getByRole('button', { name: 'Save and continue' }));
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/onboarding/business-details'));
     expect(getSellerDb().onboarding.org_new?.form.business).toMatchObject({
@@ -169,7 +180,7 @@ describe('application wizard', () => {
     expect(nav.push).not.toHaveBeenCalled();
   });
 
-  it('Stripe verification: the local stand-in is labelled and completes the step', async () => {
+  it('Stripe verification: one path — Stripe’s form opens with the step, and finishing it moves on by itself', async () => {
     const user = userEvent.setup();
     await throughBusiness('SOLE_PROPRIETOR');
     await mockApi().saveOnboardingDetails({
@@ -180,14 +191,86 @@ describe('application wizard', () => {
       address: ADDRESS
     });
     await renderScreen(<OnboardingWizard slug="stripe-verification" />);
-    await user.click(await screen.findByRole('button', { name: 'Save and continue' }));
-    expect(await screen.findByText('Finish Stripe verification to continue.')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Start verification' }));
-    expect(await screen.findByText(/Local test mode — Stripe isn’t configured on this machine/)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Complete test verification' }));
-    expect(await screen.findByText(/Verified · charges enabled/)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Save and continue' }));
+    // No boxes of checks and no "Start verification": a short list, one hint, and the form itself.
+    expect(await screen.findByText('Continue in the secure Stripe form below — it saves as you go.')).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'What Stripe will ask for' })).getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: /Start verification/ })).not.toBeInTheDocument();
+    const form = await screen.findByRole('region', { name: 'Local test verification' });
+    // The Stripe form holds the step's primary action; the page's Continue is a quiet fallback, Back sits at the top.
+    expect(screen.queryByRole('button', { name: 'Save and continue' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'I’ve finished — continue' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back' }).compareDocumentPosition(screen.getByRole('heading', { level: 2 }))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+    await user.click(within(form).getByRole('button', { name: 'Complete test verification' }));
+    expect(await screen.findByText('Verified by Stripe')).toBeInTheDocument();
+    expect(screen.getByText('Taking you to the next step…')).toBeInTheDocument();
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/onboarding/payouts'));
+  });
+
+  it('Stripe verification: a form that can’t load says so in its place, with Try again', async () => {
+    const user = userEvent.setup();
+    await throughBusiness('SOLE_PROPRIETOR');
+    await mockApi().saveOnboardingDetails({ legalFirstName: 'Titi', legalLastName: 'A', taxId: '123-45-6789', dateOfBirth: '1990-01-01', address: ADDRESS });
+    let calls = 0;
+    vi.mocked(sellerApi).mockImplementation(() => {
+      const api = mockApi();
+      return { ...api, createOnboardingStripeSession: () => (++calls === 1 ? Promise.reject(new Error('offline')) : api.createOnboardingStripeSession()) };
+    });
+    await renderScreen(<OnboardingWizard slug="stripe-verification" />);
+    expect(await screen.findByText('Stripe is unavailable right now. Try again in a minute.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('region', { name: 'Local test verification' })).toBeInTheDocument();
+    vi.mocked(sellerApi).mockImplementation(() => mockApi());
+  });
+
+  it('Payouts: Stripe collects the bank, so before verification the step points back to Stripe verification', async () => {
+    await throughBusiness('SOLE_PROPRIETOR');
+    const st = await mockApi().getOnboarding();
+    expect(st.form.payouts.status).toBe('NOT_STARTED');
+    const handle = createRef<StepHandle>();
+    await renderScreen(<PayoutsStep status={st} ref={handle} />);
+    expect(screen.getByText('Stripe collects your payout bank account.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Stripe verification' })).toHaveAttribute('href', '/onboarding/stripe-verification');
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    let ok = true;
+    await act(async () => {
+      ok = (await handle.current?.save('continue')) ?? true;
+    });
+    expect(ok).toBe(false);
+    expect(screen.getByText('Add your payout bank account in Stripe verification to continue.')).toBeInTheDocument();
+  });
+
+  it('Payouts: shows the bank Stripe holds, read-only, and changes it in Stripe’s account management', async () => {
+    const user = userEvent.setup();
+    await throughBusiness('SOLE_PROPRIETOR');
+    await mockApi().createOnboardingStripeSession();
+    await mockApi().refreshOnboardingStripe();
+    await renderScreen(<OnboardingWizard slug="payouts" />);
+    expect(await screen.findByText('STRIPE TEST BANK (local) ••6789')).toBeInTheDocument();
+    expect(screen.getByText('Held by Stripe')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Change bank account' }));
+    expect(await screen.findByRole('region', { name: 'Local test account management' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Local test account management' })).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Save and continue' }));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/onboarding/plan'));
+  });
+});
+
+describe('Account health', () => {
+  it('is read-only: each item names the Stripe form that collects it, and Stripe’s components open here', async () => {
+    resetSellerDb(new Date());
+    const user = userEvent.setup();
+    nav.pathname = '/account-health';
+    await renderScreen(<AccountHealthView />);
+    expect(await screen.findByText('Payout bank account')).toBeInTheDocument();
+    expect(screen.getByText('STRIPE TEST BANK ••6789')).toBeInTheDocument();
+    expect(screen.getByText('In Stripe’s account settings')).toBeInTheDocument();
+    expect(screen.getByText('In Stripe’s secure form')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Resolve with Stripe' }));
+    expect(await screen.findByRole('region', { name: 'Local test account management' })).toBeInTheDocument();
   });
 });
 
@@ -242,7 +325,7 @@ describe('Seller Center while the application is in progress', () => {
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
     expect(screen.getByText('Seller Central')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Account menu/ })).not.toBeInTheDocument();
-    expect(screen.queryByText(/My account|Open the storefront/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/My account|Open AfroTransact/)).not.toBeInTheDocument();
     unmount();
     const approved = await mockApi().setActiveOrg('org-ade-kitchen');
     renderWithProviders(<Header session={approved} />);

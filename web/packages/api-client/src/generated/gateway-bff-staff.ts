@@ -49,6 +49,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lola in the staff console - today's messages and the tools she has
+         * @description Any staff member. One level for everyone (200 messages a day, UTC); she is read-only and works with the member's own module access and permissions.
+         */
+        get: operations["getStaffAssistant"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/assistant/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Lola one question (the console keeps the conversation and sends the earlier turns)
+         * @description Lola looks things up through the console's own use cases (dashboard, tables, sheets) and ai-gateway
+         *     `POST /v1/ai/staff-assistant/complete`; payouts and Connect account health are read for one organisation. Emails and
+         *     phone numbers are partly hidden from the model. She cannot change anything: `links` are buttons that open a record.
+         *     429 `ASSISTANT_LIMIT` after the day's messages.
+         */
+        post: operations["staffAssistantChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/lookups/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find drivers or sellers by name for a form's picker
+         * @description The searchable pickers of the console's forms (Assign driver, Stripe lookup): up to 20 matches by name, the id the
+         *     form sends, and a second line (email, kind of seller). `drivers` needs Delivery dispatch at View and the people
+         *     directory (users:read) upstream; `sellers` needs Payouts at View. Leave `q` out for the first matches.
+         */
+        get: operations["searchStaffLookup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/resources/{resource}": {
         parameters: {
             query?: never;
@@ -141,8 +206,13 @@ export interface paths {
          * @description The action must be listed on the record's sheet with `allowed: true`; otherwise 403 `FORBIDDEN` (missing
          *     permission or module level) or 409 `CONFLICT` (not possible in the record's current state). Examples: applications
          *     `review-approve` / `review-flag` / `review-request-info` (seller `POST /v1/applications/{id}/review`,
-         *     applications:review) and `final-approve` / `send-back` / `reject` (seller `POST /v1/applications/{id}/decision`,
-         *     applications:approve, never by the step-one reviewer); claims `refund` / `deny` (trust-ops
+         *     applications:review, while pending review) and `final-approve` / `send-back` / `reject` (seller
+         *     `POST /v1/applications/{id}/decision`, applications:approve, awaiting final approval or flagged, never by the
+         *     step-one reviewer). Review decisions are idempotent: a retry with the same `Idempotency-Key`, or the same person
+         *     repeating the decision that put the application in its state, answers 200 with the current sheet and changes
+         *     nothing; when the application already went past the action, 409 `ALREADY_DONE` says what was decided, by whom
+         *     and when ("This application is already approved (by Ada Obi, 12 Oct 2026, 14:03 UTC)"); show it as
+         *     information and refresh the sheet. Never retry a decision with a new key. Claims `refund` / `deny` (trust-ops
          *     `POST /v1/claims/{id}/decision`, disputes:manage, refunds capped by the role's refund limit); payouts `approve` /
          *     `hold` / `release` (payments, payouts:approve); orders `shipment-status` (orders `POST /v1/shipments/{id}/transitions`);
          *     privacy-requests `complete` / `deny` (content `POST /v1/privacy/requests/{reference}/resolution`, content:legal.edit;
@@ -150,6 +220,27 @@ export interface paths {
          *     `Idempotency-Key` is relayed to upstreams that accept one.
          */
         post: operations["runStaffAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/resources/{resource}/{id}/files/{fileId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open a file attached to a record (an application's uploaded document)
+         * @description Redirects (302) to a short-lived signed URL of the file; the upstream logs who opened it. Needs view access to
+         *     the resource. Applications: `fileId` is the document's `assetId` from the record's `links`.
+         */
+        get: operations["openStaffRecordFile"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -368,6 +459,593 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/billing/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every plan with its versions, entitlements, prices and subscribers
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["listStaffPlans"];
+        put?: never;
+        /**
+         * Create a plan (draft, version 1 as a draft; plans:manage)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["createStaffPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/plans/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One plan
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["getStaffPlan"];
+        /**
+         * Edit name, tagline, features, limits, visibility and sort (no new version; expectedVersion = rowVersion)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        put: operations["updateStaffPlan"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/plans/{code}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save the draft version's prices per cadence and default trial (a new version when they differ)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        put: operations["saveStaffPlanDraft"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/plans/{code}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish the draft version (subscribers stay on theirs until migrated)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["publishStaffPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/plans/{code}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire a plan: no new subscribers, existing ones keep it
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["retireStaffPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/plans/{code}/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Organisations invited to an invite-only plan
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        put: operations["setStaffPlanInvites"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/plans/{code}/migration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Subscribers on older versions and what the current version will charge them
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["previewStaffPlanMigration"];
+        put?: never;
+        /**
+         * Move subscribers (all or orgIds) to the current version from their next renewal (no proration)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["migrateStaffPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/trial-campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trial campaigns (promo codes and sign-up windows)
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["listStaffTrialCampaigns"];
+        put?: never;
+        /**
+         * Create a trial campaign
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["createStaffTrialCampaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/trial-campaigns/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a trial campaign (expectedVersion)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        put: operations["updateStaffTrialCampaign"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/trial-campaigns/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate, pause or end a trial campaign
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["setStaffTrialCampaignStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/reward-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reward rules
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["listStaffRewardRules"];
+        put?: never;
+        /**
+         * Create a reward rule (DRAFT unless a status is given)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["createStaffRewardRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/reward-rules/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Who qualifies now under a rule (unsaved or edited; nothing is granted)
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        post: operations["previewStaffRewardRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/reward-rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a reward rule (expectedVersion)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        put: operations["updateStaffRewardRule"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/reward-rules/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate, pause or end a reward rule
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["setStaffRewardRuleStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Grants log: rewards and staff adjustments, newest first (server-paged)
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["listStaffBillingGrants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/reason-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reason codes for adjustments
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["listStaffBillingReasonCodes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find an organisation by name or id for its billing panel
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["searchStaffBillingOrgs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-seller billing panel: plan, trial, credit balance, grants, invoices, how the plan is paid and the invoices paid from earnings
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["getStaffBillingPanel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/credits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give platform credit the next invoices use first (billing:adjust, reason code)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+         */
+        post: operations["creditStaffBillingOrg"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/free-days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give free days: the first charge moves out (billing:adjust)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+         */
+        post: operations["giveStaffBillingFreeDays"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/free-months": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give free calendar months: the first charge moves out (billing:adjust)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+         */
+        post: operations["giveStaffBillingFreeMonths"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/charge-gate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put a condition on the plan charges: start after X sales or listings, waive while X listings, or waive until a date (billing:adjust)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. A reason code is required; the grant is in the grants log. The seller sees the condition and their progress on the Billing page.
+         */
+        put: operations["setStaffBillingChargeGate"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/charge-gate/clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove the condition on the plan charges: they apply as normal again (billing:adjust)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`.
+         */
+        post: operations["clearStaffBillingChargeGate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/trial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Override the trial: before activation its length, while trialing it ends N days after it started (billing:adjust)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+         */
+        post: operations["overrideStaffBillingTrial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/invoices/{invoiceId}/waive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Waive the rest of an open invoice (billing:adjust)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+         */
+        post: operations["waiveStaffBillingInvoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move the organisation to a plan, including an invite-only (negotiated) one, with a reason (billing:adjust; S306)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. seller `POST /v1/orgs/{orgId}/billing/staff-plan`: upgrades prorate
+         *     now; downgrades and cadence changes apply at renewal. Recorded with the reason and shown in the seller billing panel.
+         */
+        post: operations["assignStaffPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/plan-fee-collection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Override how the organisation pays its plan: from its sales first or always by card (billing:adjust, reason code; S298)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. seller `PUT /v1/orgs/{orgId}/billing/plan-fee-collection/override`:
+         *     audited with a billing reason code (OTHER needs a note) and applied from the organisation's next invoice. 409
+         *     `seller.earnings-collection-off` while the kill switch COLLECT_PLAN_FEES_FROM_EARNINGS is off.
+         */
+        put: operations["overrideStaffPlanFeeCollection"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Platform billing settings: whether sellers may pay their plan from their sales (kill switch) and the default for new sellers (S298)
+         * @description Needs VIEW on Plans & billing. seller `GET /v1/billing/settings`.
+         */
+        get: operations["getStaffBillingSettings"];
+        /**
+         * Set how new sellers pay their plan unless they choose (plans:manage; S298)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. seller `PUT /v1/billing/settings`; existing sellers keep their choice.
+         */
+        put: operations["updateStaffBillingSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/fees": {
         parameters: {
             query?: never;
@@ -482,6 +1160,126 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/tax-rates/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk upsert US state rules and local ZIP rates from CSV (USA pilot)
+         * @description tax-returns `POST /v1/tax/rates/import` (tax:configure and EDIT on fees). Header row
+         *     `kind,country,state,name,zipPrefix,generalRate,groceryRate,preparedFoodRate,shippingTaxable,facilitator,localRate,appliesToGrocery`
+         *     with `kind=STATE|LOCAL`. Country column is stored for future markets; quotes today use US rules only.
+         */
+        post: operations["importStaffTaxRates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/fees/negotiated-rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Negotiated commission and connection-fee rates (server-driven table)
+         * @description payments `GET /v1/negotiated-rates` (staff payments:read), with organisation names from seller's directory. A
+         *     negotiated rate wins over the organisation's plan rate, the category rate and the default while it is active
+         *     (its category before `*`). Filters: one organisation (the seller billing panel lists its rates this way), type,
+         *     status, and `q` over organisation, reason, reference and negotiator. Needs VIEW on the fees module.
+         */
+        get: operations["listNegotiatedRates"];
+        put?: never;
+        /**
+         * Negotiate a commission or connection fee with an organisation (audited)
+         * @description payments `POST /v1/negotiated-rates` (payments:configure and EDIT on fees). One category or every category, from
+         *     `startsAt` (default now, never in the past) to `endsAt` (optional; a job records the expiry). The reason is required
+         *     and kept in the audit trail with who negotiated it and the contract or ticket reference. 409 when another rate of the
+         *     organisation, type and category overlaps; AfroTransact Retail never pays fees (422). Payments already created keep
+         *     the rate snapshotted on their lines.
+         */
+        post: operations["createNegotiatedRate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/fees/negotiated-rates/{rateId}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End a negotiated rate now, with a reason (audited)
+         * @description payments `POST /v1/negotiated-rates/{id}/end` (payments:configure and EDIT on fees). 409 when it already ended or expired.
+         */
+        post: operations["endNegotiatedRate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/fees/calculator": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rate calculator: what one organisation pays on one kind and category now, and why
+         * @description payments `GET /v1/fee-schedules/effective?kind=` (staff payments:read): kind PRODUCT is the commission, SERVICE the
+         *     connection fee of a service category. The first match wins: an active negotiated rate (category, then `*`), the
+         *     organisation's plan rate (category, then the plan's `*`), the category rate, the default; AfroTransact Retail pays
+         *     none (RETAIL). Needs VIEW on the fees module.
+         */
+        get: operations["calculateFeeRate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/fees/orgs/{orgId}/negotiated-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Negotiate a plan price for one organisation (private, invite-only plan)
+         * @description Over the seller service's plan catalogue (plans:manage and EDIT on plans): copies the base plan's kind, features,
+         *     limits and trial into a new INVITE_ONLY plan `<base>_<org>` at the negotiated prices (quarterly and annual default
+         *     to the catalogue's rule), invites the organisation and publishes it. The
+         *     seller then chooses it in Plan & billing; it stays on its current plan until it does. 409 when that private plan
+         *     already exists.
+         */
+        post: operations["negotiatePlanPrice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/dispatch/pickups": {
         parameters: {
             query?: never;
@@ -561,6 +1359,95 @@ export interface paths {
         get: operations["listPickupAssignments"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/dispatch/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Delivery runs in dispatch, latest delivery day first (S264)
+         * @description fulfilment `GET /v1/dispatch/runs` (delivery:dispatch or fulfilment:operate), with each run's lifecycle status from
+         *     delivery-runs when it can be read. A run appears when delivery-runs confirms it (a closed pre-order window's paid
+         *     orders). Needs VIEW on dispatch; `canManage` says whether the caller may plan or move a run.
+         */
+        get: operations["listStaffRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/dispatch/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One run, its routes with every stop (seller pickups before drops) and how far it has got (S264)
+         * @description fulfilment `GET /v1/dispatch/runs/{runId}` plus delivery-runs `GET /v1/runs/{id}` and `/progress` (the run's
+         *     lifecycle status and its orders per stage, when readable). Needs VIEW on dispatch.
+         */
+        get: operations["getStaffRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/dispatch/runs/{runId}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plan the run's routes (again) (S264)
+         * @description fulfilment `POST /v1/dispatch/runs/{runId}/plan` (delivery:dispatch, EDIT on dispatch). Only shipments that are not
+         *     on a live route get new routes, so planning twice is harmless. Use it when planning could not finish (the run says
+         *     why in `planError`), after a route was cancelled, or for an order that arrived late.
+         */
+        post: operations["planStaffRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/dispatch/runs/{runId}/advance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a run to its next step by hand when the drivers' events did not arrive (S264)
+         * @description delivery-runs `POST /v1/runs/{id}/start-collecting`, `/out-for-delivery` or `/complete` (delivery-runs:manage, EDIT
+         *     on dispatch). A run normally moves by itself from the drivers' shipment events (the first pickup, the last pickup,
+         *     the last delivery); this is the override for when those did not arrive. It never marks packages delivered: those
+         *     are delivered in the driver app or by staff in orders. 409 `CONFLICT` when the step does not follow the run's
+         *     status; 422 for a step other than COLLECTING, OUT_FOR_DELIVERY or COMPLETED.
+         */
+        post: operations["advanceStaffRun"];
         delete?: never;
         options?: never;
         head?: never;
@@ -697,6 +1584,49 @@ export interface paths {
          *     no address on the account is a 422 without field errors.
          */
         post: operations["testSendNotificationTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/identity/token-inspector": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decode a JWT and check its signature and issuer
+         * @description identity `POST /v1/admin/identity/token-inspector` (`identity:admin`). The pasted token is decoded and verified in
+         *     memory at identity: it is never stored, cached or logged, it is not echoed back, and the audit trail records the
+         *     subject and key id only. A bad token is a 200 that says what is wrong (`valid`, `problems`), not an error; empty or
+         *     oversized input is a 422 on `token`.
+         */
+        post: operations["inspectIdentityToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/identity/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The OIDC discovery document and the JWKS
+         * @description identity `GET /v1/admin/identity/discovery` (`identity:admin`). The JWKS holds public keys only.
+         */
+        get: operations["getIdentityDocuments"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1014,6 +1944,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/preorders/{preorderId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide a window that closed below its minimum (cancel and refund everyone, or proceed)
+         * @description delivery-runs `POST /v1/preorders/{id}/decision` (preorders:manage, EDIT; If-Match relayed). Only a window in
+         *     `AWAITING_DECISION` (closed with fewer orders than its `minOrders`; 409 otherwise). `CANCEL` cancels the window:
+         *     every order is refunded in full, delivery fee included, and its stock released (orders-service); the window
+         *     becomes `CANCELLED` and each order shows its `refundStatus`. `PROCEED` goes ahead below the minimum: the window
+         *     closes and hands its paid orders to a run on the scheduler's next tick. The `reason` is required (422) and is
+         *     logged with who and when (`GET .../decisions`).
+         */
+        post: operations["decideStaffPreorder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a window and refund every order in full
+         * @description delivery-runs `POST /v1/preorders/{id}/cancel` (preorders:manage, EDIT; If-Match relayed). Any published window
+         *     that is not delivered or cancelled: it becomes `CANCELLED`, a run it was handed to is cancelled too (409 once
+         *     that run is out for delivery) and every order is refunded in full, delivery fee included, with its stock
+         *     released. The reason is required and logged with who and when.
+         */
+        post: operations["cancelStaffPreorder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/close-early": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close an open window early once its minimum is met
+         * @description delivery-runs `POST /v1/preorders/{id}/close-early` (preorders:manage, EDIT; If-Match relayed). Only an `OPEN`
+         *     window whose `orderCount` has reached its `minOrders` (`canCloseEarly`; 422 `delivery-runs.preorder-minimum-not-met`
+         *     otherwise, 409 when not open). The close date moves to now and the scheduler closes the window on its next tick.
+         *     The reason is required and logged.
+         */
+        post: operations["closeEarlyStaffPreorder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The window's decision log (who, when, why)
+         * @description delivery-runs `GET /v1/preorders/{id}/decisions`, oldest first.
+         */
+        get: operations["listStaffPreorderDecisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Refund progress of a cancelled window
+         * @description delivery-runs `GET /v1/preorders/{id}/refunds`: orders per refund status, `done` once none is pending or failed.
+         *     Each order's own `refundStatus` (PENDING, REFUNDED, VOIDED, FAILED), amount and error are on the orders list.
+         */
+        get: operations["getStaffPreorderRefunds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/preorders/{preorderId}/creatives/{slot}": {
         parameters: {
             query?: never;
@@ -1125,6 +2167,715 @@ export interface paths {
          *     409 when the same items were just added for the customer under another key.
          */
         post: operations["addStaffPreorderLateOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-fees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every delivery fee rule (one per delivery method and currency)
+         * @description delivery-runs `GET /v1/delivery-fees` (delivery-runs:read; module `preorders`, any level). The screen shows three
+         *     sections, one per method: AfroTransact's own delivery inside covered locations (a flat fee by distance band),
+         *     carrier shipping beyond coverage (the carrier-gateway quote plus handling, a fallback fee, free over a
+         *     threshold) and pickup (often 0). Answers carry `can.manage`.
+         */
+        get: operations["listStaffDeliveryFees"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-fees/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit trail of the delivery fees (who changed what, when and why)
+         * @description delivery-runs `GET /v1/delivery-fees/changes`, newest first: every version of every rule (or one method and
+         *     currency) with the rule before and after, the staff subject, the time and the reason.
+         */
+        get: operations["listStaffDeliveryFeeChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-fees/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What would a customer pay?
+         * @description delivery-runs `POST /v1/delivery-fees/preview`: the resolution checkout runs. A fee set on the pre-order itself
+         *     (`windowId`) wins, then the method's rule: AFROTRANSACT_DELIVERY by `distanceMiles` (or the window's own
+         *     distance), PICKUP, CARRIER by `carrierQuoteMinor` and `itemsMinor`. `applies` is false when no rule can price
+         *     it: no rule, or the address is beyond how far AfroTransact delivers (the order ships by carrier).
+         */
+        post: operations["previewStaffDeliveryFee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-fees/{method}/{currency}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the delivery fee of one method and currency
+         * @description delivery-runs `PUT /v1/delivery-fees/{method}/{currency}` (preorders:manage, EDIT; If-Match relayed: the
+         *     version seen, `0` when the rule does not exist yet). Creates the rule or makes its next version; a save that
+         *     changes nothing makes no new version. AFROTRANSACT_DELIVERY takes `bands` (1 to 12 of `fromMiles`, `toMiles`,
+         *     `feeMinor`; the first starts at 0 miles and each starts where the last ends; the last band's end is how far
+         *     AfroTransact delivers, beyond it the order ships by carrier), CARRIER `handlingMinor` (added to the carrier
+         *     quote), `fallbackMinor` (when there is no quote) and `freeAboveMinor` (goods subtotal from which it is free; null
+         *     = never), PICKUP `feeMinor`. Fees are 0 to 10000 minor units. The `reason` is required (422) and is logged with
+         *     who and when. Orders already placed keep the rule version they were charged by.
+         */
+        put: operations["updateStaffDeliveryFee"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/economics-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The driver cost model behind run economics
+         * @description delivery-runs `GET /v1/economics-settings` (delivery-runs:read; module `preorders`, any level). Cost per driver hour
+         *     and per vehicle mile, the time a seller sweep, a doorstep stop, a pickup-point stop and a handover take, and whether
+         *     the drive back counts: the numbers every run and window P&L and break-even is calculated from. Version 0
+         *     (`source` CONFIG) means nobody saved yet and the environment's defaults apply. The ETag carries the version.
+         */
+        get: operations["getStaffEconomicsSettings"];
+        /**
+         * Change the driver cost model
+         * @description delivery-runs `PUT /v1/economics-settings` (preorders:manage, EDIT; If-Match relayed: the version seen, `0` for the
+         *     environment's defaults). Makes the next version; a save that changes nothing makes no new version. Money is in minor
+         *     units (cost per hour 0 to 1000.00, per mile 0 to 100.00), times in minutes (0 to 1440). The `reason` is required
+         *     (422) and is logged with who and when. Runs and windows are priced with the new numbers from the next calculation.
+         */
+        put: operations["updateStaffEconomicsSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/economics-settings/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit trail of the driver cost model (who changed what, when and why)
+         * @description delivery-runs `GET /v1/economics-settings/changes`, newest first: every save with the numbers before (the
+         *     environment's defaults for the first save) and after, the staff subject, the time and the reason.
+         */
+        get: operations["listStaffEconomicsChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/economics-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Break-even for a window being created, beside its minimum order count
+         * @description delivery-runs `POST /v1/preorders/economics-preview` (delivery-runs:read). The location is the one named, else the
+         *     active one matching the first city target. Gives the delivery fee per order the plan assumes (the window's own fee,
+         *     else the fee rule for the location's distance), the cost of the run that would deliver it, the orders needed to
+         *     break even and whether the minimum reaches them (`minimumCoversBreakEven`). `economics` is null when no active
+         *     location serves the targets or geo-service cannot measure the route.
+         */
+        post: operations["previewStaffWindowEconomics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/economics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A window's orders, revenue, delivery fees, cost, margin and break-even
+         * @description delivery-runs `GET /v1/preorders/{id}/economics` (delivery-runs:read). At the orders placed so far: what customers
+         *     paid, the delivery fees collected, the estimated cost of the run that delivers the window, the contribution margin
+         *     and the break-even orders. A cancelled window reports the orders refunded (`ordersRefunded`, `refundedMinor`,
+         *     `refundsSettled`) instead of revenue.
+         */
+        get: operations["getStaffPreorderEconomics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The towns delivery runs serve
+         * @description delivery-runs `GET /v1/locations` (delivery-runs:read).
+         */
+        get: operations["listStaffRunLocations"];
+        put?: never;
+        /**
+         * Add a town delivery runs serve
+         * @description delivery-runs `POST /v1/locations` (preorders:manage, EDIT; delivery-runs:manage upstream). Give the name and market,
+         *     where the town delivers (a radius in miles around its centre, or an area registered as a zone in geo-service, or
+         *     a drawn GeoJSON outline), the defaults new runs start from (fee, minimum, capacity, cutoff policy), the IANA
+         *     time zone (default America/Chicago) and the community (WhatsApp) link. The slug is made from the name and state
+         *     when it is not given. The location is active unless `active` is false. Field problems are answered per field (422).
+         */
+        post: operations["createStaffRunLocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations/{locationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change a town's details
+         * @description delivery-runs `PUT /v1/locations/{id}` (preorders:manage, EDIT). Replaces the details; an edit never switches the
+         *     location on or off (use deactivate and activate, which are audited) and runs already scheduled keep their own
+         *     fee, minimum and capacity.
+         */
+        put: operations["updateStaffRunLocation"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations/{locationId}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Switch a town off, with the reason that is audited
+         * @description delivery-runs `POST /v1/locations/{id}/deactivate` (preorders:manage, EDIT). The reason is required and is recorded
+         *     with the staff member's name and the time (event delivery-runs.location.changed, audit log). Refused with 409
+         *     while a run of the town announced, takes orders or is on the road. A switched-off town gets no new runs and
+         *     disappears from the shop front; its history stays. Already off: unchanged.
+         */
+        post: operations["deactivateStaffRunLocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations/{locationId}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Switch a town back on
+         * @description delivery-runs `POST /v1/locations/{id}/activate` (preorders:manage, EDIT). The reason is optional and audited like the switch off. Already on, unchanged.
+         */
+        post: operations["activateStaffRunLocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations/{locationId}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A location's runs (orders per run), subscriber counts and subscriber growth
+         * @description delivery-runs `GET /v1/locations/{id}/history` (delivery-runs:read): the latest runs with their orders and the
+         *     delivery fees they earn (a cancelled run: `ordersRefunded`, no fees), the subscribers (total, active, pending, per
+         *     channel) and 12 months of subscriber growth.
+         */
+        get: operations["getStaffRunLocationHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations/{locationId}/attribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Visits and sign-ups of a town or one of its runs, per UTM source, medium and campaign
+         * @description delivery-runs `GET /v1/locations/{id}/attribution` (delivery-runs:read). First-party counters of the visits and
+         *     sign-ups that arrived with `utm_source`, `utm_medium` and `utm_campaign` (links shared on WhatsApp, social media
+         *     or email) over the last `days` (default 90), most visits first. Only the three tags are kept: no cookie, address
+         *     or visitor id. Product analytics can consume the same facts from the event stream (`orders.order.placed`
+         *     attribution, the `source` of `delivery-runs.subscription.*`); see docs/engineering/run-attribution.md.
+         */
+        get: operations["getStaffRunLocationAttribution"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Delivery runs, newest window first
+         * @description delivery-runs `GET /v1/runs` (delivery-runs:read).
+         */
+        get: operations["listStaffPreorderRuns"];
+        put?: never;
+        /**
+         * Schedule a delivery run (a draft) for a location
+         * @description delivery-runs `POST /v1/runs` (preorders:manage, EDIT; delivery-runs:manage upstream). The run goes to a location,
+         *     and its area comes from that location: a polygon registered as a zone in geo-service, or a radius around the town.
+         *     Give the delivery window, the order cutoff (before the window), the minimum orders and capacity (blank: the
+         *     location's defaults) and a note. `feeMinor` absent or null means the delivery fee rule for the location's distance
+         *     prices the run (ADR 0005 §3); a number is a custom fee. The answer is a `DRAFT` with the route estimate and the
+         *     break-even orders; announce or open it when it is ready. Field problems (the cutoff must be before the window, a
+         *     window is at most 24 hours, capacity cannot be below the minimum) are answered per field (422).
+         */
+        post: operations["createStaffDeliveryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A run with its location, break-even and what staff may do with it now
+         * @description delivery-runs `GET /v1/runs/{id}` plus the run's location (`GET /v1/locations/{id}`, for its name and area).
+         *     `allowed` says which actions the run's status permits; `can.manage` says whether this staff member may act at all
+         *     (EDIT or FULL on `preorders` with `preorders:manage`): the console shows the actions only when both are true and
+         *     keeps the run read-only for everyone else. Needs VIEW on `preorders`.
+         */
+        get: operations["getStaffDeliveryRun"];
+        /**
+         * Change a run before it opens (an open run keeps its fee, cutoff and drop mode)
+         * @description delivery-runs `PUT /v1/runs/{id}` (preorders:manage, EDIT). A `DRAFT` or `ANNOUNCED` run changes freely. An `OPEN` or
+         *     `EXTENDED` run keeps its fee, currency, cutoff and drop mode (customers already ordered on it: extend moves the
+         *     cutoff) and its capacity can never drop below the orders it holds (422). A run cannot move to another location.
+         *     Anything later is read-only (409 or 422).
+         */
+        put: operations["updateStaffDeliveryRun"];
+        post?: never;
+        /**
+         * Delete a draft run
+         * @description delivery-runs `DELETE /v1/runs/{id}` (preorders:manage, EDIT). Only a `DRAFT` can be deleted; any other run is cancelled instead (422).
+         */
+        delete: operations["deleteStaffDeliveryRun"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/announce": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Announce a draft run to the location's subscribers
+         * @description delivery-runs `POST /v1/runs/{id}/announce` (preorders:manage, EDIT). `DRAFT` to `ANNOUNCED`; it opens by itself at `opensAt` when one is set. 409 from any other status.
+         */
+        post: operations["announceStaffDeliveryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a run for orders
+         * @description delivery-runs `POST /v1/runs/{id}/open` (preorders:manage, EDIT). `DRAFT` or `ANNOUNCED` to `OPEN`; 422 once the cutoff has passed (extend or reschedule first).
+         */
+        post: operations["openStaffDeliveryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/extend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a run's order cutoff later
+         * @description delivery-runs `POST /v1/runs/{id}/extend` (preorders:manage, EDIT). An `OPEN`, `EXTENDED` or `CUT_OFF` run becomes
+         *     `EXTENDED` and takes orders until the new cutoff, which must be in the future and later than the current one. Without a
+         *     new window the window and the seller pickup move by as much as the cutoff. The run's cutoff policy extends a run that
+         *     misses its minimum once by itself; staff may extend by hand. The reason is required and is logged with who and when
+         *     (see the run's log); subscribers are told the new cutoff.
+         */
+        post: operations["extendStaffDeliveryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm a run now (below its minimum, staff override with a reason)
+         * @description delivery-runs `POST /v1/runs/{id}/confirm` (preorders:manage, EDIT). Closes ordering if the run is still taking
+         *     orders and confirms it: every order on it is confirmed, handover codes are issued for a pickup-point run and the
+         *     driver's planning starts. A run that has not reached its minimum is confirmed only with a `reason` (422 `reason`
+         *     otherwise); that override is logged with who, when and why. A run at its minimum needs no reason.
+         */
+        post: operations["confirmStaffDeliveryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a run and refund every order on it in full
+         * @description delivery-runs `POST /v1/runs/{id}/cancel` (preorders:manage, EDIT). Any run up to `CONFIRMED`: it becomes `CANCELLED`
+         *     and `delivery-runs.run.cancelled` lists its orders and customers; orders-service then cancels each order's package
+         *     (the captured payment is refunded in full, delivery fee included, or the authorisation is released), releases the
+         *     stock held for it, and customers are told. 409 once the run is collecting or on the road. The reason is required and
+         *     logged with who and when; it is shown to the customers.
+         */
+        post: operations["cancelStaffDeliveryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What was decided about a run: who extended, confirmed or cancelled it, when and why
+         * @description delivery-runs `GET /v1/runs/{id}/log`, oldest first. Each entry has the staff member's name (or `System` for the
+         *     cutoff job, which extends once, confirms at the minimum or cancels), the orders and the minimum at that moment and,
+         *     for an extension, the cutoff before and after. Needs VIEW on `preorders`.
+         */
+        get: operations["listStaffDeliveryRunLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The orders on a run (order numbers and customer names, never ids)
+         * @description delivery-runs `GET /v1/runs/{id}/orders?status=`: one row per slot (a reserved or confirmed order, or one released
+         *     or cancelled), with the order number and the customer's name and, once the run is out, where the package is.
+         */
+        get: operations["listStaffDeliveryRunOrders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/pnl": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A run's P&L before and after it
+         * @description delivery-runs `GET /v1/runs/{id}/pnl` (delivery-runs:read). `BEFORE`: the estimate at the orders reserved so far.
+         *     `AFTER`: the completed run at its orders. `CANCELLED`: nothing earned or spent; `ordersRefunded` and
+         *     `refundedFeesMinor` say what went back to customers. `commissionShareMinor` is the commission attributed to the run,
+         *     reported by analytics.
+         */
+        get: operations["getStaffRunPnl"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/economics-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cost, break-even and P&L of a run being planned
+         * @description delivery-runs `POST /v1/runs/economics-preview` (delivery-runs:read). Nulls take the location's defaults;
+         *     `expectedOrders` defaults to the minimum. 502 when geo-service cannot measure the route.
+         */
+        post: operations["previewStaffRunEconomics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/featured-products/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find products to feature on an advertorial's card, by name
+         * @description search `GET /v1/search` through the staff session (preorders at VIEW or above): up to eight products shoppers can
+         *     find, with the product code, name, picture (https only) and seller. No price: the card never quotes one.
+         */
+        get: operations["searchStaffFeaturedProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/advertorials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Location advertorials with views, clicks and orders
+         * @description delivery-runs `GET /v1/advertorials` (delivery-runs:read), newest first. Each is words for the visitors of the area a
+         *     pre-order window or delivery run serves, shown with a live closing countdown while ordering is open and over when it
+         *     closes or is cancelled. `results` are its views, clicks and (windows) the orders whose tracking tag carries it.
+         */
+        get: operations["listStaffAdvertorials"];
+        put?: never;
+        /**
+         * Write an advertorial (a variant) for a window or run
+         * @description delivery-runs `POST /v1/advertorials` (preorders:manage, EDIT). Created as a draft; publish it to make it live. Several
+         *     variants (A, B…) of one window or run share its visitors by weight. Variant defaults to the next free label.
+         */
+        post: operations["createStaffAdvertorial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/advertorials/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft the advertorial of a window or run from its data
+         * @description delivery-runs `POST /v1/advertorials/generate` (preorders:manage, EDIT). Town, delivery day, closing time and fee
+         *     become the words, live at once. Asking again re-drafts the generated one (a variant staff edited is left alone). 404
+         *     for an unknown window or run; 409 for one that is over.
+         */
+        post: operations["generateStaffAdvertorial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/advertorials/{advertorialId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One advertorial with its results
+         * @description delivery-runs `GET /v1/advertorials/{id}` (delivery-runs:read). The ETag carries the version.
+         */
+        get: operations["getStaffAdvertorial"];
+        /**
+         * Edit an advertorial
+         * @description delivery-runs `PUT /v1/advertorials/{id}` (preorders:manage, EDIT; If-Match relayed). Not an ended one. The words stop
+         *     following the window or run.
+         */
+        put: operations["updateStaffAdvertorial"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/advertorials/{advertorialId}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish, pause or end an advertorial
+         * @description delivery-runs `POST /v1/advertorials/{id}/publish|pause|end` (preorders:manage, EDIT; If-Match relayed). publish: draft
+         *     or paused to live; pause: live to paused; end: over for good (reason STAFF).
+         */
+        post: operations["actStaffAdvertorial"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1415,6 +3166,46 @@ export interface paths {
          * @description Mirrors inventory `GET /v1/nodes` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again).
          */
         get: operations["getStaffNodes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/currencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/currencies`
+         * @description Mirrors inventory `GET /v1/currencies` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again). The currencies stock can be received in (customers always pay in USD): `code`, `name`, `minorUnits`, and `base` for USD, first.
+         */
+        get: operations["getStaffCurrencies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/exchange-rates/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/exchange-rates/current`
+         * @description Mirrors inventory `GET /v1/exchange-rates/current` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again). The rate receiving suggests for every currency that has one: the latest on or before `asOf` (default today), as `currency`, `rateDate` and `rateToUsd` (US dollars per unit). The table itself is the `exchange-rates` Resource (Settings → Exchange rates).
+         */
+        get: operations["getStaffExchangeRatesCurrent"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2907,6 +4698,848 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        RunDispatchList: {
+            items: components["schemas"]["RunDispatch"][];
+            /** @description The caller may plan a run and move it by hand */
+            canManage: boolean;
+        };
+        /** @description A delivery run in dispatch (S264) */
+        RunDispatch: {
+            runId: string;
+            /** @example Bastrop */
+            town: string;
+            /** @example TX */
+            state: string;
+            /** @example America/Chicago */
+            timeZone: string;
+            /** Format: date */
+            serviceDate: string;
+            /** Format: date-time */
+            windowStart: string;
+            /** Format: date-time */
+            windowEnd: string;
+            /**
+             * Format: date-time
+             * @description When the driver collects from the sellers
+             */
+            sellerPickupAt: string | null;
+            /** @enum {string} */
+            dropMode: "DOORSTEP" | "PICKUP_POINT";
+            pickupPoint: components["schemas"]["RunPickupPoint"] | null;
+            /**
+             * @description Dispatch status: PENDING = not planned (see planError)
+             * @enum {string}
+             */
+            status: "PENDING" | "PLANNED" | "CANCELLED";
+            /**
+             * @description The run's lifecycle in delivery-runs; null when it could not be read
+             * @enum {string|null}
+             */
+            runStatus: "CONFIRMED" | "COLLECTING" | "OUT_FOR_DELIVERY" | "COMPLETED" | "CANCELLED" | null;
+            /** @description Why the routes could not be planned */
+            planError: string | null;
+            /** Format: date-time */
+            plannedAt: string | null;
+            progress: components["schemas"]["RunDispatchProgress"];
+            /** @description The run's orders per stage from the drivers' shipment events (detail only; null when delivery-runs could not be read) */
+            orders: components["schemas"]["RunOrderProgress"] | null;
+            routes: components["schemas"]["RunDispatchRoute"][];
+            canManage: boolean;
+        };
+        RunPickupPoint: {
+            name: string;
+            line1: string;
+            city: string;
+            state: string;
+            postalCode: string;
+            hours: string;
+            notes: string;
+        };
+        /** @description What has happened on the run's routes (bags are one seller's package of an order) */
+        RunDispatchProgress: {
+            orders: number;
+            bags: number;
+            pickupStops: number;
+            pickupsDone: number;
+            bagsCollected: number;
+            dropStops: number;
+            dropsDone: number;
+            dropsFailed: number;
+            bagsDelivered: number;
+            /** @description Run shipments waiting for a route */
+            unrouted: number;
+        };
+        /** @description Orders on the run per stage (from orders-service shipment events) */
+        RunOrderProgress: {
+            orders: number;
+            pending: number;
+            collected: number;
+            outForDelivery: number;
+            failed: number;
+            delivered: number;
+            returned: number;
+            /** Format: date-time */
+            lastDeliveredAt: string | null;
+        };
+        RunDispatchRoute: {
+            id: string;
+            name: string;
+            /** @enum {string} */
+            status: "PLANNED" | "ASSIGNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+            driverId: string | null;
+            /** @description The driver's name (Unknown driver when identity cannot name them); null without a driver */
+            driverName: string | null;
+            vehicleId: string | null;
+            blocked: boolean;
+            packages: number;
+            bagsCollected: number;
+            bagsDelivered: number;
+            pickupStops: number;
+            pickupsDone: number;
+            dropStops: number;
+            dropsDone: number;
+            dropsFailed: number;
+            /** @description In visiting order; empty in the list of runs */
+            stops: components["schemas"]["RunDispatchStop"][];
+        };
+        RunDispatchStop: {
+            id: string;
+            sequence: number;
+            /** @enum {string} */
+            kind: "PICKUP" | "DROPOFF";
+            name: string;
+            /** @enum {string} */
+            status: "PENDING" | "ARRIVED" | "DONE" | "FAILED" | "RETRY" | "SKIPPED" | "REASSIGNED" | "CANCELLED";
+            orderNumber: string | null;
+            /** @description The pickup point of a pickup-point run */
+            addressLine: string | null;
+            /** @description The customer's code is needed */
+            handoverRequired: boolean;
+            note: string | null;
+        };
+        RunAdvanceRequest: {
+            /** @enum {string} */
+            to: "COLLECTING" | "OUT_FOR_DELIVERY" | "COMPLETED";
+        };
+        IdentityTokenInspectionRequest: {
+            /** @description The JWT to inspect */
+            token: string;
+        };
+        IdentityTokenInspection: {
+            /** @description The text is a signed JWT */
+            wellFormed: boolean;
+            header?: {
+                [key: string]: unknown;
+            };
+            claims?: {
+                [key: string]: unknown;
+            };
+            scopes?: string[];
+            keyId?: string | null;
+            /** Format: date-time */
+            issuedAt?: string | null;
+            /** Format: date-time */
+            expiresAt?: string | null;
+            expired?: boolean | null;
+            /** @description The signature verifies against a key identity publishes */
+            signatureValid: boolean;
+            issuerValid: boolean;
+            /** @description Well formed, signature and issuer valid, and not expired */
+            valid: boolean;
+            problems: string[];
+        };
+        IdentityDocuments: {
+            discovery: {
+                [key: string]: unknown;
+            };
+            jwks: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description What the plan lets an organisation do (read from `limits`). A capability that is off is not offered to the plan's members. */
+        StaffPlanEntitlements: {
+            /**
+             * Format: int64
+             * @description The most live listings; null = unlimited
+             */
+            listings: number | null;
+            listingsUnlimited: boolean;
+            aiListingWriter: boolean;
+            /**
+             * @description NONE = Lola is not included
+             * @enum {string}
+             */
+            lolaTier: "NONE" | "ESSENTIALS" | "GROWTH" | "PRO";
+            bulkUpload: boolean;
+            imageLibrary: boolean;
+            coupons: boolean;
+        };
+        StaffPlanVersionPrice: {
+            /** @enum {string} */
+            cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL";
+            /** Format: int64 */
+            amountCents: number;
+        };
+        StaffPlanVersion: {
+            version: number;
+            /** @enum {string} */
+            status: "DRAFT" | "PUBLISHED" | "SUPERSEDED";
+            trialDays: number;
+            note?: string | null;
+            createdBy?: string | null;
+            /** Format: date-time */
+            createdAt?: string | null;
+            /** Format: date-time */
+            publishedAt?: string | null;
+            /** Format: int64 */
+            subscribers: number;
+            prices: components["schemas"]["StaffPlanVersionPrice"][];
+        };
+        /** @description A plan AfroTransact owns; prices are those of the current version (0 before the first publish). */
+        StaffPlan: {
+            code: string;
+            /** @enum {string} */
+            kind: "SELLER" | "PROVIDER";
+            name: string;
+            tagline?: string | null;
+            features: string[];
+            /** @description The plan's settings. `listings` (a number or `unlimited`), `bulkUpload`, `imageLibrary`, `coupons` and `aiListingWriter` (`true`/`false`) and `lolaTier` (`NONE`, `ESSENTIALS`, `GROWTH`, `PRO`) are the capabilities the platform enforces; any other key is shown as plan information. The plan's `features` list is derived from them (only what the plan allows is listed), whatever is sent. Charge terms are the keys `chargeFreeMonths` (months free first), `chargeThen` (`CHARGE`, `CHARGE_WHEN`: start charging once the condition is met, `WAIVE_WHILE`: free while it holds), `chargeMatch` (`ALL`/`ANY`), `chargeClauses` (`METRIC:amount,…` with METRIC one of GROSS_SALES (cents), COMPLETED_ORDERS, COMPLETED_BOOKINGS, ACTIVE_LISTINGS) and `chargeWindowMonths` (sales and orders counted over the last N months). */
+            limits?: {
+                [key: string]: string;
+            };
+            entitlements?: components["schemas"]["StaffPlanEntitlements"];
+            /** @description What the plan charges, in words (free months and conditions), from its charge* limits */
+            chargeTerms?: string;
+            /** @enum {string} */
+            visibility: "PUBLIC" | "HIDDEN" | "INVITE_ONLY";
+            /** @enum {string} */
+            status: "DRAFT" | "ACTIVE" | "RETIRED";
+            sortOrder?: number;
+            currentVersion: number;
+            /** Format: int64 */
+            monthlyCents: number;
+            /** Format: int64 */
+            quarterlyCents: number;
+            /** Format: int64 */
+            annualCents: number;
+            trialDays: number;
+            /**
+             * Format: int64
+             * @description Send back as expectedVersion to edit the metadata
+             */
+            rowVersion: number;
+            /** Format: int64 */
+            subscribers: number;
+            invites: string[];
+            versions: components["schemas"]["StaffPlanVersion"][];
+        };
+        /** @description A version's price per cadence in cents and its default trial. */
+        StaffPlanPrices: {
+            /** Format: int64 */
+            monthlyCents?: number;
+            /** Format: int64 */
+            quarterlyCents?: number;
+            /** Format: int64 */
+            annualCents?: number;
+            trialDays?: number;
+            note?: string | null;
+        };
+        StaffCreatePlanRequest: {
+            code: string;
+            /** @enum {string} */
+            kind: "SELLER" | "PROVIDER";
+            name: string;
+            tagline?: string | null;
+            features?: string[];
+            limits?: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            visibility?: "PUBLIC" | "HIDDEN" | "INVITE_ONLY";
+            sortOrder?: number;
+            prices?: components["schemas"]["StaffPlanPrices"];
+        };
+        StaffUpdatePlanRequest: {
+            name: string;
+            tagline?: string | null;
+            features?: string[];
+            limits?: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            visibility?: "PUBLIC" | "HIDDEN" | "INVITE_ONLY";
+            sortOrder?: number;
+            /** Format: int64 */
+            expectedVersion: number;
+        };
+        StaffPlanInvitesRequest: {
+            orgIds: string[];
+        };
+        StaffPlanMigrationRow: {
+            orgId: string;
+            orgName?: string | null;
+            fromVersion: number;
+            /** @enum {string} */
+            cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL";
+            /** Format: int64 */
+            fromCents: number;
+            /** Format: int64 */
+            toCents: number;
+            status: string;
+            /**
+             * Format: date-time
+             * @description Their next renewal, when the new price first applies
+             */
+            effectiveAt?: string | null;
+        };
+        StaffPlanMigrationPreview: {
+            planCode: string;
+            toVersion: number;
+            rows: components["schemas"]["StaffPlanMigrationRow"][];
+        };
+        StaffPlanMigrationRequest: {
+            /** @description Empty or missing = every subscriber in the preview */
+            orgIds?: string[];
+        };
+        StaffPlanMigrationResult: {
+            planCode: string;
+            toVersion: number;
+            migrated: string[];
+            failed: {
+                orgId: string;
+                error?: string | null;
+            }[];
+        };
+        StaffTrialCampaign: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            promoCode?: string | null;
+            trialDays: number;
+            /** Format: date-time */
+            signupFrom?: string | null;
+            /** Format: date-time */
+            signupTo?: string | null;
+            /** @enum {string|null} */
+            kind?: "SELLER" | "PROVIDER" | null;
+            eligiblePlans: string[];
+            maxRedemptions?: number | null;
+            redemptions: number;
+            /** @enum {string} */
+            status: "ACTIVE" | "PAUSED" | "ENDED";
+            createdBy?: string | null;
+            /** Format: date-time */
+            createdAt?: string | null;
+            updatedBy?: string | null;
+            /** Format: date-time */
+            updatedAt?: string | null;
+            /** Format: int64 */
+            version: number;
+        };
+        /** @description A promo code, a sign-up window, or both. */
+        StaffTrialCampaignRequest: {
+            name: string;
+            promoCode?: string | null;
+            trialDays: number;
+            /** Format: date-time */
+            signupFrom?: string | null;
+            /** Format: date-time */
+            signupTo?: string | null;
+            /** @enum {string|null} */
+            kind?: "SELLER" | "PROVIDER" | null;
+            eligiblePlans?: string[];
+            maxRedemptions?: number | null;
+            /** @enum {string|null} */
+            status?: "ACTIVE" | "PAUSED" | "ENDED" | null;
+            /** Format: int64 */
+            expectedVersion?: number | null;
+        };
+        StaffBillingStatusRequest: {
+            status: string;
+        };
+        /** @description Reach (AT_LEAST) or stay under (LESS_THAN, S299) the threshold of a metric and get the reward, once per seller. A LESS_THAN rule, or an AT_LEAST rule with checkAtWindowEnd, is decided once, checkLeadHours before its window (the first withinDaysOfApproval days from windowAnchor) or the trial ends. */
+        StaffRewardRule: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description?: string | null;
+            /** @enum {string} */
+            status: "DRAFT" | "ACTIVE" | "PAUSED" | "ENDED";
+            /** @enum {string|null} */
+            kind?: "SELLER" | "PROVIDER" | null;
+            /** @enum {string} */
+            metric: "GROSS_SALES" | "ACTIVE_LISTINGS" | "COMPLETED_ORDERS" | "COMPLETED_BOOKINGS" | "DAYS_SINCE_APPROVAL";
+            /**
+             * Format: int64
+             * @description Cents for GROSS_SALES, a count otherwise
+             */
+            threshold: number;
+            windowDays?: number | null;
+            /** @description The first N days from windowAnchor */
+            withinDaysOfApproval?: number | null;
+            /** @enum {string} */
+            comparison: "AT_LEAST" | "LESS_THAN";
+            /** @enum {string} */
+            windowAnchor: "APPROVAL" | "SUBSCRIPTION_START";
+            /** @description Decided once when the window closes (always for LESS_THAN) */
+            checkAtWindowEnd: boolean;
+            /** @description Hours before the window (or the trial) ends that the check runs */
+            checkLeadHours: number;
+            /** @enum {string} */
+            rewardType: "FREE_DAYS" | "CREDIT" | "PERCENT_OFF";
+            freeDays?: number | null;
+            /** Format: int64 */
+            creditCents?: number | null;
+            percentOff?: number | null;
+            durationInvoices?: number | null;
+            eligiblePlans: string[];
+            /** Format: date-time */
+            startsAt?: string | null;
+            /** Format: date-time */
+            endsAt?: string | null;
+            maxGrants?: number | null;
+            grantsCount: number;
+            /** @example 1 month free */
+            rewardLabel: string;
+            /**
+             * @example $1,000 in sales within 60 days of approval
+             * @example less than $1,000 in sales in the first 30 days of the subscription
+             */
+            conditionLabel: string;
+            createdBy?: string | null;
+            /** Format: date-time */
+            createdAt?: string | null;
+            updatedBy?: string | null;
+            /** Format: date-time */
+            updatedAt?: string | null;
+            /** Format: int64 */
+            version: number;
+        };
+        StaffRewardRuleRequest: {
+            name: string;
+            description?: string | null;
+            /** @enum {string|null} */
+            kind?: "SELLER" | "PROVIDER" | null;
+            /** @enum {string} */
+            metric: "GROSS_SALES" | "ACTIVE_LISTINGS" | "COMPLETED_ORDERS" | "COMPLETED_BOOKINGS" | "DAYS_SINCE_APPROVAL";
+            /** Format: int64 */
+            threshold: number;
+            windowDays?: number | null;
+            /** @description The first N days from windowAnchor (required for a rule checked at window end) */
+            withinDaysOfApproval?: number | null;
+            /**
+             * @description Default AT_LEAST
+             * @enum {string|null}
+             */
+            comparison?: "AT_LEAST" | "LESS_THAN" | null;
+            /**
+             * @description Default APPROVAL
+             * @enum {string|null}
+             */
+            windowAnchor?: "APPROVAL" | "SUBSCRIPTION_START" | null;
+            /** @description AT_LEAST only: decide once when the window closes */
+            checkAtWindowEnd?: boolean | null;
+            /** @description Default 24 */
+            checkLeadHours?: number | null;
+            /** @enum {string} */
+            rewardType: "FREE_DAYS" | "CREDIT" | "PERCENT_OFF";
+            freeDays?: number | null;
+            /** Format: int64 */
+            creditCents?: number | null;
+            percentOff?: number | null;
+            durationInvoices?: number | null;
+            eligiblePlans?: string[];
+            /** Format: date-time */
+            startsAt?: string | null;
+            /** Format: date-time */
+            endsAt?: string | null;
+            maxGrants?: number | null;
+            /** @enum {string|null} */
+            status?: "DRAFT" | "ACTIVE" | "PAUSED" | "ENDED" | null;
+            /** Format: int64 */
+            expectedVersion?: number | null;
+            /** @description Preview only - marks who already got this rule */
+            ruleId?: string | null;
+        };
+        StaffRewardPreviewRow: {
+            orgId: string;
+            orgName?: string | null;
+            planCode?: string | null;
+            /** Format: int64 */
+            value: number;
+            /** Format: int64 */
+            threshold: number;
+            percent: number;
+            qualifies: boolean;
+            alreadyGranted: boolean;
+            reason?: string | null;
+            /**
+             * @description PENDING - in the window of a rule checked at window end (decided when the window closes)
+             * @enum {string}
+             */
+            status: "GRANTED" | "QUALIFIES" | "PENDING" | "CHECKED" | "NOT_YET" | "INELIGIBLE";
+            /**
+             * Format: date-time
+             * @description Rules checked at window end - when this organisation is checked
+             */
+            checkAt?: string | null;
+        };
+        StaffRewardPreview: {
+            evaluated: number;
+            qualifying: number;
+            /** @description Rules checked at window end - organisations still in their window */
+            pending: number;
+            rows: components["schemas"]["StaffRewardPreviewRow"][];
+        };
+        /** @description A reward or staff adjustment and what it changed. */
+        StaffBillingGrant: {
+            /** Format: uuid */
+            id: string;
+            orgId: string;
+            /** @enum {string} */
+            source: "RULE" | "MANUAL";
+            ruleId?: string | null;
+            /** @enum {string} */
+            type: "FREE_DAYS" | "FREE_MONTHS" | "CREDIT" | "PERCENT_OFF" | "WAIVE_INVOICE" | "TRIAL_END" | "CHARGE_GATE";
+            /** Format: int64 */
+            creditCents?: number | null;
+            freeDays?: number | null;
+            freeMonths?: number | null;
+            percentOff?: number | null;
+            durationInvoices?: number | null;
+            /** @description Coupons: invoices still to discount */
+            remainingInvoices?: number | null;
+            /** @enum {string|null} */
+            gateMode?: "START_AFTER" | "WAIVE_WHILE" | "WAIVE_UNTIL" | null;
+            invoiceId?: string | null;
+            /** @enum {string} */
+            status: "PENDING" | "APPLIED" | "FAILED";
+            reasonCode?: string | null;
+            note?: string | null;
+            summary: string;
+            actorId: string;
+            metric?: string | null;
+            /** Format: int64 */
+            metricValue?: number | null;
+            reference?: string | null;
+            /** Format: date-time */
+            previousTrialEnd?: string | null;
+            /** Format: date-time */
+            newTrialEnd?: string | null;
+            attempts: number;
+            lastError?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            appliedAt?: string | null;
+        };
+        StaffBillingGrantPage: {
+            items: components["schemas"]["StaffBillingGrant"][];
+            page: number;
+            size: number;
+            /** Format: int64 */
+            total: number;
+        };
+        StaffBillingReasonCode: {
+            code: string;
+            label: string;
+        };
+        StaffBillingOrgSearch: {
+            items: {
+                orgId: string;
+                name: string;
+                kind: string;
+                status: string;
+            }[];
+        };
+        /** @description seller's Billing (cents). */
+        StaffBillingSubscription: {
+            orgId: string;
+            planCode: string;
+            planName: string;
+            /** @enum {string} */
+            cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL";
+            status: string;
+            /** Format: date-time */
+            trialEndsAt?: string | null;
+            /** Format: date-time */
+            currentPeriodEnd?: string | null;
+            /** Format: date-time */
+            nextChargeAt?: string | null;
+            /** Format: int64 */
+            nextChargeCents?: number;
+            nextChargeLabel: string;
+            cancelAtPeriodEnd: boolean;
+            dunning?: string | null;
+            failedPaymentAttempts?: number;
+            planVersion: number;
+            /**
+             * Format: int64
+             * @description Platform credit the next invoices use first
+             */
+            creditBalanceCents: number;
+            /** @enum {string|null} */
+            trialSource?: "PLAN" | "CAMPAIGN" | "OVERRIDE" | "NONE" | null;
+            trialDaysOverride?: number | null;
+            planFeeCollection?: components["schemas"]["StaffPlanFeeCollectionMode"];
+            /** @description The condition on the plan charges, with the seller's progress; null when charges apply as normal */
+            chargeGate?: components["schemas"]["StaffChargeGate"] | null;
+            entitlements?: components["schemas"]["StaffPlanEntitlements"] | null;
+        };
+        StaffChargeGate: {
+            /** @enum {string} */
+            mode: "START_AFTER" | "WAIVE_WHILE" | "WAIVE_UNTIL";
+            /** @enum {string|null} */
+            metric?: "GROSS_SALES" | "COMPLETED_ORDERS" | "COMPLETED_BOOKINGS" | "ACTIVE_LISTINGS" | null;
+            /** Format: int64 */
+            threshold?: number | null;
+            /** Format: int64 */
+            progress: number;
+            /** Format: date-time */
+            since?: string | null;
+            /** Format: date-time */
+            until?: string | null;
+            reasonCode?: string | null;
+            note?: string | null;
+            /** Format: date-time */
+            setAt?: string | null;
+            /** Format: date-time */
+            metAt?: string | null;
+            label: string;
+        };
+        StaffBillingInvoiceLine: {
+            /** @enum {string} */
+            kind: "PLAN" | "USAGE" | "COUPON" | "PRORATION" | "WAIVER";
+            description: string;
+            /** Format: int64 */
+            amountCents: number;
+            /** Format: int64 */
+            quantity?: number | null;
+            meter?: string | null;
+        };
+        StaffBillingInvoicePayment: {
+            /** @enum {string} */
+            source: "CREDIT" | "EARNINGS" | "CARD" | "WAIVER";
+            /** Format: int64 */
+            amountCents: number;
+            /** @enum {string} */
+            status: "APPLIED" | "PENDING" | "FAILED" | "REVERSED";
+            note?: string | null;
+            /** Format: date-time */
+            createdAt?: string | null;
+        };
+        /** @description A plan invoice AfroTransact issued. Settled in this order: platform credit (coupons are already off the invoice), the seller's sales if they chose that, then the saved card or bank account. */
+        StaffBillingInvoice: {
+            id: string;
+            number?: string | null;
+            /** Format: date-time */
+            periodStart?: string | null;
+            /** Format: date-time */
+            periodEnd?: string | null;
+            /** Format: int64 */
+            subtotalCents: number;
+            /** Format: int64 */
+            discountCents: number;
+            /** Format: int64 */
+            amountDueCents: number;
+            /** Format: int64 */
+            amountPaidCents: number;
+            currency: string;
+            /** @enum {string|null} */
+            status?: "open" | "paid" | "void" | "uncollectible" | null;
+            billingReason?: string | null;
+            planCode?: string | null;
+            attempts?: number;
+            /** Format: date-time */
+            nextAttemptAt?: string | null;
+            lastError?: string | null;
+            /** Format: date-time */
+            paidAt?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            lines?: components["schemas"]["StaffBillingInvoiceLine"][];
+            payments?: components["schemas"]["StaffBillingInvoicePayment"][];
+            /** Format: int64 */
+            paidFromCreditCents: number;
+            /**
+             * Format: int64
+             * @description Withheld from the organisation's sales (S298), only if it chose that
+             */
+            paidFromSalesCents: number;
+            /** Format: int64 */
+            paidByCardCents: number;
+            /** Format: int64 */
+            waivedCents: number;
+        };
+        /** @description One plan invoice paid (or asked to be paid) from earnings (S298). */
+        StaffEarningsCollection: {
+            invoiceId: string;
+            invoiceNumber?: string | null;
+            /**
+             * Format: int64
+             * @description The invoice amount when it was issued
+             */
+            invoiceAmountCents?: number | null;
+            /**
+             * Format: int64
+             * @description Asked from earnings (the invoice less the credit balance)
+             */
+            amountCents: number;
+            /** Format: int64 */
+            withheldCents: number;
+            /** Format: int64 */
+            creditedCents: number;
+            /** Format: int64 */
+            releasedCents: number;
+            /** Format: int64 */
+            paidFromSalesCents: number;
+            /** @enum {string} */
+            status: "REQUESTED" | "WITHHELD" | "CREDITED" | "DECLINED" | "MISSED" | "FAILED" | "RELEASED";
+            paymentsReference?: string | null;
+            reason?: string | null;
+            attempts: number;
+            lastError?: string | null;
+            /** Format: date-time */
+            createdAt?: string | null;
+            /** Format: date-time */
+            updatedAt?: string | null;
+        };
+        /**
+         * @description EARNINGS_FIRST: each plan invoice is taken from pending earnings and the card pays only the rest. CARD: always charged to the card.
+         * @enum {string}
+         */
+        StaffPlanFeeCollectionMode: "EARNINGS_FIRST" | "CARD";
+        StaffPlanFeeCollectionChange: {
+            id: string;
+            previous?: components["schemas"]["StaffPlanFeeCollectionMode"] | null;
+            mode: components["schemas"]["StaffPlanFeeCollectionMode"];
+            /** @enum {string} */
+            source: "ONBOARDING" | "SELLER" | "STAFF";
+            actorId: string;
+            reasonCode?: string | null;
+            note?: string | null;
+            /** Format: date-time */
+            appliesFrom?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /** @description seller's PlanFeeCollection (S298) */
+        StaffPlanFeeCollection: {
+            orgId: string;
+            /** @description The kill switch is on; the choice is offered and honoured */
+            available: boolean;
+            mode: components["schemas"]["StaffPlanFeeCollectionMode"];
+            effective: components["schemas"]["StaffPlanFeeCollectionMode"];
+            /** @enum {string} */
+            source: "DEFAULT" | "ONBOARDING" | "SELLER" | "STAFF";
+            /** Format: date-time */
+            changedAt?: string | null;
+            changedBy?: string | null;
+            platformDefault: components["schemas"]["StaffPlanFeeCollectionMode"];
+            /**
+             * Format: date-time
+             * @description A change applies from the invoice of this date (the next renewal)
+             */
+            appliesFromInvoiceAt?: string | null;
+            appliesFromLabel: string;
+            /** @description An invoice being collected now keeps the choice it was created with */
+            inProgressInvoiceId?: string | null;
+            history: components["schemas"]["StaffPlanFeeCollectionChange"][];
+        };
+        StaffPlanFeeCollectionRequest: {
+            mode: components["schemas"]["StaffPlanFeeCollectionMode"];
+            reasonCode: string;
+            note?: string | null;
+        };
+        StaffBillingSettings: {
+            /** @description The kill switch COLLECT_PLAN_FEES_FROM_EARNINGS (deployment configuration) */
+            earningsCollectionEnabled: boolean;
+            planFeeCollectionDefault: components["schemas"]["StaffPlanFeeCollectionMode"];
+            updatedBy?: string | null;
+            /** Format: date-time */
+            updatedAt?: string | null;
+        };
+        StaffBillingSettingsRequest: {
+            planFeeCollectionDefault: components["schemas"]["StaffPlanFeeCollectionMode"];
+        };
+        StaffBillingPanel: {
+            orgId: string;
+            orgName: string | null;
+            /** @enum {string} */
+            kind: "SELLER" | "PROVIDER";
+            orgStatus: string;
+            /** @description null before the organisation has a subscription */
+            billing?: components["schemas"]["StaffBillingSubscription"] | null;
+            invoices: components["schemas"]["StaffBillingInvoice"][];
+            grants: components["schemas"]["StaffBillingGrant"][];
+            collections: components["schemas"]["StaffEarningsCollection"][];
+            earningsCollectionEnabled: boolean;
+            /** @description How the plan is paid (S298); null before the organisation has a subscription */
+            planFeeCollection?: components["schemas"]["StaffPlanFeeCollection"] | null;
+            /** @description Plans staff assigned to the organisation, newest first (S306) */
+            planAssignments?: components["schemas"]["StaffPlanAssignment"][];
+        };
+        StaffPlanAssignment: {
+            /** Format: uuid */
+            id: string;
+            fromPlan?: string | null;
+            toPlan: string;
+            /** @enum {string} */
+            cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL";
+            /** @enum {string} */
+            applied: "IMMEDIATE_UPGRADE" | "AT_RENEWAL" | "NO_CHANGE";
+            reason: string;
+            assignedBy: string;
+            /** Format: date-time */
+            assignedAt: string;
+        };
+        StaffAssignPlanRequest: {
+            planCode: string;
+            /** @enum {string} */
+            cadence?: "MONTHLY" | "QUARTERLY" | "ANNUAL";
+            reason: string;
+        };
+        StaffPlanChange: {
+            /** @enum {string} */
+            applied: "IMMEDIATE_UPGRADE" | "AT_RENEWAL" | "NO_CHANGE";
+            /** @description The organisation billing overview after the change */
+            billing?: {
+                [key: string]: unknown;
+            };
+        };
+        StaffCreditRequest: {
+            /** Format: int64 */
+            amountCents: number;
+            reasonCode: string;
+            note?: string | null;
+        };
+        StaffDaysRequest: {
+            days: number;
+            reasonCode: string;
+            note?: string | null;
+        };
+        StaffMonthsRequest: {
+            months: number;
+            reasonCode: string;
+            note?: string | null;
+        };
+        /** @description A condition on the plan charges. START_AFTER: no charge until the seller reaches `threshold` of `metric`; WAIVE_WHILE: free while they keep it; WAIVE_UNTIL: free until `until`. `threshold` is in cents for GROSS_SALES, else a count. Replaces any earlier condition. */
+        StaffChargeGateRequest: {
+            /** @enum {string} */
+            mode: "START_AFTER" | "WAIVE_WHILE" | "WAIVE_UNTIL";
+            /** @enum {string|null} */
+            metric?: "GROSS_SALES" | "COMPLETED_ORDERS" | "COMPLETED_BOOKINGS" | "ACTIVE_LISTINGS" | null;
+            /** Format: int64 */
+            threshold?: number | null;
+            /** Format: date-time */
+            until?: string | null;
+            reasonCode: string;
+            note?: string | null;
+        };
+        StaffWaiveRequest: {
+            reasonCode: string;
+            note?: string | null;
+        };
         /**
          * @description LIVE serves orders; PLANNED is on the roadmap (shown, not serving); OFF is switched off (hidden by default).
          * @enum {string}
@@ -3006,7 +5639,7 @@ export interface components {
             detail?: string;
             instance?: string;
             /**
-             * @description Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, NOT_STAFF, FORBIDDEN, NOT_FOUND, CONFLICT,
+             * @description Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, NOT_STAFF, FORBIDDEN, NOT_FOUND, CONFLICT, ALREADY_DONE,
              *     REFUND_LIMIT, EXPORT_NOT_READY, EXPORT_EXPIRED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, UPSTREAM_ERROR.
              */
             code?: string;
@@ -3019,10 +5652,10 @@ export interface components {
         /** @enum {string} */
         AccessLevel: "VIEW" | "EDIT" | "APPROVE" | "FULL";
         /**
-         * @description Sidebar modules; keys follow identity's platform module matrix (support, exports and notifications are derived; preorders follows the Pre-orders matrix column).
+         * @description Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications and identity are derived; identity needs the identity:admin permission; preorders follows the Pre-orders matrix column).
          * @enum {string}
          */
-        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "inventory" | "retail" | "dispatch" | "apps" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "notifications" | "preorders";
+        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "inventory" | "retail" | "dispatch" | "orgs" | "apps" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "identity" | "notifications" | "preorders" | "plans";
         StaffUser: {
             id: string;
             firstName: string;
@@ -3096,6 +5729,27 @@ export interface components {
             /** @enum {string} */
             tone: "positive" | "attention" | "neutral";
         };
+        StaffAssistantStatus: {
+            dailyMessages: number;
+            used: number;
+            remaining: number;
+            tools: string[];
+        };
+        StaffAssistantReply: {
+            answer: string;
+            /** @description What she looked up ("Checking the dashboard") */
+            steps: {
+                tool: string;
+                label: string;
+            }[];
+            /** @description Records she points at; the console opens one when the member taps its button */
+            links: {
+                label: string;
+                resource: string;
+                id: string;
+            }[];
+            status: components["schemas"]["StaffAssistantStatus"];
+        };
         StaffDashboard: {
             rangeDays: number;
             /** Format: date-time */
@@ -3104,7 +5758,7 @@ export interface components {
             charts: components["schemas"]["ChartSpec"][];
         };
         /** @enum {string} */
-        ResourceKey: "users" | "roles" | "applications" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations";
+        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "moderation" | "product-reviews" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "tax-codes" | "tax-rules" | "tax-review" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons" | "reconciliation" | "reconciliation-runs" | "ledger-adjustments" | "credit-adjustments" | "gift-cards" | "credit-liabilities" | "money-settings" | "membership-tiers" | "memberships" | "membership-settings" | "membership-report" | "referrals" | "referral-settings" | "stripe-lookup" | "payment-settings" | "tax-settings" | "maintenance" | "tax-filings" | "tax-nexus" | "oauth-clients" | "identity-sessions" | "signing-keys" | "auth-settings" | "exchange-rates";
         /** @enum {string} */
         Tone: "good" | "warn" | "bad" | "info" | "brand";
         CellValue: string | number | null;
@@ -3135,12 +5789,26 @@ export interface components {
             label: string;
         };
         FieldValue: string | number | boolean | string[] | null;
+        StaffLookupResult: {
+            /** @enum {string} */
+            kind: "drivers" | "sellers";
+            items: {
+                id: string;
+                name: string;
+                detail?: string;
+            }[];
+        };
         FormField: {
             key: string;
             label: string;
             /** @enum {string} */
             type: "text" | "textarea" | "number" | "money" | "select" | "multiselect" | "toggle" | "date" | "datetime" | "email" | "password";
             required: boolean;
+            /**
+             * @description A text field that is a searchable picker: staff choose by name (GET /v1/staff/lookups/{kind}), the form sends the id
+             * @enum {string}
+             */
+            lookup?: "drivers" | "sellers";
             options?: components["schemas"]["FieldOption"][];
             min?: number;
             max?: number;
@@ -3150,11 +5818,17 @@ export interface components {
             help?: string;
             placeholder?: string;
             value?: components["schemas"]["FieldValue"];
+            /** @description The group the field belongs to; the form shows a heading when it changes from one field to the next (the referral program's two reward sections) */
+            section?: string;
         };
         Form: {
             title: string;
             submitLabel: string;
+            /** @description What submitting does, in a sentence or two (shown above the fields) */
+            intro?: string;
             fields: components["schemas"]["FormField"][];
+            /** @description Fields whose change makes the form worth saving: Save stays disabled until one differs from its initial value, and the server refuses a save in which none does */
+            changeKeys?: string[];
         };
         ResourcePage: {
             resource: components["schemas"]["ResourceKey"];
@@ -3182,7 +5856,7 @@ export interface components {
             label: string;
             value: string;
             /** @enum {string} */
-            kind: "text" | "mono" | "money" | "date" | "datetime" | "status" | "link";
+            kind: "text" | "mono" | "money" | "date" | "datetime" | "status" | "link" | "image";
             href?: string;
         };
         DetailSection: {
@@ -3223,8 +5897,10 @@ export interface components {
         };
         RecordLink: {
             label: string;
-            /** @description Console path, for example /support?customer=… or /orders?open=AT-… */
+            /** @description Console path, for example /support?customer=… or /orders?open=AT-…, or (external) a same-origin BFF path */
             href: string;
+            /** @description Open in a new tab (an uploaded document the reviewer reads) */
+            external?: boolean;
         };
         RecordDetail: {
             resource: components["schemas"]["ResourceKey"];
@@ -3243,6 +5919,15 @@ export interface components {
             links: components["schemas"]["RecordLink"][];
             /** @description Optimistic-locking version to send back with edits */
             version: string | null;
+            /** @description Set when an action deleted the record; the console closes the sheet */
+            removed?: boolean;
+            reveal?: components["schemas"]["OneTimeSecret"];
+        };
+        /** @description A secret shown once, right after it was created (a new OAuth client secret). It is in this answer only; the BFF keeps nothing and the upstream cannot return it again. The console shows it in a dialog and never stores it. */
+        OneTimeSecret: {
+            label: string;
+            value: string;
+            note: string;
         };
         RecordValues: {
             values?: {
@@ -3433,8 +6118,18 @@ export interface components {
             resend: boolean;
             cancelShipment: boolean;
         };
+        SupportMembership: {
+            /** @example Plus */
+            tierName: string;
+            /** @enum {string} */
+            status: "TRIALING" | "ACTIVE" | "PAST_DUE";
+            /** @description Handle this customer's cases first */
+            prioritySupport: boolean;
+        };
         Customer360: {
             customer: components["schemas"]["SupportCustomer"];
+            /** @description The customer's membership (S323): the priority-support flag; null when the customer is not a member */
+            membership: components["schemas"]["SupportMembership"] | null;
             orders: components["schemas"]["SupportOrder"][];
             bookings: components["schemas"]["SupportBooking"][];
             claims: components["schemas"]["SupportClaim"][];
@@ -3562,6 +6257,12 @@ export interface components {
             reverseCommissionOnRefund: boolean;
             /** @description AfroTransact Delivery from seller stores (S255); null when the version has no delivery pricing (quotes NOT_CONFIGURED) */
             deliveryPricing: components["schemas"]["DeliveryPricing"] | null;
+            /** @description Product commission per plan, after negotiated rates and before category rates */
+            planRates: components["schemas"]["FeePlanRate"][];
+            /** @description FBA fee per unit of the plans that have their own; every other plan pays fbaPerUnitMinor */
+            planFba: components["schemas"]["FeePlanFba"][];
+            /** @description Connection fees on service bookings; null for versions created before they existed (services paid the 'services' commission) */
+            connectionFee: components["schemas"]["FeeConnectionFee"] | null;
             note: string | null;
             createdBy: string;
             /** Format: date-time */
@@ -3611,6 +6312,235 @@ export interface components {
              */
             exampleSaleMinor: number;
             reverseOnRefundHelp: string;
+            /** @description The plan catalogue (seller service), for the plan-rate matrix */
+            plans: components["schemas"]["FeePlan"][];
+            /** @description false when the plan catalogue could not be read */
+            plansAvailable: boolean;
+            /** @description Plans whose feature text advertises a fee the version in force does not charge */
+            planWarnings: string[];
+            /** @description Service categories the connection-fee sections price */
+            serviceCategories: components["schemas"]["FeeCategory"][];
+        };
+        FeePlanFba: {
+            planCode: string;
+            planName: string;
+            /** Format: int64 */
+            feeMinor: number;
+        };
+        FeeDraftPlanFba: {
+            planCode: string;
+            /** Format: int64 */
+            feeMinor: number;
+        };
+        FeePlanRate: {
+            /** @example seller_growth */
+            planCode: string;
+            planName: string;
+            /** @description '*' = the plan's rate for categories it does not list */
+            category: string;
+            label: string;
+            bps: number;
+        };
+        FeeRate: {
+            category: string;
+            label: string;
+            bps: number;
+        };
+        FeeConnectionFee: {
+            /** @description Connection fee of service categories without their own rate */
+            defaultBps: number;
+            categoryRates: components["schemas"]["FeeRate"][];
+            planRates: components["schemas"]["FeePlanRate"][];
+        };
+        FeeRange: {
+            minBps: number;
+            maxBps: number;
+        };
+        FeePlan: {
+            code: string;
+            /** @description SELLER (product commission) or PROVIDER (connection fee) */
+            kind: string;
+            name: string;
+            status: string;
+            visibility: string;
+            /** @description The feature that mentions a fee, e.g. "8–12% referral fee by category" */
+            featureText: string | null;
+            advertised: components["schemas"]["FeeRange"] | null;
+            /** @description Lowest–highest plan rate of the version in force */
+            configured: components["schemas"]["FeeRange"] | null;
+            /** @description How the feature text and the configured rates differ */
+            warning: string | null;
+        };
+        NegotiatedRateAuditEntry: {
+            /** @enum {string} */
+            action: "CREATED" | "ENDED" | "EXPIRED";
+            actor: string;
+            reason: string | null;
+            /** Format: date-time */
+            at: string;
+        };
+        NegotiatedRate: {
+            id: string;
+            orgId: string;
+            orgName: string | null;
+            /** @enum {string} */
+            type: "COMMISSION" | "CONNECTION_FEE" | "FBA_FEE";
+            /** @description '*' = every category */
+            category: string;
+            categoryLabel: string;
+            rateBps: number;
+            /**
+             * Format: int64
+             * @description FBA_FEE: the fee per unit in minor units for every FBA line; null otherwise
+             */
+            amountMinor: number | null;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string | null;
+            /** @enum {string} */
+            status: "SCHEDULED" | "ACTIVE" | "ENDED" | "EXPIRED";
+            reason: string;
+            negotiatedBy: string;
+            reference: string | null;
+            createdBy: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            endedAt: string | null;
+            endedBy: string | null;
+            endReason: string | null;
+            /** Format: date-time */
+            expiredAt: string | null;
+            audit: components["schemas"]["NegotiatedRateAuditEntry"][];
+            /** @description The caller configures fees and the rate is scheduled or active */
+            canEnd: boolean;
+        };
+        NegotiatedRatePage: {
+            items: components["schemas"]["NegotiatedRate"][];
+            total: number;
+            page: number;
+            size: number;
+            canConfigure: boolean;
+        };
+        NegotiatedRateDraft: {
+            orgId: string;
+            /** @enum {string} */
+            type: "COMMISSION" | "CONNECTION_FEE" | "FBA_FEE";
+            /** @description One category; null or '*' = every category */
+            category?: string | null;
+            /** @description Required for COMMISSION and CONNECTION_FEE */
+            rateBps?: number;
+            /**
+             * Format: int64
+             * @description Required for FBA_FEE: the fee per unit in minor units, for every FBA line of the organisation (no category)
+             */
+            amountMinor?: number;
+            /**
+             * Format: date-time
+             * @description Default now; never in the past
+             */
+            startsAt?: string | null;
+            /**
+             * Format: date-time
+             * @description Omit for open-ended
+             */
+            endsAt?: string | null;
+            reason: string;
+            /** @description Default the caller */
+            negotiatedBy?: string | null;
+            /** @description Contract or ticket */
+            reference?: string | null;
+        };
+        NegotiatedRateEnd: {
+            reason: string;
+        };
+        FeeRateQuote: {
+            orgId: string;
+            orgName: string | null;
+            /** @enum {string} */
+            kind: "PRODUCT" | "SERVICE";
+            category: string;
+            categoryLabel: string;
+            bps: number;
+            /** @enum {string} */
+            source: "OVERRIDE" | "PLAN" | "CATEGORY" | "DEFAULT" | "RETAIL";
+            planCode: string | null;
+            planName: string | null;
+            negotiatedRateId: string | null;
+            /** Format: date-time */
+            negotiatedUntil: string | null;
+            /** @description Fee-schedule version in force */
+            version: number;
+            /** Format: int64 */
+            exampleSaleMinor: number;
+            /**
+             * Format: int64
+             * @description The rate applied to exampleSaleMinor
+             */
+            exampleFeeMinor: number;
+            /**
+             * @example Negotiated commission until 31 Dec 2026
+             * @example Plan rate: Seller Growth
+             */
+            explanation: string;
+        };
+        NegotiatedPlanDraft: {
+            basePlanCode: string;
+            /** Format: int64 */
+            monthlyCents: number;
+            /**
+             * Format: int64
+             * @description Default 3 months less 5 %
+             */
+            quarterlyCents?: number | null;
+            /**
+             * Format: int64
+             * @description Default 10 months
+             */
+            annualCents?: number | null;
+            reason: string;
+            reference?: string | null;
+            /** @description Also move the organisation to the plan now (billing:adjust; S306). Default: it chooses the plan itself. */
+            assign?: boolean;
+        };
+        NegotiatedPlan: {
+            planCode: string;
+            planName: string;
+            basePlanCode: string;
+            orgId: string;
+            /** @enum {string} */
+            visibility: "INVITE_ONLY";
+            published: boolean;
+            /** Format: int64 */
+            monthlyCents: number;
+            /** Format: int64 */
+            quarterlyCents: number;
+            /** Format: int64 */
+            annualCents: number;
+            /** @description The organisation was moved to the plan in the same step (S306) */
+            assigned?: boolean;
+            /**
+             * @description What the assignment did, when assigned
+             * @enum {string}
+             */
+            assignedAs?: "IMMEDIATE_UPGRADE" | "AT_RENEWAL" | "NO_CHANGE";
+            note: string;
+        };
+        FeeDraftRate: {
+            category: string;
+            bps: number;
+        };
+        FeeDraftPlanRate: {
+            planCode: string;
+            /** @description '*' or empty = the plan's other categories */
+            category: string;
+            bps: number;
+        };
+        FeeConnectionDraft: {
+            defaultBps: number;
+            categoryRates: components["schemas"]["FeeDraftRate"][];
+            planRates: components["schemas"]["FeeDraftPlanRate"][];
         };
         FeeOrgHit: {
             orgId: string;
@@ -3654,6 +6584,12 @@ export interface components {
             reverseCommissionOnRefund: boolean;
             /** @description AfroTransact Delivery pricing (S255). Omitted or null = carried over from the latest live version; enabled=false stops offering it */
             deliveryPricing?: components["schemas"]["DeliveryPricingDraft"] | null;
+            /** @description Product commission per plan. Omitted or null = carried over from the latest live version; [] = no plan rates */
+            planRates?: components["schemas"]["FeeDraftPlanRate"][] | null;
+            /** @description FBA fee per unit per plan; plans left out pay fbaPerUnitMinor. Omitted or null = carried over from the latest live version; [] = every plan pays the default */
+            planFba?: components["schemas"]["FeeDraftPlanFba"][] | null;
+            /** @description Connection fees on service bookings. Omitted or null = carried over from the latest live version */
+            connectionFee?: components["schemas"]["FeeConnectionDraft"] | null;
             /** @description Why the fees change (required) */
             note: string;
         };
@@ -3668,10 +6604,10 @@ export interface components {
             /** Format: int64 */
             feeMinor: number;
         };
-        /** @description FLAT: flatPerPackageMinor × packages. DISTANCE (per trip): the fee of the band covering the distance, else baseMinor + perMileMinor × miles (half up), then at least minMinor and at most maxMinor (null = no cap) */
+        /** @description FLAT: flatPerPackageMinor × packages. PER_WEIGHT: baseMinor + perLbMinor × weightLb. DISTANCE (per trip): the fee of the band covering the distance, else baseMinor + perMileMinor × miles (half up), then at least minMinor and at most maxMinor (null = no cap) */
         DeliveryTariff: {
             /** @enum {string} */
-            mode: "FLAT" | "DISTANCE";
+            mode: "FLAT" | "DISTANCE" | "PER_WEIGHT";
             /** Format: int64 */
             flatPerPackageMinor: number | null;
             /** Format: int64 */
@@ -3681,6 +6617,11 @@ export interface components {
              * @description 85 = $0.85 per mile
              */
             perMileMinor: number | null;
+            /**
+             * Format: int64
+             * @description 50 = $0.50 per pound
+             */
+            perLbMinor?: number | null;
             bands: components["schemas"]["DeliveryBand"][];
             /** Format: int64 */
             minMinor: number | null;
@@ -3743,6 +6684,15 @@ export interface components {
             maxRadiusMiles: number | null;
             currency: string;
         };
+        TaxRatesImportRequest: {
+            /** @description CSV text including header row */
+            csv: string;
+        };
+        TaxRatesImportResult: {
+            statesUpserted: number;
+            localsUpserted: number;
+            warnings: string[];
+        };
         PickupRow: {
             shipmentId: string;
             orderNumber: string;
@@ -3769,6 +6719,8 @@ export interface components {
         };
         DriverSuggestion: {
             driverId: string;
+            /** @description The driver's name (Unknown driver when identity cannot name them) */
+            driverName: string;
             routeId: string;
             routeName: string;
             zone: string;
@@ -3798,6 +6750,7 @@ export interface components {
             routeId: string;
             routeName: string | null;
             driverId: string | null;
+            driverName: string | null;
             /** @description The route's status */
             status: string;
         };
@@ -3805,14 +6758,18 @@ export interface components {
             id: string;
             shipmentId: string;
             routeId: string;
+            routeName: string | null;
             driverId: string | null;
+            driverName: string | null;
             /** @enum {string} */
             mode: "AUTO_NEAREST" | "DISPATCH_OVERRIDE";
             reason: string | null;
             previousRouteId: string | null;
+            previousRouteName: string | null;
             straightMiles: number | null;
             roadMiles: number | null;
             distanceMethod: string | null;
+            /** @description Who assigned it, by name (System for the automatic assignment) */
             actor: string | null;
             /** Format: date-time */
             createdAt: string | null;
@@ -3987,6 +6944,763 @@ export interface components {
             /** @description APPROVE, EDIT or FULL and preorders:late-add */
             lateAdd: boolean;
         };
+        StaffDeliveryFeeBand: {
+            /** @description Inclusive; the first band starts at 0 */
+            fromMiles: number;
+            /** @description Exclusive; the next band starts here */
+            toMiles: number;
+            /** @description Flat fee for an address in the band (minor units) */
+            feeMinor: number;
+        };
+        /**
+         * @description The delivery fee of one method in one currency; the ETag carries the version for If-Match. Fields a method does
+         *     not use are 0 / empty.
+         */
+        StaffDeliveryFeeRule: {
+            id: string;
+            /** @enum {string} */
+            method: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
+            /** @example USD */
+            currency: string;
+            version: number;
+            /** @description AFROTRANSACT_DELIVERY only */
+            bands?: components["schemas"]["StaffDeliveryFeeBand"][];
+            /** @description PICKUP only */
+            feeMinor?: number;
+            /** @description CARRIER: added to the carrier-gateway quote */
+            handlingMinor?: number;
+            /** @description CARRIER: the fee when there is no quote */
+            fallbackMinor?: number;
+            /** @description CARRIER: goods subtotal from which shipping is free; null = never */
+            freeAboveMinor?: number | null;
+            /** @description AFROTRANSACT_DELIVERY: how far AfroTransact delivers (end of the last band) */
+            coverageMiles?: number;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** @description Staff subject of the last change */
+            updatedBy?: string | null;
+            /** @description Why the last change was made */
+            reason?: string | null;
+            can?: components["schemas"]["PreorderCan"];
+        };
+        StaffDeliveryFeeRules: {
+            items: components["schemas"]["StaffDeliveryFeeRule"][];
+            can: components["schemas"]["PreorderCan"];
+        };
+        /** @description The rule's new numbers; a method ignores what it does not use. */
+        StaffDeliveryFeeRequest: {
+            bands?: components["schemas"]["StaffDeliveryFeeBand"][];
+            feeMinor?: number;
+            handlingMinor?: number;
+            fallbackMinor?: number;
+            freeAboveMinor?: number | null;
+            /** @description Why; logged with who and when */
+            reason: string;
+        };
+        StaffDeliveryFeeChanges: {
+            items: ({
+                id?: string;
+                /** @enum {string} */
+                method: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
+                currency: string;
+                version: number;
+                /** @description Null for the first version */
+                before?: components["schemas"]["StaffDeliveryFeeRule"] | null;
+                after: components["schemas"]["StaffDeliveryFeeRule"];
+                /** @description Staff subject, or migration */
+                actor: string;
+                reason: string;
+                /** Format: date-time */
+                at: string;
+            } & {
+                [key: string]: unknown;
+            })[];
+        };
+        StaffDeliveryFeePreviewRequest: {
+            /** @enum {string} */
+            method: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
+            currency: string;
+            /** @description AFROTRANSACT_DELIVERY: miles from the hub (absent: the window distance, else the farthest band) */
+            distanceMiles?: number | null;
+            /** @description Apply this pre-order's own fee and distance */
+            windowId?: string | null;
+            /** @description CARRIER: the carrier-gateway quote, if any */
+            carrierQuoteMinor?: number | null;
+            /** @description CARRIER: goods subtotal (free-shipping threshold) */
+            itemsMinor?: number | null;
+        };
+        StaffDeliveryFeePreview: {
+            /** @description False: no rule can price it (no rule, or beyond how far AfroTransact delivers) */
+            applies: boolean;
+            fee?: null | ({
+                /** @enum {string} */
+                method: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
+                ruleId?: string | null;
+                ruleVersion: number;
+                currency?: string;
+                amountMinor: number;
+                /** @enum {string} */
+                source?: "RULE" | "WINDOW_OVERRIDE" | "CARRIER_QUOTE" | "CARRIER_FALLBACK";
+                /** @example 10–40 mi */
+                band?: string | null;
+                distanceMiles?: number | null;
+            } & {
+                [key: string]: unknown;
+            });
+        };
+        StaffEconomicsNumbers: {
+            /** @description Loaded driver cost per hour (wage, insurance), minor units */
+            driverCostPerHourMinor: number;
+            /** @description Vehicle cost per mile (fuel, wear), minor units */
+            driverCostPerMileMinor: number;
+            /** @description Seller sweep and loading at the origin */
+            collectionMinutes: number;
+            /** @description Time per doorstep drop, local driving included */
+            perStopMinutes: number;
+            /** @description Time at a community pickup point */
+            pickupPointStopMinutes: number;
+            /** @description Time per order handed over at a pickup point */
+            handoverMinutesPerOrder: number;
+            /** @description Count the drive back to the origin */
+            roundTrip: boolean;
+        };
+        /**
+         * @description The driver cost model; the ETag carries the version for If-Match. Version 0 (`source` CONFIG): the environment's
+         *     defaults apply because nobody saved yet.
+         */
+        StaffEconomicsSettings: components["schemas"]["StaffEconomicsNumbers"] & {
+            version: number;
+            /** @enum {string} */
+            source: "CONFIG" | "STAFF";
+            /** Format: date-time */
+            updatedAt?: string | null;
+            /** @description Staff subject of the last save */
+            updatedBy?: string | null;
+            /** @description Why the last save was made */
+            reason?: string | null;
+            can: components["schemas"]["PreorderCan"];
+        };
+        /** @description The cost model's new numbers; the reason is required and is logged with who and when. */
+        StaffEconomicsSettingsRequest: components["schemas"]["StaffEconomicsNumbers"] & {
+            /** @description Why; logged with who and when */
+            reason: string;
+        };
+        StaffEconomicsChanges: {
+            items: {
+                id?: string;
+                version: number;
+                before: components["schemas"]["StaffEconomicsNumbers"];
+                after: components["schemas"]["StaffEconomicsNumbers"];
+                /** @description Staff subject */
+                actor: string;
+                reason: string;
+                /** Format: date-time */
+                at: string;
+            }[];
+        };
+        StaffRunRoute: {
+            /** @description One-way road miles from the origin to the location */
+            roadMiles: number;
+            /** @description One-way drive time */
+            driveMinutes: number;
+            /** @description How geo measured it */
+            method?: string;
+        };
+        /** @description cost(n) = fixedCostMinor + n x perOrderCostMinor */
+        StaffRunCostModel: {
+            driveMiles: number;
+            fixedMinutes: number;
+            perOrderMinutes: number;
+            fixedCostMinor: number;
+            perOrderCostMinor: number;
+        };
+        /** @description P&L at a number of orders */
+        StaffRunSnapshot: {
+            orders: number;
+            /** @description Delivery fees collected */
+            feeRevenueMinor: number;
+            /** @description Commission attributed to the run, when reported */
+            commissionShareMinor?: number | null;
+            /** @description Fees plus commission share */
+            revenueMinor: number;
+            /** @description Estimated driver and vehicle cost */
+            estimatedCostMinor: number;
+            /** @description Revenue minus estimated cost */
+            contributionMarginMinor: number;
+        };
+        StaffRunEconomics: {
+            route: components["schemas"]["StaffRunRoute"];
+            cost: components["schemas"]["StaffRunCostModel"];
+            /** @description Delivery fee per order */
+            feeMinor: number;
+            currency: string;
+            /** @description Fewest orders whose fees cover the cost; null when a fee never covers a stop */
+            breakEvenOrders?: number | null;
+            atMinimum: components["schemas"]["StaffRunSnapshot"];
+            atCapacity?: components["schemas"]["StaffRunSnapshot"] | null;
+            atOrders: components["schemas"]["StaffRunSnapshot"];
+        };
+        StaffRunPlanRequest: {
+            /** Format: uuid */
+            locationId: string;
+            feeMinor?: number | null;
+            minOrders?: number | null;
+            capacityOrders?: number | null;
+            /** @enum {string|null} */
+            dropMode?: "DOORSTEP" | "PICKUP_POINT" | null;
+            expectedOrders?: number | null;
+            commissionShareMinor?: number | null;
+        };
+        StaffRunPnl: {
+            economics: components["schemas"]["StaffRunEconomics"];
+            /** @enum {string} */
+            status: "DRAFT" | "ANNOUNCED" | "OPEN" | "EXTENDED" | "CUT_OFF" | "CONFIRMED" | "COLLECTING" | "OUT_FOR_DELIVERY" | "COMPLETED" | "CANCELLED";
+            /**
+             * @description BEFORE the run is driven, AFTER once completed, CANCELLED: nothing earned or spent
+             * @enum {string}
+             */
+            phase: "BEFORE" | "AFTER" | "CANCELLED";
+            cancelReason?: string | null;
+            /** @description Orders of a cancelled run (each refunded in full) */
+            ordersRefunded: number;
+            /** @description Delivery fees handed back */
+            refundedFeesMinor: number;
+        };
+        StaffWindowPlanRequest: {
+            /**
+             * Format: uuid
+             * @description The location of the closing run (absent: matched by the first city)
+             */
+            locationId?: string | null;
+            targets?: string[];
+            door?: boolean | null;
+            pickup?: boolean | null;
+            /** @description The window's own door fee */
+            doorFeeMinor?: number | null;
+            pickupFeeMinor?: number | null;
+            /** @description The minimum being weighed */
+            minOrders?: number | null;
+            /** @description Orders to show a P&L for (default the minimum) */
+            expectedOrders?: number | null;
+        };
+        StaffWindowPlan: {
+            locationId?: string | null;
+            locationName?: string | null;
+            currency: string;
+            feeMinor: number;
+            /** @enum {string} */
+            dropMode: "DOORSTEP" | "PICKUP_POINT";
+            minOrders: number;
+            /** @description Null when no location serves the targets or the route cannot be measured */
+            economics?: components["schemas"]["StaffRunEconomics"] | null;
+            /** @description Whether the minimum reaches break-even (null without a break-even or a minimum) */
+            minimumCoversBreakEven?: boolean | null;
+            can: components["schemas"]["PreorderCan"];
+        };
+        StaffWindowEconomics: {
+            windowId: string;
+            code?: string;
+            name?: string;
+            status: string;
+            cancelled: boolean;
+            locationId?: string | null;
+            locationName?: string | null;
+            currency: string;
+            minOrders: number;
+            /** @description Orders that count (paid and late adds); 0 for a cancelled window */
+            orders: number;
+            /** @description What customers paid, delivery fees included; 0 for a cancelled window */
+            revenueMinor: number;
+            deliveryFeesMinor: number;
+            /** @description Orders refunded in full by the cancellation */
+            ordersRefunded: number;
+            /** @description Of those, refunds or released authorisations already confirmed */
+            refundsSettled: number;
+            /** @description What customers got back, delivery fees included */
+            refundedMinor: number;
+            /** @description At the actual orders; null when no location serves the window */
+            economics?: components["schemas"]["StaffRunEconomics"] | null;
+            minimumCoversBreakEven?: boolean | null;
+            can: components["schemas"]["PreorderCan"];
+        };
+        StaffRunLocation: {
+            /** Format: uuid */
+            id: string;
+            /** @example bastrop-tx */
+            slug: string;
+            /** @example Bastrop */
+            name: string;
+            market?: string;
+            state?: string | null;
+            timeZone?: string;
+            currency?: string;
+            defaultFeeMinor?: number;
+            defaultMinOrders?: number;
+            /** @enum {string} */
+            dropMode?: "DOORSTEP" | "PICKUP_POINT";
+            whatsappInviteUrl?: string | null;
+            active?: boolean;
+            area?: components["schemas"]["StaffRunArea"];
+            defaultCapacityOrders?: number | null;
+            defaultCapacityPackages?: number | null;
+            /** @enum {string} */
+            defaultCutoffPolicy?: "EXTEND" | "CANCEL";
+            defaultExtendDays?: number;
+            pickupPoint?: {
+                [key: string]: unknown;
+            } | null;
+        } & {
+            [key: string]: unknown;
+        };
+        StaffRunLocationDetail: components["schemas"]["StaffRunLocation"] & {
+            can?: components["schemas"]["PreorderCan"];
+        };
+        /**
+         * @description A town. `areaKind` RADIUS needs `radiusMiles`; POLYGON needs `geoZoneId` (an existing geo-service zone) or
+         *     `polygonGeoJson` (registered as a zone). `centerLat` and `centerLng` are always required: the circle centre and the
+         *     drive destination for run economics. `active` only matters on create.
+         */
+        StaffRunLocationRequest: {
+            /** @example Bastrop */
+            name: string;
+            /**
+             * @description Made from the name and state when absent
+             * @example bastrop-tx
+             */
+            slug?: string;
+            /** @example US */
+            market: string;
+            /** @example TX */
+            state?: string | null;
+            /**
+             * @description IANA time zone; default America/Chicago
+             * @example America/Chicago
+             */
+            timeZone?: string;
+            /** @enum {string} */
+            areaKind: "POLYGON" | "RADIUS";
+            radiusMiles?: number;
+            geoZoneId?: string;
+            polygonGeoJson?: string;
+            centerLat: number;
+            centerLng: number;
+            originLat?: number;
+            originLng?: number;
+            /** @description Delivery fee new runs start from, minor units */
+            defaultFeeMinor?: number;
+            currency?: string;
+            defaultMinOrders?: number;
+            defaultCapacityOrders?: number;
+            defaultCapacityPackages?: number;
+            /** @enum {string} */
+            dropMode?: "DOORSTEP" | "PICKUP_POINT";
+            /** @enum {string} */
+            defaultCutoffPolicy?: "EXTEND" | "CANCEL";
+            defaultExtendDays?: number;
+            /**
+             * @description The community (WhatsApp) link; blank or null clears it
+             * @example https://chat.whatsapp.com/AbCdEf123
+             */
+            whatsappInviteUrl?: string | null;
+            /** @description Create only; the default is on */
+            active?: boolean;
+        };
+        /** @description Why a town is switched off (required) or on (optional); audited with the staff member's name */
+        StaffRunLocationSwitch: {
+            reason?: string;
+        };
+        StaffRunAttribution: {
+            /** Format: uuid */
+            locationId?: string;
+            /** @description Null for the whole town */
+            runId?: string | null;
+            /**
+             * Format: date
+             * @description First day counted (UTC)
+             */
+            since?: string;
+            visits: number;
+            signups: number;
+            rows: components["schemas"]["StaffRunAttributionRow"][];
+        };
+        StaffRunAttributionRow: {
+            /** @example whatsapp */
+            utmSource: string;
+            /** @example social */
+            utmMedium?: string | null;
+            utmCampaign?: string | null;
+            visits: number;
+            signups: number;
+        };
+        StaffRunLocations: {
+            items: components["schemas"]["StaffRunLocation"][];
+            can: components["schemas"]["PreorderCan"];
+        };
+        StaffRun: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            locationId: string;
+            status: string;
+            /** Format: date-time */
+            windowStart: string;
+            /** Format: date-time */
+            windowEnd?: string;
+            /** Format: date-time */
+            cutoffAt: string;
+            feeMinor: number;
+            currency: string;
+            minOrders: number;
+            capacityOrders?: number | null;
+            dropMode?: string;
+            reservedOrders: number;
+            minimumMet?: boolean;
+            cancelReason?: string | null;
+            /** @description The town (resolved by the BFF; never show the id) */
+            locationName?: string | null;
+            /** @description The town's IANA time zone: the run's times read in it */
+            locationTimeZone?: string | null;
+            notes?: string | null;
+            extensions?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        StaffRuns: {
+            items: components["schemas"]["StaffRun"][];
+        };
+        /** @description Where a location delivers: a polygon registered as a zone in geo-service, or a radius around the town */
+        StaffRunArea: {
+            /** @enum {string} */
+            kind: "POLYGON" | "RADIUS";
+            /** @description POLYGON: the geo-service zone */
+            geoZoneId?: string | null;
+            centerLat?: number;
+            centerLng?: number;
+            /** @description RADIUS: miles around the centre */
+            radiusMiles?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        StaffRunRequest: {
+            /**
+             * Format: uuid
+             * @description The location the run goes to; its area is the run's area. A run cannot move to another location.
+             */
+            locationId: string;
+            /**
+             * Format: date-time
+             * @description Delivery window start
+             */
+            windowStart: string;
+            /**
+             * Format: date-time
+             * @description Delivery window end (at most 24 hours after the start)
+             */
+            windowEnd: string;
+            /**
+             * Format: date-time
+             * @description Last moment to order; before the window starts
+             */
+            cutoffAt: string;
+            /**
+             * Format: date-time
+             * @description An announced run opens for orders by itself at this time
+             */
+            opensAt?: string | null;
+            /**
+             * Format: date-time
+             * @description When the driver collects from sellers (between the cutoff and the end of the window)
+             */
+            sellerPickupAt?: string | null;
+            /** @description null or absent: the delivery fee rule for the location's distance prices the run. A number is a custom fee (minor units). */
+            feeMinor?: number | null;
+            /** @description null or absent: the location's default */
+            minOrders?: number | null;
+            /** @description At least the minimum; null or absent: the location's default */
+            capacityOrders?: number | null;
+            capacityPackages?: number | null;
+            /** @enum {string|null} */
+            dropMode?: "DOORSTEP" | "PICKUP_POINT" | null;
+            /**
+             * @description What happens at the cutoff when the minimum is not met: extend once, or cancel and refund
+             * @enum {string|null}
+             */
+            cutoffPolicy?: "EXTEND" | "CANCEL" | null;
+            extendDays?: number | null;
+            /** @description A note for staff and the driver */
+            notes?: string | null;
+        };
+        StaffRunExtendRequest: {
+            /**
+             * Format: date-time
+             * @description The new cutoff; in the future and later than the current one
+             */
+            cutoffAt: string;
+            /** Format: date-time */
+            windowStart?: string | null;
+            /** Format: date-time */
+            windowEnd?: string | null;
+            /** Format: date-time */
+            sellerPickupAt?: string | null;
+            /** @description Why; logged with who and when */
+            reason: string;
+        };
+        StaffRunConfirmRequest: {
+            /** @description Required to confirm a run that has not reached its minimum; logged with who and when */
+            reason?: string | null;
+        };
+        /** @description What the run's status permits (the staff member's own access is `can.manage`) */
+        StaffRunAllowed: {
+            /** @description DRAFT, ANNOUNCED, OPEN or EXTENDED (an open run keeps its fee, cutoff and drop mode) */
+            edit: boolean;
+            /** @description Only a DRAFT */
+            delete: boolean;
+            announce: boolean;
+            open: boolean;
+            extend: boolean;
+            confirm: boolean;
+            /** @description Up to CONFIRMED; refunds every order */
+            cancel: boolean;
+        };
+        StaffRunDetail: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            locationId: string;
+            locationName?: string | null;
+            locationTimeZone?: string | null;
+            location?: components["schemas"]["StaffRunLocation"] | null;
+            /** @enum {string} */
+            status: "DRAFT" | "ANNOUNCED" | "OPEN" | "EXTENDED" | "CUT_OFF" | "CONFIRMED" | "COLLECTING" | "OUT_FOR_DELIVERY" | "COMPLETED" | "CANCELLED";
+            /** Format: date-time */
+            windowStart: string;
+            /** Format: date-time */
+            windowEnd: string;
+            /** Format: date-time */
+            cutoffAt: string;
+            /** Format: date-time */
+            originalCutoffAt?: string;
+            /** Format: date-time */
+            opensAt?: string | null;
+            /** Format: date-time */
+            sellerPickupAt?: string | null;
+            feeMinor: number;
+            currency: string;
+            minOrders: number;
+            capacityOrders?: number | null;
+            capacityPackages?: number | null;
+            /** @enum {string} */
+            dropMode?: "DOORSTEP" | "PICKUP_POINT";
+            pickupPoint?: {
+                [key: string]: unknown;
+            } | null;
+            /** @enum {string} */
+            cutoffPolicy?: "EXTEND" | "CANCEL";
+            extendDays?: number;
+            notes?: string | null;
+            /** @description How many times the cutoff was moved */
+            extensions?: number;
+            reservedOrders: number;
+            reservedPackages?: number;
+            /** @description Room left (null: no capacity limit) */
+            ordersLeft?: number | null;
+            minimumMet: boolean;
+            cancelReason?: string | null;
+            /** @description Fewest orders covering the estimated cost (null: the fee never covers a stop, or geo cannot measure the route) */
+            breakEvenOrders?: number | null;
+            estimate?: {
+                [key: string]: unknown;
+            } | null;
+            milestones?: {
+                [key: string]: unknown;
+            };
+            version?: number;
+            allowed: components["schemas"]["StaffRunAllowed"];
+            can: components["schemas"]["PreorderCan"];
+        };
+        StaffRunLogEntry: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            runId: string;
+            /** @enum {string} */
+            kind: "EXTEND" | "CONFIRM" | "CONFIRM_OVERRIDE" | "CANCEL";
+            /** @description Why; CANCEL and CONFIRM_OVERRIDE always have one */
+            reason?: string | null;
+            /** @description The staff member's name, or System for the cutoff job */
+            actor: string;
+            fromStatus: string;
+            toStatus: string;
+            /** @description Orders on the run at that moment */
+            orders: number;
+            minimum: number;
+            /** Format: date-time */
+            fromCutoff?: string | null;
+            /** Format: date-time */
+            toCutoff?: string | null;
+            /** Format: date-time */
+            at: string;
+        };
+        StaffRunLog: {
+            items: components["schemas"]["StaffRunLogEntry"][];
+        };
+        StaffRunOrder: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            runId: string;
+            orderId: string;
+            /** @description What staff and customers call the order (AT-000123) */
+            orderNumber?: string;
+            customerId?: string;
+            /** @description The customer's name */
+            customerName?: string;
+            packages?: number;
+            /** @enum {string} */
+            status: "RESERVED" | "CONFIRMED" | "RELEASED" | "CANCELLED";
+            /** @description Where the package is: PENDING, COLLECTED, OUT_FOR_DELIVERY, FAILED, DELIVERED or RETURNED */
+            stage?: string;
+            /** Format: date-time */
+            reservedAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: date-time */
+            deliveredAt?: string | null;
+        };
+        StaffRunOrders: {
+            items: components["schemas"]["StaffRunOrder"][];
+        };
+        StaffRunLocationHistory: {
+            location: components["schemas"]["StaffRunLocation"];
+            runs: {
+                /** Format: uuid */
+                id: string;
+                status: string;
+                /** Format: date-time */
+                windowStart: string;
+                /** Format: date-time */
+                cutoffAt: string;
+                orders: number;
+                packages: number;
+                feeMinor: number;
+                /** @description Delivery fees earned; 0 for a cancelled run */
+                feeRevenueMinor: number;
+                /** @description Orders refunded in full (cancelled runs) */
+                ordersRefunded: number;
+                minOrders: number;
+                minimumMet: boolean;
+            }[];
+            subscribers: {
+                locationId?: string;
+                total: number;
+                active: number;
+                pending: number;
+                /** @description Active subscriptions with consent per channel (EMAIL, SMS, PUSH, WHATSAPP) */
+                byChannel: {
+                    [key: string]: number;
+                };
+            };
+            subscriberGrowth: {
+                /** @example 2026-10 */
+                month: string;
+                count: number;
+            }[];
+        };
+        StaffAdvertorialResults: {
+            views: number;
+            clicks: number;
+            /** @description clicks / views x 100 */
+            ctrPct?: number | null;
+            /** @description Orders that came through the advertorial and still stand: a window's pre-orders whose tracking tag carries it, a run's orders whose attribution (`cr=adv-...`) does and that still hold a slot on the run */
+            orders?: number | null;
+        };
+        StaffAdvertorial: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            source: "RUN" | "WINDOW";
+            sourceId: string;
+            sourceName?: string | null;
+            sourceCode?: string | null;
+            sourceStatus?: string | null;
+            /** Format: date-time */
+            sourceCloses?: string | null;
+            locationId?: string | null;
+            locationName?: string | null;
+            /** @example A */
+            variant: string;
+            weight: number;
+            priority: number;
+            /** @description The words follow the window or run until staff edit them */
+            generated: boolean;
+            headline: string;
+            body: string;
+            ctaLabel: string;
+            /** Format: date-time */
+            startsAt?: string | null;
+            /** Format: date-time */
+            endsAt?: string | null;
+            featuredProducts?: components["schemas"]["StaffFeaturedProduct"][];
+            /** @enum {string} */
+            status: "DRAFT" | "LIVE" | "PAUSED" | "ENDED";
+            /** @enum {string|null} */
+            ended?: "SOURCE_CLOSED" | "CANCELLED" | "SCHEDULE" | "STAFF" | null;
+            /** @description Visitors can see it right now */
+            serving: boolean;
+            results: components["schemas"]["StaffAdvertorialResults"];
+            createdBy?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            version: number;
+            can?: components["schemas"]["PreorderCan"];
+        };
+        StaffAdvertorials: {
+            items: components["schemas"]["StaffAdvertorial"][];
+            can: components["schemas"]["PreorderCan"];
+        };
+        StaffAdvertorialGenerateRequest: {
+            /** @enum {string} */
+            source: "RUN" | "WINDOW";
+            /** @description Window id or run id */
+            sourceId: string;
+        };
+        StaffAdvertorialRequest: {
+            /**
+             * @description Required to create; ignored on an edit
+             * @enum {string}
+             */
+            source?: "RUN" | "WINDOW";
+            /** @description Required to create; ignored on an edit */
+            sourceId?: string;
+            /** @example B */
+            variant?: string | null;
+            weight?: number | null;
+            priority?: number | null;
+            headline: string;
+            body?: string | null;
+            ctaLabel: string;
+            /** Format: date-time */
+            startsAt?: string | null;
+            /** Format: date-time */
+            endsAt?: string | null;
+            /** @description Up to four products the card features. Left out on an edit: the current ones stay; an empty list clears them */
+            featuredProducts?: components["schemas"]["StaffFeaturedProduct"][];
+        };
+        StaffFeaturedProductHits: {
+            items: (components["schemas"]["StaffFeaturedProduct"] & {
+                sellerName?: string;
+            })[];
+        };
+        /** @description A product featured on the card. The price is not kept: the product page shows today's */
+        StaffFeaturedProduct: {
+            /** @example ATSHEA0001 */
+            atin: string;
+            title: string;
+            /** @description An https picture */
+            imageUrl?: string | null;
+        };
         StaffPreorderObject: {
             [key: string]: unknown;
         };
@@ -4005,11 +7719,61 @@ export interface components {
                 [key: string]: unknown;
             }[];
             total?: number | null;
-            /** @description Tab counts */
+            /** @description Tab counts: all, open, upcoming, decision (needs a staff decision), closed, draft */
             counts?: {
                 [key: string]: number;
             };
+            /** @description Minimum order count a new window starts with */
+            defaultMinOrders?: number | null;
             can: components["schemas"]["PreorderCan"];
+        } & {
+            [key: string]: unknown;
+        };
+        StaffPreorderReason: {
+            /** @description Why; logged with who and when */
+            reason: string;
+        };
+        StaffPreorderDecisionRequest: {
+            /**
+             * @description CANCEL refunds every order in full; PROCEED goes ahead below the minimum
+             * @enum {string}
+             */
+            decision: "CANCEL" | "PROCEED";
+            /** @description Why; logged with who and when */
+            reason: string;
+        };
+        StaffPreorderDecisions: {
+            items: ({
+                id?: string;
+                /**
+                 * @description AWAITING is the system noting the window closed below its minimum
+                 * @enum {string}
+                 */
+                kind: "AWAITING" | "PROCEED" | "CANCEL" | "EARLY_CLOSE";
+                reason: string;
+                /** @description Staff subject, or system */
+                actor: string;
+                /** @description Orders that counted */
+                orders?: number;
+                minimum?: number;
+                /** Format: date-time */
+                at: string;
+            } & {
+                [key: string]: unknown;
+            })[];
+        };
+        StaffPreorderRefunds: {
+            total: number;
+            /** @description Cancelled; orders-service is refunding */
+            pending: number;
+            /** @description Captured payment refunded in full */
+            refunded: number;
+            /** @description Nothing had been captured; the authorisation was released */
+            voided: number;
+            /** @description Could not be refunded automatically; staff must act */
+            failed: number;
+            /** @description None pending or failed */
+            done: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -4040,6 +7804,8 @@ export interface components {
             doorFeeOverride?: number | null;
             pickupFeeOverride?: number | null;
             showCount?: boolean;
+            /** @description Fewest orders the window needs (0 = none). Null: the default on create (`defaultMinOrders` of the list), unchanged on edit. Below it at the close date the window waits for a staff decision */
+            minOrders?: number | null;
             comms?: string[];
             version?: number;
         } & {
@@ -4050,8 +7816,23 @@ export interface components {
             /** @example LBK-7 */
             code?: string;
             name?: string;
-            /** @description DRAFT, PAUSED, UPCOMING, OPEN, CLOSED, DELIVERED (derived) */
+            /** @description DRAFT, PAUSED, UPCOMING, OPEN, CLOSED, DELIVERED, AWAITING_DECISION (closed below its minimum), CANCELLED */
             status?: string;
+            /** @description Fewest orders the window needs (0 = none) */
+            minOrders?: number;
+            /** @description Orders that count (paid and late adds) */
+            orderCount?: number;
+            /** @description A minimum is set and orderCount has reached it */
+            minimumMet?: boolean;
+            /** @description OPEN with the minimum met: staff may close it early */
+            canCloseEarly?: boolean;
+            /** @description AWAITING_DECISION: staff must cancel or proceed */
+            decisionNeeded?: boolean;
+            /**
+             * @description What became of the window beyond its dates
+             * @enum {string|null}
+             */
+            outcome?: "AWAITING_DECISION" | "PROCEEDED" | "CANCELLED" | null;
             /** @description Window override in minor units (null = the settings' fee for its currency) */
             doorFeeOverride?: number | null;
             pickupFeeOverride?: number | null;
@@ -4133,7 +7914,7 @@ export interface components {
         };
         /**
          * @description Platform settings (delivery-runs): enabled, fallback (SHIP | WAITLIST), placements {ribbon, hero, badge, pdp,
-         *     cart, family}, payment {doorFee and pickupFee (per currency, minor units), pickupWindow, allowedMethods
+         *     cart, family}, payment {pickupWindow, allowedMethods
          *     [CARD, WALLET, ACH], lateAdd {savedCard, paymentLink, linkExpiryHours}, missedDelivery {offerRefund,
          *     offerNewDate}}. Answers carry `can`.
          */
@@ -4145,26 +7926,6 @@ export interface components {
                 [key: string]: boolean;
             };
             payment?: {
-                /**
-                 * @description Minor units per currency
-                 * @example {
-                 *       "USD": 799,
-                 *       "CAD": 999
-                 *     }
-                 */
-                doorFee?: {
-                    [key: string]: number;
-                };
-                /**
-                 * @description Minor units per currency
-                 * @example {
-                 *       "USD": 0,
-                 *       "CAD": 0
-                 *     }
-                 */
-                pickupFee?: {
-                    [key: string]: number;
-                };
                 /** @example 10am–2pm */
                 pickupWindow?: string;
                 allowedMethods?: ("CARD" | "WALLET" | "ACH")[];
@@ -4569,8 +8330,16 @@ export interface components {
         RecordId: string;
         ExportId: string;
         ShipmentId: string;
+        /** @description Delivery run id (delivery-runs) */
+        RunId: string;
         /** @description Window id or code */
         PreorderId: string;
+        LocationId: string;
+        PreorderRunId: string;
+        AdvertorialId: string;
+        DeliveryFeeMethod: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
+        /** @description ISO 4217 code, for example USD */
+        DeliveryFeeCurrency: string;
         CreativeSlot: "HERO" | "PDP" | "STORY" | "FEED" | "EMAIL";
         /** @example order.confirmed */
         TemplateKey: string;
@@ -4582,6 +8351,10 @@ export interface components {
         MarketRegionCode: string;
         /** @description The version from the ETag (optimistic locking). */
         IfMatch: string;
+        PlanCode: string;
+        BillingId: string;
+        BillingOrgId: string;
+        BillingInvoiceId: string;
     };
     requestBodies: never;
     headers: never;
@@ -4636,6 +8409,96 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+        };
+    };
+    getStaffAssistant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAssistantStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    staffAssistantChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    message: string;
+                    history?: {
+                        /** @enum {string} */
+                        role: "user" | "assistant";
+                        content: string;
+                    }[];
+                    language?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Answer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAssistantReply"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    searchStaffLookup: {
+        parameters: {
+            query?: {
+                /** @description Part of the name; 2 characters or more when given */
+                q?: string;
+            };
+            header?: never;
+            path: {
+                kind: "drivers" | "sellers";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matches */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffLookupResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
         };
     };
     listStaffResource: {
@@ -4814,6 +8677,30 @@ export interface operations {
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
+        };
+    };
+    openStaffRecordFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource: string;
+                id: string;
+                fileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to the file */
+            302: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Problem"];
         };
     };
     addStaffNote: {
@@ -5154,6 +9041,1049 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    listStaffPlans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffCreatePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffUpdatePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveStaffPlanDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPlanPrices"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    publishStaffPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    retireStaffPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setStaffPlanInvites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPlanInvitesRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewStaffPlanMigration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlanMigrationPreview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    migrateStaffPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StaffPlanMigrationRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlanMigrationResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffTrialCampaigns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTrialCampaign"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffTrialCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTrialCampaignRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTrialCampaign"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffTrialCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["BillingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTrialCampaignRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTrialCampaign"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setStaffTrialCampaignStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["BillingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffBillingStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTrialCampaign"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffRewardRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRewardRule"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffRewardRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRewardRuleRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRewardRule"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewStaffRewardRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRewardRuleRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRewardPreview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffRewardRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["BillingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRewardRuleRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRewardRule"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setStaffRewardRuleStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["BillingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffBillingStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRewardRule"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffBillingGrants: {
+        parameters: {
+            query?: {
+                orgId?: string;
+                source?: string;
+                type?: string;
+                ruleId?: string;
+                q?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrantPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffBillingReasonCodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingReasonCode"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    searchStaffBillingOrgs: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingOrgSearch"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffBillingPanel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingPanel"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    creditStaffBillingOrg: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffCreditRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    giveStaffBillingFreeDays: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffDaysRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    giveStaffBillingFreeMonths: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffMonthsRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setStaffBillingChargeGate: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffChargeGateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    clearStaffBillingChargeGate: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffWaiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    overrideStaffBillingTrial: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffDaysRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    waiveStaffBillingInvoice: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+                invoiceId: components["parameters"]["BillingInvoiceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffWaiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    assignStaffPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffAssignPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlanChange"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    overrideStaffPlanFeeCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPlanFeeCollectionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlanFeeCollection"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffBillingSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffBillingSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffBillingSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     getStaffFees: {
         parameters: {
             query?: never;
@@ -5303,6 +10233,196 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    importStaffTaxRates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxRatesImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Import result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxRatesImportResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listNegotiatedRates: {
+        parameters: {
+            query?: {
+                orgId?: string;
+                type?: "COMMISSION" | "CONNECTION_FEE" | "FBA_FEE";
+                status?: "SCHEDULED" | "ACTIVE" | "ENDED" | "EXPIRED";
+                q?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Negotiated rates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NegotiatedRatePage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createNegotiatedRate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NegotiatedRateDraft"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NegotiatedRate"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    endNegotiatedRate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rateId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NegotiatedRateEnd"];
+            };
+        };
+        responses: {
+            /** @description Ended */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NegotiatedRate"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    calculateFeeRate: {
+        parameters: {
+            query: {
+                orgId: string;
+                category: string;
+                kind?: "PRODUCT" | "SERVICE";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Effective rate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeRateQuote"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    negotiatePlanPrice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NegotiatedPlanDraft"];
+            };
+        };
+        responses: {
+            /** @description Private plan created and the organisation invited */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NegotiatedPlan"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     listStaffPickups: {
         parameters: {
             query?: {
@@ -5414,6 +10534,125 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffRuns: {
+        parameters: {
+            query?: {
+                /** @description Dispatch status */
+                status?: "PENDING" | "PLANNED" | "CANCELLED";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDispatchList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Delivery run id (delivery-runs) */
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDispatch"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    planStaffRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Delivery run id (delivery-runs) */
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Planned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDispatch"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    advanceStaffRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Delivery run id (delivery-runs) */
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunAdvanceRequest"];
+            };
+        };
+        responses: {
+            /** @description Moved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDispatch"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
@@ -5599,6 +10838,60 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    inspectIdentityToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentityTokenInspectionRequest"];
+            };
+        };
+        responses: {
+            /** @description What the token says and whether it checks out */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityTokenInspection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getIdentityDocuments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The documents */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityDocuments"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
@@ -6275,6 +11568,174 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    decideStaffPreorder: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPreorderDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Decided */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    cancelStaffPreorder: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPreorderReason"];
+            };
+        };
+        responses: {
+            /** @description Cancelled */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    closeEarlyStaffPreorder: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPreorderReason"];
+            };
+        };
+        responses: {
+            /** @description Closing */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffPreorderDecisions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Decisions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderDecisions"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPreorderRefunds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Refund progress */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderRefunds"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     putStaffPreorderCreative: {
         parameters: {
             query?: never;
@@ -6471,6 +11932,1094 @@ export interface operations {
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffDeliveryFees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rules */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDeliveryFeeRules"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffDeliveryFeeChanges: {
+        parameters: {
+            query?: {
+                method?: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
+                currency?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Changes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDeliveryFeeChanges"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewStaffDeliveryFee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffDeliveryFeePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Resolution */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDeliveryFeePreview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffDeliveryFee: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                method: components["parameters"]["DeliveryFeeMethod"];
+                /** @description ISO 4217 code, for example USD */
+                currency: components["parameters"]["DeliveryFeeCurrency"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffDeliveryFeeRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDeliveryFeeRule"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffEconomicsSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cost model */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffEconomicsSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffEconomicsSettings: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffEconomicsSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffEconomicsSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffEconomicsChanges: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Changes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffEconomicsChanges"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewStaffWindowEconomics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffWindowPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Plan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffWindowPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPreorderEconomics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Economics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffWindowEconomics"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffRunLocations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Locations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocations"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffRunLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunLocationRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocationDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffRunLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                locationId: components["parameters"]["LocationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunLocationRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocationDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deactivateStaffRunLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                locationId: components["parameters"]["LocationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunLocationSwitch"];
+            };
+        };
+        responses: {
+            /** @description Switched off */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocationDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    activateStaffRunLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                locationId: components["parameters"]["LocationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StaffRunLocationSwitch"];
+            };
+        };
+        responses: {
+            /** @description Switched on */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocationDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffRunLocationHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                locationId: components["parameters"]["LocationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description History */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocationHistory"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffRunLocationAttribution: {
+        parameters: {
+            query?: {
+                /** @description Only the visits of this run's link */
+                runId?: string;
+                days?: number;
+            };
+            header?: never;
+            path: {
+                locationId: components["parameters"]["LocationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Counters */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunAttribution"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffPreorderRuns: {
+        parameters: {
+            query?: {
+                locationId?: string;
+                /** @description One or more run statuses, comma separated (OPEN,CONFIRMED,CANCELLED…) */
+                status?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRuns"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Scheduled */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deleteStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    announceStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Announced */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    openStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Open */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    extendStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunExtendRequest"];
+            };
+        };
+        responses: {
+            /** @description Extended */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    confirmStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StaffRunConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Confirmed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    cancelStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPreorderReason"];
+            };
+        };
+        responses: {
+            /** @description Cancelled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffDeliveryRunLog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Log */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLog"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffDeliveryRunOrders: {
+        parameters: {
+            query?: {
+                status?: "RESERVED" | "CONFIRMED" | "RELEASED" | "CANCELLED";
+            };
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Orders */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunOrders"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffRunPnl: {
+        parameters: {
+            query?: {
+                commissionShareMinor?: number;
+            };
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description P&L */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunPnl"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewStaffRunEconomics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Economics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunEconomics"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    searchStaffFeaturedProducts: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Products */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffFeaturedProductHits"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffAdvertorials: {
+        parameters: {
+            query?: {
+                source?: "RUN" | "WINDOW";
+                sourceId?: string;
+                status?: "DRAFT" | "LIVE" | "PAUSED" | "ENDED";
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Advertorials */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAdvertorials"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffAdvertorial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffAdvertorialRequest"];
+            };
+        };
+        responses: {
+            /** @description Draft */
+            201: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAdvertorial"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    generateStaffAdvertorial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffAdvertorialGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Advertorial */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAdvertorial"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffAdvertorial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                advertorialId: components["parameters"]["AdvertorialId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Advertorial */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAdvertorial"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffAdvertorial: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                advertorialId: components["parameters"]["AdvertorialId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffAdvertorialRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAdvertorial"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    actStaffAdvertorial: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                advertorialId: components["parameters"]["AdvertorialId"];
+                action: "publish" | "pause" | "end";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Advertorial */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAdvertorial"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };
@@ -6925,6 +13474,58 @@ export interface operations {
     getStaffNodes: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffCurrencies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffExchangeRatesCurrent: {
+        parameters: {
+            query?: {
+                asOf?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;

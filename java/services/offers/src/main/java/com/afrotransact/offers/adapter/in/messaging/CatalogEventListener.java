@@ -18,7 +18,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Consumes {@code catalog.product.*} from {@code at.product.events} (key = product id). created → the creating
- * seller's offers; approved / resumed / reinstated / rejected / paused / taken_down → offers on the page become live
+ * seller's offers; terms_changed → their price, quantity, "was" price, handling time and ship-from (S307); approved / resumed / reinstated / rejected / paused / taken_down → offers on the page become live
  * or not (a takedown suppresses them: off the buy box and every public read). Malformed
  * messages are logged and skipped; use-case failures propagate so the container retries the record.
  */
@@ -26,6 +26,7 @@ import tools.jackson.databind.json.JsonMapper;
 class CatalogEventListener {
 
     static final String CREATED = "catalog.product.created";
+    static final String TERMS_CHANGED = "catalog.product.terms_changed";
     static final Set<String> STATUS_EVENTS = Set.of("catalog.product.approved", "catalog.product.rejected",
             "catalog.product.paused", "catalog.product.resumed", "catalog.product.taken_down",
             "catalog.product.reinstated");
@@ -43,12 +44,17 @@ class CatalogEventListener {
     /** Wire format of catalog's ProductEventPayload (contracts/asyncapi/fragments/catalog.yaml). */
     @JsonIgnoreProperties(ignoreUnknown = true)
     record ProductMessage(UUID productId, String atin, String ownerKind, String ownerOrgId, String status,
-                          UUID categoryId, List<VariantMessage> variants) {
+                          UUID categoryId, List<VariantMessage> variants, String condition, String fulfilment,
+                          Integer handlingDays, ShipFromMessage shipFrom) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record VariantMessage(String atin, String sellerSku, String gtin, long priceMinor, String currency,
-                          int quantity) {
+                          int quantity, Long compareAtMinor) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record ShipFromMessage(String locationId, String city, String region, String country, String postalCode) {
     }
 
     @KafkaListener(id = "offers-catalog-products", groupId = "${spring.kafka.consumer.group-id:offers-service}",
@@ -56,7 +62,7 @@ class CatalogEventListener {
             autoStartup = "${at.consumers.enabled:true}")
     void onMessage(ConsumerRecord<String, String> rec) {
         String type = EventHeaders.text(rec, EventHeaders.EVENT_TYPE).orElse("");
-        if (!CREATED.equals(type) && !STATUS_EVENTS.contains(type)) {
+        if (!CREATED.equals(type) && !TERMS_CHANGED.equals(type) && !STATUS_EVENTS.contains(type)) {
             return;
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
@@ -79,10 +85,14 @@ class CatalogEventListener {
         ProductSnapshot snapshot = new ProductSnapshot(m.productId(), m.atin(), m.ownerKind(), m.ownerOrgId(),
                 m.status(), m.categoryId(), m.variants() == null ? List.of() : m.variants().stream()
                         .map(v -> new ProductSnapshot.VariantSnapshot(v.atin(), v.sellerSku(), v.gtin(),
-                                v.priceMinor(), v.currency(), v.quantity()))
-                        .toList());
+                                v.priceMinor(), v.currency(), v.quantity(), v.compareAtMinor()))
+                        .toList(), m.condition(), m.fulfilment(), m.handlingDays(),
+                m.shipFrom() == null ? null : new ProductSnapshot.ShipFromSnapshot(m.shipFrom().locationId(),
+                        m.shipFrom().city(), m.shipFrom().region(), m.shipFrom().country(), m.shipFrom().postalCode()));
         if (CREATED.equals(type)) {
             sync.productCreated(eventId.get(), snapshot);
+        } else if (TERMS_CHANGED.equals(type)) {
+            sync.termsChanged(eventId.get(), snapshot);
         } else {
             sync.productStatusChanged(eventId.get(), type, snapshot);
         }

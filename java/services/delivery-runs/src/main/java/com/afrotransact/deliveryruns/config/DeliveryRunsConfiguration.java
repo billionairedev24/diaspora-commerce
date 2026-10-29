@@ -9,6 +9,7 @@ import com.afrotransact.deliveryruns.adapter.out.http.HttpOrdersClient;
 import com.afrotransact.deliveryruns.adapter.out.http.HttpProductSearch;
 import com.afrotransact.deliveryruns.adapter.out.places.GeoPlaceDirectory;
 import com.afrotransact.deliveryruns.application.DeliveryRunsSettings;
+import com.afrotransact.deliveryruns.application.EconomicsBook;
 import com.afrotransact.deliveryruns.application.PreorderOptions;
 import com.afrotransact.deliveryruns.domain.AreaKey;
 import com.afrotransact.deliveryruns.domain.CutoffDecisionPolicy;
@@ -42,8 +43,8 @@ class DeliveryRunsConfiguration {
     }
 
     @Bean
-    RunEconomicsCalculator runEconomicsCalculator(EconomicsSettings settings) {
-        return new DefaultRunEconomicsCalculator(settings);
+    RunEconomicsCalculator runEconomicsCalculator(EconomicsBook economics) {
+        return new DefaultRunEconomicsCalculator(economics);
     }
 
     @Bean
@@ -68,7 +69,7 @@ class DeliveryRunsConfiguration {
         DeliveryRunsProperties.Preorders o = p.preorders();
         return new PreorderOptions(o.pagePath(), o.metroCities().stream().filter(k -> !k.isBlank())
                         .map(AreaKey::parse).toList(),
-                o.retentionDays(), o.seedDemoAreas(), o.supportPhone());
+                o.retentionDays(), o.seedDemoAreas(), o.supportPhone(), o.defaultMinOrders());
     }
 
     @Bean

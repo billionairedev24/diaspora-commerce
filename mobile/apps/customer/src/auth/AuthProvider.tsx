@@ -5,12 +5,15 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import { AppState } from 'react-native';
 
 import { type TokenSource } from '@/api/http';
+import { env } from '@/config/env';
 import { decodeJwt, initialsOf, isExpiring } from '@/domain/jwt';
 import { phaseOnLaunch, type SessionPhase, shouldLockOnResume } from '@/domain/lockPolicy';
+import { type SecondFactor, type SignInStep } from '@/domain/nativeSignIn';
 import { digestsEqual, LOCKED_OUT_MESSAGE, passcodeDigestInput, recordUnlockAttempt, type UnlockResult } from '@/domain/passcode';
 
 import { authenticateBiometric, biometricLabel, biometricsAvailable } from './biometrics';
-import { refreshTokens, revokeTokens, type SignInIntent, signInWithIdentity, type TokenSet } from './oidc';
+import { beginNativeSignIn, type NativeAttempt } from './nativeAuth';
+import { refreshTokens, revokeTokens, SessionGone, type SignInIntent, signInWithIdentity, type TokenSet } from './oidc';
 import { secureStorage } from './secureStorage';
 
 const K = { tokens: 'at.customer.tokens', passcode: 'at.customer.passcode', faceId: 'at.customer.faceId', setup: 'at.customer.setupComplete', attempts: 'at.customer.passcodeAttempts' };
@@ -36,7 +39,14 @@ interface AuthContextValue {
   /** Message shown on the sign-in screen (e.g. after five wrong passcodes). */
   flash: string;
   tokenSource: TokenSource;
+  /** Hosted identity page (browser sheet): social providers, passkeys and creating an account. */
   signIn(intent: SignInIntent): Promise<void>;
+  /** In-app form: email + password. Resolves a second-factor step when the account needs one, else signs in. */
+  signInWithPassword(email: string, password: string): Promise<SignInStep>;
+  sendSignInCode(): Promise<string>;
+  verifySecondFactor(factor: SecondFactor, code: string, trustDevice: boolean): Promise<SignInStep>;
+  /** Drops a half-finished sign-in (back from the code screen). */
+  cancelSignIn(): void;
   setFaceId(enabled: boolean): Promise<boolean>;
   savePasscode(pin: string): Promise<void>;
   finishSetup(): Promise<void>;
@@ -77,6 +87,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [passcodePrompt, setPasscodePrompt] = useState<AuthContextValue['passcodePrompt']>(null);
   const tokens = useRef<TokenSet | null>(null);
   const refreshing = useRef<Promise<string | null> | null>(null);
+  const attempt = useRef<NativeAttempt | null>(null);
+  const goneReason = useRef('');
+  const ending = useRef(false);
   const hooks = useRef(new Set<() => Promise<void>>());
   const backgroundedAt = useRef<number | null>(null);
   const phaseRef = useRef(phase);
@@ -141,6 +154,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await secureStorage.set(K.tokens, JSON.stringify(t));
   }, []);
 
+  /* null = the session is gone (the refresh token is no longer accepted); a thrown error = could not tell (offline,
+     identity restarting): the session is kept and the next request tries again. */
   const refreshAccessToken = useCallback(async (): Promise<string | null> => {
     if (!tokens.current) return null;
     refreshing.current ??= (async () => {
@@ -148,8 +163,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const t = await refreshTokens(tokens.current as TokenSet);
         await persistTokens(t);
         return t.accessToken;
-      } catch {
-        return null;
+      } catch (e) {
+        if (e instanceof SessionGone) {
+          goneReason.current = e.reason;
+          return null;
+        }
+        throw e;
       } finally {
         refreshing.current = null;
       }
@@ -161,22 +180,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getAccessToken: async () => {
       const t = tokens.current;
       if (!t) return null;
-      if (isExpiring(t.expiresAt, Date.now())) return refreshAccessToken();
-      return t.accessToken;
+      if (!isExpiring(t.expiresAt, Date.now())) return t.accessToken;
+      try {
+        return await refreshAccessToken();
+      } catch {
+        return t.accessToken; // could not reach identity: let the request try, the 401 path decides
+      }
     },
     refreshAccessToken,
-    onSessionExpired: () => { void signOut({ flash: 'Your session ended. Sign in again.' }); }
+    onSessionExpired: () => {
+      // Several requests fail together: the first one ends the session, the rest must not overwrite its reason.
+      if (ending.current || !tokens.current) return;
+      ending.current = true;
+      void signOut({ flash: `Your session ended. Sign in again.${env.appEnv !== 'prod' && goneReason.current ? ` (${goneReason.current})` : ''}` });
+    }
   }), [refreshAccessToken, signOut]);
 
-  const signIn = useCallback(async (intent: SignInIntent) => {
-    const t = await signInWithIdentity(intent);
+  /* A new sign-in on this phone starts the first-time setup (Face ID → passcode → notifications) unless it was done. */
+  const startSession = useCallback(async (t: TokenSet) => {
+    ending.current = false;
+    goneReason.current = '';
     await persistTokens(t);
     setUser(userFrom(t));
     setFlash('');
     await secureStorage.set(K.attempts, '0');
+    const passcode = await secureStorage.get(K.passcode);
+    const done = (await secureStorage.get(K.setup)) === '1';
+    if (done && passcode) {
+      setPhase('unlocked');
+      return;
+    }
     setSetupStep('face-id');
     setPhase('setup');
   }, [persistTokens]);
+
+  const signIn = useCallback(async (intent: SignInIntent) => {
+    await startSession(await signInWithIdentity(intent));
+  }, [startSession]);
+
+  const settle = useCallback(async (step: SignInStep): Promise<SignInStep> => {
+    const t = attempt.current?.tokens();
+    if (step.kind === 'done' && t) {
+      attempt.current = null;
+      await startSession(t);
+    }
+    return step;
+  }, [startSession]);
+
+  const signInWithPassword = useCallback(async (email: string, password: string) => {
+    attempt.current = await beginNativeSignIn();
+    return settle(await attempt.current.password(email, password));
+  }, [settle]);
+
+  const sendSignInCode = useCallback(async () => {
+    if (!attempt.current) throw new Error('Start again');
+    return attempt.current.sendSmsCode();
+  }, []);
+
+  const verifySecondFactor = useCallback(async (factor: SecondFactor, code: string, trustDevice: boolean) => {
+    if (!attempt.current) throw new Error('Start again');
+    return settle(await attempt.current.verify(factor, code, trustDevice));
+  }, [settle]);
+
+  const cancelSignIn = useCallback(() => { attempt.current = null; }, []);
 
   const setFaceId = useCallback(async (enabled: boolean) => {
     if (enabled) {
@@ -240,10 +306,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(() => ({
     ready, phase, setupStep, user, faceId, biometryLabel, flash, tokenSource, passcodePrompt,
-    signIn, setFaceId, savePasscode, finishSetup, unlockWithPasscode, unlockWithBiometrics, verifyPasscode,
+    signIn, signInWithPassword, sendSignInCode, verifySecondFactor, cancelSignIn, setFaceId, savePasscode, finishSetup, unlockWithPasscode, unlockWithBiometrics, verifyPasscode,
     lock: () => setPhase((p) => (p === 'unlocked' ? 'locked' : p)),
     signOut, confirmWithDevice, onSignOut
-  }), [ready, phase, setupStep, user, faceId, biometryLabel, flash, tokenSource, passcodePrompt, signIn, setFaceId, savePasscode, finishSetup, unlockWithPasscode, unlockWithBiometrics, verifyPasscode, signOut, confirmWithDevice, onSignOut]);
+  }), [ready, phase, setupStep, user, faceId, biometryLabel, flash, tokenSource, passcodePrompt, signIn, signInWithPassword, sendSignInCode, verifySecondFactor, cancelSignIn, setFaceId, savePasscode, finishSetup, unlockWithPasscode, unlockWithBiometrics, verifyPasscode, signOut, confirmWithDevice, onSignOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

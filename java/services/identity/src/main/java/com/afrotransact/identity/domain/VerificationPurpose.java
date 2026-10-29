@@ -9,5 +9,7 @@ public enum VerificationPurpose {
     /** Confirm a phone number before enabling SMS codes (SMS). */
     SMS_ENROLMENT,
     /** Confirm the account's phone number so notifications may text it (SMS, independent of MFA). */
-    PHONE_VERIFICATION
+    PHONE_VERIFICATION,
+    /** Set a new password after "Forgot password?" (email, and SMS to a verified phone: one code for both). */
+    PASSWORD_RESET
 }

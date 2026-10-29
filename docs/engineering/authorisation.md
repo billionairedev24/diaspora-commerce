@@ -177,3 +177,18 @@ check cache.
   `identity.role.granted` events or `fga tuple write --file`.
 - **Caching and staleness:** each service instance caches answers for `cache-ttl` (5 s); OpenFGA caches checks for
   10 s. A revoked membership stops working everywhere within ≈ 15 s of authz-sync applying the event.
+
+## 6. Shopper or organisation member: the acting context
+
+Identity issues one token per person. A person who belongs to a seller or provider organisation gets
+`pt=SELLER_MEMBER` / `PROVIDER_MEMBER` and the `org` of their active organisation, whichever app asked for the token.
+That person is still a shopper. Requests from the storefront and the customer app therefore carry
+`X-Acting-As: CUSTOMER` ([ADR 0002](../adr/0002-acting-as-a-shopper.md)), and platform-security's `ActorResolver`
+and go/pkg/auth's `Middleware` turn the person into a `CUSTOMER` of their own subject, with no organisation:
+
+- **gateway-bff** sends it on every upstream call of a storefront or customer-app route (everything except
+  `/v1/seller/**` and `/v1/staff/**`). Seller Center and Provider Hub relay the token as issued.
+- **A service relaying a shopper's token** forwards it (orders → cart / identity at checkout, ai-gateway's Lola
+  tools). Code that checks `actor.type() == CUSTOMER` needs nothing else.
+- **Staff, services, partner apps and AI agents** are never changed. The header can only narrow a person to a
+  shopper.

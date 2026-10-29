@@ -1,12 +1,10 @@
-# Shared dev cluster: per-PR preview namespaces; API reference pages on. Temporal Cloud namespace per environment
-# (e.g. afrotransact-dev.<account>) with mTLS client certificates from the secret store.
+# Shared dev cluster: per-PR preview namespaces; API reference pages on. Temporal is the in-cluster one
+# (infra/k8s/platform/lean/temporal.yaml, no TLS). For a Temporal Cloud namespace (mTLS client certificates) add the
+# profile temporal-cloud after dev: SPRING_PROFILES_ACTIVE=dev,temporal-cloud (application-temporal-cloud.yml).
 spring:
   temporal:
     connection:
       target: ${TEMPORAL_TARGET}
-      mtls:
-        cert-chain: ${TEMPORAL_TLS_CERT}
-        key: ${TEMPORAL_TLS_KEY}
     namespace: ${TEMPORAL_NAMESPACE:afrotransact-dev}
 at:
   security:

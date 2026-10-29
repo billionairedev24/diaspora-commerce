@@ -1,5 +1,7 @@
 /* TanStack Query key factories for the mobile-only resources. BFF resources reuse the factories of
    @afrotransact/api-client (cartKeys, productKeys, searchKeys, accountKeys) so keys stay identical to the web. */
+import { accountKeys } from '@afrotransact/api-client';
+
 export { accountKeys, cartKeys, productKeys, searchKeys } from '@afrotransact/api-client';
 
 export const checkoutKeys = {
@@ -10,6 +12,12 @@ export const checkoutKeys = {
 export const orderKeys = {
   all: ['orders'] as const,
   tracking: (orderNumber: string) => [...orderKeys.all, 'tracking', orderNumber] as const
+};
+
+/** The shopper's own review of a product (S324); under the account keys so signing out drops it. */
+export const reviewKeys = {
+  all: [...accountKeys.all, 'reviews'] as const,
+  mine: (atin: string) => [...accountKeys.all, 'reviews', atin, 'mine'] as const
 };
 
 export const bookingKeys = {

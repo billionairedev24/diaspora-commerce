@@ -8,7 +8,7 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <!-- Target is 4.1.4; pinned to the latest GA on Maven Central until 4.1.4 ships. -->
-        <version>4.1.1</version>
+        <version>4.1.2</version>
         <relativePath/>
     </parent>
 
@@ -24,16 +24,17 @@
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <spring-ai.version>2.0.1</spring-ai.version>
+        <spring-ai.version>2.0.2</spring-ai.version>
         <springdoc.version>3.1.1</springdoc.version>
         <archunit.version>1.5.1</archunit.version>
         <stripe.version>34.0.0</stripe.version>
         <temporal.version>1.40.0</temporal.version>
         <logstash-encoder.version>9.0</logstash-encoder.version>
-        <resend.version>4.28.0</resend.version>
+        <resend.version>4.29.0</resend.version>
         <!-- Security: Jackson 3.1.5 (Boot 4.1.1 BOM) has 5 CVEs; lz4-java 1.10.1 (via kafka-clients) has CVE-2026-106451. -->
-        <jackson-bom.version>3.1.7</jackson-bom.version>
-        <lz4-java.version>1.12.0</lz4-java.version>
+        <jackson-bom.version>3.1.8</jackson-bom.version>
+        <jackson-2-bom.version>2.21.8</jackson-2-bom.version>
+        <lz4-java.version>1.12.1</lz4-java.version>
         <!-- Security: Tomcat 11.0.24 (Boot 4.1.1 BOM) has CRITICAL CVE-2026-65182/65905/68525. -->
         <tomcat.version>11.0.25</tomcat.version>
 
@@ -151,8 +152,13 @@
                         <container>
                             <user>1000:1000</user>
                             <jvmFlags>
-                                <jvmFlag>-XX:MaxRAMPercentage=75</jvmFlag>
-                                <jvmFlag>-XX:+UseZGC</jvmFlag>
+                                <jvmFlag>-XX:MaxRAMPercentage=70</jvmFlag>
+                                <jvmFlag>-XX:+UseSerialGC</jvmFlag>
+                                <jvmFlag>-XX:TieredStopAtLevel=1</jvmFlag>
+                                <jvmFlag>-Xss512k</jvmFlag>
+                                <jvmFlag>-XX:-UsePerfData</jvmFlag>
+                                <jvmFlag>-XX:ReservedCodeCacheSize=64m</jvmFlag>
+                                <jvmFlag>-XX:+ExitOnOutOfMemoryError</jvmFlag>
                             </jvmFlags>
                         </container>
                     </configuration>

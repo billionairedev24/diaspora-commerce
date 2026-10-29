@@ -150,3 +150,12 @@ select.control { padding: 0 var(--at-space-2); cursor: pointer; }
   .check input { margin-top: 0; }
   .links a, .toggle a, .btn-link { display: inline-flex; align-items: center; min-height: var(--at-size-touch); }
 }
+
+/* A submitted form: the button shows a spinner in place of its label until the next page arrives. */
+.btn[aria-busy="true"] { color: transparent; pointer-events: none; cursor: progress; }
+.btn[aria-busy="true"]::after { content: ""; position: absolute; width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid var(--at-color-action-primary-text); border-right-color: transparent; animation: auth-spin 0.8s linear infinite; }
+.btn-dark[aria-busy="true"]::after { border-color: var(--at-ink-0); border-right-color: transparent; }
+.btn-neutral[aria-busy="true"]::after { border-color: var(--at-color-text); border-right-color: transparent; }
+.btn[aria-busy="true"] svg { visibility: hidden; }
+@keyframes auth-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .btn[aria-busy="true"]::after { animation-duration: 2.4s; } }

@@ -38,6 +38,10 @@ func (i *inspectorImpl) Inspect(r io.Reader, size int64, declaredType string) (d
 	if bytes.HasPrefix(head, []byte("RIFF")) && len(head) >= 12 && string(head[8:12]) == "WEBP" {
 		ct = "image/webp"
 	}
+	if isHEIC(head) {
+		// No dimensions: the standard library cannot decode HEIC, so only the type and size rules apply.
+		return domain.Inspection{ContentType: domain.ContentTypeHEIC, Bytes: size}, nil
+	}
 	in := domain.Inspection{ContentType: ct, Bytes: size}
 	switch {
 	case strings.HasPrefix(ct, "text/plain") && declaredType == domain.ContentTypeCSV:
@@ -91,6 +95,18 @@ func (i *inspectorImpl) Inspect(r io.Reader, size int64, declaredType string) (d
 	}
 	in.BorderBrightness = borderBrightness(img)
 	return in, nil
+}
+
+// isHEIC reports whether the head starts with an ISO base media "ftyp" box of a HEIF image brand.
+func isHEIC(head []byte) bool {
+	if len(head) < 12 || string(head[4:8]) != "ftyp" {
+		return false
+	}
+	switch string(head[8:12]) {
+	case "heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1":
+		return true
+	}
+	return false
 }
 
 // zipLocalHeader starts every member of a ZIP archive.

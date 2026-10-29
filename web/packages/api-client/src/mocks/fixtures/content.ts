@@ -65,6 +65,7 @@ export const SITE_CONFIG: SiteConfig = {
   ],
   contacts: {
     phone: '+1 (833) 555-0199',
+    phoneE164: '+18335550199',
     privacyEmail: 'privacy@afrotransact.com',
     accessibilityEmail: 'accessibility@afrotransact.com',
     legalEmail: 'legal@afrotransact.com',

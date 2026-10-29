@@ -26,7 +26,6 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("PUT /v1/seller/onboarding/business", h.saveOnboardingBusiness)
 	route("PUT /v1/seller/onboarding/business-details", h.saveOnboardingDetails)
 	route("PUT /v1/seller/onboarding/owners", onboardingSave(h, h.s.SellerShell.SaveOnboardingOwners))
-	route("PUT /v1/seller/onboarding/payouts", onboardingSave(h, h.s.SellerShell.SaveOnboardingPayouts))
 	route("PUT /v1/seller/onboarding/plan", onboardingSave(h, h.s.SellerShell.SaveOnboardingPlan))
 	route("PUT /v1/seller/onboarding/catalog-compliance", onboardingSave(h, h.s.SellerShell.SaveOnboardingCompliance))
 	route("GET /v1/seller/onboarding/plans", h.onboardingPlans)
@@ -36,6 +35,7 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("POST /v1/seller/onboarding/uploads", h.onboardingUpload)
 	route("POST /v1/seller/onboarding/uploads/{assetId}/complete", h.completeOnboardingUpload)
 	route("GET /v1/seller/compliance", h.sellerCompliance)
+	route("POST /v1/seller/stripe/session", h.sellerStripeSession)
 	route("GET /v1/seller/dashboard", h.sellerDashboard)
 	// Orders
 	route("GET /v1/seller/orders", h.sellerOrders)
@@ -43,6 +43,13 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("POST /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/status", h.shipmentStatus)
 	route("POST /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/rates", h.shippingRates)
 	route("POST /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/labels", h.buyLabel)
+	route("GET /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/label", h.downloadLabel)
+	route("GET /v1/seller/business-page", h.businessPageGet)
+	route("PUT /v1/seller/business-page", h.businessPageUpdate)
+	if h.s.SellerRunPickups != nil {
+		route("GET /v1/seller/run-pickups", h.sellerRunPickups)
+		route("GET /v1/seller/run-pickups/{runId}", h.sellerRunPickup)
+	}
 	route("GET /v1/seller/ship-from-addresses", h.shipFromList)
 	route("POST /v1/seller/ship-from-addresses", h.shipFromCreate)
 	route("PUT /v1/seller/ship-from-addresses/{addressId}", h.shipFromUpdate)
@@ -50,9 +57,30 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("DELETE /v1/seller/ship-from-addresses/{addressId}", h.shipFromDelete)
 	route("PUT /v1/seller/ship-from-addresses/{addressId}/afrotransact-pickup", h.shipFromPickup)
 	route("PUT /v1/seller/ship-from-addresses/{addressId}/customer-pickup", h.shipFromCustomerPickup)
+	if h.s.SellerAssistant != nil {
+		route("GET /v1/seller/assistant", h.sellerAssistantStatus)
+		route("POST /v1/seller/assistant/chat", h.sellerAssistantChat)
+	}
 	if h.s.SellerOffers != nil {
 		route("GET /v1/seller/offers", h.sellerOffers)
 		route("PUT /v1/seller/offers/{offerId}/fulfilment", h.offerFulfilment)
+	}
+	if h.s.SellerCases != nil {
+		route("GET /v1/seller/returns", h.sellerReturns)
+		route("GET /v1/seller/disputes", h.sellerDisputes)
+	}
+	if h.s.SellerReviews != nil {
+		h.registerSellerReviews(route)
+	}
+	if h.s.SellerTax != nil {
+		route("GET /v1/seller/tax/statement", h.sellerTaxStatement)
+		route("GET /v1/seller/tax/statement/export", h.sellerTaxStatementExport)
+	}
+	if h.s.SellerCoupons != nil {
+		route("GET /v1/seller/coupons", h.sellerCoupons)
+		route("POST /v1/seller/coupons", h.sellerCreateCoupon)
+		route("POST /v1/seller/coupons/{couponId}/status", h.sellerCouponStatus)
+		route("DELETE /v1/seller/coupons/{couponId}", h.sellerDeleteCoupon)
 	}
 	if h.s.SellerFba != nil {
 		for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPut} {
@@ -63,6 +91,31 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("GET /v1/seller/listings", h.listings)
 	route("POST /v1/seller/listings/{productId}/status", h.listingStatus)
 	route("POST /v1/seller/products", h.submitProduct)
+	if h.s.SellerListing != nil {
+		route("GET /v1/seller/listings/{productId}", h.sellerProduct)
+		route("PUT /v1/seller/products/{productId}", h.updateProduct)
+		route("GET /v1/seller/product-drafts", h.productDrafts)
+		route("POST /v1/seller/product-drafts", h.createProductDraft)
+		route("GET /v1/seller/product-drafts/{draftId}", h.productDraft)
+		route("PUT /v1/seller/product-drafts/{draftId}", h.saveProductDraft)
+		route("DELETE /v1/seller/product-drafts/{draftId}", h.deleteProductDraft)
+		route("GET /v1/seller/catalog/listing-context", h.listingContext)
+		route("POST /v1/seller/catalog/listing-writer", h.writeListing)
+	}
+	if h.s.SellerImports != nil {
+		route("GET /v1/seller/imports/template", h.importTemplate)
+		route("GET /v1/seller/imports", h.imports)
+		route("POST /v1/seller/imports", h.uploadImport)
+		route("GET /v1/seller/imports/{importId}", h.importDetail)
+		route("GET /v1/seller/imports/{importId}/rows", h.importRows)
+		route("GET /v1/seller/imports/{importId}/report", h.importReport)
+		route("POST /v1/seller/imports/{importId}/start", h.startImport)
+		route("GET /v1/seller/image-library", h.imageLibrary)
+		route("PATCH /v1/seller/image-library/{assetId}", h.renameLibraryImage)
+		route("DELETE /v1/seller/image-library/{assetId}", h.removeLibraryImage)
+		route("POST /v1/seller/image-library/attach", h.attachLibraryImages)
+		route("GET /v1/seller/catalog/brands", h.brands)
+	}
 	route("GET /v1/seller/catalog/categories", h.categoryTree)
 	route("GET /v1/seller/catalog/product-types/{code}", h.productType)
 	route("GET /v1/seller/catalog/gtin/{code}", h.checkGTIN)
@@ -90,6 +143,7 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("POST /v1/seller/billing/plan", h.changePlan)
 	route("POST /v1/seller/billing/payment-methods/{paymentMethodId}/default", h.defaultBillingMethod)
 	route("DELETE /v1/seller/billing/payment-methods/{paymentMethodId}", h.removeBillingMethod)
+	h.registerSellerBilling(route)
 	// Team
 	route("GET /v1/seller/team", h.team)
 	route("POST /v1/seller/team/invitations", h.invite)
@@ -110,9 +164,6 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("GET /v1/seller/provider/cancellation-policy", h.cancellationPolicy)
 	route("PUT /v1/seller/provider/cancellation-policy", h.saveCancellationPolicy)
 	route("GET /v1/seller/provider/earnings", h.earnings)
-	route("GET /v1/seller/storefront", h.publicPage)
-	route("PUT /v1/seller/storefront", h.savePublicPage)
-	route("POST /v1/seller/storefront/publish", h.publishPublicPage)
 }
 
 func intQuery(r *http.Request, name string, def int) (int, error) {
@@ -210,6 +261,11 @@ func (h *handlersImpl) onboardingStripeSession(w http.ResponseWriter, r *http.Re
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
+func (h *handlersImpl) sellerStripeSession(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerShell.SellerStripeSession(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
 func (h *handlersImpl) onboardingStripeRefresh(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.SellerShell.RefreshOnboardingStripe(r.Context(), callerFrom(r.Context()))
 	h.reply(w, r, http.StatusOK, v, err)
@@ -275,14 +331,15 @@ func (h *handlersImpl) sellerOrder(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) shipmentStatus(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		Status string `json:"status"`
+		Status       string `json:"status"`
+		HandoverCode string `json:"handoverCode"`
 	}
 	if err := decode(r, &b, false); err != nil {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
 	v, err := h.s.SellerOrders.UpdateStatus(r.Context(), callerFrom(r.Context()), r.Header.Get("Idempotency-Key"),
-		r.PathValue("orderNumber"), r.PathValue("shipmentId"), b.Status)
+		r.PathValue("orderNumber"), r.PathValue("shipmentId"), b.Status, b.HandoverCode)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
@@ -299,7 +356,7 @@ func (h *handlersImpl) shippingRates(w http.ResponseWriter, r *http.Request) {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
-	v, err := h.s.SellerOrders.Rates(r.Context(), callerFrom(r.Context()), r.PathValue("orderNumber"), r.PathValue("shipmentId"), b.Parcel, b.ShipFrom)
+	v, err := h.s.SellerOrders.Rates(r.Context(), callerFrom(r.Context()), r.PathValue("orderNumber"), r.PathValue("shipmentId"), b.Parcel, b.ShipFrom, b.Carrier)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
@@ -355,6 +412,11 @@ func (h *handlersImpl) submitProduct(w http.ResponseWriter, r *http.Request) {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
+	if h.s.SellerListing != nil {
+		v, err := h.s.SellerListing.Submit(r.Context(), callerFrom(r.Context()), b)
+		h.reply(w, r, http.StatusCreated, v, err)
+		return
+	}
 	v, err := h.s.SellerCatalog.Submit(r.Context(), callerFrom(r.Context()), b)
 	h.reply(w, r, http.StatusCreated, v, err)
 }
@@ -390,18 +452,28 @@ func (h *handlersImpl) requestCategory(w http.ResponseWriter, r *http.Request) {
 	h.reply(w, r, http.StatusCreated, v, err)
 }
 
+func (h *handlersImpl) downloadLabel(w http.ResponseWriter, r *http.Request) {
+	f, err := h.s.SellerOrders.Label(r.Context(), callerFrom(r.Context()), r.PathValue("orderNumber"), r.PathValue("shipmentId"))
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	sendFile(w, f)
+}
+
 func (h *handlersImpl) requestUpload(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Purpose     string `json:"purpose"`
 		FileName    string `json:"fileName"`
 		ContentType string `json:"contentType"`
 		Size        int64  `json:"size"`
+		Library     bool   `json:"library"`
 	}
 	if err := decode(r, &b, false); err != nil {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
-	v, err := h.s.SellerCatalog.Upload(r.Context(), callerFrom(r.Context()), b.Purpose, b.FileName, b.ContentType, b.Size)
+	v, err := h.s.SellerCatalog.Upload(r.Context(), callerFrom(r.Context()), b.Purpose, b.FileName, b.ContentType, b.Size, b.Library)
 	h.reply(w, r, http.StatusCreated, v, err)
 }
 
@@ -636,27 +708,17 @@ func (h *handlersImpl) earnings(w http.ResponseWriter, r *http.Request) {
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
-func (h *handlersImpl) publicPage(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.ProviderHub.PublicPage(r.Context(), callerFrom(r.Context()))
-	h.reply(w, r, http.StatusOK, v, err)
-}
-
-func (h *handlersImpl) savePublicPage(w http.ResponseWriter, r *http.Request) {
-	var b domain.PublicPageInput
-	if err := decode(r, &b, false); err != nil {
-		h.reply(w, r, 0, nil, err)
-		return
-	}
-	v, err := h.s.ProviderHub.SavePublicPage(r.Context(), callerFrom(r.Context()), b)
-	h.reply(w, r, http.StatusOK, v, err)
-}
-
-func (h *handlersImpl) publishPublicPage(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.ProviderHub.PublishPublicPage(r.Context(), callerFrom(r.Context()))
-	h.reply(w, r, http.StatusOK, v, err)
-}
-
 // ---------------------------------------------------------------- ship-from addresses
+
+func (h *handlersImpl) sellerRunPickups(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerRunPickups.List(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerRunPickup(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerRunPickups.Get(r.Context(), callerFrom(r.Context()), r.PathValue("runId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
 
 func (h *handlersImpl) shipFromList(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.SellerShipFrom.List(r.Context(), callerFrom(r.Context()))
@@ -730,6 +792,48 @@ func (h *handlersImpl) offerFulfilment(w http.ResponseWriter, r *http.Request) {
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
+func (h *handlersImpl) sellerReturns(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerCases.Returns(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("status"))
+	h.reply(w, r, http.StatusOK, map[string]any{"items": v, "total": len(v)}, err)
+}
+
+func (h *handlersImpl) sellerDisputes(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerCases.Disputes(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("status"))
+	h.reply(w, r, http.StatusOK, map[string]any{"items": v, "total": len(v)}, err)
+}
+
+func (h *handlersImpl) sellerCoupons(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerCoupons.List(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, map[string]any{"items": v}, err)
+}
+
+func (h *handlersImpl) sellerCreateCoupon(w http.ResponseWriter, r *http.Request) {
+	var b domain.CreateSellerCoupon
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerCoupons.Create(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) sellerCouponStatus(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Status string `json:"status"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerCoupons.SetStatus(r.Context(), callerFrom(r.Context()), r.PathValue("couponId"), b.Status)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerDeleteCoupon(w http.ResponseWriter, r *http.Request) {
+	err := h.s.SellerCoupons.Delete(r.Context(), callerFrom(r.Context()), r.PathValue("couponId"))
+	h.reply(w, r, http.StatusNoContent, nil, err)
+}
+
 // ---------------------------------------------------------------- exports
 
 func (h *handlersImpl) sellerExports(w http.ResponseWriter, r *http.Request) {
@@ -771,4 +875,50 @@ func (h *handlersImpl) sellerDownload(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) sellerExportFile(w http.ResponseWriter, r *http.Request) {
 	h.serveExportFile(w, r, h.s.SellerExportFiles)
+}
+
+func (h *handlersImpl) sellerAssistantStatus(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerAssistant.Status(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerAssistantChat(w http.ResponseWriter, r *http.Request) {
+	var b domain.AssistantChatRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerAssistant.Chat(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// ---------------------------------------------------------------- business page settings
+
+func (h *handlersImpl) businessPageGet(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerBusinessPage.Get(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) businessPageUpdate(w http.ResponseWriter, r *http.Request) {
+	var b domain.BusinessPageSettingsInput
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerBusinessPage.Update(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerTaxStatement(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerTax.Statement(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("month"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerTaxStatementExport(w http.ResponseWriter, r *http.Request) {
+	f, err := h.s.SellerTax.Export(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("month"))
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	sendFile(w, f)
 }

@@ -1,0 +1,12 @@
+{
+  "formattedAddress": "Ikeja City Mall, Obafemi Awolowo Way, Alausa, Ikeja 101233, Lagos, Nigeria",
+  "addressComponents": [
+    {"longText": "Ikeja City Mall", "shortText": "Ikeja City Mall", "types": ["premise"], "languageCode": "en"},
+    {"longText": "Alausa", "shortText": "Alausa", "types": ["sublocality_level_1", "sublocality", "political"], "languageCode": "en"},
+    {"longText": "Ikeja", "shortText": "Ikeja", "types": ["locality", "political"], "languageCode": "en"},
+    {"longText": "Lagos", "shortText": "LA", "types": ["administrative_area_level_1", "political"], "languageCode": "en"},
+    {"longText": "Nigeria", "shortText": "NG", "types": ["country", "political"], "languageCode": "en"},
+    {"longText": "101233", "shortText": "101233", "types": ["postal_code"], "languageCode": "en"}
+  ],
+  "location": {"latitude": 6.6142, "longitude": 3.3581}
+}

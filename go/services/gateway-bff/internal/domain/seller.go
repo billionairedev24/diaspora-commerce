@@ -102,6 +102,9 @@ type SellerSession struct {
 	NavGroups  []NavGroup   `json:"navGroups"`
 	Landing    string       `json:"landing"`
 	AccessNote string       `json:"accessNote"`
+	// Capabilities are what the active organisation's plan includes (bulkUpload, imageLibrary, coupons,
+	// aiListingWriter, lola). Anything not listed is not shown: Seller Center hides it and the BFF refuses it.
+	Capabilities []string `json:"capabilities"`
 }
 
 // PortalOf returns the portal for an organisation kind.
@@ -133,11 +136,14 @@ var navGroupOrder = []string{"overview", "commerce", "bookings", "setup", "growt
 
 // SellerModules is the Seller Center module catalogue (identity portal SELLER), in sidebar order.
 var SellerModules = []ModuleDef{
-	{"sHome", "home", "Home", "overview", "the store overview"},
+	{"sHome", "home", "Home", "overview", "the business overview"},
 	{"sOrders", "orders", "Orders", "commerce", "orders, shipping labels and refunds"},
+	{"sOrders", "returns", "Returns", "commerce", "customer returns and their refunds"},
+	{"sOrders", "disputes", "Disputes", "commerce", "disputes and A-to-z claims against you"},
 	{"sListings", "listings", "Listings", "commerce", "product listings"},
+	{"sListings", "reviews", "Reviews", "commerce", "customer reviews of your products and your replies"},
 	{"sInventory", "inventory", "Inventory & FBA", "commerce", "stock levels"},
-	{"sStorefront", "storefront", "Storefront & theme", "growth", "the storefront design"},
+	{"sAds", "coupons", "Coupons", "growth", "promotional codes for your listings"},
 	{"sPayouts", "payouts", "Payouts", "finance", "payouts and balances"},
 	{"sPayouts", "fees", "Fees & commission", "finance", "commission and fees"},
 	{"sBilling", "billing", "Plan & billing", "finance", "the plan and invoices"},
@@ -154,7 +160,6 @@ var ProviderModules = []ModuleDef{
 	{"pAvail", "hours", "Working hours", "setup", "working hours, breaks and time off"},
 	{"pServices", "services", "Services & prices", "setup", "services, prices and deposits"},
 	{"pPolicy", "policy", "Cancellation policy", "setup", "the cancellation and no-show policy"},
-	{"pPage", "public-page", "Public page", "setup", "the public page design, gallery and social links"},
 	{"pPayouts", "earnings", "Earnings", "money", "earnings per booking"},
 	{"pPayouts", "payouts", "Payouts", "money", "payouts and balances"},
 	{"pPayouts", "fees", "Fees & commission", "money", "commission and fees"},
@@ -181,12 +186,12 @@ type RoleDef struct {
 
 // SellerRoles and ProviderRoles mirror identity's seeded organisation roles (V2__seed_rbac.sql).
 var SellerRoles = []RoleDef{
-	{"seller.owner", "Owner", "Everything in Seller Center, including billing and team", "The owner can do everything, including transferring ownership and closing the store."},
-	{"seller.admin", "Admin", "Everything except plan and billing changes", "Admins run the store day to day but cannot change the plan or payout bank account."},
-	{"seller.catalog", "Catalog manager", "Listings, inventory and storefront content", ""},
+	{"seller.owner", "Owner", "Everything in Seller Center, including billing and team", "The owner can do everything, including transferring ownership and closing the account."},
+	{"seller.admin", "Admin", "Everything except plan and billing changes", "Admins run the account day to day but cannot change the plan or payout bank account."},
+	{"seller.catalog", "Catalog manager", "Listings, inventory and product content", ""},
 	{"seller.fulfilment", "Fulfilment", "Orders, shipping and inventory", "Fulfilment can buy labels and confirm, pack and mark orders ready — never refunds or payouts."},
 	{"seller.finance", "Finance", "Payouts, billing and compliance", "Finance can see money but cannot change listings or orders."},
-	{"seller.ads", "Marketing", "Advertising and storefront", ""},
+	{"seller.ads", "Marketing", "Coupons and advertising", ""},
 	{"seller.support", "Support agent", "Customer messages, orders and returns", ""},
 }
 
@@ -338,6 +343,24 @@ func Navigation(a Access, approved bool, badges map[string]int) []NavGroup {
 	return out
 }
 
+// WithoutModules drops navigation entries (and groups left empty): the modules a plan does not include.
+func WithoutModules(groups []NavGroup, keys ...string) []NavGroup {
+	out := make([]NavGroup, 0, len(groups))
+	for _, g := range groups {
+		kept := make([]NavModule, 0, len(g.Modules))
+		for _, m := range g.Modules {
+			if !slices.Contains(keys, m.Key) {
+				kept = append(kept, m)
+			}
+		}
+		if len(kept) > 0 {
+			g.Modules = kept
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
 // Landing is the first module of the navigation ("onboarding" before approval).
 func Landing(groups []NavGroup) string {
 	for _, g := range groups {
@@ -393,6 +416,30 @@ type ComplianceItem struct {
 	Requirement string `json:"requirement"`
 	Label       string `json:"label"`
 	Bucket      string `json:"bucket"`
+	// Component is the Stripe embedded component that collects it: account_management for the payout bank account,
+	// account_onboarding for everything else. Seller accounts are Stripe-collected; nothing is answered through us.
+	Component string `json:"component"`
+}
+
+// Stripe embedded components that collect a requirement.
+const (
+	ComponentAccountOnboarding = "account_onboarding"
+	ComponentAccountManagement = "account_management"
+)
+
+// RequirementComponent is the embedded component for a requirement key when the seller service didn't name one.
+func RequirementComponent(requirement string) string {
+	if strings.HasPrefix(requirement, "external_account") {
+		return ComponentAccountManagement
+	}
+	return ComponentAccountOnboarding
+}
+
+// ComplianceBank is the payout bank account Stripe holds.
+type ComplianceBank struct {
+	BankName *string `json:"bankName"`
+	Last4    *string `json:"last4"`
+	Status   *string `json:"status"`
 }
 
 // ComplianceSummary drives the account-health banner.
@@ -408,6 +455,7 @@ type ComplianceSummary struct {
 	ChargesEnabled bool             `json:"chargesEnabled"`
 	PayoutsEnabled bool             `json:"payoutsEnabled"`
 	ListingsHidden bool             `json:"listingsHidden"`
+	PayoutBank     *ComplianceBank  `json:"payoutBank"`
 	Items          []ComplianceItem `json:"items"`
 }
 
@@ -470,4 +518,35 @@ func ComplianceBanner(s *ComplianceSummary, loc *time.Location) {
 		due = " due " + s.Deadline.In(loc).Format("Jan 2")
 	}
 	s.Message = fmt.Sprintf("%d item(s)%s. Open Account health to resolve.", s.OpenItems, due)
+}
+
+// SellerCoupon is a coupon the seller can view or manage in Seller Center.
+type SellerCoupon struct {
+	ID            string `json:"id"`
+	Code          string `json:"code"`
+	Description   string `json:"description"`
+	Type          string `json:"type"`
+	Value         int64  `json:"value"`
+	Currency      string `json:"currency"`
+	Scope         string `json:"scope"`
+	ScopeRef      string `json:"scopeRef,omitempty"`
+	MinSpendMinor int64  `json:"minSpendMinor"`
+	Status        string `json:"status"`
+	Funding       string `json:"funding"`
+	Editable      bool   `json:"editable"`
+	Version       int64  `json:"version"`
+}
+
+// CreateSellerCoupon creates a seller-funded coupon (offers-service).
+type CreateSellerCoupon struct {
+	Code               string `json:"code"`
+	Description        string `json:"description"`
+	Type               string `json:"type"`
+	Value              int64  `json:"value"`
+	Currency           string `json:"currency,omitempty"`
+	Scope              string `json:"scope"`
+	ScopeRef           string `json:"scopeRef,omitempty"`
+	MinSpendMinor      int64  `json:"minSpendMinor"`
+	TotalLimit         int    `json:"totalLimit"`
+	PerCustomerLimit   int    `json:"perCustomerLimit"`
 }

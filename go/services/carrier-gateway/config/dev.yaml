@@ -19,7 +19,7 @@ outbox:
   batch: 100
 polling:
   enabled: true
-  carriers: [usps]      # carriers without push tracking
+  carriers: [usps, ups, fedex, dhl]   # USPS has no push; the others push webhooks, and this slow poll is the safety net for a missed one
   tick: 1m
   interval: 2h          # per tracking number while active
   maxBackoff: 12h       # after repeated failures

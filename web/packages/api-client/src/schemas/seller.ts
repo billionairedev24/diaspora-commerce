@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+import { BookingTakeHomeSchema, SellerNegotiatedRateSchema, SellerRateCardSchema } from '../fee-rates';
+import { DeliveryProofSchema } from './shopper';
+
 /* Zod schemas for contracts/openapi/gateway-bff-seller.yaml (Seller Center & Provider Hub). Every response is
    validated at runtime; test/seller-contract.test.ts keeps them assignable to the generated contract types. */
 
@@ -16,8 +19,8 @@ export type Portal = z.infer<typeof PortalSchema>;
 export const AccessLevelSchema = z.enum(['VIEW', 'EDIT', 'APPROVE', 'FULL']);
 export type AccessLevel = z.infer<typeof AccessLevelSchema>;
 export const ModuleKeySchema = z.enum([
-  'onboarding', 'home', 'orders', 'listings', 'inventory', 'storefront', 'calendar', 'requests', 'hours', 'services', 'policy',
-  'public-page', 'earnings', 'payouts', 'fees', 'billing', 'account-health', 'team'
+  'onboarding', 'home', 'orders', 'returns', 'disputes', 'listings', 'reviews', 'inventory', 'coupons', 'calendar', 'requests', 'hours', 'services', 'policy',
+  'earnings', 'payouts', 'fees', 'billing', 'account-health', 'team'
 ]);
 export type ModuleKey = z.infer<typeof ModuleKeySchema>;
 
@@ -40,6 +43,9 @@ export type NavModule = z.infer<typeof NavModuleSchema>;
 export const NavGroupSchema = z.object({ key: z.string(), label: z.string(), modules: z.array(NavModuleSchema) });
 export type NavGroup = z.infer<typeof NavGroupSchema>;
 
+export const PlanCapabilitySchema = z.enum(['bulkUpload', 'imageLibrary', 'coupons', 'aiListingWriter', 'lola']);
+export type PlanCapability = z.infer<typeof PlanCapabilitySchema>;
+
 export const SellerSessionSchema = z.object({
   user: SellerUserSchema,
   orgs: z.array(OrgSummarySchema),
@@ -48,7 +54,9 @@ export const SellerSessionSchema = z.object({
   approved: z.boolean(),
   navGroups: z.array(NavGroupSchema),
   landing: ModuleKeySchema,
-  accessNote: z.string()
+  accessNote: z.string(),
+  /** What the active organisation's plan includes: anything not listed is not shown (and the BFF refuses it). */
+  capabilities: z.array(PlanCapabilitySchema).default([])
 });
 export type SellerSession = z.infer<typeof SellerSessionSchema>;
 
@@ -69,6 +77,12 @@ export type OnboardingAddress = z.infer<typeof OnboardingAddressSchema>;
 
 export const OnboardingStepKeySchema = z.enum(['BUSINESS', 'BUSINESS_DETAILS', 'OWNERS', 'STRIPE_VERIFICATION', 'PAYOUTS', 'PLAN', 'CATALOG_COMPLIANCE', 'REVIEW']);
 export type OnboardingStepKey = z.infer<typeof OnboardingStepKeySchema>;
+/**
+ * "Payouts": NOT_STARTED (no Stripe account yet), NEEDS_BANK (finish Stripe verification, where Stripe collects the
+ * bank), FAILED (Stripe rejected the bank: change it), VERIFYING (bank on file, payouts not on yet), READY.
+ */
+export const OnboardingPayoutsStatusSchema = z.enum(['NOT_STARTED', 'NEEDS_BANK', 'FAILED', 'VERIFYING', 'READY']);
+export type OnboardingPayoutsStatus = z.infer<typeof OnboardingPayoutsStatusSchema>;
 export const OnboardingStepSlugSchema = z.enum(['business', 'business-details', 'owners', 'stripe-verification', 'payouts', 'plan', 'catalog-compliance', 'review']);
 export type OnboardingStepSlug = z.infer<typeof OnboardingStepSlugSchema>;
 export const OnboardingStepStateSchema = z.enum(['DONE', 'TODO', 'ACTION', 'WAITING', 'BLOCKED']);
@@ -140,7 +154,11 @@ export const OnboardingFormSchema = z.object({
     storeName: nullableString,
     contactEmail: nullableString,
     phone: nullableString,
-    website: nullableString
+    /** What the business sells or does: shown on its public page and given to Stripe. */
+    description: nullableString,
+    /** #rrggbb: the one colour of its public page. */
+    brandColor: nullableString,
+    logoUrl: nullableString
   }),
   details: z.object({
     legalFirstName: nullableString,
@@ -157,12 +175,12 @@ export const OnboardingFormSchema = z.object({
     irsDeterminationLetterAssetId: nullableString
   }),
   owners: z.array(OnboardingOwnerSchema),
+  /** The payout bank account Stripe holds, read-only: Stripe collects it in its embedded components. */
   payouts: z.object({
-    accountHolderName: nullableString,
-    accountType: nullableString,
+    status: OnboardingPayoutsStatusSchema,
     bankName: nullableString,
-    routingLast4: nullableString,
     accountLast4: nullableString,
+    bankStatus: nullableString,
     linked: z.boolean()
   }),
   plan: z.object({
@@ -174,7 +192,11 @@ export const OnboardingFormSchema = z.object({
     cardLast4: nullableString,
     cardExpMonth: z.number().int().nullable(),
     cardExpYear: z.number().int().nullable(),
-    firstCharge: OnboardingFirstChargeSchema.nullable()
+    firstCharge: OnboardingFirstChargeSchema.nullable(),
+    /** S298: the applicant's choice (null keeps the platform default), whether it is offered and the default. */
+    planFeeCollection: z.enum(['EARNINGS_FIRST', 'CARD']).nullable().default(null),
+    planFeeCollectionAvailable: z.boolean().default(false),
+    planFeeCollectionDefault: z.enum(['EARNINGS_FIRST', 'CARD']).default('CARD')
   }),
   compliance: z.object({
     categories: z.array(z.string()),
@@ -218,7 +240,9 @@ export interface OnboardingBusinessInput {
   storeName?: string;
   contactEmail?: string;
   phone?: string;
-  website?: string;
+  description?: string;
+  brandColor?: string;
+  logoUrl?: string;
 }
 
 export interface OnboardingAddressInput {
@@ -261,15 +285,6 @@ export interface OnboardingOwnersInput {
   owners: OnboardingOwnerInput[];
 }
 
-/** PUT /v1/seller/onboarding/payouts: the numbers go to Stripe once and are never stored. */
-export interface OnboardingPayoutsInput {
-  accountHolderName: string;
-  accountType: 'checking' | 'savings';
-  routingNumber: string;
-  accountNumber: string;
-  accountNumberConfirmation: string;
-}
-
 /** PUT /v1/seller/onboarding/plan. */
 export interface OnboardingPlanInput {
   planCode: string;
@@ -280,6 +295,10 @@ export interface OnboardingPlanInput {
   cardLast4?: string;
   cardExpMonth?: number;
   cardExpYear?: number;
+  /** A trial campaign's promo code (S295); 422 `promoCode` when it isn't valid for this plan. */
+  promoCode?: string;
+  /** How the plan will be paid (S298); omit for the platform default. */
+  planFeeCollection?: 'EARNINGS_FIRST' | 'CARD';
 }
 
 /** PUT /v1/seller/onboarding/catalog-compliance. */
@@ -354,7 +373,12 @@ export const ComplianceSummarySchema = z.object({
   chargesEnabled: z.boolean(),
   payoutsEnabled: z.boolean(),
   listingsHidden: z.boolean(),
-  items: z.array(z.object({ requirement: z.string(), label: z.string(), bucket: z.string() }))
+  /** The payout bank account Stripe holds (changed in Stripe's account management component). */
+  payoutBank: z.object({ bankName: nullableString, last4: nullableString, status: nullableString }).nullable(),
+  /** component: the Stripe embedded component that collects it (nothing is answered through AfroTransact). */
+  items: z.array(
+    z.object({ requirement: z.string(), label: z.string(), bucket: z.string(), component: z.enum(['account_onboarding', 'account_management']) })
+  )
 });
 export type ComplianceSummary = z.infer<typeof ComplianceSummarySchema>;
 
@@ -398,7 +422,8 @@ export const ShipmentStatusSchema = z.enum([
 ]);
 export type ShipmentStatus = z.infer<typeof ShipmentStatusSchema>;
 /** The only statuses a seller may set. */
-export const SellerStatusActionSchema = z.enum(['CONFIRMED', 'PACKED', 'READY']);
+/** What a seller may set; PICKED_UP is "Shipped" (handed to the carrier, needs a label). */
+export const SellerStatusActionSchema = z.enum(['CONFIRMED', 'PACKED', 'READY', 'PICKED_UP', 'DELIVERED']);
 export type SellerStatusAction = z.infer<typeof SellerStatusActionSchema>;
 
 export const SellerOrderRowSchema = z.object({
@@ -443,6 +468,8 @@ export const SellerAddressSchema = z.object({
 });
 export type SellerAddress = z.infer<typeof SellerAddressSchema>;
 
+export const SuggestedParcelSchema = z.object({ weightLb: z.number(), lengthIn: z.number(), widthIn: z.number(), heightIn: z.number() });
+export type SuggestedParcel = z.infer<typeof SuggestedParcelSchema>;
 export const SellerShipmentSchema = z.object({
   shipmentId: z.string(),
   label: z.string(),
@@ -460,6 +487,12 @@ export const SellerShipmentSchema = z.object({
   trackingNumber: nullableString,
   nextActions: z.array(SellerStatusActionSchema),
   canBuyLabel: z.boolean(),
+  /** A label was bought for this shipment; it can be downloaded again. */
+  hasLabel: z.boolean().default(false),
+  /** The products' listed package (lb / in), to prefill the label form. */
+  suggestedParcel: SuggestedParcelSchema.nullable().default(null),
+  /** How our driver handed it over (photo, who received it); null for carrier, pickup and by-hand deliveries. */
+  proof: DeliveryProofSchema.nullable().default(null),
   timeline: z.array(z.object({ status: z.string(), at: z.string(), actor: z.string() })),
   /** AfroTransact Delivery from the seller's store (S255): the seller delivery fee is deducted from the payout. */
   localDelivery: z
@@ -639,11 +672,134 @@ export const SellerOfferSchema = z.object({
 export type SellerOffer = z.infer<typeof SellerOfferSchema>;
 export const SellerOfferListSchema = z.object({ items: z.array(SellerOfferSchema) });
 export type SellerOfferList = z.infer<typeof SellerOfferListSchema>;
+
+export const SellerCouponSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  description: z.string(),
+  type: z.enum(['PERCENT', 'FIXED', 'FREE_SHIPPING']),
+  value: z.number().int(),
+  currency: z.string(),
+  scope: z.string(),
+  scopeRef: z.string().optional(),
+  minSpendMinor: z.number().int(),
+  status: z.enum(['ACTIVE', 'PAUSED', 'EXPIRED']),
+  funding: z.enum(['PLATFORM', 'SELLER']),
+  editable: z.boolean(),
+  version: z.number().int()
+});
+export type SellerCoupon = z.infer<typeof SellerCouponSchema>;
+export const SellerCouponListSchema = z.object({ items: z.array(SellerCouponSchema) });
+export type SellerCouponList = z.infer<typeof SellerCouponListSchema>;
+
+export const ReturnStatusSchema = z.enum(['REQUESTED', 'APPROVED', 'AUTO_APPROVED', 'LABEL_ISSUED', 'IN_TRANSIT', 'RECEIVED', 'INSPECTED', 'REFUNDED', 'REJECTED', 'CANCELLED']);
+export type ReturnStatus = z.infer<typeof ReturnStatusSchema>;
+export const SellerReturnLineSchema = z.object({ title: z.string(), quantity: z.number().int(), reason: z.string(), outcome: z.string().optional() });
+export const SellerReturnSchema = z.object({
+  number: z.string(),
+  orderNumber: z.string(),
+  title: z.string(),
+  status: ReturnStatusSchema,
+  statusLabel: z.string(),
+  method: z.string(),
+  refundMinor: z.number().int(),
+  currency: z.string(),
+  refundState: z.string(),
+  items: z.array(SellerReturnLineSchema),
+  carrier: z.string().nullish(),
+  trackingNumber: z.string().nullish(),
+  dropOffBy: z.string().nullish(),
+  createdAt: z.string().nullish()
+});
+export type SellerReturn = z.infer<typeof SellerReturnSchema>;
+export const SellerReturnListSchema = z.object({ items: z.array(SellerReturnSchema), total: z.number().int() });
+
+export const DisputeStatusSchema = z.enum(['AWAITING_SELLER', 'UNDER_REVIEW', 'ESCALATED', 'RESOLVED_REFUND', 'RESOLVED_DENIED', 'WITHDRAWN']);
+export type DisputeStatus = z.infer<typeof DisputeStatusSchema>;
+export const SellerDisputeSchema = z.object({
+  reference: z.string(),
+  type: z.string(),
+  typeLabel: z.string(),
+  status: DisputeStatusSchema,
+  statusLabel: z.string(),
+  orderNumber: z.string(),
+  amountMinor: z.number().int(),
+  currency: z.string(),
+  description: z.string(),
+  responded: z.boolean(),
+  sellerResponse: z.string().nullish(),
+  respondBy: z.string().nullish(),
+  deadlineState: z.enum(['ON_TRACK', 'AT_RISK', 'BREACHED']).nullish(),
+  escalated: z.boolean(),
+  outcome: z.string().nullish(),
+  refundMinor: z.number().int(),
+  openedAt: z.string().nullish()
+});
+export type SellerDispute = z.infer<typeof SellerDisputeSchema>;
+export const SellerDisputeListSchema = z.object({ items: z.array(SellerDisputeSchema), total: z.number().int() });
+export const CreateSellerCouponSchema = z.object({
+  code: z.string(),
+  description: z.string().optional(),
+  type: z.enum(['PERCENT', 'FIXED', 'FREE_SHIPPING']),
+  value: z.number().int(),
+  currency: z.string().optional(),
+  scope: z.enum(['CART', 'CATEGORY', 'PRODUCT', 'SELLER']),
+  scopeRef: z.string().optional(),
+  minSpendMinor: z.number().int().optional(),
+  totalLimit: z.number().int().optional(),
+  perCustomerLimit: z.number().int().optional()
+});
+export type CreateSellerCoupon = z.infer<typeof CreateSellerCouponSchema>;
 export interface OfferFulfilmentRequest {
   fulfilment: FulfilmentKind;
   shipFromLocationId?: string | null;
 }
+/** GET/PUT /v1/seller/business-page: how the organisation's plain public page (/b/{slug}) looks. */
+export const BusinessPageSettingsSchema = z.object({
+  name: z.string(),
+  /** The page's address; null until the page is first made. */
+  slug: nullableString,
+  description: nullableString,
+  /** #rrggbb */
+  brandColor: nullableString,
+  logoUrl: nullableString,
+  contactEmail: nullableString,
+  /** False for members who may only look (the owner and admins change the page). */
+  canEdit: z.boolean()
+});
+export type BusinessPageSettings = z.infer<typeof BusinessPageSettingsSchema>;
+export interface BusinessPageSettingsInput {
+  description: string;
+  brandColor: string;
+  logoUrl: string;
+}
 export const ShipFromListSchema = z.object({ items: z.array(ShipFromAddressSchema) });
+
+/* ── Delivery run pick lists (S264): when the driver comes and what to pack ── */
+
+export const RunPickItemSchema = z.object({ atin: z.string(), name: z.string(), units: z.number().int() });
+export type RunPickItem = z.infer<typeof RunPickItemSchema>;
+export const RunOrderBagSchema = z.object({ orderNumber: z.string(), collected: z.boolean(), units: z.number().int(), lines: z.array(RunPickItemSchema) });
+export type RunOrderBag = z.infer<typeof RunOrderBagSchema>;
+export const SellerRunPickupSchema = z.object({
+  runId: z.string(),
+  town: z.string(),
+  state: z.string(),
+  timeZone: z.string(),
+  runStatus: z.enum(['CONFIRMED', 'COLLECTING', 'OUT_FOR_DELIVERY', 'COMPLETED']),
+  windowStart: z.string(),
+  windowEnd: z.string(),
+  pickupAt: z.string().nullable(),
+  dropMode: z.enum(['DOORSTEP', 'PICKUP_POINT']),
+  orders: z.number().int(),
+  units: z.number().int(),
+  collectedOrders: z.number().int(),
+  items: z.array(RunPickItemSchema),
+  bags: z.array(RunOrderBagSchema)
+});
+export type SellerRunPickup = z.infer<typeof SellerRunPickupSchema>;
+export const SellerRunPickupListSchema = z.object({ items: z.array(SellerRunPickupSchema) });
+export type SellerRunPickupList = z.infer<typeof SellerRunPickupListSchema>;
 export type ShipFromInput = ShipFromForm & { label?: string; company?: string; country?: string; makeDefault?: boolean; version?: number | null };
 
 export function shipFromToForm(a: ShipFromAddress): ShipFromForm {
@@ -693,12 +849,31 @@ export const CategoryNodeSchema: z.ZodType<CategoryNode> = z.lazy(() =>
   z.object({ id: z.string(), name: z.string(), level: z.string(), productType: nullableString, path: z.string(), children: z.array(CategoryNodeSchema) })
 );
 
+export const AttributeKindSchema = z.enum(['TEXT', 'MULTILINE', 'ENUM', 'NUMBER']);
+export type AttributeKind = z.infer<typeof AttributeKindSchema>;
+export const AttributeSectionSchema = z.enum(['DETAILS', 'FOOD', 'REGULATED']);
+export type AttributeSection = z.infer<typeof AttributeSectionSchema>;
+export const AttributeDefSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  options: z.array(z.string()),
+  required: z.boolean(),
+  multiline: z.boolean(),
+  kind: AttributeKindSchema,
+  units: z.array(z.string()),
+  section: AttributeSectionSchema,
+  help: nullableString
+});
+export type AttributeDef = z.infer<typeof AttributeDefSchema>;
+export const ProductTypeTraitsSchema = z.object({ food: z.boolean(), perishable: z.boolean(), regulated: z.boolean(), preorder: z.boolean() });
+export type ProductTypeTraits = z.infer<typeof ProductTypeTraitsSchema>;
 export const ProductTypeSchemaSchema = z.object({
   code: z.string(),
   label: z.string(),
   identifierRule: z.enum(['gtin', 'isbn', 'none']),
-  attributes: z.array(z.object({ key: z.string(), label: z.string(), options: z.array(z.string()), required: z.boolean(), multiline: z.boolean() })),
-  themes: z.array(z.object({ name: z.string(), dimensions: z.array(z.object({ name: z.string(), options: z.array(z.string()) })) }))
+  attributes: z.array(AttributeDefSchema),
+  themes: z.array(z.object({ name: z.string(), dimensions: z.array(z.object({ name: z.string(), options: z.array(z.string()) })) })),
+  traits: ProductTypeTraitsSchema
 });
 export type ProductTypeSchema = z.infer<typeof ProductTypeSchemaSchema>;
 
@@ -727,7 +902,9 @@ export const ProductImageInputSchema = z.object({
   width: z.number().int().min(0).optional(),
   height: z.number().int().min(0).optional(),
   bytes: z.number().int().min(0).optional(),
-  contentType: z.string()
+  contentType: z.string(),
+  /** Optional alternative text, stored with the image. */
+  alt: z.string().max(200).nullable().optional()
 });
 export type ProductImageInput = z.infer<typeof ProductImageInputSchema>;
 export const VariantInputSchema = z.object({
@@ -736,25 +913,267 @@ export const VariantInputSchema = z.object({
   gtin: z.string().optional(),
   gtinExempt: z.boolean().optional(),
   priceMinor: z.number().int().min(1),
-  quantity: z.number().int().min(0)
+  compareAtMinor: z.number().int().min(1).nullable().optional(),
+  quantity: z.number().int().min(0).max(100_000),
+  images: z.array(ProductImageInputSchema).max(5).optional()
 });
 export type VariantInput = z.infer<typeof VariantInputSchema>;
+export const ItemConditionSchema = z.enum(['NEW', 'RENEWED', 'USED_LIKE_NEW', 'USED_VERY_GOOD', 'USED_GOOD', 'USED_ACCEPTABLE']);
+export type ItemCondition = z.infer<typeof ItemConditionSchema>;
+export const ListingFulfilmentSchema = z.enum(['SELLER', 'AFROTRANSACT']);
+export type ListingFulfilment = z.infer<typeof ListingFulfilmentSchema>;
+export const PackageDimensionsSchema = z.object({
+  lengthIn: z.number().positive().max(108),
+  widthIn: z.number().positive().max(108),
+  heightIn: z.number().positive().max(108),
+  weightLb: z.number().positive().max(150)
+});
+export type PackageDimensions = z.infer<typeof PackageDimensionsSchema>;
+export const ListingDetailsInputSchema = z.object({
+  description: z.string().max(5000).optional(),
+  condition: ItemConditionSchema.optional(),
+  keywords: z.array(z.string().max(40)).max(20).optional(),
+  fulfilment: ListingFulfilmentSchema.optional(),
+  packaging: PackageDimensionsSchema.nullable().optional(),
+  handlingDays: z.number().int().min(1).max(30).optional(),
+  shipFromId: nullableString.optional()
+});
+export type ListingDetailsInput = z.infer<typeof ListingDetailsInputSchema>;
 export const ProductDraftSchema = z.object({
   categoryId: z.string().optional(),
   categoryRequestId: z.string().optional(),
   title: z.string().min(10).max(200),
   attributes: z.record(z.string(), z.string()),
   images: z.array(ProductImageInputSchema).min(1).max(10),
-  variationTheme: z.string().min(1),
-  variants: z.array(VariantInputSchema).min(1).max(200)
+  variationTheme: z.string().max(60),
+  variants: z.array(VariantInputSchema).min(1).max(200),
+  preorderEligible: z.boolean().optional(),
+  listing: ListingDetailsInputSchema.optional(),
+  draftId: z.string().optional()
 });
 export type ProductDraft = z.infer<typeof ProductDraftSchema>;
+export type ProductUpdate = ProductDraft & { version?: number };
+
+export const ProductVariantSchema = z.object({
+  atin: z.string(),
+  sellerSku: z.string(),
+  gtin: nullableString,
+  gtinExempt: z.boolean(),
+  options: z.record(z.string(), z.string()),
+  priceMinor: z.number().int(),
+  compareAtMinor: z.number().int().nullable(),
+  quantity: z.number().int(),
+  images: z.array(ProductImageInputSchema)
+});
+export type ProductVariant = z.infer<typeof ProductVariantSchema>;
+export const ListingDetailsSchema = z.object({
+  description: nullableString,
+  condition: ItemConditionSchema,
+  keywords: z.array(z.string()),
+  fulfilment: ListingFulfilmentSchema,
+  packaging: PackageDimensionsSchema.nullable(),
+  handlingDays: z.number().int(),
+  shipFromId: nullableString
+});
+export type ListingDetails = z.infer<typeof ListingDetailsSchema>;
+export const SellerProductDetailSchema = z.object({
+  productId: z.string(),
+  atin: z.string(),
+  status: ListingStatusSchema,
+  statusLabel: z.string(),
+  moderationNote: nullableString,
+  categoryId: nullableString,
+  categoryRequestId: nullableString,
+  categoryPath: z.string(),
+  productType: z.string(),
+  title: z.string(),
+  attributes: z.record(z.string(), z.string()),
+  images: z.array(ProductImageInputSchema),
+  variationTheme: z.string(),
+  variants: z.array(ProductVariantSchema),
+  preorderEligible: z.boolean(),
+  listing: ListingDetailsSchema,
+  currency: z.string(),
+  version: z.number().int(),
+  updatedAt: z.string()
+});
+export type SellerProductDetail = z.infer<typeof SellerProductDetailSchema>;
+
+export const ProductDraftSummarySchema = z.object({
+  id: z.string(),
+  productId: nullableString,
+  title: z.string(),
+  categoryPath: nullableString,
+  updatedAt: z.string(),
+  version: z.number().int()
+});
+export type ProductDraftSummary = z.infer<typeof ProductDraftSummarySchema>;
+export const ProductDraftListSchema = z.object({ items: z.array(ProductDraftSummarySchema) });
+export type ProductDraftList = z.infer<typeof ProductDraftListSchema>;
+export const SavedProductDraftSchema = ProductDraftSummarySchema.extend({ payload: z.record(z.string(), z.unknown()) });
+export type SavedProductDraft = z.infer<typeof SavedProductDraftSchema>;
+export interface SaveProductDraftRequest {
+  productId?: string;
+  title?: string;
+  categoryPath?: string;
+  payload: Record<string, unknown>;
+  version?: number;
+}
+
+export const ListingContextSchema = z.object({
+  aiListingWriter: z.object({ available: z.boolean(), reason: z.enum(['PLAN', 'ROLE']).nullable() }),
+  moderated: z.boolean(),
+  importLimits: z.object({
+    maxFileBytes: z.number().int(),
+    maxRows: z.number().int(),
+    maxImagesPerProduct: z.number().int(),
+    maxVariantsPerProduct: z.number().int()
+  })
+});
+export type ListingContext = z.infer<typeof ListingContextSchema>;
+export interface ListingWriterRequest {
+  productType: string;
+  title: string;
+  attributes?: Record<string, string>;
+  tone?: 'warm' | 'concise' | 'premium';
+}
+export const ListingWriterDraftSchema = z.object({ title: z.string(), description: z.string(), bullets: z.array(z.string()) });
+export type ListingWriterDraft = z.infer<typeof ListingWriterDraftSchema>;
+
+/* ── Bulk upload (S308) ─────────────────────────────────── */
+
+export const SpreadsheetFormatSchema = z.enum(['xlsx', 'csv']);
+export type SpreadsheetFormat = z.infer<typeof SpreadsheetFormatSchema>;
+export const ImportModeSchema = z.enum(['CREATE', 'UPDATE']);
+export type ImportMode = z.infer<typeof ImportModeSchema>;
+export const ImportStatusSchema = z.enum(['VALIDATED', 'QUEUED', 'RUNNING', 'COMPLETED', 'FAILED']);
+export type ImportStatus = z.infer<typeof ImportStatusSchema>;
+export const ImportRowStatusSchema = z.enum(['VALID', 'WARNING', 'ERROR']);
+export type ImportRowStatus = z.infer<typeof ImportRowStatusSchema>;
+export const ImportRowOutcomeSchema = z.enum(['PENDING', 'CREATED', 'UPDATED', 'FAILED', 'SKIPPED']);
+export type ImportRowOutcome = z.infer<typeof ImportRowOutcomeSchema>;
+export const ProductImportSchema = z.object({
+  id: z.string(),
+  reference: z.string(),
+  fileName: z.string(),
+  format: z.enum(['XLSX', 'CSV']),
+  mode: ImportModeSchema,
+  productType: nullableString,
+  status: ImportStatusSchema,
+  validOnly: z.boolean(),
+  totalRows: z.number().int(),
+  validRows: z.number().int(),
+  warningRows: z.number().int(),
+  errorRows: z.number().int(),
+  productCount: z.number().int(),
+  processedRows: z.number().int(),
+  createdProducts: z.number().int(),
+  updatedProducts: z.number().int(),
+  failedRows: z.number().int(),
+  header: z.array(z.string()),
+  fileWarnings: z.array(z.string()),
+  uploadedByName: nullableString,
+  createdAt: z.string(),
+  startedAt: nullableString,
+  finishedAt: nullableString,
+  reportUrl: z.string()
+});
+export type ProductImport = z.infer<typeof ProductImportSchema>;
+export const ProductImportPageSchema = z.object({
+  items: z.array(ProductImportSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  size: z.number().int()
+});
+export type ProductImportPage = z.infer<typeof ProductImportPageSchema>;
+export const ImportRowMessageSchema = z.object({
+  column: nullableString,
+  columnIndex: z.number().int(),
+  severity: z.enum(['ERROR', 'WARNING']),
+  message: z.string()
+});
+export type ImportRowMessage = z.infer<typeof ImportRowMessageSchema>;
+export const ImageSlotSchema = z.enum(['MAIN', 'PT01', 'PT02', 'PT03', 'PT04', 'PT05', 'PT06', 'PT07', 'PT08', 'SWCH']);
+export type ImageSlot = z.infer<typeof ImageSlotSchema>;
+/** One image of a bulk-upload row: found in the image library, a link copied at import, held, missing or a bad link. */
+export const ImportRowImageSchema = z.object({
+  slot: ImageSlotSchema,
+  source: z.enum(['LINK', 'FILE', 'SKU']),
+  ref: z.string(),
+  state: z.enum(['FOUND', 'LINK', 'HELD', 'MISSING', 'BAD_LINK']),
+  url: nullableString,
+  message: nullableString
+});
+export type ImportRowImage = z.infer<typeof ImportRowImageSchema>;
+/** One image of the organisation's image library with the SKUs of the listings that use it (S310). */
+export const ImageLibraryItemSchema = z.object({
+  assetId: z.string(),
+  fileName: z.string(),
+  sku: nullableString,
+  slot: ImageSlotSchema.nullable(),
+  status: z.enum(['READY', 'FLAGGED', 'REJECTED']),
+  url: nullableString,
+  width: z.number().int(),
+  height: z.number().int(),
+  bytes: z.number().int(),
+  flags: z.array(z.string()),
+  createdAt: z.string(),
+  usedBy: z.array(z.string()),
+  skuKnown: z.boolean()
+});
+export type ImageLibraryItem = z.infer<typeof ImageLibraryItemSchema>;
+export const ImageLibraryPageSchema = z.object({
+  items: z.array(ImageLibraryItemSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  size: z.number().int()
+});
+export type ImageLibraryPage = z.infer<typeof ImageLibraryPageSchema>;
+export interface ImageLibraryQuery {
+  q?: string;
+  status?: ImageLibraryItem['status'];
+  matched?: boolean;
+  page: number;
+  size: number;
+}
+export const AttachLibraryImagesResultSchema = z.object({
+  productsUpdated: z.number().int(),
+  imagesAttached: z.number().int(),
+  skipped: z.array(z.object({ sku: z.string(), reason: z.string() }))
+});
+export type AttachLibraryImagesResult = z.infer<typeof AttachLibraryImagesResultSchema>;
+export const BrandSchema = z.object({ name: z.string(), source: z.enum(['OWN', 'CATALOG']), products: z.number().int() });
+export type Brand = z.infer<typeof BrandSchema>;
+export const BrandListSchema = z.object({ brands: z.array(BrandSchema) });
+export type BrandList = z.infer<typeof BrandListSchema>;
+export const ProductImportRowSchema = z.object({
+  rowNumber: z.number().int(),
+  groupKey: z.string(),
+  sku: z.string(),
+  status: ImportRowStatusSchema,
+  outcome: ImportRowOutcomeSchema,
+  outcomeNote: nullableString,
+  productId: nullableString,
+  messages: z.array(ImportRowMessageSchema),
+  cells: z.array(z.string()),
+  images: z.array(ImportRowImageSchema).default([])
+});
+export type ProductImportRow = z.infer<typeof ProductImportRowSchema>;
+export const ProductImportRowPageSchema = z.object({
+  items: z.array(ProductImportRowSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  size: z.number().int()
+});
+export type ProductImportRowPage = z.infer<typeof ProductImportRowPageSchema>;
 
 export const UploadRequestSchema = z.object({
   purpose: z.enum(['product-image', 'storefront']),
   fileName: z.string().min(1).max(200),
   contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
-  size: z.number().int().min(1).max(8 * 1024 * 1024)
+  size: z.number().int().min(1).max(8 * 1024 * 1024),
+  /** product-image only: also add it to the image library (matched to SKUs by file name). */
+  library: z.boolean().optional()
 });
 export type UploadRequest = z.infer<typeof UploadRequestSchema>;
 export const UploadTicketSchema = z.object({
@@ -808,12 +1227,17 @@ export const PayoutBalanceSchema = z.object({
   requestedOrInTransitMinor: z.number().int(),
   paidMinor: z.number().int(),
   providerFeesMinor: z.number().int(),
+  /** Plan fees paid from sales (S298) not yet deducted from a transfer; negative while one is owed back. */
+  planFeesMinor: z.number().int().default(0),
   minimumPayoutMinor: z.number().int(),
   canRequestToday: z.boolean(),
   payoutsPaused: z.boolean(),
   payoutsPausedReason: z.enum(['AUTO_PAST_DUE', 'MANUAL', 'DEAUTHORIZED', 'CHARGES_DISABLED']).nullable(),
   payoutsPausedMessage: nullableString,
-  holds: z.array(z.object({ orderId: z.string(), amountMinor: z.number().int(), releaseAt: nullableString }))
+  /** Payments has no Stripe Connect account for the organisation: earnings stay on hold until it is registered. */
+  payoutAccountMissing: z.boolean().default(false),
+  /** Held funds per order: `orderNumber` is what screens show (null when payments' id is not among the recent shipments). */
+  holds: z.array(z.object({ orderId: z.string(), orderNumber: nullableString, amountMinor: z.number().int(), releaseAt: nullableString }))
 });
 export type PayoutBalance = z.infer<typeof PayoutBalanceSchema>;
 export const PayoutSchema = z.object({
@@ -826,8 +1250,56 @@ export const PayoutSchema = z.object({
   failureMessage: nullableString
 });
 export type Payout = z.infer<typeof PayoutSchema>;
-export const PayoutsViewSchema = z.object({ balance: PayoutBalanceSchema, payouts: z.array(PayoutSchema), historyAvailable: z.boolean() });
+/** A plan invoice paid from sales (S298): "Plan fee (invoice …)", deducted from the next transfers. */
+export const PlanFeeDeductionSchema = z.object({
+  invoiceId: z.string(),
+  invoiceNumber: nullableString,
+  label: z.string(),
+  status: z.enum(['WITHHELD', 'DECLINED', 'RELEASED']),
+  requestedMinor: z.number().int(),
+  withheldMinor: z.number().int(),
+  releasedMinor: z.number().int(),
+  outstandingMinor: z.number().int(),
+  createdAt: z.string(),
+  transfers: z.array(z.object({ orderId: z.string(), orderNumber: nullableString, amountMinor: z.number().int(), at: z.string(), label: z.string() }))
+});
+export type PlanFeeDeduction = z.infer<typeof PlanFeeDeductionSchema>;
+export const PayoutsViewSchema = z.object({
+  balance: PayoutBalanceSchema,
+  payouts: z.array(PayoutSchema),
+  historyAvailable: z.boolean(),
+  planFeeDeductions: z.array(PlanFeeDeductionSchema).default([])
+});
 export type PayoutsView = z.infer<typeof PayoutsViewSchema>;
+
+/* ── Sales tax statement (tax collected on the seller's behalf, by state and month) ── */
+
+export const SellerTaxStateRowSchema = z.object({
+  jurisdiction: z.string(),
+  state: z.string(),
+  orders: z.number().int(),
+  grossSalesMinor: z.number().int(),
+  taxableSalesMinor: z.number().int(),
+  taxCollectedMinor: z.number().int(),
+  taxRefundedMinor: z.number().int(),
+  netTaxMinor: z.number().int()
+});
+export type SellerTaxStateRow = z.infer<typeof SellerTaxStateRowSchema>;
+export const SellerTaxStatementSchema = z.object({
+  month: z.string(),
+  currency: z.string(),
+  rows: z.array(SellerTaxStateRowSchema),
+  totals: z.object({
+    orders: z.number().int(),
+    grossSalesMinor: z.number().int(),
+    taxableSalesMinor: z.number().int(),
+    taxCollectedMinor: z.number().int(),
+    taxRefundedMinor: z.number().int(),
+    netTaxMinor: z.number().int()
+  }),
+  months: z.array(z.string())
+});
+export type SellerTaxStatement = z.infer<typeof SellerTaxStatementSchema>;
 
 /* ── Fees (read-only; rates in basis points, 1250 = 12.50 %) ── */
 
@@ -835,7 +1307,11 @@ export const SellerFeeCategorySchema = z.object({
   category: z.string(),
   label: z.string(),
   commissionBps: z.number().int(),
-  source: z.enum(['OVERRIDE', 'CATEGORY', 'DEFAULT', 'RETAIL'])
+  /** OVERRIDE: negotiated (until negotiatedUntil); PLAN: the rate of the organisation's plan. */
+  source: z.enum(['OVERRIDE', 'PLAN', 'CATEGORY', 'DEFAULT', 'RETAIL']),
+  planCode: nullableString.default(null),
+  planName: nullableString.default(null),
+  negotiatedUntil: nullableString.default(null)
 });
 export type SellerFeeCategory = z.infer<typeof SellerFeeCategorySchema>;
 export const SellerFeeVersionSchema = z.object({
@@ -877,7 +1353,12 @@ export const SellerFeesViewSchema = z.object({
   note: z.string().nullable(),
   current: SellerFeeVersionSchema,
   upcoming: SellerFeeVersionSchema.nullable(),
-  changes: z.array(SellerFeeChangeSchema)
+  changes: z.array(SellerFeeChangeSchema),
+  planCode: nullableString.default(null),
+  planName: nullableString.default(null),
+  negotiated: z.array(SellerNegotiatedRateSchema).default([]),
+  /** What service bookings pay (connection fees), apart from product commission. */
+  connectionFees: SellerRateCardSchema.nullable().default(null)
 });
 export type SellerFeesView = z.infer<typeof SellerFeesViewSchema>;
 
@@ -894,6 +1375,17 @@ export const PlanPriceSchema = z.object({
   savingLabel: z.string()
 });
 export type PlanPrice = z.infer<typeof PlanPriceSchema>;
+/** What a plan allows: the live-listing cap and the capabilities it includes (a capability that is off is not offered). */
+export const PlanEntitlementsSchema = z.object({
+  listings: z.number().int().nullable(),
+  listingsUnlimited: z.boolean(),
+  aiListingWriter: z.boolean(),
+  lolaTier: z.enum(['NONE', 'ESSENTIALS', 'GROWTH', 'PRO']),
+  bulkUpload: z.boolean().default(false),
+  imageLibrary: z.boolean().default(false),
+  coupons: z.boolean().default(false)
+});
+export type PlanEntitlements = z.infer<typeof PlanEntitlementsSchema>;
 export const PlanSchema = z.object({
   code: z.string(),
   name: z.string(),
@@ -902,7 +1394,10 @@ export const PlanSchema = z.object({
   trialDays: z.number().int(),
   features: z.array(z.string()),
   prices: z.array(PlanPriceSchema),
-  current: z.boolean()
+  current: z.boolean(),
+  /** What the plan charges, in words (free months and conditions). */
+  chargeTerms: z.string().default(''),
+  entitlements: PlanEntitlementsSchema.nullable().default(null)
 });
 export type Plan = z.infer<typeof PlanSchema>;
 export const BillingPaymentMethodSchema = z.object({
@@ -920,20 +1415,66 @@ export const BillingPaymentMethodSchema = z.object({
   label: z.string()
 });
 export type BillingPaymentMethod = z.infer<typeof BillingPaymentMethodSchema>;
+export const InvoiceLineSchema = z.object({
+  kind: z.enum(['PLAN', 'USAGE', 'COUPON', 'PRORATION', 'WAIVER']),
+  description: z.string(),
+  amountMinor: z.number().int()
+});
+export type InvoiceLine = z.infer<typeof InvoiceLineSchema>;
+/** A plan invoice AfroTransact issued: settled by credit, then sales (if chosen), then the saved card or bank. */
 export const InvoiceSchema = z.object({
   id: z.string(),
   number: z.string(),
   periodStart: nullableString,
   periodEnd: nullableString,
+  subtotalMinor: z.number().int(),
+  discountMinor: z.number().int(),
   amountDueMinor: z.number().int(),
   amountPaidMinor: z.number().int(),
   currency: z.string(),
-  status: z.string(),
-  pdfUrl: nullableString,
-  hostedUrl: nullableString,
-  createdAt: z.string()
+  status: z.enum(['OPEN', 'PAID', 'VOID', 'UNCOLLECTIBLE']),
+  createdAt: z.string(),
+  paidAt: nullableString,
+  nextAttemptAt: nullableString,
+  lastError: nullableString,
+  lines: z.array(InvoiceLineSchema),
+  paidFromCreditMinor: z.number().int(),
+  paidFromSalesMinor: z.number().int(),
+  paidByCardMinor: z.number().int(),
+  waivedMinor: z.number().int(),
+  canRetry: z.boolean()
 });
 export type Invoice = z.infer<typeof InvoiceSchema>;
+/** A condition staff put on plan charges, with the seller's progress. */
+export const ChargeGateSchema = z.object({
+  mode: z.enum(['START_AFTER', 'WAIVE_WHILE', 'WAIVE_UNTIL']),
+  metric: z.enum(['GROSS_SALES', 'COMPLETED_ORDERS', 'COMPLETED_BOOKINGS', 'ACTIVE_LISTINGS']).nullable(),
+  threshold: z.number().int().nullable(),
+  progress: z.number().int(),
+  until: nullableString,
+  metAt: nullableString,
+  label: z.string()
+});
+export type ChargeGate = z.infer<typeof ChargeGateSchema>;
+/** How the plan is paid (S298): platform credit first, then from sales if the seller chose that, then the card. */
+export const PlanFeeCollectionModeSchema = z.enum(['EARNINGS_FIRST', 'CARD']);
+export type PlanFeeCollectionMode = z.infer<typeof PlanFeeCollectionModeSchema>;
+export const PlanFeeCollectionViewSchema = z.object({
+  /** The platform offers the choice; false hides it (every invoice is charged to the card). The seller opts in. */
+  available: z.boolean(),
+  mode: PlanFeeCollectionModeSchema,
+  effective: PlanFeeCollectionModeSchema,
+  source: z.enum(['DEFAULT', 'ONBOARDING', 'SELLER', 'STAFF']),
+  platformDefault: PlanFeeCollectionModeSchema,
+  /** A change applies from the invoice of this date (the next renewal). */
+  appliesFromInvoiceAt: nullableString,
+  appliesFromLabel: z.string(),
+  inProgressInvoiceId: nullableString,
+  changedAt: nullableString,
+  /** Owner and finance roles may change it. */
+  canChange: z.boolean()
+});
+export type PlanFeeCollectionView = z.infer<typeof PlanFeeCollectionViewSchema>;
 export const SubscriptionSchema = z.object({
   planCode: z.string(),
   planName: z.string(),
@@ -948,7 +1489,14 @@ export const SubscriptionSchema = z.object({
   nextChargeLabel: z.string(),
   cancelAtPeriodEnd: z.boolean(),
   pendingChange: z.object({ planCode: z.string(), planName: z.string(), cadence: CadenceSchema, effectiveAt: z.string() }).nullable(),
-  dunning: nullableString
+  dunning: nullableString,
+  /** Plan version (prices) the organisation pays (S292). */
+  planVersion: z.number().int().default(1),
+  /** Platform credit the next invoices use first (rewards, staff credits). */
+  creditBalanceMinor: z.number().int().default(0),
+  trialSource: z.enum(['PLAN', 'CAMPAIGN', 'OVERRIDE', 'NONE']).nullable().default(null),
+  chargeGate: ChargeGateSchema.nullable().default(null),
+  entitlements: PlanEntitlementsSchema.nullable().default(null)
 });
 export type Subscription = z.infer<typeof SubscriptionSchema>;
 export const BillingViewSchema = z.object({
@@ -956,11 +1504,90 @@ export const BillingViewSchema = z.object({
   plans: z.array(PlanSchema),
   paymentMethods: z.array(BillingPaymentMethodSchema),
   invoices: z.array(InvoiceSchema),
-  canManage: z.boolean()
+  canManage: z.boolean(),
+  planFeeCollection: PlanFeeCollectionViewSchema.nullable().default(null)
 });
 export type BillingView = z.infer<typeof BillingViewSchema>;
 export const ChangePlanResultSchema = z.object({ applied: z.enum(['IMMEDIATE_UPGRADE', 'AT_RENEWAL', 'NO_CHANGE']), billing: BillingViewSchema });
 export type ChangePlanResult = z.infer<typeof ChangePlanResultSchema>;
+
+/* Rewards (S296): what the organisation can still earn, with progress, and what it received. */
+export const RewardProgressSchema = z.object({
+  ruleId: z.string(),
+  name: z.string(),
+  description: nullableString.default(null),
+  metric: z.enum(['GROSS_SALES', 'ACTIVE_LISTINGS', 'COMPLETED_ORDERS', 'COMPLETED_BOOKINGS', 'DAYS_SINCE_APPROVAL']),
+  /** Cents for GROSS_SALES, a count otherwise. */
+  value: z.number().int(),
+  threshold: z.number().int(),
+  percent: z.number().int().min(0).max(100),
+  qualifies: z.boolean(),
+  label: z.string(),
+  rewardLabel: z.string(),
+  conditionLabel: z.string(),
+  endsAt: nullableString.default(null),
+  /** S299: LESS_THAN is low-sales relief (no progress bar: decided once, at checkAt). */
+  comparison: z.enum(['AT_LEAST', 'LESS_THAN']).default('AT_LEAST'),
+  windowAnchor: z.enum(['APPROVAL', 'SUBSCRIPTION_START']).default('APPROVAL'),
+  /** The window's length: the first N days. */
+  windowDays: z.number().int().nullable().default(null),
+  /** Decided once at window end and the check is still to come. */
+  pending: z.boolean().default(false),
+  checkAt: nullableString.default(null),
+  windowClosesAt: nullableString.default(null)
+});
+export type RewardProgress = z.infer<typeof RewardProgressSchema>;
+export const EarnedRewardSchema = z.object({
+  id: z.string(),
+  source: z.enum(['RULE', 'MANUAL']),
+  type: z.enum(['FREE_DAYS', 'FREE_MONTHS', 'CREDIT', 'PERCENT_OFF', 'WAIVE_INVOICE', 'TRIAL_END', 'CHARGE_GATE']),
+  summary: z.string(),
+  reason: nullableString.default(null),
+  status: z.enum(['PENDING', 'APPLIED', 'FAILED']),
+  creditMinor: z.number().int().nullable().default(null),
+  freeDays: z.number().int().nullable().default(null),
+  createdAt: z.string(),
+  appliedAt: nullableString.default(null),
+  /** The reward rule's comparison: LESS_THAN is low-sales relief (S299). */
+  comparison: z.enum(['AT_LEAST', 'LESS_THAN']).nullable().default(null),
+  /** Free days: the new trial end, when the card is charged next. */
+  nextChargeAt: nullableString.default(null)
+});
+export type EarnedReward = z.infer<typeof EarnedRewardSchema>;
+export const SellerRewardsViewSchema = z.object({ available: z.array(RewardProgressSchema), earned: z.array(EarnedRewardSchema) });
+export type SellerRewardsView = z.infer<typeof SellerRewardsViewSchema>;
+
+/** GET /v1/seller/billing/plan/preview: what a plan or cadence change would do; nothing changes. */
+export const BillingPlanChangePreviewSchema = z.object({
+  change: z.enum(['IMMEDIATE_UPGRADE', 'AT_RENEWAL', 'NO_CHANGE']),
+  planCode: z.string(),
+  planName: z.string(),
+  cadence: CadenceSchema,
+  effectiveAt: nullableString.default(null),
+  /** Invoiced now: the proration of an upgrade (0 in a trial or for a change at renewal). */
+  amountDueNowMinor: z.number().int(),
+  nextChargeMinor: z.number().int(),
+  nextChargeAt: nullableString.default(null),
+  trialing: z.boolean()
+});
+export type BillingPlanChangePreview = z.infer<typeof BillingPlanChangePreviewSchema>;
+
+/** POST /v1/seller/billing/setup-intents: confirm with the Payment Element; `localTest` when no Stripe key is configured. */
+export const BillingSetupIntentSchema = z.object({ setupIntentId: z.string(), clientSecret: z.string(), publishableKey: z.string(), localTest: z.boolean() });
+export type BillingSetupIntent = z.infer<typeof BillingSetupIntentSchema>;
+
+/** POST /v1/seller/billing/payment-methods: the method the SetupIntent confirmed (display fields only). */
+export interface AddBillingPaymentMethodInput {
+  stripePaymentMethodId: string;
+  kind: 'CARD' | 'US_BANK_ACCOUNT';
+  brand?: string;
+  last4: string;
+  expMonth?: number;
+  expYear?: number;
+  bankName?: string;
+  accountType?: string;
+  makeDefault?: boolean;
+}
 
 /* ── Team ──────────────────────────────────────────────── */
 
@@ -1053,7 +1680,10 @@ export const BookingCardSchema = z.object({
   practitioner: nullableString,
   expiresAt: nullableString,
   proposedStartAt: nullableString,
-  allowedActions: z.array(BookingActionSchema)
+  allowedActions: z.array(BookingActionSchema),
+  serviceCategory: nullableString.default(null),
+  /** Booking requests: "You keep $X after the 8% connection fee". */
+  takeHome: BookingTakeHomeSchema.nullable().default(null)
 });
 export type BookingCard = z.infer<typeof BookingCardSchema>;
 export const DaySummarySchema = z.object({
@@ -1210,45 +1840,51 @@ export const EarningsSchema = z.object({
     heldMinor: z.number().int()
   }),
   rows: z.array(EarningsRowSchema),
-  providerFees: ProviderFeesSchema
+  providerFees: ProviderFeesSchema,
+  /** The provider's connection fee now, per service category, with its source. */
+  connectionFee: SellerRateCardSchema.nullable().default(null)
 });
 export type Earnings = z.infer<typeof EarningsSchema>;
 
-export const SocialLinkNetworkSchema = z.enum(['instagram', 'tiktok', 'facebook', 'youtube', 'whatsapp', 'x', 'linkedin', 'website']);
-export type SocialNetworkKey = z.infer<typeof SocialLinkNetworkSchema>;
-export const PageLayoutSchema = z.enum(['CLASSIC', 'GALLERY_FIRST', 'STORY']);
-export const PublicPageSchema = z.object({
-  kind: OrgKindSchema,
-  slug: z.string(),
-  name: z.string(),
-  tagline: z.string(),
-  status: z.enum(['DRAFT', 'PUBLISHED']),
-  publishedAt: nullableString,
-  primaryColor: z.string(),
-  accentColor: z.string(),
-  layout: PageLayoutSchema,
-  header: z.enum(['COVER', 'BAND']),
-  buttonShape: z.enum(['ROUNDED', 'SQUARE']),
-  gallerySize: z.number().int(),
-  gallery: z.array(z.object({ assetId: z.string(), url: z.string(), caption: z.string() })),
-  featured: z.array(z.object({ id: z.string(), headline: z.string(), body: z.string(), serviceId: nullableString, published: z.boolean() })),
-  social: z.array(z.object({ network: SocialLinkNetworkSchema, url: z.string(), status: z.enum(['PENDING', 'APPROVED', 'REJECTED']) })),
-  publicPath: z.string()
+/* ── Lola for sellers (plan tiers) ─────────────────────── */
+
+export const AssistantTierSchema = z.enum(['ESSENTIALS', 'GROWTH', 'PRO']);
+export type AssistantTier = z.infer<typeof AssistantTierSchema>;
+export const AssistantStatusSchema = z.object({
+  tier: AssistantTierSchema,
+  limits: z.object({
+    label: z.string(),
+    dailyMessages: z.number().int(),
+    maxToolRounds: z.number().int(),
+    history: z.number().int(),
+    tools: z.array(z.string()),
+    canPropose: z.boolean()
+  }),
+  used: z.number().int(),
+  remaining: z.number().int(),
+  upgrade: z.object({ planCode: z.string(), label: z.string(), gains: z.string() }).nullable()
 });
-export type PublicPage = z.infer<typeof PublicPageSchema>;
-export const PublicPageInputSchema = z.object({
-  name: z.string().min(2).max(80).optional(),
-  tagline: z.string().max(80).optional(),
-  primaryColor: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/).optional(),
-  accentColor: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/).optional(),
-  layout: PageLayoutSchema.optional(),
-  header: z.enum(['COVER', 'BAND']).optional(),
-  buttonShape: z.enum(['ROUNDED', 'SQUARE']).optional(),
-  gallerySize: z.number().int().min(0).max(24).optional(),
-  featured: z
-    .array(z.object({ id: z.string(), headline: z.string().max(80), body: z.string().max(400), serviceId: nullableString.optional(), published: z.boolean() }))
-    .max(6)
-    .optional(),
-  social: z.array(z.object({ network: SocialLinkNetworkSchema, url: z.string() })).optional()
+export type AssistantStatus = z.infer<typeof AssistantStatusSchema>;
+/** A change Lola prepared; nothing happens until the seller taps it. */
+export const AssistantProposalSchema = z.object({
+  kind: z.enum(['SET_STOCK', 'NEXT_STEP']),
+  label: z.string(),
+  sku: z.string().optional(),
+  quantity: z.number().int().optional(),
+  orderNumber: z.string().optional(),
+  shipmentId: z.string().optional(),
+  step: z.enum(['CONFIRMED', 'PACKED', 'READY']).optional()
 });
-export type PublicPageInput = z.infer<typeof PublicPageInputSchema>;
+export type AssistantProposal = z.infer<typeof AssistantProposalSchema>;
+export const AssistantReplySchema = z.object({
+  answer: z.string(),
+  steps: z.array(z.object({ tool: z.string(), label: z.string() })),
+  proposals: z.array(AssistantProposalSchema),
+  status: AssistantStatusSchema
+});
+export type AssistantReply = z.infer<typeof AssistantReplySchema>;
+export interface AssistantChatRequest {
+  message: string;
+  history?: { role: 'user' | 'assistant'; content: string }[];
+  language?: string;
+}

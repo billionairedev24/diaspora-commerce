@@ -35,6 +35,16 @@ public interface CheckoutActivities {
     /** Reserves AfroTransact-fulfilled lines (all or nothing) and splits packages into shipments per node. */
     OrderDraft reserve(CheckoutInput input, CheckoutPlan plan);
 
+    /**
+     * S261: takes the order's slot on the delivery run its pre-order package was priced for (idempotent per order,
+     * never rolled to the next run). Returns the run id, or null when the order has no run package. Fails with
+     * {@link CheckoutCodes#RUN_CLOSED} / {@link CheckoutCodes#RUN_FULL} when the run no longer takes it.
+     */
+    String reserveRunSlot(CheckoutInput input, OrderDraft draft);
+
+    /** Compensation: gives the order's run slot back. */
+    void releaseRunSlot(String orderId, String runId);
+
     /** Creates the PaymentIntent (manual capture) with one payments line per order line. */
     PaymentRef createPayment(OrderDraft draft);
 

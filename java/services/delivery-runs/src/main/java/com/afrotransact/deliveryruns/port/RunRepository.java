@@ -31,6 +31,12 @@ public interface RunRepository {
     List<Run> findAccepting(Collection<UUID> locationIds, Instant now);
 
     /**
+     * Announced runs of these locations that open by {@code opensBy} and have not reached their cutoff: what a member
+     * with early access (S323) can order from before everyone else, earliest cutoff first.
+     */
+    List<Run> findAnnouncedOpeningBy(Collection<UUID> locationIds, Instant now, Instant opensBy);
+
+    /**
      * Locks ({@code FOR UPDATE}, earliest cutoff first so concurrent reservations lock in the same order) the next
      * OPEN / EXTENDED runs of a location taking orders whose cutoff is after {@code afterCutoff}.
      */

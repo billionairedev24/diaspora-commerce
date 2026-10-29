@@ -17,7 +17,7 @@ vulnerabilities: []
 misconfigurations:
   - id: AZU-0057
     # Paths are relative to the scan root: the repository (`trivy fs .`) or infra/ (`trivy config infra`).
-    paths: ["infra/terraform/bootstrap/azure/main.tf", "terraform/bootstrap/azure/main.tf"]
+    paths: ["infra/tofu/bootstrap/azure/main.tf", "tofu/bootstrap/azure/main.tf"]
     statement: >-
       Queue logging is enabled with azurerm_storage_account_queue_properties (azurerm 4+ moved queue_properties out of
       azurerm_storage_account); Trivy's check only reads the removed inline block. Blob reads/writes of the state are

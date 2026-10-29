@@ -23,7 +23,7 @@ func (h *handlersImpl) startLogin(w http.ResponseWriter, r *http.Request, provid
 		returnTo = "/"
 	}
 	url, err := h.s.Auth.AuthorizeURL(r.Context(), callerFrom(r.Context()), app.LoginRequest{Provider: provider, ReturnTo: returnTo,
-		Prompt: q.Get("prompt"), LoginHint: q.Get("login_hint"), Invitation: q.Get("invitation"), Intent: q.Get("intent")})
+		Prompt: q.Get("prompt"), LoginHint: q.Get("login_hint"), Invitation: q.Get("invitation"), Referral: q.Get("referral"), Intent: q.Get("intent"), Retried: q.Get("retried") == "1"})
 	if err != nil {
 		h.reply(w, r, 0, nil, err)
 		return
@@ -44,9 +44,16 @@ func (h *handlersImpl) callback(w http.ResponseWriter, r *http.Request) {
 }
 
 // signOut ends the BFF session and answers where the browser goes next: identity's end-session endpoint, which ends
-// the identity session as well (single sign-out) and returns to the calling app's home page.
+// the identity session as well (single sign-out) and returns to the calling app's signed-out landing.
 func (h *handlersImpl) signOut(w http.ResponseWriter, r *http.Request) {
-	to, err := h.s.Auth.SignOut(r.Context(), callerFrom(r.Context()), r.Header.Get("Origin"))
+	var in struct {
+		ReturnTo string `json:"returnTo"`
+	}
+	if err := decode(r, &in, true); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	to, err := h.s.Auth.SignOut(r.Context(), callerFrom(r.Context()), r.Header.Get("Origin"), in.ReturnTo)
 	var body map[string]any
 	if err == nil {
 		body = map[string]any{"redirectTo": nil}
@@ -55,6 +62,17 @@ func (h *handlersImpl) signOut(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.reply(w, r, http.StatusOK, body, err)
+}
+
+// signedOut is each web app's post-logout landing (registered at identity): the storefront signed out, or the app's
+// own sign-in for Seller Center and the staff console.
+func (h *handlersImpl) signedOut(w http.ResponseWriter, r *http.Request) {
+	to, err := h.s.Auth.SignedOut(r.Context(), callerFrom(r.Context()), r.PathValue("app"), r.URL.Query().Get("state"))
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	h.redirect(w, r, to)
 }
 
 // ---------------------------------------------------------------- account
@@ -184,36 +202,26 @@ func (h *handlersImpl) cancelShipment(w http.ResponseWriter, r *http.Request) {
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
-func (h *handlersImpl) returns(w http.ResponseWriter, r *http.Request) {
-	if h.s.Shopper.enabled() {
-		v, err := h.s.Shopper.Returns.List(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("orderNumber"))
-		h.reply(w, r, http.StatusOK, v, err)
-		return
-	}
-	v, err := h.s.Account.Returns(r.Context(), callerFrom(r.Context()))
-	h.reply(w, r, http.StatusOK, v, err)
-}
-
-func (h *handlersImpl) startReturn(w http.ResponseWriter, r *http.Request) {
-	var b domain.StartReturn
-	if err := decode(r, &b, false); err != nil {
-		h.reply(w, r, 0, nil, err)
-		return
-	}
-	if h.s.Shopper.enabled() {
-		v, err := h.s.Shopper.Returns.Start(r.Context(), callerFrom(r.Context()), r.Header.Get("Idempotency-Key"), b)
-		h.reply(w, r, http.StatusCreated, v, err)
-		return
-	}
-	v, err := h.s.Account.StartReturn(r.Context(), callerFrom(r.Context()), b)
-	h.reply(w, r, http.StatusCreated, v, err)
-}
-
 // ---------------------------------------------------------------- checkout
 
+func parseCheckoutPackageDelivery(q map[string][]string) map[string]string {
+	out := map[string]string{}
+	for _, raw := range q["packageDelivery"] {
+		for _, part := range strings.Split(raw, ",") {
+			part = strings.TrimSpace(part)
+			if i := strings.Index(part, ":"); i > 0 {
+				out[strings.TrimSpace(part[:i])] = strings.TrimSpace(part[i+1:])
+			}
+		}
+	}
+	return out
+}
+
 func (h *handlersImpl) checkoutSummary(w http.ResponseWriter, r *http.Request) {
+	delivery := parseCheckoutPackageDelivery(r.URL.Query())
 	if h.s.Shopper.enabled() {
-		v, err := h.s.Shopper.Checkout.Summary(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("addressId"))
+		v, err := h.s.Shopper.Checkout.Summary(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("addressId"), delivery,
+			r.URL.Query().Get("couponCode"))
 		h.reply(w, r, http.StatusOK, v, err)
 		return
 	}

@@ -29,9 +29,16 @@ export const AddressSuggestionSchema = z.object({
   label: z.string(),
   secondary: z.string(),
   address: PostalAddressSchema,
-  source: z.enum(['google', 'osm', 'fixture'])
+  source: z.enum(['google', 'osm', 'fixture']),
+  /** false: `address` holds the street line only (Google Places); resolve the suggestion when it is picked. */
+  resolved: z.boolean().default(true)
 });
 export type AddressSuggestion = z.infer<typeof AddressSuggestionSchema>;
 
-export const AddressSuggestionsSchema = z.object({ suggestions: z.array(AddressSuggestionSchema), attribution: z.string() });
+export const AddressSuggestionsSchema = z.object({
+  suggestions: z.array(AddressSuggestionSchema),
+  attribution: z.string(),
+  /** Autocomplete session of this address entry: send it with the next keystrokes and the resolve (Google billing). */
+  sessionToken: z.string().default('')
+});
 export type AddressSuggestions = z.infer<typeof AddressSuggestionsSchema>;

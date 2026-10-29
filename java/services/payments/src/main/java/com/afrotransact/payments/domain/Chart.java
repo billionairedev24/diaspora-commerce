@@ -41,7 +41,20 @@ public enum Chart {
      * payable, never transferred or paid out through Stripe Connect.
      */
     SUPPLIER_PAYABLE("2500", "AfroTransact Retail supplier payables", AccountType.LIABILITY, Scope.SUPPLIER),
+    /**
+     * AfroTransact credit (S320): stored value customers hold, owed in goods and services only, never in cash. Credited
+     * when credit is granted, redeemed from a gift card or returned by a refund; debited when a captured order is
+     * paid with it (the credit becomes revenue then, like a card payment) or a staff correction takes it back.
+     */
+    CUSTOMER_CREDIT("2600", "Customer credit (store value, never cash)", AccountType.LIABILITY, Scope.NONE),
+    /** Sold or issued gift cards not redeemed yet (S321): a liability, not revenue, until redeemed into credit. */
+    GIFT_CARD_LIABILITY("2650", "Gift cards outstanding (unredeemed)", AccountType.LIABILITY, Scope.NONE),
     COMMISSION_REVENUE("4000", "Commission revenue", AccountType.REVENUE, Scope.NONE),
+    /**
+     * Connection fees providers pay on service bookings: a configurable percentage of the booking's service amount,
+     * on top of their plan fee, kept apart from product commission (4000) in postings, statements and exports.
+     */
+    CONNECTION_FEE_REVENUE("4050", "Service connection fees", AccountType.REVENUE, Scope.NONE),
     FBA_FEE_REVENUE("4100", "FBA fee revenue", AccountType.REVENUE, Scope.NONE),
     SHIPPING_REVENUE("4200", "AfroTransact shipping revenue", AccountType.REVENUE, Scope.NONE),
     /**
@@ -58,8 +71,21 @@ public enum Chart {
     RETAIL_SALES("4400", "AfroTransact Retail sales", AccountType.REVENUE, Scope.NONE),
     /** Handling markup charged to sellers on top of the carrier cost of labels bought through AfroTransact. */
     LABEL_HANDLING_REVENUE("4500", "Shipping label handling revenue", AccountType.REVENUE, Scope.NONE),
+    /**
+     * Seller and provider plan fees collected from their earnings instead of their card (S298): credited when a plan
+     * invoice is withheld from the seller payable, debited back when it is released (invoice voided or refunded).
+     * Plan fees paid by card never reach this ledger (Stripe Billing collects them on the platform account).
+     */
+    PLAN_FEE_REVENUE("4600", "Seller plan fees collected from earnings", AccountType.REVENUE, Scope.NONE),
+    /**
+     * Shopper membership fees (S323), taken to revenue when the card is charged and back out when refunded. (Deferring an
+     * annual fee over its twelve months is a finance policy that is not built; MRR is reported from the memberships.)
+     */
+    MEMBERSHIP_REVENUE("4700", "Shopper membership fees", AccountType.REVENUE, Scope.NONE),
     STRIPE_FEES("5000", "Stripe processing fees", AccountType.EXPENSE, Scope.NONE),
-    CHARGEBACK_LOSSES("5100", "Chargeback losses", AccountType.EXPENSE, Scope.NONE);
+    CHARGEBACK_LOSSES("5100", "Chargeback losses", AccountType.EXPENSE, Scope.NONE),
+    /** Credit and gift cards AfroTransact gives away (staff, promotions, referral, membership): the program's cost. */
+    CREDIT_GRANTED_EXPENSE("5200", "Credit and gift cards granted (program cost)", AccountType.EXPENSE, Scope.NONE);
 
     /** Whether the account has one sub-account per organisation or jurisdiction. */
     public enum Scope { NONE, ORG, JURISDICTION, SUPPLIER }

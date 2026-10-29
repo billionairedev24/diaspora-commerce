@@ -12,6 +12,9 @@ public final class FulfilmentEvents {
     public static final String TASK_READY = "fulfilment.task.ready";
     public static final String TASK_CANCELLED = "fulfilment.task.cancelled";
 
+    /** A delivery run's routes were planned (S264; key = delivery-runs run id). */
+    public static final String RUN_PLANNED = "fulfilment.run.planned";
+
     public static final String ROUTE_PLANNED = "fulfilment.route.planned";
     public static final String ROUTE_ASSIGNED = "fulfilment.route.assigned";
     public static final String ROUTE_STARTED = "fulfilment.route.started";

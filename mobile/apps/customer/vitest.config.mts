@@ -4,6 +4,11 @@ import { defineConfig } from 'vitest/config';
 
 // Unit tests cover the plain-TS domain modules (no device, no React Native runtime).
 export default defineConfig({
-  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url).href) } },
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url).href),
+      'expo-constants': fileURLToPath(new URL('./test/stubs/expo-constants.ts', import.meta.url).href)
+    }
+  },
   test: { include: ['test/**/*.test.ts'], environment: 'node' }
 });

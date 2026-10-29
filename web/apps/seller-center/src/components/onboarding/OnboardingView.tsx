@@ -11,9 +11,9 @@ import { Notice } from '@/components/ui/Notice';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { sellerApi } from '@/lib/api';
 import { signOutEverywhere } from '@/lib/auth';
+import { useShellRedirect } from '@/lib/nav-guard';
 import { prefillNote } from '@/lib/onboarding-form';
 import { isEditable, nextSlug, onboardingHref, prevSlug, progressOf, redirectFor } from '@/lib/onboarding-wizard';
-import { useStorefrontUrl } from '@/lib/runtime-config';
 import { useSeller } from '@/lib/session';
 
 import { Stepper } from './Stepper';
@@ -42,8 +42,8 @@ const STEP_COMPONENTS: Record<OnboardingStepSlug, ComponentType<StepProps>> = {
 const SUBTITLES: Partial<Record<OnboardingStepSlug, string>> = {
   business: 'Tell us what you’ll sell and how your business is set up. The rest of the form adapts to your answers.',
   owners: 'Each person will verify their identity in the next step.',
-  'stripe-verification': 'Verification runs inside AfroTransact, powered by Stripe. It takes about three minutes on a phone.',
-  payouts: 'Payouts go here weekly, after delivery. The account must belong to the business or owner.',
+  'stripe-verification': 'Stripe, our payments partner, verifies your business and keeps your payout bank account safe. It takes about three minutes.',
+  payouts: 'Stripe holds the bank account your payouts go to. It must belong to the business or owner; change it here any time.',
   plan: 'Every paid plan starts with a free trial. Change plans any time.',
   'catalog-compliance': 'Some categories need permits. We only ask for what applies to you.',
   review: 'Our trust team reviews every application, usually within 2 business days. You can’t sell until it’s approved.'
@@ -59,9 +59,19 @@ function subtitleOf(st: OnboardingStatus, slug: OnboardingStepSlug): string {
   return SUBTITLES[slug] ?? '';
 }
 
+/** A quiet text action next to the primary one. */
+const QUIET =
+  'cursor-pointer border-0 bg-transparent p-1 text-sm font-semibold text-muted underline-offset-4 hover:text-text hover:underline disabled:cursor-not-allowed';
+
 function useOnboarding() {
   const { orgId } = useSeller();
   return useQuery(sellerQueries.onboarding(sellerApi(), orgId));
+}
+
+/** The message the reviewer left when they returned the application (the latest request for information). */
+export function returnedMessage(status: OnboardingStatus): string | null {
+  const last = [...status.timeline].reverse().find((t) => t.action === 'REQUEST_INFO');
+  return last?.note?.trim() ? last.note.trim() : null;
 }
 
 function ApplicationHeading({ status }: { status: OnboardingStatus }) {
@@ -102,17 +112,17 @@ function PrefillBanner({ status }: { status: OnboardingStatus }) {
  */
 export function OnboardingView() {
   const q = useOnboarding();
-  const router = useRouter();
+  const redirect = useShellRedirect();
   const target = q.data ? redirectFor(q.data, null) : null;
   useEffect(() => {
-    if (target) router.replace(target);
-  }, [target, router]);
+    if (target) redirect(target);
+  }, [target, redirect]);
   if (q.isPending || target) return <Spinner />;
   if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <ApplicationHeading status={q.data} />
-      <div className="rounded-md border border-border bg-surface p-4 sm:p-6">
+      <div className="w-full max-w-[880px]">
         <SubmittedView status={q.data} onRefresh={() => void q.refetch()} refreshing={q.isFetching} />
       </div>
     </div>
@@ -120,22 +130,23 @@ export function OnboardingView() {
 }
 
 /**
- * /onboarding/<step>: the application wizard. Progress at the top, the step's fields in a compact grid, and a sticky
- * footer: Back, "Save & sign out" and "Save and continue" (validates, saves, then opens the next step).
+ * /onboarding/<step>: the application wizard. Progress at the top, Back beside the step heading, the step's fields,
+ * then one primary action at the end of the content ("Save and continue": validates, saves, then opens the next step)
+ * with a quiet "Save & sign out" next to it. No boxes around the step and no footer bar: whitespace and type instead.
  */
 export function OnboardingWizard({ slug }: { slug: string }) {
   const q = useOnboarding();
   const router = useRouter();
   const qc = useQueryClient();
   const { orgId } = useSeller();
-  const storefrontUrl = useStorefrontUrl();
   const step = useRef<StepHandle>(null);
   const [busy, setBusy] = useState<'continue' | 'exit' | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const redirect = useShellRedirect();
   const target = q.data ? redirectFor(q.data, slug) : null;
   useEffect(() => {
-    if (target) router.replace(target);
-  }, [target, router]);
+    if (target) redirect(target);
+  }, [target, redirect]);
 
   if (q.isPending || target) return <Spinner />;
   if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
@@ -149,6 +160,16 @@ export function OnboardingWizard({ slug }: { slug: string }) {
   const isReview = current.slug === 'review';
 
   const latest = (): OnboardingStatus => qc.getQueryData<OnboardingStatus>(sellerKeys.onboarding(orgId)) ?? status;
+  /** Opens the next step (or the status page once the application left the applicant's hands). */
+  const goNext = () => {
+    const st = latest();
+    if (isReview || !isEditable(st)) {
+      router.push('/onboarding');
+      return;
+    }
+    router.push(onboardingHref(nextSlug(st, slug) ?? st.resumeStep));
+    window.scrollTo({ top: 0 });
+  };
   const saveAndContinue = async () => {
     if (!step.current) return;
     setBusy('continue');
@@ -156,13 +177,7 @@ export function OnboardingWizard({ slug }: { slug: string }) {
       const ok = await step.current.save('continue');
       if (!ok) return;
       setSavedAt(new Date());
-      const st = latest();
-      if (isReview || !isEditable(st)) {
-        router.push('/onboarding');
-        return;
-      }
-      router.push(onboardingHref(nextSlug(st, slug) ?? st.resumeStep));
-      window.scrollTo({ top: 0 });
+      goNext();
     } finally {
       setBusy(null);
     }
@@ -171,65 +186,87 @@ export function OnboardingWizard({ slug }: { slug: string }) {
     if (!step.current) return;
     setBusy('exit');
     const ok = await step.current.save('draft');
-    if (ok) await signOutEverywhere(storefrontUrl);
+    if (ok) await signOutEverywhere();
     setBusy(null);
   };
 
+  const stripePending = current.slug === 'stripe-verification' && current.state !== 'DONE';
+  const primaryLabel =
+    busy === 'continue'
+      ? isReview
+        ? 'Submitting…'
+        : 'Saving…'
+      : isReview
+        ? status.status === 'INFO_REQUESTED'
+          ? 'Resubmit for review'
+          : 'Submit for review'
+        : stripePending
+          ? 'I’ve finished — continue'
+          : 'Save and continue';
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <ApplicationHeading status={status} />
-      {status.status === 'INFO_REQUESTED' && status.requestedItems.length ? (
-        <Notice tone="warning" title="We need a little more information:" role="alert">
-          {status.requestedItems.join('; ')}. Update the highlighted steps and submit again.
+      {status.status === 'INFO_REQUESTED' ? (
+        <Notice tone="warning" title="We need a little more information from you." role="alert">
+          {returnedMessage(status) ? <span className="block">{returnedMessage(status)}</span> : null}
+          {status.requestedItems.length ? <span className="mt-1 block">Please provide: {status.requestedItems.join('; ')}.</span> : null}
+          <span className="mt-1 block">Update the highlighted steps, then use “Resubmit for review”.</span>
         </Notice>
       ) : null}
-      {current.slug === 'business' || current.slug === 'business-details' ? <PrefillBanner status={status} /> : null}
       <Stepper status={status} current={slug} />
-      <section aria-labelledby="ob-step-title" className="flex flex-col gap-4 rounded-md border border-border bg-surface p-4 sm:p-6">
-        <header className="flex flex-col gap-0.5">
-          <span className="text-xs font-semibold text-muted max-md:hidden">
+      <section aria-labelledby="ob-step-title" className="flex w-full max-w-[880px] flex-col gap-6">
+        <header className="flex flex-col gap-1">
+          {back ? (
+            <button
+              type="button"
+              onClick={() => router.push(onboardingHref(back))}
+              disabled={busy !== null}
+              className="mb-2 inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-pill border-0 bg-transparent px-0 py-1 text-sm font-semibold text-muted hover:text-text disabled:cursor-not-allowed"
+            >
+              <ArrowLeft size={16} aria-hidden /> Back
+            </button>
+          ) : null}
+          <span className="text-xs font-semibold tracking-wide text-muted uppercase max-md:hidden">
             Step {p.num} of {p.total}
           </span>
           <h2 id="ob-step-title" className="m-0 text-2xl font-bold">
             {current.label}
           </h2>
-          <p className="m-0 max-w-[70ch] text-sm text-muted">{subtitleOf(status, current.slug)}</p>
+          <p className="m-0 max-w-[70ch] text-md text-muted">{subtitleOf(status, current.slug)}</p>
         </header>
-        <Step key={`${slug}-${status.orgId}`} status={status} ref={step} />
+        {current.slug === 'business' || current.slug === 'business-details' ? <PrefillBanner status={status} /> : null}
+        <Step key={`${slug}-${status.orgId}`} status={status} ref={step} advance={() => void goNext()} />
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3 pt-2 max-sm:flex-col max-sm:items-stretch">
+          {editable ? (
+            <>
+              {stripePending ? (
+                // Stripe's form holds the step's one primary action; this is only a quiet fallback.
+                <button type="button" onClick={() => void saveAndContinue()} disabled={busy !== null} className={QUIET}>
+                  {primaryLabel}
+                </button>
+              ) : (
+                <Button onClick={() => void saveAndContinue()} disabled={busy !== null} className="sm:min-w-56">
+                  {primaryLabel}
+                </Button>
+              )}
+              <button type="button" onClick={() => void saveAndSignOut()} disabled={busy !== null} className={QUIET}>
+                {busy === 'exit' ? 'Saving…' : 'Save & sign out'}
+              </button>
+              <span className="text-xs text-muted max-sm:text-center sm:ml-auto" aria-live="polite">
+                {savedAt ? 'Saved' : 'Progress saves to your account'}
+              </span>
+            </>
+          ) : (
+            <>
+              <Button variant="neutral" onClick={() => router.push('/onboarding')}>
+                Application status
+              </Button>
+              <span className="text-xs text-muted">Submitted — answers can’t be changed now</span>
+            </>
+          )}
+        </div>
       </section>
-      <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-2 border-t border-border bg-surface px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:-mx-8 sm:px-8">
-        {back ? (
-          <Button variant="neutral" size="sm" onClick={() => router.push(onboardingHref(back))} disabled={busy !== null}>
-            <ArrowLeft size={16} aria-hidden /> Back
-          </Button>
-        ) : null}
-        <span className="min-w-0 flex-1 text-xs text-muted max-sm:hidden" aria-live="polite">
-          {savedAt ? 'Saved' : editable ? 'Progress saves to your account' : 'Submitted — answers can’t be changed now'}
-        </span>
-        <span className="flex-1 sm:hidden" />
-        {editable ? (
-          <>
-            <Button variant="neutral" size="sm" onClick={() => void saveAndSignOut()} disabled={busy !== null}>
-              {busy === 'exit' ? 'Saving…' : 'Save & sign out'}
-            </Button>
-            <Button onClick={() => void saveAndContinue()} disabled={busy !== null} className="max-sm:order-first max-sm:w-full">
-              {busy === 'continue'
-                ? isReview
-                  ? 'Submitting…'
-                  : 'Saving…'
-                : isReview
-                  ? status.status === 'INFO_REQUESTED'
-                    ? 'Resubmit for review'
-                    : 'Submit for review'
-                  : 'Save and continue'}
-            </Button>
-          </>
-        ) : (
-          <Button variant="neutral" size="sm" onClick={() => router.push('/onboarding')}>
-            Application status
-          </Button>
-        )}
-      </div>
     </div>
   );
 }

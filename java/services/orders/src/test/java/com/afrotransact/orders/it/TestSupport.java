@@ -4,6 +4,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.afrotransact.platform.security.ActingAsActorResolver;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PrincipalType;
@@ -51,8 +52,9 @@ class TestSupport {
                 Set.of("delivery:operate"));
     }
 
+    /** The current actor, acting as a shopper on X-Acting-As: CUSTOMER requests like the platform's resolver. */
     @Bean
     ActorResolver switchableActorResolver() {
-        return CURRENT::get;
+        return new ActingAsActorResolver(CURRENT::get);
     }
 }

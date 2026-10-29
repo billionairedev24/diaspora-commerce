@@ -42,7 +42,8 @@ class PaymentLifecycleIT extends PaymentsIntegrationTest {
         LoggedRequest create = WIREMOCK.findAll(WireMock.postRequestedFor(WireMock.urlPathEqualTo(
                 "/v1/payment_intents")).withHeader("Idempotency-Key", WireMock.equalTo(order + ":create-intent")))
                 .getFirst();
-        assertThat(create.getBodyAsString()).contains("amount=7296", "currency=usd", "capture_method=manual",
+        assertThat(create.getBodyAsString()).contains("amount=7296", "currency=usd", "capture_method=automatic_async",
+                "payment_method_options[card][capture_method]=manual", "payment_method_options[klarna][capture_method]=manual",
                 "transfer_group=" + order, "payment_method_options[card][request_multicapture]=if_available", "customer=cus_shopper",
                 "automatic_payment_methods[enabled]=true", "metadata[order_id]=" + order);
         assertThat(payment.path("clientSecret").asString()).isEqualTo("pi_" + order + "_secret_test");

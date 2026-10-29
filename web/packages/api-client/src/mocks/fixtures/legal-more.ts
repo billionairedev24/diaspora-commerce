@@ -1,5 +1,5 @@
 /* Legal & privacy center fixtures for the twelve documents added after the first nine: the v1.0 drafts content-service seeds
-   in V12__seed_legal_extended.sql (replaced by the written documents through tools/legal/build_seed.py). */
+   in V13__seed_legal_extended.sql (replaced by the written documents through tools/legal/build_seed.py). */
 import { type LegalDocumentFixture } from './legal';
 
 export const MORE_LEGAL_DOCUMENTS: LegalDocumentFixture[] = [

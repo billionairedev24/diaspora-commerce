@@ -7,6 +7,8 @@ import {
   type CheckoutSummary,
   createApiClient,
   type CustomerBooking,
+  type HelpRequest,
+  type HelpRequestPage,
   type LolaEvent,
   type OrderConfirmation,
   type OrderDetail,
@@ -14,15 +16,13 @@ import {
   type ProductSummary,
   type ProviderPage,
   readSse,
-  type ReturnDetail,
-  type ReturnEligibility,
-  type ReturnSummary,
   type SearchPage,
   SearchQuerySchema,
   type SecurityOverview,
   type ServiceDetail,
   type ServiceSearch,
-  toLolaEvent
+  toLolaEvent,
+  uploadHelpEvidence
 } from '../src';
 import { type components } from '../src/generated/gateway-bff';
 import { resetDb } from '../src/mocks';
@@ -62,9 +62,8 @@ describe('shopper schemas stay aligned with the contract', () => {
     expectTypeOf<Address>().toExtend<S['Address']>();
     expectTypeOf<PaymentMethod>().toExtend<S['PaymentMethod']>();
     expectTypeOf<OrderDetail>().toExtend<S['OrderDetail']>();
-    expectTypeOf<ReturnSummary>().toExtend<S['ReturnSummary']>();
-    expectTypeOf<ReturnDetail['quote']>().toExtend<S['ReturnDetail']['quote']>();
-    expectTypeOf<ReturnEligibility>().toExtend<S['ReturnEligibility']>();
+    expectTypeOf<HelpRequest>().toExtend<S['HelpRequest']>();
+    expectTypeOf<HelpRequestPage>().toExtend<S['HelpRequestPage']>();
     expectTypeOf<SecurityOverview>().toExtend<S['SecurityOverview']>();
     expectTypeOf<CheckoutSummary['packages'][number]['deliveryOptions'][number]>().toExtend<S['DeliveryOption']>();
     expectTypeOf<OrderConfirmation['status']>().toExtend<S['OrderConfirmation']['status']>();
@@ -94,7 +93,7 @@ describe('Lola SSE parsing', () => {
   });
 });
 
-describe('mock BFF — account, checkout, returns, bookings, Lola', () => {
+describe('mock BFF — account, checkout, help requests, bookings, Lola', () => {
   it('places an order with a saved card, confirms the payment and cancels a shipment', async () => {
     const api = await signedIn();
     await api.addToCart({ offerId: (await api.getProduct('AT000000P2')).buyBox?.offerId ?? '', quantity: 2 });
@@ -120,6 +119,17 @@ describe('mock BFF — account, checkout, returns, bookings, Lola', () => {
     expect(order.shipments[0]?.cancellable).toBe(true);
     const cancelled = await api.cancelShipment(conf.orderNumber, order.shipments[0]?.shipmentId ?? '');
     expect(cancelled.status).toBe('cancelled');
+  });
+
+  it('prices a platform coupon on checkout summary and lowers the total (mock WELCOME10)', async () => {
+    const api = await signedIn();
+    await api.addToCart({ offerId: (await api.getProduct('AT000000P2')).buyBox?.offerId ?? '', quantity: 2 });
+    const base = await api.getCheckoutSummary('ad1');
+    const withCode = await api.getCheckoutSummary('ad1', undefined, 'WELCOME10');
+    expect(withCode.coupon).toMatchObject({ code: 'WELCOME10', applicable: true, funding: 'platform' });
+    expect(withCode.discountMinor).toBeGreaterThan(0);
+    expect(withCode.totalMinor).toBeLessThan(base.totalMinor);
+    expect(withCode.coupon?.sellerShares?.[0]?.funding).toBe('platform');
   });
 
   it('quotes AfroTransact Delivery from the seller’s store per address and refuses an out-of-range one (S255)', async () => {
@@ -149,31 +159,30 @@ describe('mock BFF — account, checkout, returns, bookings, Lola', () => {
     expect(order.shipments[0]?.localDelivery).toEqual({ roadMiles: 7.4, durationMinutes: 18, chargeMinor: 1128 });
   });
 
-  it('starts a return with a reason and shows the refund; food can only be reported', async () => {
+  it('reports a problem with photos, replays an Idempotency-Key and keeps requests private to the account', async () => {
     const api = await signedIn();
     expect((await api.getOrder('AT-2026-104221')).shipments[0]?.returnable).toBe(true);
-    const e = await api.getReturnEligibility('AT-2026-104221');
-    const lines = e.shipments[0]?.lines ?? [];
-    const shea = lines.find((l) => !l.reportProblemOnly);
-    const rice = lines.find((l) => l.reportProblemOnly);
-    expect(rice?.methods).toEqual(['NO_RETURN']);
-    const err = await api
-      .startReturn({ orderNumber: 'AT-2026-104221', shipmentId: e.shipments[0]?.shipmentId ?? '', method: 'NO_RETURN', lines: [{ lineId: rice?.lineId ?? '', quantity: 1, reason: 'NO_LONGER_NEEDED' }] })
-      .catch((x: unknown) => x);
-    expect(err).toBeInstanceOf(ApiError);
-    const rma = await api.startReturn({ orderNumber: 'AT-2026-104221', shipmentId: e.shipments[0]?.shipmentId ?? '', method: 'DROP_OFF', lines: [{ lineId: shea?.lineId ?? '', quantity: 1, reason: 'DAMAGED' }] });
-    expect(rma.refundMinor).toBeGreaterThan(1600);
-    expect(rma.qrPayload).toContain('AFROTRANSACT-RETURN');
-    const detail = await api.getReturn(rma.rmaId);
-    expect(detail.quote?.totalMinor).toBe(rma.refundMinor);
-    expect((await api.getReturns('AT-2026-104221')).map((r) => r.rmaId)).toContain(rma.rmaId);
-    if (rma.number) expect((await api.getReturn(rma.number)).rmaId).toBe(rma.rmaId);
-    // Shea is now being returned; only the food line is left, and food can only be reported.
-    const order = await api.getOrder('AT-2026-104221');
-    expect(order.shipments[0]).toMatchObject({ returnable: false, problemReportOnly: true });
-    expect(order.shipments[0]?.returnWindowEndsAt).toBeTruthy();
-    expect(order.payment?.refundableMinor).toBeGreaterThanOrEqual(0);
-    expect((await api.cancelReturn(rma.rmaId)).status).toBe('cancelled');
+    const progress: number[] = [];
+    const photo = new Blob(['jpeg-bytes'], { type: 'image/jpeg' }) as Blob & { name: string };
+    Object.defineProperty(photo, 'name', { value: 'cracked-jar.jpg' });
+    const put = async (_url: string, _init: unknown, onProgress: (f: number) => void) => {
+      onProgress(0.5);
+      return { ok: true, status: 200 };
+    };
+    const asset = await uploadHelpEvidence(api, photo, { onProgress: (f) => progress.push(f), put });
+    expect(asset.status).toBe('READY');
+    expect(progress).toEqual([0.5, 1]);
+    await expect(api.requestHelpEvidenceUpload({ fileName: 'a.pdf', contentType: 'application/pdf', size: 10 })).rejects.toSatisfy((e) => e instanceof ApiError && e.status === 422);
+    const body = { orderNumber: 'AT-2026-104221', type: 'DAMAGED_ITEM' as const, description: 'The jar arrived cracked and leaking.', evidenceAssetIds: [asset.assetId] };
+    await expect(api.createHelpRequest({ ...body, evidenceAssetIds: ['not-mine'] }, 'help-key-000000001')).rejects.toSatisfy((e) => e instanceof ApiError && e.status === 422);
+    await expect(api.createHelpRequest({ ...body, orderNumber: 'AT-2026-NOPE' }, 'help-key-000000001')).rejects.toSatisfy((e) => e instanceof ApiError && e.status === 404);
+    const created = await api.createHelpRequest(body, 'help-key-000000001');
+    expect(created).toMatchObject({ status: 'RECEIVED', evidenceCount: 1, orderNumber: 'AT-2026-104221', resolution: null });
+    expect((await api.createHelpRequest(body, 'help-key-000000001')).id).toBe(created.id);
+    const page = await api.getHelpRequests();
+    expect(page.items.map((r) => r.id)).toEqual(expect.arrayContaining([created.id, 'help-9001']));
+    expect((await api.getHelpRequest('help-9001')).resolution).toMatchObject({ outcome: 'REFUNDED', refundMinor: 1899 });
+    await expect(api.getHelpRequest('help-nope')).rejects.toSatisfy((e) => e instanceof ApiError && e.status === 404);
   });
 
   it('books a service with a deposit, then cancels with the quoted refund', async () => {
@@ -194,7 +203,7 @@ describe('mock BFF — account, checkout, returns, bookings, Lola', () => {
     expect(res.applied.refundMinor).toBe(quote.refundMinor);
     expect(res.booking.canCancel).toBe(false);
     const page = await api.getProviderPage(svc?.orgId ?? '');
-    expect(page.design?.layout).toBe('GALLERY_FIRST');
+    expect(page.services.length).toBeGreaterThan(0);
   });
 
   it('streams a Lola turn with a confirmable add-to-cart proposal and suggestion chips', async () => {
@@ -221,6 +230,17 @@ describe('mock BFF — account, checkout, returns, bookings, Lola', () => {
     expect((await api.revokeOtherSessions()).revoked).toBe(1);
     const prefs = await api.saveNotificationPreferences({ email: true, sms: false, push: true, marketingOptIn: true });
     expect(prefs.sms).toBe(false);
+  });
+});
+
+describe('mock BFF — services in search', () => {
+  it('a text search also returns the services matching its words, on the first page only', async () => {
+    const api = browserLikeClient().api;
+    const first = await api.search(SearchQuerySchema.parse({ q: 'braids' }));
+    expect(first.services.length).toBeGreaterThan(0);
+    expect(first.services.every((s) => s.name.toLowerCase().includes('braids') || s.category.toLowerCase().includes('braids') || s.providerName.toLowerCase().includes('braids'))).toBe(true);
+    const nothing = await api.search(SearchQuerySchema.parse({ q: 'zzzznothing' }));
+    expect(nothing.services).toEqual([]);
   });
 });
 

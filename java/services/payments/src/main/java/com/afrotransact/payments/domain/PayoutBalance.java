@@ -14,6 +14,9 @@ import java.util.List;
  *                            cancellation fees
  * @param labelCharges        shipping labels bought through AfroTransact and not yet recovered from a transfer
  *                            (S256); negative when voided labels are owed back and paid with the next transfer
+ * @param planFees            plan fees withheld from earnings (S298) and not yet recovered from a transfer: they come
+ *                            out of the amounts on hold; only the part those cannot cover reserves available.
+ *                            Negative when a released fee is owed back and paid with the next transfer
  * @param deliveryFees        AfroTransact Delivery pickup fees the organisation has paid on captured lines (S259), net of
  *                            fees given back by customer-fault refunds: already deducted from its nets, shown so
  *                            earnings can list them
@@ -21,11 +24,14 @@ import java.util.List;
  * @param canRequestToday     false once today's request was made
  * @param payoutsPaused       a compliance hold from seller-service blocks requests and approvals (S214)
  * @param payoutsPausedReason AUTO_PAST_DUE, MANUAL, DEAUTHORIZED or CHARGES_DISABLED while paused, else null
+ * @param connectedAccount     payments knows a Stripe Connect account for the organisation; without one nothing is
+ *                            transferred and the earnings stay on hold
  */
 public record PayoutBalance(String orgId, String currency, Money available, List<HeldOrder> onHold,
                             Money onHoldTotal, Money inFlight, Money paid, Money providerFees, Money labelCharges,
-                            Money deliveryFees, Money minimum,
-                            boolean canRequestToday, boolean payoutsPaused, String payoutsPausedReason) {
+                            Money planFees, Money deliveryFees, Money minimum,
+                            boolean canRequestToday, boolean payoutsPaused, String payoutsPausedReason,
+                            boolean connectedAccount) {
 
     public PayoutBalance {
         onHold = List.copyOf(onHold);

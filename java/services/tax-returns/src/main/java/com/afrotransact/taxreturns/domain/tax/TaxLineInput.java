@@ -11,9 +11,17 @@ package com.afrotransact.taxreturns.domain.tax;
  * @param unitPriceMinor unit price
  * @param discountMinor  discount on the whole line (reduces the taxable amount)
  * @param shippingMinor  delivery charge allocated to this line (taxed only where shipping is taxable)
+ * @param taxCode        our tax code (null when the caller gave only a category)
+ * @param providerTaxCode the external provider's code for it, or null
  */
 public record TaxLineInput(String lineId, String atin, String sellerOrgId, TaxCategory category, int quantity,
-                           long unitPriceMinor, long discountMinor, long shippingMinor) {
+                           long unitPriceMinor, long discountMinor, long shippingMinor, String taxCode,
+                           String providerTaxCode) {
+
+    public TaxLineInput(String lineId, String atin, String sellerOrgId, TaxCategory category, int quantity,
+                        long unitPriceMinor, long discountMinor, long shippingMinor) {
+        this(lineId, atin, sellerOrgId, category, quantity, unitPriceMinor, discountMinor, shippingMinor, null, null);
+    }
 
     public TaxLineInput {
         if (quantity <= 0) {

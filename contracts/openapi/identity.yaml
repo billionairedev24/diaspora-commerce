@@ -19,8 +19,14 @@ servers:
 security:
 - bearer: []
 tags:
+- name: Organisation sync
+  description: Repairs identity's copy of seller and provider organisations from the seller service (the source of truth)
+    when an approval event was missed or arrived late
 - name: Two-step verification
   description: Authenticator app, SMS codes and recovery codes
+- name: Identity admin
+  description: 'OAuth clients, sessions and tokens, signing keys, token inspector and authentication settings (identity:admin;
+    every change needs a reason and is written to the access change log)'
 - name: Data protection
   description: 'Encryption at rest of MFA secrets: key status and key rotation (staff with platform.super_admin only)'
 - name: Notification preferences
@@ -53,6 +59,12 @@ tags:
     token, scope auth:first-party). A completed sign-in returns a one-time loginTicket that the BFF redeems on GET /oauth2/authorize?…&login_ticket=…
     (authorization code + PKCE), then exchanges the code at /oauth2/token. Failed attempts count towards per-account and per-IP
     lockouts (429 identity.sign-in-locked with Retry-After).
+- name: Password reset
+  description: 'Forgotten password (public, enumeration-safe): request a 6-digit code (email, plus SMS to a verified phone; 10-minute
+    expiry, single use, hashed at rest), then set a new password with it. Requests and wrong codes are rate-limited per email and
+    per IP with escalating lockouts (429 with Retry-After). A completed reset signs the account out everywhere (refresh tokens,
+    browser sessions, trusted browsers) and emails a "your password was changed" notice. Staff still need two-step verification
+    at the next sign-in. The hosted pages /login/forgot use the same rules.'
 paths:
   /v1/accounts:
     post:
@@ -215,6 +227,457 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/IdentityProviderAdmin'
+  /v1/admin/identity/step-up:
+    post:
+      tags:
+      - Identity admin
+      summary: Confirm your password for the dangerous actions; returns a proof for the X-Step-Up header
+      description: The proof is valid for five minutes and bound to the signed-in staff member. Wrong passwords count towards
+        the account's sign-in lockout (429 identity.sign-in-locked). Signing in again also counts, the dangerous actions accept
+        an access token whose sign-in (auth_time) is less than five minutes old. Dangerous actions are rotating the signing
+        key, signing a user or a client out, disabling a client and changing the authentication settings.
+      operationId: confirmPassword
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StepUpRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StepUpProof'
+        '422':
+          description: The password is wrong (identity.step-up-failed) or the account has no password (identity.step-up-no-password)
+  /v1/admin/identity/clients:
+    get:
+      tags:
+      - Identity admin
+      summary: Every registered OAuth client (identity:admin)
+      operationId: adminClients
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OAuthClient'
+    post:
+      tags:
+      - Identity admin
+      summary: Register an OAuth client; a confidential client's secret is in the response, once
+      description: Needs a reason. Written to the access change log.
+      operationId: createAdminClient
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthClientRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OAuthClientSecret'
+  /v1/admin/identity/clients/{clientId}:
+    get:
+      tags:
+      - Identity admin
+      summary: One OAuth client (identity:admin)
+      operationId: adminClient
+      parameters:
+      - name: clientId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OAuthClient'
+    put:
+      tags:
+      - Identity admin
+      summary: Edit an OAuth client (everything but its id and type)
+      description: Needs a reason. Written to the access change log with the before and after values.
+      operationId: updateAdminClient
+      parameters:
+      - name: clientId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthClientRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OAuthClient'
+  /v1/admin/identity/clients/{clientId}/disable:
+    post:
+      tags:
+      - Identity admin
+      summary: 'Disable a client: the token endpoint refuses it and its refresh tokens stop working'
+      operationId: disableAdminClient
+      parameters:
+      - name: clientId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: X-Step-Up
+        in: header
+        description: Step-up proof from POST /v1/admin/identity/step-up; not needed within five minutes of signing in. Without
+          either the call is refused with 403 identity.step-up-required.
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OAuthClient'
+  /v1/admin/identity/clients/{clientId}/enable:
+    post:
+      tags:
+      - Identity admin
+      summary: Enable a disabled client
+      operationId: enableAdminClient
+      parameters:
+      - name: clientId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OAuthClient'
+  /v1/admin/identity/clients/{clientId}/rotate-secret:
+    post:
+      tags:
+      - Identity admin
+      summary: Rotate a confidential client's secret; the new secret is in the response, once
+      description: The previous secret keeps working for 24 hours so deployed callers can switch over.
+      operationId: rotateAdminClientSecret
+      parameters:
+      - name: clientId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OAuthClientSecret'
+  /v1/admin/identity/clients/{clientId}/sessions/revoke:
+    post:
+      tags:
+      - Identity admin
+      summary: Revoke every sign-in of a client
+      operationId: revokeAdminClientSessions
+      parameters:
+      - name: clientId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: X-Step-Up
+        in: header
+        description: Step-up proof from POST /v1/admin/identity/step-up; not needed within five minutes of signing in. Without
+          either the call is refused with 403 identity.step-up-required.
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SessionsRevoked'
+  /v1/admin/identity/sessions:
+    get:
+      tags:
+      - Identity admin
+      summary: Active sign-ins and refresh tokens, by user or client
+      description: q matches the user's name or email and the client's id or name.
+      operationId: adminSessions
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: userId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: clientId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdminSessionPage'
+  /v1/admin/identity/sessions/{sessionId}:
+    get:
+      tags:
+      - Identity admin
+      summary: One active sign-in
+      operationId: adminSession
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdminSession'
+  /v1/admin/identity/sessions/{sessionId}/revoke:
+    post:
+      tags:
+      - Identity admin
+      summary: 'Revoke one sign-in: its refresh token stops working at once'
+      operationId: revokeAdminSession
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+        required: true
+      responses:
+        '204':
+          description: No Content
+  /v1/admin/identity/users/{userId}/sessions/revoke:
+    post:
+      tags:
+      - Identity admin
+      summary: 'Sign a user out everywhere: every sign-in and single sign-on browser session'
+      operationId: revokeAdminUserSessions
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: X-Step-Up
+        in: header
+        description: Step-up proof from POST /v1/admin/identity/step-up; not needed within five minutes of signing in. Without
+          either the call is refused with 403 identity.step-up-required.
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SessionsRevoked'
+  /v1/admin/identity/signing-keys:
+    get:
+      tags:
+      - Identity admin
+      summary: 'The JWKS signing keys: active, retiring and retired'
+      operationId: adminSigningKeys
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SigningKey'
+  /v1/admin/identity/signing-keys/rotate:
+    post:
+      tags:
+      - Identity admin
+      summary: 'Rotate the signing key: a new key signs new tokens, the old one stays published until the longest access
+        token has expired'
+      operationId: rotateAdminSigningKey
+      parameters:
+      - name: X-Step-Up
+        in: header
+        description: Step-up proof from POST /v1/admin/identity/step-up; not needed within five minutes of signing in. Without
+          either the call is refused with 403 identity.step-up-required.
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SigningKey'
+  /v1/admin/identity/token-inspector:
+    post:
+      tags:
+      - Identity admin
+      summary: Decode a JWT and check its signature and issuer; the token is never stored or logged
+      operationId: inspectToken
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenInspectionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TokenInspection'
+  /v1/admin/identity/discovery:
+    get:
+      tags:
+      - Identity admin
+      summary: The OIDC discovery document and the JWKS (public keys only)
+      operationId: adminDiscovery
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OidcDocuments'
+  /v1/admin/identity/settings:
+    get:
+      tags:
+      - Identity admin
+      summary: 'Authentication settings: in force, stored overrides and configured defaults'
+      operationId: adminAuthSettings
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AuthSettings'
+    put:
+      tags:
+      - Identity admin
+      summary: Replace the stored authentication settings
+      description: Validated, needs a reason, written to the access change log with before and after.
+      operationId: updateAdminAuthSettings
+      parameters:
+      - name: X-Step-Up
+        in: header
+        description: Step-up proof from POST /v1/admin/identity/step-up; not needed within five minutes of signing in. Without
+          either the call is refused with 403 identity.step-up-required.
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthSettingsUpdate'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AuthSettings'
   /v1/admin/module-access:
     get:
       tags:
@@ -754,6 +1217,44 @@ paths:
                 items:
                   $ref: '#/components/schemas/IdentityProvider'
       security: []
+  /v1/internal/orgs/reconcile:
+    post:
+      tags:
+      - Organisation sync
+      summary: Reconcile every approved or suspended organisation with the seller service now
+      description: What the scheduled job does on start-up and every few minutes, on request (the local repair command, an
+        operator). Needs a service or staff token with orgs:manage.
+      operationId: reconcileAll
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgReconcileSummary'
+  /v1/orgs/{orgId}/sync:
+    post:
+      tags:
+      - Organisation sync
+      summary: Sync one organisation from the seller service now
+      description: 'gateway-bff calls it with the person''s token when the seller service shows the organisation approved
+        and identity does not yet: identity reads the seller service, corrects the status and adds the owners'' memberships,
+        so the next token carries the organisation. The caller must be an owner or the approved applicant at the seller service,
+        or a service or staff member with orgs:manage; anyone else gets 404.'
+      operationId: sync
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgSyncResult'
   /v1/internal/orgs/{orgId}/owners:
     get:
       tags:
@@ -1769,8 +2270,81 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/OrgRoleList'
+  /v1/password-reset:
+    post:
+      tags:
+      - Password reset
+      summary: Ask for a password reset code (always 202, whether or not the email has an account)
+      description: 'If the email belongs to an account with a password, a 6-digit code (10-minute expiry, single use) is sent
+        by email and, when the account has a verified phone, by text message. An account that only signs in with Google,
+        Apple or Facebook gets an email saying to sign in with that provider instead. Unknown emails get nothing, and the
+        answer is the same in every case (no account enumeration). Every request counts towards per-email and per-IP limits:
+        429 identity.reset-locked with Retry-After once they are exceeded.'
+      operationId: requestPasswordReset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PasswordResetRequested'
+      security: []
+  /v1/password-reset/confirm:
+    post:
+      tags:
+      - Password reset
+      summary: Set a new password with the emailed or texted code
+      description: 'The new password follows the sign-up policy (422 identity.invalid-password-reset with fieldErrors.newPassword
+        / confirmPassword). A wrong, expired, used or unknown code, or an email without an account, all answer 422
+        identity.invalid-reset-code (fieldErrors.code) and count towards the per-email and per-IP lockout (429
+        identity.reset-locked with Retry-After). On success every session and refresh token of the account is revoked.'
+      operationId: confirmPasswordReset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+        required: true
+      responses:
+        '204':
+          description: No Content
+      security: []
 components:
   schemas:
+    OrgSyncResult:
+      type: object
+      properties:
+        orgId:
+          type: string
+        status:
+          type: string
+          description: identity's status after the sync; null when the organisation has none yet
+          enum:
+          - PENDING
+          - APPROVED
+          - SUSPENDED
+          - REJECTED
+        repaired:
+          type: boolean
+          description: true when identity's copy was repaired
+    OrgReconcileSummary:
+      type: object
+      properties:
+        scanned:
+          type: integer
+          format: int32
+        repaired:
+          type: integer
+          format: int32
+        failed:
+          type: integer
+          format: int32
     UpsertOrgRequest:
       type: object
       properties:
@@ -2628,6 +3202,10 @@ components:
           type: string
           description: End user's User-Agent
           maxLength: 512
+        appClientId:
+          type: string
+          description: Native app the login ticket is for (customer-app, driver-app); omit for web sessions
+          maxLength: 64
           minLength: 0
       required:
       - clientIp
@@ -2751,6 +3329,10 @@ components:
         userAgent:
           type: string
           maxLength: 512
+        appClientId:
+          type: string
+          description: Native app the login ticket is for (customer-app, driver-app); omit for web sessions
+          maxLength: 64
           minLength: 0
       required:
       - challengeId
@@ -2897,6 +3479,12 @@ components:
             one; the account starts verified and joins the organisation.
           maxLength: 200
           minLength: 0
+        referralCode:
+          type: string
+          description: Referral code of the friend who shared AfroTransact, as in their link (S322). Optional; a code nobody
+            owns is ignored, the account is created either way.
+          maxLength: 20
+          minLength: 0
       required:
       - confirmPassword
       - email
@@ -2949,6 +3537,52 @@ components:
         codeExpiresAt:
           type: string
           format: date-time
+    PasswordResetRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          minLength: 1
+      required:
+      - email
+    PasswordResetRequested:
+      type: object
+      description: The same answer whether or not the email has an account
+      properties:
+        codeTtlMinutes:
+          type: integer
+          format: int32
+          examples:
+          - 10
+      required:
+      - codeTtlMinutes
+    PasswordResetConfirmRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          minLength: 1
+        code:
+          type: string
+          minLength: 1
+          pattern: ^[0-9]{6}$
+        newPassword:
+          type: string
+          maxLength: 128
+          minLength: 1
+        confirmPassword:
+          type: string
+          maxLength: 128
+          minLength: 1
+      required:
+      - code
+      - confirmPassword
+      - email
+      - newPassword
     UpdateProfileRequest:
       type: object
       description: Null fields are left unchanged
@@ -3330,6 +3964,336 @@ components:
           minLength: 0
       required:
       - token
+    StepUpRequest:
+      type: object
+      description: The signed-in staff member's own password, to confirm a dangerous action. It is checked and never stored
+        or logged.
+      properties:
+        password:
+          type: string
+          format: password
+    StepUpProof:
+      type: object
+      description: Send the proof as the X-Step-Up header on the dangerous actions within five minutes. Shown once; only its
+        hash is stored.
+      properties:
+        proof:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+    ReasonBody:
+      type: object
+      description: 'Why: 10 to 500 characters, kept in the access log'
+      properties:
+        reason:
+          type: string
+    OAuthClientRequest:
+      type: object
+      properties:
+        clientId:
+          type: string
+          description: Create only; lower-case letters, digits, dots, dashes and underscores
+        type:
+          type: string
+          description: Create only
+          enum:
+          - public
+          - confidential
+        name:
+          type: string
+        grantTypes:
+          type: array
+          items:
+            type: string
+            enum:
+            - authorization_code
+            - refresh_token
+            - client_credentials
+        scopes:
+          type: array
+          items:
+            type: string
+        redirectUris:
+          type: array
+          items:
+            type: string
+        postLogoutRedirectUris:
+          type: array
+          items:
+            type: string
+        requireConsent:
+          type: boolean
+        publicRefreshTokens:
+          type: boolean
+        accessTokenTtlMinutes:
+          type: integer
+          format: int64
+        refreshTokenTtlMinutes:
+          type: integer
+          format: int64
+        reason:
+          type: string
+    OAuthClient:
+      type: object
+      properties:
+        clientId:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - public
+          - confidential
+        grantTypes:
+          type: array
+          items:
+            type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        redirectUris:
+          type: array
+          items:
+            type: string
+        postLogoutRedirectUris:
+          type: array
+          items:
+            type: string
+        requirePkce:
+          type: boolean
+        requireConsent:
+          type: boolean
+        publicRefreshTokens:
+          type: boolean
+        accessTokenTtlMinutes:
+          type: integer
+          format: int64
+        refreshTokenTtlMinutes:
+          type: integer
+          format: int64
+        enabled:
+          type: boolean
+        platformClient:
+          type: boolean
+          description: The platform's own sign-in client; it cannot be disabled
+        issuedAt:
+          type: string
+          format: date-time
+        secretRotatedAt:
+          type: string
+          format: date-time
+        previousSecretExpiresAt:
+          type: string
+          format: date-time
+          description: While set and in the future, the previous secret still works
+    OAuthClientSecret:
+      type: object
+      description: The new client and its secret. The secret is shown here once and cannot be read again; it is stored only
+        as a hash.
+      properties:
+        client:
+          $ref: '#/components/schemas/OAuthClient'
+        secret:
+          type: string
+          description: Null for a public client
+    AdminSession:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        userName:
+          type: string
+        userEmail:
+          type: string
+        clientId:
+          type: string
+        clientName:
+          type: string
+        ipAddress:
+          type: string
+        signedInAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        refreshable:
+          type: boolean
+    AdminSessionPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminSession'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    SessionsRevoked:
+      type: object
+      properties:
+        sessions:
+          type: integer
+          format: int32
+        browserSessions:
+          type: integer
+          format: int32
+    SigningKey:
+      type: object
+      properties:
+        kid:
+          type: string
+        algorithm:
+          type: string
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - RETIRING
+          - RETIRED
+        createdAt:
+          type: string
+          format: date-time
+        rotatedAt:
+          type: string
+          format: date-time
+        retireAfter:
+          type: string
+          format: date-time
+        retiredAt:
+          type: string
+          format: date-time
+    TokenInspectionRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          maxLength: 16384
+    TokenInspection:
+      type: object
+      properties:
+        wellFormed:
+          type: boolean
+        header:
+          type: object
+          additionalProperties: {}
+        claims:
+          type: object
+          additionalProperties: {}
+        scopes:
+          type: array
+          items:
+            type: string
+        keyId:
+          type: string
+        issuedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        expired:
+          type: boolean
+        signatureValid:
+          type: boolean
+        issuerValid:
+          type: boolean
+        valid:
+          type: boolean
+        problems:
+          type: array
+          items:
+            type: string
+    OidcDocuments:
+      type: object
+      description: The OIDC discovery document and the JWKS (public keys only)
+      properties:
+        discovery:
+          type: object
+          additionalProperties: {}
+        jwks:
+          type: object
+          additionalProperties: {}
+    AuthSettingsValues:
+      type: object
+      properties:
+        passwordMinLength:
+          type: integer
+          format: int32
+        mfaRequiredAccount:
+          type: boolean
+        mfaRequiredSeller:
+          type: boolean
+        mfaRequiredProvider:
+          type: boolean
+        sessionIdleTimeoutMinutes:
+          type: integer
+          format: int32
+        sessionAbsoluteTimeoutMinutes:
+          type: integer
+          format: int32
+        accessTokenTtlCapMinutes:
+          type: integer
+          format: int32
+        refreshTokenTtlCapMinutes:
+          type: integer
+          format: int32
+    AuthSettingsOverrides:
+      type: object
+      description: What is stored; a null field uses the configured default
+      properties:
+        passwordMinLength:
+          type: integer
+          format: int32
+        mfaRequiredAccount:
+          type: boolean
+        mfaRequiredSeller:
+          type: boolean
+        mfaRequiredProvider:
+          type: boolean
+        sessionIdleTimeoutMinutes:
+          type: integer
+          format: int32
+        sessionAbsoluteTimeoutMinutes:
+          type: integer
+          format: int32
+        accessTokenTtlCapMinutes:
+          type: integer
+          format: int32
+        refreshTokenTtlCapMinutes:
+          type: integer
+          format: int32
+    AuthSettings:
+      type: object
+      properties:
+        effective:
+          $ref: '#/components/schemas/AuthSettingsValues'
+        overrides:
+          $ref: '#/components/schemas/AuthSettingsOverrides'
+        defaults:
+          $ref: '#/components/schemas/AuthSettingsValues'
+    AuthSettingsUpdate:
+      type: object
+      description: 'Replaces the stored overrides: send null to go back to the configured default'
+      properties:
+        overrides:
+          $ref: '#/components/schemas/AuthSettingsOverrides'
+        reason:
+          type: string
   securitySchemes:
     bearer:
       type: http

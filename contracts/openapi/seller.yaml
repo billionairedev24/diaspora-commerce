@@ -20,31 +20,42 @@ servers:
 security:
 - bearer: []
 tags:
-- name: Stripe compliance
-  description: Account health for sellers (owner / finance) and the staff compliance console (compliance:remind, compliance:hold).
-    Stripe is the source of truth; answers are forwarded to Stripe and verified there.
+- name: Billing adjustments
+  description: Staff per-seller billing panel and audited adjustments (credits, free days, waived invoices, trial overrides)
+    with reason codes; billing:adjust to change. The Idempotency-Key header makes a retried request return the first grant.
+- name: Plan fee collection
+  description: 'How each organisation pays its plan (S298): from its sales first (EARNINGS_FIRST) or always by card (CARD).
+    Changes apply from the next invoice.'
 - name: Ship-from addresses
   description: Where a seller ships its own orders from (label purchase, rates, AfroTransact Delivery pickup). Members read;
     owner, admin and fulfilment members change them. Addresses are geocoded with geo-service when saved (position).
-- name: Onboarding
-  description: 'The applicant''s resumable application: start (prefilled from the signed-in account), autosave each step,
-    Stripe verification, submit. No back-office access until final approval.'
+- name: Plan catalogue
+  description: AfroTransact owns plans, versions (prices per cadence and the default trial) and trial campaigns; Stripe only
+    executes the charges. Staff with plans:manage change them; plans:manage, seller:billing or billing:adjust read them.
 - name: Application review
   description: 'Two-step staff review. Step 1 (applications:review): approve → AWAITING_FINAL_APPROVAL, flag → FLAGGED, request
     info → INFO_REQUESTED. Step 2 (applications:approve, a different person): final approve → APPROVED (seller.org.approved),
     send back → PENDING_REVIEW, reject.'
-- name: Enforcement
-  description: 'Trust and Safety suspension of an organisation (sellers:enforce; staff or the trust-ops-service client). Separate
-    from Stripe compliance payout holds: reinstating releases only the suspension hold.'
 - name: Plans & billing
   description: Plan catalogue (public) and each organisation's Stripe Billing subscription. Owner and finance can view; only
     the owner changes billing.
+- name: Stripe compliance
+  description: Account health for sellers (owner / finance) and the staff compliance console (compliance:remind, compliance:hold).
+    Stripe is the source of truth and collects every answer in its embedded components; Account health is read-only.
+- name: Stripe webhooks
+  description: Signature-verified (Stripe-Signature) and de-duplicated by event id
+- name: Onboarding
+  description: 'The applicant''s resumable application: start (prefilled from the signed-in account), autosave each step,
+    Stripe verification, submit. No back-office access until final approval.'
+- name: Enforcement
+  description: 'Trust and Safety suspension of an organisation (sellers:enforce; staff or the trust-ops-service client). Separate
+    from Stripe compliance payout holds: reinstating releases only the suspension hold.'
 - name: Organisations
   description: Seller and provider organisations
 - name: Metered usage
   description: FBA storage, sponsored-products spend and AI credits billed on Stripe Billing meters (S206)
-- name: Stripe webhooks
-  description: Signature-verified (Stripe-Signature) and de-duplicated by event id
+- name: Rewards
+  description: Reward rules (staff with plans:manage), the grants log, and the rewards an organisation can earn (owner / finance)
 paths:
   /v1/applications:
     get:
@@ -103,8 +114,8 @@ paths:
       - Onboarding
       summary: Start or resume my application
       description: Creates a DRAFT organisation (caller = owner) and application; name, email and phone are prefilled from
-        the token's identity claims (phone, store name and business address from prefill when given) and listed in
-        prefilledFields. Returns 200 with the existing draft when one exists (resume).
+        the token's identity claims (phone, store name and business address from prefill when given) and listed in prefilledFields.
+        Returns 200 with the existing draft when one exists (resume).
       operationId: startApplication
       requestBody:
         content:
@@ -130,9 +141,9 @@ paths:
       tags:
       - Onboarding
       summary: Autosave one step
-      description: 'Steps: business, business-details, owners, payouts, plan, catalog-compliance, review. The body is the
-        step''s data; only the fields present are validated (submit validates everything). stripe-verification is completed
-        in Stripe''s embedded component.'
+      description: 'Steps: business, business-details, owners, plan, catalog-compliance, review. The body is the step''s data;
+        only the fields present are validated (submit validates everything). stripe-verification and payouts are completed
+        in Stripe''s embedded components (Stripe collects the payout bank account); saving them answers 422 seller.step-managed-by-stripe.'
       operationId: saveStep
       parameters:
       - name: step
@@ -148,13 +159,12 @@ paths:
               - $ref: '#/components/schemas/BusinessStep'
               - $ref: '#/components/schemas/BusinessDetailsStep'
               - $ref: '#/components/schemas/OwnersStep'
-              - $ref: '#/components/schemas/PayoutsStep'
               - $ref: '#/components/schemas/PlanStep'
               - $ref: '#/components/schemas/CatalogComplianceStep'
         required: true
       responses:
         '422':
-          description: seller.invalid-application (fieldErrors), seller.country-not-live or seller.step-not-applicable
+          description: seller.invalid-application (fieldErrors), seller.country-not-live, seller.step-not-applicable or seller.step-managed-by-stripe
           content:
             application/problem+json:
               schema:
@@ -227,11 +237,22 @@ paths:
       tags:
       - Application review
       summary: 'Step 2 — final decision: FINAL_APPROVE, SEND_BACK or REJECT (not by the reviewer)'
+      description: 'Idempotent: a retry with the same Idempotency-Key, or the same person repeating the decision that put
+        the application in its current state, answers 200 with the current application and changes nothing (no timeline entry,
+        no events, no email). A decision that is no longer possible answers 409: seller.already-decided / seller.already-reviewed
+        say what was decided, by whom and when (properties decision, decidedBy, decidedAt); seller.idempotency-key-reused
+        when the key named a different decision.'
       operationId: finalDecision
       parameters:
       - name: id
         in: path
         required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        description: Optional, 8–128 characters; the same key on every retry of one decision
+        required: false
         schema:
           type: string
       requestBody:
@@ -276,11 +297,22 @@ paths:
       tags:
       - Application review
       summary: 'Step 1 — reviewer decision: APPROVE, FLAG (failedChecks) or REQUEST_INFO (requestedItems)'
+      description: 'Idempotent: a retry with the same Idempotency-Key, or the same person repeating the decision that put
+        the application in its current state, answers 200 with the current application and changes nothing (no timeline entry,
+        no events, no email). A decision that is no longer possible answers 409: seller.already-decided / seller.already-reviewed
+        say what was decided, by whom and when (properties decision, decidedBy, decidedAt); seller.idempotency-key-reused
+        when the key named a different decision.'
       operationId: reviewApplication
       parameters:
       - name: id
         in: path
         required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        description: Optional, 8–128 characters; the same key on every retry of one decision
+        required: false
         schema:
           type: string
       requestBody:
@@ -296,6 +328,548 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Application'
+  /v1/billing/grants:
+    get:
+      tags:
+      - Rewards
+      summary: 'Grants log: rewards and staff adjustments, newest first (staff)'
+      operationId: listGrants
+      parameters:
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: source
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: ruleId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingGrantPage'
+  /v1/billing/plans:
+    get:
+      tags:
+      - Plan catalogue
+      summary: Every plan with its versions, Stripe prices and subscribers (staff)
+      operationId: listAdminPlans
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanAdmin'
+    post:
+      tags:
+      - Plan catalogue
+      summary: Create a plan (draft, with version 1 as a draft)
+      operationId: createPlan
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlanRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanAdmin'
+  /v1/billing/plans/{code}:
+    get:
+      tags:
+      - Plan catalogue
+      summary: One plan (staff)
+      operationId: getAdminPlan
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanAdmin'
+    put:
+      tags:
+      - Plan catalogue
+      summary: Edit a plan's name, tagline, features, limits, visibility and sort
+      description: No new version. 409 seller.concurrent-update when expectedVersion is stale.
+      operationId: updatePlan
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePlanRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanAdmin'
+  /v1/billing/plans/{code}/draft:
+    put:
+      tags:
+      - Plan catalogue
+      summary: Save the draft version's prices and trial
+      description: Creates the next version when prices or trial differ from the current one; subscribers stay on their version
+        until migrated.
+      operationId: savePlanDraft
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanPrices'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanAdmin'
+  /v1/billing/plans/{code}/invites:
+    put:
+      tags:
+      - Plan catalogue
+      summary: Organisations invited to an invite-only plan
+      operationId: setPlanInvites
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanInvitesRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanAdmin'
+  /v1/billing/plans/{code}/migration:
+    get:
+      tags:
+      - Plan catalogue
+      summary: Subscribers on older versions and what the current version will charge them
+      operationId: previewPlanMigration
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanMigrationPreview'
+    post:
+      tags:
+      - Plan catalogue
+      summary: Migrate subscribers to the current version (from their next renewal, no proration)
+      operationId: migratePlan
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanMigrationRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanMigrationResult'
+  /v1/billing/plans/{code}/publish:
+    post:
+      tags:
+      - Plan catalogue
+      summary: Publish the draft version and sync it to Stripe (a new Price per cadence; the old one is archived)
+      operationId: publishPlan
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanAdmin'
+  /v1/billing/plans/{code}/retire:
+    post:
+      tags:
+      - Plan catalogue
+      summary: 'Retire a plan: no new subscribers; existing ones keep it'
+      operationId: retirePlan
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanAdmin'
+  /v1/billing/reason-codes:
+    get:
+      tags:
+      - Rewards
+      summary: Reason codes for staff adjustments
+      operationId: listBillingReasonCodes
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BillingReasonCode'
+  /v1/billing/reward-rules:
+    get:
+      tags:
+      - Rewards
+      summary: Reward rules (staff)
+      operationId: listRewardRules
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RewardRule'
+    post:
+      tags:
+      - Rewards
+      summary: Create a reward rule (DRAFT unless a status is given)
+      operationId: createRewardRule
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RewardRuleRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RewardRule'
+  /v1/billing/reward-rules/preview:
+    post:
+      tags:
+      - Rewards
+      summary: Who qualifies now under a rule (unsaved or edited; nothing is granted)
+      operationId: previewRewardRule
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RewardRuleRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RewardPreview'
+  /v1/billing/reward-rules/{id}:
+    get:
+      tags:
+      - Rewards
+      summary: One reward rule (staff)
+      operationId: getRewardRule
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RewardRule'
+    put:
+      tags:
+      - Rewards
+      summary: Edit a reward rule (expectedVersion required)
+      operationId: updateRewardRule
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RewardRuleRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RewardRule'
+  /v1/billing/reward-rules/{id}/status:
+    post:
+      tags:
+      - Rewards
+      summary: Activate, pause or end a reward rule
+      operationId: setRewardRuleStatus
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatusRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RewardRule'
+  /v1/billing/settings:
+    get:
+      tags:
+      - Plan fee collection
+      summary: 'Platform billing settings: the kill switch and the default for new sellers (billing staff)'
+      operationId: billingSettings
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingSettings'
+    put:
+      tags:
+      - Plan fee collection
+      summary: Set how new sellers pay their plan unless they choose (plans:manage)
+      operationId: updateBillingSettings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BillingSettingsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingSettings'
+  /v1/billing/stripe-sync:
+    get:
+      tags:
+      - Plan catalogue
+      summary: Drift between our plan versions and Stripe (nothing changes)
+      operationId: planSyncReport
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanSyncReport'
+    post:
+      tags:
+      - Plan catalogue
+      summary: 'Sync with Stripe: adopt matching Prices, create missing ones, replace drifted ones'
+      operationId: syncPlans
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanSyncReport'
+  /v1/billing/trial-campaigns:
+    get:
+      tags:
+      - Plan catalogue
+      summary: Trial campaigns (promo codes and sign-up windows)
+      operationId: listTrialCampaigns
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrialCampaign'
+    post:
+      tags:
+      - Plan catalogue
+      summary: Create a trial campaign
+      operationId: createTrialCampaign
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrialCampaignRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TrialCampaign'
+  /v1/billing/trial-campaigns/{id}:
+    put:
+      tags:
+      - Plan catalogue
+      summary: Edit a trial campaign (expectedVersion required)
+      operationId: updateTrialCampaign
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrialCampaignRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TrialCampaign'
+  /v1/billing/trial-campaigns/{id}/status:
+    post:
+      tags:
+      - Plan catalogue
+      summary: Activate, pause or end a trial campaign
+      operationId: setTrialCampaignStatus
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatusRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TrialCampaign'
   /v1/billing/usage/runs:
     get:
       tags:
@@ -445,6 +1019,20 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/AccountHealth'
+  /v1/compliance/payments-sync:
+    post:
+      tags:
+      - Stripe compliance
+      summary: 'Staff: register every Connect account with payments now — compliance:remind'
+      description: The scheduled job's run on demand (every minute locally, nightly elsewhere). Payments transfers a seller's net only to an account it knows. Idempotent.
+      operationId: syncNow
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PaymentsSyncResult'
   /v1/launch-list:
     post:
       tags:
@@ -537,6 +1125,44 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/OrgDirectoryPage'
+  /v1/orgs/mirror:
+    get:
+      tags:
+      - Organisations
+      summary: Organisations as identity mirrors them (status, kind, names, owners, approved applicant)
+      description: Ordered by id; the same shape as seller.org.approved / seller.org.updated. Identity's reconcile job reads
+        it to repair its copy when an event was missed or arrived late. Needs sellers:directory as a service client, or staff.
+      operationId: orgMirror
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 200
+      - name: status
+        in: query
+        description: 'Comma-separated statuses (default: all)'
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgMirrorPage'
   /v1/orgs/{id}:
     get:
       tags:
@@ -580,6 +1206,27 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Organisation'
+  /v1/orgs/{id}/mirror:
+    get:
+      tags:
+      - Organisations
+      summary: One organisation as identity mirrors it
+      description: Identity syncs one organisation on demand (gateway-bff saw the approval before identity did). Needs sellers:directory
+        as a service client, or staff.
+      operationId: orgMirrorOne
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgEventPayload'
   /v1/orgs/{id}/public:
     get:
       tags:
@@ -603,7 +1250,7 @@ paths:
     get:
       tags:
       - Stripe compliance
-      summary: 'Account health: what Stripe needs, with a typed form per requirement'
+      summary: 'Account health: what Stripe needs, and the embedded component that collects each item'
       operationId: accountHealth
       parameters:
       - name: orgId
@@ -611,39 +1258,6 @@ paths:
         required: true
         schema:
           type: string
-      responses:
-        '200':
-          description: OK
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/AccountHealth'
-  /v1/orgs/{orgId}/account-health/requirements/{requirement}:
-    post:
-      tags:
-      - Stripe compliance
-      summary: Answer a requirement (owner / finance)
-      description: Values follow the requirement's form. Documents are media asset ids (uploaded to Stripe Files with purpose
-        account_requirement); SSNs and bank accounts are Stripe.js tokens. The requirement then shows as pending verification
-        until Stripe confirms.
-      operationId: answerRequirement
-      parameters:
-      - name: orgId
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: requirement
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RequirementAnswer'
-        required: true
       responses:
         '200':
           description: OK
@@ -689,6 +1303,66 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Billing'
+  /v1/orgs/{orgId}/billing/credits:
+    post:
+      tags:
+      - Billing adjustments
+      summary: Credit the organisation's Stripe balance (billing:adjust)
+      operationId: creditBalance
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingGrant'
+  /v1/orgs/{orgId}/billing/free-days:
+    post:
+      tags:
+      - Billing adjustments
+      summary: 'Give free days: the subscription''s trial_end moves out (billing:adjust)'
+      operationId: giveFreeDays
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FreeDaysRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingGrant'
   /v1/orgs/{orgId}/billing/invoices:
     get:
       tags:
@@ -732,6 +1406,60 @@ paths:
       responses:
         '200':
           description: OK
+  /v1/orgs/{orgId}/billing/invoices/{invoiceId}/waive:
+    post:
+      tags:
+      - Billing adjustments
+      summary: Waive (void) an open invoice (billing:adjust)
+      operationId: waiveInvoice
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: invoiceId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaiveInvoiceRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingGrant'
+  /v1/orgs/{orgId}/billing/panel:
+    get:
+      tags:
+      - Billing adjustments
+      summary: Per-seller billing panel (staff)
+      operationId: billingPanel
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingPanel'
   /v1/orgs/{orgId}/billing/payment-methods:
     get:
       tags:
@@ -831,6 +1559,53 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PaymentMethod'
+  /v1/orgs/{orgId}/billing/staff-plan:
+    post:
+      tags:
+      - Plans & billing
+      summary: Staff assign a plan, including an invite-only (negotiated) one, with the reason (billing:adjust)
+      description: Upgrades prorate now; downgrades and cadence changes apply at renewal, as for the owner. 422 seller.reason-required without a reason of 10+ characters. Recorded in the plan assignments.
+      operationId: assignPlan
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignPlanRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ChangePlanResponse'
+  /v1/orgs/{orgId}/billing/plan-assignments:
+    get:
+      tags:
+      - Plans & billing
+      summary: Plans staff assigned to the organisation, newest first (staff)
+      operationId: planAssignments
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanAssignment'
   /v1/orgs/{orgId}/billing/plan:
     post:
       tags:
@@ -858,6 +1633,78 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ChangePlanResponse'
+  /v1/orgs/{orgId}/billing/plan-fee-collection:
+    get:
+      tags:
+      - Plan fee collection
+      summary: How the organisation pays its plan, with the change log (owner / finance, billing staff)
+      operationId: planFeeCollection
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanFeeCollection'
+    put:
+      tags:
+      - Plan fee collection
+      summary: Pay the plan from sales (EARNINGS_FIRST) or always by card (CARD) (owner / finance)
+      description: Applies from the next invoice. 409 seller.earnings-collection-off while the kill switch COLLECT_PLAN_FEES_FROM_EARNINGS
+        is off.
+      operationId: choosePlanFeeCollection
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanFeeCollectionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanFeeCollection'
+  /v1/orgs/{orgId}/billing/plan-fee-collection/override:
+    put:
+      tags:
+      - Plan fee collection
+      summary: Staff override of how the organisation pays its plan (billing:adjust)
+      description: Audited with a billing reason code (OTHER needs a note). Applies from the next invoice. 409 seller.earnings-collection-off
+        while the kill switch is off.
+      operationId: overridePlanFeeCollection
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanFeeCollectionOverrideRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanFeeCollection'
   /v1/orgs/{orgId}/billing/plan/preview:
     get:
       tags:
@@ -889,6 +1736,27 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/PlanChangePreview'
+  /v1/orgs/{orgId}/billing/plans:
+    get:
+      tags:
+      - Plans & billing
+      summary: Plans this organisation may choose (public, invited, and its current plan) (owner / finance)
+      operationId: listOrgPlans
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Plan'
   /v1/orgs/{orgId}/billing/resume:
     post:
       tags:
@@ -908,6 +1776,25 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Billing'
+  /v1/orgs/{orgId}/billing/rewards:
+    get:
+      tags:
+      - Rewards
+      summary: Rewards the organisation can earn (with progress) and what it received (owner / finance)
+      operationId: sellerRewards
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerRewards'
   /v1/orgs/{orgId}/billing/setup-intents:
     post:
       tags:
@@ -929,6 +1816,38 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/BillingSetupIntent'
+  /v1/orgs/{orgId}/billing/trial:
+    post:
+      tags:
+      - Billing adjustments
+      summary: Override the trial length for this organisation (billing:adjust)
+      description: 'Before activation: the subscription starts with this trial. While trialing: the trial ends this many days
+        after it started.'
+      operationId: overrideTrial
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FreeDaysRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingGrant'
   /v1/orgs/{orgId}/billing/usage:
     get:
       tags:
@@ -1008,6 +1927,51 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/OrgEnforcement'
+  /v1/orgs/{orgId}/business-page:
+    get:
+      tags:
+      - Business page settings
+      summary: The page settings as they are now
+      operationId: get
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BusinessPageSettings'
+    put:
+      tags:
+      - Business page settings
+      summary: Change how the page looks
+      description: Blank values clear them. 422 seller.invalid-branding with fieldErrors
+        (description, brandColor, logoUrl).
+      operationId: update
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessPageSettingsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BusinessPageSettings'
   /v1/orgs/{orgId}/ship-from-addresses:
     get:
       tags:
@@ -1175,6 +2139,28 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ShipFromAddress'
+  /v1/orgs/{orgId}/stripe/account-session:
+    post:
+      tags:
+      - Stripe compliance
+      summary: Account Session for Stripe's embedded components (owner / finance)
+      description: 'Seller accounts are Stripe-collected: what Stripe needs (identity, tax ID, documents, terms) and the payout
+        bank account are entered in Stripe''s embedded components — account onboarding, account management, notification banner
+        — never through AfroTransact. Returns client_secret for Connect.js. Staff can''t open one.'
+      operationId: orgAccountSession
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AccountSession'
   /v1/orgs/{orgId}/suspend:
     post:
       tags:
@@ -1265,7 +2251,10 @@ paths:
     post:
       tags:
       - Stripe webhooks
-      summary: 'Billing events: invoice.paid, invoice.payment_failed, customer.subscription.updated/deleted'
+      summary: 'Billing events: invoice.created/finalized/paid/payment_failed/voided/deleted, credit_note.created, customer.subscription.created/updated/deleted'
+      description: 'invoice.created claims a renewal invoice of an organisation that pays its plan from its sales and collects
+        it at once (S298). 503 while that collection failed for a transient reason: Stripe redelivers and keeps the invoice
+        a draft until we acknowledge it.'
       operationId: stripeBillingWebhook
       parameters:
       - name: Stripe-Signature
@@ -1281,7 +2270,13 @@ paths:
         required: true
       responses:
         '200':
-          description: OK
+          description: Applied (or a duplicate)
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/WebhookResult'
+        '503':
+          description: 'Retry later: paying the invoice from sales is still pending'
           content:
             '*/*':
               schema:
@@ -1290,7 +2285,7 @@ paths:
     post:
       tags:
       - Stripe webhooks
-      summary: 'Connect events: account.updated, capability.updated, person.created/updated, account.external_account.updated,
+      summary: 'Connect events: account.updated, capability.updated, person.created/updated, account.external_account.created/updated/deleted,
         payout.failed, account.application.deauthorized'
       operationId: stripeConnectWebhook
       parameters:
@@ -1314,6 +2309,13 @@ paths:
                 $ref: '#/components/schemas/WebhookResult'
 components:
   schemas:
+    PaymentsSyncResult:
+      type: object
+      properties:
+        registered:
+          type: integer
+          format: int32
+          description: Connect accounts payments accepted
     ShipFromAddressRequest:
       type: object
       description: A ship-from address; US addresses need a state code and ZIP
@@ -1444,6 +2446,42 @@ components:
       - closes
       - day
       - opens
+    BusinessPageSettings:
+      type: object
+      properties:
+        orgId:
+          type: string
+        slug:
+          type: string
+          description: null until the page is first made
+        kind:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        brandColor:
+          type: string
+        logoUrl:
+          type: string
+        contactEmail:
+          type: string
+        approved:
+          type: boolean
+    BusinessPageSettingsRequest:
+      type: object
+      properties:
+        description:
+          type: string
+          maxLength: 2000
+        brandColor:
+          type: string
+          description: '#rrggbb; blank clears it'
+          maxLength: 7
+        logoUrl:
+          type: string
+          description: https URL of an uploaded logo; blank removes it
+          maxLength: 2048
     ShipFromAddress:
       type: object
       properties:
@@ -1507,6 +2545,568 @@ components:
           description: Version being edited; 409 when it changed
       required:
       - enabled
+    PlanFeeCollectionRequest:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+    PlanFeeCollection:
+      type: object
+      description: 'How the organisation pays its plan: EARNINGS_FIRST takes each invoice from pending earnings and charges
+        the card only for the rest; CARD always charges the card'
+      properties:
+        orgId:
+          type: string
+        available:
+          type: boolean
+          description: 'The kill switch is on: the choice is offered and honoured'
+        mode:
+          type: string
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+        effective:
+          type: string
+          description: What the next invoice uses (CARD while the kill switch is off)
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+        source:
+          type: string
+          enum:
+          - DEFAULT
+          - ONBOARDING
+          - SELLER
+          - STAFF
+        changedAt:
+          type: string
+          format: date-time
+        changedBy:
+          type: string
+        platformDefault:
+          type: string
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+        appliesFromInvoiceAt:
+          type: string
+          format: date-time
+          description: A change applies from the invoice of this date (next renewal); null without a paid plan
+        appliesFromLabel:
+          type: string
+          description: e.g. Applies from your next invoice, on Nov 9, 2026
+        inProgressInvoiceId:
+          type: string
+          description: An invoice being collected now keeps the choice it was created with
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanFeeCollectionChange'
+    PlanFeeCollectionChange:
+      type: object
+      description: One change of an organisation's choice
+      properties:
+        id:
+          type: string
+          format: uuid
+        previous:
+          type: string
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+        mode:
+          type: string
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+        source:
+          type: string
+          enum:
+          - ONBOARDING
+          - SELLER
+          - STAFF
+        actorId:
+          type: string
+        reasonCode:
+          type: string
+          description: 'Staff overrides: billing reason code'
+        note:
+          type: string
+        appliesFrom:
+          type: string
+          format: date-time
+          description: The next invoice when it changed
+        createdAt:
+          type: string
+          format: date-time
+    PlanFeeCollectionOverrideRequest:
+      type: object
+      description: Staff override, audited with a reason code (OTHER needs a note)
+      properties:
+        mode:
+          type: string
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+        reasonCode:
+          type: string
+        note:
+          type: string
+    TrialCampaignRequest:
+      type: object
+      description: A promo code, a sign-up window, or both
+      properties:
+        name:
+          type: string
+        promoCode:
+          type: string
+        trialDays:
+          type: integer
+          format: int32
+        signupFrom:
+          type: string
+          format: date-time
+        signupTo:
+          type: string
+          format: date-time
+        kind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+        eligiblePlans:
+          type: array
+          items:
+            type: string
+        maxRedemptions:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - PAUSED
+          - ENDED
+        expectedVersion:
+          type: integer
+          format: int64
+    TrialCampaign:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        promoCode:
+          type: string
+        trialDays:
+          type: integer
+          format: int32
+        signupFrom:
+          type: string
+          format: date-time
+        signupTo:
+          type: string
+          format: date-time
+        kind:
+          type: string
+        eligiblePlans:
+          type: array
+          items:
+            type: string
+        maxRedemptions:
+          type: integer
+          format: int32
+        redemptions:
+          type: integer
+          format: int32
+        status:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    BillingSettingsRequest:
+      type: object
+      properties:
+        planFeeCollectionDefault:
+          type: string
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+    BillingSettings:
+      type: object
+      description: Platform billing settings (staff console › Plans & billing)
+      properties:
+        earningsCollectionEnabled:
+          type: boolean
+          description: The kill switch COLLECT_PLAN_FEES_FROM_EARNINGS
+        planFeeCollectionDefault:
+          type: string
+          description: How new sellers pay their plan unless they choose
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    RewardRuleRequest:
+      type: object
+      description: Reach threshold of metric (optionally in the last windowDays days and/or within withinDaysOfApproval days
+        of approval) and get the reward, once per seller. LESS_THAN rewards staying under the threshold in the first withinDaysOfApproval
+        days (from approval or the subscription's start), checked once, checkLeadHours before the window or the trial ends
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        kind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+        metric:
+          type: string
+          enum:
+          - GROSS_SALES
+          - ACTIVE_LISTINGS
+          - COMPLETED_ORDERS
+          - COMPLETED_BOOKINGS
+          - DAYS_SINCE_APPROVAL
+        threshold:
+          type: integer
+          format: int64
+          description: Cents for GROSS_SALES, a count otherwise
+        windowDays:
+          type: integer
+          format: int32
+        withinDaysOfApproval:
+          type: integer
+          format: int32
+          description: The first N days from windowAnchor (the window of a rule checked at window end)
+        comparison:
+          type: string
+          description: Default AT_LEAST
+          enum:
+          - AT_LEAST
+          - LESS_THAN
+        windowAnchor:
+          type: string
+          description: Default APPROVAL
+          enum:
+          - APPROVAL
+          - SUBSCRIPTION_START
+        checkAtWindowEnd:
+          type: boolean
+          description: 'AT_LEAST: decide once when the window closes (LESS_THAN always does)'
+        checkLeadHours:
+          type: integer
+          format: int32
+          description: Hours before the window (or the trial) ends that the check runs; default 24
+        rewardType:
+          type: string
+          enum:
+          - FREE_DAYS
+          - CREDIT
+          - PERCENT_OFF
+        freeDays:
+          type: integer
+          format: int32
+        creditCents:
+          type: integer
+          format: int64
+        percentOff:
+          type: number
+        durationInvoices:
+          type: integer
+          format: int32
+        eligiblePlans:
+          type: array
+          items:
+            type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        maxGrants:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - ACTIVE
+          - PAUSED
+          - ENDED
+        expectedVersion:
+          type: integer
+          format: int64
+        ruleId:
+          type: string
+          description: 'Preview only: marks who already got this rule'
+    RewardRule:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        kind:
+          type: string
+        metric:
+          type: string
+        threshold:
+          type: integer
+          format: int64
+        windowDays:
+          type: integer
+          format: int32
+        withinDaysOfApproval:
+          type: integer
+          format: int32
+        comparison:
+          type: string
+          enum:
+          - AT_LEAST
+          - LESS_THAN
+        windowAnchor:
+          type: string
+          enum:
+          - APPROVAL
+          - SUBSCRIPTION_START
+        checkAtWindowEnd:
+          type: boolean
+          description: Decided once when the window closes (always for LESS_THAN)
+        checkLeadHours:
+          type: integer
+          format: int32
+        rewardType:
+          type: string
+        freeDays:
+          type: integer
+          format: int32
+        creditCents:
+          type: integer
+          format: int64
+        percentOff:
+          type: number
+        durationInvoices:
+          type: integer
+          format: int32
+        eligiblePlans:
+          type: array
+          items:
+            type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        maxGrants:
+          type: integer
+          format: int32
+        grantsCount:
+          type: integer
+          format: int32
+        rewardLabel:
+          type: string
+        conditionLabel:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    UpdatePlanRequest:
+      type: object
+      description: Metadata only; expectedVersion is the plan's rowVersion
+      properties:
+        name:
+          type: string
+        tagline:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        limits:
+          type: object
+          additionalProperties:
+            type: string
+        visibility:
+          type: string
+          enum:
+          - PUBLIC
+          - HIDDEN
+          - INVITE_ONLY
+        sortOrder:
+          type: integer
+          format: int32
+        expectedVersion:
+          type: integer
+          format: int64
+    PlanAdmin:
+      type: object
+      description: 'A plan for staff: metadata, versions with Stripe prices, invites'
+      properties:
+        code:
+          type: string
+        kind:
+          type: string
+        name:
+          type: string
+        tagline:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        limits:
+          type: object
+          additionalProperties:
+            type: string
+        visibility:
+          type: string
+        status:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+        currentVersion:
+          type: integer
+          format: int32
+        monthlyCents:
+          type: integer
+          format: int64
+        quarterlyCents:
+          type: integer
+          format: int64
+        annualCents:
+          type: integer
+          format: int64
+        trialDays:
+          type: integer
+          format: int32
+        rowVersion:
+          type: integer
+          format: int64
+        stripeProductId:
+          type: string
+        subscribers:
+          type: integer
+          format: int64
+        invites:
+          type: array
+          items:
+            type: string
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanVersion'
+    PlanVersion:
+      type: object
+      properties:
+        version:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - SUPERSEDED
+        trialDays:
+          type: integer
+          format: int32
+        note:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        publishedAt:
+          type: string
+          format: date-time
+        subscribers:
+          type: integer
+          format: int64
+        prices:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanVersionPrice'
+    PlanVersionPrice:
+      type: object
+      description: One cadence of a version and its Stripe Price
+      properties:
+        cadence:
+          type: string
+        amountCents:
+          type: integer
+          format: int64
+        lookupKey:
+          type: string
+        stripePriceId:
+          type: string
+        syncedAt:
+          type: string
+          format: date-time
+        syncError:
+          type: string
+    PlanInvitesRequest:
+      type: object
+      properties:
+        orgIds:
+          type: array
+          items:
+            type: string
+    PlanPrices:
+      type: object
+      description: A version's price per cadence (cents) and default trial
+      properties:
+        monthlyCents:
+          type: integer
+          format: int64
+        quarterlyCents:
+          type: integer
+          format: int64
+        annualCents:
+          type: integer
+          format: int64
+        trialDays:
+          type: integer
+          format: int32
+        note:
+          type: string
     BusinessStep:
       type: object
       description: Step 'business'. Non-live countries return 422 seller.country-not-live.
@@ -1584,8 +3184,8 @@ components:
           type: string
     Owner:
       type: object
-      description: A beneficial owner (25%+) or person with significant control, with their home address. Identity and
-        tax numbers are collected by Stripe's embedded onboarding, not here.
+      description: A beneficial owner (25%+) or person with significant control, with their home address. Identity and tax
+        numbers are collected by Stripe's embedded onboarding, not here.
       properties:
         firstName:
           type: string
@@ -1612,29 +3212,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Owner'
-    PayoutsStep:
-      type: object
-      description: Step 'payouts'. Only last 4 digits are stored. The bank account goes to Stripe as the connected account's
-        payout account, either externalAccountToken (btok_…, Stripe.js) or the routing and account numbers, sent once to
-        Stripe and never stored. The step is complete only once Stripe accepted the account (externalAccountLinked).
-      properties:
-        accountHolderName:
-          type: string
-        accountType:
-          type: string
-          enum:
-          - checking
-          - savings
-        bankName:
-          type: string
-        routingNumber:
-          type: string
-        accountNumber:
-          type: string
-        accountNumberConfirmation:
-          type: string
-        externalAccountToken:
-          type: string
     PlanStep:
       type: object
       description: Step 'plan'. Cards are tokenised client-side (pm_…); only brand, last 4 and expiry are stored. US_BANK_ACCOUNT
@@ -1665,6 +3242,15 @@ components:
         cardExpYear:
           type: integer
           format: int32
+        promoCode:
+          type: string
+          description: Trial campaign promo code (optional)
+        planFeeCollection:
+          type: string
+          description: 'How the plan will be paid (S298): from sales first or always by card; omit for the platform default'
+          enum:
+          - EARNINGS_FIRST
+          - CARD
     CatalogComplianceStep:
       type: object
       description: Step 'catalog-compliance'
@@ -1718,11 +3304,6 @@ components:
           type: string
         permitType:
           type: string
-          enum:
-          - FOOD_ESTABLISHMENT
-          - COTTAGE_FOOD
-          - FDA_FACILITY
-          - FOOD_HANDLER
     ServiceLicence:
       type: object
       description: A service offered; regulated services need licence number, issuing state, expiry (expired licences are
@@ -1771,6 +3352,8 @@ components:
           type: boolean
         outcome:
           type: string
+        retryLater:
+          type: boolean
     ProvisionOrgRequest:
       type: object
       properties:
@@ -1925,6 +3508,21 @@ components:
           type: string
         reinstateNote:
           type: string
+    AccountSession:
+      type: object
+      description: 'client_secret for Stripe''s embedded Connect components. localTest is true only on the local profile without
+        a Stripe key (LocalTestStripePolicy): there is no Stripe to load and the client shows its labelled local verification
+        instead.'
+      properties:
+        accountId:
+          type: string
+        clientSecret:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        localTest:
+          type: boolean
     ReinstateOrgRequest:
       type: object
       properties:
@@ -1932,6 +3530,103 @@ components:
           type: string
           maxLength: 1000
           minLength: 0
+    FreeDaysRequest:
+      type: object
+      properties:
+        days:
+          type: integer
+          format: int32
+        reasonCode:
+          type: string
+        note:
+          type: string
+    BillingGrant:
+      type: object
+      description: A reward or staff adjustment and the Stripe objects it produced
+      properties:
+        id:
+          type: string
+        orgId:
+          type: string
+        source:
+          type: string
+          enum:
+          - RULE
+          - MANUAL
+        ruleId:
+          type: string
+        type:
+          type: string
+          enum:
+          - FREE_DAYS
+          - CREDIT
+          - PERCENT_OFF
+          - WAIVE_INVOICE
+          - TRIAL_END
+        creditCents:
+          type: integer
+          format: int64
+        freeDays:
+          type: integer
+          format: int32
+        percentOff:
+          type: number
+        durationInvoices:
+          type: integer
+          format: int32
+        invoiceId:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - APPLIED
+          - FAILED
+        reasonCode:
+          type: string
+        note:
+          type: string
+        summary:
+          type: string
+        actorId:
+          type: string
+        metric:
+          type: string
+        metricValue:
+          type: integer
+          format: int64
+        stripeCustomerId:
+          type: string
+        stripeSubscriptionId:
+          type: string
+        stripeBalanceTransactionId:
+          type: string
+        stripeCouponId:
+          type: string
+        previousTrialEnd:
+          type: string
+          format: date-time
+        newTrialEnd:
+          type: string
+          format: date-time
+        attempts:
+          type: integer
+          format: int32
+        lastError:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        appliedAt:
+          type: string
+          format: date-time
+        ruleComparison:
+          type: string
+          description: 'Seller rewards: the rule''s comparison (LESS_THAN = low-sales relief); null for staff adjustments
+            and in the grants log'
+          enum:
+          - AT_LEAST
+          - LESS_THAN
     BillingSetupIntent:
       type: object
       properties:
@@ -1984,6 +3679,30 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PaymentMethod'
+        planVersion:
+          type: integer
+          format: int32
+          description: Plan version (prices) the organisation is on
+        creditBalanceCents:
+          type: integer
+          format: int64
+          description: Stripe customer credit balance the next invoices use
+        trialSource:
+          type: string
+          enum:
+          - PLAN
+          - CAMPAIGN
+          - OVERRIDE
+          - NONE
+        trialDaysOverride:
+          type: integer
+          format: int32
+        planFeeCollection:
+          type: string
+          description: 'How the plan is paid (S298); details: GET /v1/orgs/{orgId}/billing/plan-fee-collection'
+          enum:
+          - EARNINGS_FIRST
+          - CARD
     FirstCharge:
       type: object
       properties:
@@ -2119,15 +3838,48 @@ components:
       required:
       - kind
       - stripePaymentMethodId
-    RequirementAnswer:
+    WaiveInvoiceRequest:
       type: object
       properties:
-        values:
-          type: object
-          additionalProperties:
-            type: string
+        reasonCode:
+          type: string
+        note:
+          type: string
+    CreditRequest:
+      type: object
+      properties:
+        amountCents:
+          type: integer
+          format: int64
+        reasonCode:
+          type: string
+        note:
+          type: string
+    LaunchListRequest:
+      type: object
+      properties:
+        country:
+          type: string
+          maxLength: 2
+          minLength: 2
+        email:
+          type: string
+          format: email
+          minLength: 1
+        shoppingUpdates:
+          type: boolean
       required:
-      - values
+      - country
+      - email
+    LaunchListResponse:
+      type: object
+      properties:
+        country:
+          type: string
+        added:
+          type: boolean
+        message:
+          type: string
     AccountHealth:
       type: object
       properties:
@@ -2169,6 +3921,8 @@ components:
           type: object
           additionalProperties:
             type: string
+        payoutBank:
+          $ref: '#/components/schemas/PayoutBank'
         requirements:
           type: array
           items:
@@ -2195,22 +3949,16 @@ components:
         occurredAt:
           type: string
           format: date-time
-    FormField:
+    PayoutBank:
       type: object
       properties:
-        name:
+        id:
           type: string
-        label:
+        bankName:
           type: string
-        type:
+        last4:
           type: string
-        required:
-          type: boolean
-        options:
-          type: array
-          items:
-            type: string
-        pattern:
+        status:
           type: string
     RequirementError:
       type: object
@@ -2245,10 +3993,8 @@ components:
           type: string
         why:
           type: string
-        fields:
-          type: array
-          items:
-            $ref: '#/components/schemas/FormField'
+        component:
+          type: string
     RequirementItem:
       type: object
       properties:
@@ -2262,31 +4008,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RequirementError'
-    LaunchListRequest:
-      type: object
-      properties:
-        country:
-          type: string
-          maxLength: 2
-          minLength: 2
-        email:
-          type: string
-          format: email
-          minLength: 1
-        shoppingUpdates:
-          type: boolean
-      required:
-      - country
-      - email
-    LaunchListResponse:
-      type: object
-      properties:
-        country:
-          type: string
-        added:
-          type: boolean
-        message:
-          type: string
     ComplianceNote:
       type: object
       properties:
@@ -2352,6 +4073,189 @@ components:
         finishedAt:
           type: string
           format: date-time
+    StatusRequest:
+      type: object
+      properties:
+        status:
+          type: string
+    PlanSyncLine:
+      type: object
+      properties:
+        planCode:
+          type: string
+        planName:
+          type: string
+        version:
+          type: integer
+          format: int32
+        cadence:
+          type: string
+        amountCents:
+          type: integer
+          format: int64
+        lookupKey:
+          type: string
+        state:
+          type: string
+          enum:
+          - IN_SYNC
+          - FREE
+          - ADOPTABLE
+          - MISSING
+          - DRIFT
+          - SUPERSEDED
+        action:
+          type: string
+          enum:
+          - NONE
+          - ADOPTED
+          - CREATED
+          - REPLACED
+          - FAILED
+        stripePriceId:
+          type: string
+        stripeAmountCents:
+          type: integer
+          format: int64
+        error:
+          type: string
+    PlanSyncReport:
+      type: object
+      description: Drift between our plan versions and Stripe; applied = the sync ran
+      properties:
+        checkedAt:
+          type: string
+          format: date-time
+        applied:
+          type: boolean
+        drifted:
+          type: integer
+          format: int64
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanSyncLine'
+    RewardPreview:
+      type: object
+      description: Who qualifies now (best first, at most 500 rows)
+      properties:
+        evaluated:
+          type: integer
+          format: int32
+        qualifying:
+          type: integer
+          format: int32
+        pending:
+          type: integer
+          format: int32
+          description: 'Rules checked at window end: organisations still in their window'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/RewardPreviewRow'
+    RewardPreviewRow:
+      type: object
+      properties:
+        orgId:
+          type: string
+        orgName:
+          type: string
+        planCode:
+          type: string
+        value:
+          type: integer
+          format: int64
+          description: The metric so far (in the window)
+        threshold:
+          type: integer
+          format: int64
+        percent:
+          type: integer
+          format: int32
+        qualifies:
+          type: boolean
+        alreadyGranted:
+          type: boolean
+        reason:
+          type: string
+        status:
+          type: string
+          description: 'PENDING: in the window of a rule checked at window end'
+          enum:
+          - GRANTED
+          - QUALIFIES
+          - PENDING
+          - CHECKED
+          - NOT_YET
+          - INELIGIBLE
+        checkAt:
+          type: string
+          format: date-time
+          description: 'Rules checked at window end: when this organisation is checked'
+    CreatePlanRequest:
+      type: object
+      properties:
+        code:
+          type: string
+        kind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+        name:
+          type: string
+        tagline:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        limits:
+          type: object
+          additionalProperties:
+            type: string
+        visibility:
+          type: string
+          enum:
+          - PUBLIC
+          - HIDDEN
+          - INVITE_ONLY
+        sortOrder:
+          type: integer
+          format: int32
+        prices:
+          $ref: '#/components/schemas/PlanPrices'
+    PlanMigrationRequest:
+      type: object
+      description: orgIds empty or missing = every subscriber in the preview
+      properties:
+        orgIds:
+          type: array
+          items:
+            type: string
+    PlanMigrationFailure:
+      type: object
+      properties:
+        orgId:
+          type: string
+        error:
+          type: string
+    PlanMigrationResult:
+      type: object
+      properties:
+        planCode:
+          type: string
+        toVersion:
+          type: integer
+          format: int32
+        migrated:
+          type: array
+          items:
+            type: string
+        failed:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanMigrationFailure'
     ReviewDecision:
       type: object
       properties:
@@ -2380,6 +4284,12 @@ components:
           type: array
           items:
             type: string
+        actorName:
+          type: string
+          description: The staff member's display name, recorded on the timeline and used in "already approved by …" messages
+            (display only)
+          maxLength: 200
+          minLength: 0
       required:
       - action
       - reasonCode
@@ -2464,6 +4374,17 @@ components:
         updatedAt:
           type: string
           format: date-time
+        planFeeCollectionOption:
+          $ref: '#/components/schemas/PlanFeeCollectionOption'
+          description: Whether the Plan step offers paying the plan from sales, and the platform default (S298)
+        reviewedAt:
+          type: string
+          format: date-time
+          description: When step 1 was decided
+        decidedAt:
+          type: string
+          format: date-time
+          description: When the final decision was made
     BusinessDetails:
       type: object
       description: Tax ID is masked (last 4) unless the reviewer has applications:pii; dates of birth are year-only for masked
@@ -2626,6 +4547,19 @@ components:
           type: string
         externalAccountLinked:
           type: boolean
+        bankStatus:
+          type: string
+    PlanFeeCollectionOption:
+      type: object
+      description: What the onboarding Plan step offers
+      properties:
+        available:
+          type: boolean
+        platformDefault:
+          type: string
+          enum:
+          - EARNINGS_FIRST
+          - CARD
     PlanSelection:
       type: object
       properties:
@@ -2649,6 +4583,14 @@ components:
           format: int32
         firstCharge:
           $ref: '#/components/schemas/FirstCharge'
+        promoCode:
+          type: string
+        planFeeCollection:
+          type: string
+          description: The applicant's choice; null keeps the platform default
+          enum:
+          - EARNINGS_FIRST
+          - CARD
     StripeVerification:
       type: object
       properties:
@@ -2695,6 +4637,37 @@ components:
         occurredAt:
           type: string
           format: date-time
+        actorName:
+          type: string
+          description: The staff member's display name (staff views only)
+    ApplicationPrefill:
+      type: object
+      description: 'What the caller''s account already knows (sent by gateway-bff from identity''s profile and address book).
+        Used only when the application is created, and only where the token''s claims have nothing: name, email, phone (verified
+        or not), the default address as the business address, and a store name.'
+      properties:
+        givenName:
+          type: string
+          maxLength: 80
+          minLength: 0
+        familyName:
+          type: string
+          maxLength: 80
+          minLength: 0
+        email:
+          type: string
+          maxLength: 254
+          minLength: 0
+        phone:
+          type: string
+          maxLength: 32
+          minLength: 0
+        storeName:
+          type: string
+          maxLength: 120
+          minLength: 0
+        address:
+          $ref: '#/components/schemas/Address'
     StartApplicationRequest:
       type: object
       properties:
@@ -2708,44 +4681,6 @@ components:
           $ref: '#/components/schemas/ApplicationPrefill'
       required:
       - kind
-    ApplicationPrefill:
-      type: object
-      description: 'What the caller''s account already knows (sent by gateway-bff from identity''s profile and address
-        book). Used only when the application is created, and only where the token''s claims have nothing: name,
-        email, phone (verified or not), the default address as the business address, and a store name.'
-      properties:
-        givenName:
-          type: string
-          maxLength: 80
-        familyName:
-          type: string
-          maxLength: 80
-        email:
-          type: string
-          maxLength: 254
-        phone:
-          type: string
-          maxLength: 32
-        storeName:
-          type: string
-          maxLength: 120
-        address:
-          $ref: '#/components/schemas/Address'
-    AccountSession:
-      type: object
-      description: 'client_secret for Stripe''s embedded Connect components. localTest is true only on the local profile
-        without a Stripe key (LocalTestStripePolicy): there is no Stripe to load and the client shows its labelled local
-        verification instead.'
-      properties:
-        accountId:
-          type: string
-        clientSecret:
-          type: string
-        expiresAt:
-          type: string
-          format: date-time
-        localTest:
-          type: boolean
     RenameOrgRequest:
       type: object
       properties:
@@ -2780,6 +4715,7 @@ components:
         trialDays:
           type: integer
           format: int32
+          description: The trial a sign-up gets today (plan default or a running campaign)
         features:
           type: array
           items:
@@ -2788,6 +4724,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlanPrice'
+        version:
+          type: integer
+          format: int32
+          description: Current version (prices)
+        visibility:
+          type: string
+          enum:
+          - PUBLIC
+          - HIDDEN
+          - INVITE_ONLY
+        limits:
+          type: object
+          additionalProperties:
+            type: string
     UsageDayLine:
       type: object
       properties:
@@ -2861,6 +4811,75 @@ components:
         estimatedTotalCents:
           type: integer
           format: int64
+    RewardProgress:
+      type: object
+      description: A reward the organisation can still earn
+      properties:
+        ruleId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        metric:
+          type: string
+        value:
+          type: integer
+          format: int64
+        threshold:
+          type: integer
+          format: int64
+        percent:
+          type: integer
+          format: int32
+        qualifies:
+          type: boolean
+        label:
+          type: string
+        rewardLabel:
+          type: string
+        conditionLabel:
+          type: string
+        endsAt:
+          type: string
+          format: date-time
+        comparison:
+          type: string
+          enum:
+          - AT_LEAST
+          - LESS_THAN
+        windowAnchor:
+          type: string
+          enum:
+          - APPROVAL
+          - SUBSCRIPTION_START
+        windowDays:
+          type: integer
+          format: int32
+          description: The window's length in days (the first N days)
+        pending:
+          type: boolean
+          description: Checked once at window end and the check is still to come
+        checkAt:
+          type: string
+          format: date-time
+          description: 'Rules checked at window end: when the check runs'
+        windowClosesAt:
+          type: string
+          format: date-time
+          description: 'Rules checked at window end: when the window closes'
+    SellerRewards:
+      type: object
+      description: Rewards the organisation can still earn and what it received
+      properties:
+        available:
+          type: array
+          items:
+            $ref: '#/components/schemas/RewardProgress'
+        earned:
+          type: array
+          items:
+            $ref: '#/components/schemas/BillingGrant'
     PlanChangePreview:
       type: object
       properties:
@@ -2892,6 +4911,116 @@ components:
           format: date-time
         trialing:
           type: boolean
+    BillingPanel:
+      type: object
+      description: Staff per-seller billing panel; billing is null before the organisation has a subscription
+      properties:
+        orgId:
+          type: string
+        orgName:
+          type: string
+        kind:
+          type: string
+        orgStatus:
+          type: string
+        billing:
+          $ref: '#/components/schemas/Billing'
+        invoices:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invoice'
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/BillingGrant'
+        collections:
+          type: array
+          items:
+            $ref: '#/components/schemas/EarningsCollection'
+        earningsCollectionEnabled:
+          type: boolean
+        planFeeCollection:
+          $ref: '#/components/schemas/PlanFeeCollection'
+          description: How the plan is paid (S298); null before the subscription exists
+        planAssignments:
+          type: array
+          description: Plans staff assigned to the organisation, newest first (S306)
+          items:
+            $ref: '#/components/schemas/PlanAssignment'
+    PlanAssignment:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        fromPlan: {type: string}
+        toPlan: {type: string}
+        cadence: {type: string}
+        applied: {type: string, description: 'IMMEDIATE_UPGRADE, AT_RENEWAL or NO_CHANGE'}
+        reason: {type: string}
+        assignedBy: {type: string}
+        assignedAt: {type: string, format: date-time}
+    AssignPlanRequest:
+      type: object
+      required: [planCode, reason]
+      properties:
+        planCode: {type: string}
+        cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
+        reason: {type: string, description: 'Why, at least 10 characters; recorded with the assignment'}
+    EarningsCollection:
+      type: object
+      description: One plan invoice paid (or asked to be paid) from earnings
+      properties:
+        invoiceId:
+          type: string
+        invoiceNumber:
+          type: string
+        invoiceAmountCents:
+          type: integer
+          format: int64
+          description: Invoice amount when Stripe created it
+        amountCents:
+          type: integer
+          format: int64
+          description: Asked from earnings (the invoice less the credit balance)
+        withheldCents:
+          type: integer
+          format: int64
+        creditedCents:
+          type: integer
+          format: int64
+        releasedCents:
+          type: integer
+          format: int64
+        paidFromSalesCents:
+          type: integer
+          format: int64
+          description: 'Paid from sales: credited less released'
+        status:
+          type: string
+          enum:
+          - REQUESTED
+          - WITHHELD
+          - CREDITED
+          - DECLINED
+          - MISSED
+          - FAILED
+          - RELEASED
+        paymentsReference:
+          type: string
+        stripeBalanceTransactionId:
+          type: string
+        reason:
+          type: string
+        attempts:
+          type: integer
+          format: int32
+        lastError:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     Invoice:
       type: object
       properties:
@@ -2932,6 +5061,14 @@ components:
           type: integer
           format: int64
           description: Sum of the metered usage lines
+        paidFromSalesCents:
+          type: integer
+          format: int64
+          description: 'Paid from the organisation''s sales (S298): withheld from its earnings and credited to the invoice'
+        paidByCardCents:
+          type: integer
+          format: int64
+          description: 'Paid (or, while open, due) by card or bank: the rest'
     InvoiceLine:
       type: object
       description: Plan, proration or metered usage line (S206)
@@ -2970,6 +5107,50 @@ components:
           type: string
         status:
           type: string
+    OrgEventPayload:
+      type: object
+      properties:
+        orgId:
+          type: string
+        kind:
+          type: string
+        primaryKind:
+          type: string
+        offering:
+          type: string
+        legalName:
+          type: string
+        displayName:
+          type: string
+        country:
+          type: string
+        status:
+          type: string
+        ownerUserIds:
+          type: array
+          items:
+            type: string
+        applicantUserId:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+    OrgMirrorPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgEventPayload'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
     OrgDirectoryEntry:
       type: object
       properties:
@@ -3007,6 +5188,64 @@ components:
           type: array
           items:
             type: string
+    BillingReasonCode:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+    PlanMigrationPreview:
+      type: object
+      properties:
+        planCode:
+          type: string
+        toVersion:
+          type: integer
+          format: int32
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanMigrationRow'
+    PlanMigrationRow:
+      type: object
+      properties:
+        orgId:
+          type: string
+        orgName:
+          type: string
+        fromVersion:
+          type: integer
+          format: int32
+        cadence:
+          type: string
+        fromCents:
+          type: integer
+          format: int64
+        toCents:
+          type: integer
+          format: int64
+        status:
+          type: string
+        effectiveAt:
+          type: string
+          format: date-time
+    BillingGrantPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BillingGrant'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
     ApplicationQueue:
       type: object
       properties:

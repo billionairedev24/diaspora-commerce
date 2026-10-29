@@ -8,6 +8,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -130,10 +131,11 @@ class JdbcInventoryInsightsRepository implements InventoryInsightsRepository {
         }
         List<StatusValue> byStatus = jdbc.sql("""
                 select l.status, l.currency, sum(l.qty_on_hand) as units, count(*) as lots,
-                       sum(l.qty_on_hand::bigint * l.unit_landed_cost_minor) as value
+                       sum(l.qty_on_hand::bigint * l.unit_landed_cost_minor) as value,
+                       sum(l.qty_on_hand::bigint * l.unit_cost_usd_minor) as value_usd
                 from lot l""" + lotWhere + " group by l.status, l.currency order by l.status, l.currency")
                 .params(p).query((rs, n) -> new StatusValue(rs.getString("status"), rs.getString("currency"),
-                        rs.getLong("units"), rs.getLong("lots"), rs.getLong("value"))).list();
+                        rs.getLong("units"), rs.getLong("lots"), rs.getLong("value"), rs.getLong("value_usd"))).list();
 
         String daysLeft = "(l.exp_date - " + NODE_TODAY + ")";
         String bucket = "case when l.exp_date is null then 'NO_EXPIRY' when " + daysLeft + " <= 0 then 'EXPIRED'"
@@ -151,6 +153,20 @@ class JdbcInventoryInsightsRepository implements InventoryInsightsRepository {
                         rs.getLong("units"), rs.getLong("lots"))).list()
                 .forEach(c -> counts.put(c.bucket(), c));
 
+        Map<String, List<CurrencyValue>> paidIn = new LinkedHashMap<>();
+        jdbc.sql("""
+                select l.node_id, l.currency, sum(l.qty_on_hand) as units,
+                       sum(l.qty_on_hand::bigint * l.unit_landed_cost_minor) as value,
+                       sum(l.qty_on_hand::bigint * l.unit_cost_usd_minor) as value_usd
+                from lot l
+                where l.qty_on_hand > 0 and (cast(:owner as varchar) is null or l.owner_org = :owner)
+                group by l.node_id, l.currency order by l.node_id, l.currency
+                """).param("owner", ownerOrg).query((ResultSet rs) -> {
+                    paidIn.computeIfAbsent(rs.getString("node_id"), k -> new ArrayList<>())
+                            .add(new CurrencyValue(rs.getString("currency"), rs.getLong("units"), rs.getLong("value"),
+                                    rs.getLong("value_usd")));
+                });
+
         List<NodeFigures> nodes = jdbc.sql("""
                 select n.id, n.name, n.kind,
                        (select count(*) from lot l where l.node_id = n.id and l.qty_on_hand > 0
@@ -163,10 +179,9 @@ class JdbcInventoryInsightsRepository implements InventoryInsightsRepository {
                        (select coalesce(sum(l.qty_on_hand), 0) from lot l where l.node_id = n.id
                             and l.status in ('QUARANTINE', 'DAMAGED', 'EXPIRED')
                             and (cast(:owner as varchar) is null or l.owner_org = :owner)) as blocked,
-                       (select coalesce(sum(l.qty_on_hand::bigint * l.unit_landed_cost_minor), 0) from lot l
+                       (select coalesce(sum(l.qty_on_hand::bigint * l.unit_cost_usd_minor), 0) from lot l
                             where l.node_id = n.id and (cast(:owner as varchar) is null or l.owner_org = :owner))
                             as value,
-                       (select min(l.currency) from lot l where l.node_id = n.id and l.qty_on_hand > 0) as currency,
                        (select coalesce(sum(p.reserved), 0) from inventory_position p where p.node_id = n.id
                             and (cast(:owner as varchar) is null or p.owner_org = :owner)) as reserved,
                        (select coalesce(sum(p.inbound), 0) from inventory_position p where p.node_id = n.id
@@ -177,8 +192,8 @@ class JdbcInventoryInsightsRepository implements InventoryInsightsRepository {
                 """).param("owner", ownerOrg).param("node", nodeId)
                 .query((rs, n) -> new NodeFigures(rs.getString("id"), rs.getString("name"), rs.getString("kind"),
                         rs.getLong("lots"), rs.getLong("units"), rs.getLong("sellable"), rs.getLong("blocked"),
-                        rs.getLong("value"), rs.getString("currency"), rs.getLong("reserved"),
-                        rs.getLong("inbound"))).list();
+                        rs.getLong("value"), "USD", rs.getLong("reserved"), rs.getLong("inbound"),
+                        paidIn.getOrDefault(rs.getString("id"), List.of()))).list();
 
         StringBuilder inboundWhere = new StringBuilder(" where s.status not in ('CLOSED', 'CANCELLED')");
         if (nodeId != null) {

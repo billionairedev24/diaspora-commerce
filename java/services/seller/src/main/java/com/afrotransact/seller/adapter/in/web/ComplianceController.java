@@ -5,21 +5,21 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import com.afrotransact.seller.adapter.in.web.OnboardingDtos.AccountSessionResponse;
 import com.afrotransact.seller.application.AccountHealthView;
 import com.afrotransact.seller.application.ComplianceService;
 import com.afrotransact.seller.application.RequirementItem;
+import com.afrotransact.seller.application.StripeOnboardingService;
 import com.afrotransact.seller.domain.ComplianceHistoryEntry;
 import com.afrotransact.seller.domain.ComplianceStatus;
 import com.afrotransact.seller.domain.ConnectAccount;
+import com.afrotransact.seller.domain.PayoutBank;
 import com.afrotransact.seller.domain.SellerRuleViolation;
+import com.afrotransact.seller.port.AccountSession;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,35 +28,34 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Stripe compliance", description = "Account health for sellers (owner / finance) and the staff "
-        + "compliance console (compliance:remind, compliance:hold). Stripe is the source of truth; answers are "
-        + "forwarded to Stripe and verified there.")
+        + "compliance console (compliance:remind, compliance:hold). Stripe is the source of truth and collects "
+        + "every answer in its embedded components; Account health is read-only.")
 @RestController
 class ComplianceController {
 
     private final ComplianceService compliance;
+    private final StripeOnboardingService stripe;
 
-    ComplianceController(ComplianceService compliance) {
+    ComplianceController(ComplianceService compliance, StripeOnboardingService stripe) {
         this.compliance = compliance;
+        this.stripe = stripe;
     }
 
-    @Operation(summary = "Account health: what Stripe needs, with a typed form per requirement")
+    @Operation(summary = "Account health: what Stripe needs, and the embedded component that collects each item")
     @GetMapping("/v1/orgs/{orgId}/account-health")
     AccountHealthResponse accountHealth(@PathVariable String orgId) {
         return AccountHealthResponse.of(compliance.accountHealth(orgId));
     }
 
-    @Operation(summary = "Answer a requirement (owner / finance)",
-            description = "Values follow the requirement's form. Documents are media asset ids (uploaded to Stripe "
-                    + "Files with purpose account_requirement); SSNs and bank accounts are Stripe.js tokens. The "
-                    + "requirement then shows as pending verification until Stripe confirms.")
-    @PostMapping("/v1/orgs/{orgId}/account-health/requirements/{requirement}")
-    AccountHealthResponse answerRequirement(@PathVariable String orgId, @PathVariable String requirement,
-                                 @Valid @RequestBody AnswerRequest body, HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        String ip = forwarded == null || forwarded.isBlank() ? request.getRemoteAddr()
-                : forwarded.split(",")[0].trim();
-        return AccountHealthResponse.of(compliance.answer(orgId, requirement, body.values(), ip,
-                request.getHeader(HttpHeaders.USER_AGENT)));
+    @Operation(summary = "Account Session for Stripe's embedded components (owner / finance)",
+            description = "Seller accounts are Stripe-collected: what Stripe needs (identity, tax ID, documents, "
+                    + "terms) and the payout bank account are entered in Stripe's embedded components — account "
+                    + "onboarding, account management, notification banner — never through AfroTransact. Returns "
+                    + "client_secret for Connect.js. Staff can't open one.")
+    @PostMapping("/v1/orgs/{orgId}/stripe/account-session")
+    AccountSessionResponse orgAccountSession(@PathVariable String orgId) {
+        AccountSession s = stripe.accountSession(orgId);
+        return new AccountSessionResponse(s.accountId(), s.clientSecret(), s.expiresAt(), s.localTest());
     }
 
     @Operation(summary = "Staff: connected accounts (filter by status or open items)")
@@ -98,10 +97,6 @@ class ComplianceController {
         return AccountHealthResponse.of(compliance.resumePayouts(accountId, body == null ? null : body.note()));
     }
 
-    @Schema(name = "RequirementAnswer")
-    record AnswerRequest(@NotNull Map<String, String> values) {
-    }
-
     @Schema(name = "ComplianceNote")
     record NoteRequest(@Size(max = 1000) String note) {
     }
@@ -121,7 +116,7 @@ class ComplianceController {
                                  boolean chargesEnabled, boolean payoutsEnabled, boolean payoutsPaused,
                                  String holdReason, boolean listingsHidden, boolean deauthorized, int openItems,
                                  Instant currentDeadline, String disabledReason, int remindersSent,
-                                 Instant lastReminderAt, Map<String, String> capabilities,
+                                 Instant lastReminderAt, Map<String, String> capabilities, PayoutBank payoutBank,
                                  List<RequirementItem> requirements, List<HistoryView> history) {
 
         static AccountHealthResponse of(AccountHealthView v) {
@@ -131,7 +126,7 @@ class ComplianceController {
                     r.chargesEnabled(), r.payoutsEnabled(), a.payoutsPaused(),
                     a.holdReason() == null ? null : a.holdReason().name(), a.listingsHidden(), a.deauthorized(),
                     r.open().size(), r.currentDeadline(), r.disabledReason(), a.remindersSent(), a.lastReminderAt(),
-                    r.capabilities(), v.requirements(), v.history().stream().map(HistoryView::of).toList());
+                    r.capabilities(), r.payoutBank(), v.requirements(), v.history().stream().map(HistoryView::of).toList());
         }
     }
 }

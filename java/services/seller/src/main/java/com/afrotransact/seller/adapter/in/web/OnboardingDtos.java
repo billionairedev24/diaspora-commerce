@@ -12,6 +12,7 @@ import com.afrotransact.seller.application.PiiLevel;
 import com.afrotransact.seller.domain.Address;
 import com.afrotransact.seller.domain.Application;
 import com.afrotransact.seller.domain.ApplicationData;
+import com.afrotransact.seller.domain.ApplicationStatus;
 import com.afrotransact.seller.domain.BusinessDetailsInput;
 import com.afrotransact.seller.domain.BusinessDetailsSection;
 import com.afrotransact.seller.domain.BusinessSection;
@@ -20,8 +21,8 @@ import com.afrotransact.seller.domain.DocumentAccess;
 import com.afrotransact.seller.domain.FirstCharge;
 import com.afrotransact.seller.domain.OnboardingStep;
 import com.afrotransact.seller.domain.Owner;
-import com.afrotransact.seller.domain.PayoutInput;
 import com.afrotransact.seller.domain.PayoutSection;
+import com.afrotransact.seller.domain.PlanFeeCollection;
 import com.afrotransact.seller.domain.PlanSection;
 import com.afrotransact.seller.domain.StripeVerification;
 import com.afrotransact.seller.domain.TimelineEntry;
@@ -74,11 +75,17 @@ final class OnboardingDtos {
                             "corporation", "partnership", "nonprofit"}) String entityType,
                         @Schema(example = "US") String country, String storeName, String contactEmail,
                         @Schema(description = "National or international; stored as E.164") String phone,
-                        String website) {
+                        @Schema(description = "What the business sells or does, a few sentences: shown on its public page and given to Stripe")
+                        String description,
+                        @Schema(description = "One brand colour for its public page, #rrggbb")
+                        String brandColor,
+                        @Schema(description = "https URL of the uploaded logo")
+                        String logoUrl) {
 
         BusinessSection toSection() {
             return new BusinessSection(Inputs.offering(offering), Inputs.entityType(entityType), country, storeName,
-                    contactEmail, phone, website);
+                    contactEmail, phone, null, description == null && brandColor == null && logoUrl == null ? null
+                    : new BusinessSection.Branding(description, brandColor, logoUrl));
         }
     }
 
@@ -111,30 +118,22 @@ final class OnboardingDtos {
     record OwnersStep(List<OwnerDto> owners) {
     }
 
-    @Schema(name = "PayoutsStep", description = "Step 'payouts'. Only last 4 digits are stored. The bank account "
-            + "goes to Stripe as the connected account's payout account: either externalAccountToken (btok_…, "
-            + "Stripe.js) or the routing and account numbers, sent once to Stripe and never stored. The step is "
-            + "complete only once Stripe accepted the account (externalAccountLinked).")
-    record PayoutsStep(String accountHolderName, @Schema(allowableValues = {"checking", "savings"}) String accountType,
-                       String bankName, String routingNumber, String accountNumber, String accountNumberConfirmation,
-                       String externalAccountToken) {
-
-        PayoutInput toInput() {
-            return new PayoutInput(accountHolderName, accountType, bankName, routingNumber, accountNumber,
-                    accountNumberConfirmation, externalAccountToken);
-        }
-    }
-
     @Schema(name = "PlanStep", description = "Step 'plan'. Cards are tokenised client-side (pm_…); only brand, last 4 "
             + "and expiry are stored. US_BANK_ACCOUNT charges the payout bank by ACH.")
     record PlanStep(String planCode, @Schema(allowableValues = {"MONTHLY", "QUARTERLY", "ANNUAL"}) String cadence,
                     @Schema(allowableValues = {"CARD", "US_BANK_ACCOUNT"}) String paymentMethodKind,
                     String stripePaymentMethodId, String cardBrand, String cardLast4, Integer cardExpMonth,
-                    Integer cardExpYear) {
+                    Integer cardExpYear,
+                    @Schema(description = "Trial campaign promo code (optional)") String promoCode,
+                    @Schema(allowableValues = {"EARNINGS_FIRST", "CARD"}, description = "How the plan will be paid "
+                            + "(S298): from sales first or always by card; omit for the platform default")
+                    String planFeeCollection) {
 
         PlanSection toSection() {
             return new PlanSection(planCode, Inputs.cadence(cadence), Inputs.paymentMethodKind(paymentMethodKind),
-                    stripePaymentMethodId, cardBrand, cardLast4, cardExpMonth, cardExpYear);
+                    stripePaymentMethodId, cardBrand, cardLast4, cardExpMonth, cardExpYear, promoCode,
+                    planFeeCollection == null || planFeeCollection.isBlank() ? null
+                            : PlanFeeCollection.parse(planFeeCollection, "planFeeCollection"));
         }
     }
 
@@ -184,16 +183,22 @@ final class OnboardingDtos {
 
     @Schema(name = "PlanSelection")
     record PlanView(String planCode, String planName, String cadence, String paymentMethodKind, String cardBrand,
-                    String cardLast4, Integer cardExpMonth, Integer cardExpYear, FirstCharge firstCharge) {
+                    String cardLast4, Integer cardExpMonth, Integer cardExpYear, FirstCharge firstCharge,
+                    String promoCode,
+                    @Schema(allowableValues = {"EARNINGS_FIRST", "CARD"}, description = "The applicant's choice; null "
+                            + "keeps the platform default") String planFeeCollection) {
     }
 
     @Schema(name = "TimelineEntry")
     record TimelineView(String action, String fromStatus, String toStatus, String actorId, String reasonCode,
-                        String note, List<String> items, Instant occurredAt) {
+                        String note, List<String> items, Instant occurredAt,
+                        @Schema(description = "The staff member's display name (staff views only)")
+                        String actorName) {
 
-        static TimelineView of(TimelineEntry t) {
+        static TimelineView of(TimelineEntry t, boolean staff) {
             return new TimelineView(t.action().name(), t.fromStatus() == null ? null : t.fromStatus().name(),
-                    t.toStatus().name(), t.actorId(), t.reasonCode(), t.note(), t.items(), t.occurredAt());
+                    t.toStatus().name(), t.actorId(), t.reasonCode(), t.note(), t.items(), t.occurredAt(),
+                    staff ? t.actorName() : null);
         }
     }
 
@@ -215,7 +220,12 @@ final class OnboardingDtos {
                                List<String> requestedItems, List<String> failedChecks, String reviewerId,
                                String finalApproverId, String reasonCode, int submissionCount, Instant submittedAt,
                                List<TimelineView> timeline, List<AccessView> accessLog, Instant createdAt,
-                               Instant updatedAt) {
+                               Instant updatedAt,
+                               @Schema(description = "Whether the Plan step offers paying the plan from sales, and "
+                                       + "the platform default (S298)")
+                               PlanFeeDtos.OptionView planFeeCollectionOption,
+                               @Schema(description = "When step 1 was decided") Instant reviewedAt,
+                               @Schema(description = "When the final decision was made") Instant decidedAt) {
 
         static ApplicationResponse of(ApplicationView v) {
             Application a = v.application();
@@ -235,15 +245,27 @@ final class OnboardingDtos {
             PlanView plan = p == null ? null : new PlanView(p.planCode(), v.planName(),
                     p.cadence() == null ? null : p.cadence().name(),
                     p.paymentMethodKind() == null ? null : p.paymentMethodKind().name(), p.cardBrand(), p.cardLast4(),
-                    p.cardExpMonth(), p.cardExpYear(), v.firstCharge());
-            return new ApplicationResponse(a.id(), a.reference(), a.orgId(), a.kind().name(), a.status().name(),
+                    p.cardExpMonth(), p.cardExpYear(), v.firstCharge(), p.promoCode(),
+                    p.planFeeCollection() == null ? null : p.planFeeCollection().name());
+            // The applicant sees what was asked of them and the final decision, never the internal review: a flagged
+            // application looks like any other in review, and who reviewed it and which checks failed stay inside.
+            boolean applicant = v.pii() == PiiLevel.APPLICANT;
+            ApplicationStatus status = applicant && a.status() == ApplicationStatus.FLAGGED
+                    ? ApplicationStatus.PENDING_REVIEW : a.status();
+            boolean addressedToApplicant = a.status() == ApplicationStatus.INFO_REQUESTED
+                    || a.status() == ApplicationStatus.REJECTED;
+            return new ApplicationResponse(a.id(), a.reference(), a.orgId(), a.kind().name(), status.name(),
                     a.currentStep().key(), v.steps().stream().map(OnboardingStep::key).toList(),
                     v.completedSteps().stream().map(OnboardingStep::key).toList(),
                     a.prefilledFields().stream().sorted().toList(), d.business(), details, owners, d.stripe(),
-                    d.payouts(), plan, d.compliance(), v.documents(), a.requestedItems(), a.failedChecks(),
-                    a.reviewerId(), a.finalApproverId(), a.reasonCode(), a.submissionCount(), a.submittedAt(),
-                    v.timeline().stream().map(TimelineView::of).toList(),
-                    v.accessLog().stream().map(AccessView::of).toList(), a.createdAt(), a.updatedAt());
+                    d.payouts(), plan, d.compliance(), v.documents(), a.requestedItems(),
+                    applicant ? List.of() : a.failedChecks(), applicant ? null : a.reviewerId(),
+                    applicant ? null : a.finalApproverId(),
+                    applicant && !addressedToApplicant ? null : a.reasonCode(), a.submissionCount(), a.submittedAt(),
+                    v.timeline().stream().map(t -> TimelineView.of(t, v.pii() != PiiLevel.APPLICANT)).toList(),
+                    applicant ? List.of() : v.accessLog().stream().map(AccessView::of).toList(), a.createdAt(),
+                    a.updatedAt(), v.planFeeOptions() == null ? null : PlanFeeDtos.OptionView.of(v.planFeeOptions()),
+                    applicant ? null : a.reviewedAt(), a.decidedAt());
         }
 
         private static String dob(LocalDate d, boolean mask) {

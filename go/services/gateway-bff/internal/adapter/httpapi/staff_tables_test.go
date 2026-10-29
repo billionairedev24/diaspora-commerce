@@ -64,7 +64,7 @@ func TestStaffTablesSearchEveryColumnSortAndExport(t *testing.T) {
 	if cached := get("/v1/staff/resources/orders?q=AT-0049&size=20", 200); cached["total"].(float64) != 0 {
 		t.Fatalf("cached rows = %v", cached["total"])
 	}
-	post("/v1/staff/resources/orders/AT-000001/actions/shipment-status", map[string]any{"values": map[string]any{"shipmentId": "shp-1", "to": "CANCELLED", "reason": "Customer asked"}}, 200)
+	post("/v1/staff/resources/orders/AT-000001/actions/shipment-status", map[string]any{"values": map[string]any{"step": "shp-1|CANCELLED", "reason": "Customer asked"}}, 200)
 	big := get("/v1/staff/resources/orders?q=AT-0049&size=20", 200)
 	if big["partial"] != true || big["total"].(float64) != 100 || len(rows(big)) != 20 {
 		t.Fatalf("partial = %v total = %v", big["partial"], big["total"])

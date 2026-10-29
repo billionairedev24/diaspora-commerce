@@ -10,14 +10,26 @@ import java.util.List;
  *
  * @param status             awaiting_payment | placed | processing
  * @param paymentClientSecret same as clientSecret (gateway-bff field name)
+ * @param creditMinor        the part of the total paid with AfroTransact credit (S320); the card pays the rest. An
+ *                           order that credit pays in full has no clientSecret and needs no card (null until known)
  */
 public record CheckoutView(String orderId, String orderNumber, String status, String clientSecret,
-                           String paymentClientSecret, Long totalMinor, String currency, List<Shipment> shipments,
-                           Preorder preorder) {
+                           String paymentClientSecret, Long totalMinor, String currency,
+                           Long itemsMinor, Long shippingMinor, Long taxMinor, Long discountMinor,
+                           List<Shipment> shipments, Preorder preorder, Long creditMinor) {
+
+    public CheckoutView(String orderId, String orderNumber, String status, String clientSecret,
+                        String paymentClientSecret, Long totalMinor, String currency,
+                        Long itemsMinor, Long shippingMinor, Long taxMinor, Long discountMinor,
+                        List<Shipment> shipments, Preorder preorder) {
+        this(orderId, orderNumber, status, clientSecret, paymentClientSecret, totalMinor, currency, itemsMinor,
+                shippingMinor, taxMinor, discountMinor, shipments, preorder, null);
+    }
 
     public CheckoutView(String orderId, String orderNumber, String status, String clientSecret,
                         String paymentClientSecret, Long totalMinor, String currency, List<Shipment> shipments) {
-        this(orderId, orderNumber, status, clientSecret, paymentClientSecret, totalMinor, currency, shipments, null);
+        this(orderId, orderNumber, status, clientSecret, paymentClientSecret, totalMinor, currency,
+                null, null, null, null, shipments, null);
     }
 
     /**
@@ -28,10 +40,12 @@ public record CheckoutView(String orderId, String orderNumber, String status, St
      * @param closesAt       cancel for a full refund until then
      * @param timeZone       business time zone the dates are shown in
      * @param otherItemCount units of the same order that ship now
+     * @param kind           WINDOW, or RUN for a delivery run staff scheduled (then {@code windowId} is the run's id
+     *                       and {@code closesAt} its cutoff)
      */
     public record Preorder(String number, String windowName, String windowId, String windowCode,
                            LocalDate deliversOn, Instant closesAt, String timeZone, String fulfilment,
-                           int otherItemCount) {
+                           int otherItemCount, String kind) {
     }
 
     /**

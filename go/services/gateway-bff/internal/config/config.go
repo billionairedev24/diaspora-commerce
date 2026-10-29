@@ -17,9 +17,9 @@ type Upstream struct {
 	Timeout time.Duration `yaml:"timeout"`
 	// SlowTimeout bounds calls that wait for a downstream saga or call chain (orders: POST /v1/checkout and its
 	// confirm, above orders' checkout-response-timeout; deliveryRuns: late pre-order adds, above its 15s orders
-	// timeout). Defaults to Timeout.
+	// timeout; seller: a final approval, which activates the Stripe subscription). Defaults to Timeout.
 	SlowTimeout time.Duration `yaml:"slowTimeout"`
-	Retries     int           `yaml:"retries"` // extra attempts for idempotent GETs only
+	Retries     int           `yaml:"retries"` // extra attempts for GETs and for calls that carry an Idempotency-Key
 	Breaker     struct {
 		Failures int           `yaml:"failures"` // consecutive failures that open the breaker
 		Cooldown time.Duration `yaml:"cooldown"` // open → half-open after this long
@@ -43,7 +43,6 @@ type Upstreams struct {
 	Seller     Upstream `yaml:"seller"`
 	Offers     Upstream `yaml:"offers"`
 	Bookings   Upstream `yaml:"bookings"`
-	Storefront Upstream `yaml:"storefront"`
 	Media      Upstream `yaml:"media"`
 	Carrier    Upstream `yaml:"carrier"`
 	// Storefront account, returns and Lola upstreams (TAX_RETURNS_URL, AI_GATEWAY_URL).
@@ -63,7 +62,7 @@ func (u *Upstreams) Named() map[string]*Upstream {
 		"search": &u.Search, "catalog": &u.Catalog, "inventory": &u.Inventory, "cart": &u.Cart, "geo": &u.Geo,
 		"identity": &u.Identity, "content": &u.Content, "payments": &u.Payments, "promise": &u.Promise,
 		"orders": &u.Orders, "notifications": &u.Notifications, "seller": &u.Seller, "offers": &u.Offers, "bookings": &u.Bookings,
-		"storefront": &u.Storefront, "media": &u.Media, "carrier": &u.Carrier,
+		"media": &u.Media, "carrier": &u.Carrier,
 		"tax_returns": &u.TaxReturns, "ai_gateway": &u.AIGateway,
 		"trust_ops": &u.TrustOps, "retail": &u.Retail, "fulfilment": &u.Fulfilment, "delivery_runs": &u.DeliveryRuns,
 	}
@@ -193,15 +192,52 @@ const OIDCCallbackPath = "/v1/auth/oidc/callback"
 // <origin><BFFPath>/v1/auth/oidc/callback, the storefront's being OIDC.RedirectURI (OIDC_REDIRECT_URI overrides it).
 // Identity registers the same URIs for the gateway-bff client (application-<env>.yml).
 func (c *Config) RedirectURIs() map[string]string {
-	out := make(map[string]string, len(c.Web.Origins)+1)
+	out := make(map[string]string, len(c.Web.Origins)+2)
 	for _, o := range c.Web.Origins {
 		o = strings.TrimRight(strings.TrimSpace(o), "/")
 		if o != "" {
 			out[o] = pkgconfig.JoinURL(o, strings.TrimRight(c.Web.BFFPath, "/")+OIDCCallbackPath)
 		}
 	}
+	// In local dev, Seller Center may move to port 3010 when 3001 is busy (tools/dev/local.sh).
+	// Ensure both local origins have registered callbacks so appOrigin accepts either port.
+	if _, has3001 := out["http://localhost:3001"]; has3001 {
+		if _, has3010 := out["http://localhost:3010"]; !has3010 {
+			out["http://localhost:3010"] = pkgconfig.JoinURL("http://localhost:3010", strings.TrimRight(c.Web.BFFPath, "/")+OIDCCallbackPath)
+		}
+	} else if _, has3010 := out["http://localhost:3010"]; has3010 {
+		if _, has3001 := out["http://localhost:3001"]; !has3001 {
+			out["http://localhost:3001"] = pkgconfig.JoinURL("http://localhost:3001", strings.TrimRight(c.Web.BFFPath, "/")+OIDCCallbackPath)
+		}
+	}
 	if c.Web.PublicOrigin != "" && c.OIDC.RedirectURI != "" {
 		out[c.Web.PublicOrigin] = c.OIDC.RedirectURI
+	}
+	return out
+}
+
+// SignedOutPath is the BFF's post-logout landing under Web.BFFPath, followed by the app key: identity registers
+// <app origin><BFFPath>/v1/auth/signed-out/<app> as the gateway-bff client's post-logout redirect URI for each web app
+// (application-<env>.yml), so single sign-out returns each app to its own page.
+const SignedOutPath = "/v1/auth/signed-out/"
+
+// Web app keys (the {app} of SignedOutPath).
+const (
+	AppStorefront   = "storefront"
+	AppSellerCenter = "seller-center"
+	AppStaffConsole = "staff-console"
+)
+
+// AppOrigins names the web apps: storefront (Web.PublicOrigin), seller-center and staff-console (the platform URLs,
+// so a moved port or LAN mode follows SELLER_CENTER_URL / STAFF_CONSOLE_URL like identity does). Apps without a URL
+// are left out.
+func (c *Config) AppOrigins() map[string]string {
+	out := map[string]string{}
+	for app, origin := range map[string]string{AppStorefront: c.Web.PublicOrigin,
+		AppSellerCenter: c.Platform.SellerCenterURL, AppStaffConsole: c.Platform.StaffConsoleURL} {
+		if o := strings.TrimRight(strings.TrimSpace(origin), "/"); o != "" {
+			out[app] = o
+		}
 	}
 	return out
 }

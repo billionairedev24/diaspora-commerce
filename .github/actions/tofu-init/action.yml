@@ -1,19 +1,19 @@
 name: OpenTofu init (cloud backend)
 description: >
-  Install OpenTofu, write backend.tf for the selected cloud (s3 | gcs | azurerm) and run `tofu init`.
+  Install OpenTofu, write backend.tf for the selected cloud (s3 | gcs | azurerm | s3 on OVH Object Storage) and run `tofu init`.
   State settings come from the TF_TARGETS repository variable (see docs/engineering/ci-cd.md).
 inputs:
   working-directory:
     description: Root module directory.
     required: true
   cloud:
-    description: aws | gcp | azure (where the state bucket lives).
+    description: aws | gcp | azure | ovh (where the state bucket lives).
     required: true
   state-key:
     description: State object key / prefix, e.g. envs/dev/terraform.tfstate.
     required: true
   state:
-    description: JSON object with bucket+region (aws), bucket (gcp) or resource_group+storage_account (azure).
+    description: JSON object with bucket+region (aws), bucket (gcp) resource_group+storage_account (azure) or bucket+region[+endpoint] (ovh, e.g. region gra).
     required: true
   tofu-version:
     description: OpenTofu version constraint (>= 1.9 for provider for_each).
@@ -49,6 +49,14 @@ runs:
             printf 'terraform {\n  backend "azurerm" {}\n}\n' > backend.tf
             printf 'resource_group_name = "%s"\nstorage_account_name = "%s"\ncontainer_name = "tfstate"\nkey = "%s"\nuse_azuread_auth = true\nuse_oidc = true\n' \
               "$(get resource_group)" "$(get storage_account)" "$KEY" > backend.hcl ;;
+          ovh)
+            # OVH Object Storage speaks S3 but is not AWS: custom endpoint, path-style, no account/metadata probes.
+            # No native lock (conditional writes are not offered), so the workflow concurrency group is the lock.
+            region="$(get region)"
+            endpoint="$(get endpoint)"; endpoint="${endpoint:-https://s3.${region}.io.cloud.ovh.net}"
+            printf 'terraform {\n  backend "s3" {}\n}\n' > backend.tf
+            printf 'bucket = "%s"\nkey = "%s"\nregion = "%s"\nendpoints = { s3 = "%s" }\nuse_path_style = true\nskip_credentials_validation = true\nskip_region_validation = true\nskip_requesting_account_id = true\nskip_metadata_api_check = true\nskip_s3_checksum = true\nuse_lockfile = false\n' \
+              "$(get bucket)" "$KEY" "$region" "$endpoint" > backend.hcl ;;
           *) echo "::error::unknown cloud $CLOUD"; exit 1 ;;
         esac
 

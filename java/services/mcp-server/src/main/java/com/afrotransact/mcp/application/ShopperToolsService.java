@@ -21,6 +21,8 @@ public interface ShopperToolsService {
 
     ToolResult trackOrder(McpCaller caller, String orderId);
 
+    ToolResult myOrderHistory(McpCaller caller, String cursor);
+
     ToolResult startReturnProposal(McpCaller caller, String orderId, String reason, List<String> items);
 
     ToolResult findService(McpCaller caller, String query, String zip);

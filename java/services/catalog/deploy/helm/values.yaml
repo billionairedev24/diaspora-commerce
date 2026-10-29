@@ -35,6 +35,7 @@ monitoring:
 #   - KAFKA_BOOTSTRAP
 #   - GS1_API_KEY (optional: Verified by GS1 for the S031 GTIN prefill; also set extraEnv GS1_ENABLED: "true")
 #   - FGA_API_TOKEN            (one of OpenFGA's pre-shared keys, afrotransact/openfga preshared-keys; S248)
+#   - CATALOG_CLIENT_SECRET    (identity's catalog-service client, scopes media:import: bulk-upload images, S308, and orders:purchase-check: verified-purchase reviews, S324)
 secrets:
   enabled: true
   store: platform-secrets

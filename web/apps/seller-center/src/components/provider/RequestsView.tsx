@@ -1,12 +1,13 @@
 'use client';
 
-import { type BookingCard, sellerQueries } from '@afrotransact/api-client';
+import { type BookingCard, formatBps, sellerQueries } from '@afrotransact/api-client';
 import { useQuery } from '@tanstack/react-query';
 
 import { Card } from '@/components/ui/Card';
 import { ModulePage } from '@/components/ui/ModulePage';
 import { EmptyState, ErrorState, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
+import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { dateTime, minutesLabel, money } from '@/lib/format';
 import { useSeller } from '@/lib/session';
@@ -20,8 +21,13 @@ function expiresIn(iso: string | null): string | null {
   return mins < 120 ? `Expires in ${mins} min` : `Expires in ${Math.round(mins / 60)} h`;
 }
 
+/** 800 → "8%", 750 → "7.50%". */
+const compactBps = (bps: number) => (bps % 100 === 0 ? `${bps / 100}%` : formatBps(bps));
+
 function RequestCard({ b }: { b: BookingCard }) {
+  const t = useT();
   const expiry = expiresIn(b.expiresAt);
+  const home = b.takeHome;
   return (
     <Card>
       <div className="flex flex-wrap items-start gap-3">
@@ -41,6 +47,14 @@ function RequestCard({ b }: { b: BookingCard }) {
         <div className="flex flex-col items-end gap-1 text-sm">
           <strong>{money(b.priceMinor, b.currency)}</strong>
           {b.depositMinor ? <span className="text-xs text-muted">Deposit {money(b.depositMinor, b.currency)} · {b.depositState}</span> : null}
+          {home ? (
+            <span className="text-right text-xs" data-testid="take-home">
+              <strong className="text-sm">{t('sc.requests.takeHome', { keep: money(home.keepMinor, home.currency), pct: compactBps(home.connectionFeeBps) })}</strong>
+              <span className="block text-muted">
+                {t('sc.requests.takeHomeDetail', { fee: money(home.connectionFeeMinor, home.currency), card: money(home.cardFeesMinor, home.currency) })}
+              </span>
+            </span>
+          ) : null}
         </div>
       </div>
       <BookingActions booking={b} />

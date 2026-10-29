@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -33,11 +34,12 @@ func claimsResource() *staffResource {
 	}
 	return &staffResource{
 		key: "claims", module: "disputes", title: "A-to-z claims", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("reference", "Claim", "mono", 13), col("type", "Type", "text", 18), col("orderNumber", "Order", "mono", 13), col("sellerOrgId", "Seller", "text", 16),
+		columns: []domain.Column{col("reference", "Claim", "mono", 13), col("type", "Type", "text", 18), col("orderNumber", "Order", "mono", 13), col("sellerOrgName", "Seller", "text", 16),
 			col("amountMinor", "Amount", "money", 11), col("sla.dueAt", "Due", "datetime", 14), col("status", "Status", "status", 15)},
 		facets:     domain.StaffFacets("AWAITING_SELLER", "UNDER_REVIEW", "ESCALATED", "RESOLVED_REFUND", "RESOLVED_DENIED", "WITHDRAWN"),
 		list:       listPaged("/v1/claims", upTrustOps, nil),
 		get:        getByPath("/v1/claims/", upTrustOps),
+		names:      []nameRef{sellerRef("sellerOrgId"), customerRef("customerId"), personRef("decidedBy", "Decided by")},
 		titleOf:    func(o jobj) string { return "Claim " + jstr(o, "reference") },
 		subtitleOf: func(o jobj) string { return domain.Humanize(jstr(o, "type")) + " · order " + jstr(o, "orderNumber") },
 		sections:   func(o jobj) []domain.DetailSection { return autoSections(o, "status", "evidence") },
@@ -50,6 +52,7 @@ func claimsResource() *staffResource {
 				return nil
 			}
 			out := []domain.ActivityEntry{}
+			nameAll(ctx, sc, hist, personRef("actorId", "Actor"))
 			for _, h := range hist {
 				text := domain.Humanize(jstr(h, "action"))
 				if to := jstr(h, "toStatus"); to != "" {
@@ -58,7 +61,7 @@ func claimsResource() *staffResource {
 				if n := jstr(h, "note"); n != "" {
 					text += " — " + n
 				}
-				out = append(out, domain.ActivityEntry{At: timeOf(h, "at"), Actor: jstr(h, "actorId"), Text: text})
+				out = append(out, domain.ActivityEntry{At: timeOf(h, "at"), Actor: jstr(h, "actorName"), Text: text})
 			}
 			return out
 		},
@@ -94,6 +97,7 @@ func returnsResource() *staffResource {
 		facets:  domain.StaffFacets("REQUESTED", "APPROVED", "IN_TRANSIT", "RECEIVED", "INSPECTED", "REFUNDED", "REJECTED", "CANCELLED"),
 		list:    listLimited("/v1/returns", upTaxReturns),
 		get:     getByPath("/v1/returns/", upTaxReturns),
+		names:   []nameRef{customerRef("customerId"), sellerRef("sellerOrgId"), personRef("dropOffBy", "Dropped off by")},
 		titleOf: func(o jobj) string { return "Return " + jstr(o, "number") },
 		subtitleOf: func(o jobj) string {
 			return "Order " + jstr(o, "orderNumber") + " · " + domain.Humanize(jstr(o, "method"))
@@ -125,20 +129,52 @@ func payoutsResource() *staffResource {
 			return sc.post(ctx, sc.up.Payments, "/v1/payouts/requests/"+url.PathEscape(jstr(o, "id"))+path, body(v), nil)
 		}
 	}
+	list := listLimited("/v1/payouts/requests", upPayments)
 	return &staffResource{
 		key: "payouts", module: "payouts", title: "Payout requests", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("id", "Request", "mono", 14), col("orgId", "Organisation", "strong", 22), col("amountMinor", "Amount", "money", 14),
-			col("requestedAt", "Requested", "date", 14), col("holdReason", "Hold reason", "text", 22), col("status", "Status", "status", 14)},
-		facets:     domain.StaffFacets("REQUESTED", "ON_HOLD", "APPROVED", "IN_TRANSIT", "PAID", "FAILED"),
-		list:       listLimited("/v1/payouts/requests", upPayments),
-		get:        getByPath("/v1/payouts/requests/", upPayments),
-		titleOf:    func(o jobj) string { return "Payout to " + jstr(o, "orgId") },
-		subtitleOf: func(o jobj) string { return jstr(o, "id") },
+		columns: []domain.Column{col("sellerName", "Seller", "strong", 22), col("requestedByName", "Requested by", "text", 16), col("amountMinor", "Amount", "money", 12),
+			col("requestedAt", "Requested", "date", 12), col("holdReason", "Hold reason", "text", 20), col("status", "Status", "status", 14)},
+		facets: domain.StaffFacets("REQUESTED", "HELD", "IN_TRANSIT", "PAID", "FAILED"),
+		list:   list,
+		names: []nameRef{sellerRef("orgId").named("sellerName"), personRef("requestedBy", "Requested by"), personRef("decidedBy", "Decided by"),
+			orderRef("orderId").inList("transfers"), orderRef("orderId").inList("balance.onHold")},
+		get: func(ctx context.Context, sc staffCtx, id string) (jobj, error) {
+			o, err := getByPath("/v1/payouts/requests/", upPayments)(ctx, sc, id)
+			if err != nil {
+				return nil, err
+			}
+			enrichPayout(ctx, sc, o)
+			return o, nil
+		},
+		titleOf:    func(o jobj) string { return "Payout to " + jstr(o, "sellerName") },
+		subtitleOf: func(o jobj) string { return strings.TrimSpace("Requested by " + jstr(o, "requestedByName")) },
+		sections:   payoutSections,
+		tables:     payoutTables,
+		links: func(o jobj) []domain.RecordLink {
+			org := jstr(o, "orgId")
+			if org == "" {
+				return nil
+			}
+			connect := "/organisations?tab=connect-accounts"
+			if acct := jstr(o, "stripeAccountId"); acct != "" {
+				connect += "&open=" + url.QueryEscape(acct)
+			}
+			return append([]domain.RecordLink{
+				{Label: "Seller organisation", Href: "/organisations?open=" + url.QueryEscape(org)},
+				{Label: "Stripe compliance", Href: connect},
+			}, stripeLinks(o)...)
+		},
 		actions: []staffAction{
 			{key: "approve", label: "Approve & pay", tone: "primary", permission: "payouts:approve", level: domain.LevelApprove, confirm: "Create the Stripe payout now?", when: inState("REQUESTED"), run: act("/approve", func(jobj) jobj { return nil })},
+			{key: "sync-stripe", label: "Check with Stripe", tone: "neutral", permission: "payouts:approve", level: domain.LevelApprove, when: inState("IN_TRANSIT"),
+				// A webhook may have closed it since the sheet was opened: the check then just reports where it stands.
+				settled: func(o jobj) bool {
+					return slices.Contains([]string{"PAID", "FAILED"}, strings.ToUpper(jstr(o, "status")))
+				},
+				confirm: "Ask Stripe where this payout stands? If Stripe says it was paid or failed, the request is closed to match.", run: act("/sync", func(jobj) jobj { return nil })},
 			{key: "hold", label: "Hold", tone: "danger", permission: "payouts:approve", level: domain.LevelApprove, form: reasonForm("Put the payout on hold", "Hold"), when: inState("REQUESTED"),
 				run: act("/hold", func(v jobj) jobj { return jobj{"reason": vs(v, "reason")} })},
-			{key: "release", label: "Release", tone: "neutral", permission: "payouts:approve", level: domain.LevelApprove, confirm: "Release the hold?", when: inState("ON_HOLD", "HELD"), run: act("/release", func(jobj) jobj { return nil })},
+			{key: "release", label: "Release", tone: "neutral", permission: "payouts:approve", level: domain.LevelApprove, confirm: "Release the hold?", when: inState("HELD"), run: act("/release", func(jobj) jobj { return nil })},
 		},
 	}
 }
@@ -170,6 +206,7 @@ func feeSchedulesResource() *staffResource {
 			return map[string]any{"defaultCommissionBps": pct(o, "defaultCommissionBps"), "cardPctBps": pct(o, "cardPctBps")}
 		},
 		list: list, get: findIn(list, "id"),
+		names:      []nameRef{personRef("createdBy", "Created by"), personRef("cancelledBy", "Cancelled by"), sellerRef("orgId").inList("overrides")},
 		titleOf:    func(o jobj) string { return "Fee schedule v" + jstr(o, "version") },
 		subtitleOf: func(o jobj) string { return jstr(o, "note") },
 		sections: func(o jobj) []domain.DetailSection {
@@ -189,7 +226,7 @@ func feeSchedulesResource() *staffResource {
 			return append(secs, cat)
 		},
 		tables: func(o jobj) []domain.DetailTable {
-			return []domain.DetailTable{tableOf("Seller overrides", objs(o, "overrides"), []domain.Column{col("orgId", "Organisation", "mono", 40), col("category", "Category", "text", 30), col("commissionBps", "Commission (bps)", "number", 30)}, "orgId")}
+			return []domain.DetailTable{tableOf("Seller overrides", objs(o, "overrides"), []domain.Column{col("orgName", "Organisation", "text", 40), col("category", "Category", "text", 30), col("commissionBps", "Commission (bps)", "number", 30)}, "orgId")}
 		},
 	}
 }
@@ -224,7 +261,7 @@ func taxRatesResource() *staffResource {
 		}
 		if q.Status == "" || q.Status == "LOCAL" {
 			for _, l := range objs(table, "locals") {
-				l["kind"], l["rowId"], l["generalRate"] = "LOCAL", "local:"+jstr(l, "state")+":"+jstr(l, "zipPrefix"), l["rate"]
+				l["kind"], l["rowId"], l["country"], l["generalRate"] = "LOCAL", "local:"+jstr(l, "state")+":"+jstr(l, "zipPrefix"), "US", l["rate"]
 				out = append(out, l)
 			}
 		}
@@ -239,7 +276,7 @@ func taxRatesResource() *staffResource {
 	}
 	return &staffResource{
 		key: "tax-rates", module: "fees", title: "Tax rates", statusKey: "kind", exportable: true,
-		columns: []domain.Column{col("kind", "Rule", "status", 10), col("state", "State", "mono", 8), col("zipPrefix", "ZIP prefix", "mono", 12), col("name", "Name", "strong", 22),
+		columns: []domain.Column{col("kind", "Rule", "status", 10), col("country", "Country", "mono", 8), col("state", "State", "mono", 8), col("zipPrefix", "ZIP prefix", "mono", 12), col("name", "Name", "strong", 22),
 			col("generalRate", "General", "percent", 12), col("groceryRate", "Grocery", "percent", 12), col("preparedFoodRate", "Prepared food", "percent", 14), col("version", "Version", "number", 10)},
 		facets: domain.StaffFacets("STATE", "LOCAL"),
 		idOf:   func(o jobj) string { return jstr(o, "rowId") },

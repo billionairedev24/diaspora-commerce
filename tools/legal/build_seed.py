@@ -28,7 +28,7 @@ The generated migration is idempotent and follows the content service's version 
 version becomes CURRENT, an older CURRENT version is ARCHIVED (kept and retrievable), a newer CURRENT version is never
 touched, and a version that is already CURRENT is refreshed in place only while it is untouched since it was inserted by a
 seed or by this loader (counsel's sign-off or translations edited in the staff console are never overwritten). The skeleton
-texts V5/V12 seed are placeholders with an invented history: a written version that is *lower* than a still-untouched seeded
+texts V5/V13 seed are placeholders with an invented history: a written version that is *lower* than a still-untouched seeded
 one (the first written Conditions of Use is 1.0, the seed says 3.2) replaces the placeholder and its invented history.
 The file name carries a hash of every document, so the name is stable for the same documents; see
 docs/engineering/legal-documents.md.

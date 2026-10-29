@@ -698,6 +698,7 @@ class OpsSeeder:
 
     def fulfil(self) -> None:
         self.log("  · Fulfilment: the FC picks and packs, carriers move parcels, sellers pack their own")
+        self._ensure_local_connected_accounts()
         tasks = self._tasks()
         for order in self.all_orders():
             try:
@@ -728,10 +729,10 @@ class OpsSeeder:
         local = pkg.option == "afrotransact_delivery"
         stop_at = min(rank(want), rank("ready")) if local else rank(want)
         if s.get("fulfilmentType") == "SELLER_FULFILLED":
-            seller = next((x for x in D.SELLERS if x.org_id == s.get("sellerOrgId")), None)
-            if seller is None or seller.org_id != O.FINANCE_ORG:
-                return  # only Mama Put Pantry has a test user to act as the seller
-            h = self.headers(O.SELLER_OWNER)
+            actor = O.SELLER_FULFILMENT_ACTORS.get(s.get("sellerOrgId") or "")
+            if not actor:
+                return
+            h = self.headers(actor)
             for to in ("confirmed", "packed", "ready"):
                 if rank(status) < rank(to) <= stop_at:
                     self._transition(sid, to, h)
@@ -1048,17 +1049,27 @@ class OpsSeeder:
         self.log(f"    claim {claim.get('reference')} on {view['orderNumber']}: {claim.get('status')}")
 
     # ------------------------------------------------------------------------------------------------ payouts
-    def _test_connected_account(self) -> None:
-        """A test Stripe Connect account id for Mama Put Pantry (local test payments only). It must exist before the
-        settlement hold matures: a transfer without one is retried only an hour later."""
+    def _local_test_stripe_account_id(self, org_id: str, key: str) -> str:
+        """Stable fake acct_… ids for local test payments (must match acct_[A-Za-z0-9]{6,64})."""
+        slug = "".join(ch for ch in key.title() if ch.isalnum())[:24] or "Seller"
+        return f"acct_1LocalTest{slug}"
+
+    def _ensure_local_connected_accounts(self) -> None:
+        """Register test Connect account ids for seeded seller-fulfilled orgs (local test payments only)."""
+        if not self.local_payments():
+            return
         pay = self.svc["payments"]
-        try:
-            pay.get(f"/v1/connected-accounts/{O.FINANCE_ORG}")
-        except ApiError as e:
-            if e.status != 404:
-                raise
-            pay.put(f"/v1/connected-accounts/{O.FINANCE_ORG}", {"stripeAccountId": "acct_1LocalTestMamaPut"})
-            self.add("connected accounts", "test account registered")
+        for s in D.SELLERS:
+            if s.org_id == D.RETAIL_ORG:
+                continue
+            acct = self._local_test_stripe_account_id(s.org_id, s.key)
+            try:
+                pay.get(f"/v1/connected-accounts/{s.org_id}")
+            except ApiError as e:
+                if e.status != 404:
+                    raise
+                pay.put(f"/v1/connected-accounts/{s.org_id}", {"stripeAccountId": acct})
+                self.add("connected accounts", f"{s.name} test account")
 
     def payouts(self) -> None:
         """Mama Put's matured sale becomes a payout request in Finance's queue. Needs a connected account: on the local
@@ -1072,7 +1083,7 @@ class OpsSeeder:
         if not any(o.settle_early for o in self.all_orders()) or not self.local_payments():
             self.log("    payouts: skipped (Stripe test mode: onboard the seller's Stripe account in Seller Center)")
             return
-        self._test_connected_account()
+        self._ensure_local_connected_accounts()
         h = self.headers(O.SELLER_OWNER)
 
         def available() -> int:

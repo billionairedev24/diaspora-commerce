@@ -17,6 +17,12 @@ type Config struct {
 		Group   string   `yaml:"group" env:"KAFKA_GROUP"`
 		Topics  []string `yaml:"topics" env:"KAFKA_TOPICS"`
 	} `yaml:"kafka"`
+	// SearchProvider selects the engine: "elasticsearch" (default) or "meilisearch". Search-service must use the same one.
+	SearchProvider string `yaml:"searchProvider" env:"SEARCH_PROVIDER"`
+	Meilisearch    struct {
+		URL    string `yaml:"url" env:"MEILISEARCH_URL"`
+		APIKey string `yaml:"apiKey" env:"MEILISEARCH_API_KEY"`
+	} `yaml:"meilisearch"`
 	Elasticsearch struct {
 		URLs     []string `yaml:"urls" env:"ES_URLS"`
 		Username string   `yaml:"username" env:"ES_USERNAME"`

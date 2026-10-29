@@ -29,8 +29,13 @@ public record ConnectAccount(String accountId, String orgId, RequirementsSnapsho
                 false, false, 0, null, Map.of(), null, now, 0);
     }
 
-    /** Applies a Stripe snapshot and decides enforcement. Older versions are ignored by the caller. */
-    public ComplianceUpdate apply(RequirementsSnapshot next, long eventVersion, Instant now) {
+    /**
+     * Applies a Stripe snapshot and decides enforcement. Older versions are ignored by the caller. A snapshot without
+     * the payout bank account (a payload that did not list external accounts) keeps the one already mirrored.
+     */
+    public ComplianceUpdate apply(RequirementsSnapshot snapshot, long eventVersion, Instant now) {
+        RequirementsSnapshot next = snapshot.payoutBank() == null && requirements.payoutBank() != null
+                ? snapshot.withPayoutBank(requirements.payoutBank()) : snapshot;
         ComplianceStatus nextStatus = ComplianceStatusPolicy.derive(next, now);
         List<String> fresh = new ArrayList<>(next.open());
         fresh.removeAll(requirements.open());
@@ -62,14 +67,6 @@ public record ConnectAccount(String accountId, String orgId, RequirementsSnapsho
                 payouts, listings);
     }
 
-    /** The seller answered a requirement in Account health; it is verifying until Stripe confirms. */
-    public ConnectAccount answered(String requirement, Instant now) {
-        RequirementsSnapshot next = requirements.markPending(requirement);
-        return new ConnectAccount(accountId, orgId, next, ComplianceStatusPolicy.derive(next, now),
-                requirementsVersion, payoutsPaused, holdReason, listingsHidden, deauthorized, remindersSent,
-                lastReminderAt, persons, externalAccountStatus, now, version);
-    }
-
     public ConnectAccount withCapability(String capability, String capabilityStatus, Instant now) {
         return new ConnectAccount(accountId, orgId, requirements.withCapability(capability, capabilityStatus), status,
                 requirementsVersion, payoutsPaused, holdReason, listingsHidden, deauthorized, remindersSent,
@@ -84,10 +81,20 @@ public record ConnectAccount(String accountId, String orgId, RequirementsSnapsho
                 now, version);
     }
 
-    public ConnectAccount withExternalAccountStatus(String bankStatus, Instant now) {
-        return new ConnectAccount(accountId, orgId, requirements, status, requirementsVersion, payoutsPaused,
-                holdReason, listingsHidden, deauthorized, remindersSent, lastReminderAt, persons, bankStatus, now,
-                version);
+    /** account.external_account.created / updated: the payout bank account Stripe holds now. */
+    public ConnectAccount withPayoutBank(PayoutBank bank, Instant now) {
+        return new ConnectAccount(accountId, orgId, requirements.withPayoutBank(bank), status, requirementsVersion,
+                payoutsPaused, holdReason, listingsHidden, deauthorized, remindersSent, lastReminderAt, persons,
+                bank == null ? null : bank.status(), now, version);
+    }
+
+    /** account.external_account.deleted: forgets the mirrored bank account when it is the one deleted. */
+    public ConnectAccount withoutPayoutBank(String externalAccountId, Instant now) {
+        PayoutBank current = requirements.payoutBank();
+        if (current == null || current.id() != null && !current.id().equals(externalAccountId)) {
+            return this;
+        }
+        return withPayoutBank(null, now);
     }
 
     public ConnectAccount reminded(Instant now) {

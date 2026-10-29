@@ -248,7 +248,7 @@ export function ComplianceStep({ status, ref }: StepProps) {
             }
           />
           {v.services.map((s, i) => (
-            <section key={s.serviceName} aria-label={`${s.serviceName} licence`} className="flex flex-col gap-1 rounded-md border border-border p-4">
+            <section key={s.serviceName} aria-label={`${s.serviceName} licence`} className="flex flex-col gap-1 rounded-lg bg-surface-sunken p-4 sm:p-5">
               <FieldGrid>
                 <Cell span={5}>
                   <TextField
@@ -309,7 +309,7 @@ export function ComplianceStep({ status, ref }: StepProps) {
           ) : null}
         </>
       ) : null}
-      <section aria-label="Agreements" className="flex flex-col gap-1.5 border-t border-border pt-3">
+      <section aria-label="Agreements" className="flex flex-col gap-1.5 pt-2">
         <Checkbox
           id={fieldId('agreeTerms')}
           label={

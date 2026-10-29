@@ -23,6 +23,16 @@ class ValueObjectsTest {
     }
 
     @Test
+    void convertsFromBaseToThePoCurrencyAndStatesTheRateToUsd() {
+        FxRate ghs = new FxRate("GHS", "USD", new BigDecimal("15.42"), Fixtures.TODAY);
+        assertThat(ghs.fromBase(100)).isEqualTo(1_542);         // USD 1.00 → GHS 15.42
+        assertThat(ghs.baseUnitsPerUnit()).isEqualByComparingTo("0.0648508431");
+        FxRate xof = new FxRate("XOF", "USD", new BigDecimal("566"), Fixtures.TODAY);
+        assertThat(xof.fromBase(100)).isEqualTo(566);
+        assertThat(FxRate.identity("USD", Fixtures.TODAY).fromBase(12_345)).isEqualTo(12_345);
+    }
+
+    @Test
     void convertsBetweenCurrenciesWithDifferentMinorUnits() {
         FxRate ghs = new FxRate("GHS", "USD", new BigDecimal("15.42"), Fixtures.TODAY);
         assertThat(ghs.toBase(1_542)).isEqualTo(100);          // GHS 15.42 → USD 1.00

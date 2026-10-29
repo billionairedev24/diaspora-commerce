@@ -77,7 +77,11 @@ type OnboardingBusiness struct {
 	StoreName    *string `json:"storeName"`
 	ContactEmail *string `json:"contactEmail"`
 	Phone        *string `json:"phone"`
-	Website      *string `json:"website"`
+	// Description, BrandColor and LogoURL are how the business's plain public page looks (and what Stripe is told it
+	// sells): nobody is asked for a website.
+	Description *string `json:"description"`
+	BrandColor  *string `json:"brandColor"`
+	LogoURL     *string `json:"logoUrl"`
 }
 
 // OnboardingDetails is the wizard's "About you" (sole proprietor) / "Business details & TIN" step. The tax ID is only
@@ -109,15 +113,31 @@ type OnboardingOwner struct {
 	Address            *OnboardingAddress `json:"address"`
 }
 
-// OnboardingPayouts is the payout bank account as Stripe accepted it (last 4 digits only).
+// OnboardingPayouts is the payout bank account Stripe holds, read-only: Stripe collects it in its embedded onboarding
+// and changes it in account management (seller accounts are Stripe-collected). Never the numbers.
 type OnboardingPayouts struct {
-	AccountHolderName *string `json:"accountHolderName"`
-	AccountType       *string `json:"accountType"`
-	BankName          *string `json:"bankName"`
-	RoutingLast4      *string `json:"routingLast4"`
-	AccountLast4      *string `json:"accountLast4"`
-	Linked            bool    `json:"linked"`
+	// Status is NOT_STARTED, NEEDS_BANK, FAILED, VERIFYING or READY (see the Payouts* constants).
+	Status       string  `json:"status"`
+	BankName     *string `json:"bankName"`
+	AccountLast4 *string `json:"accountLast4"`
+	// BankStatus is Stripe's: new, validated, verified, verification_failed or errored.
+	BankStatus *string `json:"bankStatus"`
+	Linked     bool    `json:"linked"`
 }
+
+// "Payouts" states.
+const (
+	// PayoutsNotStarted: no Stripe account yet.
+	PayoutsNotStarted = "NOT_STARTED"
+	// PayoutsNeedsBank: Stripe holds no bank yet (finish Stripe verification, where Stripe collects it).
+	PayoutsNeedsBank = "NEEDS_BANK"
+	// PayoutsFailed: Stripe rejected the bank (change it in account management).
+	PayoutsFailed = "FAILED"
+	// PayoutsVerifying: a bank is on file, payouts aren't on yet.
+	PayoutsVerifying = "VERIFYING"
+	// PayoutsReady: the step is complete.
+	PayoutsReady = "READY"
+)
 
 // OnboardingFirstCharge is the plan's first charge ("Free for 30 days. First charge of $39.00 on …").
 type OnboardingFirstCharge struct {
@@ -137,6 +157,10 @@ type OnboardingPlan struct {
 	CardExpMonth      *int                   `json:"cardExpMonth"`
 	CardExpYear       *int                   `json:"cardExpYear"`
 	FirstCharge       *OnboardingFirstCharge `json:"firstCharge"`
+	// S298: the applicant's choice (nil keeps the platform default), whether it is offered and the default.
+	PlanFeeCollection          *string `json:"planFeeCollection"`
+	PlanFeeCollectionAvailable bool    `json:"planFeeCollectionAvailable"`
+	PlanFeeCollectionDefault   string  `json:"planFeeCollectionDefault"`
 }
 
 // OnboardingFoodPermit is the food permit of a groceries / prepared-food seller.
@@ -229,7 +253,9 @@ type OnboardingBusinessInput struct {
 	StoreName    string `json:"storeName"`
 	ContactEmail string `json:"contactEmail"`
 	Phone        string `json:"phone"`
-	Website      string `json:"website"`
+	Description  string `json:"description"`
+	BrandColor   string `json:"brandColor"`
+	LogoURL      string `json:"logoUrl"`
 }
 
 // OnboardingAddressInput is an address in a step save.
@@ -275,16 +301,6 @@ type OnboardingOwnersInput struct {
 	Owners []OnboardingOwnerInput `json:"owners"`
 }
 
-// OnboardingPayoutsInput is PUT /v1/seller/onboarding/payouts. The numbers go to Stripe once, through the seller
-// service, and are never stored or logged.
-type OnboardingPayoutsInput struct {
-	AccountHolderName         string `json:"accountHolderName"`
-	AccountType               string `json:"accountType"`
-	RoutingNumber             string `json:"routingNumber"`
-	AccountNumber             string `json:"accountNumber"`
-	AccountNumberConfirmation string `json:"accountNumberConfirmation"`
-}
-
 // OnboardingPlanInput is PUT /v1/seller/onboarding/plan. Cards are tokenised by Stripe.js (pm_…).
 type OnboardingPlanInput struct {
 	PlanCode              string `json:"planCode"`
@@ -295,6 +311,10 @@ type OnboardingPlanInput struct {
 	CardLast4             string `json:"cardLast4"`
 	CardExpMonth          *int   `json:"cardExpMonth"`
 	CardExpYear           *int   `json:"cardExpYear"`
+	// PromoCode is a trial campaign's code (S295), validated by the seller service for the plan and sign-up time.
+	PromoCode string `json:"promoCode"`
+	// PlanFeeCollection is how the plan will be paid (S298): EARNINGS_FIRST, CARD or empty for the platform default.
+	PlanFeeCollection string `json:"planFeeCollection"`
 }
 
 // OnboardingComplianceInput is PUT /v1/seller/onboarding/catalog-compliance.

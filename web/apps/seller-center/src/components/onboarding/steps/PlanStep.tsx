@@ -1,12 +1,14 @@
 'use client';
 
-import { type OnboardingPlanInput, type OnboardingPlanOffer, sellerQueries } from '@afrotransact/api-client';
-import { Button, cx, TextField } from '@afrotransact/ui';
-import { Check, CreditCard, Flask, LockSimple } from '@phosphor-icons/react/ssr';
+import { type OnboardingPlanInput, type OnboardingPlanOffer, type PlanFeeCollectionMode, sellerQueries } from '@afrotransact/api-client';
+import { Button, cx, SavedPaymentCard, TextField } from '@afrotransact/ui';
+import { Check, Flask, LockSimple } from '@phosphor-icons/react/ssr';
 import { useQuery } from '@tanstack/react-query';
 import { type Ref, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
+import { PlanFeeChoice } from '@/components/money/PlanFeeChoice';
 import { ErrorState, Spinner } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { fieldId } from '@/lib/onboarding-form';
 import { useSeller } from '@/lib/session';
@@ -201,9 +203,12 @@ const priceOf = (p: OnboardingPlanOffer, c: Cadence) => p.prices.find((x) => x.c
 
 /** Step 6 "Plan": choose a subscription (Stripe Billing, free trial) and how it is paid; the fee summary as designed. */
 export function PlanStep({ status, ref }: StepProps) {
+  const t = useT();
   const { orgId } = useSeller();
   const api = sellerApi();
   const plans = useQuery(sellerQueries.onboardingPlans(api, orgId));
+  // A trial campaign's promo code (S295): validated by the seller service for the plan when the step is saved.
+  const [promo, setPromo] = useState('');
   const form = status.form;
   const disabled = !form.editable;
   const saved = form.plan;
@@ -212,12 +217,16 @@ export function PlanStep({ status, ref }: StepProps) {
     cadence: (saved.cadence ?? 'MONTHLY') as Cadence
   }));
   const [newCard, setNewCard] = useState(!saved.cardLast4);
+  // How the plan will be paid (S298): offered while the platform allows it, defaulting to the platform default.
+  const [feeMode, setFeeMode] = useState<PlanFeeCollectionMode>(saved.planFeeCollection ?? saved.planFeeCollectionDefault);
+  const offerFeeChoice = saved.planFeeCollectionAvailable;
+  const feeChanged = offerFeeChoice && feeMode !== (saved.planFeeCollection ?? saved.planFeeCollectionDefault);
   const card = useRef<CardHandle>(null);
   const plan = plans.data?.plans.find((p) => p.code === f.values.planCode) ?? null;
   const paid = !!plan && plan.monthlyCents > 0;
   // The saved card belongs to the saved plan: re-saving would drop its payment method, so it is kept by not saving.
   const unchanged = saved.planCode === f.values.planCode && saved.cadence === f.values.cadence;
-  const cardKept = !newCard && !!saved.cardLast4 && unchanged;
+  const cardKept = !newCard && !!saved.cardLast4 && unchanged && !promo.trim();
   const holder = form.details.legalName ?? [form.details.legalFirstName, form.details.legalLastName].filter(Boolean).join(' ');
 
   useImperativeHandle(ref, () => ({
@@ -231,9 +240,13 @@ export function PlanStep({ status, ref }: StepProps) {
       }
       let body: OnboardingPlanInput = {
         planCode: v.planCode,
-        cadence: v.cadence
+        cadence: v.cadence,
+        ...(promo.trim() ? { promoCode: promo.trim().toUpperCase() } : {}),
+        ...(paid && offerFeeChoice ? { planFeeCollection: feeMode } : {})
       };
-      if (paid && cardKept) return true;
+      // A kept card stays with the saved plan; when only how the plan is paid changed, the seller service keeps it.
+      if (paid && cardKept && !feeChanged) return true;
+      if (paid && cardKept) return f.run(mode, () => ({}), () => api.saveOnboardingPlan(body));
       if (paid) {
         if (mode === 'draft')
           return f.run(
@@ -350,23 +363,42 @@ export function PlanStep({ status, ref }: StepProps) {
         <div className="flex flex-col gap-2">
           <h3 className="m-0 text-md font-bold">How should we bill you?</h3>
           {cardKept ? (
-            <div className="flex flex-wrap items-center gap-3 rounded-md border border-border px-4 py-3">
-              <CreditCard size={24} aria-hidden />
-              <span className="flex-1 text-sm">
-                <strong className="capitalize">{saved.cardBrand}</strong> ••
-                {saved.cardLast4} · expires {String(saved.cardExpMonth).padStart(2, '0')}/{String(saved.cardExpYear).slice(-2)}
-              </span>
-              {!disabled ? (
+            <SavedPaymentCard
+              type="card"
+              brand={saved.cardBrand}
+              last4={saved.cardLast4}
+              expires={saved.cardExpMonth && saved.cardExpYear ? `${String(saved.cardExpMonth).padStart(2, '0')}/${String(saved.cardExpYear).slice(-2)}` : null}
+              selected
+              labels={{ defaultTag: t('sc.billing.default'), expires: (date) => t('sc.billing.expires', { date }), expired: t('sc.billing.expired') }}
+              actions={!disabled ? (
                 <Button size="sm" variant="link" onClick={() => setNewCard(true)}>
                   Use a different card
                 </Button>
               ) : null}
-            </div>
+            />
           ) : hasStripeKey(key) ? (
             <StripeCard ref={card} publishableKey={key} holder={holder} />
           ) : (
             <LocalTestCard ref={card} />
           )}
+          {offerFeeChoice ? (
+            <div className="flex flex-col gap-2">
+              <h3 className="m-0 text-md font-bold">{t('sc.planStep.planFee.title')}</h3>
+              <PlanFeeChoice value={feeMode} onChange={setFeeMode} disabled={disabled} t={t} platformDefault={saved.planFeeCollectionDefault} />
+            </div>
+          ) : null}
+          <TextField
+            id={fieldId('promoCode')}
+            className="max-w-xs"
+            label={t('sc.planStep.promoCode')}
+            autoComplete="off"
+            maxLength={40}
+            value={promo}
+            disabled={disabled}
+            onChange={(e) => setPromo(e.target.value.replace(/\s/g, '').toUpperCase())}
+            error={f.errors.promoCode}
+            help={promo.trim() && saved.cardLast4 && !newCard ? t('sc.planStep.promoCardAgain') : t('sc.planStep.promoHelp')}
+          />
           <p className="m-0 inline-flex items-center gap-1 text-xs text-muted">
             <LockSimple size={12} aria-hidden /> The subscription starts when your application is approved; you’re not charged before the trial ends.
           </p>

@@ -150,11 +150,14 @@ final class ProviderDtos {
         }
     }
 
-    @Schema(name = "TakeHome", description = "What the provider receives at the listed price")
+    @Schema(name = "TakeHome", description = "What the provider receives at the listed price, after AfroTransact's "
+            + "connection fee (commissionBps / commissionMinor, payments' kind SERVICE rate for the service's "
+            + "category) and card fees")
     record TakeHomeDto(long priceMinor, long depositMinor, long balanceMinor, int commissionBps, long commissionMinor,
                        long cardFeesMinor, long takeHomeMinor, String currency,
-                       @Schema(description = "Where the commission comes from: payments' OVERRIDE, CATEGORY, DEFAULT, "
-                               + "RETAIL, or CONFIG (configured fallback while payments is unavailable)")
+                       @Schema(description = "Where the connection fee comes from: payments' OVERRIDE (negotiated), "
+                               + "PLAN, CATEGORY, DEFAULT, RETAIL, or CONFIG (configured fallback while payments is "
+                               + "unavailable)")
                        String feeSource,
                        @Schema(description = "payments' fee-schedule version (null for the fallback)")
                        Integer feeVersion) {

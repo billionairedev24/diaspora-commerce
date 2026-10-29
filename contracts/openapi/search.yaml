@@ -56,6 +56,7 @@ paths:
         - {name: community, in: query, schema: {type: string}, description: 'Comma-separated communities (Nigerian, Ghanaian…)'}
         - {name: fulfilment, in: query, schema: {type: string, enum: [AFROTRANSACT, SELLER]}}
         - {name: sellerKind, in: query, schema: {type: string, enum: [PLATFORM, SELLER]}}
+        - {name: sellerId, in: query, schema: {type: string, maxLength: 80}, description: One seller's products (an organisation id)}
         - {name: minRating, in: query, schema: {type: number, minimum: 0, maximum: 5}}
         - {name: minPrice, in: query, schema: {type: integer, format: int64, minimum: 0}, description: Minor units}
         - {name: maxPrice, in: query, schema: {type: integer, format: int64, minimum: 0}, description: Minor units}

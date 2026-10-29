@@ -28,6 +28,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/accounts"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/dhl"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/fedex"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/localtest"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/ups"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/usps"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/httpapi"
@@ -177,6 +178,11 @@ func buildCarriers(cfg config.Config, client *http.Client, log *slog.Logger) app
 		}
 		for _, c := range creds {
 			if c == "" {
+				if cfg.LocalTestCarriers {
+					log.Warn("carrier has no credentials; using the local test carrier (labels are marked TEST)", "carrier", code)
+					carriers[code] = localtest.New(code, nil)
+					return
+				}
 				log.Warn("carrier enabled but credentials missing; skipping", "carrier", code)
 				return
 			}

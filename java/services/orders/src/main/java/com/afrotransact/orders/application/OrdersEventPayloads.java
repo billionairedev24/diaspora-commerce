@@ -71,10 +71,12 @@ public final class OrdersEventPayloads {
      * @param closesAt   the customer may cancel for a full refund until then
      * @param fulfilment DOOR | PICKUP
      * @param feeMinor   the window's door or pickup fee charged on the order (all its shipments of that window)
+     * @param source     WINDOW, or RUN for a delivery run staff scheduled (S261): then {@code windowId} is the run's id
+     *                   and the order holds a slot on it in delivery-runs rather than a pre-order window order
      */
     public record PreorderSummary(String windowId, String code, String name, String number, LocalDate deliversOn,
                                   Instant closesAt, String fulfilment, long feeMinor, String currency,
-                                  String pickupWindow) {
+                                  String pickupWindow, String source) {
 
         static PreorderSummary of(Order o, PreorderPackage p) {
             if (p == null) {
@@ -83,7 +85,7 @@ public final class OrdersEventPayloads {
             long fee = o.preorderShipments().stream().filter(s -> s.preorder().windowId().equals(p.windowId()))
                     .mapToLong(Shipment::shippingMinor).sum();
             return new PreorderSummary(p.windowId(), p.windowCode(), p.windowName(), null, p.deliversOn(),
-                    p.closesAt(), p.fulfilment().name(), fee, o.currency(), null);
+                    p.closesAt(), p.fulfilment().name(), fee, o.currency(), null, p.source().name());
         }
     }
 
@@ -113,6 +115,31 @@ public final class OrdersEventPayloads {
     public record PreorderMissedDeliveryAnswered(String orderId, String orderNumber, String customerId,
                                                  String shipmentId, String windowId, String choice,
                                                  Instant answeredAt) {
+    }
+
+    /**
+     * orders.preorder.refund_settled (ADR 0005): {@code status} is REFUNDED (a captured payment was refunded, delivery
+     * fee included) or VOIDED (nothing had been captured: the authorisation was released).
+     */
+    public record PreorderRefundSettled(String orderId, String orderNumber, String customerId, String shipmentId,
+                                        String windowId, String status, long amountMinor, String currency,
+                                        Instant at) {
+
+        static PreorderRefundSettled of(Order o, Shipment s, Instant at) {
+            return new PreorderRefundSettled(o.id(), o.number(), o.customerId(), s.id(),
+                    s.preorder() == null ? null : s.preorder().windowId(), s.captured() ? "REFUNDED" : "VOIDED",
+                    s.totalMinor(), o.currency(), at);
+        }
+    }
+
+    /** orders.preorder.refund_failed (ADR 0005): the pre-order could not be cancelled or refunded automatically. */
+    public record PreorderRefundFailed(String orderId, String orderNumber, String customerId, String shipmentId,
+                                       String windowId, String code, String error, Instant at) {
+
+        static PreorderRefundFailed of(Order o, Shipment s, String code, String error, Instant at) {
+            return new PreorderRefundFailed(o.id(), o.number(), o.customerId(), s.id(),
+                    s.preorder() == null ? null : s.preorder().windowId(), code, error, at);
+        }
     }
 
     /**
@@ -180,16 +207,21 @@ public final class OrdersEventPayloads {
      * @param localTaxJurisdiction local jurisdiction from the tax quote (US-TX-770), null when none
      * @param shippingTaxMinor     part of taxMinor charged on the shipment's shipping
      * @param imageUrl             product photo snapshotted at checkout (order emails, S279); null when none
+     * @param sellerOrgId          seller of the line: a community pre-order package mixes sellers, so delivery-runs
+     *                             and fulfilment plan seller pickups and pick lists from it (null for older orders)
+     * @param sellerName           seller display name
      */
     public record LineSummary(String lineId, String variantAtin, String title, int quantity, long unitPriceMinor,
                               long taxMinor, String productAtin, String productType, String category,
                               boolean perishable, long discountMinor, String taxJurisdiction,
-                              String localTaxJurisdiction, long shippingTaxMinor, int lineNo, String imageUrl) {
+                              String localTaxJurisdiction, long shippingTaxMinor, int lineNo, String imageUrl,
+                              String sellerOrgId, String sellerName) {
 
         static LineSummary of(OrderLine l) {
             return new LineSummary(l.id(), l.variantAtin(), l.title(), l.quantity(), l.unitPriceMinor(),
                     l.taxMinor(), l.productAtin(), l.productType(), l.category(), l.perishable(), l.discountMinor(),
-                    l.taxJurisdiction(), l.localTaxJurisdiction(), l.shippingTaxMinor(), l.lineNo(), l.imageUrl());
+                    l.taxJurisdiction(), l.localTaxJurisdiction(), l.shippingTaxMinor(), l.lineNo(), l.imageUrl(),
+                    l.sellerOrgId(), l.sellerName());
         }
     }
 

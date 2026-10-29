@@ -1,6 +1,6 @@
 'use client';
 
-import { type FeesOverview, staffQueries } from '@afrotransact/api-client';
+import { type DeliveryTariffMode, type FeesOverview, staffQueries } from '@afrotransact/api-client';
 import { Button, Checkbox, Select, TextField } from '@afrotransact/ui';
 import { Plus, Trash } from '@phosphor-icons/react/ssr';
 import { useQuery } from '@tanstack/react-query';
@@ -12,6 +12,7 @@ import { problemMessage } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { money } from '@/lib/format';
+import { sellerName } from '@/lib/names';
 
 import { type DeliveryForm, previewQuote, type QuotePreview, type TariffForm, toDeliveryDraft } from './delivery-model';
 import { parseMiles, rowId } from './money-input';
@@ -40,9 +41,10 @@ function TariffEditor({ name, prefix, value, onChange, errors }: { name: string;
         error={err('mode')}
         options={[
           { value: 'FLAT', label: t('st.delivery.mode.flat') },
+          { value: 'PER_WEIGHT', label: 'By weight (base + per lb)' },
           { value: 'DISTANCE', label: t('st.delivery.mode.distance') }
         ]}
-        onChange={(e) => set('mode', e.currentTarget.value === 'DISTANCE' ? 'DISTANCE' : 'FLAT')}
+        onChange={(e) => set('mode', e.currentTarget.value as DeliveryTariffMode)}
       />
       {value.mode === 'FLAT' ? (
         <TextField
@@ -55,6 +57,16 @@ function TariffEditor({ name, prefix, value, onChange, errors }: { name: string;
           help={t('st.delivery.flatHelp')}
           onChange={(e) => set('flat', e.currentTarget.value)}
         />
+      ) : value.mode === 'PER_WEIGHT' ? (
+        <>
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,160px),1fr))] gap-3">
+            <TextField id={id('baseMinor')} inputMode="decimal" label={t('st.delivery.base')} value={value.base} error={err('baseMinor')} onChange={(e) => set('base', e.currentTarget.value)} />
+            <TextField id={id('perLbMinor')} inputMode="decimal" label="Per-pound rate ($)" value={value.perLb} error={err('perLbMinor')} onChange={(e) => set('perLb', e.currentTarget.value)} />
+            <TextField id={id('minMinor')} inputMode="decimal" label={t('st.delivery.min')} value={value.min} error={err('minMinor')} help={t('st.delivery.optional')} onChange={(e) => set('min', e.currentTarget.value)} />
+            <TextField id={id('maxMinor')} inputMode="decimal" label={t('st.delivery.max')} value={value.max} error={err('maxMinor')} help={t('st.delivery.noCap')} onChange={(e) => set('max', e.currentTarget.value)} />
+          </div>
+          <p className="m-0 text-xs text-muted">Base fee + per-pound rate × package weight in lbs (rounded half up), raised to the minimum and capped at the maximum.</p>
+        </>
       ) : (
         <>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,160px),1fr))] gap-3">
@@ -151,8 +163,8 @@ function QuotePreviewCard({ overview, form }: { overview: FeesOverview; form: De
   }, [form, overview.base, t]);
   const current = overview.current?.deliveryPricing ?? null;
   const orgs = new Map<string, string>([['', t('st.delivery.quote.anySeller')], [overview.retail.orgId, overview.retail.name]]);
-  form.overrides.forEach((o) => orgs.set(o.orgId, o.orgName));
-  current?.sellerOverrides.forEach((o) => orgs.set(o.orgId, o.orgName ?? o.orgId));
+  form.overrides.forEach((o) => orgs.set(o.orgId, sellerName(t, o.orgName)));
+  current?.sellerOverrides.forEach((o) => orgs.set(o.orgId, sellerName(t, o.orgName)));
   const liveQuote = useQuery({
     ...staffQueries.deliveryQuote(staffApi(), orgId || 'quote-preview', miles ?? 0, packages ?? 1),
     enabled: live && miles !== null && packages !== null
@@ -238,14 +250,14 @@ export function DeliveryPricingEditor({ overview, form, onChange, errors }: { ov
                 {form.overrides.map((o, i) => (
                   <li key={o.rowId} className="flex flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-2" id={deliveryFieldId(`deliveryPricing.sellerOverrides.${i}.orgId`)} tabIndex={-1}>
-                      <strong>{o.orgName}</strong>
+                      <strong>{sellerName(t, o.orgName)}</strong>
                       {errors[`deliveryPricing.sellerOverrides.${i}.orgId`] ? <span className="text-xs text-danger">{errors[`deliveryPricing.sellerOverrides.${i}.orgId`]}</span> : null}
-                      <Button variant="neutral" size="sm" aria-label={t('st.delivery.removeOverride', { seller: o.orgName })} onClick={() => set('overrides', form.overrides.filter((x) => x.rowId !== o.rowId))}>
+                      <Button variant="neutral" size="sm" aria-label={t('st.delivery.removeOverride', { seller: sellerName(t, o.orgName) })} onClick={() => set('overrides', form.overrides.filter((x) => x.rowId !== o.rowId))}>
                         <Trash size={16} aria-hidden />
                       </Button>
                     </div>
                     <TariffEditor
-                      name={t('st.delivery.overrideFee', { seller: o.orgName })}
+                      name={t('st.delivery.overrideFee', { seller: sellerName(t, o.orgName) })}
                       prefix={`deliveryPricing.sellerOverrides.${i}.sellerFee`}
                       value={o.tariff}
                       errors={errors}

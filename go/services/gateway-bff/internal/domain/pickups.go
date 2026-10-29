@@ -38,6 +38,7 @@ type PickupList struct {
 // DriverSuggestion is an available driver for a pickup, nearest first.
 type DriverSuggestion struct {
 	DriverID          string     `json:"driverId"`
+	DriverName        string     `json:"driverName"`
 	RouteID           string     `json:"routeId"`
 	RouteName         string     `json:"routeName"`
 	Zone              string     `json:"zone"`
@@ -70,23 +71,27 @@ type PickupAssignResult struct {
 	RouteID    string  `json:"routeId"`
 	RouteName  *string `json:"routeName"`
 	DriverID   *string `json:"driverId"`
+	DriverName *string `json:"driverName"`
 	Status     string  `json:"status"`
 }
 
 // PickupAssignment is one assignment of a pickup (automatic nearest driver or dispatch override).
 type PickupAssignment struct {
-	ID              string     `json:"id"`
-	ShipmentID      string     `json:"shipmentId"`
-	RouteID         string     `json:"routeId"`
-	DriverID        *string    `json:"driverId"`
-	Mode            string     `json:"mode"`
-	Reason          *string    `json:"reason"`
-	PreviousRouteID *string    `json:"previousRouteId"`
-	StraightMiles   *float64   `json:"straightMiles"`
-	RoadMiles       *float64   `json:"roadMiles"`
-	DistanceMethod  *string    `json:"distanceMethod"`
-	Actor           *string    `json:"actor"`
-	CreatedAt       *time.Time `json:"createdAt"`
+	ID                string     `json:"id"`
+	ShipmentID        string     `json:"shipmentId"`
+	RouteID           string     `json:"routeId"`
+	RouteName         *string    `json:"routeName"`
+	DriverID          *string    `json:"driverId"`
+	DriverName        *string    `json:"driverName"`
+	Mode              string     `json:"mode"`
+	Reason            *string    `json:"reason"`
+	PreviousRouteID   *string    `json:"previousRouteId"`
+	PreviousRouteName *string    `json:"previousRouteName"`
+	StraightMiles     *float64   `json:"straightMiles"`
+	RoadMiles         *float64   `json:"roadMiles"`
+	DistanceMethod    *string    `json:"distanceMethod"`
+	Actor             *string    `json:"actor"`
+	CreatedAt         *time.Time `json:"createdAt"`
 }
 
 // PickupAssignmentList is GET /v1/staff/dispatch/pickups/{id}/assignments.

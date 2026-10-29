@@ -1,7 +1,8 @@
 # Reusable deploy of ONE service to ONE environment on ONE cloud.
 #   1. verify the GHCR image signature (cosign keyless, must come from this repo's service pipelines)
-#   2. OIDC login to the target cloud (aws | gcp | azure) - no long-lived keys
-#   3. mirror the signed image + signatures/attestations from GHCR to ECR / Artifact Registry / ACR
+#   2. OIDC login to the target cloud (aws | gcp | azure) - no long-lived keys. ovh has no OIDC trust for CI: the
+#      deploy identity is a Harbor robot account limited to the registry project (secret OVH_REGISTRY_PASSWORD)
+#   3. mirror the signed image + signatures/attestations from GHCR to ECR / Artifact Registry / ACR / OVH Harbor
 #   4. GitOps bump: image.tag in <service>/deploy/helm/values-<env>.yaml, committed to the gitops branch;
 #      Argo CD syncs the service's Application, Argo Rollouts runs the canary (uat/prod)
 # The job runs in the GitHub environment named `inputs.environment`: dev/uat need no approval, `prod` has
@@ -19,7 +20,7 @@ on:
         type: string
         required: true
       cloud:
-        description: aws | gcp | azure. Empty = the `CLOUD` variable of the GitHub environment (the usual case).
+        description: aws | gcp | azure | ovh. Empty = the `CLOUD` variable of the GitHub environment (the usual case).
         type: string
         default: ""
       tag:
@@ -30,6 +31,9 @@ on:
       GITOPS_APP_ID:
         required: false
       GITOPS_APP_PRIVATE_KEY:
+        required: false
+      OVH_REGISTRY_PASSWORD:
+        description: Harbor robot password (ovh). Usually an environment secret of `inputs.environment`.
         required: false
 
 permissions:
@@ -69,7 +73,7 @@ jobs:
             echo "skip=true" >> "$GITHUB_ENV"
             exit 0
           fi
-          case "$CLOUD" in aws|gcp|azure) ;; *) echo "::error::bad cloud $CLOUD"; exit 1 ;; esac
+          case "$CLOUD" in aws|gcp|azure|ovh) ;; *) echo "::error::bad cloud $CLOUD"; exit 1 ;; esac
           [[ -n "$REGISTRY_URL" ]] || { echo "::error::set the REGISTRY_URL variable on the '$ENVIRONMENT' environment (tofu output registry_url)"; exit 1; }
           [[ "$TAG" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::tag must be a full git sha"; exit 1; }
 
@@ -140,6 +144,18 @@ jobs:
       - name: Registry login (ACR)
         if: env.CLOUD == 'azure'
         run: az acr login --name "${REGISTRY_URL%%.*}"
+
+      - name: Registry login (OVHcloud Managed Private Registry, Harbor)
+        if: env.skip != 'true' && env.CLOUD == 'ovh'
+        env:
+          OVH_REGISTRY_USERNAME: ${{ vars.OVH_REGISTRY_USERNAME }}
+          OVH_REGISTRY_PASSWORD: ${{ secrets.OVH_REGISTRY_PASSWORD }}
+        run: |
+          [[ -n "$OVH_REGISTRY_USERNAME" && -n "$OVH_REGISTRY_PASSWORD" ]] || {
+            echo "::error::set the OVH_REGISTRY_USERNAME variable and OVH_REGISTRY_PASSWORD secret on the '$ENVIRONMENT' environment (Harbor robot account, push+pull on the project only)"; exit 1; }
+          echo "::add-mask::$OVH_REGISTRY_PASSWORD"
+          # Robot names contain a "$" (robot$name): pass the password on stdin and quote the user.
+          printf '%s' "$OVH_REGISTRY_PASSWORD" | docker login "${REGISTRY_URL%%/*}" --username "$OVH_REGISTRY_USERNAME" --password-stdin
 
       - name: Mirror image, signature and SBOM attestation
         if: env.skip != 'true'

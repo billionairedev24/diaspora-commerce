@@ -24,7 +24,7 @@ describe('driver runtime capabilities', () => {
   it('skips remote push in Expo Go', async () => {
     const { capabilities, isExpoGo } = await load();
     expect(isExpoGo()).toBe(true);
-    expect(capabilities).toEqual({ runtime: 'expo-go', remotePush: false, localNotifications: true });
+    expect(capabilities).toEqual({ runtime: 'expo-go', remotePush: false, localNotifications: false });
   });
 
   it('registers push in a development or release build', async () => {

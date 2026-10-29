@@ -116,6 +116,15 @@ func TestPreorderStorefrontRoutes(t *testing.T) {
 		len(pkg["deliveryOptions"].([]any)) != 0 {
 		t.Fatalf("pre-order package = %v", pkg)
 	}
+	// ADR 0005 §3: the cart shows the delivery fee rule behind the chosen fee and behind each option.
+	rule, _ := pre["feeRule"].(map[string]any)
+	if rule == nil || rule["method"] != "PICKUP" || rule["ruleVersion"] != float64(2) || rule["amountMinor"] != float64(0) {
+		t.Fatalf("chosen fee rule = %v", pre["feeRule"])
+	}
+	door, _ := pre["options"].([]any)[0].(map[string]any)["rule"].(map[string]any)
+	if door == nil || door["method"] != "AFROTRANSACT_DELIVERY" || door["band"] != "10–40 mi" || door["ruleVersion"] != float64(3) {
+		t.Fatalf("door option rule = %v", pre["options"])
+	}
 	r = b.do("GET", "/v1/cart", nil)
 	mustStatus(t, r, 200)
 	mustStatus(t, b.do("PUT", "/v1/cart/preorder-fulfilment", map[string]any{"windowId": "NOPE-1", "fulfilment": "DOOR"}), 404)

@@ -23,6 +23,7 @@ import com.afrotransact.deliveryruns.application.DispatchList;
 import com.afrotransact.deliveryruns.application.LocationService;
 import com.afrotransact.deliveryruns.application.PublicRunService;
 import com.afrotransact.deliveryruns.application.ReserveCommand;
+import com.afrotransact.deliveryruns.application.RunCommand;
 import com.afrotransact.deliveryruns.application.RunSchedulerService;
 import com.afrotransact.deliveryruns.application.RunService;
 import com.afrotransact.deliveryruns.application.RunSlotService;
@@ -44,12 +45,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
@@ -61,12 +61,26 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
     "at.delivery-runs.jobs.initial-delay=1h"})
 @ActiveProfiles("local")
 @Import(ItSupport.class)
-@Testcontainers
 class RunFlowIT {
 
-    @Container
-    @ServiceConnection
+    /** Set {@code AT_IT_POSTGRES_URL} (jdbc:postgresql://…) to run without Docker. */
+    static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
+
+    static {
+        if (EXTERNAL_DB == null) {
+            POSTGRES.start();
+        }
+    }
+
+    @DynamicPropertySource
+    static void datasource(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", () -> EXTERNAL_DB != null ? EXTERNAL_DB : POSTGRES.getJdbcUrl());
+        registry.add("spring.datasource.username", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_USER", "postgres") : POSTGRES.getUsername());
+        registry.add("spring.datasource.password", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_PASSWORD", "") : POSTGRES.getPassword());
+    }
 
     private final LocationService locations;
     private final RunService runs;
@@ -277,7 +291,9 @@ class RunFlowIT {
         assertThat(geo.registered()).contains("delivery-runs:" + elgin.slug());
         geo.zone(zoneId, new FakeGeo.Box(30.30, 30.40, -97.42, -97.32));
         Run open = runs.open(runs.create(Fixtures.run(elgin.id(), clock.instant(), Duration.ofDays(5))).id());
-        assertThat(open.terms().feeMinor()).isEqualTo(899);
+        // A run without a named fee is priced by the delivery fee rule (V6 seeds 7.99 for AfroTransact delivery), not by
+        // the location's own default (8.99).
+        assertThat(open.terms().feeMinor()).isEqualTo(799);
 
         assertThat(publicRuns.available("78621", null, null)).extracting(a -> a.run().id()).contains(open.id());
         assertThat(publicRuns.available("78701", null, null)).extracting(a -> a.run().id())
@@ -294,6 +310,82 @@ class RunFlowIT {
         ItSupport.as(new Actor("orders-service", PrincipalType.SERVICE, Optional.empty(), Set.of(),
                 Set.of("delivery-runs:reserve")));
         assertThatThrownBy(() -> runs.cancel(UUID.randomUUID(), "x")).isInstanceOf(ForbiddenActionException.class);
+    }
+
+    /**
+     * S261: what checkout needs to offer a run honestly. The open run is listed for the address with its progress
+     * toward the minimum (reservations count as they are taken and stop counting when released), and the rule behind its
+     * fee, or the run's own fee when staff set one that differs from the rule's.
+     */
+    @Test
+    void anOpenRunIsOfferedWithItsProgressTowardTheMinimumAndTheRuleBehindItsFee() {
+        Location bastrop = locations.create(Fixtures.bastrop(Fixtures.slug("bastrop"), DropMode.DOORSTEP, null,
+                CutoffPolicy.CANCEL));
+        Run ruled = runs.open(runs.create(Fixtures.run(bastrop.id(), clock.instant(), Duration.ofDays(3), 10)).id());
+
+        AvailableRun first = availableRun(ruled.id());
+        assertThat(first.run().terms().minOrders()).isEqualTo(10);
+        assertThat(first.run().reservedOrders()).isZero();
+        assertThat(first.feeRule().source().name()).isEqualTo("RULE");
+        assertThat(first.feeRule().method().name()).isEqualTo("AFROTRANSACT_DELIVERY");
+        assertThat(first.feeRule().amountMinor()).isEqualTo(ruled.terms().feeMinor());
+        assertThat(first.feeRule().ruleVersion()).isPositive();
+        assertThat(first.full()).isFalse();
+
+        reserve(ruled.id(), "ord-p1", "cust-1");
+        reserve(ruled.id(), "ord-p2", "cust-2");
+        reserve(ruled.id(), "ord-p3", "cust-3");
+        assertThat(availableRun(ruled.id()).run().reservedOrders()).as("7 of 10 would read 3 of 10 here")
+                .isEqualTo(3);
+        slots.release(ruled.id(), "ord-p3");
+        assertThat(availableRun(ruled.id()).run().reservedOrders()).isEqualTo(2);
+        assertThat(availableRun(ruled.id()).run().minimumMet()).isFalse();
+
+        Instant start = clock.instant().plus(Duration.ofDays(9));
+        Run custom = runs.open(runs.create(new RunCommand(bastrop.id(), start, start.plus(Duration.ofHours(4)),
+                clock.instant().plus(Duration.ofDays(6)), null, null, 999L, null, 3, null, null, null, null, null,
+                null, null)).id());
+        AvailableRun overridden = availableRun(custom.id());
+        assertThat(overridden.feeRule().amountMinor()).isEqualTo(999);
+        assertThat(overridden.feeRule().source().name()).as("staff set the fee on the run itself")
+                .isEqualTo("WINDOW_OVERRIDE");
+        // The earliest cutoff comes first: the "next" run is the one after it.
+        assertThat(publicRuns.available("78602", null, null)).extracting(a -> a.run().id()).containsSubsequence(
+                ruled.id(), custom.id());
+    }
+
+    /**
+     * S261: checkout asks for exactly the run it priced ({@code allowNextRun=false}). After the cutoff, or when the
+     * run is full, that is refused (409) rather than quietly moved to a run with another date and fee; the run then no
+     * longer appears among the open runs, so the cart offers the next one.
+     */
+    @Test
+    void anOrderForAClosedOrFullRunIsRefusedNotMovedWhenCheckoutAsksForThatRun() {
+        Location bastrop = locations.create(Fixtures.bastrop(Fixtures.slug("bastrop"), DropMode.DOORSTEP, 1,
+                CutoffPolicy.CANCEL));
+        Run first = runs.open(runs.create(Fixtures.run(bastrop.id(), clock.instant(), Duration.ofDays(2), 1)).id());
+        Run next = runs.open(runs.create(Fixtures.run(bastrop.id(), clock.instant(), Duration.ofDays(9), 1)).id());
+
+        slots.reserve(new ReserveCommand(first.id(), "ord-q1", "cust-1", 1, false));
+        assertThatThrownBy(() -> slots.reserve(new ReserveCommand(first.id(), "ord-q2", "cust-2", 1, false)))
+                .isInstanceOf(ConflictException.class).hasMessageContaining("full");
+        assertThat(publicRuns.available("78602", null, null)).filteredOn(a -> a.run().id().equals(first.id()))
+                .allSatisfy(a -> assertThat(a.full()).isTrue());
+        assertThat(slots.reserve(new ReserveCommand(first.id(), "ord-q1", "cust-1", 1, false)).created())
+                .as("the same order asking again is answered, not refused").isFalse();
+
+        clock.set(first.terms().cutoffAt().plusSeconds(1));
+        assertThatThrownBy(() -> slots.reserve(new ReserveCommand(first.id(), "ord-q3", "cust-3", 1, false)))
+                .isInstanceOf(ConflictException.class).hasMessageContaining("no longer takes orders");
+        assertThat(publicRuns.available("78602", null, null)).extracting(a -> a.run().id())
+                .doesNotContain(first.id()).contains(next.id());
+        // The same order that may roll over does go to the next run (staff-facing callers, other services).
+        assertThat(slots.reserve(new ReserveCommand(first.id(), "ord-q3", "cust-3", 1, true)).moved()).isTrue();
+    }
+
+    private AvailableRun availableRun(UUID runId) {
+        return publicRuns.available("78602", null, null).stream().filter(a -> a.run().id().equals(runId))
+                .findFirst().orElseThrow();
     }
 
     private SlotReservation reserve(UUID runId, String orderId, String customerId) {

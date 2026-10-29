@@ -67,6 +67,7 @@ func (h *handlersImpl) search(w http.ResponseWriter, r *http.Request) {
 		Department:  v.Get("department"),
 		Fulfilment:  strings.ToUpper(v.Get("fulfilment")),
 		SellerKind:  strings.ToUpper(v.Get("sellerKind")),
+		SellerID:    strings.TrimSpace(v.Get("sellerId")),
 		InStockOnly: v.Get("inStock") == "true",
 		Sort:        domain.Sort(v.Get("sort")),
 		Ads:         v.Get("ads") == "true",

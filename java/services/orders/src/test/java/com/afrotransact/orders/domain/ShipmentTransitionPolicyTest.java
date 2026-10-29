@@ -52,6 +52,10 @@ class ShipmentTransitionPolicyTest {
                     m.put(CONFIRMED, EnumSet.of(PLACED));
                     m.put(PACKED, EnumSet.of(CONFIRMED));
                     m.put(READY, EnumSet.of(PACKED));
+                    // Carrier parcels (the matrix uses the carrier method): shipped once the label exists.
+                    m.put(PICKED_UP, EnumSet.of(READY));
+                    // ... and confirmed delivered by the seller when the carrier's tracking has not reported it.
+                    m.put(DELIVERED, EnumSet.of(PICKED_UP, IN_TRANSIT, OUT));
                 }
             }
             case PLATFORM_ADMIN, FULFILMENT_OPS -> {
@@ -113,6 +117,19 @@ class ShipmentTransitionPolicyTest {
     // ------------------------------------------------------------------ the rules in words
 
     @Test
+    void sellerMarksACarrierParcelShippedOnlyWithALabel() {
+        Shipment ready = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.CARRIER, READY);
+        assertThat(POLICY.decide(ready, PICKED_UP, ActorKind.SELLER).kind()).isEqualTo(TransitionDecision.Kind.ALLOW);
+        assertThat(POLICY.nextFor(ready, ActorKind.SELLER)).containsExactly(PICKED_UP);
+        Shipment unlabelled = ready.withTracking(null, null);
+        assertThatThrownBy(() -> POLICY.decide(unlabelled, PICKED_UP, ActorKind.SELLER))
+                .isInstanceOf(TransitionRefused.class).hasMessageContaining("shipping label");
+        Shipment pickup = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.PICKUP, READY);
+        assertThatThrownBy(() -> POLICY.decide(pickup, PICKED_UP, ActorKind.SELLER))
+                .isInstanceOf(TransitionRefused.class);
+    }
+
+    @Test
     void onlyTheSellerConfirmsPacksAndMarksReadyASellerFulfilledShipment() {
         Shipment placed = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.CARRIER, PLACED);
         assertThat(POLICY.decide(placed, CONFIRMED, ActorKind.SELLER).kind()).isEqualTo(TransitionDecision.Kind.ALLOW);
@@ -146,9 +163,27 @@ class ShipmentTransitionPolicyTest {
     }
 
     @Test
-    void sellersCannotMarkDelivered() {
-        Shipment shipped = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.CARRIER, IN_TRANSIT);
-        assertThatThrownBy(() -> POLICY.decide(shipped, DELIVERED, ActorKind.SELLER))
+    void sellersConfirmDeliveryOfCarrierParcelsOnceShipped() {
+        for (ShipmentStatus on : List.of(PICKED_UP, IN_TRANSIT, OUT)) {
+            Shipment shipped = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.CARRIER, on);
+            assertThat(POLICY.decide(shipped, DELIVERED, ActorKind.SELLER).kind())
+                    .isEqualTo(TransitionDecision.Kind.ALLOW);
+            assertThat(POLICY.nextFor(shipped, ActorKind.SELLER)).containsExactly(DELIVERED);
+        }
+    }
+
+    @Test
+    void sellersCannotMarkDeliveredBeforeTheParcelIsShipped() {
+        Shipment ready = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.CARRIER, READY);
+        assertThatThrownBy(() -> POLICY.decide(ready, DELIVERED, ActorKind.SELLER))
+                .isInstanceOf(TransitionRefused.class);
+    }
+
+    @Test
+    void sellersCannotMarkDeliveredOnCourierDeliveries() {
+        Shipment onTheWay = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.AFROTRANSACT_DELIVERY,
+                OUT);
+        assertThatThrownBy(() -> POLICY.decide(onTheWay, DELIVERED, ActorKind.SELLER))
                 .isInstanceOf(TransitionRefused.class)
                 .satisfies(e -> assertThat(((TransitionRefused) e).forbidden()).isTrue());
     }
@@ -222,6 +257,30 @@ class ShipmentTransitionPolicyTest {
         assertThatThrownBy(() -> POLICY.decide(courier, PICKED_UP, ActorKind.CARRIER))
                 .isInstanceOf(TransitionRefused.class);
         assertThatThrownBy(() -> POLICY.decide(carrier, PICKED_UP, ActorKind.COURIER))
+                .isInstanceOf(TransitionRefused.class);
+    }
+
+    @Test
+    void aRunsDriverMovesPreorderPickupShipmentsThroughTheTransitStepsButNoOtherPickupShipments() {
+        Shipment pickupDrop = Shipments.of(FulfilmentType.PREORDER, DeliveryMethod.PICKUP, CONFIRMED);
+        for (ShipmentStatus to : List.of(PICKED_UP, OUT, DELIVERED)) {
+            assertThat(POLICY.decide(pickupDrop, to, ActorKind.COURIER).kind())
+                    .isEqualTo(TransitionDecision.Kind.ALLOW);
+        }
+        // the driver never moves the prepare steps, and carriers have nothing to do with a pickup point
+        assertThatThrownBy(() -> POLICY.decide(pickupDrop, PACKED, ActorKind.COURIER))
+                .isInstanceOf(TransitionRefused.class);
+        assertThatThrownBy(() -> POLICY.decide(pickupDrop, PICKED_UP, ActorKind.CARRIER))
+                .isInstanceOf(TransitionRefused.class);
+        // a seller's own pickup order (not a pre-order run) is still handed over by the seller, not a courier
+        Shipment sellerPickup = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.PICKUP, READY);
+        assertThatThrownBy(() -> POLICY.decide(sellerPickup, DELIVERED, ActorKind.COURIER))
+                .isInstanceOf(TransitionRefused.class);
+        // forward only, and a delivered package stays delivered
+        Shipment delivered = Shipments.of(FulfilmentType.PREORDER, DeliveryMethod.PICKUP, DELIVERED);
+        assertThat(POLICY.decide(delivered, OUT, ActorKind.COURIER).kind()).isEqualTo(TransitionDecision.Kind.IGNORE);
+        Shipment placed = Shipments.of(FulfilmentType.PREORDER, DeliveryMethod.PICKUP, PLACED);
+        assertThatThrownBy(() -> POLICY.decide(placed, PICKED_UP, ActorKind.COURIER))
                 .isInstanceOf(TransitionRefused.class);
     }
 

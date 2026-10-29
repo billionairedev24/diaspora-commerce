@@ -10,6 +10,11 @@ public enum FailureKind {
     TIMEOUT(false),
     /** Other 4xx such as an unknown model id or a context-length error. Falls back immediately. */
     CLIENT_ERROR(false),
+    /**
+     * OpenRouter found no endpoint for the model that satisfies our provider privacy preferences (for example no
+     * zero-data-retention endpoint). Falls back immediately: the next candidate may have one.
+     */
+    PRIVACY_POLICY(false),
     /** Connection failures and anything unclassified. Falls back immediately. */
     UNKNOWN(false);
 

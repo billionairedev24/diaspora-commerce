@@ -1,6 +1,8 @@
 package com.afrotransact.deliveryruns.application;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -14,6 +16,10 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 import com.afrotransact.deliveryruns.domain.AreaKind;
+import com.afrotransact.deliveryruns.domain.DropMode;
+import com.afrotransact.deliveryruns.domain.FeeMethod;
+import com.afrotransact.deliveryruns.domain.FeeSnapshot;
+import com.afrotransact.deliveryruns.domain.FeeSource;
 import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.LocationDetails;
@@ -37,15 +43,17 @@ class PublicRunServiceImpl implements PublicRunService {
     private final RunRepository runs;
     private final GeoGateway geo;
     private final RunLinks links;
+    private final FeeBook fees;
     private final DeliveryRunsSettings settings;
     private final Clock clock;
 
     PublicRunServiceImpl(LocationRepository locations, RunRepository runs, GeoGateway geo, RunLinks links,
-                         DeliveryRunsSettings settings, Clock clock) {
+                         FeeBook fees, DeliveryRunsSettings settings, Clock clock) {
         this.locations = locations;
         this.runs = runs;
         this.geo = geo;
         this.links = links;
+        this.fees = fees;
         this.settings = settings;
         this.clock = clock;
     }
@@ -53,6 +61,12 @@ class PublicRunServiceImpl implements PublicRunService {
     @Override
     @Transactional(readOnly = true)
     public List<AvailableRun> available(String zip, Double lat, Double lng) {
+        return available(zip, lat, lng, 0);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AvailableRun> available(String zip, Double lat, Double lng, int earlyAccessHours) {
         Optional<GeoPoint> point = point(zip, lat, lng);
         if (point.isEmpty()) {
             return List.of();
@@ -80,10 +94,18 @@ class PublicRunServiceImpl implements PublicRunService {
         }
         Instant now = Instant.now(clock);
         List<AvailableRun> out = new ArrayList<>();
-        for (Run run : runs.findAccepting(covering.keySet(), now)) {
+        Map<UUID, Optional<FeeSnapshot>> doorRules = new HashMap<>();
+        List<Run> takingOrders = new ArrayList<>(runs.findAccepting(covering.keySet(), now));
+        if (earlyAccessHours > 0) {
+            takingOrders.addAll(runs.findAnnouncedOpeningBy(covering.keySet(), now,
+                    now.plus(Duration.ofHours(earlyAccessHours))));
+        }
+        for (Run run : takingOrders) {
             Location location = covering.get(run.locationId());
+            Optional<FeeSnapshot> doorRule = doorRules.computeIfAbsent(run.locationId(),
+                    id -> fees.doorFeeAt(location, run.terms().currency()));
             out.add(new AvailableRun(run, location, run.terms().capacity().ordersLeft(run.reservedOrders()),
-                    run.isFull(1), links.runUrl(location, run)));
+                    run.isFull(1), links.runUrl(location, run), feeRule(run, doorRule)));
         }
         out.sort(Comparator.comparing(a -> a.run().terms().cutoffAt()));
         return out;
@@ -127,6 +149,24 @@ class PublicRunServiceImpl implements PublicRunService {
                 "Preorder by " + links.cutoffDisplay(location, run),
                 links.runUrl(location, run, "storefront", "advertorial", "advertorial"), d.whatsappInviteUrl(),
                 area.kind(), area.geoZoneId(), area.center().lat(), area.center().lng(), area.radiusMiles());
+    }
+
+    /**
+     * The rule behind the run's fee (ADR 0005 §3). A doorstep run costs what the AfroTransact delivery rule says for
+     * the location's distance unless staff set another fee on the run, which is then the source (the run keeps the fee
+     * its customers were quoted); a pickup-point run is priced by the pickup rule the same way.
+     */
+    private FeeSnapshot feeRule(Run run, Optional<FeeSnapshot> doorRule) {
+        RunTerms t = run.terms();
+        boolean door = t.dropMode() == DropMode.DOORSTEP;
+        Optional<FeeSnapshot> rule = door ? doorRule : Optional.of(fees.current().pickup(t.currency()));
+        if (rule.isPresent() && rule.get().amountMinor() == t.feeMinor()) {
+            return rule.get();
+        }
+        FeeMethod method = door ? FeeMethod.AFROTRANSACT_DELIVERY : FeeMethod.PICKUP;
+        return new FeeSnapshot(method, rule.map(FeeSnapshot::ruleId).orElse(null),
+                rule.map(FeeSnapshot::ruleVersion).orElse(0L), t.currency(), t.feeMinor(), FeeSource.WINDOW_OVERRIDE,
+                null, rule.map(FeeSnapshot::distanceMiles).orElse((BigDecimal) null));
     }
 
     private Optional<GeoPoint> point(String zip, Double lat, Double lng) {

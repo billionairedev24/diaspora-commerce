@@ -8,6 +8,8 @@ const env = (name: string): string | undefined => {
 
 /** True when the storefront should use the in-process MSW mock BFF (NEXT_PUBLIC_API_MOCKS=1 or API_MOCKS=1). */
 export function mocksEnabled(): boolean {
+  // Demo data never reaches a production or UAT deployment, whatever the flags say.
+  if (['prod', 'production', 'uat'].includes(env('APP_ENV') ?? '')) return false;
   return env('NEXT_PUBLIC_API_MOCKS') === '1' || env('API_MOCKS') === '1';
 }
 
@@ -20,6 +22,12 @@ export function bffOrigin(): string {
     environment (NEXT_PUBLIC_SELLER_CENTER_URL is still read), resolved per request on the server. */
 export function sellerCenterUrl(): string {
   return (env('SELLER_CENTER_URL') ?? env('NEXT_PUBLIC_SELLER_CENTER_URL') ?? 'http://localhost:3001').replace(/\/+$/, '');
+}
+
+/** Staff console origin (account menu link for staff): the shared STAFF_CONSOLE_URL of the environment, resolved per
+    request on the server. */
+export function staffConsoleUrl(): string {
+  return (env('STAFF_CONSOLE_URL') ?? 'http://localhost:3002').replace(/\/+$/, '');
 }
 
 /** Path the browser uses for every BFF call (same origin; the route handler proxies or mocks). */

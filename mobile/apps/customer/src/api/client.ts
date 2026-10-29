@@ -9,6 +9,7 @@ import { env } from '@/config/env';
 
 import { createAuthFetch, createJsonRequester, type TokenSource } from './http';
 import { mockFetch } from './mock/router';
+import { withDeadline } from './network';
 import {
   type AvailableDay,
   type AvailableSlot,
@@ -29,11 +30,10 @@ import {
   type PublicService,
   type PublicServiceSearch,
   type RegisterDeviceRequest,
-  type SetupIntent,
-  type StartReturnRequest
+  type SetupIntent
 } from './types';
 
-export function createCustomerApi(tokens: TokenSource, network: FetchLike = (r) => fetch(r)) {
+export function createCustomerApi(tokens: TokenSource, network: FetchLike = withDeadline((r) => fetch(r))) {
   const transport: FetchLike = env.mocks ? mockFetch : network;
   const authed = createAuthFetch(tokens, transport);
   const bff = createApiClient({ baseUrl: env.bffUrl, fetch: authed, headers: { 'Accept-Language': 'en-US' } });
@@ -53,7 +53,6 @@ export function createCustomerApi(tokens: TokenSource, network: FetchLike = (r) 
     account: {
       createSetupIntent: () => bffJson<SetupIntent>('/v1/account/payment-methods/setup-intents', { method: 'POST' }),
       deletePaymentMethod: (id: string) => bffJson<void>(`/v1/account/payment-methods/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-      startReturn: (body: StartReturnRequest) => bffJson<{ rmaId: string; orderNumber: string; title: string; status: string; refundMinor: number }>('/v1/account/returns', { method: 'POST', body }),
       /** Proposed BFF route (see OrderTracking). */
       tracking: (orderNumber: string) => bffJson<OrderTracking>(`/v1/account/orders/${encodeURIComponent(orderNumber)}/tracking`)
     },
