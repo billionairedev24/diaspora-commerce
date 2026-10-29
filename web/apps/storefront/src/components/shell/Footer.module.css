@@ -56,7 +56,7 @@
 .colToggle[aria-expanded='true'] .colCaret { transform: rotate(180deg); }
 
 @media (max-width: 640px) {
-  .grid { grid-template-columns: 1fr; gap: 0; padding-top: var(--at-space-8); }
+  .grid { grid-template-columns: minmax(0, 1fr); gap: 0; padding-top: var(--at-space-8); }
   .brand { padding-bottom: var(--at-space-6); }
   .col { gap: 0; border-top: 1px solid var(--at-ink-700); }
   .colList { gap: 0; padding-bottom: var(--at-space-3); }
