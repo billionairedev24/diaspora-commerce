@@ -134,7 +134,7 @@ func payoutsResource() *staffResource {
 		key: "payouts", module: "payouts", title: "Payout requests", statusKey: "status", exportable: true,
 		columns: []domain.Column{col("sellerName", "Seller", "strong", 22), col("requestedByName", "Requested by", "text", 16), col("amountMinor", "Amount", "money", 12),
 			col("requestedAt", "Requested", "date", 12), col("holdReason", "Hold reason", "text", 20), col("status", "Status", "status", 14)},
-		facets: domain.StaffFacets("REQUESTED", "ON_HOLD", "APPROVED", "IN_TRANSIT", "PAID", "FAILED"),
+		facets: domain.StaffFacets("REQUESTED", "HELD", "IN_TRANSIT", "PAID", "FAILED"),
 		list:   list,
 		names: []nameRef{sellerRef("orgId").named("sellerName"), personRef("requestedBy", "Requested by"), personRef("decidedBy", "Decided by"),
 			orderRef("orderId").inList("transfers"), orderRef("orderId").inList("balance.onHold")},
@@ -174,7 +174,7 @@ func payoutsResource() *staffResource {
 				confirm: "Ask Stripe where this payout stands? If Stripe says it was paid or failed, the request is closed to match.", run: act("/sync", func(jobj) jobj { return nil })},
 			{key: "hold", label: "Hold", tone: "danger", permission: "payouts:approve", level: domain.LevelApprove, form: reasonForm("Put the payout on hold", "Hold"), when: inState("REQUESTED"),
 				run: act("/hold", func(v jobj) jobj { return jobj{"reason": vs(v, "reason")} })},
-			{key: "release", label: "Release", tone: "neutral", permission: "payouts:approve", level: domain.LevelApprove, confirm: "Release the hold?", when: inState("ON_HOLD", "HELD"), run: act("/release", func(jobj) jobj { return nil })},
+			{key: "release", label: "Release", tone: "neutral", permission: "payouts:approve", level: domain.LevelApprove, confirm: "Release the hold?", when: inState("HELD"), run: act("/release", func(jobj) jobj { return nil })},
 		},
 	}
 }

@@ -86,7 +86,7 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
     { resource: 'roles', label: 'Roles' }
   ],
   payouts: [
-    { resource: 'payouts', label: 'Payout requests' },
+    { resource: 'payouts', label: 'Payout requests', statusFilter: true },
     { resource: 'reconciliation', label: 'Differences' },
     { resource: 'ledger-adjustments', label: 'Ledger adjustments' },
     { resource: 'credit-adjustments', label: 'Credit adjustments' },
