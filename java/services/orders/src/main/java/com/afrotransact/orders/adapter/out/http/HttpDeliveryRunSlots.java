@@ -71,6 +71,11 @@ class HttpDeliveryRunSlots implements DeliveryRunSlots {
 
     @Override
     public void reserve(String runId, String orderId, String customerId, int earlyAccessHours) {
+        reserve(runId, orderId, customerId, earlyAccessHours, null);
+    }
+
+    @Override
+    public void reserve(String runId, String orderId, String customerId, int earlyAccessHours, RunCharge charge) {
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("orderId", orderId);
         request.put("customerId", customerId);
@@ -78,6 +83,11 @@ class HttpDeliveryRunSlots implements DeliveryRunSlots {
         request.put("allowNextRun", false);
         if (earlyAccessHours > 0) {
             request.put("earlyAccessHours", earlyAccessHours);
+        }
+        if (charge != null) {
+            request.put("feeMinor", charge.feeMinor());
+            request.put("totalMinor", charge.totalMinor());
+            request.put("deliveryKind", charge.kind());
         }
         try {
             deliveryRuns.call(c -> c.post().uri("/v1/service/runs/{id}/reservations", runId)

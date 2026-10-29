@@ -78,6 +78,35 @@ Pre-order windows are the one customer-facing offer; a delivery run is how a clo
   shown beside the minimum order count while a window is created, a window's overview shows its orders, revenue, delivery fees,
   estimated cost and margin, and a run has a P&L before and after it. A cancelled window or run reports the orders refunded in
   full (delivery fee included), not revenue.
+- **A run's P&L is built from its real orders, not orders x one fee (S265).** Each run slot keeps what its order was charged
+  (delivery fee, total and the way it is delivered: door, pickup or carrier), told by orders-service when it reserves the slot
+  and by the pre-order window it was handed over from; what payments reports for it (`payments.captured`: the seller
+  commission; `payments.refunded`: the amount and its delivery-fee part, once per capture and refund id); and so the run's
+  report counts the orders delivered (a completed run delivers every order the driver did not report failed), those given
+  back after reserving apart, the fees actually charged per way of delivery, the refunds, the cost and the margin, and the
+  break-even at the fee the orders paid. An order that never reported its fee falls back to the run's fee and the report says
+  so (`feesEstimated`). The cost stays an estimate (geo route time and miles x the staff-set driver cost); when the run's
+  collecting or out-for-delivery time and its completion are both captured and plausible (at least the one-way drive, at
+  most a day) those minutes replace the estimated ones and `costBasis` says `ACTUAL_TIME`; miles stay estimated.
+- **"Orders refunded" means one thing everywhere (S265).** The orders of a cancelled run (each refunded in full, or its
+  authorisation released), plus orders that were delivered and then had money handed back. Slots customers gave back before
+  being charged are counted apart (`ordersCancelled`). The run P&L and the location history use the same count, and
+  `refundedFeesMinor` is the sum of the fees those orders were actually charged, or the fee refunds payments reported; only an
+  order that never reported its fee uses the run's fee, labelled `refundedFeesEstimated`.
+- **The contribution lens: "Platform fees on goods" (S265).** What AfroTransact keeps on the goods of a run's (or window's)
+  orders is a separate line, never part of the delivery P&L, so staff weigh delivery fees and minimums against it without the
+  two being mixed. The figure is the commission payments reported for each order (seller recipients of `payments.captured`);
+  for orders it has not reported, the staff-configured **platform fee per order** in the same audited economics settings (a
+  reason, who, when, before and after); a value typed into the view replaces both (`MANUAL`). The line always says where it
+  comes from (`PAYMENTS`, `MIXED`, `ESTIMATE`, `MANUAL` or `NONE`: with nothing reported and no estimate there is no figure,
+  not a zero). The old `commissionShareMinor` query still works, but only as that typed figure: it no longer changes the margin.
+  Retail's own orders have no seller commission and report none.
+- **Per-location history and the wizard (S265).** A location's history gives each run its cost, margin, break-even and whether
+  its minimum covered the break-even, each pre-order window it delivered (orders, delivery fees, refunds, minimum met), and
+  subscriber growth per month both gross and net of unsubscribes (a subscription ends in the month of its last withdrawn
+  consent in the consent log; a subscriber who signed up again is not counted as having left). The staff view trends orders and
+  margin per run. The window wizard asks for the margin at capacity as well as the break-even: at the capacity given, else the
+  location's default capacity; a location with no order limit has no figure at capacity and the panel says so.
 - **Announcements** go through notifications from the delivery-runs events (window and run open, the cutoff reminder, dispatch,
   confirmed and cancelled), per channel the shopper consented to. WhatsApp messages are behind
   `DELIVERY_RUNS_WHATSAPP_ENABLED` (off) because they are sent only from templates Meta must approve; consent and the community

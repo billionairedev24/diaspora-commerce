@@ -7,6 +7,7 @@ import {
   economicsInputProblems,
   type EconomicsNumbers,
   type EconomicsSettings,
+  PLATFORM_FEE_MAX_MINOR,
   runBreakEven,
   runCostModel,
   staffRunKeys,
@@ -39,6 +40,7 @@ const draftOf = (s: EconomicsNumbers): Draft => ({
   perStopMinutes: String(s.perStopMinutes),
   pickupPointStopMinutes: String(s.pickupPointStopMinutes),
   handoverMinutesPerOrder: String(s.handoverMinutesPerOrder),
+  platformFeePerOrderMinor: majorText(s.platformFeePerOrderMinor),
   roundTrip: s.roundTrip
 });
 
@@ -53,7 +55,7 @@ function parseMinutes(text: string): number {
 }
 
 /** The numbers a draft describes (NaN where a field is not a number), for the checks and for the BFF. */
-function numbersOf(d: Draft): Record<keyof typeof ECONOMICS_LIMITS, number> & { roundTrip: boolean } {
+function numbersOf(d: Draft): Record<keyof typeof ECONOMICS_LIMITS | 'platformFeePerOrderMinor', number> & { roundTrip: boolean } {
   return {
     driverCostPerHourMinor: parseMajor(d.driverCostPerHourMinor),
     driverCostPerMileMinor: parseMajor(d.driverCostPerMileMinor),
@@ -61,6 +63,8 @@ function numbersOf(d: Draft): Record<keyof typeof ECONOMICS_LIMITS, number> & { 
     perStopMinutes: parseMinutes(d.perStopMinutes),
     pickupPointStopMinutes: parseMinutes(d.pickupPointStopMinutes),
     handoverMinutesPerOrder: parseMinutes(d.handoverMinutesPerOrder),
+    // Blank means no estimate (0).
+    platformFeePerOrderMinor: d.platformFeePerOrderMinor.trim() === '' ? 0 : parseMajor(d.platformFeePerOrderMinor),
     roundTrip: d.roundTrip
   };
 }
@@ -139,7 +143,7 @@ function History({ changes }: { changes: EconomicsChange[] }) {
       point: n.pickupPointStopMinutes,
       handover: n.handoverMinutesPerOrder,
       trip: n.roundTrip ? t('st.runs.settings.trip.round') : t('st.runs.settings.trip.oneWay')
-    });
+    }) + (n.platformFeePerOrderMinor > 0 ? `, ${t('st.runs.settings.summary.platform', { fee: money(n.platformFeePerOrderMinor) })}` : '');
   return (
     <section aria-labelledby="runs-history-title" className={CARD}>
       <h3 id="runs-history-title" className="m-0 text-md font-bold">
@@ -186,6 +190,7 @@ function Editor({ settings }: { settings: EconomicsSettings }) {
     const p = shown ? problems[f] : undefined;
     return p ? problemText(t, p, f, money) : null;
   };
+  const platformProblem = shown && problems.platformFeePerOrderMinor ? t('st.runs.settings.problem.range', { min: money(0), max: money(PLATFORM_FEE_MAX_MINOR) }) : null;
   const save = useMutation({
     mutationFn: ({ reason }: { reason: string }) => api.updateSettings({ ...nums, reason }, settings.version),
     onSuccess: () => {
@@ -217,6 +222,14 @@ function Editor({ settings }: { settings: EconomicsSettings }) {
           {field('perStopMinutes', 'st.runs.settings.perStop', 'st.runs.settings.perStop.help')}
           {field('pickupPointStopMinutes', 'st.runs.settings.pickupStop', 'st.runs.settings.pickupStop.help')}
           {field('handoverMinutesPerOrder', 'st.runs.settings.handover', 'st.runs.settings.handover.help')}
+          <TextField
+            label={t('st.runs.settings.platformFee')}
+            help={t('st.runs.settings.platformFee.help')}
+            inputMode="decimal"
+            value={d.platformFeePerOrderMinor}
+            error={platformProblem}
+            onChange={(e) => set({ platformFeePerOrderMinor: e.currentTarget.value })}
+          />
           <Checkbox label={t('st.runs.settings.roundTrip')} description={t('st.runs.settings.roundTrip.help')} checked={d.roundTrip} onChange={(e) => set({ roundTrip: e.currentTarget.checked })} />
         </fieldset>
         <div className="flex flex-col gap-0.5 text-xs text-muted" data-testid="economics-meta">

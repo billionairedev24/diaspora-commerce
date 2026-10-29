@@ -43,6 +43,42 @@ func TestEconomicsSettingsBodyKeepsOnlyTheNumbersAndChecksEachOne(t *testing.T) 
 	}
 }
 
+func TestEconomicsSettingsBodyTakesTheOptionalPlatformFeeEstimate(t *testing.T) {
+	b := economicsBody()
+	b["platformFeePerOrderMinor"] = float64(250)
+	out, err := domain.EconomicsSettingsBody(b)
+	if err != nil || len(out) != 8 || out["platformFeePerOrderMinor"] != int64(250) {
+		t.Fatalf("%v %v", out, err)
+	}
+	b["platformFeePerOrderMinor"] = nil
+	if out, err := domain.EconomicsSettingsBody(b); err != nil || len(out) != 7 {
+		t.Fatalf("null is not configured: %v %v", out, err)
+	}
+	for _, bad := range []any{float64(-1), float64(100_001), "two", float64(2.5)} {
+		b["platformFeePerOrderMinor"] = bad
+		if _, ok := problemFields(t, func() error { _, err := domain.EconomicsSettingsBody(b); return err }())["platformFeePerOrderMinor"]; !ok {
+			t.Errorf("%v was accepted", bad)
+		}
+	}
+}
+
+func TestWindowPlanBodyTakesTheCapacityForTheMarginAtCapacity(t *testing.T) {
+	out, err := domain.WindowPlanBody(map[string]any{"targets": []any{"US/TX/Bastrop"}, "capacityOrders": float64(40)})
+	if err != nil || out["capacityOrders"] != int64(40) {
+		t.Fatalf("%v %v", out, err)
+	}
+	out, err = domain.WindowPlanBody(map[string]any{"targets": []any{"US/TX/Bastrop"}, "capacityOrders": nil})
+	if _, has := out["capacityOrders"]; err != nil || has {
+		t.Fatalf("an unset capacity stays unset: the location's default applies: %v %v", out, err)
+	}
+	for _, bad := range []any{float64(0), float64(10_001), "many", float64(1.5)} {
+		_, err := domain.WindowPlanBody(map[string]any{"targets": []any{"US/TX/Bastrop"}, "capacityOrders": bad})
+		if _, ok := problemFields(t, err)["capacityOrders"]; !ok {
+			t.Errorf("%v was accepted", bad)
+		}
+	}
+}
+
 func TestWindowPlanBody(t *testing.T) {
 	out, err := domain.WindowPlanBody(map[string]any{"targets": []any{"US/TX/Bastrop"}, "door": true, "minOrders": float64(12), "doorFeeMinor": nil})
 	if err != nil || out["minOrders"] != int64(12) || out["door"] != true || len(out["targets"].([]string)) != 1 {

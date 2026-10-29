@@ -18,6 +18,7 @@ import java.util.UUID;
 
 import com.afrotransact.deliveryruns.domain.Capacity;
 import com.afrotransact.deliveryruns.domain.CutoffPolicy;
+import com.afrotransact.deliveryruns.domain.DeliveryKind;
 import com.afrotransact.deliveryruns.domain.DeliveryWindow;
 import com.afrotransact.deliveryruns.domain.DropMode;
 import com.afrotransact.deliveryruns.domain.FeeSnapshot;
@@ -25,6 +26,7 @@ import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.LocationDetails;
 import com.afrotransact.deliveryruns.domain.PickupPoint;
+import com.afrotransact.deliveryruns.domain.PreorderFulfilment;
 import com.afrotransact.deliveryruns.domain.PreorderLine;
 import com.afrotransact.deliveryruns.domain.PreorderOrder;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
@@ -35,6 +37,7 @@ import com.afrotransact.deliveryruns.domain.RunAction;
 import com.afrotransact.deliveryruns.domain.RunEconomics;
 import com.afrotransact.deliveryruns.domain.RunEconomicsCalculator;
 import com.afrotransact.deliveryruns.domain.RunOrder;
+import com.afrotransact.deliveryruns.domain.RunOrderMoney;
 import com.afrotransact.deliveryruns.domain.RunOrderStatus;
 import com.afrotransact.deliveryruns.domain.RunStatus;
 import com.afrotransact.deliveryruns.domain.RunTerms;
@@ -318,8 +321,11 @@ class RunServiceImpl implements RunService {
         for (PreorderOrder o : paid) {
             String customer = o.customerId() == null || o.customerId().isBlank() ? "unknown" : o.customerId();
             String code = mode == DropMode.PICKUP_POINT ? preorders.codes().next() : null;
+            DeliveryKind kind = o.fulfilment() == PreorderFulfilment.PICKUP ? DeliveryKind.PICKUP
+                    : DeliveryKind.DOOR;
+            RunOrderMoney charged = RunOrderMoney.charged(o.deliveryFeeMinor(), o.totalMinor(), kind);
             slots.add(runOrders.insert(RunOrder.reserve(UUID.randomUUID(), run.id(), o.orderId(), customer, 1, null,
-                    now).confirm(code, now)));
+                    now).confirm(code, now).withMoney(charged, now)));
         }
         preorders.events().run(DeliveryRunsEvents.RUN_CONFIRMED, location, run, null, null, PreorderDeliveryDayService.REASON_PREFIX + w.code(),
                 slots, sellersOf(paid));

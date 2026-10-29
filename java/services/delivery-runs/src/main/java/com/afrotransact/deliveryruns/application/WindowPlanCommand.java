@@ -17,9 +17,18 @@ import com.afrotransact.deliveryruns.domain.AreaKey;
  * @param pickupFeeMinor the window's own pickup fee (null = the pickup rule)
  * @param minOrders      the minimum being weighed (null or 0 = none)
  * @param expectedOrders the orders to show a P&amp;L for (null = the minimum, at least 1)
+ * @param capacityOrders the most orders the run can carry, to show the margin at capacity (null = the location's
+ *                       default capacity; none when that is not limited)
  */
 public record WindowPlanCommand(UUID locationId, List<AreaKey> targets, boolean door, boolean pickup,
-                                Long doorFeeMinor, Long pickupFeeMinor, Integer minOrders, Integer expectedOrders) {
+                                Long doorFeeMinor, Long pickupFeeMinor, Integer minOrders, Integer expectedOrders,
+                                Integer capacityOrders) {
+
+    /** A plan without a capacity of its own. */
+    public WindowPlanCommand(UUID locationId, List<AreaKey> targets, boolean door, boolean pickup,
+                             Long doorFeeMinor, Long pickupFeeMinor, Integer minOrders, Integer expectedOrders) {
+        this(locationId, targets, door, pickup, doorFeeMinor, pickupFeeMinor, minOrders, expectedOrders, null);
+    }
 
     public WindowPlanCommand {
         targets = targets == null ? List.of() : List.copyOf(targets);

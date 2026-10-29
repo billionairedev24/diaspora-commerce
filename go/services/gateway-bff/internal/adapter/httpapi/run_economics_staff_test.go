@@ -22,7 +22,7 @@ const (
 
 func econNumbers(perHour, perMile int) map[string]any {
 	return map[string]any{"driverCostPerHourMinor": perHour, "driverCostPerMileMinor": perMile, "collectionMinutes": 45, "perStopMinutes": 6,
-		"pickupPointStopMinutes": 30, "handoverMinutesPerOrder": 1, "roundTrip": true}
+		"pickupPointStopMinutes": 30, "handoverMinutesPerOrder": 1, "roundTrip": true, "platformFeePerOrderMinor": 200}
 }
 
 func runEconomicsFake(minOrders int) map[string]any {
@@ -90,8 +90,15 @@ func (f *fakeDeliveryRuns) runEconomics(w http.ResponseWriter, r *http.Request) 
 				"minOrders": min, "economics": nil, "minimumCoversBreakEven": nil})
 			return
 		}
+		e := runEconomicsFake(min)
+		var capacity any
+		if n, ok := body["capacityOrders"].(float64); ok {
+			capacity = int(n)
+			e["atCapacity"] = map[string]any{"orders": int(n), "feeRevenueMinor": int(n) * 799, "commissionShareMinor": nil, "revenueMinor": int(n) * 799,
+				"estimatedCostMinor": 9688 + int(n)*250, "contributionMarginMinor": int(n)*799 - 9688 - int(n)*250}
+		}
 		writeJ(w, 200, map[string]any{"locationId": runLocationID, "locationName": "Bastrop", "currency": "USD", "feeMinor": 799, "dropMode": "DOORSTEP",
-			"minOrders": min, "economics": runEconomicsFake(min), "minimumCoversBreakEven": min >= 18})
+			"minOrders": min, "economics": e, "minimumCoversBreakEven": min >= 18, "capacityOrders": capacity})
 	case strings.HasPrefix(p, "/v1/preorders/") && strings.HasSuffix(p, "/economics"):
 		if strings.Contains(p, "win-cancelled") {
 			writeJ(w, 200, map[string]any{"windowId": "win-cancelled", "code": "LBK-7", "name": "Lubbock Pre-order #7", "status": "CANCELLED", "cancelled": true,
@@ -101,7 +108,8 @@ func (f *fakeDeliveryRuns) runEconomics(w http.ResponseWriter, r *http.Request) 
 		}
 		writeJ(w, 200, map[string]any{"windowId": "win-7", "code": "LBK-7", "name": "Lubbock Pre-order #7", "status": "OPEN", "cancelled": false,
 			"locationId": runLocationID, "locationName": "Bastrop", "currency": "USD", "minOrders": 10, "orders": 3, "revenueMinor": 8397, "deliveryFeesMinor": 2397,
-			"ordersRefunded": 0, "refundsSettled": 0, "refundedMinor": 0, "economics": runEconomicsFake(10), "minimumCoversBreakEven": false})
+			"ordersRefunded": 0, "refundsSettled": 0, "refundedMinor": 0, "economics": runEconomicsFake(10), "minimumCoversBreakEven": false,
+			"platformFees": map[string]any{"source": "ESTIMATE", "commissionMinor": 600, "orders": 3, "ordersReported": 0, "perOrderEstimateMinor": 200}})
 	case p == "/v1/locations":
 		writeJ(w, 200, []any{map[string]any{"id": runLocationID, "slug": "bastrop-tx", "name": "Bastrop", "market": "US", "state": "TX", "timeZone": "America/Chicago",
 			"currency": "USD", "defaultFeeMinor": 799, "defaultMinOrders": 10, "dropMode": "DOORSTEP", "whatsappInviteUrl": "https://chat.whatsapp.com/BastropRuns",
@@ -115,11 +123,20 @@ func (f *fakeDeliveryRuns) runEconomics(w http.ResponseWriter, r *http.Request) 
 		writeJ(w, 200, map[string]any{"location": map[string]any{"id": runLocationID, "slug": "bastrop-tx", "name": "Bastrop"},
 			"runs": []any{
 				map[string]any{"id": runID, "status": "COMPLETED", "windowStart": "2026-10-24T15:00:00Z", "cutoffAt": "2026-10-23T01:00:00Z", "orders": 22,
-					"packages": 25, "feeMinor": 799, "feeRevenueMinor": 17578, "ordersRefunded": 0, "minOrders": 10, "minimumMet": true},
+					"packages": 25, "feeMinor": 799, "feeRevenueMinor": 17578, "ordersRefunded": 0, "minOrders": 10, "minimumMet": true,
+					"ordersDelivered": 22, "ordersCancelled": 1, "refundedFeesMinor": 0, "feesEstimated": false, "phase": "AFTER", "costMinor": 12400,
+					"marginMinor": 5178, "breakEvenOrders": 18, "minimumCoveredBreakEven": false},
 				map[string]any{"id": "7e1f0a2b-0000-4000-8000-000000000001", "status": "CANCELLED", "windowStart": "2026-10-10T15:00:00Z", "cutoffAt": "2026-10-09T01:00:00Z",
-					"orders": 6, "packages": 6, "feeMinor": 799, "feeRevenueMinor": 0, "ordersRefunded": 6, "minOrders": 10, "minimumMet": false}},
+					"orders": 6, "packages": 6, "feeMinor": 799, "feeRevenueMinor": 0, "ordersRefunded": 6, "minOrders": 10, "minimumMet": false,
+					"ordersDelivered": 0, "ordersCancelled": 0, "refundedFeesMinor": 4794, "feesEstimated": true, "phase": "CANCELLED", "costMinor": 0,
+					"marginMinor": 0, "breakEvenOrders": 18, "minimumCoveredBreakEven": false}},
+			"windows": []any{map[string]any{"id": "win-7", "code": "LBK-7", "name": "Lubbock Pre-order #7", "status": "DELIVERED", "deliversOn": "2026-10-24",
+				"currency": "USD", "orders": 22, "deliveryFeesMinor": 17578, "revenueMinor": 61578, "ordersRefunded": 0, "refundedMinor": 0, "minOrders": 10,
+				"minimumMet": true}},
 			"subscribers":      map[string]any{"locationId": runLocationID, "total": 120, "active": 96, "pending": 4, "byChannel": map[string]any{"EMAIL": 90, "SMS": 40, "PUSH": 22}},
-			"subscriberGrowth": []any{map[string]any{"month": "2026-09", "count": 31}, map[string]any{"month": "2026-10", "count": 52}}})
+			"subscriberGrowth": []any{map[string]any{"month": "2026-09", "count": 31}, map[string]any{"month": "2026-10", "count": 52}},
+			"subscriberNetGrowth": []any{map[string]any{"month": "2026-09", "signUps": 31, "unsubscribes": 4, "net": 27},
+				map[string]any{"month": "2026-10", "signUps": 52, "unsubscribes": 9, "net": 43}}})
 	case p == "/v1/runs" && r.Method == http.MethodGet:
 		writeJ(w, 200, []any{map[string]any{"id": runID, "locationId": runLocationID, "status": "OPEN", "windowStart": "2026-10-24T15:00:00Z",
 			"windowEnd": "2026-10-24T19:00:00Z", "cutoffAt": "2026-10-23T01:00:00Z", "feeMinor": 799, "currency": "USD", "minOrders": 10, "capacityOrders": 40,
@@ -129,10 +146,27 @@ func (f *fakeDeliveryRuns) runEconomics(w http.ResponseWriter, r *http.Request) 
 			e := runEconomicsFake(10)
 			e["atOrders"] = map[string]any{"orders": 0, "feeRevenueMinor": 0, "commissionShareMinor": nil, "revenueMinor": 0, "estimatedCostMinor": 0, "contributionMarginMinor": 0}
 			writeJ(w, 200, map[string]any{"economics": e, "status": "CANCELLED", "phase": "CANCELLED", "cancelReason": "Storm warning", "ordersRefunded": 6,
-				"refundedFeesMinor": 4794})
+				"refundedFeesMinor": 4794, "refundedFeesEstimated": true, "actuals": nil, "platformFees": nil})
 			return
 		}
-		writeJ(w, 200, map[string]any{"economics": runEconomicsFake(10), "status": "OPEN", "phase": "BEFORE", "cancelReason": nil, "ordersRefunded": 0, "refundedFeesMinor": 0})
+		if strings.Contains(p, "c0de0000") {
+			e := runEconomicsFake(10)
+			e["atOrders"] = map[string]any{"orders": 5, "feeRevenueMinor": 3097, "commissionShareMinor": nil, "revenueMinor": 3097, "estimatedCostMinor": 11980,
+				"contributionMarginMinor": 3097 - 11980}
+			writeJ(w, 200, map[string]any{"economics": e, "status": "COMPLETED", "phase": "AFTER", "cancelReason": nil, "ordersRefunded": 1,
+				"refundedFeesMinor": 799, "refundedFeesEstimated": false,
+				"actuals": map[string]any{"ordersCarried": 5, "ordersDelivered": 5, "ordersFailed": 0, "ordersCancelled": 1, "ordersRefunded": 1,
+					"feeMix": []any{map[string]any{"kind": "DOOR", "orders": 3, "feeMinor": 2597}, map[string]any{"kind": "PICKUP", "orders": 1, "feeMinor": 0},
+						map[string]any{"kind": "CARRIER", "orders": 1, "feeMinor": 1299}},
+					"deliveryFeesMinor": 3896, "refundedFeesMinor": 799, "netDeliveryFeesMinor": 3097, "feesEstimated": false, "customersPaidMinor": 20896,
+					"totalsComplete": true, "refundsMinor": 2299, "averageFeeMinor": 619.4, "costBasis": "ACTUAL_TIME", "actualMinutes": 180.0,
+					"estimatedCostMinor": 11980, "contributionMarginMinor": 3097 - 11980, "breakEvenOrders": 27, "breakEvenCovered": false},
+				"platformFees": map[string]any{"source": "MIXED", "commissionMinor": 1430, "orders": 5, "ordersReported": 2, "perOrderEstimateMinor": 200}})
+			return
+		}
+		writeJ(w, 200, map[string]any{"economics": runEconomicsFake(10), "status": "OPEN", "phase": "BEFORE", "cancelReason": nil, "ordersRefunded": 0, "refundedFeesMinor": 0,
+			"refundedFeesEstimated": false, "actuals": nil, "platformFees": map[string]any{"source": "NONE", "commissionMinor": nil, "orders": 0, "ordersReported": 0,
+				"perOrderEstimateMinor": 0}})
 	case p == "/v1/runs/economics-preview":
 		writeJ(w, 200, runEconomicsFake(10))
 	case p == "/v1/advertorials" && r.Method == http.MethodGet:
@@ -240,7 +274,8 @@ func TestStaffRunEconomicsConformance(t *testing.T) {
 	if out["version"] != float64(3) || out["source"] != "STAFF" || out["reason"] != "Austin drivers moved to overtime" || out["can"] == nil {
 		t.Fatalf("saved = %v", out)
 	}
-	if got := sent("PUT /v1/economics-settings"); got["reason"] != "Austin drivers moved to overtime" || got["driverCostPerHourMinor"] != float64(3000) || got["roundTrip"] != true {
+	if got := sent("PUT /v1/economics-settings"); got["reason"] != "Austin drivers moved to overtime" || got["driverCostPerHourMinor"] != float64(3000) || got["roundTrip"] != true ||
+		got["platformFeePerOrderMinor"] != float64(200) {
 		t.Fatalf("relayed %v", got)
 	}
 	if f.ifMatch["PUT /v1/economics-settings"] != `"0"` {
@@ -257,6 +292,8 @@ func TestStaffRunEconomicsConformance(t *testing.T) {
 		"day-long stop":  func(b map[string]any) { b["perStopMinutes"] = 1441 },
 		"text minutes":   func(b map[string]any) { b["collectionMinutes"] = "forty" },
 		"no round trip":  func(b map[string]any) { delete(b, "roundTrip") },
+		"dear platform":  func(b map[string]any) { b["platformFeePerOrderMinor"] = 100_001 },
+		"negative fee":   func(b map[string]any) { b["platformFeePerOrderMinor"] = -1 },
 	} {
 		b := econNumbers(3000, 80)
 		b["reason"] = "why"
@@ -301,6 +338,13 @@ func TestStaffRunEconomicsConformance(t *testing.T) {
 		t.Fatalf("no location = %v", p)
 	}
 	do("ops", "POST", "/v1/staff/preorders/economics-preview", map[string]any{"locationId": runLocationID, "minOrders": 25, "expectedOrders": 30}, 200)
+	atCap := jsonOf(t, do("ops", "POST", "/v1/staff/preorders/economics-preview", map[string]any{"locationId": runLocationID, "minOrders": 5, "capacityOrders": 40}, 200))
+	if ec := atCap["economics"].(map[string]any); atCap["capacityOrders"] != float64(40) || ec["atCapacity"].(map[string]any)["orders"] != float64(40) || ec["breakEvenOrders"] != float64(18) {
+		t.Fatalf("plan at capacity = %v", atCap)
+	}
+	if got := sent("POST /v1/preorders/economics-preview"); got["capacityOrders"] != float64(40) {
+		t.Fatalf("capacity relayed %v", got)
+	}
 	for name, body := range map[string]map[string]any{
 		"nothing to plan":  {},
 		"bad place":        {"targets": []any{"Bastrop"}},
@@ -310,6 +354,8 @@ func TestStaffRunEconomicsConformance(t *testing.T) {
 		"fractional":       {"targets": []any{"US/TX/Bastrop"}, "minOrders": 2.5},
 		"door text":        {"targets": []any{"US/TX/Bastrop"}, "door": "yes"},
 		"fee too high":     {"targets": []any{"US/TX/Bastrop"}, "doorFeeMinor": 20000},
+		"zero capacity":    {"targets": []any{"US/TX/Bastrop"}, "capacityOrders": 0},
+		"huge capacity":    {"targets": []any{"US/TX/Bastrop"}, "capacityOrders": 10_001},
 	} {
 		if e := jsonOf(t, do("ops", "POST", "/v1/staff/preorders/economics-preview", body, 422)); e["errors"] == nil {
 			t.Errorf("%s: errors = %v", name, e)
@@ -321,6 +367,9 @@ func TestStaffRunEconomicsConformance(t *testing.T) {
 	open := jsonOf(t, do("finance", "GET", "/v1/staff/preorders/win-7/economics", nil, 200))
 	if open["orders"] != float64(3) || open["deliveryFeesMinor"] != float64(2397) || open["economics"] == nil || open["can"] == nil {
 		t.Fatalf("window economics = %v", open)
+	}
+	if fees := open["platformFees"].(map[string]any); fees["source"] != "ESTIMATE" || fees["commissionMinor"] != float64(600) {
+		t.Fatalf("a window's platform fees are their own line: %v", open)
 	}
 	cancelled := jsonOf(t, do("ops", "GET", "/v1/staff/preorders/win-cancelled/economics", nil, 200))
 	if cancelled["cancelled"] != true || cancelled["ordersRefunded"] != float64(7) || cancelled["revenueMinor"] != float64(0) || cancelled["economics"] != nil {
@@ -339,6 +388,17 @@ func TestStaffRunEconomicsConformance(t *testing.T) {
 	if len(runs) != 2 || runs[1].(map[string]any)["ordersRefunded"] != float64(6) || runs[1].(map[string]any)["feeRevenueMinor"] != float64(0) ||
 		len(history["subscriberGrowth"].([]any)) != 2 {
 		t.Fatalf("history = %v", history)
+	}
+	done := runs[0].(map[string]any)
+	if done["costMinor"] != float64(12400) || done["marginMinor"] != float64(5178) || done["breakEvenOrders"] != float64(18) || done["minimumCoveredBreakEven"] != false ||
+		runs[1].(map[string]any)["refundedFeesMinor"] != float64(4794) || runs[1].(map[string]any)["feesEstimated"] != true {
+		t.Fatalf("a run's history row carries its cost, margin and break-even: %v", runs)
+	}
+	if w := history["windows"].([]any); len(w) != 1 || w[0].(map[string]any)["minimumMet"] != true || w[0].(map[string]any)["deliveryFeesMinor"] != float64(17578) {
+		t.Fatalf("windows = %v", history["windows"])
+	}
+	if n := history["subscriberNetGrowth"].([]any); len(n) != 2 || n[0].(map[string]any)["net"] != float64(27) {
+		t.Fatalf("net growth = %v", history["subscriberNetGrowth"])
 	}
 	do("ops", "GET", "/v1/staff/delivery-runs/locations/nope/history", nil, 404)
 
@@ -383,6 +443,15 @@ func TestStaffRunEconomicsConformance(t *testing.T) {
 	cp := jsonOf(t, do("ops", "GET", "/v1/staff/delivery-runs/runs/7e1f0a2b-0000-4000-8000-000000000001/pnl", nil, 200))
 	if cp["phase"] != "CANCELLED" || cp["ordersRefunded"] != float64(6) || cp["economics"].(map[string]any)["atOrders"].(map[string]any)["revenueMinor"] != float64(0) {
 		t.Fatalf("cancelled pnl = %v", cp)
+	}
+	if cp["refundedFeesEstimated"] != true || cp["actuals"] != nil || cp["platformFees"] != nil {
+		t.Fatalf("a cancelled run: refunded fees are an estimate here, no delivery P&L, no platform fees: %v", cp)
+	}
+	after := jsonOf(t, do("finance", "GET", "/v1/staff/delivery-runs/runs/c0de0000-0000-4000-8000-000000000001/pnl", nil, 200))
+	act := after["actuals"].(map[string]any)
+	if after["phase"] != "AFTER" || act["deliveryFeesMinor"] != float64(3896) || act["costBasis"] != "ACTUAL_TIME" || len(act["feeMix"].([]any)) != 3 ||
+		after["platformFees"].(map[string]any)["source"] != "MIXED" || after["economics"].(map[string]any)["atOrders"].(map[string]any)["commissionShareMinor"] != nil {
+		t.Fatalf("a completed run's P&L is built from its orders, platform fees apart: %v", after)
 	}
 	do("ops", "GET", "/v1/staff/delivery-runs/runs/"+runID+"/pnl?commissionShareMinor=-4", nil, 422)
 	do("ops", "GET", "/v1/staff/delivery-runs/runs/nope/pnl", nil, 404)

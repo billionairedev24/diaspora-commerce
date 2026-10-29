@@ -41,11 +41,12 @@ class ServiceController {
     @Operation(summary = "Reserve a slot on a run for an order (delivery-runs:reserve)",
             description = "Idempotent per orderId (200 with the existing slot; 201 when created). A full or closed run "
                     + "moves the order to the location's next open run (`moved`) unless allowNextRun=false; 409 "
-                    + "delivery-runs.run-full / run-closed when no run has room.")
+                    + "delivery-runs.run-full / run-closed when no run has room. feeMinor, totalMinor and deliveryKind "
+                    + "(S265) say what the order is charged, so the run's P&L uses the fee each order paid.")
     @PostMapping("/v1/service/runs/{runId}/reservations")
     ResponseEntity<ReservationResponse> reserve(@PathVariable UUID runId, @Valid @RequestBody ReserveRequest body) {
         SlotReservation r = slots.reserve(new ReserveCommand(runId, body.orderId(), body.customerId(), body.packages(),
-                body.allowNextRun(), body.earlyAccessHours()));
+                body.allowNextRun(), body.earlyAccessHours(), body.charge()));
         return ResponseEntity.status(r.created() ? HttpStatus.CREATED : HttpStatus.OK).body(ReservationResponse.of(r));
     }
 

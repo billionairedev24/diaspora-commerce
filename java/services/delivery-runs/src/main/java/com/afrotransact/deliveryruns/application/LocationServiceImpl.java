@@ -16,6 +16,7 @@ import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.LocationDetails;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
+import com.afrotransact.deliveryruns.domain.Run;
 import com.afrotransact.deliveryruns.domain.RunArea;
 import com.afrotransact.deliveryruns.domain.RunStatus;
 import com.afrotransact.deliveryruns.port.DuplicateEntryException;
@@ -47,12 +48,14 @@ class LocationServiceImpl implements LocationService {
     private final SubscriptionRepository subscriptions;
     private final GeoZoneRegistry zones;
     private final DeliveryRunsEventPublisher events;
+    private final LocationReports reports;
     private final PermissionChecker permissions;
     private final Clock clock;
 
     LocationServiceImpl(LocationRepository locations, RunRepository runs, SubscriptionRepository subscriptions,
-                        GeoZoneRegistry zones, DeliveryRunsEventPublisher events, PermissionChecker permissions,
-                        Clock clock) {
+                        GeoZoneRegistry zones, DeliveryRunsEventPublisher events, LocationReports reports,
+                        PermissionChecker permissions, Clock clock) {
+        this.reports = reports;
         this.locations = locations;
         this.runs = runs;
         this.subscriptions = subscriptions;
@@ -154,7 +157,10 @@ class LocationServiceImpl implements LocationService {
         SubscriberCounts subscribers = counts.isEmpty() ? new SubscriberCounts(id, 0, 0, 0, Map.of())
                 : counts.getFirst();
         Instant since = Instant.now(clock).minus(366, ChronoUnit.DAYS);
-        return new LocationHistory(location, runs.find(id, null, 100), subscribers, subscriptions.growth(id, since));
+        List<Run> history = runs.find(id, null, 100);
+        return new LocationHistory(location, reports.runs(location, history),
+                reports.windows(location, LocationReports.ids(history)), subscribers, subscriptions.growth(id, since),
+                subscriptions.netGrowth(id, since));
     }
 
     private static String reasonOf(String reason) {

@@ -83,6 +83,28 @@ Differences between our ledger and Stripe appear under **Reconciliation**.
 Fixes to the ledger are made by an **adjustment**, never by editing history. Finance creates it with a reason and an
 amount; a **second person approves** before it posts. See the [finance reconciliation runbook](../runbooks/finance-reconciliation.md).
 
+## Delivery runs: what a run earned (Pre-orders, Delivery runs)
+
+Open a location, then a run date in its history, to see the run's profit. Before the run it is an estimate at the orders reserved
+so far. After it, it is built from the run's **real orders**:
+
+- **Orders:** delivered, not delivered, cancelled after reserving (these earn and cost nothing) and refunded. "Refunded" counts the
+  same way here, in the history table and for a cancelled run.
+- **Delivery fees by way of delivery:** door, pickup point and carrier can charge different fees, so the table shows what each way
+  actually charged, what was handed back to customers and what was kept. A note says when some orders did not report their fee and
+  the run's fee stands in for them (an estimate).
+- **Cost and margin:** the cost is an estimate from the route and the driver cost model in Settings, Money, Run economics; once the
+  run has been driven it uses the minutes the driver was out. The margin is the delivery fees kept minus the cost, and the
+  break-even is worked out at the fee the orders actually paid.
+- **Platform fees on goods:** what AfroTransact keeps on the goods of the run's orders, on its own line. It is not part of the
+  delivery profit above; use it beside the delivery margin to decide fees and minimums. It comes from the commission payments
+  reported, or, for orders payments has not reported yet, from the **Platform fee on goods, per order** estimate in Run economics
+  (saved with a reason, like the other numbers). With neither, the line says there is no figure yet.
+
+The location history lists every run with its cost, margin and break-even and whether its minimum covered it, trends orders and
+margin per run, lists the pre-orders the location delivered, and shows subscribers who joined, who left and the net each month. When
+you create a pre-order, the break-even panel also shows what a full run would earn (or lose) at the location's capacity.
+
 ## Settings
 
 All configuration lives in one place: **Settings** (sidebar). Sections include General (including the Help

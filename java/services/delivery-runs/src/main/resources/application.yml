@@ -121,6 +121,8 @@ at:
       pickup-point-stop-minutes: ${RUN_PICKUP_POINT_STOP_MINUTES:30}
       handover-minutes-per-order: ${RUN_HANDOVER_MINUTES_PER_ORDER:1}
       round-trip: true
+      # What the platform keeps on the goods of one order (estimate used until payments reports the real commission).
+      platform-fee-per-order-minor: ${PLATFORM_FEE_PER_ORDER_MINOR:0}
     # media-service (creatives: GET /v1/assets/{id}, scope media:read), orders-service (late pre-orders:
     # POST /v1/service/orders/late-preorder, scope orders:on-behalf) and catalog-service (eligibility: public
     # variant reads). Tokens: client credentials of geo.client-id / geo.client-secret.
@@ -139,6 +141,7 @@ at:
       timeout: ${SEARCH_TIMEOUT:3s}
     consumers:
       order-topic: at.order.events
+      payment-topic: at.payment.events
     # Pre-orders (S270, S271).
     preorders:
       page-path: ${PREORDERS_PAGE_PATH:/pre-orders}

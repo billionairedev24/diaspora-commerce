@@ -15,7 +15,10 @@ import java.util.UUID;
  * @param economics              route, cost, break-even and P&amp;L at the minimum and at the expected orders; null
  *                               when no location serves the targets or geo-service cannot measure the route
  * @param minimumCoversBreakEven whether the minimum reaches break-even (null without a break-even or a minimum)
+ * @param capacityOrders         the orders the run can carry that {@code economics.atCapacity} is worked out for
+ *                               (null when the capacity is not known or not limited)
  */
 public record WindowPlan(UUID locationId, String locationName, String currency, long feeMinor, DropMode dropMode,
-                         int minOrders, RunEconomics economics, Boolean minimumCoversBreakEven) {
+                         int minOrders, RunEconomics economics, Boolean minimumCoversBreakEven,
+                         Integer capacityOrders) {
 }

@@ -10,10 +10,11 @@ package com.afrotransact.deliveryruns.application;
  * @param pickupPointStopMinutes  time at a community pickup point
  * @param handoverMinutesPerOrder time per order handed over at a pickup point
  * @param roundTrip               count the drive back to the origin
+ * @param platformFeePerOrderMinor estimate of what the platform keeps on the goods of one order (0 = none)
  * @param reason                  why (required; logged with who and when)
  */
 public record EconomicsSettingsCommand(Long driverCostPerHourMinor, Long driverCostPerMileMinor,
                                        Double collectionMinutes, Double perStopMinutes,
                                        Double pickupPointStopMinutes, Double handoverMinutesPerOrder,
-                                       Boolean roundTrip, String reason) {
+                                       Boolean roundTrip, Long platformFeePerOrderMinor, String reason) {
 }

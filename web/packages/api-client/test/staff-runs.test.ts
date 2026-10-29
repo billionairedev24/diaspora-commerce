@@ -25,7 +25,8 @@ const api = (roles?: string) =>
   });
 const runs = (roles?: string) => api(roles).runs;
 
-const NUMBERS = { driverCostPerHourMinor: 2500, driverCostPerMileMinor: 70, collectionMinutes: 45, perStopMinutes: 6.5, pickupPointStopMinutes: 30, handoverMinutesPerOrder: 1, roundTrip: true };
+const NUMBERS = { driverCostPerHourMinor: 2500, driverCostPerMileMinor: 70, collectionMinutes: 45, perStopMinutes: 6.5, pickupPointStopMinutes: 30, handoverMinutesPerOrder: 1, roundTrip: true, platformFeePerOrderMinor: 0 };
+const LUBBOCK = '4b2f9d3a-0000-4000-8000-00000000000a';
 
 beforeEach(() => resetStaffDb(new Date('2026-10-10T15:00:00Z')));
 
@@ -67,6 +68,14 @@ describe('drafts', () => {
     expect(economicsInputProblems({ ...NUMBERS, reason: 'x'.repeat(501) }).reason).toBe('tooLong');
   });
 
+  it('checks the platform fee estimate: optional, whole minor units, at most 1,000.00', () => {
+    expect(economicsInputProblems({ ...NUMBERS, platformFeePerOrderMinor: 250, reason: 'Commission averages $2.50' })).toEqual({});
+    expect(economicsInputProblems({ ...NUMBERS, platformFeePerOrderMinor: null, reason: 'Not configured' })).toEqual({});
+    expect(economicsInputProblems({ ...NUMBERS, platformFeePerOrderMinor: -1, reason: 'x' }).platformFeePerOrderMinor).toBe('range');
+    expect(economicsInputProblems({ ...NUMBERS, platformFeePerOrderMinor: 100_001, reason: 'x' }).platformFeePerOrderMinor).toBe('range');
+    expect(economicsInputProblems({ ...NUMBERS, platformFeePerOrderMinor: 2.5, reason: 'x' }).platformFeePerOrderMinor).toBe('whole');
+  });
+
   it('checks an advertorial by characters, and what staff can do in each state', () => {
     expect(advertorialInputProblems({ headline: 'Hi', ctaLabel: 'Go', source: 'WINDOW', sourceId: 'lbk-7' }, true)).toEqual({});
     expect(advertorialInputProblems({ headline: ' ', ctaLabel: 'é'.repeat(41), body: 'x'.repeat(401), weight: 0, priority: 1001, startsAt: '2026-10-12T10:00:00Z', endsAt: '2026-10-11T10:00:00Z' }, true)).toEqual({
@@ -98,6 +107,16 @@ describe('economics settings through the mock BFF', () => {
     expect(changes).toHaveLength(1);
     expect(changes[0]).toMatchObject({ version: 1, reason: 'Fuel and insurance went up', before: { driverCostPerHourMinor: 2500 }, after: { driverCostPerHourMinor: 2800 } });
     expect(staffRunKeys.settings()).toEqual(['staff', 'runs', 'settings']);
+  });
+
+  it('keeps the platform fee estimate with a reason and in the audit trail', async () => {
+    expect((await runs().settings()).platformFeePerOrderMinor).toBe(0);
+    const saved = await runs().updateSettings({ ...NUMBERS, platformFeePerOrderMinor: 250, reason: 'Commission averages $2.50 an order' }, 0);
+    expect(saved).toMatchObject({ version: 1, platformFeePerOrderMinor: 250 });
+    const [change] = await runs().settingChanges();
+    expect(change).toMatchObject({ reason: 'Commission averages $2.50 an order', before: { platformFeePerOrderMinor: 0 }, after: { platformFeePerOrderMinor: 250 } });
+    const err = await runs().updateSettings({ ...NUMBERS, platformFeePerOrderMinor: 100_001, reason: 'Typo' }, 1).catch((e: unknown) => e);
+    expect(isApiError(err) && err.status === 422 && Object.keys(err.fieldErrors)).toEqual(['platformFeePerOrderMinor']);
   });
 
   it('refuses a missing reason and out-of-range numbers field by field', async () => {
@@ -154,11 +173,74 @@ describe('break-even and P&L through the mock BFF', () => {
     expect(before).toMatchObject({ phase: 'BEFORE', ordersRefunded: 0 });
     const after = await runs().runPnl(byStatus('COMPLETED').id, 2000);
     expect(after).toMatchObject({ phase: 'AFTER' });
-    expect(after.economics.atOrders).toMatchObject({ commissionShareMinor: 2000 });
+    expect(after.economics.atOrders.commissionShareMinor).toBeNull();
+    expect(after.platformFees).toMatchObject({ source: 'MANUAL', commissionMinor: 2000 });
     const cancelled = await runs().runPnl(byStatus('CANCELLED').id);
-    expect(cancelled).toMatchObject({ phase: 'CANCELLED', ordersRefunded: 7, refundedFeesMinor: 7 * 799, cancelReason: expect.any(String) });
+    expect(cancelled).toMatchObject({ phase: 'CANCELLED', ordersRefunded: 7, refundedFeesMinor: 7 * 799, refundedFeesEstimated: false, actuals: null, platformFees: null, cancelReason: expect.any(String) });
     expect(cancelled.economics.atOrders).toMatchObject({ orders: 0, feeRevenueMinor: 0 });
     expect(await runs().runs({ status: ['OPEN', 'COMPLETED'] })).toHaveLength(7);
+  });
+
+  it('builds a completed run from its real orders and keeps the platform fees apart from the delivery margin', async () => {
+    const all = await runs().runs({ locationId: LUBBOCK });
+    const done = all.find((r) => r.status === 'COMPLETED' && r.reservedOrders === 38)!;
+    const pnl = await runs().runPnl(done.id);
+    const a = pnl.actuals!;
+    expect(a).toMatchObject({ ordersDelivered: 38, ordersRefunded: 1, ordersCancelled: 3, costBasis: 'ESTIMATE', feesEstimated: false });
+    expect(a.feeMix.map((m) => m.kind)).toEqual(['DOOR', 'PICKUP', 'CARRIER']);
+    expect(a.deliveryFeesMinor).toBe(a.feeMix.reduce((sum, m) => sum + m.feeMinor, 0));
+    expect(a.deliveryFeesMinor).not.toBe(38 * done.feeMinor);
+    expect(a.netDeliveryFeesMinor).toBe(a.deliveryFeesMinor - a.refundedFeesMinor);
+    expect(a.contributionMarginMinor).toBe(a.netDeliveryFeesMinor - a.estimatedCostMinor);
+    expect(pnl.economics.atOrders.contributionMarginMinor).toBe(a.contributionMarginMinor);
+    expect(pnl.platformFees).toMatchObject({ source: 'PAYMENTS', orders: 38, ordersReported: 38 });
+    await runs().updateSettings({ ...NUMBERS, reason: 'Same numbers as the defaults but staff-owned' }, 0);
+    const before = await runs().runPnl(all.find((r) => r.status === 'OPEN')!.id);
+    expect(before.platformFees).toMatchObject({ source: 'NONE', commissionMinor: null });
+    await runs().updateSettings({ ...NUMBERS, platformFeePerOrderMinor: 200, reason: 'Estimate until payments reports' }, 1);
+    const estimated = await runs().runPnl(all.find((r) => r.status === 'OPEN')!.id);
+    expect(estimated.platformFees).toMatchObject({ source: 'ESTIMATE', perOrderEstimateMinor: 200, commissionMinor: estimated.platformFees!.orders * 200 });
+    expect(estimated.actuals!.contributionMarginMinor).toBe(before.actuals!.contributionMarginMinor);
+  });
+
+  it('shows the margin at capacity next to the break-even when the capacity is known', async () => {
+    const byDefault = await runs().previewWindow({ targets: ['US/TX/Lubbock'], door: true, minOrders: 5 });
+    expect(byDefault.capacityOrders).toBe(40);
+    expect(byDefault.economics?.atCapacity).toMatchObject({ orders: 40 });
+    const asked = await runs().previewWindow({ targets: ['US/TX/Lubbock'], door: true, minOrders: 5, capacityOrders: 60 });
+    expect(asked.capacityOrders).toBe(60);
+    expect(asked.economics?.atCapacity?.contributionMarginMinor).toBeGreaterThan(byDefault.economics!.atCapacity!.contributionMarginMinor);
+    expect((await runs().previewWindow({ targets: ['US/TX/Nowhere'] })).capacityOrders).toBeNull();
+  });
+
+  it('gives a window the platform fees of its orders as their own line', async () => {
+    expect((await runs().windowEconomics('lbk-7')).platformFees).toMatchObject({ source: 'NONE', commissionMinor: null });
+    await runs().updateSettings({ ...NUMBERS, platformFeePerOrderMinor: 250, reason: 'Estimate' }, 0);
+    const w = await runs().windowEconomics('lbk-7');
+    expect(w.platformFees).toMatchObject({ source: 'ESTIMATE', commissionMinor: w.orders * 250 });
+    expect(w.economics?.atOrders.commissionShareMinor).toBeNull();
+  });
+
+  it('keeps a location history with each run\'s cost, margin and break-even, its windows and net subscriber growth', async () => {
+    const h = await runs().locationHistory(LUBBOCK);
+    const done = h.runs.find((r) => r.status === 'COMPLETED')!;
+    expect(done).toMatchObject({ phase: 'AFTER', ordersDelivered: done.orders });
+    expect(done.costMinor).toBeGreaterThan(0);
+    expect(done.marginMinor).toBe((done.feeRevenueMinor ?? 0) - (done.costMinor as number));
+    expect(done.minimumCoveredBreakEven).toBe(done.minOrders >= (done.breakEvenOrders as number));
+    const cancelled = h.runs.find((r) => r.status === 'CANCELLED')!;
+    expect(cancelled).toMatchObject({ phase: 'CANCELLED', costMinor: 0, marginMinor: 0, refundedFeesMinor: 7 * 799, ordersRefunded: 7 });
+    expect(h.windows.length).toBeGreaterThan(0);
+    expect(h.windows[0]).toMatchObject({ deliveryFeesMinor: expect.any(Number), minOrders: expect.any(Number) });
+    expect(h.subscriberNetGrowth).toHaveLength(h.subscriberGrowth.length);
+    h.subscriberNetGrowth.forEach((m, i) => {
+      expect(m.net).toBe(m.signUps - m.unsubscribes);
+      expect(m.signUps).toBe(h.subscriberGrowth[i]!.count);
+    });
+    // the run's row and its P&L count orders the same way
+    const pnl = await runs().runPnl(done.id);
+    expect(pnl.ordersRefunded).toBe(done.ordersRefunded);
+    expect(pnl.economics.atOrders.estimatedCostMinor).toBe(done.costMinor);
   });
 
   it('keeps a location history of orders per run and subscriber growth', async () => {
@@ -218,7 +300,6 @@ describe('advertorials through the mock BFF', () => {
 
 /* ── Run lifecycle (S260) ─────────────────────────────── */
 
-const LUBBOCK = '4b2f9d3a-0000-4000-8000-00000000000a';
 const AMARILLO = '4b2f9d3a-0000-4000-8000-00000000000b';
 const NOW = Date.parse('2026-10-10T15:00:00Z');
 const iso = (days: number, hours = 0) => new Date(NOW + days * 86_400_000 + hours * 3_600_000).toISOString();

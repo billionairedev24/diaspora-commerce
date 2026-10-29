@@ -12,6 +12,7 @@ import com.afrotransact.deliveryruns.domain.EconomicsSnapshot;
 import com.afrotransact.deliveryruns.domain.FeeSnapshot;
 import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.Location;
+import com.afrotransact.deliveryruns.domain.PlatformFees;
 import com.afrotransact.deliveryruns.domain.PreorderOrder;
 import com.afrotransact.deliveryruns.domain.PreorderStatus;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
@@ -20,16 +21,15 @@ import com.afrotransact.deliveryruns.domain.RuleViolation;
 import com.afrotransact.deliveryruns.domain.Run;
 import com.afrotransact.deliveryruns.domain.RunEconomics;
 import com.afrotransact.deliveryruns.domain.RunEconomicsCalculator;
-import com.afrotransact.deliveryruns.domain.RunOrderStatus;
+import com.afrotransact.deliveryruns.domain.RunOrder;
+import com.afrotransact.deliveryruns.domain.RunOrderTally;
+import com.afrotransact.deliveryruns.domain.RunPnlCalculator;
 import com.afrotransact.deliveryruns.domain.RunPnl;
-import com.afrotransact.deliveryruns.domain.RunStatus;
-import com.afrotransact.deliveryruns.domain.RunTerms;
 import com.afrotransact.deliveryruns.domain.WindowEconomics;
 import com.afrotransact.deliveryruns.domain.WindowPlan;
 import com.afrotransact.deliveryruns.port.GeoGateway;
 import com.afrotransact.deliveryruns.port.GeoUnavailableException;
 import com.afrotransact.deliveryruns.port.LocationRepository;
-import com.afrotransact.deliveryruns.port.RunOrderRepository;
 import com.afrotransact.deliveryruns.port.RunRepository;
 import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.platform.web.error.NotFoundException;
@@ -44,20 +44,25 @@ class EconomicsServiceImpl implements EconomicsService {
     private static final Logger LOG = LoggerFactory.getLogger(EconomicsServiceImpl.class);
 
     private final RunRepository runs;
-    private final RunOrderRepository runOrders;
+    private final RunLedger ledger;
     private final LocationRepository locations;
     private final GeoGateway geo;
     private final RunEconomicsCalculator calculator;
+    private final RunPnlCalculator pnls;
+    private final EconomicsBook book;
     private final DeliveryRunsSettings settings;
     private final PreorderHandover preorders;
     private final PermissionChecker permissions;
     private final Clock clock;
 
-    EconomicsServiceImpl(RunRepository runs, RunOrderRepository runOrders, LocationRepository locations,
-                         GeoGateway geo, RunEconomicsCalculator calculator, DeliveryRunsSettings settings,
-                         PreorderHandover preorders, PermissionChecker permissions, Clock clock) {
+    EconomicsServiceImpl(RunRepository runs, RunLedger ledger, LocationRepository locations, GeoGateway geo,
+                         RunEconomicsCalculator calculator, RunPnlCalculator pnls, EconomicsBook book,
+                         DeliveryRunsSettings settings, PreorderHandover preorders, PermissionChecker permissions,
+                         Clock clock) {
         this.runs = runs;
-        this.runOrders = runOrders;
+        this.ledger = ledger;
+        this.pnls = pnls;
+        this.book = book;
         this.locations = locations;
         this.geo = geo;
         this.calculator = calculator;
@@ -76,21 +81,7 @@ class EconomicsServiceImpl implements EconomicsService {
         Location location = locations.findById(run.locationId()).orElseThrow(() -> new NotFoundException(
                 "delivery-runs.location-not-found", "Location not found"));
         RouteEstimate route = run.estimate() != null ? run.estimate() : route(location);
-        RunTerms t = run.terms();
-        if (run.status() == RunStatus.CANCELLED) {
-            int refunded = runOrders.findByRun(runId, RunOrderStatus.CANCELLED).size();
-            RunEconomics planned = calculator.evaluate(route, t.dropMode(), t.feeMinor(), t.currency(), t.minOrders(),
-                    t.capacity().maxOrders(), 0, null);
-            // Nobody drove it: no fees kept, no cost (the fixed cost of a trip is only incurred by taking it).
-            RunEconomics none = new RunEconomics(planned.route(), planned.cost(), planned.feeMinor(),
-                    planned.currency(), planned.breakEvenOrders(), planned.atMinimum(), planned.atCapacity(),
-                    new EconomicsSnapshot(0, 0, null, 0, 0, 0));
-            return new RunPnl(none, run.status(), RunPnl.Phase.CANCELLED, run.cancelReason(), refunded,
-                    refunded * t.feeMinor());
-        }
-        RunEconomics economics = calculator.evaluate(route, t.dropMode(), t.feeMinor(), t.currency(), t.minOrders(),
-                t.capacity().maxOrders(), run.reservedOrders(), commissionShareMinor);
-        return new RunPnl(economics, run.status(), RunPnl.phaseOf(run.status()), null, 0, 0);
+        return pnls.pnl(run, route, ledger.slots(runId), commissionShareMinor);
     }
 
     @Override
@@ -111,7 +102,7 @@ class EconomicsServiceImpl implements EconomicsService {
             int settled = (int) refunds.stream().filter(o -> o.refund().status().settled()).count();
             long refundedMinor = refunds.stream().mapToLong(PreorderOrder::totalMinor).sum();
             return new WindowEconomics(w.id(), w.code(), w.details().name(), status, true, locationId, locationName,
-                    currency, min, 0, 0, 0, refunds.size(), settled, refundedMinor, null, null);
+                    currency, min, 0, 0, 0, refunds.size(), settled, refundedMinor, null, null, null);
         }
         List<PreorderOrder> counted = all.stream().filter(PreorderOrder::counts).toList();
         long revenue = counted.stream().mapToLong(PreorderOrder::totalMinor).sum();
@@ -121,10 +112,11 @@ class EconomicsServiceImpl implements EconomicsService {
             Location location = served.get();
             long fee = counted.isEmpty() ? effectiveFee(w, location) : Math.round((double) fees / counted.size());
             economics = actual(location, mode(w.details().door(), w.details().pickup(), location), fee, currency,
-                    min, counted.size(), fees, commissionShareMinor);
+                    min, counted.size(), fees);
         }
         return new WindowEconomics(w.id(), w.code(), w.details().name(), status, false, locationId, locationName,
-                currency, min, counted.size(), revenue, fees, 0, 0, 0, economics, covers(economics, min));
+                currency, min, counted.size(), revenue, fees, 0, 0, 0, economics, covers(economics, min),
+                windowPlatformFees(w, counted.size(), commissionShareMinor));
     }
 
     @Override
@@ -139,21 +131,24 @@ class EconomicsServiceImpl implements EconomicsService {
         }
         Optional<Location> served = preorders.fees().distances().locate(c.locationId(), c.targets());
         if (served.isEmpty()) {
-            return new WindowPlan(null, null, "USD", 0, DropMode.DOORSTEP, min, null, null);
+            return new WindowPlan(null, null, "USD", 0, DropMode.DOORSTEP, min, null, null, null);
         }
+        // The orders the run can carry: asked for, else the location's default capacity (null = not limited).
+        Integer capacity = c.capacityOrders() != null ? c.capacityOrders()
+                : served.get().details().defaultCapacity().maxOrders();
         Location location = served.get();
         String currency = location.details().currency();
         DropMode mode = mode(c.door(), c.pickup(), location);
         long fee = planFee(c, location, currency);
         RunEconomics economics = null;
         try {
-            economics = calculator.evaluate(route(location), mode, fee, currency, Math.max(min, 0), null, expected,
+            economics = calculator.evaluate(route(location), mode, fee, currency, Math.max(min, 0), capacity, expected,
                     null);
         } catch (GeoUnavailableException e) {
             LOG.warn("No route for the break-even of location {}: {}", location.slug(), e.getMessage());
         }
         return new WindowPlan(location.id(), location.name(), currency, fee, mode, min, economics,
-                covers(economics, min));
+                covers(economics, min), economics == null ? null : capacity);
     }
 
     private long planFee(WindowPlanCommand c, Location location, String currency) {
@@ -187,7 +182,7 @@ class EconomicsServiceImpl implements EconomicsService {
 
     /** Economics at the orders actually placed: the fees collected, not orders x one fee (door and pickup differ). */
     private RunEconomics actual(Location location, DropMode mode, long feeMinor, String currency, int min, int orders,
-                                long feesMinor, Long commissionShareMinor) {
+                                long feesMinor) {
         RouteEstimate route;
         try {
             route = route(location);
@@ -196,13 +191,28 @@ class EconomicsServiceImpl implements EconomicsService {
             return null;
         }
         CostModel cost = calculator.costModel(route, mode);
-        long commission = commissionShareMinor == null ? 0 : commissionShareMinor;
-        long revenue = feesMinor + commission;
         long estimated = cost.costFor(orders);
-        EconomicsSnapshot atOrders = new EconomicsSnapshot(orders, feesMinor, commissionShareMinor, revenue,
-                estimated, revenue - estimated);
+        EconomicsSnapshot atOrders = new EconomicsSnapshot(orders, feesMinor, null, feesMinor, estimated,
+                feesMinor - estimated);
         return new RunEconomics(route, cost, feeMinor, currency, calculator.breakEvenOrders(feeMinor, cost),
                 calculator.at(min, feeMinor, null, cost), null, atOrders);
+    }
+
+    /**
+     * The window's platform fees on goods, apart from its delivery P&amp;L: typed in, else what payments reported on
+     * the orders of the run it was handed to, else the configured estimate per order.
+     */
+    private PlatformFees windowPlatformFees(PreorderWindow w, int orders, Long manualMinor) {
+        if (manualMinor != null) {
+            return PlatformFees.manual(manualMinor, orders);
+        }
+        long perOrder = book.get().platformFeePerOrderMinor();
+        if (w.runId() == null) {
+            return PlatformFees.of(0, 0, orders, perOrder);
+        }
+        List<RunOrder> slots = ledger.slots(w.runId());
+        RunOrderTally tally = RunOrderTally.of(null, slots);
+        return PlatformFees.of(tally.commissionReportedMinor(), tally.commissionReportedOrders(), orders, perOrder);
     }
 
     private static Boolean covers(RunEconomics economics, int min) {

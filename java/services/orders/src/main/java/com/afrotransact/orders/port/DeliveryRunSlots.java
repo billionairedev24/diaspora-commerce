@@ -38,6 +38,24 @@ public interface DeliveryRunSlots {
     }
 
     /**
+     * The same, telling delivery-runs what the order is charged (S265) so the run's P&amp;L is built from the fees
+     * orders actually paid. Implementations that cannot pass it reserve without.
+     */
+    default void reserve(String runId, String orderId, String customerId, int earlyAccessHours, RunCharge charge) {
+        reserve(runId, orderId, customerId, earlyAccessHours);
+    }
+
+    /**
+     * What an order of a run is charged.
+     *
+     * @param feeMinor   the delivery fee
+     * @param totalMinor everything the customer pays for the shipment, delivery fee and tax included
+     * @param kind       {@code DOOR}, {@code PICKUP} or {@code CARRIER}
+     */
+    record RunCharge(long feeMinor, long totalMinor, String kind) {
+    }
+
+    /**
      * Gives the order's slot back (cancelled, refunded or failed order). Idempotent: an order without a slot, or one
      * whose slot is already released or cancelled, is fine.
      */

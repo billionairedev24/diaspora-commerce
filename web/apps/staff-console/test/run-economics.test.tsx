@@ -68,6 +68,35 @@ describe('Run economics settings (S265)', () => {
     expect((await mockApi().runs.settings()).driverCostPerHourMinor).toBe(2800);
   });
 
+  it('saves the platform fee estimate with a reason and shows it in the history, then prices the window\'s line with it', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<EconomicsSettingsView />);
+    const fee = await screen.findByRole('textbox', { name: 'Platform fee on goods, per order' });
+    expect(fee).toHaveValue('0.00');
+    await user.clear(fee);
+    await user.type(fee, '2.50');
+    await user.click(screen.getByRole('button', { name: 'Save cost model' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox', { name: 'Reason for the change' }), 'Commission averages $2.50');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Cost model saved')).toBeInTheDocument();
+    const history = within(await screen.findByRole('list', { name: 'Change history' }));
+    expect(history.getByText(/After: .*platform fee \$2\.50 per order/)).toBeInTheDocument();
+    expect(history.getByText(/Before: \$25\.00\/h/)).not.toHaveTextContent('platform fee');
+    expect((await mockApi().runs.settings()).platformFeePerOrderMinor).toBe(250);
+    const window = await mockApi().runs.windowEconomics('lbk-7');
+    expect(window.platformFees).toMatchObject({ source: 'ESTIMATE', commissionMinor: window.orders * 250 });
+  });
+
+  it('refuses a platform fee that is not an amount', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<EconomicsSettingsView />);
+    const fee = await screen.findByRole('textbox', { name: 'Platform fee on goods, per order' });
+    await user.type(fee, 'x');
+    expect(await screen.findByText(/Use a value from/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save cost model' })).toBeDisabled();
+  });
+
   it('keeps Save off and says what is wrong with a number', async () => {
     const user = userEvent.setup();
     await renderScreen(<EconomicsSettingsView />);
@@ -110,6 +139,16 @@ describe('Break-even and window economics (S265)', () => {
     await waitFor(() => expect(screen.getByTestId('break-even-verdict')).toHaveTextContent(/The minimum of 3 orders is below break-even: a run with only the minimum would lose \$/), { timeout: 3000 });
   });
 
+  it('shows the margin at capacity beside the break-even when the capacity is known', async () => {
+    nav.set('/preorders/lbk-7/edit');
+    await renderScreen(<PreordersView screen={{ kind: 'edit', id: 'lbk-7' }} />);
+    const panel = await screen.findByTestId('break-even');
+    const line = await within(panel).findByTestId('break-even-capacity');
+    // Lubbock is 148 miles out: even a full run at the 7.99 fee loses money, and the panel says so.
+    expect(line).toHaveTextContent(/Even when the run is full \(40 orders\) it would lose \$[\d,.]+\./);
+    expect(within(panel).getByTestId('pnl-capacity')).toHaveTextContent('At capacity');
+  });
+
   it('shows the P&L of a window on its overview', async () => {
     nav.set('/preorders/lbk-7');
     await renderScreen(<PreordersView screen={{ kind: 'detail', id: 'lbk-7' }} />);
@@ -117,6 +156,9 @@ describe('Break-even and window economics (S265)', () => {
     await waitFor(() => expect(within(card).getByTestId('window-orders')).toHaveTextContent(/^\d+ of 100 minimum$/));
     expect(within(card).getByTestId('pnl-orders')).toHaveTextContent('At the orders so far');
     expect(within(card).getByTestId('pnl-model')).toHaveTextContent(/Cost \$[\d,.]+ per run plus \$[\d.]+ per order, against a \$7\.99 delivery fee/);
+    // no estimate configured and nothing reported: the line says so instead of showing a zero
+    expect(within(card).getByTestId('window-platform-fees-amount')).toHaveTextContent('No figure yet');
+    expect(within(card).getByTestId('window-platform-fees-source')).toHaveTextContent('Set a platform fee per order in Economics settings');
   });
 
   it('reports a cancelled window as orders refunded in full', async () => {
@@ -146,8 +188,36 @@ describe('Delivery runs (S265)', () => {
     const counts = within(history).getByTestId('subscriber-counts');
     expect(counts).toHaveTextContent('Active164');
     expect(counts).toHaveTextContent('Waiting to confirm9');
-    expect(within(history).getByRole('region', { name: 'Subscriber growth by month' })).toBeInTheDocument();
+    expect(within(history).getByRole('region', { name: 'Subscriber growth by month (joined minus left)' })).toBeInTheDocument();
     expect(within(history).getByRole('region', { name: 'Orders per run' })).toBeInTheDocument();
+  });
+
+  it('trends orders and margin per run and shows each run\'s cost, margin and whether its minimum covered break-even', async () => {
+    await renderScreen(<RunsView />);
+    const history = await screen.findByTestId('location-history');
+    const trend = within(history).getByTestId('run-trend');
+    expect(within(trend).getByRole('region', { name: 'Orders per run' })).toBeInTheDocument();
+    expect(within(trend).getByRole('region', { name: 'Margin per run (delivery fees kept minus cost)' })).toBeInTheDocument();
+    const table = within(history).getByRole('table', { name: 'Runs of this location' });
+    const done = within(table).getAllByTestId('run-row-COMPLETED')[0] as HTMLElement;
+    expect(within(done).getByTestId('history-cost')).toHaveTextContent(/^\$[\d,]+\.\d\d$/);
+    expect(within(done).getByTestId('history-margin')).toHaveTextContent(/\$[\d,]+\.\d\d/);
+    expect(within(done).getByTestId('history-break-even')).toHaveTextContent(/^\d+ orders$/);
+    expect(within(done).getByTestId('history-covers')).toHaveTextContent('Minimum below break-even');
+    const cancelled = within(table).getByTestId('run-row-CANCELLED');
+    expect(within(cancelled).getByTestId('history-cost')).toHaveTextContent('$0.00');
+    expect(cancelled).toHaveTextContent('$55.93 in fees');
+  });
+
+  it('lists the pre-orders a location delivered and its subscriber growth net of unsubscribes', async () => {
+    await renderScreen(<RunsView />);
+    const windows = await screen.findByTestId('location-windows');
+    expect(within(windows).getByRole('table', { name: 'Pre-orders of this location' })).toBeInTheDocument();
+    expect(within(windows).getByTestId('window-row-LBK-7')).toHaveTextContent(/Lubbock Pre-order #7/);
+    const growth = await screen.findByTestId('growth-table');
+    const oct = within(growth).getByTestId('growth-2026-10');
+    expect(oct).toHaveTextContent('164');
+    expect(oct).toHaveTextContent('+148');
   });
 
   it('shows the P&L of a run before, after and when cancelled', async () => {
@@ -165,13 +235,30 @@ describe('Delivery runs (S265)', () => {
     await user.click(within(done).getByRole('button'));
     await waitFor(() => expect(screen.getByTestId('run-pnl-phase')).toHaveTextContent('Result after the run'));
     expect(screen.getByTestId('pnl-orders')).toHaveTextContent('At the actual orders');
+    // built from the run's real orders: fees by way of delivery, the refund and the break-even at the fee actually paid
+    const orders = screen.getByTestId('run-pnl-orders');
+    expect(within(orders).getByTestId('run-pnl-orders-refunded')).toHaveTextContent('1');
+    expect(within(orders).getByTestId('run-pnl-orders-cancelled')).toHaveTextContent(/^\d+$/);
+    expect(screen.getByTestId('run-pnl-fee-DOOR')).toHaveTextContent(/Door/);
+    expect(screen.getByTestId('run-pnl-fee-PICKUP')).toHaveTextContent(/Pickup point/);
+    expect(screen.getByTestId('run-pnl-fee-refunded')).toHaveTextContent('Handed back to customers');
+    expect(screen.getByTestId('run-pnl-fee-kept')).toHaveTextContent('Delivery fees kept');
+    expect(screen.getByTestId('run-pnl-cost-basis')).toHaveTextContent('Cost is an estimate');
+    expect(screen.getByTestId('run-pnl-actual-break-even')).toHaveTextContent(/At the \$[\d.]+ an order actually paid, break-even is \d+ orders\./);
+    // platform fees on goods: their own line, with where the figure comes from
+    expect(screen.getByTestId('platform-fees-amount')).toHaveTextContent(/^\$[\d,]+\.\d\d$/);
+    expect(screen.getByTestId('platform-fees-source')).toHaveTextContent(/Reported by payments for all \d+ orders/);
+    expect(screen.getByTestId('platform-fees')).toHaveTextContent('It is not part of the delivery profit');
+    expect(within(screen.getByTestId('run-pnl')).getByTestId('pnl-orders')).not.toHaveTextContent('Platform fees');
 
     const cancelled = rows.find((r) => r.textContent?.includes('Cancelled')) as HTMLElement;
     await user.click(within(cancelled).getByRole('button'));
     const note = await screen.findByTestId('run-pnl-cancelled');
     expect(note).toHaveTextContent('Every order was refunded in full, the delivery fee included');
     expect(note).toHaveTextContent('7 orders refunded, $55.93 of delivery fees handed back');
+    expect(note).not.toHaveTextContent('estimated from the run');
     expect(note).toHaveTextContent('Below the minimum');
+    expect(screen.queryByTestId('platform-fees')).not.toBeInTheDocument();
     expect(screen.queryByTestId('pnl-orders')).not.toBeInTheDocument();
   });
 

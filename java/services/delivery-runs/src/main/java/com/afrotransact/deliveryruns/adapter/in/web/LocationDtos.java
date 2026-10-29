@@ -1,6 +1,7 @@
 package com.afrotransact.deliveryruns.adapter.in.web;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
@@ -8,16 +9,23 @@ import java.util.UUID;
 
 import com.afrotransact.deliveryruns.application.LocationCommand;
 import com.afrotransact.deliveryruns.application.LocationHistory;
+import com.afrotransact.deliveryruns.application.RunHistoryEntry;
+import com.afrotransact.deliveryruns.application.WindowHistoryEntry;
 import com.afrotransact.deliveryruns.domain.AreaKind;
 import com.afrotransact.deliveryruns.domain.Channel;
 import com.afrotransact.deliveryruns.domain.CutoffPolicy;
 import com.afrotransact.deliveryruns.domain.DropMode;
+import com.afrotransact.deliveryruns.domain.EconomicsSnapshot;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.LocationDetails;
 import com.afrotransact.deliveryruns.domain.PickupPoint;
+import com.afrotransact.deliveryruns.domain.PreorderStatus;
 import com.afrotransact.deliveryruns.domain.Run;
 import com.afrotransact.deliveryruns.domain.RunArea;
+import com.afrotransact.deliveryruns.domain.RunOrderTally;
+import com.afrotransact.deliveryruns.domain.RunPnl;
 import com.afrotransact.deliveryruns.domain.RunStatus;
+import com.afrotransact.deliveryruns.port.NetGrowth;
 import com.afrotransact.deliveryruns.port.SubscriberCounts;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -144,18 +152,70 @@ final class LocationDtos {
     }
 
     @Schema(name = "LocationRunSummary", description = """
-            One run of a location: the orders it carries, the delivery fees it earns and whether it reached its minimum.
-            A cancelled run earns nothing: feeRevenueMinor is 0 and ordersRefunded says how many orders were refunded
-            in full.""")
+            One run of a location: its orders, the delivery fees it earns, what it costs, its margin and whether its
+            minimum covered the break-even. The figures are the run's P&L (GET /v1/runs/{id}/pnl) and count orders
+            the same way: ordersRefunded is the orders money was handed back on (a cancelled run: every order, each
+            refunded in full), ordersCancelled the slots customers gave back. A cancelled run earns nothing:
+            feeRevenueMinor, costMinor and marginMinor are 0. costMinor, marginMinor and breakEvenOrders are null
+            when the route to the location could not be measured.""")
     record RunSummary(UUID id, String status, Instant windowStart, Instant cutoffAt, int orders, int packages,
-                      long feeMinor, long feeRevenueMinor, int ordersRefunded, int minOrders, boolean minimumMet) {
+                      long feeMinor, long feeRevenueMinor, int ordersRefunded, int minOrders, boolean minimumMet,
+                      @Schema(description = "Orders delivered (a run still to be driven: the orders it will deliver)")
+                      int ordersDelivered,
+                      @Schema(description = "Slots customers gave back after reserving (and orders cancelled once "
+                              + "confirmed)") int ordersCancelled,
+                      @Schema(description = "Delivery fees handed back, from the fees the orders were charged")
+                      long refundedFeesMinor,
+                      @Schema(description = "A fee or refund stands in for an unreported one: the run's fee") boolean
+                      feesEstimated,
+                      @Schema(description = "BEFORE, AFTER or CANCELLED, as in the run's P&L") String phase,
+                      @Schema(description = "Estimated driver and vehicle cost") Long costMinor,
+                      @Schema(description = "Contribution margin: delivery fees kept minus the cost") Long marginMinor,
+                      @Schema(description = "Orders whose fees cover the cost, at the run's fee") Integer breakEvenOrders,
+                      @Schema(description = "Whether the run's minimum reached the break-even (null without one)")
+                      Boolean minimumCoveredBreakEven) {
 
-        static RunSummary of(Run r) {
+        static RunSummary of(RunHistoryEntry e) {
+            Run r = e.run();
+            RunOrderTally t = e.tally();
+            RunPnl pnl = e.pnl();
             boolean cancelled = r.status() == RunStatus.CANCELLED;
+            EconomicsSnapshot at = pnl == null ? null : pnl.economics().atOrders();
+            long fees = cancelled ? 0 : at != null ? at.feeRevenueMinor() : t.netDeliveryFeesMinor();
+            long refundedFees = pnl != null ? pnl.refundedFeesMinor() : cancelled ? t.cancelledRefundFeesMinor()
+                    : t.refundedFeesOnDeliveredMinor() + t.cancelledRefundFeesMinor();
+            boolean estimated = cancelled ? t.cancelledRefundFeesEstimated()
+                    : t.feesEstimated() || t.cancelledRefundFeesEstimated();
             return new RunSummary(r.id(), r.status().name(), r.terms().window().start(), r.terms().cutoffAt(),
-                    r.reservedOrders(), r.reservedPackages(), r.terms().feeMinor(),
-                    cancelled ? 0 : r.reservedOrders() * r.terms().feeMinor(), cancelled ? r.reservedOrders() : 0,
-                    r.terms().minOrders(), r.minimumMet());
+                    r.reservedOrders(), r.reservedPackages(), r.terms().feeMinor(), fees, t.refunded(),
+                    r.terms().minOrders(), r.minimumMet(), cancelled ? 0 : t.delivered(), t.cancelledAfterReservation(),
+                    refundedFees, estimated, RunPnl.phaseOf(r.status()).name(), at == null ? null
+                    : at.estimatedCostMinor(), at == null ? null : at.contributionMarginMinor(),
+                    pnl == null ? null : pnl.economics().breakEvenOrders(), e.minimumCoveredBreakEven());
+        }
+    }
+
+    @Schema(name = "LocationWindowSummary", description = """
+            One pre-order window delivered by a location: the orders that count, the delivery fees and revenue they
+            paid, whether the minimum was met, and, for a cancelled window, the orders it refunded in full.""")
+    record WindowSummary(UUID id, String code, String name, PreorderStatus status, LocalDate deliversOn,
+                         String currency, int orders, long deliveryFeesMinor, long revenueMinor, int ordersRefunded,
+                         long refundedMinor, int minOrders,
+                         @Schema(description = "Whether the orders placed reached the minimum (null without one)")
+                         Boolean minimumMet) {
+
+        static WindowSummary of(WindowHistoryEntry w) {
+            return new WindowSummary(w.windowId(), w.code(), w.name(), w.status(), w.deliversOn(), w.currency(),
+                    w.orders(), w.deliveryFeesMinor(), w.revenueMinor(), w.ordersRefunded(), w.refundedMinor(),
+                    w.minOrders(), w.minimumMet());
+        }
+    }
+
+    @Schema(name = "NetGrowth", description = "Subscribers gained and lost in one month (UTC)")
+    record NetGrowthResponse(@Schema(example = "2026-10") String month, long signUps, long unsubscribes, long net) {
+
+        static NetGrowthResponse of(NetGrowth g) {
+            return new NetGrowthResponse(g.month().toString(), g.signUps(), g.unsubscribes(), g.net());
         }
     }
 
@@ -167,14 +227,20 @@ final class LocationDtos {
         }
     }
 
-    @Schema(name = "LocationHistory", description = "Per-location history: runs with orders, subscriber growth")
-    record LocationHistoryResponse(LocationResponse location, List<RunSummary> runs,
-                                   SubscriberCountsResponse subscribers, List<MonthlyCountResponse> subscriberGrowth) {
+    @Schema(name = "LocationHistory", description = """
+            Per-location history: runs (newest first) with orders, cost, margin and break-even; pre-order windows
+            with orders, fees and whether the minimum was met; subscriber counts; and subscriber growth per month:
+            subscriberGrowth is gross sign-ups, subscriberNetGrowth is sign-ups minus unsubscribes.""")
+    record LocationHistoryResponse(LocationResponse location, List<RunSummary> runs, List<WindowSummary> windows,
+                                   SubscriberCountsResponse subscribers, List<MonthlyCountResponse> subscriberGrowth,
+                                   List<NetGrowthResponse> subscriberNetGrowth) {
 
         static LocationHistoryResponse of(LocationHistory h) {
             return new LocationHistoryResponse(LocationResponse.of(h.location()),
-                    h.runs().stream().map(RunSummary::of).toList(), SubscriberCountsResponse.of(h.subscribers()),
-                    h.subscriberGrowth().stream().map(m -> MonthlyCountResponse.of(m.month(), m.count())).toList());
+                    h.runs().stream().map(RunSummary::of).toList(),
+                    h.windows().stream().map(WindowSummary::of).toList(), SubscriberCountsResponse.of(h.subscribers()),
+                    h.subscriberGrowth().stream().map(m -> MonthlyCountResponse.of(m.month(), m.count())).toList(),
+                    h.subscriberNetGrowth().stream().map(NetGrowthResponse::of).toList());
         }
     }
 }

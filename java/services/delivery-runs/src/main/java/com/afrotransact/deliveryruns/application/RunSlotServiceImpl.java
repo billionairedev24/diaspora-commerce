@@ -83,8 +83,9 @@ class RunSlotServiceImpl implements RunSlotService {
         }
         RunOrder slot;
         try {
-            slot = runOrders.insert(RunOrder.reserve(UUID.randomUUID(), target.id(), c.orderId(), c.customerId(),
-                    packages, requested.id(), now));
+            RunOrder reserved = RunOrder.reserve(UUID.randomUUID(), target.id(), c.orderId(), c.customerId(),
+                    packages, requested.id(), now);
+            slot = runOrders.insert(c.charge() == null ? reserved : reserved.withMoney(c.charge(), now));
         } catch (DuplicateEntryException e) {
             throw new ConflictException("delivery-runs.order-already-reserved",
                     "Order " + c.orderId() + " already holds a run slot");

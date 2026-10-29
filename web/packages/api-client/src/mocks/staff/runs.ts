@@ -16,6 +16,8 @@ import {
   economicsInputProblems,
   type EconomicsNumbers,
   type EconomicsSettings,
+  type PlatformFees,
+  type RunActuals,
   type RunAllowed,
   type RunArea,
   runBreakEven,
@@ -23,6 +25,7 @@ import {
   type RunCutoffPolicy,
   type RunDropMode,
   type RunEconomics,
+  type RunFeeLine,
   type RunHistoryRow,
   type RunLocationInput,
   runLocationProblems,
@@ -40,6 +43,7 @@ import {
   type StaffRunLocation,
   type StaffRunOrder,
   type WindowEconomics,
+  type WindowHistoryRow,
   type WindowPlan
 } from '../../staff-runs';
 import { getStaffDb, type MockStaffDb } from './db';
@@ -56,7 +60,8 @@ export const DEFAULT_ECONOMICS: EconomicsNumbers = {
   perStopMinutes: 6,
   pickupPointStopMinutes: 30,
   handoverMinutesPerOrder: 1,
-  roundTrip: true
+  roundTrip: true,
+  platformFeePerOrderMinor: 0
 };
 
 interface Place {
@@ -239,6 +244,7 @@ const NumbersBody = z.object({
   pickupPointStopMinutes: z.number(),
   handoverMinutesPerOrder: z.number(),
   roundTrip: z.boolean(),
+  platformFeePerOrderMinor: z.number().int().optional(),
   reason: z.string()
 });
 const WindowPlanBody = z.object({
@@ -249,7 +255,8 @@ const WindowPlanBody = z.object({
   doorFeeMinor: z.number().int().nullish(),
   pickupFeeMinor: z.number().int().nullish(),
   minOrders: z.number().int().nullish(),
-  expectedOrders: z.number().int().nullish()
+  expectedOrders: z.number().int().nullish(),
+  capacityOrders: z.number().int().nullish()
 });
 const RunPlanBody = z.object({
   locationId: z.string(),
@@ -453,6 +460,100 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       atOrders: runSnapshot(orders, feeMinor, commission, cost)
     };
   };
+
+  /* A run's orders as the mock tells them: a fifth of them are collected at a pickup point (free), a few carrier hand-offs
+     cost more, a tenth were given back after reserving, and a long completed run has one refunded order. */
+  interface MockTally {
+    delivered: number;
+    cancelled: number;
+    refunded: number;
+    mix: RunFeeLine[];
+    fees: number;
+    refundedFees: number;
+    refunds: number;
+  }
+  const tallyOf = (r: MockRun): MockTally => {
+    if (r.status === 'CANCELLED') return { delivered: 0, cancelled: 0, refunded: r.orders, mix: [], fees: 0, refundedFees: r.orders * r.feeMinor, refunds: 0 };
+    const delivered = r.orders;
+    const pickup = Math.floor(delivered * 0.2);
+    const carrier = delivered >= 30 ? 2 : 0;
+    const door = delivered - pickup - carrier;
+    const mix: RunFeeLine[] = [
+      { kind: 'DOOR' as const, orders: door, feeMinor: door * r.feeMinor },
+      { kind: 'PICKUP' as const, orders: pickup, feeMinor: 0 },
+      { kind: 'CARRIER' as const, orders: carrier, feeMinor: carrier * (r.feeMinor + 500) }
+    ].filter((m) => m.orders > 0);
+    const refunded = r.completed && delivered >= 20 ? 1 : 0;
+    return {
+      delivered,
+      cancelled: Math.floor(r.orders / 10),
+      refunded,
+      mix,
+      fees: mix.reduce((a, m) => a + m.feeMinor, 0),
+      refundedFees: refunded * r.feeMinor,
+      refunds: refunded * (r.feeMinor + 1500)
+    };
+  };
+  const platformFeesOf = (ctx: PreorderCtx, r: MockRun, t: MockTally, manual: number | null): PlatformFees | null => {
+    if (r.status === 'CANCELLED') return null;
+    const perOrder = st(ctx).settings.platformFeePerOrderMinor;
+    if (manual !== null) return { source: 'MANUAL', commissionMinor: manual, orders: t.delivered, ordersReported: 0, perOrderEstimateMinor: 0 };
+    // Payments reported the commission of a completed run's orders; for the others it is the configured estimate.
+    if (r.completed) return { source: 'PAYMENTS', commissionMinor: t.delivered * 180, orders: t.delivered, ordersReported: t.delivered, perOrderEstimateMinor: perOrder };
+    if (perOrder === 0) return { source: 'NONE', commissionMinor: null, orders: t.delivered, ordersReported: 0, perOrderEstimateMinor: 0 };
+    return { source: 'ESTIMATE', commissionMinor: t.delivered * perOrder, orders: t.delivered, ordersReported: 0, perOrderEstimateMinor: perOrder };
+  };
+  /** The run's delivery P&L from its (mock) orders, the same formulas as delivery-runs. */
+  const pnlOf = (ctx: PreorderCtx, r: MockRun, p: Place, manual: number | null): RunPnl => {
+    const dropMode = (r.dropMode as RunDropMode | undefined) ?? 'DOORSTEP';
+    const t = tallyOf(r);
+    const cancelled = r.status === 'CANCELLED';
+    const base = evaluate(ctx, p, dropMode, r.feeMinor, r.minOrders, r.capacityOrders ?? null, cancelled ? 0 : t.delivered, null);
+    if (cancelled) {
+      // Nobody drove it: no fees kept, no cost.
+      const none = { orders: 0, feeRevenueMinor: 0, commissionShareMinor: null, revenueMinor: 0, estimatedCostMinor: 0, contributionMarginMinor: 0 };
+      return { economics: { ...base, atOrders: none }, status: r.status as RunStatus, phase: 'CANCELLED', cancelReason: r.cancelReason ?? null, ordersRefunded: t.refunded, refundedFeesMinor: t.refundedFees, refundedFeesEstimated: false, actuals: null, platformFees: null };
+    }
+    const net = t.fees - t.refundedFees;
+    const cost = base.cost;
+    const estimated = Math.round(cost.fixedCostMinor + t.delivered * cost.perOrderCostMinor);
+    const average = t.delivered === 0 ? null : net / t.delivered;
+    const breakEven = average === null ? null : runBreakEven(Math.round(average), cost);
+    const actuals: RunActuals = {
+      ordersCarried: t.delivered,
+      ordersDelivered: t.delivered,
+      ordersFailed: 0,
+      ordersCancelled: t.cancelled,
+      ordersRefunded: t.refunded,
+      feeMix: t.mix,
+      deliveryFeesMinor: t.fees,
+      refundedFeesMinor: t.refundedFees,
+      netDeliveryFeesMinor: net,
+      feesEstimated: false,
+      customersPaidMinor: t.delivered * 2800,
+      totalsComplete: true,
+      refundsMinor: t.refunds,
+      averageFeeMinor: average,
+      costBasis: 'ESTIMATE',
+      actualMinutes: null,
+      estimatedCostMinor: estimated,
+      contributionMarginMinor: net - estimated,
+      breakEvenOrders: breakEven,
+      breakEvenCovered: breakEven === null ? null : t.delivered >= breakEven
+    };
+    const atOrders = { orders: t.delivered, feeRevenueMinor: net, commissionShareMinor: null, revenueMinor: net, estimatedCostMinor: estimated, contributionMarginMinor: net - estimated };
+    return {
+      economics: { ...base, atOrders },
+      status: r.status as RunStatus,
+      phase: r.completed ? 'AFTER' : 'BEFORE',
+      cancelReason: null,
+      ordersRefunded: t.refunded,
+      refundedFeesMinor: t.refundedFees,
+      refundedFeesEstimated: false,
+      actuals,
+      platformFees: platformFeesOf(ctx, r, t, manual)
+    };
+  };
   const runOf = (ctx: PreorderCtx, id: string | undefined) => {
     const r = st(ctx).runs.find((x) => x.id === id);
     if (!r) throw notFound('No such run.');
@@ -635,7 +736,8 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       if (Object.keys(errors).length) throw validation(errors);
       const s = st(ctx);
       ifMatch(ctx, s.settings.version);
-      const { reason, ...numbers } = b;
+      const { reason, platformFeePerOrderMinor, ...rest } = b;
+      const numbers: EconomicsNumbers = { ...rest, platformFeePerOrderMinor: platformFeePerOrderMinor ?? 0 };
       const before: EconomicsNumbers = { ...s.settings };
       const same = (Object.keys(numbers) as (keyof EconomicsNumbers)[]).every((k) => numbers[k] === before[k]);
       if (same) return withEtag({ ...s.settings, can: can(ctx) });
@@ -660,7 +762,9 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       const dropMode: RunDropMode = door ? 'DOORSTEP' : 'PICKUP_POINT';
       const fee = (door ? b.doorFeeMinor : b.pickupFeeMinor) ?? 799;
       const minOrders = b.minOrders ?? 12;
-      const economics = p ? evaluate(ctx, p, dropMode, fee, minOrders, null, b.expectedOrders ?? minOrders, null) : null;
+      // The orders the run can carry: asked for, else the location's default capacity (null = not limited).
+      const capacity = b.capacityOrders ?? (p ? (p.details?.defaultCapacityOrders === undefined ? 40 : p.details.defaultCapacityOrders) : null);
+      const economics = p ? evaluate(ctx, p, dropMode, fee, minOrders, capacity, b.expectedOrders ?? minOrders, null) : null;
       return {
         locationId: p?.id ?? null,
         locationName: p?.name ?? null,
@@ -670,6 +774,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
         minOrders,
         economics,
         minimumCoversBreakEven: economics?.breakEvenOrders == null || minOrders < 1 ? null : minOrders >= economics.breakEvenOrders,
+        capacityOrders: economics ? capacity : null,
         can: can(ctx)
       };
     })),
@@ -704,6 +809,11 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
         refundedMinor: refunded.reduce((a, o) => a + o.total, 0),
         economics,
         minimumCoversBreakEven: economics?.breakEvenOrders == null ? null : w.minOrders >= economics.breakEvenOrders,
+        platformFees: cancelled
+          ? null
+          : st(ctx).settings.platformFeePerOrderMinor === 0
+            ? { source: 'NONE', commissionMinor: null, orders: counted.length, ordersReported: 0, perOrderEstimateMinor: 0 }
+            : { source: 'ESTIMATE', commissionMinor: counted.length * st(ctx).settings.platformFeePerOrderMinor, orders: counted.length, ordersReported: 0, perOrderEstimateMinor: st(ctx).settings.platformFeePerOrderMinor },
         can: can(ctx)
       };
     })),
@@ -721,16 +831,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       const p = placeOf(ctx, r.locationId);
       if (!p) throw notFound('No such location.');
       const commission = new URL(ctx.request.url).searchParams.get('commissionShareMinor');
-      const cancelled = r.status === 'CANCELLED';
-      const economics = evaluate(ctx, p, (r.dropMode as RunDropMode | undefined) ?? 'DOORSTEP', r.feeMinor, r.minOrders, r.capacityOrders ?? null, cancelled ? 0 : r.orders, commission === null ? null : Number(commission));
-      return {
-        economics,
-        status: r.status as RunStatus,
-        phase: cancelled ? 'CANCELLED' : r.completed ? 'AFTER' : 'BEFORE',
-        cancelReason: r.cancelReason ?? null,
-        ordersRefunded: cancelled ? r.orders : 0,
-        refundedFeesMinor: cancelled ? r.orders * r.feeMinor : 0
-      };
+      return pnlOf(ctx, r, p, commission === null ? null : Number(commission));
     })),
 
     /* ── locations and runs ── */
@@ -809,16 +910,40 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       const p = placeOf(ctx, params.id);
       if (!p) throw notFound('No such location.');
       const runs = st(ctx).runs.filter((r) => r.locationId === p.id).sort((a, b) => b.windowStart.localeCompare(a.windowStart));
-      const rows: RunHistoryRow[] = runs.map((r) => ({
-        id: r.id, status: r.status, windowStart: r.windowStart, cutoffAt: r.cutoffAt, orders: r.orders, packages: r.packages, feeMinor: r.feeMinor,
-        feeRevenueMinor: r.status === 'CANCELLED' ? 0 : r.orders * r.feeMinor, ordersRefunded: r.status === 'CANCELLED' ? r.orders : 0, minOrders: r.minOrders, minimumMet: r.minimumMet ?? r.orders >= r.minOrders
-      }));
+      const rows: RunHistoryRow[] = runs.map((r) => {
+        const pnl = pnlOf(ctx, r, p, null);
+        const at = pnl.economics.atOrders;
+        return {
+          id: r.id, status: r.status, windowStart: r.windowStart, cutoffAt: r.cutoffAt, orders: r.orders, packages: r.packages, feeMinor: r.feeMinor,
+          feeRevenueMinor: at.feeRevenueMinor, ordersRefunded: pnl.ordersRefunded, minOrders: r.minOrders, minimumMet: r.minimumMet ?? r.orders >= r.minOrders,
+          ordersDelivered: pnl.actuals?.ordersDelivered ?? 0, ordersCancelled: pnl.actuals?.ordersCancelled ?? 0, refundedFeesMinor: pnl.refundedFeesMinor, feesEstimated: pnl.refundedFeesEstimated,
+          phase: pnl.phase, costMinor: at.estimatedCostMinor, marginMinor: at.contributionMarginMinor, breakEvenOrders: pnl.economics.breakEvenOrders,
+          minimumCoveredBreakEven: pnl.economics.breakEvenOrders === null ? null : r.minOrders >= pnl.economics.breakEvenOrders
+        };
+      });
+      const windows: WindowHistoryRow[] = ctx.db.preorders.windows
+        .filter((w) => placeOfTargets(ctx, w.targets)?.id === p.id && preorderStatus(w, clockOf(ctx.db)) !== 'DRAFT')
+        .map((w) => {
+          const cancelled = w.outcome === 'CANCELLED';
+          const all = ordersOf(ctx.db.preorders, w);
+          const counted = cancelled ? [] : all.filter((o) => o.status !== 'CANCELLED');
+          const refunded = cancelled ? all.filter((o) => o.refundStatus !== null) : [];
+          const fee = w.doorFeeOverride ?? 799;
+          return {
+            id: w.id, code: w.code, name: w.name, status: preorderStatus(w, clockOf(ctx.db)), deliversOn: w.deliversOn, currency: 'USD', orders: counted.length,
+            deliveryFeesMinor: counted.filter((o) => o.fulfilment === 'DOOR').length * fee, revenueMinor: counted.reduce((a, o) => a + o.total, 0), ordersRefunded: refunded.length,
+            refundedMinor: refunded.reduce((a, o) => a + o.total, 0), minOrders: w.minOrders, minimumMet: w.minOrders < 1 ? null : (cancelled ? all.length : counted.length) >= w.minOrders
+          };
+        });
       const last = p.growth[p.growth.length - 1]?.[1] ?? 0;
       return {
         location: locationRow(p),
         runs: rows,
+        windows,
         subscribers: { locationId: p.id, total: last + 9, active: last, pending: 9, byChannel: p.channels },
-        subscriberGrowth: p.growth.map(([month, count]) => ({ month, count }))
+        subscriberGrowth: p.growth.map(([month, count]) => ({ month, count })),
+        // A tenth of each month's sign-ups leave in the same month (rounded down): net = sign-ups - unsubscribes.
+        subscriberNetGrowth: p.growth.map(([month, count]) => ({ month, signUps: count, unsubscribes: Math.floor(count / 10), net: count - Math.floor(count / 10) }))
       };
     })),
     http.get(`${W}/delivery-runs/runs`, route((ctx) => {
@@ -1134,7 +1259,8 @@ function pickNumbers(n: EconomicsNumbers): EconomicsNumbers {
     perStopMinutes: n.perStopMinutes,
     pickupPointStopMinutes: n.pickupPointStopMinutes,
     handoverMinutesPerOrder: n.handoverMinutesPerOrder,
-    roundTrip: n.roundTrip
+    roundTrip: n.roundTrip,
+    platformFeePerOrderMinor: n.platformFeePerOrderMinor
   };
 }
 

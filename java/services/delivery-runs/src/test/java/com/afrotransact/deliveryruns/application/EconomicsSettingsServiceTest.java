@@ -96,7 +96,7 @@ class EconomicsSettingsServiceTest {
     }
 
     private static EconomicsSettingsCommand command(long perHour, long perMile, String reason) {
-        return new EconomicsSettingsCommand(perHour, perMile, 45.0, 6.0, 30.0, 1.0, true, reason);
+        return new EconomicsSettingsCommand(perHour, perMile, 45.0, 6.0, 30.0, 1.0, true, 0L, reason);
     }
 
     @Test
@@ -164,10 +164,29 @@ class EconomicsSettingsServiceTest {
         assertThatThrownBy(() -> service.replace(command(100_001, 80, "Typo"), 0L)).isInstanceOf(RuleViolation.class);
         assertThatThrownBy(() -> service.replace(command(3000, 10_001, "Typo"), 0L)).isInstanceOf(RuleViolation.class);
         assertThatThrownBy(() -> service.replace(new EconomicsSettingsCommand(3000L, 80L, 1_441.0, 6.0, 30.0, 1.0,
-                true, "Typo"), 0L)).isInstanceOf(RuleViolation.class);
+                true, 0L, "Typo"), 0L)).isInstanceOf(RuleViolation.class);
         assertThatThrownBy(() -> service.replace(new EconomicsSettingsCommand(3000L, 80L, 45.0, 6.0, 30.0, 1.0,
-                null, "No answer"), 0L)).isInstanceOf(RuleViolation.class);
+                null, 0L, "No answer"), 0L)).isInstanceOf(RuleViolation.class);
         assertThat(memory.row).isNull();
+    }
+
+    @Test
+    void thePlatformFeeEstimateIsSavedWithAReasonAuditedAndRangeChecked() {
+        EconomicsSettingsCommand withFee = new EconomicsSettingsCommand(2500L, 70L, 45.0, 6.0, 30.0, 1.0, true, 250L,
+                "Commission averages $2.50 an order");
+        EconomicsRevision saved = service.replace(withFee, 0L);
+        assertThat(saved.settings().platformFeePerOrderMinor()).isEqualTo(250);
+        assertThat(service.changes(10)).singleElement().satisfies(c -> {
+            assertThat(c.before().platformFeePerOrderMinor()).isZero();
+            assertThat(c.after().platformFeePerOrderMinor()).isEqualTo(250);
+            assertThat(c.reason()).isEqualTo("Commission averages $2.50 an order");
+        });
+        for (Long bad : new Long[] {-1L, EconomicsSettings.MAX_PLATFORM_FEE_MINOR + 1, null}) {
+            assertThatThrownBy(() -> service.replace(new EconomicsSettingsCommand(2500L, 70L, 45.0, 6.0, 30.0, 1.0,
+                    true, bad, "Typo"), 1L)).isInstanceOfSatisfying(RuleViolation.class,
+                    e -> assertThat(e.code()).isEqualTo("delivery-runs.invalid-economics"));
+        }
+        assertThat(service.current().version()).isEqualTo(1);
     }
 
     @Test
@@ -192,7 +211,7 @@ class EconomicsSettingsServiceTest {
         DefaultRunEconomicsCalculator calculator = new DefaultRunEconomicsCalculator(book);
         RouteEstimate bastrop = new RouteEstimate(32, 40, "ROAD_OSRM");
         CostModel before = calculator.costModel(bastrop, DropMode.DOORSTEP);
-        service.replace(new EconomicsSettingsCommand(5000L, 70L, 45.0, 6.0, 30.0, 1.0, true, "Overtime rate"), 0L);
+        service.replace(new EconomicsSettingsCommand(5000L, 70L, 45.0, 6.0, 30.0, 1.0, true, 0L, "Overtime rate"), 0L);
         CostModel after = calculator.costModel(bastrop, DropMode.DOORSTEP);
         assertThat(after.fixedCostMinor()).isGreaterThan(before.fixedCostMinor());
         assertThat(after.perOrderCostMinor()).isEqualTo(500.0);

@@ -19,8 +19,12 @@ const (
 	MaxEconomicsPerMileMinor = 10_000
 	// MaxEconomicsMinutes is the longest time any step of the cost model takes.
 	MaxEconomicsMinutes = 1_440
+	// MaxEconomicsPlatformFeeMinor is the highest platform fee per order staff can enter (1,000.00).
+	MaxEconomicsPlatformFeeMinor = 100_000
 	// MaxOrderCount is the largest minimum or expected order count.
 	MaxOrderCount = 100_000
+	// MaxCapacityOrders is the most orders a run can be set to carry.
+	MaxCapacityOrders = 10_000
 
 	// Advertorial copy limits, as in delivery-runs.
 	MaxAdvertorialHeadline = 140
@@ -99,6 +103,10 @@ func EconomicsSettingsBody(body map[string]any) (map[string]any, error) {
 		out["roundTrip"] = b
 	} else {
 		problems["roundTrip"] = "Say whether the drive back counts"
+	}
+	// What the platform keeps on the goods of one order: optional (left out = not configured, 0).
+	if v, ok := body["platformFeePerOrderMinor"]; ok && v != nil {
+		money("platformFeePerOrderMinor", MaxEconomicsPlatformFeeMinor, "Platform fee per order")
 	}
 	if len(problems) > 0 {
 		return nil, ValidationProblem(problems)
@@ -181,6 +189,14 @@ func WindowPlanBody(body map[string]any) (map[string]any, error) {
 	optionalFee(body, "pickupFeeMinor", problems, out)
 	optionalCount(body, "minOrders", 0, problems, out)
 	optionalCount(body, "expectedOrders", 0, problems, out)
+	// The most orders the run can carry, for the margin at capacity (absent: the location's default capacity).
+	if v, ok := body["capacityOrders"]; ok && v != nil {
+		if n, ok := intIn(v, 1, MaxCapacityOrders); ok {
+			out["capacityOrders"] = n
+		} else {
+			problems["capacityOrders"] = fmt.Sprintf("Enter a whole number from 1 to %d", MaxCapacityOrders)
+		}
+	}
 	if len(problems) > 0 {
 		return nil, ValidationProblem(problems)
 	}
