@@ -93,7 +93,8 @@ components:
       name: preorder.comms.due
       title: >-
         A pre-order window's comms are due (scheduler: opening, closes − 48 h, closes − 6 h, closing; OUT_FOR_DELIVERY
-        from the driver events), for a kind the window has switched on. Keyed by window id.
+        once, when the run the window's orders were handed to leaves — the driver events or staff move it), for a kind
+        the window has switched on. Keyed by window id.
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/PreorderCommsDue'}
     preorderWindowPublished:
@@ -395,7 +396,8 @@ components:
           type: [string, 'null']
           description: >-
             The window's SMS copy (≤ 160, GSM-7). "{link}" is replaced with the tracked link
-            <PUBLIC_WEB_URL>/pre-orders?src=sms&po=<code>&cr=<slot> (about 60 characters): count it in the 160.
+            <PUBLIC_WEB_URL>/pre-orders?src=sms&po=<code>&cr=<slot> plus the four utm_* tags (about 140 characters): the
+            announcement SMS may take two messages.
         categories: {type: array, items: {type: string}}
         door: {type: boolean}
         pickup: {type: boolean}
@@ -414,7 +416,10 @@ components:
         pageUrl: {type: string, format: uri, description: '<PUBLIC_WEB_URL>/pre-orders/<code>'}
         links:
           type: object
-          description: pageUrl with ?src=<channel>&po=<code>[&cr=<slot>] per channel
+          description: >-
+            The pre-order page per channel: ?src=<email|sms|app|ig|fb|tt|wa>&po=<code>&cr=<slot> (the order attribution)
+            plus utm_source, utm_medium (the channel or network; social = medium), utm_campaign=preorder-<code> and
+            utm_content=<slot> (announce, remind, last, closed, ofd; story or feed for social posts).
           properties:
             email: {type: string, format: uri}
             sms: {type: string, format: uri}
@@ -434,6 +439,7 @@ components:
               orderId: {type: string}
               customerId: {type: string}
               fulfilment: {type: string, enum: [DOOR, PICKUP]}
+              handoverCode: {type: [string, 'null'], description: 'OUT_FOR_DELIVERY of a pickup-only window: this customer''s pickup-point handover code'}
     PreorderLateOrderAdded:
       type: object
       required: [windowId, code, name, orderId, number, customerId, payment, totalMinor, currency, deliversOn]
