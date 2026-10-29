@@ -686,6 +686,8 @@
   "co.conditions": "Condiciones de uso",
   "co.and": "y el",
   "co.privacy": "Aviso de privacidad",
+  "co.returnsPrefix": "¿Cambiaste de opinión? Lee nuestras",
+  "co.preorderPrefix": "Las preventas se cobran y se entregan como se describe en nuestros",
   "co.orderSummary": "Resumen del pedido",
   "co.sellers": "De {n} vendedor(es)",
   "co.itemsTotal": "Artículos ({n})",

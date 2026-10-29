@@ -686,6 +686,8 @@
   "co.conditions": "Àwọn Òfin Ìlò",
   "co.and": "àti",
   "co.privacy": "Àkíyèsí Ìpamọ́",
+  "co.returnsPrefix": "Ṣé o yí ọkàn padà? Ka",
+  "co.preorderPrefix": "A máa gba owó àti fi àwọn ìpàṣẹ àtẹ̀lé ránṣẹ́ bí a ṣe ṣàlàyé nínú",
   "co.orderSummary": "Àkópọ̀ ìbéèrè",
   "co.sellers": "Láti ọ̀dọ̀ olùtajà {n}",
   "co.itemsTotal": "Àwọn ohun ({n})",

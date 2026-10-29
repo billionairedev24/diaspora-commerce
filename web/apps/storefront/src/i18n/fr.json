@@ -686,6 +686,8 @@
   "co.conditions": "Conditions d’utilisation",
   "co.and": "et l’",
   "co.privacy": "Avis de confidentialité",
+  "co.returnsPrefix": "Vous avez changé d’avis ? Consultez notre politique :",
+  "co.preorderPrefix": "Les précommandes sont facturées et livrées comme indiqué dans nos",
   "co.orderSummary": "Récapitulatif de commande",
   "co.sellers": "De {n} vendeur(s)",
   "co.itemsTotal": "Articles ({n})",

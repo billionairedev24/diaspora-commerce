@@ -8,6 +8,7 @@ import {
   definitiveFailure,
   type DeliverySelection,
   isApiError,
+  legalHref,
   type OrderConfirmation,
   orderKeys,
   type PaymentMethod
@@ -494,8 +495,14 @@ export function CheckoutView() {
             </ol>
           )}
           <p className={styles.fine}>
-            {t('co.agreePrefix')} <Link href="/legal/conditions-of-use">{t('co.conditions')}</Link> {t('co.and')} <Link href="/legal/privacy">{t('co.privacy')}</Link>.
+            {t('co.agreePrefix')} <Link href={legalHref('conditions-of-use')}>{t('co.conditions')}</Link> {t('co.and')} <Link href={legalHref('privacy')}>{t('co.privacy')}</Link>.{' '}
+            {t('co.returnsPrefix')} <Link href={legalHref('returns')}>{t('legal.doc.returns')}</Link>.
           </p>
+          {preBlock && (
+            <p className={styles.fine} data-testid="preorder-terms-note">
+              {t('co.preorderPrefix')} <Link href={legalHref('preorder-delivery-terms')}>{t('legal.doc.preorder-delivery-terms')}</Link>.
+            </p>
+          )}
           <div className={styles.stripeLine}>
             <PoweredByStripe height={24} />
             <span>{t('co.chargeNote')}</span>

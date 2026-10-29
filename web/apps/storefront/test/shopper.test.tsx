@@ -126,6 +126,18 @@ describe('checkout (mock BFF + mock Stripe)', () => {
     expect(orders.items[0]?.shipments[0]?.deliveryCode).toMatch(/^\d{4}$/);
   });
 
+  it('links the Conditions of Use, Privacy Notice and Returns & Refunds next to the order button', async () => {
+    const api = await signInDemo();
+    const jollof = await api.getProduct('AT000000P2');
+    await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 1 });
+    renderWithProviders(<CheckoutView />);
+    await screen.findByTestId('checkout-package');
+    expect(screen.getByRole('link', { name: 'Conditions of Use' })).toHaveAttribute('href', '/legal/conditions-of-use');
+    expect(screen.getByRole('link', { name: 'Privacy Notice' })).toHaveAttribute('href', '/legal/privacy');
+    expect(screen.getByRole('link', { name: 'Returns & Refunds' })).toHaveAttribute('href', '/legal/returns');
+    expect(screen.queryByTestId('preorder-terms-note')).not.toBeInTheDocument();
+  });
+
   it('picks up at an AfroTransact pickup point: no shipping charge, and the order names the point', async () => {
     const api = await signInDemo();
     const jollof = await api.getProduct('AT000000P2');

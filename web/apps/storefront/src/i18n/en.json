@@ -679,6 +679,8 @@
   "co.conditions": "Conditions of Use",
   "co.and": "and",
   "co.privacy": "Privacy Notice",
+  "co.returnsPrefix": "Changed your mind? Read our",
+  "co.preorderPrefix": "Pre-orders are charged and delivered as described in our",
   "co.orderSummary": "Order summary",
   "co.sellers": "From {n} seller(s)",
   "co.itemsTotal": "Items ({n})",

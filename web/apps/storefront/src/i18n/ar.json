@@ -686,6 +686,8 @@
   "co.conditions": "شروط الاستخدام",
   "co.and": "و",
   "co.privacy": "إشعار الخصوصية",
+  "co.returnsPrefix": "غيّرت رأيك؟ اقرأ",
+  "co.preorderPrefix": "يتم تحصيل الطلبات المسبقة وتسليمها كما هو موضح في",
   "co.orderSummary": "ملخص الطلب",
   "co.sellers": "من {n} بائع (بائعين)",
   "co.itemsTotal": "العناصر ({n})",
