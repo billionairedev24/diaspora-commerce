@@ -1,0 +1,46 @@
+# The written legal documents (docs/legal/*.md) reach the content service only through the generated Flyway migration
+# java/services/content/src/main/resources/db/migration/V<n>__legal_documents_<hash>.sql (docs/engineering/legal-documents.md):
+#   legal-seed : fails when docs/legal changed but the migration did not (like merge_asyncapi --check), when a document is
+#                invalid (front matter, unknown key or placeholder, version below what the service seeds), and runs the
+#                loader's tests against a throwaway PostgreSQL.
+name: legal-documents
+
+on:
+  push:
+    branches: [main]
+    paths: [docs/legal/**, tools/legal/**, java/services/content/src/main/resources/db/migration/**,
+            java/services/content/src/main/java/com/afrotransact/content/domain/legal/LegalDocumentType.java,
+            .github/workflows/legal-documents.yml]
+  pull_request:
+    paths: [docs/legal/**, tools/legal/**, java/services/content/src/main/resources/db/migration/**,
+            java/services/content/src/main/java/com/afrotransact/content/domain/legal/LegalDocumentType.java,
+            .github/workflows/legal-documents.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  legal-seed:
+    name: legal documents match the content migration
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pip install --quiet pyyaml==6.0.3
+      - name: Loader tests (fixtures in tools/legal/testdata, SQL applied to PostgreSQL)
+        env:
+          LEGAL_TEST_PG: postgresql://postgres:postgres@localhost:5432/postgres
+          PGPASSWORD: postgres
+        run: python3 -m unittest discover -s tools/legal -p 'test_*.py'
+      - name: docs/legal is loaded by the newest legal migration
+        run: python3 tools/legal/build_seed.py --check
