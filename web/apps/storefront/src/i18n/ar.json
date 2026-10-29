@@ -1729,5 +1729,11 @@
   "mem.col.amount": "المبلغ",
   "mem.tableUsage": "المزايا المستخدمة",
   "mem.tableCharges": "مدفوعات العضوية",
-  "mem.manage.noneTitle": "لست عضوًا بعد"
+  "mem.manage.noneTitle": "لست عضوًا بعد",
+  "refer.col.friend": "الصديق",
+  "refer.col.status": "الحالة",
+  "refer.col.joined": "تاريخ الانضمام",
+  "refer.col.reward": "مكافأتك",
+  "refer.table": "الأصدقاء الذين دعوتهم",
+  "refer.shareLead": "أرسل رابطك إلى صديق."
 }

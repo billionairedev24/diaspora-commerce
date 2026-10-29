@@ -1729,5 +1729,11 @@
   "mem.col.amount": "Iye",
   "mem.tableUsage": "Àwọn àǹfààní tí a lò",
   "mem.tableCharges": "Àwọn ìsanwó ẹ̀tọ́ ọmọ ẹgbẹ́",
-  "mem.manage.noneTitle": "O kò tíì jẹ́ ọmọ ẹgbẹ́"
+  "mem.manage.noneTitle": "O kò tíì jẹ́ ọmọ ẹgbẹ́",
+  "refer.col.friend": "Ọ̀rẹ́",
+  "refer.col.status": "Ipò",
+  "refer.col.joined": "Ọjọ́ ìkópa",
+  "refer.col.reward": "Ẹ̀bùn rẹ",
+  "refer.table": "Àwọn ọ̀rẹ́ tí o pè",
+  "refer.shareLead": "Fi ìjápọ̀ rẹ ránṣẹ́ sí ọ̀rẹ́ kan."
 }

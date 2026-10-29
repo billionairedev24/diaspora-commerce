@@ -1729,5 +1729,11 @@
   "mem.col.amount": "Importe",
   "mem.tableUsage": "Ventajas usadas",
   "mem.tableCharges": "Pagos de la membresía",
-  "mem.manage.noneTitle": "Aún no eres miembro"
+  "mem.manage.noneTitle": "Aún no eres miembro",
+  "refer.col.friend": "Amigo",
+  "refer.col.status": "Estado",
+  "refer.col.joined": "Se unió",
+  "refer.col.reward": "Tu recompensa",
+  "refer.table": "Amigos que invitaste",
+  "refer.shareLead": "Envía tu enlace a un amigo."
 }

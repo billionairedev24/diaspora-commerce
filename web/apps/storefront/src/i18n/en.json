@@ -1722,5 +1722,11 @@
   "mem.col.amount": "Amount",
   "mem.tableUsage": "Benefits used",
   "mem.tableCharges": "Membership payments",
-  "mem.manage.noneTitle": "You’re not a member yet"
+  "mem.manage.noneTitle": "You’re not a member yet",
+  "refer.col.friend": "Friend",
+  "refer.col.status": "Status",
+  "refer.col.joined": "Joined",
+  "refer.col.reward": "Your reward",
+  "refer.table": "Friends you invited",
+  "refer.shareLead": "Send your link to a friend."
 }

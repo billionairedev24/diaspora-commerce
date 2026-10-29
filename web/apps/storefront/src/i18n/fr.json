@@ -1729,5 +1729,11 @@
   "mem.col.amount": "Montant",
   "mem.tableUsage": "Avantages utilisés",
   "mem.tableCharges": "Paiements de l’abonnement",
-  "mem.manage.noneTitle": "Vous n’êtes pas encore abonné"
+  "mem.manage.noneTitle": "Vous n’êtes pas encore abonné",
+  "refer.col.friend": "Ami",
+  "refer.col.status": "Statut",
+  "refer.col.joined": "Inscription",
+  "refer.col.reward": "Votre récompense",
+  "refer.table": "Amis que vous avez invités",
+  "refer.shareLead": "Envoyez votre lien à un ami."
 }
