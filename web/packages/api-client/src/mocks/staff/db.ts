@@ -496,6 +496,14 @@ function seed(now: Date): MockStaffDb {
     rec('adj-1', { reason: 'Stripe fee booked twice for the charge', amountMinor: 250, stripeRef: 'ch_3Q8xK2', proposedByName: 'Finance Lead', decidedByName: null, status: 'PROPOSED', proposedAt: ago(0, 4), decidedAt: null, decisionNote: null, journalId: null }),
     rec('adj-2', { reason: 'Reclass a mis-booked chargeback fee to chargeback losses', amountMinor: 1_500, stripeRef: 'dp_1Q7cD9', proposedByName: 'Finance Lead', decidedByName: 'Platform Admin', status: 'POSTED', proposedAt: ago(3, 0), decidedAt: ago(2, 6), decisionNote: 'Checked against the Stripe dispute', journalId: 'a1b2c3d4' })
   ];
+  const recoveries = [
+    rec('rcv-1', { orgName: 'Kente Naturals', orderNumber: 'AT-000412', amountMinor: 1_840, outstandingMinor: 1_840, recoveredMinor: 0, resolvedMinor: 0, stripeCode: 'balance_insufficient',
+      reason: 'Insufficient funds in the connected account: its balance was already paid out.', waitingFor: '', proposedByName: null, decidedByName: null, decidedAt: null, decisionNote: null, resolutionRef: null, status: 'OPEN', createdAt: ago(1, 2) }),
+    rec('rcv-2', { orgName: 'Lagos Spice Co', orderNumber: 'AT-000398', amountMinor: 6_250, outstandingMinor: 6_250, recoveredMinor: 0, resolvedMinor: 0, stripeCode: 'balance_insufficient',
+      reason: 'Insufficient funds in the connected account: its balance was already paid out.', waitingFor: 'Approval of a write-off', proposedByName: 'Finance Lead', decidedByName: null, decidedAt: null, decisionNote: null, resolutionRef: null, status: 'OPEN', createdAt: ago(3, 0) }),
+    rec('rcv-3', { orgName: 'Accra Fabrics', orderNumber: 'AT-000377', amountMinor: 2_100, outstandingMinor: 0, recoveredMinor: 2_100, resolvedMinor: 0, stripeCode: 'balance_insufficient',
+      reason: 'Insufficient funds in the connected account: its balance was already paid out.', waitingFor: '', proposedByName: null, decidedByName: null, decidedAt: null, decisionNote: null, resolutionRef: null, status: 'RECOVERED', createdAt: ago(6, 0) })
+  ];
   const stripeLookup: MockRecord[] = [];
   const creditAdjustments = [
     rec('cadj-1', { customerId: customers[0]?.id ?? 'cus-1000', customerName: customers[0]?.name ?? 'Amara Nwosu', amountMinor: 25_000, source: 'STAFF', reason: 'Goodwill for a parcel that arrived a week late', proposedByName: 'Finance Lead', decidedByName: null, status: 'PROPOSED', proposedAt: ago(0, 3), decidedAt: null, decisionNote: null, balanceMinor: 2_500 }),
@@ -625,7 +633,7 @@ function seed(now: Date): MockStaffDb {
     records: {
       users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, 'product-reviews': productReviews, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
-      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
+      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, recoveries, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now),
       ...seedIdentityAdmin(now)

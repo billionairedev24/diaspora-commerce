@@ -810,6 +810,57 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       build: (v, id, ctx) => ({ id, fields: { reason: str(v.reason), amountMinor: Math.round(num(v.amount) * 100), stripeRef: str(v.stripeRef) || null, proposedByName: ctx.actor, decidedByName: null, status: 'PROPOSED', proposedAt: ctx.now.toISOString(), decidedAt: null, decisionNote: null, journalId: null }, activity: [] })
     }
   },
+  recoveries: {
+    title: 'Refund recoveries',
+    columns: [col('orgName', 'Seller', 'strong', 18), col('orderNumber', 'Order', 'mono', 12), col('amountMinor', 'Stripe refused', 'money', 11), col('outstandingMinor', 'Still owed', 'money', 11), col('stripeCode', 'Stripe said', 'text', 14), col('waitingFor', 'Waiting for', 'text', 14), col('createdAt', 'Opened', 'date', 10), col('status', 'Status', 'status', 10)],
+    statusKey: 'status',
+    facets: facets('OPEN', 'RECOVERED', 'WRITTEN_OFF'),
+    exportable: true,
+    titleOf: (r) => `Refund recovery of $${(num(r.fields.outstandingMinor) / 100).toFixed(2)}`,
+    subtitleOf: (r) => `${str(r.fields.orgName)} · order ${str(r.fields.orderNumber)}`,
+    sections: [
+      ['What happened', ['orgName', 'orderNumber', 'amountMinor', 'stripeCode', 'reason', 'createdAt']],
+      ['Where it stands', ['status', 'outstandingMinor', 'recoveredMinor', 'resolvedMinor', 'waitingFor']],
+      ['Who decided', ['proposedByName', 'decidedByName', 'decidedAt', 'decisionNote', 'resolutionRef']]
+    ],
+    actions: [
+      {
+        key: 'mark-recovered', label: 'Mark recovered', tone: 'primary', permission: 'ledger:adjust',
+        when: (r) => stateReason(r, 'OPEN') ?? (str(r.fields.waitingFor) ? 'A resolution already waits for approval.' : null),
+        form: (r) => form('The seller paid the platform back', 'Propose', [
+          field('reference', 'Bank reference of the money received', 'text', true, { maxLength: 120 }),
+          field('reason', 'Why (at least 15 characters)', 'textarea', true, { maxLength: 500 })
+        ], `Use this when the seller paid outside Stripe (a bank transfer). It covers the $${(num(r.fields.outstandingMinor) / 100).toFixed(2)} still owed. Nothing is posted until a different person approves it.`),
+        apply: (r, v, ctx) => { r.fields.waitingFor = 'Approval of money received'; r.fields.proposedByName = ctx.actor; r.fields.resolutionRef = str(v.reference); log(r, ctx, `Proposed: money received (${str(v.reference)}) — ${str(v.reason)}`); }
+      },
+      {
+        key: 'write-off', label: 'Write off', tone: 'danger', permission: 'ledger:adjust',
+        when: (r) => stateReason(r, 'OPEN') ?? (str(r.fields.waitingFor) ? 'A resolution already waits for approval.' : null),
+        form: (r) => form('Write the recovery off', 'Propose', [field('reason', 'Why (at least 15 characters)', 'textarea', true, { maxLength: 500 })],
+          `The platform absorbs the loss (account 5300) and never takes it from the seller's earnings. It covers the $${(num(r.fields.outstandingMinor) / 100).toFixed(2)} still owed. Nothing is posted until a different person approves it.`),
+        apply: (r, v, ctx) => { r.fields.waitingFor = 'Approval of a write-off'; r.fields.proposedByName = ctx.actor; r.fields.resolutionRef = null; log(r, ctx, `Proposed: write-off — ${str(v.reason)}`); }
+      },
+      {
+        key: 'approve', label: 'Approve and post', tone: 'primary', permission: 'ledger:approve', confirm: 'Post this to the ledger now? It cannot be edited afterwards.',
+        when: (r, ctx) => stateReason(r, 'OPEN') ?? (!str(r.fields.waitingFor) ? 'Nothing waits for approval.' : str(r.fields.proposedByName) === ctx.actor ? 'You proposed this, so a different person must approve it.' : null),
+        apply: (r, _v, ctx) => {
+          const writeOff = str(r.fields.waitingFor).includes('write-off');
+          r.fields.status = writeOff ? 'WRITTEN_OFF' : 'RECOVERED';
+          r.fields.resolvedMinor = num(r.fields.outstandingMinor);
+          r.fields.outstandingMinor = 0;
+          r.fields.waitingFor = '';
+          r.fields.decidedByName = ctx.actor;
+          r.fields.decidedAt = ctx.now.toISOString();
+          log(r, ctx, writeOff ? 'Approved: written off' : 'Approved: recovered');
+        }
+      },
+      {
+        key: 'reject', label: 'Reject', tone: 'danger', permission: 'ledger:approve', when: (r) => stateReason(r, 'OPEN') ?? (!str(r.fields.waitingFor) ? 'Nothing waits for approval.' : null),
+        form: () => form('Why is it rejected?', 'Reject', [field('note', 'Explanation (at least 10 characters)', 'textarea', true, { maxLength: 2000 })], 'The proposer sees this reason. The recovery stays open.'),
+        apply: (r, v, ctx) => { r.fields.waitingFor = ''; r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); r.fields.decisionNote = str(v.note); r.fields.resolutionRef = null; log(r, ctx, `Rejected — ${str(v.note)}`); }
+      }
+    ]
+  },
   'credit-adjustments': {
     title: 'Credit adjustments',
     columns: [col('customerName', 'Customer', 'strong', 18), col('reason', 'Why', 'text', 30), col('amountMinor', 'Amount', 'money', 11), col('source', 'Kind', 'text', 12), col('proposedByName', 'Proposed by', 'text', 13), col('decidedByName', 'Decided by', 'text', 13), col('status', 'Status', 'status', 10)],

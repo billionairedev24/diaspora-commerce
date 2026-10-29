@@ -24,6 +24,8 @@ import {
   UsersThree
 } from '@phosphor-icons/react/ssr';
 
+import { type MessageKey } from '@/i18n/t';
+
 /** Sidebar icon of each module (the Backoffice prototype's Phosphor icons). */
 export const MODULE_ICONS: Record<StaffModuleKey, Icon> = {
   dash: SquaresFour, exports: DownloadSimple, orders: Receipt, catalog: ShieldCheck, inventory: Stack, retail: Package, dispatch: Path,
@@ -66,7 +68,7 @@ export function moduleOf(pathname: string): StaffModuleKey | null {
 }
 
 /** The server-driven tables each module shows (one tab per table). */
-export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceKey; label: string; statusFilter?: boolean }[]>> = {
+export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceKey; label: string; labelKey?: MessageKey; statusFilter?: boolean }[]>> = {
   orders: [{ resource: 'orders', label: 'Orders' }],
   catalog: [
     { resource: 'moderation', label: 'Moderation queue' },
@@ -89,6 +91,7 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
     { resource: 'payouts', label: 'Payout requests', statusFilter: true },
     { resource: 'reconciliation', label: 'Differences' },
     { resource: 'ledger-adjustments', label: 'Ledger adjustments' },
+    { resource: 'recoveries', label: 'Refund recoveries', labelKey: 'st.moduleView.tab.recoveries' },
     { resource: 'credit-adjustments', label: 'Credit adjustments' },
     { resource: 'gift-cards', label: 'Gift cards' },
     { resource: 'credit-liabilities', label: 'Credit & gift card liability' },

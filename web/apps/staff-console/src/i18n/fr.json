@@ -35,6 +35,7 @@
   "st.states.tryAgain": "Réessayer",
   "st.states.youDonTHaveAccess": "Vous n’avez pas accès à cette page",
   "st.moduleView.tables": "Tableaux",
+  "st.moduleView.tab.recoveries": "Remboursements à récupérer",
   "st.modulePage.readOnly": "Lecture seule.",
   "st.resourceTable.export": "Exporter",
   "st.resourceTable.status": "Statut",
