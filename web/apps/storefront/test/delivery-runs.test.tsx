@@ -224,14 +224,14 @@ describe('location advertorials', () => {
     const cta = within(card).getByRole('link', { name: 'Order now' });
     expect(cta.getAttribute('href')).toMatch(/src=page&cr=adv-[0-9a-f]{32}&po=LBK-7/);
     await waitFor(() => expect(requests('POST', '/events')).toHaveLength(1));
-    expect(await bodyOf(requests('POST', '/events')[0] as Request)).toEqual({ type: 'VIEW' });
+    expect(await bodyOf(requests('POST', '/events')[0] as Request)).toEqual({ type: 'VIEW', visitor: expect.stringMatching(/^[0-9a-f]{24}$/) });
     const query = new URL((sent.find((r) => new URL(r.url).pathname.endsWith('/v1/delivery-runs/advertorials')) as Request).url).searchParams;
     expect(query.get('zip')).toBe('79401');
     expect(query.get('visitor')).toMatch(/^[0-9a-f]{24}$/);
     cta.addEventListener('click', (e) => e.preventDefault());
     await user.click(cta);
     await waitFor(() => expect(requests('POST', '/events')).toHaveLength(2));
-    expect(await bodyOf(requests('POST', '/events')[1] as Request)).toEqual({ type: 'CLICK' });
+    expect(await bodyOf(requests('POST', '/events')[1] as Request)).toEqual({ type: 'CLICK', visitor: expect.stringMatching(/^[0-9a-f]{24}$/) });
   });
 
   it('features up to four products on the card, each linking to its product page, and counts a click on one', async () => {
@@ -245,7 +245,7 @@ describe('location advertorials', () => {
     links[0]?.addEventListener('click', (e) => e.preventDefault());
     await user.click(links[0] as HTMLElement);
     await waitFor(() => expect(requests('POST', '/events')).toHaveLength(2));
-    expect(await bodyOf(requests('POST', '/events')[1] as Request)).toEqual({ type: 'CLICK' });
+    expect(await bodyOf(requests('POST', '/events')[1] as Request)).toEqual({ type: 'CLICK', visitor: expect.stringMatching(/^[0-9a-f]{24}$/) });
   });
 
   it('keeps the same variant for the same visit and renders nothing where there is none', async () => {

@@ -68,6 +68,18 @@ describe('featured products on an advertorial', () => {
     expect(screen.queryByTestId('adv-featured-A')).not.toBeInTheDocument();
   });
 
+  it('compares the variants of a window side by side, per variant and in total, with cancelled orders apart', async () => {
+    await renderScreen(<AdvertorialsPanel source="WINDOW" sourceId="lbk-7" />);
+    const compare = await screen.findByTestId('adv-compare');
+    const cells = (id: string) => within(within(compare).getByTestId(id)).getAllByRole('cell').map((c) => c.textContent);
+    // views, clicks, click rate, orders, cancelled, share of the views
+    expect(cells('adv-compare-A')).toEqual(['1,840', '212', '11.5%', '37', '3', '50.7%']);
+    expect(cells('adv-compare-B')).toEqual(['1,792', '274', '15.3%', '52', '5', '49.3%']);
+    expect(cells('adv-compare-total')).toEqual(['3,632', '486', '13.4%', '89', '8', '100%']);
+    expect(screen.getByTestId('adv-cancelled-A')).toHaveTextContent('3');
+    expect(screen.getByTestId('adv-orders-B')).toHaveTextContent('52');
+  });
+
   it('shows the orders credited to a run advertorial, not "not tracked"', async () => {
     const runs = await import('@afrotransact/api-client/mocks/staff');
     expect(runs).toBeDefined();

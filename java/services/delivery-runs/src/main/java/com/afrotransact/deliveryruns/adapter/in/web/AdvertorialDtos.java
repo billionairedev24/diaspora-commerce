@@ -48,11 +48,14 @@ final class AdvertorialDtos {
     record ResultsResponse(long views, long clicks,
                            @Schema(description = "clicks / views x 100; null without views") Double ctrPct,
                            @Schema(description = "Orders that came through the advertorial and still stand: a "
-                                   + "window's pre-orders whose tracking tag carries it, a run's orders whose "
-                                   + "attribution (cr=adv-...) does and that still hold a slot on the run") int orders) {
+                                   + "window's pre-orders whose tracking tag carries it that are not cancelled, a "
+                                   + "run's orders whose attribution (cr=adv-...) does and that still hold a slot "
+                                   + "on the run: one rule for both") int orders,
+                           @Schema(description = "Orders that came through the advertorial and were cancelled or "
+                                   + "refunded (not in orders)") int cancelledOrders) {
 
         static ResultsResponse of(AdvertorialView.Results r) {
-            return new ResultsResponse(r.views(), r.clicks(), r.ctrPct(), r.orders());
+            return new ResultsResponse(r.views(), r.clicks(), r.ctrPct(), r.orders(), r.cancelledOrders());
         }
     }
 
@@ -144,6 +147,8 @@ final class AdvertorialDtos {
 
     @Schema(name = "AdvertorialEventRequest")
     record EventRequest(@NotNull @Schema(description = "VIEW: it was shown; CLICK: its button was clicked")
-                        Event type) {
+                        Event type,
+                        @Size(max = 64) @Schema(description = "The visitor id also sent for sticky variants; one "
+                                + "visitor counts once per advertorial and kind in the event window") String visitor) {
     }
 }

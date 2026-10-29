@@ -18,6 +18,7 @@ import com.afrotransact.deliveryruns.domain.PreorderOrder;
 import com.afrotransact.deliveryruns.domain.PreorderOrderStatus;
 import com.afrotransact.deliveryruns.domain.OrderRefund;
 import com.afrotransact.deliveryruns.domain.PreorderPackage;
+import com.afrotransact.deliveryruns.port.AttributedOrders;
 import com.afrotransact.deliveryruns.port.ConcurrentUpdateException;
 import com.afrotransact.deliveryruns.port.DuplicateEntryException;
 import com.afrotransact.deliveryruns.domain.RefundStatus;
@@ -120,19 +121,21 @@ class JdbcPreorderOrderRepository implements PreorderOrderRepository {
     }
 
     @Override
-    public Map<String, Integer> attributedOrders(Collection<String> creatives) {
-        Map<String, Integer> out = new HashMap<>();
+    public Map<String, AttributedOrders> attributedOrders(Collection<String> creatives) {
+        Map<String, AttributedOrders> out = new HashMap<>();
         if (creatives.isEmpty()) {
             return out;
         }
         jdbc.sql("""
-                select substring(tracking_tag from 'cr=([A-Za-z0-9_-]+)') as creative, count(*) as n
+                select substring(tracking_tag from 'cr=([A-Za-z0-9_-]+)') as creative,
+                       count(*) filter (where status <> 'CANCELLED') as live,
+                       count(*) filter (where status = 'CANCELLED') as cancelled
                 from preorder_order
-                where status <> 'CANCELLED' and tracking_tag like '%cr=%'
+                where tracking_tag like '%cr=%'
                   and substring(tracking_tag from 'cr=([A-Za-z0-9_-]+)') in (:creatives)
                 group by 1
                 """).param("creatives", List.copyOf(creatives)).query((rs, n) -> {
-                    out.put(rs.getString("creative"), rs.getInt("n"));
+                    out.put(rs.getString("creative"), new AttributedOrders(rs.getInt("live"), rs.getInt("cancelled")));
                     return null;
                 }).list();
         return out;

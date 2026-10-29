@@ -1244,8 +1244,10 @@ export interface paths {
         put?: never;
         /**
          * Count a view or a click on an advertorial
-         * @description delivery-runs `POST /v1/public/advertorials/{id}/events {type}`. Best effort: the storefront sends `VIEW` once
-         *     per visit and `CLICK` on the button, and ignores a failure. Rate limited like other lookups.
+         * @description delivery-runs `POST /v1/public/advertorials/{id}/events {type, visitor}` with the client address. Best effort: the
+         *     storefront sends `VIEW` once per visit and `CLICK` on the button, and ignores a failure. Only an advertorial that
+         *     is live and whose window or run takes orders counts, and one visitor counts once per kind in a time window; any
+         *     other post answers 204 without counting. Rate limited like other lookups.
          */
         post: operations["recordRunAdvertorialEvent"];
         delete?: never;
@@ -7234,6 +7236,8 @@ export interface operations {
                 "application/json": {
                     /** @enum {string} */
                     type: "VIEW" | "CLICK";
+                    /** @description The anonymous id the storefront keeps per browser (the one that keeps A/B variants stable) */
+                    visitor?: string;
                 };
             };
         };

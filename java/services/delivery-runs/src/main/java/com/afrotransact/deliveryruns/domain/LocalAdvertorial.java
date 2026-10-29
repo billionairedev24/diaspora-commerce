@@ -166,6 +166,18 @@ public record LocalAdvertorial(UUID id, AdvertorialSource source, UUID sourceId,
         return with(AdvertorialStatus.ENDED, why, now);
     }
 
+    /**
+     * Live again after the sweeper ended it because its source stopped taking orders and the source then took orders
+     * again (a run extended past its cutoff, a paused window resumed). Anything else, including one staff ended, stays
+     * as it is.
+     */
+    public LocalAdvertorial reopen(Instant now) {
+        if (status != AdvertorialStatus.ENDED || ended != AdvertorialEnd.SOURCE_CLOSED) {
+            return this;
+        }
+        return with(AdvertorialStatus.LIVE, null, now);
+    }
+
     private void requireNotEnded(AdvertorialStatus target) {
         if (status == AdvertorialStatus.ENDED) {
             throw new InvalidTransitionException(status.name(), target.name());

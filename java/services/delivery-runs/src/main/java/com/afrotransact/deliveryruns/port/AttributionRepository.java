@@ -40,10 +40,11 @@ public interface AttributionRepository {
     void recordOrder(String orderId, String creative, String src, Instant placedAt);
 
     /**
-     * Orders still holding a slot on a run, per advertorial creative (creatives without any are absent). A cancelled
-     * run's orders are refunded, so they are not counted.
+     * The orders each advertorial creative brought to a run, live and cancelled as {@link AttributedOrders} defines
+     * them (creatives without any are absent): live = still holding a slot (RESERVED or CONFIRMED); cancelled = no
+     * slot left (released, or the run was cancelled and the order refunded).
      */
-    Map<String, Integer> runOrdersByCreative(Collection<String> creatives);
+    Map<String, AttributedOrders> runOrdersByCreative(Collection<String> creatives);
 
     /**
      * @param tags    the UTM tags

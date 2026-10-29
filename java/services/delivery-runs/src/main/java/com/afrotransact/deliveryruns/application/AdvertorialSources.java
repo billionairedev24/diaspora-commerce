@@ -38,6 +38,9 @@ class AdvertorialSources {
      * @param code         window code (null for runs)
      * @param status       window or run status now
      * @param open         takes orders now
+     * @param over         will not take orders again: a run past its cutoff, cancelled, confirmed, driven or
+     *                     completed; a window that is closed, delivered, awaiting a decision, cancelled or paused
+     *                     (resuming it reopens its advertorials). An announced run or upcoming window is not over.
      * @param cancelled    was cancelled
      * @param closes       when ordering closes (window close, run cutoff)
      * @param locationId   the location it serves (null when none serves a window)
@@ -46,7 +49,7 @@ class AdvertorialSources {
      * @param draft        the words the system drafts for it
      */
     record Info(AdvertorialSource kind, UUID id, String name, String code, String status, boolean open,
-                boolean cancelled, Instant closes, UUID locationId, String locationName, String place,
+                boolean over, boolean cancelled, Instant closes, UUID locationId, String locationName, String place,
                 AdvertorialCopy draft) {
     }
 
@@ -80,7 +83,7 @@ class AdvertorialSources {
                 "Order by " + links.cutoffDisplay(location, run) + ". Delivery is " + fee + " per order.",
                 "Order for the run");
         return new Info(AdvertorialSource.RUN, run.id(), town + " · " + day, null, run.status().name(),
-                run.acceptsOrders(now), run.status() == RunStatus.CANCELLED,
+                run.acceptsOrders(now), runOver(run, now), run.status() == RunStatus.CANCELLED,
                 run.terms().cutoffAt(), location.id(), town, town, draft);
     }
 
@@ -101,8 +104,17 @@ class AdvertorialSources {
         AdvertorialCopy draft = new AdvertorialCopy(clip(headline, AdvertorialCopy.MAX_HEADLINE),
                 clip(body, AdvertorialCopy.MAX_BODY), "Pre-order now");
         return new Info(AdvertorialSource.WINDOW, w.id(), d.name(), w.code(), status.name(),
-                status == PreorderStatus.OPEN, status == PreorderStatus.CANCELLED, d.closesAt(),
+                status == PreorderStatus.OPEN, status != PreorderStatus.OPEN && status != PreorderStatus.UPCOMING
+                && status != PreorderStatus.DRAFT, status == PreorderStatus.CANCELLED, d.closesAt(),
                 served.map(Location::id).orElse(null), served.map(Location::name).orElse(null), where, draft);
+    }
+
+    private static boolean runOver(Run run, Instant now) {
+        return switch (run.status()) {
+            case DRAFT, ANNOUNCED -> false;
+            case OPEN, EXTENDED -> !now.isBefore(run.terms().cutoffAt());
+            default -> true;
+        };
     }
 
     private static String clip(String s, int max) {

@@ -19,8 +19,17 @@ public interface AdvertorialServing {
      */
     List<ServedAdvertorial> serve(AdvertorialQuery query);
 
-    /** Counts one view or click (404 for an unknown advertorial). Best effort, never changes what is served. */
-    void record(UUID advertorialId, Event event);
+    /**
+     * Counts one view or click (404 for an unknown advertorial). Best effort, never changes what is served. Only an
+     * advertorial that is live, inside its schedule and whose window or run takes orders right now counts; a draft,
+     * paused, ended or out-of-schedule one is ignored without an error. Each visitor counts once per advertorial and
+     * kind in the event window (a visitor id, else the client address), and one client address only a few times, so a
+     * direct POST cannot inflate the results.
+     *
+     * @param visitor the visitor id the storefront also sends for sticky variants (null when none)
+     * @param client  the client address the request came from (null when unknown)
+     */
+    void record(UUID advertorialId, Event event, String visitor, String client);
 
     /** What happened. */
     enum Event {
@@ -29,8 +38,9 @@ public interface AdvertorialServing {
     }
 
     /**
-     * Where the visitor is. A ZIP or coordinates match delivery runs by coverage; country and region (and city) match
-     * pre-order windows.
+     * Where the visitor is. A ZIP or coordinates match delivery runs by coverage, and the pre-order windows of the
+     * towns that coverage falls in (so a ZIP alone finds a window); country and region (and city) match pre-order
+     * windows too. Both together give each source once.
      *
      * @param zip     5-digit ZIP
      * @param lat     latitude

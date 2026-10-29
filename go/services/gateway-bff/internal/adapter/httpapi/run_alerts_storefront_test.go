@@ -189,13 +189,22 @@ func TestRunAlertStorefrontRoutes(t *testing.T) {
 	mustStatus(t, b.do("POST", "/v1/delivery-runs/subscriptions", map[string]any{"locationId": testkit.RunLocationID, "email": "ada@example.com", "utmMedium": strings.Repeat("m", 81)}), 422)
 
 	events := "/v1/delivery-runs/advertorials/" + testkit.RunAdvertorialID + "/events"
-	mustStatus(t, b.do("POST", events, map[string]any{"type": "view"}), 204)
+	mustStatus(t, b.do("POST", events, map[string]any{"type": "view", "visitor": "visit_01-ab"}), 204)
 	mustStatus(t, b.do("POST", events, map[string]any{"type": "CLICK"}), 204)
 	mustStatus(t, b.do("POST", events, map[string]any{"type": "BUY"}), 422)
+	mustStatus(t, b.do("POST", events, map[string]any{"type": "VIEW", "visitor": "not a visitor!"}), 422)
 	mustStatus(t, b.do("POST", "/v1/delivery-runs/advertorials/5c3a0e4b-0000-4000-8000-0000000000ff/events", map[string]any{"type": "VIEW"}), 404)
 	mustStatus(t, b.do("POST", "/v1/delivery-runs/advertorials/not-a-uuid/events", map[string]any{"type": "VIEW"}), 404)
 	if got := bff.Upstreams.AdvertorialEvents; !slices.Equal(got, []string{"VIEW", "CLICK"}) {
 		t.Fatalf("events counted = %v", got)
+	}
+	if got := bff.Upstreams.AdvertorialEventVisitors; !slices.Equal(got, []string{"visit_01-ab", "<nil>"}) {
+		t.Fatalf("visitor ids relayed = %v", got)
+	}
+	for _, ip := range bff.Upstreams.AdvertorialEventClients {
+		if ip == "" {
+			t.Fatalf("the client address was not relayed to delivery-runs: %v", bff.Upstreams.AdvertorialEventClients)
+		}
 	}
 
 	for _, op := range []string{"listRunLocations", "getRunLocation", "subscribeRunAlerts", "confirmRunAlerts", "unsubscribeRunAlerts",

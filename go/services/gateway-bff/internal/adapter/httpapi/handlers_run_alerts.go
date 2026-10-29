@@ -120,12 +120,13 @@ func (h *handlersImpl) countRunVisit(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) runAdvertorialEvent(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		Type string `json:"type"`
+		Type    string `json:"type"`
+		Visitor string `json:"visitor"`
 	}
 	if err := decode(r, &b, false); err != nil {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
-	err := h.s.RunAlerts.AdvertorialEvent(r.Context(), r.PathValue("advertorialId"), b.Type)
+	err := h.s.RunAlerts.AdvertorialEvent(r.Context(), r.PathValue("advertorialId"), b.Type, b.Visitor, callerFrom(r.Context()).ClientIP)
 	h.reply(w, r, http.StatusNoContent, nil, err)
 }

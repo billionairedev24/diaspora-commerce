@@ -2,6 +2,8 @@ package com.afrotransact.deliveryruns.adapter.out.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.HashMap;
@@ -122,6 +124,12 @@ class JdbcAdvertorialRepository implements AdvertorialRepository {
     }
 
     @Override
+    public List<LocalAdvertorial> findLive(int limit) {
+        return jdbc.sql("select * from local_advertorial where status = 'LIVE' order by created_at, id limit :limit")
+                .param("limit", limit).query(this::row).list();
+    }
+
+    @Override
     public void count(UUID advertorialId, LocalDate day, long views, long clicks) {
         jdbc.sql("""
                 insert into local_advertorial_stat (advertorial_id, day, views, clicks)
@@ -131,6 +139,30 @@ class JdbcAdvertorialRepository implements AdvertorialRepository {
                         clicks = local_advertorial_stat.clicks + excluded.clicks
                 """).param("id", advertorialId).param("day", day).param("views", views).param("clicks", clicks)
                 .update();
+    }
+
+    @Override
+    public boolean admit(UUID advertorialId, String subject, String kind, Instant now, Duration window, int max) {
+        // One statement: a new subject is admitted; a known one only when its window ended (a new window starts) or
+        // it has places left in the current one.
+        return jdbc.sql("""
+                insert into local_advertorial_gate (advertorial_id, subject, kind, window_start, hits)
+                values (:id, :subject, :kind, :now, 1)
+                on conflict (advertorial_id, subject, kind) do update
+                    set window_start = case when local_advertorial_gate.window_start <= :expired
+                            then excluded.window_start else local_advertorial_gate.window_start end,
+                        hits = case when local_advertorial_gate.window_start <= :expired
+                            then 1 else local_advertorial_gate.hits + 1 end
+                    where local_advertorial_gate.window_start <= :expired or local_advertorial_gate.hits < :max
+                """).param("id", advertorialId).param("subject", subject).param("kind", kind)
+                .param("now", Sql.ts(now)).param("expired", Sql.ts(now.minus(window))).param("max", max)
+                .update() > 0;
+    }
+
+    @Override
+    public int purgeGates(Instant before) {
+        return jdbc.sql("delete from local_advertorial_gate where window_start < :before")
+                .param("before", Sql.ts(before)).update();
     }
 
     @Override

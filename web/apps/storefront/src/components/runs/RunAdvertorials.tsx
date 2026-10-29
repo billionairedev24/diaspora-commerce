@@ -12,10 +12,10 @@ import { firstView, visitorId } from '@/lib/runs/visitor';
 
 import styles from './Runs.module.css';
 
-/** Counts a view or a click; best effort, a failure never reaches the shopper. */
+/** Counts a view or a click; best effort, a failure never reaches the shopper. The visitor id lets the server count each visitor once. */
 function record(id: string, type: 'VIEW' | 'CLICK') {
   void browserApi()
-    .recordRunAdvertorialEvent(id, type)
+    .recordRunAdvertorialEvent(id, type, visitorId())
     .catch(() => undefined);
 }
 

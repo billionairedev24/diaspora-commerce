@@ -643,8 +643,10 @@ export const AdvertorialResultsSchema = z.object({
   views: z.number().int(),
   clicks: z.number().int(),
   ctrPct: z.number().nullable().default(null),
-  /** Orders that came through the advertorial and still stand: a window's pre-orders whose tracking tag carries it, a run's orders whose attribution (cr=adv-...) does and that still hold a slot. */
-  orders: z.number().int().nullable().default(null)
+  /** Orders that came through the advertorial and still stand, on one rule for windows and runs: a window's pre-orders that are not cancelled, a run's orders that still hold a slot. */
+  orders: z.number().int().nullable().default(null),
+  /** Orders that came through the advertorial and were cancelled or refunded (not in `orders`). */
+  cancelledOrders: z.number().int().default(0)
 });
 export type AdvertorialResults = z.infer<typeof AdvertorialResultsSchema>;
 

@@ -179,7 +179,8 @@ describe('advertorials through the mock BFF', () => {
     const { items, can } = await runs().advertorials({ source: 'WINDOW', sourceId: 'lbk-7' });
     expect(can.manage).toBe(true);
     expect(items.map((a) => a.variant).sort()).toEqual(['A', 'B']);
-    expect(items.find((a) => a.variant === 'B')!.results).toMatchObject({ views: 1792, clicks: 274 });
+    expect(items.find((a) => a.variant === 'B')!.results).toMatchObject({ views: 1792, clicks: 274, orders: 52, cancelledOrders: 5 });
+    expect(items.find((a) => a.variant === 'A')!.results).toMatchObject({ views: 1840, clicks: 212, orders: 37, cancelledOrders: 3 });
     expect(items.every((a) => a.serving)).toBe(true);
   });
 

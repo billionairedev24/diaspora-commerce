@@ -34,8 +34,9 @@ type RunAlertService interface {
 	// CountVisit counts a visit to a location page or run link that arrived with UTM tags (best effort: the storefront
 	// ignores failures). Only the three tags are kept.
 	CountVisit(ctx context.Context, slug string, req RunVisitRequest) error
-	// AdvertorialEvent counts a VIEW or a CLICK (best effort: the storefront ignores failures).
-	AdvertorialEvent(ctx context.Context, id, eventType string) error
+	// AdvertorialEvent counts a VIEW or a CLICK (best effort: the storefront ignores failures). The visitor id and the
+	// client address let delivery-runs count each visitor once per window, so a direct POST cannot inflate the results.
+	AdvertorialEvent(ctx context.Context, id, eventType, visitor, clientIP string) error
 }
 
 // RunSubscribeRequest is POST /v1/delivery-runs/subscriptions.
@@ -440,7 +441,7 @@ func (s *runAlertServiceImpl) CountVisit(ctx context.Context, slug string, req R
 	return mapErr("delivery-runs", s.up.CountVisit(ctx, slug, body))
 }
 
-func (s *runAlertServiceImpl) AdvertorialEvent(ctx context.Context, id, eventType string) error {
+func (s *runAlertServiceImpl) AdvertorialEvent(ctx context.Context, id, eventType, visitor, clientIP string) error {
 	if p := domain.ValidUUID(id); p != nil {
 		return p
 	}
@@ -448,5 +449,9 @@ func (s *runAlertServiceImpl) AdvertorialEvent(ctx context.Context, id, eventTyp
 	if eventType != "VIEW" && eventType != "CLICK" {
 		return domain.ValidationProblem(map[string]string{"type": "Use VIEW or CLICK"})
 	}
-	return mapErr("delivery-runs", s.up.AdvertorialEvent(ctx, id, eventType))
+	visitor = strings.TrimSpace(visitor)
+	if visitor != "" && !visitorRe.MatchString(visitor) {
+		return domain.ValidationProblem(map[string]string{"visitor": "Use up to 64 letters, digits, dashes or underscores"})
+	}
+	return mapErr("delivery-runs", s.up.AdvertorialEvent(ctx, id, eventType, visitor, clientIP))
 }

@@ -811,7 +811,7 @@
 - Customers of a cancelled window or run are told that they are refunded in full, delivery fee included","E34","","High","8","delivery-runs notifications whatsapp","delivery-runs","To Do"
 "S263","Story","Location-targeted dynamic advertorials","Content placements targeted by the visitor's deliver-to ZIP or town, generated from window or run data (town, date, closing countdown, fee, featured products) or authored by staff, with schedule, priority and A/B variants.","- Visitors in a window's or run's area see the advertorial with a live closing countdown
 - Staff can author or auto-generate advertorials per window or run in the staff console
-- Advertorials expire when the window closes or is cancelled and show results (views, clicks, orders)","E34","","High","8","delivery-runs content storefront","delivery-runs","To Do"
+- Advertorials expire when the window closes or is cancelled and show results (views, clicks, orders)","E34","","High","8","delivery-runs content storefront","delivery-runs","Done"
 "S264","Story","Batched seller pickups and run dispatch","When a pre-order window closes with its minimum met (or staff decide to proceed below it), its paid orders are handed to a run and fulfilment plans one sweep: pickups from each participating seller (and FC load-out), then drops in the run area (doorstep stops ordered by road distance, or a community pickup point with handover codes). Sellers see run deadlines and pack in time. A cancelled window or run is never planned.","- Sellers get the run pickup time and a pick list for all run orders
 - One route per run (or split by capacity) with seller pickups before drops
 - Pickup-point drops use handover codes per order

@@ -173,9 +173,11 @@ type Upstreams struct {
 	LastWaitlist map[string]any
 	// Last delivery-runs bodies and queries of the run-alert routes (S262, S263) and the advertorial events counted.
 	LastRunUnsubscribe, LastRunSubscribeMine, LastRunVisit map[string]any
-	LastRunUnsubscribeMine                   []string
-	LastAdvertorialQuery                     url.Values
-	AdvertorialEvents                        []string
+	LastRunUnsubscribeMine                                 []string
+	LastAdvertorialQuery                                   url.Values
+	AdvertorialEvents                                      []string
+	// AdvertorialEventVisitors and AdvertorialEventClients are the visitor id and the X-Forwarded-For of each event.
+	AdvertorialEventVisitors, AdvertorialEventClients []string
 	// LastConsent / LastConsentGPC are the last content POST /v1/consent/records body and Sec-GPC header.
 	LastConsent    map[string]any
 	LastConsentGPC string

@@ -17,6 +17,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.afrotransact.deliveryruns.application.AdvertorialLifecycle;
+import com.afrotransact.deliveryruns.application.AttributionService;
 import com.afrotransact.deliveryruns.application.ExtendCommand;
 import com.afrotransact.deliveryruns.application.LocationService;
 import com.afrotransact.deliveryruns.application.OrderPlaced;
@@ -24,7 +26,9 @@ import com.afrotransact.deliveryruns.application.PreorderDecisionService;
 import com.afrotransact.deliveryruns.application.PreorderProjectionService;
 import com.afrotransact.deliveryruns.application.PreorderSchedulerService;
 import com.afrotransact.deliveryruns.application.PreorderWindowService;
+import com.afrotransact.deliveryruns.application.ReserveCommand;
 import com.afrotransact.deliveryruns.application.RunService;
+import com.afrotransact.deliveryruns.application.RunSlotService;
 import com.afrotransact.deliveryruns.application.WindowCommand;
 import com.afrotransact.deliveryruns.application.WindowView;
 import com.afrotransact.deliveryruns.domain.CommKind;
@@ -44,6 +48,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpMethod;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -91,12 +96,17 @@ class AdvertorialIT {
     private final PreorderSchedulerService scheduler;
     private final LocationService locations;
     private final RunService runs;
+    private final RunSlotService slots;
+    private final AttributionService attribution;
+    private final AdvertorialLifecycle lifecycle;
+    private final JdbcClient jdbc;
 
     @Autowired
     AdvertorialIT(@LocalServerPort int port, JsonMapper json, MutableClock clock, FakeUpstreams upstreams,
                   PreorderWindowService windows, PreorderDecisionService decisions,
                   PreorderProjectionService projection, PreorderSchedulerService scheduler,
-                  LocationService locations, RunService runs) {
+                  LocationService locations, RunService runs, RunSlotService slots,
+                  AttributionService attribution, AdvertorialLifecycle lifecycle, JdbcClient jdbc) {
         this.http = RestClient.builder().baseUrl("http://localhost:" + port).build();
         this.json = json;
         this.clock = clock;
@@ -107,6 +117,10 @@ class AdvertorialIT {
         this.scheduler = scheduler;
         this.locations = locations;
         this.runs = runs;
+        this.slots = slots;
+        this.attribution = attribution;
+        this.lifecycle = lifecycle;
+        this.jdbc = jdbc;
     }
 
     @DynamicPropertySource
@@ -245,14 +259,12 @@ class AdvertorialIT {
         String a = call(HttpMethod.GET, "/v1/advertorials?source=WINDOW&sourceId=" + f.window.id(), null, null)
                 .body().path("items").get(0).path("id").asString();
         for (int i = 0; i < 4; i++) {
-            assertThat(call(HttpMethod.POST, "/v1/public/advertorials/" + a + "/events", Map.of("type", "VIEW"), null)
-                    .status()).isEqualTo(204);
+            assertThat(event(a, "VIEW", "viewer-" + i).status()).isEqualTo(204);
         }
-        call(HttpMethod.POST, "/v1/public/advertorials/" + a + "/events", Map.of("type", "CLICK"), null);
+        event(a, "CLICK", "viewer-0");
         assertThat(call(HttpMethod.POST, "/v1/public/advertorials/" + UUID.randomUUID() + "/events",
                 Map.of("type", "VIEW"), null).status()).isEqualTo(404);
-        assertThat(call(HttpMethod.POST, "/v1/public/advertorials/" + a + "/events", Map.of("type", "LIKE"), null)
-                .status()).isEqualTo(400);
+        assertThat(event(a, "LIKE", "viewer-0").status()).isEqualTo(400);
 
         // Two orders came through the advertorial link (src=page&cr=adv-…), one by another route.
         String creative = "adv-" + a.replace("-", "");
@@ -268,6 +280,223 @@ class AdvertorialIT {
         assertThat(r.path("clicks").asLong()).isEqualTo(1);
         assertThat(r.path("ctrPct").asDouble()).isEqualTo(25.0);
         assertThat(r.path("orders").asInt()).isEqualTo(2);
+    }
+
+    /**
+     * One rule for both sources: an order that came through the advertorial counts while it stands; a cancelled or
+     * refunded one is shown apart. The same three orders, one of them cancelled, give the same result for a window
+     * (tracking tag, cancelled pre-order) and a run (attribution, released slot); cancelling the run cancels the rest.
+     */
+    @Test
+    void windowAndRunOrdersAreCountedOnTheSameBasis() {
+        Fixture f = fixture("Adv Basis #8", "Plainview", 2);
+        String wa = call(HttpMethod.GET, "/v1/advertorials?source=WINDOW&sourceId=" + f.window.id(), null, null)
+                .body().path("items").get(0).path("id").asString();
+        String windowCreative = "adv-" + wa.replace("-", "");
+        List<String> windowOrders = List.of(UUID.randomUUID().toString(), UUID.randomUUID().toString(),
+                UUID.randomUUID().toString());
+        for (String order : windowOrders) {
+            projection.onOrderPlaced(UUID.randomUUID(), placed(order, f.window.id(), clock.instant(), "page",
+                    windowCreative, f.window.code()));
+        }
+        projection.onOrderPlaced(UUID.randomUUID(), placed(UUID.randomUUID().toString(), f.window.id(),
+                clock.instant(), "ig", "story", f.window.code()));
+        projection.onOrderCancelled(UUID.randomUUID(), windowOrders.get(0), clock.instant());
+
+        UUID location = locations.create(Fixtures.bastrop(Fixtures.slug("basis"), DropMode.DOORSTEP, null,
+                CutoffPolicy.CANCEL)).id();
+        Run run = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(3), 2));
+        runs.announce(run.id());
+        runs.open(run.id());
+        String ra = call(HttpMethod.GET, "/v1/advertorials?source=RUN&sourceId=" + run.id(), null, null).body()
+                .path("items").get(0).path("id").asString();
+        String runCreative = "adv-" + ra.replace("-", "");
+        List<String> runOrders = List.of("basis-" + UUID.randomUUID(), "basis-" + UUID.randomUUID(),
+                "basis-" + UUID.randomUUID());
+        for (String order : runOrders) {
+            slots.reserve(new ReserveCommand(run.id(), order, "cust-basis", 1, false));
+            attribution.orderPlaced(order, runCreative, "page", clock.instant());
+        }
+        slots.release(run.id(), runOrders.get(0));
+
+        assertThat(orders(wa)).as("window: two stand, one cancelled").containsExactly(2, 1);
+        assertThat(orders(ra)).as("run: the same rule").containsExactly(2, 1);
+
+        runs.cancel(run.id(), "Storm warning");
+        assertThat(orders(ra)).as("a cancelled run refunds its orders").containsExactly(0, 3);
+        projection.onOrderCancelled(UUID.randomUUID(), windowOrders.get(1), clock.instant());
+        projection.onOrderCancelled(UUID.randomUUID(), windowOrders.get(2), clock.instant());
+        assertThat(orders(wa)).as("window: all cancelled").containsExactly(0, 3);
+    }
+
+    @Test
+    void aZipAloneFindsTheOpenWindowOfTheTownItFallsIn() {
+        String town = "Zipton" + UUID.randomUUID().toString().replace("-", "").chars().limit(8)
+                .mapToObj(c -> String.valueOf((char) ('a' + Character.digit(c, 16)))).collect(Collectors.joining());
+        locations.create(Fixtures.town(Fixtures.slug("zipton"), town));
+        Instant opens = clock.instant().minus(Duration.ofDays(1));
+        Instant closes = clock.instant().plus(Duration.ofDays(2));
+        PreorderWindow w = publish("Adv Zip #10", "US/TX/" + town, opens, closes);
+        scheduler.process(w.id());
+
+        Res byZip = call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&visitor=zip-1&limit=10", null, null);
+        assertThat(byZip.status()).isEqualTo(200);
+        JsonNode s = null;
+        for (JsonNode item : byZip.body().path("items")) {
+            if (item.path("sourceId").asString().equals(w.id().toString())) {
+                s = item;
+            }
+        }
+        assertThat(s).as("a ZIP alone, no country, region or city").isNotNull();
+        assertThat(s.path("source").asString()).isEqualTo("WINDOW");
+        assertThat(s.path("place").asString()).as("the town the ZIP falls in").isEqualTo(town);
+        assertThat(s.path("code").asString()).isEqualTo(w.code());
+        assertThat(Instant.parse(s.path("countdownTarget").asString())).isEqualTo(closes);
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?zip=78701&limit=10", null, null).body().path("items"))
+                .as("Austin is outside the town's area").extracting(i -> i.path("sourceId").asString())
+                .doesNotContain(w.id().toString());
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&country=US&region=TX&city=" + town
+                + "&limit=10", null, null).body().path("items")).as("ZIP and place together: one card, not two")
+                .extracting(i -> i.path("sourceId").asString()).containsOnlyOnce(w.id().toString());
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?country=US&region=TX&city=" + town + "&limit=10",
+                null, null).body().path("items")).as("the session location alone still finds it")
+                .extracting(i -> i.path("sourceId").asString()).contains(w.id().toString());
+    }
+
+    @Test
+    void aZipFindsAWindowPlannedForTheLocationItFallsInEvenWhenItsTargetNamesAnotherCity() {
+        String town = "Plan" + UUID.randomUUID().toString().replace("-", "").chars().limit(8)
+                .mapToObj(c -> String.valueOf((char) ('a' + Character.digit(c, 16)))).collect(Collectors.joining());
+        UUID location = locations.create(Fixtures.town(Fixtures.slug("planned"), town)).id();
+        Instant opens = clock.instant().minus(Duration.ofDays(1));
+        Instant closes = clock.instant().plus(Duration.ofDays(2));
+        WindowView v = windows.create(command("Adv Planned #11", "US/TX/Elsewhere" + town.substring(4), opens, closes,
+                "Planned for the town", location));
+        WindowView withHero = windows.setCreative(v.window().id(), CreativeSlot.HERO, upstreams.image(1920, 640),
+                v.window().version());
+        PreorderWindow w = windows.publish(v.window().id(), withHero.window().version()).window();
+        scheduler.process(w.id());
+
+        List<String> ids = new ArrayList<>();
+        call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&limit=10", null, null).body().path("items")
+                .forEach(i -> ids.add(i.path("sourceId").asString()));
+        assertThat(ids).contains(w.id().toString());
+    }
+
+    @Test
+    void theSweeperEndsAWindowAdvertorialOnceTheWindowClosedWithoutAnyEvent() {
+        Fixture f = fixture("Adv Sweep Window #9", "Plainview", 1);
+        String a = advertorialOf("WINDOW", f.window.id());
+        assertThat(statusOf(a)).isEqualTo("LIVE");
+        lifecycle.sweep(1000);
+        assertThat(statusOf(a)).as("still open: nothing to end").isEqualTo("LIVE");
+
+        clock.set(f.closes.plusSeconds(60));
+        assertThat(lifecycle.sweep(1000)).isPositive();
+        assertThat(statusOf(a)).isEqualTo("ENDED");
+        assertThat(endedOf(a)).isEqualTo("SOURCE_CLOSED");
+        assertThat(lifecycle.sweep(1000)).as("idempotent: an ended one is not touched again").isZero();
+        assertThat(endedOf(a)).isEqualTo("SOURCE_CLOSED");
+    }
+
+    @Test
+    void theSweeperEndsARunAdvertorialPastCutoffAndExtendingTheRunBringsItBack() {
+        UUID location = locations.create(Fixtures.bastrop(Fixtures.slug("sweep"), DropMode.DOORSTEP, null,
+                CutoffPolicy.CANCEL)).id();
+        Run run = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(3), 2));
+        runs.announce(run.id());
+        String a = advertorialOf("RUN", run.id());
+        lifecycle.sweep(1000);
+        assertThat(statusOf(a)).as("an announced run is not over").isEqualTo("LIVE");
+        runs.open(run.id());
+
+        clock.set(run.terms().cutoffAt().plusSeconds(60));
+        assertThat(lifecycle.sweep(1000)).isPositive();
+        assertThat(statusOf(a)).as("past the cutoff, before the schedule job decided the run").isEqualTo("ENDED");
+        assertThat(endedOf(a)).isEqualTo("SOURCE_CLOSED");
+        assertThat(servedRunIds()).doesNotContain(run.id().toString());
+        assertThat(lifecycle.sweep(1000)).isZero();
+
+        runs.extend(run.id(), new ExtendCommand(clock.instant().plus(Duration.ofDays(1)), null, null, null,
+                "More time"));
+        assertThat(statusOf(a)).as("the run takes orders again, so does its advertorial").isEqualTo("LIVE");
+        assertThat(servedRunIds()).contains(run.id().toString());
+    }
+
+    @Test
+    void theSweeperEndsRunAdvertorialsOfACancelledOrCompletedRunWhoseEventWasMissed() {
+        UUID location = locations.create(Fixtures.bastrop(Fixtures.slug("sweep"), DropMode.DOORSTEP, null,
+                CutoffPolicy.CANCEL)).id();
+        Run cancelled = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(3), 2));
+        Run completed = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(4), 2));
+        Run closed = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(5), 2));
+        for (Run r : List.of(cancelled, completed, closed)) {
+            runs.announce(r.id());
+            runs.open(r.id());
+        }
+        String c = advertorialOf("RUN", cancelled.id());
+        String d = advertorialOf("RUN", completed.id());
+        String x = advertorialOf("RUN", closed.id());
+
+        // As if the run events were never handled: the runs change in the database only.
+        jdbc.sql("update run set status = 'CANCELLED' where id = :id").param("id", cancelled.id()).update();
+        jdbc.sql("update run set status = 'COMPLETED' where id = :id").param("id", completed.id()).update();
+        assertThat(lifecycle.sweep(1000)).isGreaterThanOrEqualTo(2);
+        assertThat(statusOf(c)).isEqualTo("ENDED");
+        assertThat(endedOf(c)).isEqualTo("SOURCE_CLOSED");
+        assertThat(statusOf(d)).isEqualTo("ENDED");
+        assertThat(endedOf(d)).isEqualTo("SOURCE_CLOSED");
+        assertThat(statusOf(x)).as("an open run before its cutoff keeps its advertorial").isEqualTo("LIVE");
+        assertThat(lifecycle.sweep(1000)).isZero();
+    }
+
+    @Test
+    void onlyALiveServableAdvertorialCountsAndEachVisitorCountsOncePerWindow() {
+        Fixture f = fixture("Adv Gate #7", "Plainview", 2);
+        String a = call(HttpMethod.GET, "/v1/advertorials?source=WINDOW&sourceId=" + f.window.id(), null, null)
+                .body().path("items").get(0).path("id").asString();
+
+        assertThat(event(a, "VIEW", "v-1").status()).isEqualTo(204);
+        assertThat(event(a, "VIEW", "v-1").status()).as("the same visitor again: 204, not counted").isEqualTo(204);
+        assertThat(event(a, "VIEW", "v-2").status()).isEqualTo(204);
+        assertThat(event(a, "CLICK", "v-1").status()).isEqualTo(204);
+        assertThat(event(a, "CLICK", "v-1").status()).isEqualTo(204);
+        assertThat(results(a)).containsExactly(2L, 1L);
+
+        clock.set(clock.instant().plus(Duration.ofMinutes(31)));
+        event(a, "VIEW", "v-1");
+        assertThat(results(a)).as("a new window counts the visitor again").containsExactly(3L, 1L);
+
+        for (int i = 0; i < 60; i++) {
+            event(a, "VIEW", "flood-" + UUID.randomUUID());
+        }
+        assertThat(results(a)[0]).as("fresh visitor ids from one client stop at the client limit (30 a window, "
+                + "one of them was v-1's)").isEqualTo(3L + 29L);
+
+        // A draft, a paused and a scheduled-for-later variant never count; neither does a closed source.
+        String draft = call(HttpMethod.POST, "/v1/advertorials", Map.of("source", "WINDOW", "sourceId", f.window.id()
+                .toString(), "headline", "Draft", "ctaLabel", "Go"), null).body().path("id").asString();
+        assertThat(event(draft, "VIEW", "v-9").status()).isEqualTo(204);
+        assertThat(results(draft)).containsExactly(0L, 0L);
+        call(HttpMethod.POST, "/v1/advertorials/" + draft + "/publish", null, null);
+        call(HttpMethod.POST, "/v1/advertorials/" + draft + "/pause", null, null);
+        event(draft, "VIEW", "v-9");
+        assertThat(results(draft)).as("paused").containsExactly(0L, 0L);
+        String later = call(HttpMethod.POST, "/v1/advertorials", Map.of("source", "WINDOW", "sourceId", f.window.id()
+                .toString(), "headline", "Later", "ctaLabel", "Go", "startsAt", clock.instant().plus(Duration.ofHours(5))
+                .toString()), null).body().path("id").asString();
+        call(HttpMethod.POST, "/v1/advertorials/" + later + "/publish", null, null);
+        event(later, "VIEW", "v-9");
+        assertThat(results(later)).as("live but outside its schedule").containsExactly(0L, 0L);
+
+        long before = results(a)[0];
+        clock.set(f.closes.plusSeconds(60));
+        event(a, "VIEW", "v-late");
+        assertThat(results(a)[0]).as("the window closed").isEqualTo(before);
+        call(HttpMethod.POST, "/v1/advertorials/" + a + "/end", null, null);
+        clock.set(Instant.now().truncatedTo(ChronoUnit.SECONDS));
+        event(a, "CLICK", "v-new");
+        assertThat(results(a)[1]).as("ended").isEqualTo(1L);
     }
 
     @Test
@@ -374,6 +603,43 @@ class AdvertorialIT {
         return r.body().path("items").get(0).path("variant").asString();
     }
 
+    private Res event(String advertorial, String type, String visitor) {
+        return call(HttpMethod.POST, "/v1/public/advertorials/" + advertorial + "/events",
+                Map.of("type", type, "visitor", visitor), null);
+    }
+
+    /** {views, clicks} of an advertorial as staff see them. */
+    private long[] results(String advertorial) {
+        JsonNode r = call(HttpMethod.GET, "/v1/advertorials/" + advertorial, null, null).body().path("results");
+        return new long[] {r.path("views").asLong(), r.path("clicks").asLong()};
+    }
+
+    private String advertorialOf(String source, UUID sourceId) {
+        return call(HttpMethod.GET, "/v1/advertorials?source=" + source + "&sourceId=" + sourceId, null, null).body()
+                .path("items").get(0).path("id").asString();
+    }
+
+    private String statusOf(String advertorial) {
+        return call(HttpMethod.GET, "/v1/advertorials/" + advertorial, null, null).body().path("status").asString();
+    }
+
+    private String endedOf(String advertorial) {
+        return call(HttpMethod.GET, "/v1/advertorials/" + advertorial, null, null).body().path("ended").asString();
+    }
+
+    private List<String> servedRunIds() {
+        List<String> out = new ArrayList<>();
+        call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&limit=10", null, null).body().path("items")
+                .forEach(i -> out.add(i.path("sourceId").asString()));
+        return out;
+    }
+
+    /** {orders, cancelledOrders} of an advertorial as staff see them. */
+    private int[] orders(String advertorial) {
+        JsonNode r = call(HttpMethod.GET, "/v1/advertorials/" + advertorial, null, null).body().path("results");
+        return new int[] {r.path("orders").asInt(-1), r.path("cancelledOrders").asInt(-1)};
+    }
+
     private List<String> servedIds(Fixture f) {
         List<String> out = new ArrayList<>();
         call(HttpMethod.GET, "/v1/public/advertorials?country=US&region=TX&city=" + f.city() + "&limit=10", null, null)
@@ -394,10 +660,15 @@ class AdvertorialIT {
     }
 
     private static WindowCommand command(String name, String target, Instant opens, Instant closes, String headline) {
+        return command(name, target, opens, closes, headline, null);
+    }
+
+    private static WindowCommand command(String name, String target, Instant opens, Instant closes, String headline,
+                                         UUID locationId) {
         LocalDate delivers = closes.plus(Duration.ofDays(2)).atZone(CHICAGO).toLocalDate();
         return new WindowCommand(name, List.of(target), opens, closes, delivers, "America/Chicago",
                 name + " is open", headline, "AfroTransact: pre-order open", Set.of("Pantry", "Spices"), true, true,
-                null, null, true, 20_000L, Set.of(CommKind.ANNOUNCE), null, null, null, 0);
+                null, null, true, 20_000L, Set.of(CommKind.ANNOUNCE), null, null, locationId, 0);
     }
 
     private PreorderWindow publish(String name, String target, Instant opens, Instant closes) {

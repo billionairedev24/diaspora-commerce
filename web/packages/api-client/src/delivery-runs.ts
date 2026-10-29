@@ -192,9 +192,12 @@ export function deliveryRunMethods(request: Requester) {
         },
         signal
       }),
-    /** Best effort: VIEW once per visit, CLICK on the button; callers ignore a failure. */
-    recordRunAdvertorialEvent: (id: string, type: RunAdvertorialEvent): Promise<void> =>
-      request(`/v1/delivery-runs/advertorials/${enc(id)}/events`, z.void(), { method: 'POST', body: { type } })
+    /**
+     * Best effort: VIEW once per visit, CLICK on the button; callers ignore a failure. The visitor id (the one that keeps
+     * A/B variants stable) lets the server count each visitor once per window; an advertorial that is not live counts nothing.
+     */
+    recordRunAdvertorialEvent: (id: string, type: RunAdvertorialEvent, visitor?: string): Promise<void> =>
+      request(`/v1/delivery-runs/advertorials/${enc(id)}/events`, z.void(), { method: 'POST', body: visitor ? { type, visitor } : { type } })
   };
 }
 
