@@ -25,7 +25,7 @@ We group cookies into four categories. Strictly necessary cookies are always on 
 
 ## Your choices
 
-The first time you visit, a banner asks for your choices. You can accept all, reject all, or choose by category. Your choice is saved for 12 months in a strictly necessary cookie (`at_consent`). You can change it at any time from "Cookie preferences" in the footer of every page, and in the app under Account > Privacy. If you clear your cookies, we will ask again.
+The first time you visit, a banner asks for your choices. You can accept all, reject all, or choose by category. Your choice is saved for 12 months in a strictly necessary cookie (`at_consent`). You can change it at any time from "Cookie preferences" in the footer of every page. If you clear your cookies, we will ask again.
 
 You can also block or delete cookies in your browser settings. Mobile operating systems let you reset or limit your advertising identifier. These controls are separate from ours, and a blocked cookie cannot remember that you blocked it.
 
