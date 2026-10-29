@@ -135,7 +135,7 @@ func preorderFees(d map[string]any) {
 // preorderWindow normalises a window's display fields.
 func preorderWindow(d map[string]any) {
 	nullable(d, "name", "code", "where", "ribbon", "headline", "smsCopy", "opensDisplay", "closesDisplay", "deliversDisplay",
-		"deliveryWindow", "unsubscribeUrl")
+		"deliveryWindow", "unsubscribeUrl", "handoverCode")
 	setDefault(d, "name", "AfroTransact pre-order")
 	setDefault(d, "where", "your area")
 	setDefault(d, "opensDisplay", friendlyDateTime(str(d, "opensAt")))

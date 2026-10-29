@@ -14,7 +14,7 @@ import java.util.UUID;
  * @param code          public code, e.g. LUB-7
  * @param name          window name
  * @param status        derived status at the event
- * @param kind          comms.due only: ANNOUNCE, REMIND_48H, LAST_CALL_6H or CLOSED
+ * @param kind          comms.due only: ANNOUNCE, REMIND_48H, LAST_CALL_6H, CLOSED or OUT_FOR_DELIVERY
  * @param dueAt         comms.due only: when the message was due
  * @param targets       area keys, e.g. US/TX/Lubbock
  * @param where         display, e.g. "Lubbock, TX"
@@ -44,7 +44,8 @@ import java.util.UUID;
  * @param opensDisplay  market-local, e.g. "Tue, Oct 6 9:00 AM"
  * @param closesDisplay market-local, e.g. "Thu, Oct 22 11:59 PM"
  * @param deliversDisplay e.g. "Sun, Oct 25"
- * @param orders        comms.due CLOSED only: the window's paid orders (notifications resolves contacts)
+ * @param orders        comms.due CLOSED and OUT_FOR_DELIVERY only: the window's paid orders (notifications resolves
+ *                      contacts)
  * @param actorId       staff subject who made the change (paused / resumed / updated; null for scheduler events)
  * @param minOrders     the window's minimum order count (0 = none)
  * @param decision      decision_needed / decided / cancelled only: what was decided, by whom, why
@@ -79,7 +80,13 @@ public record PreorderEventPayload(UUID windowId, String code, String name, Stri
      * @param orderId    order
      * @param customerId customer (token subject)
      * @param fulfilment DOOR or PICKUP
+     * @param handoverCode the customer's pickup-point handover code (OUT_FOR_DELIVERY of a pickup-only window), else null
      */
-    public record OrderRef(String orderId, String customerId, String fulfilment) {
+    public record OrderRef(String orderId, String customerId, String fulfilment, String handoverCode) {
+
+        /** An order without a handover code. */
+        public OrderRef(String orderId, String customerId, String fulfilment) {
+            this(orderId, customerId, fulfilment, null);
+        }
     }
 }

@@ -128,6 +128,28 @@ func TestPreorderCommsFanOutToTheAudienceWithTrackedLinks(t *testing.T) {
 	}
 }
 
+// OUT_FOR_DELIVERY (published when the window's run leaves) goes to the window's buyers, by SMS and push, with the
+// pickup-point handover code when the order has one.
+func TestPreorderOutForDeliveryTellsTheBuyersWithTheirHandoverCode(t *testing.T) {
+	n := &recordingNotifier{}
+	ing := app.NewIngest(n, app.IngestConfig{Resolver: stubResolver{}, Links: sampleLinks}, slog.New(slog.DiscardHandler))
+	ev := app.SampleEvents(sampleLinks)["preorder.comms.due"][5]
+	if ev["kind"] != "OUT_FOR_DELIVERY" {
+		t.Fatalf("fixture = %v", ev["kind"])
+	}
+	ev["orders"] = []any{map[string]any{"orderId": "o-1", "customerId": "cust-1", "fulfilment": "PICKUP", "handoverCode": "482913"},
+		map[string]any{"orderId": "o-2", "customerId": "cust-2", "fulfilment": "DOOR"}}
+	handle(t, ing, "preorder.comms.due", ev)
+	if got := strings.Join(channelsOf(n.reqs), ","); got != "preorder.out_for_delivery/sms,preorder.out_for_delivery/push,"+
+		"preorder.out_for_delivery/sms,preorder.out_for_delivery/push" {
+		t.Fatalf("channels = %s", got)
+	}
+	if n.reqs[0].Recipient.ID != "cust-1" || n.reqs[0].Data["handoverCode"] != "482913" ||
+		n.reqs[1].Recipient.ID != "cust-2" || n.reqs[1].Data["handoverCode"] != "" {
+		t.Fatalf("recipients = %+v / %+v", n.reqs[0], n.reqs[1])
+	}
+}
+
 func TestPreorderOrderPlacedAndLatePayment(t *testing.T) {
 	n := &recordingNotifier{}
 	ing := app.NewIngest(n, app.IngestConfig{Resolver: stubResolver{}, Links: sampleLinks}, slog.New(slog.DiscardHandler))

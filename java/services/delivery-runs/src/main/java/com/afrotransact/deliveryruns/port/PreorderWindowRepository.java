@@ -17,6 +17,9 @@ public interface PreorderWindowRepository {
 
     Optional<PreorderWindow> findById(UUID id);
 
+    /** The window whose orders the run carries (the run was handed over from it). */
+    Optional<PreorderWindow> findByRunId(UUID runId);
+
     /** {@code SELECT … FOR UPDATE}. */
     Optional<PreorderWindow> lockById(UUID id);
 

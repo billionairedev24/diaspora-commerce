@@ -186,6 +186,18 @@ func TestRunOutForDeliveryTellsTheCustomersWithTheirHandoverCode(t *testing.T) {
 	}
 }
 
+// A run handed over from a pre-order window is told by the window's own out-for-delivery message
+// (preorder.comms.due OUT_FOR_DELIVERY), so the generic run message is not sent on top.
+func TestRunOutForDeliverySkipsRunsThatBelongToAPreorderWindow(t *testing.T) {
+	n := &recordingNotifier{}
+	ev := app.SampleEvents(sampleLinks)["delivery-runs.run.out_for_delivery"][0]
+	ev["reason"] = "PREORDER LBK-7"
+	handle(t, runIngest(n, runAudience(), false), "delivery-runs.run.out_for_delivery", ev)
+	if len(n.reqs) != 0 {
+		t.Fatalf("a window's run is told by the window's message: %v", channelsOf(n.reqs))
+	}
+}
+
 // A run handed over from a pre-order window is covered by the window's emails; a run cancelled with its window by the
 // cancelled pre-order email; only runs staff scheduled get these.
 func TestRunConfirmedAndCancelledSkipRunsThatBelongToAPreorderWindow(t *testing.T) {

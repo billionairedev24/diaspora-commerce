@@ -81,6 +81,12 @@ class PreorderEventPublisher {
         List<PreorderEventPayload.OrderRef> refs = orders == null ? null : orders.stream().filter(PreorderOrder::counts)
                 .map(o -> new PreorderEventPayload.OrderRef(o.orderId(), o.customerId(), o.fulfilment().name()))
                 .toList();
+        commsDueTo(w, kind, dueAt, payment, now, refs);
+    }
+
+    /** A message due to these orders' customers (OUT_FOR_DELIVERY: with the pickup-point handover codes). */
+    void commsDueTo(PreorderWindow w, CommKind kind, Instant dueAt, PaymentSettings payment, Instant now,
+                    List<PreorderEventPayload.OrderRef> refs) {
         events.publish(DeliveryRunsEvents.PREORDER_COMMS_DUE, DeliveryRunsEvents.AGGREGATE, w.id().toString(),
                 payload(w, payment, kind.name(), dueAt, now, refs, null, null));
     }
