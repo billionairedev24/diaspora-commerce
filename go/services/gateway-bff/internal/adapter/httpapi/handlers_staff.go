@@ -46,6 +46,9 @@ type StaffServices struct {
 	// Identity serves the token inspector and published documents of Identity & access (S291); routes are registered when
 	// it is set.
 	Identity app.StaffIdentityService
+	// ContentPages serves Settings → Published pages (index, preview data, drafts, publication and rollback of legal
+	// documents and help pages); routes are registered when it is set.
+	ContentPages app.StaffContentPagesService
 	// Assistant is Lola in the staff console (read-only); routes are registered when it is set.
 	Assistant app.StaffAssistantService
 	// Files serves exports kept by the BFF itself (nil when exports live in media).
@@ -124,6 +127,9 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	}
 	if s.Taxonomy != nil {
 		h.registerStaffTaxonomy(route)
+	}
+	if s.ContentPages != nil {
+		h.registerStaffContent(route)
 	}
 	if s.Identity != nil {
 		route("POST /v1/staff/identity/token-inspector", h.staffInspectToken)

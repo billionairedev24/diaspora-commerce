@@ -22,13 +22,13 @@ final class LegalAuthoringDtos {
     }
 
     @Schema(name = "LegalDraft", description = "The working copy of a document; saving it changes nothing public")
-    record DraftResponse(String key, String version, String baseVersion, LocalDate effectiveDate, boolean draftBanner,
+    record DraftResponse(String key, String title, String version, String baseVersion, LocalDate effectiveDate, boolean draftBanner,
                          Map<String, String> bodies, List<String> needsReview, String changeSummary,
                          Map<String, Integer> unresolvedMarkers, long rowVersion, String createdBy, Instant createdAt,
                          String updatedBy, Instant updatedAt) {
 
         static DraftResponse of(LegalDraft d) {
-            return new DraftResponse(d.type().key(), d.version().toString(), d.baseVersion().toString(),
+            return new DraftResponse(d.type().key(), d.type().title(), d.version().toString(), d.baseVersion().toString(),
                     d.effectiveDate(), d.draftBanner(), d.bodies(), List.copyOf(d.needsReview()), d.changeSummary(),
                     d.unresolvedMarkers(), d.rowVersion(), d.createdBy(), d.createdAt(), d.updatedBy(), d.updatedAt());
         }
@@ -83,12 +83,12 @@ final class LegalAuthoringDtos {
     }
 
     @Schema(name = "LegalVersionSource", description = "One published version with its Markdown as written")
-    record SourceResponse(String key, String version, LocalDate effectiveDate, LegalVersionStatus status,
+    record SourceResponse(String key, String title, String version, LocalDate effectiveDate, LegalVersionStatus status,
                           boolean draftBanner, Map<String, String> bodies, String changeSummary, String publishedBy,
                           Instant publishedAt, Instant archivedAt) {
 
         static SourceResponse of(LegalVersion v) {
-            return new SourceResponse(v.type().key(), v.version().toString(), v.effectiveDate(), v.status(),
+            return new SourceResponse(v.type().key(), v.type().title(), v.version().toString(), v.effectiveDate(), v.status(),
                     v.draftBanner(), v.bodies(), v.changeSummary(), v.createdBy(), v.createdAt(), v.archivedAt());
         }
     }
