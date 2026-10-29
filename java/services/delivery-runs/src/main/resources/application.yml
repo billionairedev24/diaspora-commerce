@@ -141,6 +141,7 @@ at:
       timeout: ${SEARCH_TIMEOUT:3s}
     consumers:
       order-topic: at.order.events
+      payment-topic: at.payment.events
     # Pre-orders (S270, S271).
     preorders:
       page-path: ${PREORDERS_PAGE_PATH:/pre-orders}

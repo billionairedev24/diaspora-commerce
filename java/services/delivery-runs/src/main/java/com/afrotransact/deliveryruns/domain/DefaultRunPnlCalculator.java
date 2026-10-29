@@ -69,7 +69,8 @@ public class DefaultRunPnlCalculator implements RunPnlCalculator {
                 : PlatformFees.of(tally.commissionReportedMinor(), tally.commissionReportedOrders(), orders,
                 model.platformFeePerOrderMinor());
         return new RunPnl(economics, run.status(), phase, null, tally.refunded(),
-                tally.refundedFeesOnDeliveredMinor(), false, actuals, fees);
+                tally.refundedFeesOnDeliveredMinor() + tally.cancelledRefundFeesMinor(),
+                tally.cancelledRefundFeesEstimated(), actuals, fees);
     }
 
     /** Minutes the driver was out, when captured and plausible (at least the one-way drive, at most a day). */

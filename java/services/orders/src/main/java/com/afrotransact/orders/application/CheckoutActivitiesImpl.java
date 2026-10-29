@@ -766,21 +766,31 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
 
     @Override
     public String reserveRunSlot(CheckoutInput in, OrderDraft draft) {
-        String runId = draft.shipments().stream().map(OrderDraft.DraftShipment::preorder)
-                .filter(p -> p != null && p.run()).map(PreorderPackage::runId).findFirst().orElse(null);
-        if (runId == null) {
+        OrderDraft.DraftShipment onRun = draft.shipments().stream()
+                .filter(s -> s.preorder() != null && s.preorder().run()).findFirst().orElse(null);
+        if (onRun == null) {
             return null;
         }
+        String runId = onRun.preorder().runId();
+        DeliveryRunSlots.RunCharge charge = runCharge(onRun);
         return guard(() -> {
             try {
                 runSlots.reserve(runId, in.orderId(), in.customerId(),
-                        memberBenefits.earlyAccessHours(in.customerId()));
+                        memberBenefits.earlyAccessHours(in.customerId()), charge);
             } catch (DeliveryRunSlots.RunUnavailable e) {
                 throw new OrdersRuleViolation(e.code(), e.getMessage() + ". Your cart shows the next run, if there is "
                         + "one.");
             }
             return runId;
         });
+    }
+
+    /** What the shipment on the run is charged: its delivery fee and everything the customer pays for it (S265). */
+    private static DeliveryRunSlots.RunCharge runCharge(OrderDraft.DraftShipment s) {
+        long goods = s.lines().stream().mapToLong(l -> l.unitPriceMinor() * l.quantity() - l.discountMinor()
+                + l.taxMinor() + l.shippingTaxMinor()).sum();
+        String kind = s.preorder().fulfilment() == PreorderFulfilment.PICKUP ? "PICKUP" : "DOOR";
+        return new DeliveryRunSlots.RunCharge(s.shippingMinor(), goods + s.shippingMinor(), kind);
     }
 
     @Override

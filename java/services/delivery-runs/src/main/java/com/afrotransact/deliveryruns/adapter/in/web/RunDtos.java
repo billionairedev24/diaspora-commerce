@@ -11,6 +11,7 @@ import com.afrotransact.deliveryruns.application.ExtendCommand;
 import com.afrotransact.deliveryruns.application.RunCommand;
 import com.afrotransact.deliveryruns.application.SlotReservation;
 import com.afrotransact.deliveryruns.domain.CutoffPolicy;
+import com.afrotransact.deliveryruns.domain.DeliveryKind;
 import com.afrotransact.deliveryruns.domain.DropMode;
 import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.Location;
@@ -20,6 +21,7 @@ import com.afrotransact.deliveryruns.domain.RunAction;
 import com.afrotransact.deliveryruns.domain.RunEconomics;
 import com.afrotransact.deliveryruns.domain.RunMilestones;
 import com.afrotransact.deliveryruns.domain.RunOrder;
+import com.afrotransact.deliveryruns.domain.RunOrderMoney;
 import com.afrotransact.deliveryruns.domain.RunTerms;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -177,7 +179,17 @@ final class RunDtos {
                           @Schema(description = "Roll over to the location's next open run when this one is full or "
                                   + "closed (default true)") Boolean allowNextRun,
                           @Min(0) @Max(720) @Schema(description = "S323: the customer's membership lets them take a "
-                                  + "slot on an announced run that opens within this many hours") Integer earlyAccessHours) {
+                                  + "slot on an announced run that opens within this many hours") Integer earlyAccessHours,
+                          @PositiveOrZero @Schema(description = "S265: the delivery fee the order is charged, minor "
+                                  + "units; the run's P&L uses it instead of the run's fee") Long feeMinor,
+                          @PositiveOrZero @Schema(description = "S265: everything the customer pays, delivery fee "
+                                  + "included, minor units") Long totalMinor,
+                          @Schema(description = "S265: DOOR, PICKUP or CARRIER") DeliveryKind deliveryKind) {
+
+        RunOrderMoney charge() {
+            return feeMinor == null && totalMinor == null && deliveryKind == null ? null
+                    : RunOrderMoney.charged(feeMinor, totalMinor, deliveryKind);
+        }
     }
 
     @Schema(name = "SlotReservation")

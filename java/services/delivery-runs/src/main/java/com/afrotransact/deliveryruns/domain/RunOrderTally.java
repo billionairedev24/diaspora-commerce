@@ -14,11 +14,12 @@ import java.util.Map;
  *   <li><b>failed</b>: carried orders the driver could not deliver (stage FAILED or RETURNED);
  *   <li><b>delivered</b>: carried minus failed. An order of a run that has been completed is delivered unless
  *       the driver reported otherwise (staff may complete a run without per-order delivery events);
- *   <li><b>cancelled after reservation</b>: slots given back by the customer (RELEASED) - they leave the run and
- *       earn and cost nothing;
+ *   <li><b>cancelled after reservation</b>: slots given back by the customer before the run (RELEASED) or
+ *       cancelled once confirmed (CANCELLED on a run that went on) - they leave the run and earn and cost nothing;
  *   <li><b>run cancelled</b>: slots a cancelled run closed (CANCELLED): each is refunded in full;
- *   <li><b>refunded</b>: the run-cancelled slots, plus carried orders money was handed back on (a refund after
- *       delivery). Cancelled-after-reservation slots are not counted: the customer was not charged for them.
+ *   <li><b>refunded</b>: the CANCELLED slots (refunded or their authorisation released in full), plus carried
+ *       orders money was handed back on (a refund after delivery). A RELEASED slot is not counted: the customer
+ *       gave it back before being charged.
  * </ul>
  *
  * @param carried                    orders carried by the run
@@ -96,6 +97,7 @@ public record RunOrderTally(int carried, int delivered, int failed, int cancelle
         long runFee = run == null ? 0 : run.terms().feeMinor();
         DeliveryKind defaultKind = run != null && run.terms().dropMode() == DropMode.PICKUP_POINT
                 ? DeliveryKind.PICKUP : DeliveryKind.DOOR;
+        boolean runIsCancelled = run != null && run.status() == RunStatus.CANCELLED;
         int carried = 0;
         int failed = 0;
         int released = 0;
@@ -120,7 +122,13 @@ public record RunOrderTally(int carried, int delivered, int failed, int cancelle
             switch (o.status()) {
                 case RELEASED -> released++;
                 case CANCELLED -> {
-                    cancelled++;
+                    // A cancelled run closes all its slots; on a run that goes on, it is an order cancelled after
+                    // it was confirmed (its shipment was cancelled). Either way the customer got everything back.
+                    if (runIsCancelled) {
+                        cancelled++;
+                    } else {
+                        released++;
+                    }
                     refunded++;
                     long fee = m.refundedFeeMinor() > 0 ? m.refundedFeeMinor() : m.feeKnown() ? m.feeMinor() : runFee;
                     cancelledEstimated |= m.refundedFeeMinor() == 0 && !m.feeKnown();
