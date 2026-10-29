@@ -37,7 +37,7 @@ public record DeliveryRunsProperties(String publicWebUrl, String locationPath, D
         nextRunSearchLimit = nextRunSearchLimit == null ? 5 : nextRunSearchLimit;
         origin = origin == null ? new Origin(null, null) : origin;
         geo = geo == null ? new Geo(null, null, null, null, null, null) : geo;
-        economics = economics == null ? new Economics(null, null, null, null, null, null, null) : economics;
+        economics = economics == null ? new Economics(null, null, null, null, null, null, null, null) : economics;
         jobs = jobs == null ? new Jobs(null, null, null) : jobs;
         media = media == null ? new Upstream("http://localhost:8207", null) : media.orDefault("http://localhost:8207");
         orders = orders == null ? new Upstream("http://localhost:8104", null)
@@ -122,7 +122,7 @@ public record DeliveryRunsProperties(String publicWebUrl, String locationPath, D
     /** Driver cost model (see {@code EconomicsSettings}). */
     public record Economics(Long driverCostPerHourMinor, Long driverCostPerMileMinor, Double collectionMinutes,
                             Double perStopMinutes, Double pickupPointStopMinutes, Double handoverMinutesPerOrder,
-                            Boolean roundTrip) {
+                            Boolean roundTrip, Long platformFeePerOrderMinor) {
 
         public Economics {
             driverCostPerHourMinor = driverCostPerHourMinor == null ? 2500L : driverCostPerHourMinor;
@@ -132,6 +132,7 @@ public record DeliveryRunsProperties(String publicWebUrl, String locationPath, D
             pickupPointStopMinutes = pickupPointStopMinutes == null ? 30.0 : pickupPointStopMinutes;
             handoverMinutesPerOrder = handoverMinutesPerOrder == null ? 1.0 : handoverMinutesPerOrder;
             roundTrip = roundTrip == null || roundTrip;
+            platformFeePerOrderMinor = platformFeePerOrderMinor == null ? 0L : platformFeePerOrderMinor;
         }
     }
 

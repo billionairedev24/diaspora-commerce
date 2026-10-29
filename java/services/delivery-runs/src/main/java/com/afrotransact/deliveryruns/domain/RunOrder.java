@@ -20,10 +20,20 @@ import java.util.UUID;
  * @param stage          where the order's package is on the run (S264); {@code PENDING} until the seller pickup
  * @param stageAt        when the package reached {@code stage} (the event's time)
  * @param deliveredAt    when it was handed over (starts the seller payout hold in payments)
+ * @param money          what the order paid in delivery fee and in all, how it is delivered, the platform's
+ *                       commission and what was refunded (S265); {@link RunOrderMoney#NONE} until reported
  */
 public record RunOrder(UUID id, UUID runId, String orderId, String customerId, int packages, RunOrderStatus status,
                        String handoverCode, UUID requestedRunId, Instant reservedAt, Instant updatedAt, long version,
-                       RunOrderStage stage, Instant stageAt, Instant deliveredAt) {
+                       RunOrderStage stage, Instant stageAt, Instant deliveredAt, RunOrderMoney money) {
+
+    /** A slot without reported amounts. */
+    public RunOrder(UUID id, UUID runId, String orderId, String customerId, int packages, RunOrderStatus status,
+                    String handoverCode, UUID requestedRunId, Instant reservedAt, Instant updatedAt, long version,
+                    RunOrderStage stage, Instant stageAt, Instant deliveredAt) {
+        this(id, runId, orderId, customerId, packages, status, handoverCode, requestedRunId, reservedAt, updatedAt,
+                version, stage, stageAt, deliveredAt, RunOrderMoney.NONE);
+    }
 
     /** A slot that has not started its run yet (no delivery progress). */
     public RunOrder(UUID id, UUID runId, String orderId, String customerId, int packages, RunOrderStatus status,
@@ -40,6 +50,7 @@ public record RunOrder(UUID id, UUID runId, String orderId, String customerId, i
             throw new RuleViolation("delivery-runs.invalid-packages", "An order has between 1 and 50 packages");
         }
         stage = stage == null ? RunOrderStage.PENDING : stage;
+        money = money == null ? RunOrderMoney.NONE : money;
     }
 
     public static RunOrder reserve(UUID id, UUID runId, String orderId, String customerId, int packages,
@@ -52,7 +63,7 @@ public record RunOrder(UUID id, UUID runId, String orderId, String customerId, i
     public RunOrder confirm(String code, Instant now) {
         requireActive();
         return new RunOrder(id, runId, orderId, customerId, packages, RunOrderStatus.CONFIRMED, code, requestedRunId,
-                reservedAt, now, version, stage, stageAt, deliveredAt);
+                reservedAt, now, version, stage, stageAt, deliveredAt, money);
     }
 
     /**
@@ -66,7 +77,7 @@ public record RunOrder(UUID id, UUID runId, String orderId, String customerId, i
         }
         Instant when = at == null ? now : at;
         return new RunOrder(id, runId, orderId, customerId, packages, status, handoverCode, requestedRunId,
-                reservedAt, now, version, next, when, next == RunOrderStage.DELIVERED ? when : deliveredAt);
+                reservedAt, now, version, next, when, next == RunOrderStage.DELIVERED ? when : deliveredAt, money);
     }
 
     public RunOrder release(Instant now) {
@@ -84,7 +95,13 @@ public record RunOrder(UUID id, UUID runId, String orderId, String customerId, i
     private RunOrder to(RunOrderStatus next, Instant now) {
         requireActive();
         return new RunOrder(id, runId, orderId, customerId, packages, next, handoverCode, requestedRunId, reservedAt,
-                now, version, stage, stageAt, deliveredAt);
+                now, version, stage, stageAt, deliveredAt, money);
+    }
+
+    /** The same slot with the amounts reported for it (checkout's charge, payments' commission and refunds). */
+    public RunOrder withMoney(RunOrderMoney reported, Instant now) {
+        return new RunOrder(id, runId, orderId, customerId, packages, status, handoverCode, requestedRunId, reservedAt,
+                now, version, stage, stageAt, deliveredAt, reported);
     }
 
     private void requireActive() {

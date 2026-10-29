@@ -39,7 +39,8 @@ class DeliveryRunsConfiguration {
     EconomicsSettings economicsSettings(DeliveryRunsProperties p) {
         DeliveryRunsProperties.Economics e = p.economics();
         return new EconomicsSettings(e.driverCostPerHourMinor(), e.driverCostPerMileMinor(), e.collectionMinutes(),
-                e.perStopMinutes(), e.pickupPointStopMinutes(), e.handoverMinutesPerOrder(), e.roundTrip());
+                e.perStopMinutes(), e.pickupPointStopMinutes(), e.handoverMinutesPerOrder(), e.roundTrip(),
+                e.platformFeePerOrderMinor());
     }
 
     @Bean

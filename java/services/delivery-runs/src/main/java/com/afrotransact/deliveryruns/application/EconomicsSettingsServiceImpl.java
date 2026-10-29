@@ -55,7 +55,7 @@ class EconomicsSettingsServiceImpl implements EconomicsSettingsService {
         }
         EconomicsSettings numbers = EconomicsSettings.checked(c.driverCostPerHourMinor(), c.driverCostPerMileMinor(),
                 c.collectionMinutes(), c.perStopMinutes(), c.pickupPointStopMinutes(), c.handoverMinutesPerOrder(),
-                c.roundTrip());
+                c.roundTrip(), c.platformFeePerOrderMinor());
         Optional<EconomicsRevision> stored = repository.lock();
         long seen = stored.map(EconomicsRevision::version).orElse(0L);
         if (expectedVersion != null && expectedVersion != seen) {

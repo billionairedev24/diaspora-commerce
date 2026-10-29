@@ -31,7 +31,11 @@ final class EconomicsDtos {
     record SettingsResponse(@Schema(description = "Minor units") long driverCostPerHourMinor,
                             @Schema(description = "Minor units") long driverCostPerMileMinor,
                             double collectionMinutes, double perStopMinutes, double pickupPointStopMinutes,
-                            double handoverMinutesPerOrder, boolean roundTrip, long version,
+                            double handoverMinutesPerOrder, boolean roundTrip,
+                            @Schema(description = "Minor units the platform keeps on the goods of one order; the "
+                                    + "estimate behind 'Platform fees on goods' when payments has not reported the "
+                                    + "real commission (0 = not configured)") long platformFeePerOrderMinor,
+                            long version,
                             @Schema(description = "CONFIG while the environment's defaults apply, STAFF once saved")
                             String source, Instant updatedAt, String updatedBy, String reason) {
 
@@ -39,7 +43,7 @@ final class EconomicsDtos {
             EconomicsSettings s = r.settings();
             return new SettingsResponse(s.driverCostPerHourMinor(), s.driverCostPerMileMinor(), s.collectionMinutes(),
                     s.perStopMinutes(), s.pickupPointStopMinutes(), s.handoverMinutesPerOrder(), s.roundTrip(),
-                    r.version(), r.saved() ? "STAFF" : "CONFIG", r.updatedAt(), r.updatedBy(), r.reason());
+                    s.platformFeePerOrderMinor(), r.version(), r.saved() ? "STAFF" : "CONFIG", r.updatedAt(), r.updatedBy(), r.reason());
         }
     }
 
@@ -52,22 +56,26 @@ final class EconomicsDtos {
                            @NotNull @PositiveOrZero Double perStopMinutes,
                            @NotNull @PositiveOrZero Double pickupPointStopMinutes,
                            @NotNull @PositiveOrZero Double handoverMinutesPerOrder, @NotNull Boolean roundTrip,
+                           @PositiveOrZero @Max(EconomicsSettings.MAX_PLATFORM_FEE_MINOR)
+                           @Schema(description = "Default 0 (not configured)") Long platformFeePerOrderMinor,
                            @NotBlank @Size(max = 500) String reason) {
 
         EconomicsSettingsCommand toCommand() {
             return new EconomicsSettingsCommand(driverCostPerHourMinor, driverCostPerMileMinor, collectionMinutes,
-                    perStopMinutes, pickupPointStopMinutes, handoverMinutesPerOrder, roundTrip, reason);
+                    perStopMinutes, pickupPointStopMinutes, handoverMinutesPerOrder, roundTrip,
+                    platformFeePerOrderMinor == null ? Long.valueOf(0) : platformFeePerOrderMinor, reason);
         }
     }
 
     @Schema(name = "EconomicsSettingsNumbers", description = "The cost model of one side of a change")
     record Numbers(long driverCostPerHourMinor, long driverCostPerMileMinor, double collectionMinutes,
                    double perStopMinutes, double pickupPointStopMinutes, double handoverMinutesPerOrder,
-                   boolean roundTrip) {
+                   boolean roundTrip, long platformFeePerOrderMinor) {
 
         static Numbers of(EconomicsSettings s) {
             return new Numbers(s.driverCostPerHourMinor(), s.driverCostPerMileMinor(), s.collectionMinutes(),
-                    s.perStopMinutes(), s.pickupPointStopMinutes(), s.handoverMinutesPerOrder(), s.roundTrip());
+                    s.perStopMinutes(), s.pickupPointStopMinutes(), s.handoverMinutesPerOrder(), s.roundTrip(),
+                    s.platformFeePerOrderMinor());
         }
     }
 
