@@ -8,6 +8,7 @@ import { useMemo } from 'react';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 
+import { PlatformFeesLine } from './RunPnlParts';
 import { breakEvenText, CARD, EconomicsTable, marginClass, useDebounced, useRunsApi } from './shared';
 
 /** What the window form holds so far (the break-even is calculated from it before anything is saved). */
@@ -80,6 +81,17 @@ export function BreakEvenPanel({ form }: { form: BreakEvenForm }) {
             </p>
           )}
           <EconomicsTable e={e} labelOrders={t('st.runs.pnl.atExpected')} />
+          {e.atCapacity && p.capacityOrders ? (
+            <p className={`m-0 text-sm ${e.atCapacity.contributionMarginMinor >= 0 ? 'text-success' : 'text-danger'}`} data-testid="break-even-capacity">
+              {e.atCapacity.contributionMarginMinor >= 0
+                ? t('st.runs.breakEven.atCapacity', { n: p.capacityOrders, margin: fmt.money(e.atCapacity.contributionMarginMinor, p.currency) })
+                : t('st.runs.breakEven.atCapacityLoss', { n: p.capacityOrders, loss: fmt.money(Math.abs(e.atCapacity.contributionMarginMinor), p.currency) })}
+            </p>
+          ) : (
+            <p className="m-0 text-xs text-muted" data-testid="break-even-capacity-unknown">
+              {t('st.runs.breakEven.capacityUnknown')}
+            </p>
+          )}
         </>
       ) : (
         <p className="m-0 text-sm text-muted" data-testid="break-even-unknown">
@@ -154,6 +166,7 @@ export function WindowEconomicsCard({ id }: { id: string }) {
         </>
       ) : null}
       {!w.cancelled && !e ? <p className="m-0 text-sm text-muted">{t('st.runs.window.noLocation')}</p> : null}
+      {!w.cancelled ? <PlatformFeesLine fees={w.platformFees} currency={w.currency} testId="window-platform-fees" /> : null}
     </section>
   );
 }

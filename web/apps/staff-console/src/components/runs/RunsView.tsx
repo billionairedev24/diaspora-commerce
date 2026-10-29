@@ -2,7 +2,7 @@
 
 import { type RunHistoryRow, staffRunKeys, staffRunQueries } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, Select, useToast } from '@afrotransact/ui';
+import { Button, cx, Select, useToast } from '@afrotransact/ui';
 import { PencilSimple, Plus } from '@phosphor-icons/react/ssr';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -15,18 +15,20 @@ import { type MessageKey, useT } from '@/i18n/t';
 import { AdvertorialsPanel } from './AdvertorialsPanel';
 import { AttributionPanel } from './AttributionPanel';
 import { LocationFormSheet } from './LocationForm';
+import { GrowthTable, WindowsTable } from './LocationHistoryParts';
 import { RunFormSheet } from './RunForm';
 import { RunList, RunsNeedingDecision } from './RunList';
 import { RunPnlPanel } from './RunPnlPanel';
 import { ActionDialog, RunSheet } from './RunSheet';
-import { RUN_STATUS_PILL, runStatusLabel, useCanManageRuns, useRunsApi } from './shared';
+import { RunTrend } from './RunTrend';
+import { marginClass, RUN_STATUS_PILL, runStatusLabel, useCanManageRuns, useRunsApi } from './shared';
 
 function HistoryTable({ rows, currency, selected, onSelect }: { rows: RunHistoryRow[]; currency: string; selected: string | null; onSelect: (id: string) => void }) {
   const t = useT();
   const fmt = useFormatters();
   return (
     <div className="overflow-auto rounded-md border border-border">
-      <table className="w-full min-w-[720px] border-collapse text-sm" aria-label={t('st.runs.runs.history.table')}>
+      <table className="w-full min-w-[980px] border-collapse text-sm" aria-label={t('st.runs.runs.history.table')}>
         <thead className="bg-surface-muted text-left">
           <tr className="text-2xs font-bold tracking-[0.06em] text-muted uppercase">
             <th scope="col" className="px-3 py-2">
@@ -47,6 +49,15 @@ function HistoryTable({ rows, currency, selected, onSelect }: { rows: RunHistory
             <th scope="col" className="px-3 py-2 text-right">
               {t('st.runs.runs.history.refunded')}
             </th>
+            <th scope="col" className="px-3 py-2 text-right">
+              {t('st.runs.runs.history.cost')}
+            </th>
+            <th scope="col" className="px-3 py-2 text-right">
+              {t('st.runs.runs.history.margin')}
+            </th>
+            <th scope="col" className="px-3 py-2 text-right">
+              {t('st.runs.runs.history.breakEven')}
+            </th>
             <th scope="col" className="px-3 py-2">
               {t('st.runs.runs.history.minimum')}
             </th>
@@ -63,11 +74,35 @@ function HistoryTable({ rows, currency, selected, onSelect }: { rows: RunHistory
               <td className="px-3 py-2">
                 <Pill className={RUN_STATUS_PILL[r.status] ?? 'bg-ink-50 text-ink-600'}>{runStatusLabel(t, r.status)}</Pill>
               </td>
-              <td className="px-3 py-2 text-right">{fmt.number(r.orders)}</td>
+              <td className="px-3 py-2 text-right">
+                {fmt.number(r.orders)}
+                {r.ordersCancelled > 0 ? <span className="block text-xs text-muted">{t('st.runs.runs.history.cancelledOrders', { n: r.ordersCancelled })}</span> : null}
+              </td>
               <td className="px-3 py-2 text-right">{fmt.number(r.packages)}</td>
               <td className="px-3 py-2 text-right">{fmt.money(r.feeRevenueMinor, currency)}</td>
-              <td className="px-3 py-2 text-right">{r.ordersRefunded > 0 ? t('st.runs.runs.history.refundedOrders', { n: r.ordersRefunded }) : '-'}</td>
-              <td className="px-3 py-2 text-xs">{r.minimumMet ? t('st.runs.runs.history.met', { min: r.minOrders }) : t('st.runs.runs.history.notMet', { min: r.minOrders })}</td>
+              <td className="px-3 py-2 text-right">
+                {r.ordersRefunded > 0 ? t('st.runs.runs.history.refundedOrders', { n: r.ordersRefunded }) : '-'}
+                {r.refundedFeesMinor > 0 ? (
+                  <span className="block text-xs text-muted">{t(r.feesEstimated ? 'st.runs.runs.history.refundedFeesEstimated' : 'st.runs.runs.history.refundedFees', { fees: fmt.money(r.refundedFeesMinor, currency) })}</span>
+                ) : null}
+              </td>
+              <td className="px-3 py-2 text-right" data-testid="history-cost">
+                {r.costMinor === null ? '-' : fmt.money(r.costMinor, currency)}
+              </td>
+              <td className={cx('px-3 py-2 text-right font-bold', r.marginMinor === null ? '' : marginClass(r.marginMinor))} data-testid="history-margin">
+                {r.marginMinor === null ? '-' : fmt.money(r.marginMinor, currency)}
+              </td>
+              <td className="px-3 py-2 text-right" data-testid="history-break-even">
+                {r.breakEvenOrders === null ? '-' : t('st.runs.runs.history.breakEvenOrders', { n: r.breakEvenOrders })}
+              </td>
+              <td className="px-3 py-2 text-xs">
+                {r.minimumMet ? t('st.runs.runs.history.met', { min: r.minOrders }) : t('st.runs.runs.history.notMet', { min: r.minOrders })}
+                {r.minimumCoveredBreakEven === null ? null : (
+                  <span className={cx('block', r.minimumCoveredBreakEven ? 'text-success' : 'text-danger')} data-testid="history-covers">
+                    {t(r.minimumCoveredBreakEven ? 'st.runs.runs.history.covers' : 'st.runs.runs.history.belowBreakEven')}
+                  </span>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -85,7 +120,6 @@ function LocationHistory({ locationId, currency }: { locationId: string; currenc
   if (q.isPending) return <Spinner />;
   if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   const h = q.data;
-  const oldestFirst = [...h.runs].reverse();
   const channels = Object.entries(h.subscribers.byChannel);
   return (
     <div className="flex flex-col gap-4" data-testid="location-history">
@@ -104,11 +138,12 @@ function LocationHistory({ locationId, currency }: { locationId: string; currenc
           </dl>
           <HBars title={t('st.runs.runs.subscribers.byChannel')} color="green" labelWidth={110} rows={channels.map(([k, n]) => ({ k: t(`st.runs.channel.${k}` as MessageKey), n }))} />
         </section>
-        <HBars title={t('st.runs.runs.subscribers.growth')} color="gold" labelWidth={80} rows={h.subscriberGrowth.map((g) => ({ k: g.month, n: g.count }))} />
+        <GrowthTable rows={h.subscriberNetGrowth} />
       </div>
       <AttributionPanel locationId={locationId} town={h.location.name} />
-      <HBars title={t('st.runs.runs.history.chart')} color="ink" labelWidth={110} rows={oldestFirst.map((r) => ({ k: fmt.date(r.windowStart, 'short'), n: r.orders }))} />
+      {h.runs.length > 0 ? <RunTrend rows={h.runs} currency={currency} /> : null}
       {h.runs.length === 0 ? <EmptyState title={t('st.runs.runs.history.empty')} /> : <HistoryTable rows={h.runs} currency={currency} selected={selected} onSelect={setSelected} />}
+      <WindowsTable rows={h.windows} />
       {selected ? (
         <div className="flex flex-col gap-4">
           <RunPnlPanel key={selected} runId={selected} />
