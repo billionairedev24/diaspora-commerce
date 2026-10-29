@@ -24,6 +24,46 @@ export { cx } from './cx';
 export { MaintenancePage, type MaintenancePageProps } from './feedback/MaintenancePage';
 export { PendingNavigation, type PendingNavigationProps } from './feedback/PendingNavigation';
 export { Spinner, type SpinnerProps, type SpinnerSize, type SpinnerVariant } from './feedback/Spinner';
+export {
+  BigFigure,
+  type BreadcrumbItem,
+  type DataColumn,
+  DataTable,
+  type DataTableProps,
+  type DefinitionItem,
+  DefinitionList,
+  EmptyState,
+  type EmptyStateProps,
+  fieldWidth,
+  FilterBar,
+  FilterSelect,
+  type FilterSelectProps,
+  FlatPage,
+  type FlatPageProps,
+  FormActions,
+  FormFields,
+  type InlineFieldProps,
+  InlineFormRow,
+  type InlineFormRowProps,
+  LinkEntry,
+  linkEntryClassName,
+  type LinkEntryProps,
+  LinkGrid,
+  LinkGroup,
+  Message,
+  PageHeader,
+  type PageHeaderProps,
+  Pager,
+  Row,
+  RowList,
+  type RowProps,
+  Section,
+  type SectionProps,
+  StatusText,
+  type StatusTone,
+  TextLinkButton,
+  type TextLinkButtonProps,
+  textLinkClassName} from './flat/FlatPage';
 export { Checkbox, type CheckboxProps } from './form/Checkbox';
 export { ChipGroup, type ChipGroupProps } from './form/ChipGroup';
 export { Combobox, type ComboboxOption, type ComboboxProps } from './form/Combobox';

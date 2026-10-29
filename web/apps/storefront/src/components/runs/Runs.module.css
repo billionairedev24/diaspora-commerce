@@ -1,9 +1,10 @@
 /* Storefront delivery runs (S262, S263): location pages, delivery alerts and advertorials. Tokens only. */
 
-.channels { margin: 0; padding: 0; border: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: var(--at-space-3); min-width: 0; }
+.channels { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; min-width: 0; }
 .channelLegend { padding: 0; font-weight: var(--at-weight-bold); font-size: var(--at-text-sm); margin-bottom: var(--at-space-2); }
-.channel { display: flex; flex-direction: column; gap: var(--at-space-1); padding: var(--at-space-3); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-sm); background: var(--at-color-surface); min-width: 0; }
-.channelOn { border-color: var(--at-color-success); background: var(--at-color-success-bg); }
+.channel { display: flex; flex-direction: column; gap: var(--at-space-1); padding-block: var(--at-space-3); border-block-start: 1px solid var(--at-color-border); min-width: 0; }
+.channel:first-of-type { border-block-start: 0; }
+.channelOn { color: var(--at-color-text); }
 .channelRow { display: flex; align-items: center; gap: var(--at-space-2); font-weight: var(--at-weight-semibold); }
 .channelRow input { width: 20px; height: 20px; accent-color: var(--at-green-600); flex: none; }
 .record { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
@@ -48,3 +49,5 @@
 @media (hover: hover) {
   .advCta:hover { color: var(--at-ink-1000); text-decoration: none; filter: brightness(.96); }
 }
+
+.policy { margin: 0; max-inline-size: 70ch; padding-inline-start: var(--at-space-3); border-inline-start: 3px solid var(--at-color-border-strong); font-size: var(--at-text-md); line-height: var(--at-leading-normal); }

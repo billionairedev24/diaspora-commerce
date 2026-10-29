@@ -9,6 +9,9 @@ import { type AccountT, useAccountT } from './i18n/t';
 
 export { styles };
 
+/** Wrap the account screens in an element with this class for the flat (no boxed cards) look. */
+export const flatAccountClassName: string = styles.flat ?? '';
+
 /** The problem's message (or the field's), else a generic line. */
 export function errorText(t: AccountT, e: unknown, field?: string): string {
   if (isApiError(e)) return (field && e.fieldErrors[field]) || e.message || t('common.genericError');

@@ -2,19 +2,18 @@
 
 import { creditKeys, creditQueries, type GiftCard, type GiftCardPurchaseRequest, isApiError, randomUuid } from '@afrotransact/api-client';
 import { useFormatters, useLocale } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, Skeleton, TextField, useToast } from '@afrotransact/ui';
+import { Button, cx, EmptyState, fieldWidth, FlatPage, FormActions, Message, Row, RowList, Section, Skeleton, StatusText, TextField, textLinkClassName, useToast } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 
-import { AccountCrumb } from '@/components/account/AccountCrumb';
-import pages from '@/components/account/Pages.module.css';
+import { AccountHeader } from '@/components/account/AccountHeader';
 import { type PaymentElementChange, PaymentElementField,type PaymentElementHandle } from '@/components/payments/PaymentElementField';
 import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 
-import styles from './Credit.module.css';
+import styles from './GiftCard.module.css';
 
 const STATUS_KEYS: Record<GiftCard['status'], MessageKey> = {
   PENDING_PAYMENT: 'gift.status.PENDING_PAYMENT',
@@ -24,6 +23,7 @@ const STATUS_KEYS: Record<GiftCard['status'], MessageKey> = {
   PAYMENT_FAILED: 'gift.status.PAYMENT_FAILED'
 };
 
+const MESSAGE_MAX = 500;
 const LOCALES = ['en', 'fr', 'es', 'ar', 'yo'] as const;
 const todayIso = () => new Date().toISOString().slice(0, 10);
 /** 09:00 UTC on the chosen day; the email goes out at the first run after that. */
@@ -57,6 +57,7 @@ export function GiftCardView() {
   const [senderName, setSenderName] = useState('');
   const [message, setMessage] = useState('');
   const [sendOn, setSendOn] = useState('');
+  const [deliver, setDeliver] = useState<'now' | 'later'>('now');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -87,7 +88,8 @@ export function GiftCardView() {
     const errs: Record<string, string> = {};
     if (!cfg || outOfRange || amountMinor <= 0) errs.amountMinor = t('gift.errAmount', { min: fmt.money(cfg?.minMinor ?? 0), max: fmt.money(cfg?.maxMinor ?? 0) });
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(recipientEmail.trim())) errs.recipientEmail = t('gift.errEmail');
-    if (sendOn && sendOn < todayIso()) errs.sendAt = t('gift.errDate');
+    if (deliver === 'later' && !sendOn) errs.sendAt = t('gift.errDateRequired');
+    else if (deliver === 'later' && sendOn < todayIso()) errs.sendAt = t('gift.errDate');
     return errs;
   };
 
@@ -111,7 +113,7 @@ export function GiftCardView() {
         recipientName: recipientName.trim() || undefined,
         senderName: senderName.trim() || undefined,
         message: message.trim() || undefined,
-        sendAt: sendAtOf(sendOn),
+        sendAt: deliver === 'later' ? sendAtOf(sendOn) : undefined,
         locale: LOCALES.find((l) => l === locale)
       };
       const purchase = await api.buyGiftCard(request, keyRef.current);
@@ -141,97 +143,198 @@ export function GiftCardView() {
     setRecipientName('');
     setMessage('');
     setSendOn('');
+    setDeliver('now');
     keyRef.current = randomUuid();
   };
 
   const when = (c: GiftCard) => (c.deliveryStatus === 'SENT' ? t('gift.delivery.SENT', { date: fmt.date(c.sentAt ?? c.sendAt) }) : t('gift.delivery.SCHEDULED', { date: fmt.date(c.sendAt) }));
+  const currency = cfg?.currency;
 
   return (
-    <div className={pages.page}>
-      <AccountCrumb>{t('gift.title')}</AccountCrumb>
-      <div className={pages.head}>
-        <h1 className={pages.h1}>{t('gift.title')}</h1>
-        <Link href="/account/credit" className={buttonClassName({ variant: 'secondary' })}>
-          {t('gift.toCredit')}
-        </Link>
-      </div>
+    <FlatPage width="wide">
+      <AccountHeader title={t('gift.title')} via={[{ label: t('credit.title'), href: '/account/credit' }]} lead={t('gift.intro')} />
 
       {bought ? (
-        <section className={`${pages.card} ${styles.done}`} aria-live="polite" data-testid="gift-card-done">
-          <h2 className={pages.h}>{t('gift.doneTitle')}</h2>
-          <p>{bought.deliveryStatus === 'SENT' ? t('gift.doneSent', { email: bought.recipientEmail }) : t('gift.doneScheduled', { email: bought.recipientEmail, date: fmt.date(bought.sendAt) })}</p>
-          <Button onClick={again}>{t('gift.another')}</Button>
-        </section>
-      ) : (
-        <form className={`${pages.card} ${pages.form}`} onSubmit={(e) => void submit(e)} noValidate data-testid="gift-card-form">
-          <p className={pages.muted}>{t('gift.intro')}</p>
-          {config.isPending && <Skeleton height={48} />}
-          {cfg && (
-            <fieldset className={styles.presets}>
-              <legend className={styles.legend}>{t('gift.amount')}</legend>
-              {cfg.presetsMinor.map((p) => (
-                <button key={p} type="button" className={styles.preset} aria-pressed={!custom.trim() && preset === p} onClick={() => { setPreset(p); setCustom(''); }}>
-                  {fmt.money(p, cfg.currency)}
-                </button>
-              ))}
-            </fieldset>
-          )}
-          {cfg && (
-            <TextField
-              label={t('gift.custom')}
-              inputMode="decimal"
-              value={custom}
-              onChange={(e) => { setCustom(e.target.value); setPreset(null); }}
-              help={t('gift.amountRange', { min: fmt.money(cfg.minMinor, cfg.currency), max: fmt.money(cfg.maxMinor, cfg.currency) })}
-              error={fieldErrors.amountMinor}
-            />
-          )}
-          <TextField label={t('gift.recipientEmail')} type="email" autoComplete="off" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} error={fieldErrors.recipientEmail} />
-          <TextField label={t('gift.recipientName')} autoComplete="off" maxLength={120} value={recipientName} onChange={(e) => setRecipientName(e.target.value)} />
-          <TextField label={t('gift.senderName')} autoComplete="name" maxLength={120} value={senderName} onChange={(e) => setSenderName(e.target.value)} />
-          <label className={styles.legend} htmlFor="gift-message">{t('gift.message')}</label>
-          <textarea id="gift-message" className={styles.textarea} maxLength={500} value={message} onChange={(e) => setMessage(e.target.value)} />
-          <TextField label={t('gift.sendOn')} type="date" min={todayIso()} value={sendOn} onChange={(e) => setSendOn(e.target.value)} help={t('gift.sendOnHelp')} error={fieldErrors.sendAt} />
-
-          <div>
-            <p className={styles.legend}>{t('gift.pay')}</p>
-            <PaymentElementField
-              ref={payEl}
-              publishableKey={cfg?.publishableKey ?? ''}
-              amountMinor={Math.max(amountMinor, 0)}
-              currency={cfg?.currency ?? 'USD'}
-              save={false}
-              paymentMethodTypes={['card']}
-              onChange={setCardReady}
-            />
-            <p className={styles.fine}>{t('gift.cardOnly')}</p>
+        <Section title={t('gift.doneTitle')} id="gift-done" testId="gift-card-done">
+          <div aria-live="polite">
+            <Message tone="success">{bought.deliveryStatus === 'SENT' ? t('gift.doneSent', { email: bought.recipientEmail }) : t('gift.doneScheduled', { email: bought.recipientEmail, date: fmt.date(bought.sendAt) })}</Message>
           </div>
+          <FormActions>
+            <Button onClick={again}>{t('gift.another')}</Button>
+            <Link href="/account/credit" className={textLinkClassName}>
+              {t('credit.title')}
+            </Link>
+          </FormActions>
+        </Section>
+      ) : (
+        <div className={styles.layout}>
+          <form className={styles.formCol} onSubmit={(e) => void submit(e)} noValidate data-testid="gift-card-form" aria-label={t('gift.title')}>
+            <Section title={t('gift.amount')} id="gift-amount">
+              {config.isPending && <Skeleton height={48} />}
+              {cfg && (
+                <fieldset className={styles.chips} aria-labelledby="gift-amount-h">
+                  {cfg.presetsMinor.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={styles.chip}
+                      aria-pressed={!custom.trim() && preset === p}
+                      onClick={() => {
+                        setPreset(p);
+                        setCustom('');
+                      }}
+                    >
+                      {fmt.money(p, cfg.currency)}
+                    </button>
+                  ))}
+                </fieldset>
+              )}
+              {cfg && (
+                <TextField
+                  className={fieldWidth.short}
+                  label={t('gift.custom')}
+                  inputMode="decimal"
+                  value={custom}
+                  onChange={(e) => {
+                    setCustom(e.target.value);
+                    setPreset(null);
+                  }}
+                  help={t('gift.amountRange', { min: fmt.money(cfg.minMinor, cfg.currency), max: fmt.money(cfg.maxMinor, cfg.currency) })}
+                  error={fieldErrors.amountMinor}
+                />
+              )}
+            </Section>
 
-          {error && <p className={pages.error} role="alert">{error}</p>}
-          <Button type="submit" size="lg" loading={busy} disabled={!cfg || busy || (!cardReady.complete && !cardReady.empty)} data-testid="gift-card-buy">
-            {busy ? t('gift.buying') : t('gift.buy', { amount: fmt.money(amountMinor, cfg?.currency) })}
-          </Button>
-          <p className={styles.fine}>{cfg?.terms[locale] || cfg?.terms.en || t('gift.defaultTerms')}</p>
-        </form>
+            <Section title={t('gift.sectionRecipient')} id="gift-recipient">
+              <TextField className={fieldWidth.fit} label={t('gift.recipientName')} autoComplete="off" maxLength={120} value={recipientName} onChange={(e) => setRecipientName(e.target.value)} />
+              <TextField className={fieldWidth.fit} label={t('gift.recipientEmail')} type="email" autoComplete="off" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} error={fieldErrors.recipientEmail} />
+              <div className={fieldWidth.wide}>
+                <label className={styles.textareaLabel} htmlFor="gift-message">
+                  {t('gift.message')}
+                </label>
+                <textarea id="gift-message" className={styles.textarea} maxLength={MESSAGE_MAX} value={message} onChange={(e) => setMessage(e.target.value)} aria-describedby="gift-message-count" />
+                <p id="gift-message-count" className={styles.counter}>
+                  {t('gift.messageCount', { count: message.length, max: MESSAGE_MAX })}
+                </p>
+              </div>
+              <TextField className={fieldWidth.fit} label={t('gift.senderName')} autoComplete="name" maxLength={120} value={senderName} onChange={(e) => setSenderName(e.target.value)} />
+            </Section>
+
+            <Section title={t('gift.sectionDelivery')} id="gift-delivery">
+              <fieldset className={styles.radios}>
+                <legend className={styles.legend}>{t('gift.deliverLegend')}</legend>
+                <label className={styles.radio}>
+                  <input type="radio" name="gift-deliver" checked={deliver === 'now'} onChange={() => setDeliver('now')} />
+                  {t('gift.deliverNow')}
+                </label>
+                <label className={styles.radio}>
+                  <input type="radio" name="gift-deliver" checked={deliver === 'later'} onChange={() => setDeliver('later')} />
+                  {t('gift.deliverLater')}
+                </label>
+              </fieldset>
+              {deliver === 'later' && (
+                <TextField className={fieldWidth.fit} label={t('gift.sendOn')} type="date" min={todayIso()} value={sendOn} onChange={(e) => setSendOn(e.target.value)} help={t('gift.sendOnHelp')} error={fieldErrors.sendAt} />
+              )}
+            </Section>
+
+            <Section title={t('gift.pay')} id="gift-pay">
+              <PaymentElementField
+                ref={payEl}
+                publishableKey={cfg?.publishableKey ?? ''}
+                amountMinor={Math.max(amountMinor, 0)}
+                currency={cfg?.currency ?? 'USD'}
+                save={false}
+                paymentMethodTypes={['card']}
+                onChange={setCardReady}
+              />
+              <p className={styles.fine}>{t('gift.cardOnly')}</p>
+            </Section>
+
+            <div>
+              <p className={styles.fine}>
+                {t('gift.cardsByEmail')}{' '}
+                <Link href="/legal/gift-card-terms" data-testid="gift-terms-link">
+                  {t('gift.termsLink')}
+                </Link>
+              </p>
+              <p className={styles.fine}>{cfg?.terms[locale] || cfg?.terms.en || t('gift.defaultTerms')}</p>
+            </div>
+            {error && <Message tone="error">{error}</Message>}
+            <FormActions>
+              <Button type="submit" size="lg" loading={busy} disabled={!cfg || busy || (!cardReady.complete && !cardReady.empty)} data-testid="gift-card-buy">
+                {busy ? t('gift.buying') : t('gift.buy', { amount: fmt.money(amountMinor, currency) })}
+              </Button>
+            </FormActions>
+          </form>
+
+          <aside className={styles.previewCol} aria-label={t('gift.previewTitle')}>
+            <GiftPreview amountMinor={amountMinor} currency={currency} recipientName={recipientName} recipientEmail={recipientEmail} senderName={senderName} message={message} deliver={deliver} sendOn={sendOn} />
+          </aside>
+        </div>
       )}
 
-      <section className={pages.card} aria-labelledby="gift-mine">
-        <h2 id="gift-mine" className={pages.h}>{t('gift.mine')}</h2>
+      <Section title={t('gift.mine')} id="gift-mine">
         {mine.isPending && <Skeleton height={48} />}
-        {mine.isSuccess && mine.data.items.length === 0 && <p className={pages.muted}>{t('gift.noneBought')}</p>}
-        <ul className={pages.list} data-testid="gift-card-list">
-          {mine.data?.items.map((c) => (
-            <li key={c.id} className={styles.giftRow} data-testid="gift-card-row">
-              <span>
-                <strong>{fmt.money(c.amountMinor, c.currency)}</strong> · {c.recipientName || c.recipientEmail}
-                <br />
-                <span className={styles.entryDate}>{when(c)}</span>
-              </span>
-              <span className={styles.status}>{t(STATUS_KEYS[c.status])}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </div>
+        {mine.isSuccess && mine.data.items.length === 0 && <EmptyState>{t('gift.noneBought')}</EmptyState>}
+        {mine.isSuccess && mine.data.items.length > 0 && (
+          <RowList testId="gift-card-list">
+            {mine.data.items.map((c) => (
+              <Row
+                key={c.id}
+                testId="gift-card-row"
+                title={
+                  <>
+                    <strong>{fmt.money(c.amountMinor, c.currency)}</strong> · {c.recipientName || c.recipientEmail}
+                  </>
+                }
+                detail={when(c)}
+                actions={<StatusText tone={c.status === 'ACTIVE' || c.status === 'REDEEMED' ? 'positive' : c.status === 'PAYMENT_FAILED' ? 'negative' : 'neutral'}>{t(STATUS_KEYS[c.status])}</StatusText>}
+              />
+            ))}
+          </RowList>
+        )}
+      </Section>
+    </FlatPage>
+  );
+}
+
+interface PreviewProps {
+  amountMinor: number;
+  currency: string | undefined;
+  recipientName: string;
+  recipientEmail: string;
+  senderName: string;
+  message: string;
+  deliver: 'now' | 'later';
+  sendOn: string;
+}
+
+/** The gift card email as the recipient will see it, updating as the form is filled in. */
+function GiftPreview({ amountMinor, currency, recipientName, recipientEmail, senderName, message, deliver, sendOn }: PreviewProps) {
+  const t = useT();
+  const fmt = useFormatters();
+  const sender = senderName.trim();
+  const name = recipientName.trim();
+  const note = message.trim();
+  return (
+    <>
+      <h2 className={styles.legend}>{t('gift.previewTitle')}</h2>
+      <div className={styles.mail} data-testid="gift-preview">
+        <div className={styles.mailMeta}>
+          <span className={styles.mailSubject}>{sender ? t('gift.previewSubject', { sender }) : t('gift.previewSubjectAnon')}</span>
+          <span>{recipientEmail.trim() ? t('gift.previewTo', { email: recipientEmail.trim() }) : t('gift.previewToEmpty')}</span>
+        </div>
+        <p className={styles.mailAmount}>{fmt.money(Math.max(amountMinor, 0), currency)}</p>
+        <p className={styles.mailText}>{name ? t('gift.previewHello', { name }) : t('gift.previewHelloAnon')}</p>
+        <p className={styles.mailText}>{t('gift.previewBody')}</p>
+        <p className={cx(styles.mailNote, !note && styles.mailNoteEmpty)}>{note || t('gift.previewMessageEmpty')}</p>
+        {sender ? <p className={styles.mailText}>{t('gift.previewFrom', { sender })}</p> : null}
+        <p className={styles.mailCodeLabel}>{t('gift.previewCode')}</p>
+        <p className={styles.mailCode}>{t('credit.redeem.placeholder')}</p>
+        <span className={styles.mailButton}>{t('gift.previewCta')}</span>
+        <p className={styles.mailFoot}>{deliver === 'later' && sendOn ? t('gift.previewOn', { date: fmt.date(`${sendOn}T09:00:00Z`) }) : t('gift.previewNow')}</p>
+        <p className={styles.mailFoot}>{t('gift.previewFooter')}</p>
+      </div>
+    </>
   );
 }

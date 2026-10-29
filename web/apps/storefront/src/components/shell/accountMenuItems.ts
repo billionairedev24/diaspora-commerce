@@ -4,7 +4,7 @@ import { type MessageKey } from '@/i18n/t';
 import { backOfficeHref } from '@/lib/back-office';
 import { signInHref, signUpHref } from '@/lib/links';
 
-export type AccountMenuIcon = 'user' | 'package' | 'help' | 'pin' | 'card' | 'shield' | 'sparkle' | 'store' | 'calendar' | 'desktop' | 'signin' | 'signup';
+export type AccountMenuIcon = 'user' | 'package' | 'help' | 'pin' | 'card' | 'gift' | 'shield' | 'sparkle' | 'store' | 'calendar' | 'desktop' | 'signin' | 'signup';
 
 export interface AccountMenuEntry {
   id: string;
@@ -56,6 +56,7 @@ export function accountMenuModel(me: Me | undefined, returnTo = '/'): AccountMen
       { id: 'help', label: 'account.help', icon: 'help', href: '/account/help' },
       { id: 'addresses', label: 'account.addresses', icon: 'pin', href: '/account/addresses', count: c?.addresses },
       { id: 'payments', label: 'account.payments', icon: 'card', href: '/account/payments', count: c?.paymentMethods },
+      { id: 'credit', label: 'account.credit', icon: 'gift', href: '/account/credit' },
       { id: 'security', label: 'account.security', icon: 'shield', href: '/account/security' },
       { id: 'lola', label: 'account.askLola', icon: 'sparkle', action: 'lola' },
       ...backOfficeEntries(user.backOffices)

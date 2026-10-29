@@ -20,6 +20,143 @@ test.describe('storefront · your account', () => {
     await expectNoSeriousA11yViolations(page, testInfo, { page: 'account hub' });
   });
 
+  test('hub is flat grouped link lists with live facts, not tiles', async ({ page }) => {
+    const main = page.getByRole('main');
+    for (const group of ['Orders & appointments', 'Login & security', 'Payments & credit', 'Addresses & delivery', 'Membership & rewards', 'Notifications & privacy', 'Help']) {
+      await expect(main.getByRole('heading', { level: 2, name: group })).toBeVisible();
+    }
+    await expect(main.getByRole('link', { name: 'Gift cards & credit' })).toHaveAttribute('href', '/account/credit');
+    await expect(main.getByRole('link', { name: 'Refer a friend' })).toHaveAttribute('href', '/account/refer');
+    await expect(main.getByTestId('hub-credit')).toContainText(/Balance \$/);
+    await expect(main.getByTestId('hub-addresses')).toContainText(/Default: /);
+    await expect(main.getByTestId('hub-payments')).toContainText(/Default: /);
+    // No bordered panels: the hub's link entries have no border.
+    const border = await main.getByTestId('hub-credit').evaluate((el) => getComputedStyle(el).borderTopWidth);
+    expect(border).toBe('0px');
+  });
+
+  test('the account menu, the hub and the footer all reach Gift cards & credit', async ({ page }) => {
+    await page.getByRole('button', { name: /Account menu/ }).first().click();
+    await page.getByRole('menuitem', { name: 'Gift cards & credit' }).click();
+    await expect(page).toHaveURL(/\/account\/credit$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Gift cards & credit' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Your account');
+    await expect(page.getByRole('contentinfo').getByRole('link', { name: 'Gift cards & credit' })).toHaveAttribute('href', '/account/credit');
+  });
+
+  test('gift cards & credit: balance, inline redeem with code grouping, buy link and the activity table @a11y', async ({ page }, testInfo) => {
+    await page.goto('/account/credit');
+    await expect(page.getByRole('heading', { level: 1, name: 'Gift cards & credit' })).toBeVisible();
+    await expect(page.getByTestId('credit-balance')).toContainText('$');
+    await expectNoSeriousA11yViolations(page, testInfo, { page: 'gift cards & credit' });
+    await expect(page.getByText(/never expires\. It can’t be withdrawn, refunded to a card or sent to anyone else\./)).toBeVisible();
+
+    const code = page.getByLabel('Gift card code');
+    const redeem = page.getByRole('button', { name: 'Redeem' });
+    await expect(code).toHaveAttribute('placeholder', 'XXXX-XXXX-XXXX-XXXX');
+    await expect(redeem).toBeDisabled();
+    await code.fill('abcd efgh');
+    await expect(code).toHaveValue('ABCD-EFGH');
+    await expect(redeem).toBeDisabled();
+    await code.fill('aaaa bbbb cccc dddd');
+    await expect(code).toHaveValue('AAAA-BBBB-CCCC-DDDD');
+    await expect(redeem).toBeEnabled();
+    await redeem.click();
+    // A wrong code is refused inline under the field (the real redeem changes the shared mock balance, so vitest covers it).
+    await expect(page.getByText('That code isn’t valid. Check it and try again.')).toBeVisible();
+
+    await expect(page.getByRole('link', { name: 'Buy a gift card' })).toHaveAttribute('href', '/gift-cards');
+    const table = page.getByRole('table', { name: 'Credit activity' });
+    await expect(table.getByRole('columnheader')).toHaveText(['Date', 'Description', 'Amount', 'Balance']);
+    await expect(table.getByTestId('credit-entry').first()).toBeVisible();
+    await page.getByTestId('credit-filter-type').selectOption('used');
+    for (const amount of await table.getByTestId('credit-entry').locator('td:nth-child(3)').allTextContents()) expect(amount.startsWith('−')).toBe(true);
+  });
+
+  test('buy a gift card: presets, recipient, delivery choice, live email preview, terms link', async ({ page }, testInfo) => {
+    await page.goto('/gift-cards');
+    await expect(page.getByRole('heading', { level: 1, name: 'Buy a gift card' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Gift cards & credit');
+    await expectNoSeriousA11yViolations(page, testInfo, { page: 'buy a gift card' });
+    const preview = page.getByTestId('gift-preview');
+    await page.getByRole('button', { name: '$25.00' }).click();
+    await expect(preview).toContainText('$25.00');
+    await page.getByLabel('Recipient’s name (optional)').fill('Ama');
+    await page.getByLabel('Recipient’s email').fill('ama@example.com');
+    await page.getByLabel('From (optional)').fill('Adaeze');
+    await page.getByLabel('Message (optional)').fill('Happy birthday');
+    await expect(preview).toContainText('Hi Ama,');
+    await expect(preview).toContainText('ama@example.com');
+    await expect(preview).toContainText('Adaeze sent you an AfroTransact gift card');
+    await expect(preview).toContainText('Happy birthday');
+    await expect(preview).toContainText('Sent as soon as the payment goes through.');
+    await page.getByLabel('Send on a date').check();
+    await expect(page.getByLabel('Delivery date')).toBeVisible();
+    await expect(page.getByTestId('gift-terms-link')).toHaveAttribute('href', '/legal/gift-card-terms');
+    await expect(page.getByText('Credit never converts to cash.').first()).toBeVisible();
+  });
+
+  test('membership: plan radio rows, renewal and cancellation disclosure before the button, terms link', async ({ page }) => {
+    await page.goto('/membership');
+    await expect(page.getByRole('heading', { level: 1, name: 'AfroTransact Membership' })).toBeVisible();
+    const monthly = page.getByTestId('membership-interval-MONTHLY');
+    const yearly = page.getByTestId('membership-interval-YEARLY');
+    await expect(monthly).toBeChecked();
+    await yearly.check();
+    const plus = page.getByTestId('membership-tier-plus');
+    await expect(plus).toContainText(/Save \$\d+\.\d\d a year/);
+    await expect(plus).toContainText(/renews automatically until you cancel/);
+    await expect(plus).toContainText(/Cancel any time in Your account/);
+    await expect(plus.getByRole('link', { name: 'Membership terms and refund rule' })).toHaveAttribute('href', '/legal/membership-terms');
+    await expect(plus.getByRole('listitem').first()).toBeVisible();
+  });
+
+  test('membership: manage view shows the plan, the refund rule and one cancel path, or the way in', async ({ page }) => {
+    await page.goto('/account/membership');
+    await expect(page.getByRole('heading', { level: 1, name: 'Your membership' })).toBeVisible();
+    await expect(page.getByTestId('membership-none').or(page.getByTestId('membership-plan'))).toBeVisible();
+    if (await page.getByTestId('membership-none').isVisible()) {
+      await expect(page.getByRole('link', { name: 'AfroTransact Membership' })).toHaveAttribute('href', '/membership');
+      return;
+    }
+    await expect(page.getByTestId('membership-plan')).toContainText('Status');
+    await expect(page.getByTestId('membership-plan')).toContainText('Payment method');
+    await expect(page.getByRole('heading', { level: 2, name: 'Cancel membership' })).toBeVisible();
+  });
+
+  test('refer a friend, payment methods, addresses and help list share one flat page language', async ({ page }) => {
+    await page.goto('/account/refer');
+    await expect(page.getByRole('heading', { level: 1, name: 'Refer a friend' })).toBeVisible();
+    await expect(page.getByTestId('refer-code')).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Friends you invited' })).toBeVisible();
+
+    await page.goto('/account/payments');
+    await expect(page.getByRole('heading', { level: 1, name: 'Your Payments' })).toBeVisible();
+    await expect(page.getByTestId('payment-method').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add a payment method' })).toBeVisible();
+
+    await page.goto('/account/addresses');
+    await expect(page.getByRole('heading', { level: 1, name: 'Your Addresses' })).toBeVisible();
+    await expect(page.getByTestId('address-card').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add address' })).toBeVisible();
+
+    await page.goto('/account/help');
+    await expect(page.getByRole('heading', { level: 1, name: 'Get help with an order' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Your account');
+    // Every page of the area is flat: no element with a bordered card box and a radius.
+    for (const path of ['/account/refer', '/account/payments', '/account/addresses', '/account/help', '/account/credit', '/gift-cards']) {
+      await page.goto(path);
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      const boxed = await page.getByRole('main').evaluate((main) =>
+        [...main.querySelectorAll('section, div, li')].filter((el) => {
+          const c = getComputedStyle(el);
+          return c.borderTopWidth !== '0px' && c.borderBottomWidth !== '0px' && c.borderLeftWidth !== '0px' && c.borderRightWidth !== '0px' && c.borderTopStyle === 'solid' && parseFloat(c.borderTopLeftRadius) > 0 && el.children.length > 1;
+        }).length
+      );
+      expect(boxed, `${path} has boxed panels`).toBe(0);
+    }
+  });
+
   test('login & security: authenticator re-enrolled from the QR code, codes shown once', async ({ page }) => {
     await page.getByRole('main').getByRole('link', { name: /^Login & security/ }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Login & security' })).toBeVisible();

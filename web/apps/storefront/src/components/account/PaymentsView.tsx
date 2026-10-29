@@ -1,7 +1,7 @@
 'use client';
 
 import { accountKeys, isApiError, type PaymentMethod } from '@afrotransact/api-client';
-import { Button, Plus, SavedPaymentCard, Skeleton, useToast } from '@afrotransact/ui';
+import { Button, cardExpired, EmptyState, FlatPage, Message, PaymentMethodMark, Plus, Row, RowList, Section, Skeleton, StatusText, TextLinkButton, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -10,8 +10,7 @@ import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 
-import { AccountCrumb } from './AccountCrumb';
-import styles from './Pages.module.css';
+import { AccountHeader } from './AccountHeader';
 
 /** Your Payments (S148): add card or US bank account (Stripe), remove, set default. */
 export function PaymentsView() {
@@ -26,51 +25,65 @@ export function PaymentsView() {
   const remove = useMutation({ mutationFn: (pm: PaymentMethod) => api.deletePaymentMethod(pm.id), onSuccess: async () => { await refresh(); toast.show(t('pay.removed')); }, onError: fail });
   const makeDefault = useMutation({ mutationFn: (pm: PaymentMethod) => api.setDefaultPaymentMethod(pm.id), onSuccess: async () => { await refresh(); toast.show(t('pay.defaultSet')); }, onError: fail });
 
+  const detailOf = (pm: PaymentMethod) => {
+    const bits: string[] = [];
+    if (pm.type === 'us_bank_account' && /verification pending/i.test(pm.label)) bits.push(t('pay.verificationPending'));
+    if (pm.expires) bits.push(cardExpired(pm.expires) ? t('pay.expired') : t('pay.expires', { date: pm.expires }));
+    return bits.join(' · ');
+  };
+
   return (
-    <div className={styles.page}>
-      <AccountCrumb>{t('account.payments')}</AccountCrumb>
-      <div className={styles.head}>
-        <h1 className={styles.h1}>{t('pay.title')}</h1>
-        <Button icon={<Plus aria-hidden />} onClick={() => setAdding(true)}>
-          {t('pay.add')}
-        </Button>
-      </div>
-      <section className={styles.card} aria-label={t('pay.saved')}>
+    <FlatPage>
+      <AccountHeader
+        title={t('pay.title')}
+        crumb={t('account.payments')}
+        actions={
+          <Button icon={<Plus aria-hidden />} onClick={() => setAdding(true)}>
+            {t('pay.add')}
+          </Button>
+        }
+      />
+      <Section title={t('pay.saved')} id="pay-saved">
         {list.isPending && <Skeleton height={48} />}
-        {list.isError && <p className={styles.error} role="alert">{t('acct.loadError')}</p>}
-        {list.data?.length === 0 && <p className={styles.muted}>{t('pay.none')}</p>}
-        <ul className={styles.cards}>
-          {list.data?.map((pm) => (
-            <li key={pm.id} data-testid="payment-method">
-              <strong className="at-visually-hidden">{pm.label}</strong>
-              <SavedPaymentCard
-                type={pm.type}
-                brand={pm.brand}
-                last4={pm.last4}
-                expires={pm.expires}
-                title={pm.type === 'us_bank_account' ? pm.label.replace(/ ending in \d+.*$/, '') : undefined}
-                detail={pm.type === 'us_bank_account' && /verification pending/i.test(pm.label) ? t('pay.verificationPending') : undefined}
-                isDefault={pm.isDefault}
-                labels={{ defaultTag: t('pay.default'), expires: (date) => t('pay.expires', { date }), expired: t('pay.expired') }}
+        {list.isError && (
+          <Message tone="error">
+            {t('acct.loadError')} <TextLinkButton onClick={() => void list.refetch()}>{t('acct.retry')}</TextLinkButton>
+          </Message>
+        )}
+        {list.data?.length === 0 && <EmptyState>{t('pay.none')}</EmptyState>}
+        {(list.data?.length ?? 0) > 0 && (
+          <RowList>
+            {list.data?.map((pm) => (
+              <Row
+                key={pm.id}
+                testId="payment-method"
+                title={
+                  <>
+                    <PaymentMethodMark type={pm.type} brand={pm.brand} height={22} />
+                    <strong>{pm.label}</strong>
+                    {pm.isDefault ? <StatusText tone="positive">{t('pay.default')}</StatusText> : null}
+                  </>
+                }
+                detail={detailOf(pm) || undefined}
                 actions={
-                  <span className={styles.actions}>
+                  <>
                     {pm.isDefault ? null : (
-                      <button type="button" className="link-button" onClick={() => makeDefault.mutate(pm)} disabled={makeDefault.isPending}>
+                      <TextLinkButton onClick={() => makeDefault.mutate(pm)} disabled={makeDefault.isPending}>
                         {t('pay.setDefault')}
-                      </button>
+                      </TextLinkButton>
                     )}
-                    <button type="button" className="link-button" onClick={() => remove.mutate(pm)} disabled={remove.isPending} aria-label={t('pay.removeAria', { label: pm.label })}>
+                    <TextLinkButton danger onClick={() => remove.mutate(pm)} disabled={remove.isPending} aria-label={t('pay.removeAria', { label: pm.label })}>
                       {t('common.remove')}
-                    </button>
-                  </span>
+                    </TextLinkButton>
+                  </>
                 }
               />
-            </li>
-          ))}
-        </ul>
-        <p className={styles.muted}>{t('pay.stripeNote')}</p>
-      </section>
+            ))}
+          </RowList>
+        )}
+        <Message tone="muted">{t('pay.stripeNote')}</Message>
+      </Section>
       <AddPaymentMethodDialog open={adding} onOpenChange={setAdding} onSaved={(pm) => toast.show(pm ? t('pay.added', { label: pm.label }) : t('pay.addedPending'))} />
-    </div>
+    </FlatPage>
   );
 }
