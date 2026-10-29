@@ -54,7 +54,7 @@ Stripe may also set other cookies and use device signals on payment pages and in
 
 ## Mobile apps
 
-Our apps do not use browser cookies. They use local storage on your device and SDKs for sign-in, push notifications (Firebase Cloud Messaging on Android, Apple Push Notification service on iPhone), crash reporting and payments. Push notifications are controlled in your device settings and in Account > Notifications.
+Our apps do not use browser cookies. They use local storage on your device and SDKs for sign-in, push notifications (Firebase Cloud Messaging on Android, Apple Push Notification service on iPhone), crash reporting and payments. Push notifications are controlled in your device settings and in Your account > Notifications.
 
 ## Third parties and sharing
 

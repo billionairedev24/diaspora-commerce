@@ -31,7 +31,7 @@ The email contains a code. The code is secret: whoever has it can redeem the car
 ## Redeeming a gift card
 
 1. Sign in to your AfroTransact account (or create one).
-2. Go to Account > Gift cards and enter the code, or follow the button in the email.
+2. Go to Your account > AfroTransact credit and enter the code, or follow the button in the email.
 3. The value is added to your store credit balance at once.
 
 A card can be redeemed once only. After redemption, the balance is **store credit** in the redeemer's account, and it follows the Store Credit Terms. A gift card cannot be split, merged or moved to someone else after it is redeemed. For safety, we limit how many times a code can be tried in a short time, and we may ask you to try later or to verify your identity.
@@ -46,13 +46,13 @@ A gift card and the credit it becomes cannot be exchanged for cash, paid out, re
 
 ## Cancelling and refunds
 
-- **Before the card is sent,** you can cancel a gift card you scheduled for a future date. You get back the amount you paid, to the payment method you used. [[LEGAL: Q08 confirm with Operations that a scheduled card can be cancelled before it is sent]]
+- **Before the card is sent or used,** you can ask us to cancel a gift card you scheduled for a future date: open a help request (Your account > Get help with an order) with the order details. Our team cancels (voids) a card that has not been redeemed and refunds the amount you paid to the card or payment method you used. There is no cancel button yet, so this is done by our team. [[LEGAL: Q08 confirm the wording]]
 - **After the card is sent,** it cannot be cancelled and the purchase is not refundable, except where the law requires it, or where we decide in a help request that the card was bought in error or by fraud and has not been redeemed.
 - **If the card was bought with a payment that is later disputed or reversed,** we may remove the unspent balance and recover the amount.
 
 ## Lost, stolen or wrong email
 
-Treat a gift card code like cash. We are not responsible for a card that is lost, stolen, sent to the wrong address or used by someone else after you share the code. If you think that a code was sent to the wrong person, or was stolen, tell us at once through Account > Help or {phone}. If the card has not been redeemed, we may be able to cancel it and issue a new one after we check your identity and the purchase, which we do at our discretion. If it has been redeemed, the credit is in someone's account and we cannot take it back unless it was obtained by fraud.
+Treat a gift card code like cash. We are not responsible for a card that is lost, stolen, sent to the wrong address or used by someone else after you share the code. If you think that a code was sent to the wrong person, or was stolen, tell us at once through Your account > Get help with an order or {phone}. If the card has not been redeemed, we may be able to cancel it and issue a new one after we check your identity and the purchase, which we do at our discretion. If it has been redeemed, the credit is in someone's account and we cannot take it back unless it was obtained by fraud.
 
 ## Fraud and scams
 
@@ -72,4 +72,4 @@ We can change these terms for gift cards bought in the future. A change will not
 
 ## Contact
 
-Help: Account > Help. Phone: {phone}. Email: {legal}. Address: {address}.
+Help: Your account > Get help with an order. Phone: {phone}. Email: {legal}. Address: {address}.

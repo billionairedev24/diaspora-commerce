@@ -12,7 +12,7 @@ draft: true
 
 ## What this is
 
-AfroTransact offers paid memberships with benefits for shoppers. We call the first one **Plus**. We may offer other tiers (for example a higher one), and we may change which tiers are offered. These terms apply to every tier. The plan name, price, trial length and benefits that apply to you are shown on the sign-up page and in the confirmation email, and in Account > Membership. If anything in this document is different from what the sign-up page shows for your tier, the sign-up page for your tier wins for price and benefits.
+AfroTransact offers paid memberships with benefits for shoppers. We call the first one **Plus**. We may offer other tiers (for example a higher one), and we may change which tiers are offered. These terms apply to every tier. The plan name, price, trial length and benefits that apply to you are shown on the sign-up page and in the confirmation email, and in Your account > Membership. If anything in this document is different from what the sign-up page shows for your tier, the sign-up page for your tier wins for price and benefits.
 
 The membership is provided by [[LEGAL: Q01 legal entity name]] ("AfroTransact", "we").
 
@@ -32,7 +32,7 @@ Each tier has a set of benefits that we choose from a list and that we may chang
 - **Bigger referral or gift rewards.**
 - **Member prices or deals,** where shown on a product.
 
-The benefits of your tier are shown at sign-up and in Account > Membership, and each order shows the benefits that were applied. Credit benefits start with your first paid period and not during a free trial. Store credit from a membership follows the Store Credit Terms, so it can never be converted to cash. If a benefit is changed or removed, we will give you notice, and you can cancel. The changes do not affect benefits already earned on orders already placed.
+The benefits of your tier are shown at sign-up and in Your account > Membership, and each order shows the benefits that were applied. Credit benefits start with your first paid period and not during a free trial. Store credit from a membership follows the Store Credit Terms, so it can never be converted to cash. If a benefit is changed or removed, we will give you notice, and you can cancel. The changes do not affect benefits already earned on orders already placed.
 
 ## Free trial
 
@@ -53,7 +53,7 @@ You give your express consent to these terms by ticking the unticked consent box
 
 ## How to cancel
 
-You can cancel **online, any time, in the same way you signed up**: go to Account > Membership and choose **Cancel membership**. You can also cancel from the confirmation email link, in the mobile app, or by contacting support at {phone} or through Account > Help. You do not have to call, chat with an agent, give a reason, or go through special offers to cancel. After you cancel, we show a confirmation on screen and by email.
+You can cancel **online, any time, in the same way you signed up**: go to Your account > Membership and choose **Cancel membership**. You can also cancel from the confirmation email link, in the mobile app, or by contacting support at {phone} or through Your account > Get help with an order. You do not have to call, chat with an agent, give a reason, or go through special offers to cancel. After you cancel, we show a confirmation on screen and by email.
 
 When you cancel:
 
@@ -101,7 +101,7 @@ Membership is for personal and household use. We can end a membership or take ba
 
 ## Payments by Stripe
 
-Membership fees are processed by Stripe on a card or bank account you saved. By saving the card you agree to Stripe's terms and acknowledge its privacy policy. You can change the payment method for your membership in Account > Payments.
+Membership fees are processed by Stripe on a card or bank account you saved. By saving the card you agree to Stripe's terms and acknowledge its privacy policy. You can change the payment method for your membership in Your account > Payment methods.
 
 ## Changes to these terms
 
@@ -109,4 +109,4 @@ We will tell you at least 30 days before a material change to these terms or to 
 
 ## Contact
 
-Help: Account > Help. Phone: {phone}. Email: {legal}. Address: {address}.
+Help: Your account > Get help with an order. Phone: {phone}. Email: {legal}. Address: {address}.

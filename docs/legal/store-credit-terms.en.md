@@ -12,7 +12,7 @@ draft: true
 
 ## What store credit is
 
-Store credit is a balance in US dollars (USD) on your AfroTransact account. You can use it to pay for products and services on AfroTransact. It is kept as a running record (a ledger) of every addition and every use, so your balance is always the total of that record, and you can see the record in Account > Credit.
+Store credit is a balance in US dollars (USD) on your AfroTransact account. You can use it to pay for products and services on AfroTransact. It is kept as a running record (a ledger) of every addition and every use, so your balance is always the total of that record, and you can see the record in Your account > AfroTransact credit.
 
 Store credit is issued by [[LEGAL: Q01 legal entity name]] ("AfroTransact", "we"). It is not money in a bank account. It is not a deposit, does not earn interest, is not insured by the FDIC or any government agency, and is not a payment instrument or a prepaid card. [[LEGAL: Q12 confirm the characterisation and whether any state stored-value, money-transmitter or prepaid access rule applies to closed-loop credit]]
 
@@ -72,4 +72,4 @@ We can change these terms for credit you receive in the future and will tell you
 
 ## Contact
 
-Help: Account > Help. Phone: {phone}. Email: {legal}. Address: {address}.
+Help: Your account > Get help with an order. Phone: {phone}. Email: {legal}. Address: {address}.

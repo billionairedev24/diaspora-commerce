@@ -70,7 +70,7 @@ All prices are in US dollars (USD). The price on the product page, with any disc
 
 **Payment processing by Stripe.** Card, Apple Pay, Google Pay, bank and wallet payments are processed by Stripe, Inc. and its affiliates ("Stripe"). When you pay or save a payment method, you agree to Stripe's applicable terms, you acknowledge Stripe's Privacy Policy, and you authorise us and Stripe to process the payment. Stripe may collect device and transaction data to prevent fraud and to meet its legal duties. We do not see or store your full card number. If you use Stripe's Link service, Link may offer to remember your email, phone number and payment details across businesses; Link has its own terms and privacy notice, and using it is your choice. [[LEGAL: Q29 confirm the exact Stripe terms to name and the wording for saved methods and Link]]
 
-**Saved payment methods.** If you save a card or bank account, you authorise us to use it for purchases you make, for the Plus membership if you join it, and for any other charge you have agreed to. You can remove a saved method at any time in Account > Payments. A removed method will not be used for new charges, but removing it does not cancel an order or membership already in progress; change or cancel those separately.
+**Saved payment methods.** If you save a card or bank account, you authorise us to use it for purchases you make, for the Plus membership if you join it, and for any other charge you have agreed to. You can remove a saved method at any time in Your account > Payment methods. A removed method will not be used for new charges, but removing it does not cancel an order or membership already in progress; change or cancel those separately.
 
 **Failed or reversed payments.** If a payment fails or is reversed, we may cancel the order, pause your account and recover the amount you owe. Please contact us before you dispute a charge with your bank, so that we can fix a mistake quickly. You may of course exercise any rights you have with your card issuer.
 
@@ -88,7 +88,7 @@ Delivery dates and delivery windows are our best estimate and are not guarantees
 
 ## Problems with a delivered order
 
-Once an order has been delivered, there is no self-service return or refund button. If something is wrong, go to Account > Help, describe the problem and add photos, and our team will decide the outcome. The Returns, Refunds and Problems With Your Order page explains how this works, where refunds go and the rights the law gives you. Nothing in these Conditions removes a right you have under the law that cannot be waived.
+Once an order has been delivered, there is no self-service return or refund button. If something is wrong, go to Your account > Get help with an order, describe the problem and add photos, and our team will decide the outcome. The Returns, Refunds and Problems With Your Order page explains how this works, where refunds go and the rights the law gives you. Nothing in these Conditions removes a right you have under the law that cannot be waived.
 
 ## Services and bookings
 
@@ -134,7 +134,7 @@ To the extent the law allows, you agree to compensate us for losses we suffer be
 
 ## Resolving disputes
 
-**Talk to us first.** Contact us at {legal} or through Account > Help. Most issues are resolved within 48 hours, and we will try to resolve any dispute informally before either of us starts a formal case.
+**Talk to us first.** Contact us at {legal} or through Your account > Get help with an order. Most issues are resolved within 48 hours, and we will try to resolve any dispute informally before either of us starts a formal case.
 
 **Arbitration and class action waiver.** [[LEGAL: Q05 arbitration clause. The earlier placeholder draft proposed binding individual arbitration under the AAA Consumer Arbitration Rules, a small-claims carve-out, a class-action waiver and a 30-day opt-out by writing to the legal address. Counsel to decide whether to use it, the administrator, fee allocation, a mass-arbitration protocol and state-law carve-outs]]
 
@@ -142,7 +142,7 @@ To the extent the law allows, you agree to compensate us for losses we suffer be
 
 ## Ending your account
 
-You can close your account at any time in Account > Settings. We may suspend or close an account, with notice where the law requires it, if you break these Conditions, create risk or harm for others, or if we must by law. Closing an account does not cancel your obligations for orders already placed. Remaining store credit is handled under the Store Credit Terms, and we will tell you before a closure we start takes effect so that you can use your credit. Terms that by their nature should continue after the account closes, such as ownership, disclaimers, liability and dispute terms, do so.
+You can ask us to close your account at any time by contacting us at {legal} or through the privacy request form on the Privacy Choices page. We may suspend or close an account, with notice where the law requires it, if you break these Conditions, create risk or harm for others, or if we must by law. Closing an account does not cancel your obligations for orders already placed. Remaining store credit is handled under the Store Credit Terms, and we will tell you before a closure we start takes effect so that you can use your credit. Terms that by their nature should continue after the account closes, such as ownership, disclaimers, liability and dispute terms, do so.
 
 ## General
 

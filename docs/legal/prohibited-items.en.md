@@ -48,7 +48,7 @@ These can be sold only by sellers and providers whom we have approved and who ho
 Many of our customers shop for foods from home. These rules protect you.
 
 - Imported foods must meet FDA rules, carry English-language labelling with ingredients, allergens and the importer, and come from registered facilities. Sellers must not list food that is unlabelled, expired, damaged or unsafe.
-- Perishable and frozen items are sold only for delivery methods that can keep them safe, and we show that on the listing. Pre-order delivery windows and delivery runs may be used for perishable items; the Pre-order and Delivery Run Terms explain what to do on delivery. Do not eat food that arrives spoiled, damaged or with a broken seal. Report it through Account > Help.
+- Perishable and frozen items are sold only for delivery methods that can keep them safe, and we show that on the listing. Pre-order delivery windows and delivery runs may be used for perishable items; the Pre-order and Delivery Run Terms explain what to do on delivery. Do not eat food that arrives spoiled, damaged or with a broken seal. Report it through Your account > Get help with an order.
 - Home-made foods sold from a home kitchen must follow state cottage food laws, including limits on what can be sold and shipped.
 - Allergen and ingredient information on a listing is provided by the seller. If you have an allergy, check the label on the product when it arrives.
 - Items that cannot be shipped lawfully into a state or by a given carrier will not be offered to addresses where they are not allowed.

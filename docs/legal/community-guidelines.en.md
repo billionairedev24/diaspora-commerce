@@ -83,7 +83,7 @@ Lola is an AI assistant. It can help you find products, track a package, change 
 
 ## Reporting and enforcement
 
-If you see something that breaks these guidelines, use **Report** on the page or email {legal}. We may remove content, warn you, limit what you can post, cancel an order, withhold rewards, or suspend or close an account, depending on how serious or repeated the breach is. We try to be fair and tell you why where we can. You can ask us to review a decision by replying to our message or through Account > Help. Reports about intellectual property go through the Intellectual Property and Copyright Policy.
+If you see something that breaks these guidelines, use **Report** on the page or email {legal}. We may remove content, warn you, limit what you can post, cancel an order, withhold rewards, or suspend or close an account, depending on how serious or repeated the breach is. We try to be fair and tell you why where we can. You can ask us to review a decision by replying to our message or through Your account > Get help with an order. Reports about intellectual property go through the Intellectual Property and Copyright Policy.
 
 ## Changes
 

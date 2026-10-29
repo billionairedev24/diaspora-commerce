@@ -42,3 +42,17 @@ Where a decision changes how the product behaves (not only the text), the last c
 1. **Provider terms were not read in full.** See `provider-terms-matrix.md`: the session could not reach the providers' legal pages. Obligations marked K there are from general knowledge and unverified.
 2. **Owner decisions reflected in the drafts** (do not change without the owner): no self-service return or refund after delivery (support decides, with photo evidence); cancel before the shipment is prepared; refunds to each payer in its own form; credit can never become cash; gift cards $10 to $500 with no expiry; Plus example $9.99 a month or $99 a year with a 14-day trial and free delivery on orders of $25 or more; referral reward example $10 each after a first delivered order of at least $30 and its return window; a cancelled pre-order window or run refunds everything, including the delivery fee.
 3. **Mismatches between the documents and the product that need a product decision:** quiet hours (Q14); yearly-renewal reminder (Q09); the "reporting window" for problems (Q13); whether credit is applied by default (Q12); whether a scheduled gift card can be cancelled before sending (Q08); the cookie-settings location in the mobile app (`Account > Privacy`) and the privacy request form (Q11).
+
+## Product alignment decisions (resolved 2026-10-29)
+
+These were mismatches between the drafts and the product. Each now has one rule, and the documents and the code agree.
+
+| Topic | Decision | Where |
+|---|---|---|
+| Quiet hours | Marketing and other non-urgent messages are held 21:00 to 08:00 in the recipient's local time (platform default, `quietHours` in the notifications config); members can set their own quieter hours in Your account > Notifications. The text now matches the code. Counsel to confirm states with shorter windows. | `sms-terms` |
+| Old `returns` v2.0 (30-day returns) | Replaced by `returns.en.md` (no self-service return after delivery; help request with evidence) when the loader migration is applied. Nothing else in the repo promises 30-day returns. | `returns` |
+| Account screens | The documents name only screens that exist: Your orders, Your account > Get help with an order, Notifications, Membership, AfroTransact credit (where gift card codes are redeemed), Refer a friend, Payment methods. There is no Account > Privacy or Account > Settings screen: privacy requests and account closure go through the privacy request form on the Privacy Choices page or by contacting us. | all |
+| AI provider settings | Code now sends OpenRouter provider preferences (no data collection; zero data retention in uat and prod). The OpenRouter account settings (logging and training off) are a launch checklist item in `docs/runbooks/production-readiness.md`. | `privacy` |
+| Unused membership period when we end a membership | We refund the unused part of the period when we end a membership for a reason other than the member's breach. Staff do this with the existing "refund any membership fee, with a reason" tool; there is no automatic pro-rata refund. | `membership-terms` |
+| Scheduled gift card cancelled before it is sent | There is no cancel button. The buyer asks through a help request and staff void the unredeemed card, which refunds the buyer's card (existing void action). | `gift-card-terms` |
+| Credit at checkout | The shopper chooses whether to apply credit (a checkbox, off until ticked), as the store-credit terms say. | `store-credit-terms` |

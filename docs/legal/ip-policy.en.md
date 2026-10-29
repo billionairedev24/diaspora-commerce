@@ -73,7 +73,7 @@ For reports about other rights (for example design rights, patents, trade secret
 
 ## If you bought a counterfeit item
 
-If you think an item you bought is counterfeit, report it through Account > Help (see the Returns, Refunds and Problems With Your Order page). Our team will decide the outcome and a refund is made to the payers as described there. Please keep the item and its packaging.
+If you think an item you bought is counterfeit, report it through Your account > Get help with an order (see the Returns, Refunds and Problems With Your Order page). Our team will decide the outcome and a refund is made to the payers as described there. Please keep the item and its packaging.
 
 ## Our own rights
 

@@ -13,13 +13,13 @@ draft: true
 ## The short version
 
 - **Before your order is delivered:** you can cancel it yourself until the shipment has been prepared. You get your money back, or the charge is released.
-- **After your order is delivered:** there is no return or refund button. If something is wrong, go to **Account > Help**, tell us what happened and add photos. Our team looks at every request and decides the outcome.
+- **After your order is delivered:** there is no return or refund button. If something is wrong, go to **Your account > Get help with an order**, tell us what happened and add photos. Our team looks at every request and decides the outcome.
 - **Refunds go back to whoever paid, the way they paid:** the card part to the card, the store credit part back as store credit.
 - **Your legal rights stay.** Nothing on this page takes away rights you have under the law.
 
 ## Cancelling before delivery
 
-You can cancel an order in Account > Orders until its shipment has been prepared. "Prepared" means we or the seller have picked and packed the items for dispatch. The order page shows whether cancelling is still possible. If the Cancel option is no longer shown, the package is on its way.
+You can cancel an order in Your orders until its shipment has been prepared. "Prepared" means we or the seller have picked and packed the items for dispatch. The order page shows whether cancelling is still possible. If the Cancel option is no longer shown, the package is on its way.
 
 - **If you cancel in time,** the whole order total is returned, including delivery fee and tax. If your card was only authorised and not yet charged, the authorisation is released, so you are not charged and the hold falls off your statement in a few days (your bank decides how long). If the money was already collected, we refund it.
 - **Orders with more than one package** are handled package by package. You can cancel a package that has not been prepared even if another package has.
@@ -31,7 +31,7 @@ You can cancel an order in Account > Orders until its shipment has been prepared
 
 When an order has been delivered, there is no self-service return or refund. Instead:
 
-1. Go to **Account > Help** (or open the order and choose **Get help with this order**).
+1. Go to **Your account > Get help with an order** (or open the order and choose **Get help with this order**).
 2. Choose the order, and the package if there is more than one.
 3. Choose what went wrong: *I didn't receive it*, *It arrived damaged*, *I got the wrong item*, *It's not as described*, or *Something else*.
 4. Describe what you expected and what you got, in your own words.
@@ -79,8 +79,8 @@ Some goods come with a manufacturer's or seller's warranty. If a seller offers i
 
 ## Services
 
-Refunds for services follow the provider's cancellation policy shown before booking. If a provider cancels or does not show up, you get a full refund, including any deposit. If a service was not performed as promised, use Account > Help in the same way as for a product.
+Refunds for services follow the provider's cancellation policy shown before booking. If a provider cancels or does not show up, you get a full refund, including any deposit. If a service was not performed as promised, use Your account > Get help with an order in the same way as for a product.
 
 ## Contact
 
-Help: Account > Help. Phone: {phone}. Email: {legal}. Accessibility help: {accessibility}. Address: {address}.
+Help: Your account > Get help with an order. Phone: {phone}. Email: {legal}. Accessibility help: {accessibility}. Address: {address}.

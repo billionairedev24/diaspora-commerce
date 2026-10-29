@@ -37,7 +37,7 @@ A reward is earned only when **all** the following are true:
 3. The problem-reporting (return) window for that order has passed without it being refunded below the minimum.
 4. The program is on, you and your friend have passed our checks, and neither of you is breaking these terms.
 
-Where a delivery or refund is still being reviewed, the reward waits. If a smaller first order does not reach the minimum, a later delivered order can still qualify within the time limit. You can see a referral that is waiting in Account > Refer a friend.
+Where a delivery or refund is still being reviewed, the reward waits. If a smaller first order does not reach the minimum, a later delivered order can still qualify within the time limit. You can see a referral that is waiting in Your account > Refer a friend.
 
 ## How rewards are paid
 
@@ -71,4 +71,4 @@ We may change these terms. Material changes will be notified before they take ef
 
 ## Contact
 
-Help: Account > Help. Phone: {phone}. Email: {legal}. Address: {address}.
+Help: Your account > Get help with an order. Phone: {phone}. Email: {legal}. Address: {address}.

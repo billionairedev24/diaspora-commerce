@@ -32,7 +32,7 @@ Depending on your state, you can:
 
 We do not sell personal information for money. Some advertising and measurement features may count as a "sale" or "sharing" under some state laws. To opt out, you can:
 
-1. Use the **Do not sell or share my personal information** link in the footer (or the toggle in Cookie preferences), or Account > Privacy in the app.
+1. Use the **Do not sell or share my personal information** link in the footer (or the toggle in Cookie preferences), or the privacy request form on this page.
 2. Turn on **Global Privacy Control** in your browser or a browser extension. We treat GPC as a valid opt-out request for that browser, and we also apply it to your account when you are signed in.
 3. Email {privacy}.
 
@@ -49,8 +49,8 @@ If your browser sends the Global Privacy Control signal, we honour it without as
 You can stop marketing messages at any time:
 
 - **Email:** use the unsubscribe link in any marketing email. It works in one click.
-- **SMS:** reply STOP to any text. WhatsApp marketing has its own opt-in and opt-out; you can reply STOP or change it in Account > Notifications.
-- **Push:** change the setting on your device or in Account > Notifications.
+- **SMS:** reply STOP to any text. WhatsApp marketing has its own opt-in and opt-out; you can reply STOP or change it in Your account > Notifications.
+- **Push:** change the setting on your device or in Your account > Notifications.
 
 We will still send messages about your orders, deliveries, bookings, payments and security while your account is open. Details are in the SMS and Notification Terms.
 
@@ -58,7 +58,7 @@ We will still send messages about your orders, deliveries, bookings, payments an
 
 Choose one:
 
-- Use the privacy request form on this page [[LEGAL: Q11 confirm that the form is live at launch]], or sign in and go to Account > Privacy.
+- Use the privacy request form on this page [[LEGAL: Q11 confirm that the form is live at launch]], or contact us at {privacy}.
 - Email {privacy}.
 - Call {phone} [[LEGAL: Q11 whether a toll-free number is required for the launch states]].
 

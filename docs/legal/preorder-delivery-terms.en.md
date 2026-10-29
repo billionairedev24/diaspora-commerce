@@ -57,7 +57,7 @@ A window or run can have its own door or pickup fee. A Plus membership can waive
 
 ## Delivery dates and windows
 
-The delivery date is our plan, and the delivery window (for example, morning or afternoon) is our best estimate. We do not promise a time. Weather, traffic, vehicle problems, a closed road, safety, the seller's stock or events outside our control may move a date. We tell you as soon as we can by your notification channels, and if the new date does not work, you can cancel the shipment if it has not been prepared. If we cannot deliver within a reasonable time after the date we gave, contact us through Account > Help. [[LEGAL: Q30 confirm delay-notice and cancel-and-refund rules for pre-paid orders under the FTC Mail, Internet or Telephone Order Merchandise Rule and state law]]
+The delivery date is our plan, and the delivery window (for example, morning or afternoon) is our best estimate. We do not promise a time. Weather, traffic, vehicle problems, a closed road, safety, the seller's stock or events outside our control may move a date. We tell you as soon as we can by your notification channels, and if the new date does not work, you can cancel the shipment if it has not been prepared. If we cannot deliver within a reasonable time after the date we gave, contact us through Your account > Get help with an order. [[LEGAL: Q30 confirm delay-notice and cancel-and-refund rules for pre-paid orders under the FTC Mail, Internet or Telephone Order Merchandise Rule and state law]]
 
 ## Delivery codes and proof of delivery
 
@@ -79,7 +79,7 @@ Many pre-orders and runs include fresh, chilled or frozen food. Please:
 
 - Be ready to receive the package in the delivery window, and take it indoors and into the fridge or freezer promptly.
 - Check the package when it arrives: look for spoilage, a broken seal, leaks, a strong smell, warm packaging or a temperature that does not seem right. If in doubt, do not eat it.
-- Report a problem on the day of delivery through Account > Help with photos (see the Returns page). Keep the items and packaging until we reply unless unsafe.
+- Report a problem on the day of delivery through Your account > Get help with an order with photos (see the Returns page). Keep the items and packaging until we reply unless unsafe.
 - Allergens and ingredients are on the product label and listing. Check the label.
 
 Perishable items are not accepted back by post, and you will not be asked to return them. Our team will decide each report. We will not deliver perishable items if we think they cannot arrive safely, and we may cancel and refund such items. [[LEGAL: Q13 and Q21 add temperature-holding and food-safety language reviewed against FDA, state and local rules]]
@@ -98,4 +98,4 @@ We may change how windows and runs work, the places, the fees and the minimums. 
 
 ## Contact
 
-Help: Account > Help. Phone: {phone}. Email: {legal}. Address: {address}.
+Help: Your account > Get help with an order. Phone: {phone}. Email: {legal}. Address: {address}.
