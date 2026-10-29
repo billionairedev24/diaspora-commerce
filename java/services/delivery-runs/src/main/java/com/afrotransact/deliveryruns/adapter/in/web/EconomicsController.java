@@ -40,9 +40,15 @@ class EconomicsController {
     }
 
     @Operation(summary = "A run's P&L before and after it (delivery-runs:read)",
-            description = "BEFORE: estimate at the orders reserved so far. AFTER: the completed run at its orders. "
-                    + "CANCELLED: nothing earned or spent; ordersRefunded and refundedFeesMinor say what went back to "
-                    + "customers. commissionShareMinor: commission attributed to the run, reported by analytics.")
+            description = "Built from the run's real orders. BEFORE: the orders reserved so far. AFTER: the completed run: "
+                    + "the orders delivered, those cancelled after reserving shown apart, the delivery fees each order was "
+                    + "actually charged (door, pickup and carrier differ), what was refunded, the cost (route estimate, or "
+                    + "the minutes the driver was out once captured), the contribution margin and the break-even at the fee "
+                    + "the orders paid. CANCELLED: nothing earned or spent; ordersRefunded and refundedFeesMinor (the fees "
+                    + "the orders were charged, an estimate only where refundedFeesEstimated) say what went back to "
+                    + "customers. platformFees is a separate lens, never part of the delivery P&L: what the platform keeps "
+                    + "on the goods (commission payments reported, else the staff-configured fee per order). "
+                    + "commissionShareMinor types that figure in for this view (source MANUAL).")
     @GetMapping("/v1/runs/{id}/pnl")
     RunPnl runPnl(@PathVariable UUID id, @RequestParam(required = false) Long commissionShareMinor) {
         return economics.runPnl(id, commissionShareMinor);
@@ -51,7 +57,8 @@ class EconomicsController {
     @Operation(summary = "A pre-order window's economics (delivery-runs:read)",
             description = "Orders, revenue, delivery fees collected, the estimated cost of the run that delivers it, "
                     + "contribution margin and break-even orders. A cancelled window reports the orders refunded "
-                    + "(ordersRefunded, refundedMinor) instead of revenue.")
+                    + "(ordersRefunded, refundedMinor) instead of revenue. platformFees is the platform's fees on the "
+                    + "goods, apart from the delivery P&L; commissionShareMinor types it in for this view.")
     @GetMapping("/v1/preorders/{id}/economics")
     WindowEconomics windowEconomics(@PathVariable UUID id, @RequestParam(required = false) Long commissionShareMinor) {
         return economics.windowEconomics(id, commissionShareMinor);
@@ -60,7 +67,8 @@ class EconomicsController {
     @Operation(summary = "Break-even for a window being created or edited (delivery-runs:read)",
             description = "The cost of the run that would deliver it, the orders needed to break even, and whether "
                     + "the minimum reaches them. economics is null when no active location serves the targets or "
-                    + "geo-service cannot measure the route.")
+                    + "geo-service cannot measure the route. economics.atCapacity is the margin when the run is full: at "
+                    + "capacityOrders if asked, else the location's default capacity (null when that is not limited).")
     @PostMapping("/v1/preorders/economics-preview")
     WindowPlan planWindow(@Valid @RequestBody PlanRequest body) {
         return economics.planWindow(body.toCommand());

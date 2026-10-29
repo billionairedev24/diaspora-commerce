@@ -31,7 +31,12 @@ export const EconomicsNumbersSchema = z.object({
   /** Time per order handed over at a pickup point. */
   handoverMinutesPerOrder: z.number(),
   /** Count the drive back to the origin. */
-  roundTrip: z.boolean()
+  roundTrip: z.boolean(),
+  /**
+   * What the platform keeps on the goods of one order (seller commission and fees), minor units: the estimate behind the
+   * "Platform fees on goods" line until payments reports the real commission of an order. 0 = not configured.
+   */
+  platformFeePerOrderMinor: z.number().int().default(0)
 });
 export type EconomicsNumbers = z.infer<typeof EconomicsNumbersSchema>;
 
@@ -74,10 +79,15 @@ export const ECONOMICS_LIMITS = {
   handoverMinutesPerOrder: { min: 0, max: 1440 }
 } as const;
 
-export type EconomicsField = keyof typeof ECONOMICS_LIMITS | 'roundTrip' | 'reason';
+/** Highest platform fee per order staff can enter (1,000.00). */
+export const PLATFORM_FEE_MAX_MINOR = 100_000;
+
+export type EconomicsField = keyof typeof ECONOMICS_LIMITS | 'roundTrip' | 'reason' | 'platformFeePerOrderMinor';
 
 /** The problems of a cost model as it is sent (keyed by field), the same ones the BFF's 422 reports. */
-export function economicsInputProblems(input: Partial<Record<keyof typeof ECONOMICS_LIMITS, number | null>> & { reason: string }): Partial<Record<EconomicsField, 'required' | 'range' | 'whole' | 'tooLong'>> {
+export function economicsInputProblems(
+  input: Partial<Record<keyof typeof ECONOMICS_LIMITS | 'platformFeePerOrderMinor', number | null>> & { reason: string }
+): Partial<Record<EconomicsField, 'required' | 'range' | 'whole' | 'tooLong'>> {
   const out: Partial<Record<EconomicsField, 'required' | 'range' | 'whole' | 'tooLong'>> = {};
   (Object.keys(ECONOMICS_LIMITS) as (keyof typeof ECONOMICS_LIMITS)[]).forEach((k) => {
     const v = input[k];
@@ -86,6 +96,12 @@ export function economicsInputProblems(input: Partial<Record<keyof typeof ECONOM
     else if (v < min || v > max) out[k] = 'range';
     else if ((k === 'driverCostPerHourMinor' || k === 'driverCostPerMileMinor') && !Number.isInteger(v)) out[k] = 'whole';
   });
+  // Optional: absent means "not configured" (0).
+  const fee = input.platformFeePerOrderMinor;
+  if (fee !== null && fee !== undefined) {
+    if (Number.isNaN(fee) || fee < 0 || fee > PLATFORM_FEE_MAX_MINOR) out.platformFeePerOrderMinor = 'range';
+    else if (!Number.isInteger(fee)) out.platformFeePerOrderMinor = 'whole';
+  }
   const reason = input.reason.trim();
   if (!reason) out.reason = 'required';
   else if (reason.length > ECONOMICS_REASON_MAX) out.reason = 'tooLong';
@@ -138,14 +154,75 @@ export type RunStatus = z.infer<typeof RunStatusSchema>;
 export const RunPhaseSchema = z.enum(['BEFORE', 'AFTER', 'CANCELLED']);
 export type RunPhase = z.infer<typeof RunPhaseSchema>;
 
+export const DELIVERY_KINDS = ['DOOR', 'PICKUP', 'CARRIER'] as const;
+export const DeliveryKindSchema = z.enum(DELIVERY_KINDS);
+export type DeliveryKind = z.infer<typeof DeliveryKindSchema>;
+
+/** The delivery fees charged on the delivered orders of one way of delivery (door, pickup and carrier differ). */
+export const RunFeeLineSchema = z.object({ kind: DeliveryKindSchema, orders: z.number().int(), feeMinor: z.number().int() });
+export type RunFeeLine = z.infer<typeof RunFeeLineSchema>;
+
+/**
+ * The run's delivery P&L built from its real orders, not from orders x one fee. ESTIMATE: route time and miles from geo x
+ * the staff-set driver cost; ACTUAL_TIME: the minutes the driver was out replace the estimated minutes (miles stay estimated).
+ */
+export const RunActualsSchema = z.object({
+  ordersCarried: z.number().int(),
+  ordersDelivered: z.number().int(),
+  ordersFailed: z.number().int(),
+  /** Slots customers gave back after reserving: they earn and cost nothing. */
+  ordersCancelled: z.number().int(),
+  /** Delivered orders money was handed back on. */
+  ordersRefunded: z.number().int(),
+  feeMix: z.array(RunFeeLineSchema).default([]),
+  deliveryFeesMinor: z.number().int(),
+  refundedFeesMinor: z.number().int(),
+  netDeliveryFeesMinor: z.number().int(),
+  /** Some order had no reported fee: the run's fee stands in for it. */
+  feesEstimated: z.boolean(),
+  customersPaidMinor: z.number().int(),
+  totalsComplete: z.boolean(),
+  refundsMinor: z.number().int(),
+  averageFeeMinor: z.number().nullable().default(null),
+  costBasis: z.enum(['ESTIMATE', 'ACTUAL_TIME']),
+  actualMinutes: z.number().nullable().default(null),
+  estimatedCostMinor: z.number().int(),
+  contributionMarginMinor: z.number().int(),
+  /** Fewest orders whose fees cover the cost at the average fee actually kept. */
+  breakEvenOrders: z.number().int().nullable().default(null),
+  breakEvenCovered: z.boolean().nullable().default(null)
+});
+export type RunActuals = z.infer<typeof RunActualsSchema>;
+
+/**
+ * What the platform keeps on the goods of the orders (seller commission and fees): its own line, never part of the
+ * delivery P&L. PAYMENTS: all reported; MIXED: some reported, the rest estimated; ESTIMATE: orders x the configured fee;
+ * MANUAL: typed into the request; NONE: nothing reported and no estimate configured.
+ */
+export const PlatformFeesSchema = z.object({
+  source: z.enum(['PAYMENTS', 'MIXED', 'ESTIMATE', 'MANUAL', 'NONE']),
+  commissionMinor: z.number().int().nullable().default(null),
+  orders: z.number().int(),
+  ordersReported: z.number().int(),
+  perOrderEstimateMinor: z.number().int()
+});
+export type PlatformFees = z.infer<typeof PlatformFeesSchema>;
+
 export const RunPnlSchema = z.object({
   economics: RunEconomicsSchema,
   status: RunStatusSchema,
   phase: RunPhaseSchema,
   cancelReason: z.string().nullable().default(null),
-  /** Orders of a cancelled run, each refunded in full (the delivery fee included). */
+  /** Orders refunded: a cancelled run's orders (each in full), otherwise the delivered orders money was handed back on. */
   ordersRefunded: z.number().int(),
-  refundedFeesMinor: z.number().int()
+  /** Delivery fees handed back, from the fees the orders were actually charged. */
+  refundedFeesMinor: z.number().int(),
+  /** Some of those orders had no reported fee: the run's fee stands in for it (an estimate). */
+  refundedFeesEstimated: z.boolean().default(false),
+  /** The delivery P&L from the real orders; null for a cancelled run. */
+  actuals: RunActualsSchema.nullable().default(null),
+  /** Platform fees on the goods, apart from the delivery P&L; null for a cancelled run. */
+  platformFees: PlatformFeesSchema.nullable().default(null)
 });
 export type RunPnl = z.infer<typeof RunPnlSchema>;
 
@@ -173,6 +250,8 @@ export interface WindowPlanInput {
   pickupFeeMinor?: number | null;
   minOrders?: number | null;
   expectedOrders?: number | null;
+  /** Most orders the run can carry, for the margin at capacity (absent: the location's default capacity). */
+  capacityOrders?: number | null;
 }
 
 export const WindowPlanSchema = z.object({
@@ -186,6 +265,8 @@ export const WindowPlanSchema = z.object({
   economics: RunEconomicsSchema.nullable().default(null),
   /** Whether the minimum reaches break-even (null without a break-even or a minimum). */
   minimumCoversBreakEven: z.boolean().nullable().default(null),
+  /** The orders `economics.atCapacity` is worked out for; null when the capacity is not known or not limited. */
+  capacityOrders: z.number().int().nullable().default(null),
   can: RunCanSchema
 });
 export type WindowPlan = z.infer<typeof WindowPlanSchema>;
@@ -210,6 +291,8 @@ export const WindowEconomicsSchema = z.object({
   refundedMinor: z.number().int(),
   economics: RunEconomicsSchema.nullable().default(null),
   minimumCoversBreakEven: z.boolean().nullable().default(null),
+  /** Platform fees on the goods of these orders, apart from the delivery P&L; null for a cancelled window. */
+  platformFees: PlatformFeesSchema.nullable().default(null),
   can: RunCanSchema
 });
 export type WindowEconomics = z.infer<typeof WindowEconomicsSchema>;
@@ -331,12 +414,51 @@ export const RunHistoryRowSchema = z.object({
   feeMinor: z.number().int(),
   /** Delivery fees earned; 0 for a cancelled run. */
   feeRevenueMinor: z.number().int(),
-  /** Orders refunded in full (cancelled runs). */
+  /** Orders refunded, counted as in the run's P&L (a cancelled run: every order, each refunded in full). */
   ordersRefunded: z.number().int(),
   minOrders: z.number().int(),
-  minimumMet: z.boolean()
+  minimumMet: z.boolean(),
+  ordersDelivered: z.number().int().default(0),
+  /** Slots customers gave back after reserving. */
+  ordersCancelled: z.number().int().default(0),
+  refundedFeesMinor: z.number().int().default(0),
+  /** A fee or refund stands in for an unreported one (the run's fee). */
+  feesEstimated: z.boolean().default(false),
+  phase: RunPhaseSchema.optional(),
+  /** Estimated driver and vehicle cost; null when the route could not be measured. */
+  costMinor: z.number().int().nullable().default(null),
+  /** Delivery fees kept minus the cost. */
+  marginMinor: z.number().int().nullable().default(null),
+  /** Orders whose fees cover the cost at the run's fee. */
+  breakEvenOrders: z.number().int().nullable().default(null),
+  /** Whether the run's minimum reached the break-even (null without one). */
+  minimumCoveredBreakEven: z.boolean().nullable().default(null)
 });
 export type RunHistoryRow = z.infer<typeof RunHistoryRowSchema>;
+
+/** One pre-order window a location delivered: its orders, delivery fees, refunds and whether the minimum was met. */
+export const WindowHistoryRowSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  name: z.string(),
+  status: z.string(),
+  deliversOn: z.string(),
+  currency: z.string(),
+  /** Orders that count; 0 once the window was cancelled. */
+  orders: z.number().int(),
+  deliveryFeesMinor: z.number().int(),
+  revenueMinor: z.number().int(),
+  ordersRefunded: z.number().int(),
+  refundedMinor: z.number().int(),
+  minOrders: z.number().int(),
+  /** Whether the orders placed reached the minimum (null without one). */
+  minimumMet: z.boolean().nullable().default(null)
+});
+export type WindowHistoryRow = z.infer<typeof WindowHistoryRowSchema>;
+
+/** Subscribers gained and lost in one month. */
+export const NetGrowthSchema = z.object({ month: z.string(), signUps: z.number().int(), unsubscribes: z.number().int(), net: z.number().int() });
+export type NetGrowth = z.infer<typeof NetGrowthSchema>;
 
 export const SubscriberCountsSchema = z.object({
   locationId: z.string().optional(),
@@ -351,8 +473,12 @@ export type SubscriberCounts = z.infer<typeof SubscriberCountsSchema>;
 export const StaffRunLocationHistorySchema = z.object({
   location: StaffRunLocationSchema,
   runs: z.array(RunHistoryRowSchema),
+  windows: z.array(WindowHistoryRowSchema).default([]),
   subscribers: SubscriberCountsSchema,
-  subscriberGrowth: z.array(z.object({ month: z.string(), count: z.number().int() }))
+  /** Gross sign-ups per month. */
+  subscriberGrowth: z.array(z.object({ month: z.string(), count: z.number().int() })),
+  /** Sign-ups minus unsubscribes per month. */
+  subscriberNetGrowth: z.array(NetGrowthSchema).default([])
 });
 export type StaffRunLocationHistory = z.infer<typeof StaffRunLocationHistorySchema>;
 

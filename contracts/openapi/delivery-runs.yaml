@@ -333,8 +333,9 @@ paths:
     get:
       tags:
       - Locations
-      summary: 'Per-location history: runs with orders and fees, subscribers and monthly growth'
-      description: delivery-runs:read (S265)
+      summary: 'Per-location history: runs with orders, cost, margin and break-even, windows, subscribers and growth'
+      description: delivery-runs:read (S265). Runs are counted and priced as their P&L is; windows list their orders, delivery
+        fees, refunds and whether the minimum was met; growth is monthly, gross and net of unsubscribes.
       operationId: history
       parameters:
       - name: id
@@ -2916,7 +2917,8 @@ paths:
       summary: Reserve a slot on a run for an order (delivery-runs:reserve)
       description: Idempotent per orderId (200 with the existing slot; 201 when created). A full or closed run moves the order
         to the location's next open run (`moved`) unless allowNextRun=false; 409 delivery-runs.run-full / run-closed when
-        no run has room.
+        no run has room. feeMinor, totalMinor and deliveryKind (S265) say what the order is charged, so the run's P&L uses the
+        fee each order paid.
       operationId: reserve
       parameters:
       - name: runId
@@ -3346,7 +3348,9 @@ paths:
       - Economics
       summary: Break-even for a window being created or edited (delivery-runs:read)
       description: The cost of the run that would deliver it, the orders needed to break even, and whether the minimum reaches
-        them. economics is null when no active location serves the targets or geo-service cannot measure the route.
+        them. economics is null when no active location serves the targets or geo-service cannot measure the route. economics.atCapacity
+        is the margin when the run is full, at capacityOrders if asked, else the location's default capacity (null when that
+        is not limited).
       operationId: planWindow
       requestBody:
         content:
@@ -3374,7 +3378,8 @@ paths:
       summary: A pre-order window's economics (delivery-runs:read)
       description: Orders, revenue, delivery fees collected, the estimated cost of the run that delivers it, contribution
         margin and break-even orders. A cancelled window reports the orders refunded (ordersRefunded, refundedMinor) instead
-        of revenue.
+        of revenue. platformFees is the platform's fees on the goods, apart from the delivery P&L; commissionShareMinor types
+        it in for this view.
       operationId: windowEconomics
       parameters:
       - name: id
@@ -3507,9 +3512,14 @@ paths:
       tags:
       - Economics
       summary: A run's P&L before and after it (delivery-runs:read)
-      description: 'BEFORE: estimate at the orders reserved so far. AFTER: the completed run at its orders. CANCELLED: nothing
-        earned or spent; ordersRefunded and refundedFeesMinor say what went back to customers. commissionShareMinor: commission
-        attributed to the run, reported by analytics.'
+      description: 'Built from the run''s real orders. BEFORE: the orders reserved so far. AFTER: the completed run: the orders
+        delivered, those cancelled after reserving shown apart, the delivery fees each order was actually charged (door, pickup
+        and carrier differ), what was refunded, the cost (route estimate, or the minutes the driver was out once captured), the
+        contribution margin and the break-even at the fee the orders paid. CANCELLED: nothing earned or spent; ordersRefunded
+        and refundedFeesMinor (the fees the orders were charged, an estimate only where refundedFeesEstimated) say what went
+        back to customers. platformFees is a separate lens, never part of the delivery P&L: what the platform keeps on the goods
+        (commission payments reported, else the staff-configured fee per order). commissionShareMinor types that figure in for
+        this view (source MANUAL).'
       operationId: runPnl
       parameters:
       - name: id
@@ -4708,6 +4718,24 @@ components:
             many hours'
           maximum: 720
           minimum: 0
+        feeMinor:
+          type: integer
+          format: int64
+          description: 'S265: the delivery fee the order is charged, minor units; the run''s P&L uses it instead of the run''s
+            fee'
+          minimum: 0
+        totalMinor:
+          type: integer
+          format: int64
+          description: 'S265: everything the customer pays, delivery fee included, minor units'
+          minimum: 0
+        deliveryKind:
+          type: string
+          description: 'S265: DOOR, PICKUP or CARRIER'
+          enum:
+          - DOOR
+          - PICKUP
+          - CARRIER
       required:
       - customerId
       - orderId
@@ -6707,7 +6735,11 @@ components:
           type: string
     LocationHistory:
       type: object
-      description: 'Per-location history: runs with orders, subscriber growth'
+      description: 'Per-location history: runs (newest first) with orders, cost, margin and break-even; pre-order windows
+
+        with orders, fees and whether the minimum was met; subscriber counts; and subscriber growth per month:
+
+        subscriberGrowth is gross sign-ups, subscriberNetGrowth is sign-ups minus unsubscribes.'
       properties:
         location:
           $ref: '#/components/schemas/Location'
@@ -6715,19 +6747,33 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LocationRunSummary'
+        windows:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocationWindowSummary'
         subscribers:
           $ref: '#/components/schemas/SubscriberCounts'
         subscriberGrowth:
           type: array
           items:
             $ref: '#/components/schemas/MonthlyCount'
+        subscriberNetGrowth:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetGrowth'
     LocationRunSummary:
       type: object
-      description: 'One run of a location: the orders it carries, the delivery fees it earns and whether it reached its minimum.
+      description: 'One run of a location: its orders, the delivery fees it earns, what it costs, its margin and whether its
 
-        A cancelled run earns nothing: feeRevenueMinor is 0 and ordersRefunded says how many orders were refunded
+        minimum covered the break-even. The figures are the run''s P&L (GET /v1/runs/{id}/pnl) and count orders
 
-        in full.'
+        the same way: ordersRefunded is the orders money was handed back on (a cancelled run: every order, each
+
+        refunded in full), ordersCancelled the slots customers gave back. A cancelled run earns nothing:
+
+        feeRevenueMinor, costMinor and marginMinor are 0. costMinor, marginMinor and breakEvenOrders are null
+
+        when the route to the location could not be measured.'
       properties:
         id:
           type: string
@@ -6760,6 +6806,39 @@ components:
           format: int32
         minimumMet:
           type: boolean
+        ordersDelivered:
+          type: integer
+          format: int32
+          description: 'Orders delivered (a run still to be driven: the orders it will deliver)'
+        ordersCancelled:
+          type: integer
+          format: int32
+          description: Slots customers gave back after reserving (and orders cancelled once confirmed)
+        refundedFeesMinor:
+          type: integer
+          format: int64
+          description: Delivery fees handed back, from the fees the orders were charged
+        feesEstimated:
+          type: boolean
+          description: 'A fee or refund stands in for an unreported one: the run''s fee'
+        phase:
+          type: string
+          description: BEFORE, AFTER or CANCELLED, as in the run's P&L
+        costMinor:
+          type: integer
+          format: int64
+          description: Estimated driver and vehicle cost
+        marginMinor:
+          type: integer
+          format: int64
+          description: 'Contribution margin: delivery fees kept minus the cost'
+        breakEvenOrders:
+          type: integer
+          format: int32
+          description: Orders whose fees cover the cost, at the run's fee
+        minimumCoveredBreakEven:
+          type: boolean
+          description: Whether the run's minimum reached the break-even (null without one)
     MonthlyCount:
       type: object
       properties:
@@ -6858,6 +6937,12 @@ components:
           minimum: 0
         roundTrip:
           type: boolean
+        platformFeePerOrderMinor:
+          type: integer
+          format: int64
+          description: Default 0 (not configured)
+          maximum: 100000
+          minimum: 0
         reason:
           type: string
           maxLength: 500
@@ -6901,6 +6986,11 @@ components:
           format: double
         roundTrip:
           type: boolean
+        platformFeePerOrderMinor:
+          type: integer
+          format: int64
+          description: Minor units the platform keeps on the goods of one order; the estimate behind 'Platform fees on goods'
+            when payments has not reported the real commission (0 = not configured)
         version:
           type: integer
           format: int64
@@ -7144,6 +7234,12 @@ components:
           format: int32
           maximum: 100000
           minimum: 0
+        capacityOrders:
+          type: integer
+          format: int32
+          description: Most orders the run can carry, to show the margin at capacity (null = the location's default capacity)
+          maximum: 10000
+          minimum: 1
     WindowPlan:
       type: object
       properties:
@@ -7169,6 +7265,9 @@ components:
           $ref: '#/components/schemas/RunEconomics'
         minimumCoversBreakEven:
           type: boolean
+        capacityOrders:
+          type: integer
+          format: int32
     GenerateAdvertorialRequest:
       type: object
       properties:
@@ -7215,6 +7314,12 @@ components:
         refundedFeesMinor:
           type: integer
           format: int64
+        refundedFeesEstimated:
+          type: boolean
+        actuals:
+          $ref: '#/components/schemas/RunActuals'
+        platformFees:
+          $ref: '#/components/schemas/PlatformFees'
     ServedAdvertorial:
       type: object
       description: An advertorial ready to show a visitor
@@ -7326,6 +7431,8 @@ components:
           $ref: '#/components/schemas/RunEconomics'
         minimumCoversBreakEven:
           type: boolean
+        platformFees:
+          $ref: '#/components/schemas/PlatformFees'
     EconomicsSettingsChange:
       type: object
       description: 'One entry of the audit trail: the numbers before (the environment defaults for the first save) and after,
@@ -7379,6 +7486,9 @@ components:
           format: double
         roundTrip:
           type: boolean
+        platformFeePerOrderMinor:
+          type: integer
+          format: int64
     LocalAdvertorials:
       type: object
       properties:
@@ -7484,6 +7594,173 @@ components:
           type: integer
           format: int64
         signups:
+          type: integer
+          format: int64
+    FeeLine:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - DOOR
+          - PICKUP
+          - CARRIER
+        orders:
+          type: integer
+          format: int32
+        feeMinor:
+          type: integer
+          format: int64
+    PlatformFees:
+      type: object
+      properties:
+        source:
+          type: string
+          enum:
+          - PAYMENTS
+          - MIXED
+          - ESTIMATE
+          - MANUAL
+          - NONE
+        commissionMinor:
+          type: integer
+          format: int64
+        orders:
+          type: integer
+          format: int32
+        ordersReported:
+          type: integer
+          format: int32
+        perOrderEstimateMinor:
+          type: integer
+          format: int64
+    RunActuals:
+      type: object
+      properties:
+        ordersCarried:
+          type: integer
+          format: int32
+        ordersDelivered:
+          type: integer
+          format: int32
+        ordersFailed:
+          type: integer
+          format: int32
+        ordersCancelled:
+          type: integer
+          format: int32
+        ordersRefunded:
+          type: integer
+          format: int32
+        feeMix:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeeLine'
+        deliveryFeesMinor:
+          type: integer
+          format: int64
+        refundedFeesMinor:
+          type: integer
+          format: int64
+        netDeliveryFeesMinor:
+          type: integer
+          format: int64
+        feesEstimated:
+          type: boolean
+        customersPaidMinor:
+          type: integer
+          format: int64
+        totalsComplete:
+          type: boolean
+        refundsMinor:
+          type: integer
+          format: int64
+        averageFeeMinor:
+          type: number
+          format: double
+        costBasis:
+          type: string
+          enum:
+          - ESTIMATE
+          - ACTUAL_TIME
+        actualMinutes:
+          type: number
+          format: double
+        estimatedCostMinor:
+          type: integer
+          format: int64
+        contributionMarginMinor:
+          type: integer
+          format: int64
+        breakEvenOrders:
+          type: integer
+          format: int32
+        breakEvenCovered:
+          type: boolean
+    LocationWindowSummary:
+      type: object
+      description: 'One pre-order window delivered by a location: the orders that count, the delivery fees and revenue they
+
+        paid, whether the minimum was met, and, for a cancelled window, the orders it refunded in full.'
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PAUSED
+          - UPCOMING
+          - OPEN
+          - CLOSED
+          - DELIVERED
+          - AWAITING_DECISION
+          - CANCELLED
+        deliversOn:
+          type: string
+          format: date
+        currency:
+          type: string
+        orders:
+          type: integer
+          format: int32
+        deliveryFeesMinor:
+          type: integer
+          format: int64
+        revenueMinor:
+          type: integer
+          format: int64
+        ordersRefunded:
+          type: integer
+          format: int32
+        refundedMinor:
+          type: integer
+          format: int64
+        minOrders:
+          type: integer
+          format: int32
+        minimumMet:
+          type: boolean
+          description: Whether the orders placed reached the minimum (null without one)
+    NetGrowth:
+      type: object
+      description: Subscribers gained and lost in one month (UTC)
+      properties:
+        month:
+          type: string
+          example: 2026-10
+        signUps:
+          type: integer
+          format: int64
+        unsubscribes:
+          type: integer
+          format: int64
+        net:
           type: integer
           format: int64
   securitySchemes:

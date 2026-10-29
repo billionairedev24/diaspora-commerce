@@ -88,8 +88,10 @@ class LocationController {
         return LocationResponse.of(locations.activate(id, body == null ? null : body.reason()));
     }
 
-    @Operation(summary = "Per-location history: runs with orders and fees, subscribers and monthly growth",
-            description = "delivery-runs:read (S265)")
+    @Operation(summary = "Per-location history: runs with orders, cost, margin and break-even, windows, subscribers and growth",
+            description = "delivery-runs:read (S265). Runs are counted and priced as their P&L is; windows list their "
+                    + "orders, delivery fees, refunds and whether the minimum was met; growth is monthly, gross and net "
+                    + "of unsubscribes.")
     @GetMapping("/v1/locations/{id}/history")
     LocationHistoryResponse history(@PathVariable UUID id) {
         return LocationHistoryResponse.of(locations.history(id));

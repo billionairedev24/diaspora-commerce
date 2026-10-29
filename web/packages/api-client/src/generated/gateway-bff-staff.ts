@@ -7515,6 +7515,8 @@ export interface components {
             handoverMinutesPerOrder: number;
             /** @description Count the drive back to the origin */
             roundTrip: boolean;
+            /** @description What the platform keeps on the goods of one order (seller commission and fees), minor units. The estimate behind the "Platform fees on goods" line until payments reports the real commission of an order; 0 = not configured. Saved with a reason and audited like the other numbers. */
+            platformFeePerOrderMinor?: number;
         };
         /**
          * @description The driver cost model; the ETag carries the version for If-Match. Version 0 (`source` CONFIG): the environment's
@@ -7603,6 +7605,82 @@ export interface components {
             expectedOrders?: number | null;
             commissionShareMinor?: number | null;
         };
+        /** @description The delivery fees charged on the delivered orders of one way of delivery */
+        StaffRunFeeLine: {
+            /** @enum {string} */
+            kind: "DOOR" | "PICKUP" | "CARRIER";
+            orders: number;
+            /** @description Fees charged on those orders */
+            feeMinor: number;
+        };
+        /**
+         * @description The run's delivery P&L built from its real orders, not from orders x one fee: what each order was charged (door,
+         *     pickup and carrier differ), what was handed back, the cost and the margin. Platform fees on goods are not
+         *     here (see `platformFees`).
+         */
+        StaffRunActuals: {
+            /** @description Orders that held a place on the run */
+            ordersCarried: number;
+            /** @description Of them, delivered (before the run: the orders it will deliver) */
+            ordersDelivered: number;
+            /** @description Of them, not delivered (the driver reported a failed or returned delivery) */
+            ordersFailed: number;
+            /** @description Slots customers gave back after reserving (and orders cancelled once confirmed); they earn and cost nothing */
+            ordersCancelled: number;
+            /** @description Delivered orders money was handed back on */
+            ordersRefunded: number;
+            feeMix: components["schemas"]["StaffRunFeeLine"][];
+            /** @description Delivery fees charged on the delivered orders */
+            deliveryFeesMinor: number;
+            /** @description Of them, handed back (from the refunds payments issued) */
+            refundedFeesMinor: number;
+            /** @description Fees kept */
+            netDeliveryFeesMinor: number;
+            /** @description Some order had no reported fee; the run's fee stands in for it (labelled estimate) */
+            feesEstimated: boolean;
+            /** @description What the delivered orders' customers paid in all, delivery fees included (reported totals) */
+            customersPaidMinor: number;
+            /** @description Every delivered order's total was reported */
+            totalsComplete: boolean;
+            /** @description All money handed back on the delivered orders, goods and fees */
+            refundsMinor: number;
+            /** @description Average delivery fee kept per delivered order */
+            averageFeeMinor?: number | null;
+            /**
+             * @description ESTIMATE: route time and miles from geo x the staff-set driver cost. ACTUAL_TIME: the minutes the driver was out (captured from the run) replace the estimated minutes; miles stay estimated.
+             * @enum {string}
+             */
+            costBasis: "ESTIMATE" | "ACTUAL_TIME";
+            /** @description Minutes the driver was out, when captured and plausible */
+            actualMinutes?: number | null;
+            /** @description Driver and vehicle cost */
+            estimatedCostMinor: number;
+            /** @description Net delivery fees minus the cost */
+            contributionMarginMinor: number;
+            /** @description Fewest orders whose fees cover the cost at the average fee actually kept */
+            breakEvenOrders?: number | null;
+            /** @description Whether the delivered orders reach that break-even */
+            breakEvenCovered?: boolean | null;
+        };
+        /**
+         * @description The contribution lens: what the platform keeps on the goods of the orders (seller commission and fees), shown as
+         *     its own line "Platform fees on goods" and never mixed into the delivery P&L. From the commission payments
+         *     reported on each order; for the others the staff-configured platform fee per order (economics settings).
+         */
+        StaffPlatformFees: {
+            /**
+             * @description PAYMENTS: all reported. MIXED: some reported, the rest estimated. ESTIMATE: orders x the configured fee. MANUAL: typed into the request. NONE: nothing reported and no estimate configured.
+             * @enum {string}
+             */
+            source: "PAYMENTS" | "MIXED" | "ESTIMATE" | "MANUAL" | "NONE";
+            /** @description Null when source is NONE */
+            commissionMinor?: number | null;
+            orders: number;
+            /** @description Orders payments reported the commission of */
+            ordersReported: number;
+            /** @description The configured estimate per order (0 = not configured) */
+            perOrderEstimateMinor: number;
+        };
         StaffRunPnl: {
             economics: components["schemas"]["StaffRunEconomics"];
             /** @enum {string} */
@@ -7613,10 +7691,16 @@ export interface components {
              */
             phase: "BEFORE" | "AFTER" | "CANCELLED";
             cancelReason?: string | null;
-            /** @description Orders of a cancelled run (each refunded in full) */
+            /** @description Orders refunded: a cancelled run's orders (each refunded in full), otherwise the delivered orders money was handed back on. The location history counts them the same way. */
             ordersRefunded: number;
-            /** @description Delivery fees handed back */
+            /** @description Delivery fees handed back, from the fees the orders were actually charged */
             refundedFeesMinor: number;
+            /** @description Some of those orders had no reported fee; the run's fee stands in for it (an estimate) */
+            refundedFeesEstimated?: boolean;
+            /** @description The delivery P&L from the real orders; null for a cancelled run */
+            actuals?: components["schemas"]["StaffRunActuals"] | null;
+            /** @description Platform fees on goods, apart from the delivery P&L; null for a cancelled run */
+            platformFees?: components["schemas"]["StaffPlatformFees"] | null;
         };
         StaffWindowPlanRequest: {
             /**
@@ -7634,6 +7718,8 @@ export interface components {
             minOrders?: number | null;
             /** @description Orders to show a P&L for (default the minimum) */
             expectedOrders?: number | null;
+            /** @description Most orders the run can carry, to show the margin at capacity (absent: the location's default capacity) */
+            capacityOrders?: number | null;
         };
         StaffWindowPlan: {
             locationId?: string | null;
@@ -7647,6 +7733,8 @@ export interface components {
             economics?: components["schemas"]["StaffRunEconomics"] | null;
             /** @description Whether the minimum reaches break-even (null without a break-even or a minimum) */
             minimumCoversBreakEven?: boolean | null;
+            /** @description The orders `economics.atCapacity` is worked out for; null when the capacity is not known or not limited */
+            capacityOrders?: number | null;
             can: components["schemas"]["PreorderCan"];
         };
         StaffWindowEconomics: {
@@ -7673,6 +7761,8 @@ export interface components {
             /** @description At the actual orders; null when no location serves the window */
             economics?: components["schemas"]["StaffRunEconomics"] | null;
             minimumCoversBreakEven?: boolean | null;
+            /** @description Platform fees on the goods of these orders, apart from the delivery P&L above; null for a cancelled window */
+            platformFees?: components["schemas"]["StaffPlatformFees"] | null;
             can: components["schemas"]["PreorderCan"];
         };
         StaffRunLocation: {
@@ -8022,6 +8112,10 @@ export interface components {
         StaffRunOrders: {
             items: components["schemas"]["StaffRunOrder"][];
         };
+        /**
+         * @description Runs newest first with their orders, cost, margin and break-even (the same figures as the run's P&L), pre-order
+         *     windows with their orders and fees, subscriber counts and growth per month (gross sign-ups, and net of unsubscribes).
+         */
         StaffRunLocationHistory: {
             location: components["schemas"]["StaffRunLocation"];
             runs: {
@@ -8035,12 +8129,49 @@ export interface components {
                 orders: number;
                 packages: number;
                 feeMinor: number;
-                /** @description Delivery fees earned; 0 for a cancelled run */
+                /** @description Delivery fees kept; 0 for a cancelled run */
                 feeRevenueMinor: number;
-                /** @description Orders refunded in full (cancelled runs) */
+                /** @description Orders refunded, counted as in the run's P&L (a cancelled run: every order, each refunded in full) */
                 ordersRefunded: number;
                 minOrders: number;
                 minimumMet: boolean;
+                ordersDelivered?: number;
+                /** @description Slots customers gave back after reserving */
+                ordersCancelled?: number;
+                /** @description Delivery fees handed back */
+                refundedFeesMinor?: number;
+                /** @description A fee or refund stands in for an unreported one (the run's fee) */
+                feesEstimated?: boolean;
+                /** @enum {string} */
+                phase?: "BEFORE" | "AFTER" | "CANCELLED";
+                /** @description Estimated driver and vehicle cost; null when the route could not be measured */
+                costMinor?: number | null;
+                /** @description Delivery fees kept minus the cost */
+                marginMinor?: number | null;
+                /** @description Orders whose fees cover the cost at the run's fee */
+                breakEvenOrders?: number | null;
+                /** @description Whether the run's minimum reached the break-even */
+                minimumCoveredBreakEven?: boolean | null;
+            }[];
+            windows?: {
+                id: string;
+                code: string;
+                name: string;
+                status: string;
+                /** Format: date */
+                deliversOn: string;
+                currency: string;
+                /** @description Orders that count; 0 once the window was cancelled */
+                orders: number;
+                deliveryFeesMinor: number;
+                /** @description What customers paid, delivery fees included */
+                revenueMinor: number;
+                /** @description Orders refunded in full by the window's cancellation */
+                ordersRefunded: number;
+                refundedMinor: number;
+                minOrders: number;
+                /** @description Whether the orders placed reached the minimum (null without one) */
+                minimumMet?: boolean | null;
             }[];
             subscribers: {
                 locationId?: string;
@@ -8055,7 +8186,16 @@ export interface components {
             subscriberGrowth: {
                 /** @example 2026-10 */
                 month: string;
+                /** @description Gross sign-ups */
                 count: number;
+            }[];
+            /** @description Sign-ups minus unsubscribes per month */
+            subscriberNetGrowth?: {
+                /** @example 2026-10 */
+                month: string;
+                signUps: number;
+                unsubscribes: number;
+                net: number;
             }[];
         };
         StaffAdvertorialResults: {
