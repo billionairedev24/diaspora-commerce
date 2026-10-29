@@ -142,13 +142,19 @@ final class OnboardingDtos {
     record ComplianceStep(List<String> categories, ComplianceSection.FoodPermit foodPermit,
                           Boolean beautyLabellingConfirmed, List<ServiceLicenceDto> services,
                           String insuranceDocumentAssetId, Boolean agreementsAccepted, Boolean w9Certified,
-                          String w9SignerName) {
+                          String w9SignerName, List<AgreementRef> agreements) {
 
         ComplianceSection toSection() {
             return new ComplianceSection(categories, foodPermit, beautyLabellingConfirmed,
                     services == null ? List.of() : services.stream().map(ServiceLicenceDto::toLicence).toList(),
-                    insuranceDocumentAssetId, agreementsAccepted, w9Certified, w9SignerName);
+                    insuranceDocumentAssetId, agreementsAccepted, w9Certified, w9SignerName,
+                    agreements == null ? List.of() : agreements.stream()
+                            .map(a -> new ComplianceSection.AcceptedAgreement(a.key(), a.version(), null)).toList());
         }
+    }
+
+    @Schema(name = "AgreementRef", description = "A legal document accepted, with the version that was shown")
+    record AgreementRef(String key, String version) {
     }
 
     @Schema(name = "ServiceLicence", description = "A service offered; regulated services need licence number, "

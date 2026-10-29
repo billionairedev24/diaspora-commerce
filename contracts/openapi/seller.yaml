@@ -1689,6 +1689,21 @@ components:
           type: boolean
         w9SignerName:
           type: string
+        agreements:
+          type: array
+          description: Legal documents accepted, each with the version that was shown (for example seller-terms 2.4). Sellers accept seller-terms, payments-terms and data-processing; providers provider-terms, payments-terms and data-processing.
+          items:
+            $ref: '#/components/schemas/AgreementRef'
+    AgreementRef:
+      type: object
+      description: A legal document accepted, with the version that was shown
+      properties:
+        key:
+          type: string
+          example: seller-terms
+        version:
+          type: string
+          example: '2.4'
     FoodPermit:
       type: object
       properties:
@@ -2535,6 +2550,24 @@ components:
           type: boolean
         w9SignerName:
           type: string
+        agreements:
+          type: array
+          description: Legal documents accepted with the version shown and the date of acceptance
+          items:
+            $ref: '#/components/schemas/AcceptedAgreement'
+    AcceptedAgreement:
+      type: object
+      description: A legal document accepted in onboarding
+      properties:
+        key:
+          type: string
+          example: seller-terms
+        version:
+          type: string
+          example: '2.4'
+        acceptedOn:
+          type: string
+          format: date
     DocumentAccess:
       type: object
       properties:
