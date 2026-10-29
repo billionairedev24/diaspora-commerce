@@ -250,8 +250,14 @@ var DefaultEventRules = map[string][]EventRule{
 	},
 	"orders.shipment.delivered": {{Topic: TopicOrders, Template: "shipment.delivered", Channels: chEmailPush,
 		Recipient: RecipientUser, IDField: "customerId", Enrich: enrichDelivered}},
-	"orders.shipment.cancelled": {{Topic: TopicOrders, Template: "shipment.cancelled", Channels: chEmailPush,
-		Recipient: RecipientUser, IDField: "customerId", Enrich: enrichShipmentCancelled}},
+	"orders.shipment.cancelled": {
+		{Topic: TopicOrders, Template: "shipment.cancelled", Channels: chEmailPush,
+			Recipient: RecipientUser, IDField: "customerId", Enrich: enrichShipmentCancelled},
+		// S262: a pre-order AfroTransact cancelled (its window, or the delivery run it was handed to) is also texted, as a
+		// cancelled run is: the customer must hear that the whole amount, delivery fee included, comes back.
+		{Topic: TopicOrders, Template: "shipment.cancelled", Channels: chSMS, Recipient: RecipientUser,
+			IDField: "customerId", Enrich: enrichShipmentCancelled, When: preorderCancelledByUs},
+	},
 
 	// ---- seller onboarding (at.seller-application.events) ----
 	"seller.application.submitted": {{Topic: TopicSellerApplications, Template: "seller.application.submitted",
@@ -505,12 +511,18 @@ func enrichShipment(d map[string]any, l Links) {
 	}
 }
 
+// preorderCancelledByUs: a PREORDER shipment cancelled by AfroTransact (its window or delivery run was cancelled), not
+// by the customer.
+func preorderCancelledByUs(d map[string]any) bool {
+	return str(d, "fulfilmentType") == "PREORDER" && str(d, "actorType") != "CUSTOMER"
+}
+
 func enrichShipmentCancelled(d map[string]any, l Links) {
 	enrichShipmentView(d, l)
 	d["refund"] = ""
 	// ADR 0005: a pre-order cancelled by AfroTransact (its window or delivery run was cancelled) is refunded in full,
 	// delivery fee included; say so plainly.
-	byUs := str(d, "fulfilmentType") == "PREORDER" && str(d, "actorType") != "CUSTOMER"
+	byUs := preorderCancelledByUs(d)
 	switch {
 	case boolean(d, "captured") && byUs:
 		d["refund"] = moneyField(d, "totalMinor")
@@ -523,6 +535,17 @@ func enrichShipmentCancelled(d map[string]any, l Links) {
 		d["refundNote"] = "AfroTransact cancelled this pre-order. You haven't been charged, and the hold on your card is being released."
 	default:
 		d["refundNote"] = "You haven't been charged for these items."
+	}
+	// The text message: short, one GSM-7 segment.
+	switch {
+	case boolean(d, "captured") && byUs:
+		d["smsRefundNote"] = "Refunded in full, delivery fee included: " + moneyField(d, "totalMinor") + "."
+	case boolean(d, "captured"):
+		d["smsRefundNote"] = "Refunding " + moneyField(d, "totalMinor") + " to your original payment method."
+	case byUs:
+		d["smsRefundNote"] = "You were not charged; the hold on your card is released."
+	default:
+		d["smsRefundNote"] = "You were not charged."
 	}
 }
 
