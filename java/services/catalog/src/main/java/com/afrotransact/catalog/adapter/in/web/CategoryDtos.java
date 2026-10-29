@@ -4,13 +4,19 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.catalog.application.CategoryService.ApprovalChoice;
+import com.afrotransact.catalog.application.CategoryService.ApprovalPlan;
+import com.afrotransact.catalog.application.CategoryService.PlannedNode;
+import com.afrotransact.catalog.application.CategoryService.RequestDetail;
 import com.afrotransact.catalog.domain.AttributeDefinition;
 import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.CategoryRequest;
+import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.ProductTypeTraits;
 import com.afrotransact.catalog.domain.VariationTheme;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -36,7 +42,7 @@ final class CategoryDtos {
                                List<VariationTheme> themes, ProductTypeTraits traits) {
 
         static ProductTypeResponse of(ProductType t) {
-            return new ProductTypeResponse(t.code(), t.label(), t.identifierRule().name(), t.attributes(), t.themes(),
+            return new ProductTypeResponse(t.code(), t.label(), t.identifierRule().name(), t.applicableAttributes(), t.themes(),
                     t.traits());
         }
     }
@@ -48,8 +54,42 @@ final class CategoryDtos {
                                  @NotBlank @Size(min = 3, max = 1000) String detailsNeeded) {
     }
 
-    @Schema(name = "ApproveCategoryRequest")
-    record ApproveCategoryRequest(@NotNull UUID parentCategoryId, @NotBlank String productType, String note) {
+    @Schema(name = "ApproveCategoryRequest", description = "parentCategoryId is a department (a category named "
+            + "categoryName, default the requested name, is created for it) or a category. Give productType (an "
+            + "existing schema) or newProductType (a new one), not both.")
+    record ApproveCategoryRequest(@NotNull UUID parentCategoryId, @Size(max = 80) String categoryName,
+                                  @Size(max = 40) String productType,
+                                  @Valid TaxonomyDtos.NewProductTypeBody newProductType,
+                                  @Size(max = 1000) String note) {
+
+        ApprovalChoice toChoice() {
+            return new ApprovalChoice(parentCategoryId, categoryName, productType,
+                    newProductType == null ? null : newProductType.toDomain());
+        }
+    }
+
+    @Schema(name = "PlannedNode")
+    record PlannedNodeResponse(String level, String name, String path, boolean created) {
+
+        static PlannedNodeResponse of(PlannedNode n) {
+            return new PlannedNodeResponse(n.level().name(), n.name(), n.path(), n.created());
+        }
+    }
+
+    @Schema(name = "PlannedProductType")
+    record PlannedTypeResponse(String code, String label, boolean created, int attributeCount) {
+    }
+
+    @Schema(name = "ApprovalPlan", description = "What approving the request would create; nothing is created by "
+            + "asking")
+    record ApprovalPlanResponse(List<PlannedNodeResponse> nodes, PlannedTypeResponse productType,
+                                long productsMoving) {
+
+        static ApprovalPlanResponse of(ApprovalPlan p) {
+            return new ApprovalPlanResponse(p.nodes().stream().map(PlannedNodeResponse::of).toList(),
+                    new PlannedTypeResponse(p.productType().code(), p.productType().label(),
+                            p.productType().created(), p.productType().attributeCount()), p.productsMoving());
+        }
     }
 
     @Schema(name = "RejectCategoryRequest")
@@ -57,14 +97,40 @@ final class CategoryDtos {
     }
 
     @Schema(name = "CategoryRequest")
-    record CategoryRequestResponse(UUID id, String reference, String orgId, String path, String exampleProduct,
-                                   String detailsNeeded, String status, UUID resolvedCategoryId, String decisionNote,
-                                   Instant createdAt, Instant decidedAt) {
+    record CategoryRequestResponse(UUID id, String reference, String orgId, String path, String parentPath,
+                                   String name, String exampleProduct, String detailsNeeded, String status,
+                                   UUID resolvedCategoryId, String decisionNote, Instant createdAt, Instant decidedAt,
+                                   long productsWaiting) {
 
         static CategoryRequestResponse of(CategoryRequest r) {
+            return of(r, 0);
+        }
+
+        static CategoryRequestResponse of(CategoryRequest r, long productsWaiting) {
             return new CategoryRequestResponse(r.id(), r.reference(), r.requestedByOrg(), r.fullPath(),
-                    r.exampleProduct(), r.detailsNeeded(), r.status().name(), r.resolvedCategoryId(),
-                    r.decisionNote(), r.createdAt(), r.decidedAt());
+                    r.parentPath(), r.name(), r.exampleProduct(), r.detailsNeeded(), r.status().name(),
+                    r.resolvedCategoryId(), r.decisionNote(), r.createdAt(), r.decidedAt(), productsWaiting);
+        }
+    }
+
+    @Schema(name = "WaitingProduct")
+    record WaitingProductResponse(UUID id, String atin, String title) {
+
+        static WaitingProductResponse of(Product p) {
+            return new WaitingProductResponse(p.id(), p.atin().value(), p.title());
+        }
+    }
+
+    @Schema(name = "CategoryRequestDetail", description = "A request with the products waiting on it and the "
+            + "department or category its requested path points to (null when the path does not exist)")
+    record CategoryRequestDetailResponse(CategoryRequestResponse request, List<WaitingProductResponse> products,
+                                         CategoryNodeResponse suggestedParent) {
+
+        static CategoryRequestDetailResponse of(RequestDetail d) {
+            return new CategoryRequestDetailResponse(
+                    CategoryRequestResponse.of(d.request(), d.waitingProducts().size()),
+                    d.waitingProducts().stream().map(WaitingProductResponse::of).toList(),
+                    d.suggestedParent() == null ? null : CategoryNodeResponse.of(d.suggestedParent()));
         }
     }
 }

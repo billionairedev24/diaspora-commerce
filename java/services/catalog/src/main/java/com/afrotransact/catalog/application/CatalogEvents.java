@@ -5,6 +5,7 @@ public final class CatalogEvents {
 
     public static final String AGGREGATE_PRODUCT = "product";
     public static final String AGGREGATE_CATEGORY_REQUEST = "category-request";
+    public static final String AGGREGATE_TAXONOMY = "taxonomy";
 
     public static final String PRODUCT_CREATED = "catalog.product.created";
     public static final String PRODUCT_APPROVED = "catalog.product.approved";
@@ -58,6 +59,11 @@ public final class CatalogEvents {
     public static final String REVIEW_REPORTED = "catalog.review.reported";
     /** The product owner replied to a review. */
     public static final String REVIEW_REPLIED = "catalog.review.replied";
+    /**
+     * Staff changed the taxonomy (a node created, renamed, moved, reordered, retired or restored, or a product type's
+     * schema edited). Consumers that cache the category tree (indexer, delivery-runs) drop their copy.
+     */
+    public static final String TAXONOMY_CHANGED = "catalog.taxonomy.changed";
     public static final String CATEGORY_REQUESTED = "catalog.category-request.created";
     public static final String CATEGORY_APPROVED = "catalog.category-request.approved";
     public static final String CATEGORY_REJECTED = "catalog.category-request.rejected";

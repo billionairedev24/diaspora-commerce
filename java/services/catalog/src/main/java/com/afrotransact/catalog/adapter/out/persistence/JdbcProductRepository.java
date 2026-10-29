@@ -245,6 +245,49 @@ class JdbcProductRepository implements ProductRepository {
                 .param("org", orgId).param("sku", sellerSku).query(Boolean.class).single();
     }
 
+    @Override
+    public Map<UUID, Long> countByCategory(Set<ProductStatus> excluding) {
+        List<String> skipped = excluding.stream().map(ProductStatus::name).toList();
+        Map<UUID, Long> counts = new HashMap<>();
+        jdbc.sql("""
+                select category_id, count(*) as n from product
+                where category_id is not null and (cardinality(cast(:skipped as text[])) = 0
+                      or status <> all(cast(:skipped as text[])))
+                group by category_id
+                """).param("skipped", skipped.toArray(new String[0]))
+                .query(rs -> {
+                    counts.put(rs.getObject("category_id", UUID.class), rs.getLong("n"));
+                });
+        return counts;
+    }
+
+    @Override
+    public Map<String, Long> countByProductType() {
+        Map<String, Long> counts = new HashMap<>();
+        jdbc.sql("select product_type, count(*) as n from product group by product_type")
+                .query(rs -> {
+                    counts.put(rs.getString("product_type"), rs.getLong("n"));
+                });
+        return counts;
+    }
+
+    @Override
+    public Map<UUID, Long> countByCategoryRequest(Collection<UUID> requestIds) {
+        Map<UUID, Long> counts = new HashMap<>();
+        if (requestIds.isEmpty()) {
+            return counts;
+        }
+        jdbc.sql("""
+                select category_request_id, count(*) as n from product
+                where category_request_id in (:ids) and status = 'PENDING_CATEGORY_APPROVAL'
+                group by category_request_id
+                """).param("ids", requestIds)
+                .query(rs -> {
+                    counts.put(rs.getObject("category_request_id", UUID.class), rs.getLong("n"));
+                });
+        return counts;
+    }
+
     private Optional<Product> one(String sql, Object value) {
         List<Product> found = jdbc.sql(sql).param("v", value).query(this::mapProduct).list();
         return withVariants(found).stream().findFirst();

@@ -19,10 +19,12 @@ import java.util.regex.Pattern;
  * @param units     for {@link AttributeKind#NUMBER}: allowed units, the first is the default ("days", "months")
  * @param section   where the product form shows it; {@link AttributeSection#DETAILS} when absent
  * @param help      one-line hint shown under the field and in the upload template; may be null
+ * @param applies   whether the product type asks for it; false keeps the definition (and what existing products
+ *                  hold) but hides it from the product form and the upload template (absent in stored JSON = true)
  */
 public record AttributeDefinition(String key, String label, List<String> options, boolean required,
                                   boolean multiline, AttributeKind kind, List<String> units,
-                                  AttributeSection section, String help) {
+                                  AttributeSection section, String help, Boolean applies) {
 
     private static final Pattern NUMBER_WITH_UNIT = Pattern.compile("^(-?\\d+(?:[.,]\\d+)?)\\s*(.*)$");
 
@@ -36,11 +38,18 @@ public record AttributeDefinition(String key, String label, List<String> options
         }
         section = section == null ? AttributeSection.DETAILS : section;
         help = help == null || help.isBlank() ? null : help.trim();
+        applies = applies == null || applies;
+    }
+
+    /** An attribute that applies, with every other detail given. */
+    public AttributeDefinition(String key, String label, List<String> options, boolean required, boolean multiline,
+                               AttributeKind kind, List<String> units, AttributeSection section, String help) {
+        this(key, label, options, required, multiline, kind, units, section, help, null);
     }
 
     /** A details attribute whose kind follows its options and multiline flag. */
     public AttributeDefinition(String key, String label, List<String> options, boolean required, boolean multiline) {
-        this(key, label, options, required, multiline, null, null, null, null);
+        this(key, label, options, required, multiline, null, null, null, null, null);
     }
 
     public boolean accepts(String value) {

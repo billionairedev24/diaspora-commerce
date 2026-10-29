@@ -362,7 +362,7 @@ public final class ImportValidator {
         if (!brand.isEmpty()) {
             out.put(ImportColumns.BRAND, brand);
         }
-        for (AttributeDefinition a : type.attributes()) {
+        for (AttributeDefinition a : type.applicableAttributes()) {
             String col = ImportColumns.BRAND.equals(a.key()) ? ImportColumns.BRAND : ImportColumns.ATTR_PREFIX + a.key();
             String value = ctx.fixedType() == null && !ImportColumns.BRAND.equals(a.key())
                     ? generic.getOrDefault(a.key().toLowerCase(Locale.ROOT), "")
@@ -393,7 +393,7 @@ public final class ImportValidator {
         }
         if (ctx.fixedType() == null) {
             Set<String> known = new HashSet<>();
-            type.attributes().forEach(a -> known.add(a.key().toLowerCase(Locale.ROOT)));
+            type.applicableAttributes().forEach(a -> known.add(a.key().toLowerCase(Locale.ROOT)));
             List<String> unknown = generic.keySet().stream().filter(k -> !known.contains(k)).toList();
             if (!unknown.isEmpty()) {
                 add(first, RowMessage.warning(ImportColumns.ATTRIBUTES, idx(ImportColumns.ATTRIBUTES),

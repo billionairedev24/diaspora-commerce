@@ -106,7 +106,7 @@ public final class ImportColumns {
                         d.options(), d.options().isEmpty() ? "" : d.options().getFirst(), false));
             }
         }
-        for (AttributeDefinition a : type.attributes()) {
+        for (AttributeDefinition a : type.applicableAttributes()) {
             if (BRAND.equals(a.key())) {
                 continue;
             }

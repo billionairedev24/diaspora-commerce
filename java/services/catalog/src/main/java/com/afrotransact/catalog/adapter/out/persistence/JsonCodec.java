@@ -19,6 +19,7 @@ class JsonCodec {
 
     private static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() { };
     private static final TypeReference<Map<String, Boolean>> FLAGS = new TypeReference<>() { };
+    private static final TypeReference<Map<String, Object>> OBJECT_MAP = new TypeReference<>() { };
     private static final TypeReference<List<ProductImage>> IMAGES = new TypeReference<>() { };
     private static final TypeReference<List<AttributeDefinition>> ATTRIBUTES = new TypeReference<>() { };
     private static final TypeReference<List<VariationTheme>> THEMES = new TypeReference<>() { };
@@ -37,6 +38,11 @@ class JsonCodec {
 
     Map<String, String> stringMap(String json) {
         return json == null ? Map.of() : mapper.readValue(json, STRING_MAP);
+    }
+
+    /** A JSON object with values of any type (audit details). */
+    Map<String, Object> objectMap(String json) {
+        return json == null || json.isBlank() ? Map.of() : mapper.readValue(json, OBJECT_MAP);
     }
 
     List<ProductImage> images(String json) {

@@ -33,7 +33,13 @@ public record ProductType(String code, String label, List<AttributeDefinition> a
         return themes.stream().filter(t -> t.name().equals(name)).findFirst();
     }
 
+    /** What the product form, the upload template and the validators ask for (attributes that apply). */
+    public List<AttributeDefinition> applicableAttributes() {
+        return attributes.stream().filter(AttributeDefinition::applies).toList();
+    }
+
+    /** The applicable attribute with this key. */
     public Optional<AttributeDefinition> attribute(String key) {
-        return attributes.stream().filter(a -> a.key().equals(key)).findFirst();
+        return attributes.stream().filter(a -> a.applies() && a.key().equals(key)).findFirst();
     }
 }

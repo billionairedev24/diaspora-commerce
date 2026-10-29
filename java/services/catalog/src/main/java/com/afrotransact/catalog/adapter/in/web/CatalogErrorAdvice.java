@@ -3,6 +3,8 @@ package com.afrotransact.catalog.adapter.in.web;
 import java.util.Map;
 
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
+import com.afrotransact.catalog.domain.PreconditionRequiredException;
+import com.afrotransact.catalog.domain.StaleVersionException;
 import com.afrotransact.catalog.domain.ReviewStateConflict;
 import com.afrotransact.catalog.domain.imports.SpreadsheetRejected;
 import com.afrotransact.catalog.port.ImageImporter.ImageServiceUnavailable;
@@ -66,6 +68,24 @@ class CatalogErrorAdvice {
         pd.setType(ProblemTypes.of("catalog.purchase-check-unavailable"));
         pd.setTitle("Purchase check unavailable");
         pd.setProperty("code", "catalog.purchase-check-unavailable");
+        return pd;
+    }
+
+    @ExceptionHandler(StaleVersionException.class)
+    ProblemDetail staleVersion(StaleVersionException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.PRECONDITION_FAILED, ex.getMessage());
+        pd.setType(ProblemTypes.of("catalog.version-mismatch"));
+        pd.setTitle("Changed by someone else");
+        pd.setProperty("code", "catalog.version-mismatch");
+        return pd;
+    }
+
+    @ExceptionHandler(PreconditionRequiredException.class)
+    ProblemDetail preconditionRequired(PreconditionRequiredException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.PRECONDITION_REQUIRED, ex.getMessage());
+        pd.setType(ProblemTypes.of("catalog.if-match-required"));
+        pd.setTitle("Version required");
+        pd.setProperty("code", "catalog.if-match-required");
         return pd;
     }
 
