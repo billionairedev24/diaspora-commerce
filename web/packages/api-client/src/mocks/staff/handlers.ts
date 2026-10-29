@@ -62,6 +62,7 @@ import { ordersOf, PREORDER_ORDER_COLUMNS, preorderHandlers, preorderOrderRow } 
 import { type ActionCtx, detailKind, humanize, type MockAction, RESOURCES, toneOf } from './resources';
 import { runHandlers } from './runs';
 import { staffSettingsHandlers } from './settings';
+import { taxonomyHandlers } from './taxonomy';
 import { MockRenderError, renderPart, type TemplatePart } from './template-render';
 
 export const MOCK_STAFF_ROLE_COOKIE = 'at_mock_staff_role';
@@ -127,7 +128,10 @@ function context(request: Request): Ctx {
   const showOnce = (label: string, value: string, note: string) => {
     once.current = { label, value, note };
   };
-  return { db, roles, permissions: permissionsOf(roles), request, now, once, action: { actor, actorId: db.user.id, now, refundLimit: refundLimit(roles), showOnce } };
+  const fail = (errors: Record<string, string>): never => {
+    throw invalid(errors);
+  };
+  return { db, roles, permissions: permissionsOf(roles), request, now, once, action: { actor, actorId: db.user.id, now, refundLimit: refundLimit(roles), showOnce, fail } };
 }
 
 function requireModule(ctx: Ctx, resource: ResourceKey, min: AccessLevel = 'VIEW') {
@@ -1306,6 +1310,7 @@ export const staffHandlers = [
   ...runHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Settings → Markets & locations (location tree) and the shared place pickers */
   ...marketHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
+  ...taxonomyHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Plans & billing (S292–S297): the seller service's catalogue, trials, rewards and per-seller billing */
   ...planHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   ...feeRateHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }, (ctx) => activeFeeSchedule(ctx.db.feeSchedules, ctx.now)),

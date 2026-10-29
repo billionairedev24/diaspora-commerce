@@ -125,7 +125,7 @@ export interface paths {
          * One page of a server-driven table (columns, facets, rows)
          * @description Upstreams per resource — users: identity `GET /v1/admin/users`; roles: identity `GET /v1/admin/roles`;
          *     applications: seller `GET /v1/applications`; orders: orders `GET /v1/admin/orders`; products: catalog
-         *     `GET /v1/products`; moderation: trust-ops `GET /v1/moderation/items`; claims: trust-ops `GET /v1/claims`;
+         *     `GET /v1/products`; category-requests: catalog `GET /v1/category-requests` (actions approve, reject); moderation: trust-ops `GET /v1/moderation/items`; claims: trust-ops `GET /v1/claims`;
          *     returns: tax-returns `GET /v1/returns`; payouts: payments `GET /v1/payouts/requests`; inventory: inventory
          *     `GET /v1/lots`; purchase-orders: retail `GET /v1/purchase-orders`; routes: fulfilment `GET /v1/dispatch/routes` (create = the route builder
          *     `POST /v1/dispatch/routes/build`); dispatch-shipments: fulfilment `GET /v1/dispatch/shipments`; sos-alerts: fulfilment
@@ -4694,10 +4694,462 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/taxonomy/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The whole category tree with retired nodes, product counts and the pending-request count
+         * @description catalog `GET /v1/taxonomy/tree` (module `catalog` VIEW and permission `catalog:taxonomy`).
+         */
+        get: operations["getStaffTaxonomyTree"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a department, a category or a product type
+         * @description catalog `POST /v1/taxonomy/nodes` (EDIT). A product type uses an existing schema (`productType`) or defines a new
+         *     one (`newProductType`). Every change carries a reason. 422 for duplicate names or codes, a wrong parent level or a
+         *     retired parent.
+         */
+        post: operations["createStaffTaxonomyNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/nodes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaxonomyNodeId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Rename a node; the paths below it follow (If-Match = the node's version)
+         * @description catalog `PATCH /v1/taxonomy/nodes/{id}`. A save in which the name did not change is a 422.
+         */
+        patch: operations["renameStaffTaxonomyNode"];
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/nodes/{id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaxonomyNodeId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a category to another department or a product type to another category (If-Match = the node's version)
+         * @description catalog `POST /v1/taxonomy/nodes/{id}/move`. Products follow the node; departments cannot move.
+         */
+        post: operations["moveStaffTaxonomyNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/nodes/{id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaxonomyNodeId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire a node and what is under it (soft; If-Match = the node's version)
+         * @description catalog `POST /v1/taxonomy/nodes/{id}/retire`. A retired node stays on the products that already use it but cannot
+         *     be chosen for new ones. 409 while the node or anything under it has products: move its product types elsewhere first.
+         */
+        post: operations["retireStaffTaxonomyNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/nodes/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TaxonomyNodeId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bring a retired node back, with what was retired with it (If-Match = the node's version)
+         * @description catalog `POST /v1/taxonomy/nodes/{id}/restore`. 422 while its parent is still retired.
+         */
+        post: operations["restoreStaffTaxonomyNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set the display order of the children of a node (or of the departments)
+         * @description catalog `POST /v1/taxonomy/reorder`. `ids` is every child of the parent, retired ones included; 412 when the list
+         *     changed since it was loaded, 422 when the order did not change.
+         */
+        post: operations["reorderStaffTaxonomy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/product-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Product-type schemas with where they are used
+         * @description catalog `GET /v1/taxonomy/product-types`.
+         */
+        get: operations["listStaffTaxonomyProductTypes"];
+        put?: never;
+        /**
+         * Create a product-type schema
+         * @description catalog `POST /v1/taxonomy/product-types`. Variation options are copied from `basedOn` (default the placeholder type).
+         */
+        post: operations["createStaffTaxonomyProductType"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/product-types/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["TaxonomyTypeCode"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One product type with every attribute, including those that do not apply
+         * @description catalog `GET /v1/taxonomy/product-types/{code}`.
+         */
+        get: operations["getStaffTaxonomyProductType"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit a product type's label, identifier rule, traits or attributes (If-Match = the schema's version)
+         * @description catalog `PATCH /v1/taxonomy/product-types/{code}`. Only the fields sent change; `attributes`, when sent, is the whole
+         *     new list (order matters: it is the order of the seller's form). The sales-tax question (`tax_class`) is owned by
+         *     tax-returns: its wording and choices cannot be edited. A save in which nothing changed is a 422.
+         */
+        patch: operations["updateStaffTaxonomyProductType"];
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who changed the taxonomy, what and why, newest first (people by name)
+         * @description catalog `GET /v1/taxonomy/audit`. `subject` narrows it to one node, product type or category request.
+         */
+        get: operations["listStaffTaxonomyAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/requests/{id}/approval-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What approving a category request with these choices would create (creates nothing)
+         * @description catalog `POST /v1/category-requests/{id}/approval-preview`. Takes the values of the `approve` action's form
+         *     (`parentCategoryId`, `categoryName`, `productType` or `__new__` with `basedOn`). The approval itself is the
+         *     `approve` action of the `category-requests` table.
+         */
+        post: operations["previewStaffCategoryRequestApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Why the change is made; recorded in the audit trail with the person's name */
+        StaffTaxonomyReason: string;
+        StaffTaxonomyReasonBody: {
+            reason: components["schemas"]["StaffTaxonomyReason"];
+        };
+        /** @enum {string} */
+        StaffTaxonomyIdentifierRule: "GTIN" | "ISBN";
+        /** @enum {string} */
+        StaffTaxonomyLevel: "DEPARTMENT" | "CATEGORY" | "PRODUCT_TYPE";
+        StaffTaxonomyNode: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            parentId: string | null;
+            /**
+             * @description Stable machine code
+             * @example fashion-women-dresses
+             */
+            code: string;
+            name: string;
+            level: components["schemas"]["StaffTaxonomyLevel"];
+            /** @description The product-type schema a product-type node uses */
+            productType: string | null;
+            productTypeLabel: string | null;
+            /** @example Fashion › Women › Dresses */
+            path: string;
+            position: number;
+            /** @description False once retired */
+            active: boolean;
+            /** Format: date-time */
+            retiredAt: string | null;
+            retiredReason: string | null;
+            /**
+             * Format: int64
+             * @description Send as If-Match when changing the node
+             */
+            version: number;
+            /**
+             * Format: int64
+             * @description Products directly on the node
+             */
+            productCount: number;
+            /**
+             * Format: int64
+             * @description Products on the node and everything under it
+             */
+            subtreeProductCount: number;
+            childCount: number;
+        };
+        StaffTaxonomyNodes: {
+            items: components["schemas"]["StaffTaxonomyNode"][];
+        };
+        StaffTaxonomyTree: {
+            nodes: components["schemas"]["StaffTaxonomyNode"][];
+            /** Format: int64 */
+            pendingRequests: number;
+            /** @description The caller may change the tree (module catalog EDIT) */
+            canEdit: boolean;
+            /** @description The caller may approve and reject category requests (module catalog APPROVE) */
+            canDecide: boolean;
+        };
+        /** @description What a product type implies for the seller's form and upload template */
+        StaffTaxonomyTraits: {
+            food?: boolean;
+            /** @description Only food can be perishable */
+            perishable?: boolean;
+            regulated?: boolean;
+            preorder?: boolean;
+        };
+        /** @description One detail a product type asks sellers for. `applies` false keeps the definition but stops asking (brand is just an attribute; a Books type has none). */
+        StaffTaxonomyAttribute: {
+            key: string;
+            label: string;
+            /** @enum {string} */
+            kind: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER";
+            /** @description The allowed values of a choice (ENUM); empty for other kinds */
+            options?: string[];
+            /** @description The units of a NUMBER; the first is the default */
+            units?: string[];
+            required?: boolean;
+            /**
+             * @description Where the seller's form shows it; FOOD needs the food trait and REGULATED the regulated trait
+             * @enum {string}
+             */
+            section?: "DETAILS" | "FOOD" | "REGULATED";
+            help?: string | null;
+            /** @default true */
+            applies: boolean;
+            /** @description Read-only echo of kind MULTILINE */
+            multiline?: boolean;
+        };
+        StaffTaxonomyTypeUse: {
+            /** Format: uuid */
+            nodeId: string;
+            path: string;
+            active: boolean;
+        };
+        StaffTaxonomyProductType: {
+            code: string;
+            label: string;
+            identifierRule: components["schemas"]["StaffTaxonomyIdentifierRule"];
+            traits: components["schemas"]["StaffTaxonomyTraits"];
+            attributes: components["schemas"]["StaffTaxonomyAttribute"][];
+            /** @description Variation options (Size × Color…); copied when a type is created */
+            themes: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Format: int64
+             * @description Send as If-Match when editing the schema
+             */
+            version: number;
+            /** Format: date-time */
+            updatedAt?: string | null;
+            /** Format: int64 */
+            productCount: number;
+            usedBy: components["schemas"]["StaffTaxonomyTypeUse"][];
+            canEdit?: boolean;
+        };
+        StaffTaxonomyProductTypes: {
+            items: components["schemas"]["StaffTaxonomyProductType"][];
+            canEdit: boolean;
+        };
+        StaffTaxonomyNewProductType: {
+            /** @description Derived from the label when blank */
+            code?: string;
+            label?: string;
+            identifierRule: components["schemas"]["StaffTaxonomyIdentifierRule"];
+            traits?: components["schemas"]["StaffTaxonomyTraits"];
+            attributes?: components["schemas"]["StaffTaxonomyAttribute"][];
+            /** @description The product type whose variation options are copied; default the placeholder type */
+            basedOn?: string;
+        };
+        StaffTaxonomyCreateNode: {
+            level: components["schemas"]["StaffTaxonomyLevel"];
+            /**
+             * Format: uuid
+             * @description Required for categories (a department) and product types (a category)
+             */
+            parentId?: string;
+            name: string;
+            /** @description Derived from the path when blank */
+            code?: string;
+            /** @description The existing schema of a product-type node (or newProductType) */
+            productType?: string;
+            newProductType?: components["schemas"]["StaffTaxonomyNewProductType"];
+            reason: components["schemas"]["StaffTaxonomyReason"];
+        };
+        StaffTaxonomyAuditItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** @description Who made the change, by name */
+            actorName: string;
+            /** @example NODE_RENAMED */
+            action: string;
+            /** @example Renamed */
+            actionLabel: string;
+            /** @enum {string} */
+            subjectKind: "NODE" | "PRODUCT_TYPE" | "REQUEST";
+            /** @description The path, product-type label or request as it read at the time */
+            subjectLabel: string;
+            reason: string;
+            /** @description What changed, in a line */
+            summary: string;
+        };
+        StaffTaxonomyAudit: {
+            items: components["schemas"]["StaffTaxonomyAuditItem"][];
+        };
+        StaffCategoryApprovalChoice: {
+            /**
+             * Format: uuid
+             * @description A department (a category is created for it) or a category
+             */
+            parentCategoryId: string;
+            /** @description The category created under a department; defaults to the requested name */
+            categoryName?: string;
+            /** @description An existing product type, or `__new__` to create one */
+            productType: string;
+            /** @description With `__new__`, the product type whose details, identifier rule and traits it starts from */
+            basedOn?: string;
+            note?: string;
+        };
+        StaffCategoryApprovalPlan: {
+            nodes: {
+                level: components["schemas"]["StaffTaxonomyLevel"];
+                name: string;
+                path: string;
+                /** @description False when the category already exists and is reused */
+                created: boolean;
+            }[];
+            productType: {
+                code: string;
+                label: string;
+                created: boolean;
+                attributeCount: number;
+            };
+            /**
+             * Format: int64
+             * @description Products waiting on the request that move into listing review
+             */
+            productsMoving: number;
+        };
         RunDispatchList: {
             items: components["schemas"]["RunDispatch"][];
             /** @description The caller may plan a run and move it by hand */
@@ -5758,7 +6210,7 @@ export interface components {
             charts: components["schemas"]["ChartSpec"][];
         };
         /** @enum {string} */
-        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "moderation" | "product-reviews" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "tax-codes" | "tax-rules" | "tax-review" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons" | "reconciliation" | "reconciliation-runs" | "ledger-adjustments" | "credit-adjustments" | "gift-cards" | "credit-liabilities" | "money-settings" | "membership-tiers" | "memberships" | "membership-settings" | "membership-report" | "referrals" | "referral-settings" | "stripe-lookup" | "payment-settings" | "tax-settings" | "maintenance" | "tax-filings" | "tax-nexus" | "oauth-clients" | "identity-sessions" | "signing-keys" | "auth-settings" | "exchange-rates";
+        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "category-requests" | "moderation" | "product-reviews" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "tax-codes" | "tax-rules" | "tax-review" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons" | "reconciliation" | "reconciliation-runs" | "ledger-adjustments" | "credit-adjustments" | "gift-cards" | "credit-liabilities" | "money-settings" | "membership-tiers" | "memberships" | "membership-settings" | "membership-report" | "referrals" | "referral-settings" | "stripe-lookup" | "payment-settings" | "tax-settings" | "maintenance" | "tax-filings" | "tax-nexus" | "oauth-clients" | "identity-sessions" | "signing-keys" | "auth-settings" | "exchange-rates";
         /** @enum {string} */
         Tone: "good" | "warn" | "bad" | "info" | "brand";
         CellValue: string | number | null;
@@ -8321,6 +8773,10 @@ export interface components {
         };
     };
     parameters: {
+        TaxonomyNodeId: string;
+        TaxonomyTypeCode: string;
+        /** @description The version of the node or schema as loaded (optimistic locking); 412 VERSION_CONFLICT when someone changed it since. */
+        TaxonomyIfMatch: string;
         /**
          * @description Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
          *     3). Any column of the table. Empty cells sort last in both directions.
@@ -16407,6 +16863,421 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffTaxonomyTree: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tree */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxonomyTree"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffTaxonomyNode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxonomyCreateNode"];
+            };
+        };
+        responses: {
+            /** @description Created node */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxonomyNode"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    renameStaffTaxonomyNode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The version of the node or schema as loaded (optimistic locking); 412 VERSION_CONFLICT when someone changed it since. */
+                "If-Match": components["parameters"]["TaxonomyIfMatch"];
+            };
+            path: {
+                id: components["parameters"]["TaxonomyNodeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    reason: components["schemas"]["StaffTaxonomyReason"];
+                };
+            };
+        };
+        responses: {
+            /** @description Node */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxonomyNode"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    moveStaffTaxonomyNode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The version of the node or schema as loaded (optimistic locking); 412 VERSION_CONFLICT when someone changed it since. */
+                "If-Match": components["parameters"]["TaxonomyIfMatch"];
+            };
+            path: {
+                id: components["parameters"]["TaxonomyNodeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    parentId: string;
+                    reason: components["schemas"]["StaffTaxonomyReason"];
+                };
+            };
+        };
+        responses: {
+            /** @description Node */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxonomyNode"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    retireStaffTaxonomyNode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The version of the node or schema as loaded (optimistic locking); 412 VERSION_CONFLICT when someone changed it since. */
+                "If-Match": components["parameters"]["TaxonomyIfMatch"];
+            };
+            path: {
+                id: components["parameters"]["TaxonomyNodeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxonomyReasonBody"];
+            };
+        };
+        responses: {
+            /** @description Node */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxonomyNode"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    restoreStaffTaxonomyNode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The version of the node or schema as loaded (optimistic locking); 412 VERSION_CONFLICT when someone changed it since. */
+                "If-Match": components["parameters"]["TaxonomyIfMatch"];
+            };
+            path: {
+                id: components["parameters"]["TaxonomyNodeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxonomyReasonBody"];
+            };
+        };
+        responses: {
+            /** @description Node */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxonomyNode"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    reorderStaffTaxonomy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: uuid
+                     * @description The category or department whose children are ordered; null orders the departments
+                     */
+                    parentId?: string | null;
+                    ids: string[];
+                    reason: components["schemas"]["StaffTaxonomyReason"];
+                };
+            };
+        };
+        responses: {
+            /** @description The children in their new order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxonomyNodes"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffTaxonomyProductTypes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Product types */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxonomyProductTypes"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffTaxonomyProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxonomyNewProductType"] & {
+                    reason: components["schemas"]["StaffTaxonomyReason"];
+                };
+            };
+        };
+        responses: {
+            /** @description Created product type */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxonomyProductType"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffTaxonomyProductType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["TaxonomyTypeCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Product type */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxonomyProductType"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffTaxonomyProductType: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The version of the node or schema as loaded (optimistic locking); 412 VERSION_CONFLICT when someone changed it since. */
+                "If-Match": components["parameters"]["TaxonomyIfMatch"];
+            };
+            path: {
+                code: components["parameters"]["TaxonomyTypeCode"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    label?: string;
+                    identifierRule?: components["schemas"]["StaffTaxonomyIdentifierRule"];
+                    traits?: components["schemas"]["StaffTaxonomyTraits"];
+                    attributes?: components["schemas"]["StaffTaxonomyAttribute"][];
+                    reason: components["schemas"]["StaffTaxonomyReason"];
+                };
+            };
+        };
+        responses: {
+            /** @description Product type */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxonomyProductType"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffTaxonomyAudit: {
+        parameters: {
+            query?: {
+                subject?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Changes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxonomyAudit"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewStaffCategoryRequestApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffCategoryApprovalChoice"];
+            };
+        };
+        responses: {
+            /** @description Plan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffCategoryApprovalPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
     };

@@ -13,6 +13,7 @@ import { tierBenefitDetails } from './membership-tiers';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
 import { type MockPlansState, seedPlans } from './plans';
 import { type MockPreorderState, seedPreorders } from './preorders';
+import { type MockTaxonomyState, seedCategoryRequests, seedTaxonomy } from './taxonomy';
 
 export type Scalar = string | number | boolean | null;
 
@@ -54,6 +55,8 @@ export interface MockStaffDb {
   preorders: MockPreorderState;
   /** content's draft markets: countries → states → cities (Markets & locations). */
   markets: MockMarketsState;
+  /** catalog's category tree, product-type details and the audit of changes (Catalog → Categories). */
+  taxonomy: MockTaxonomyState;
   /** seller's plan catalogue, trial campaigns, reward rules, grants and per-seller billing (S292–S297). */
   plans: MockPlansState;
   /** payments' negotiated commission / connection-fee rates and organisations' plans. */
@@ -623,7 +626,7 @@ function seed(now: Date): MockStaffDb {
     lolaUsed: 0,
     user: { id: 'stf-1', firstName: 'Ifeoma', lastName: 'Okafor', email: 'ifeoma@afrotransact.com' },
     records: {
-      users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, 'product-reviews': productReviews, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
+      users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, 'category-requests': seedCategoryRequests(now), moderation, 'product-reviews': productReviews, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
       'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
@@ -638,6 +641,7 @@ function seed(now: Date): MockStaffDb {
     templates: { rows: seedTemplateRows(), samples: seedTemplateSamples() },
     preorders: seedPreorders(now),
     markets: seedMarkets(),
+    taxonomy: seedTaxonomy(),
     plans: seedPlans(now),
     feeRates: seedFeeRates(now),
     seq: 1
@@ -650,6 +654,7 @@ export function getStaffDb(): MockStaffDb {
   // A database seeded before pre-orders existed (dev server kept across reloads) gets them on first use.
   g[KEY].preorders ??= seedPreorders(g[KEY].now);
   g[KEY].markets ??= seedMarkets();
+  g[KEY].taxonomy ??= seedTaxonomy();
   g[KEY].plans ??= seedPlans(g[KEY].now);
   g[KEY].feeRates ??= seedFeeRates(g[KEY].now);
   return g[KEY];

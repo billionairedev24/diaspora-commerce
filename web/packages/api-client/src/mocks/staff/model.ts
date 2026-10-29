@@ -11,7 +11,7 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
   dash: { label: 'Dashboard', description: 'Marketplace health for the USA market today.' },
   exports: { label: 'Exports', description: 'Large exports build on the server; download links last 24 hours.' },
   orders: { label: 'Orders & shipments', description: 'All marketplace and AfroTransact Retail orders.' },
-  catalog: { label: 'Listing moderation', description: 'AI-flagged listings awaiting a human decision.' },
+  catalog: { label: 'Catalog', description: 'Listing moderation, products, the category tree with its product-type details, and seller category requests.' },
   inventory: { label: 'Inventory', description: 'AfroTransact-owned and FBA stock by fulfilment centre, lot by lot.' },
   retail: { label: 'AfroTransact Retail (1P)', description: 'Purchase orders for AfroTransact-owned and AfroTransact Brand inventory.' },
   dispatch: { label: 'Delivery dispatch', description: 'AfroTransact Delivery routes, drivers and internal delivery.' },
@@ -59,7 +59,7 @@ export const NAV: { key: StaffNavGroupKey; label: string; modules: StaffModuleKe
 ];
 
 export const RESOURCE_MODULE: Record<ResourceKey, StaffModuleKey> = {
-  users: 'rbac', roles: 'rbac', applications: 'apps', orders: 'orders', products: 'catalog', moderation: 'catalog', 'product-reviews': 'catalog', claims: 'disputes', returns: 'disputes',
+  users: 'rbac', roles: 'rbac', applications: 'apps', orders: 'orders', products: 'catalog', 'category-requests': 'catalog', moderation: 'catalog', 'product-reviews': 'catalog', claims: 'disputes', returns: 'disputes',
   payouts: 'payouts', inventory: 'inventory', 'purchase-orders': 'retail', routes: 'dispatch', 'support-cases': 'support', audit: 'audit', markets: 'markets',
   'site-settings': 'siteCfg', 'legal-documents': 'siteCfg', 'help-articles': 'siteCfg', 'privacy-requests': 'siteCfg', announcements: 'marketing', placements: 'marketing', 'identity-providers': 'dev',
   'fee-schedules': 'fees', 'tax-rates': 'fees', 'tax-codes': 'fees', 'tax-rules': 'fees', 'tax-review': 'fees', 'dispatch-shipments': 'dispatch', 'sos-alerts': 'dispatch', 'vehicle-defects': 'dispatch', 'driver-events': 'dispatch', 'pickup-locations': 'dispatch',

@@ -19,6 +19,7 @@ import { exchangeRatesDef } from './exchange-rates';
 import { IDENTITY_RESOURCES } from './identity';
 import { MOCK_DRIVERS } from './lookups';
 import { tierBenefitDetails } from './membership-tiers';
+import { categoryRequestsDef } from './taxonomy';
 
 export interface ActionCtx {
   actor: string;
@@ -27,6 +28,8 @@ export interface ActionCtx {
   refundLimit: number | null;
   /** Puts a secret in the answer of the current action or creation, and nowhere else (a new OAuth client secret). */
   showOnce?: (label: string, value: string, note: string) => void;
+  /** Refuses the action with per-field messages (422), like the BFF's validation of an action. */
+  fail?: (errors: Record<string, string>) => never;
 }
 
 export interface MockAction {
@@ -1448,6 +1451,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     }
   },
   'exchange-rates': exchangeRatesDef,
+  'category-requests': categoryRequestsDef,
   // Identity & access (S291)
   ...IDENTITY_RESOURCES
 };
