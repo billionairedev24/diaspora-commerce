@@ -1042,5 +1042,6 @@
   "sc.pf.bar.label": "إجراءات الإعلان",
   "sc.pf.bar.noChanges": "لا توجد تغييرات لحفظها.",
   "sc.pf.images.addMore": "أضف المزيد من الصور",
-  "sc.pf.images.reorderHint": "اسحب الصور لإعادة ترتيبها. الصورة الأولى هي الرئيسية."
+  "sc.pf.images.reorderHint": "اسحب الصور لإعادة ترتيبها. الصورة الأولى هي الرئيسية.",
+  "sc.pf.titleHelpPlain": "اسم المنتج + التفاصيل الرئيسية · {count}/200"
 }

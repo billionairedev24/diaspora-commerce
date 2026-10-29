@@ -404,7 +404,13 @@ export const PRODUCT_TYPES: Record<string, ProductTypeSchema> = {
     attr('author', 'Author'),
     attr('publisher', 'Publisher'),
     attr('language', 'Language', ['English', 'French', 'Yoruba', 'Swahili', 'Amharic']),
-    attr('pages', 'Pages', [], { kind: 'NUMBER' })
+    attr('pages', 'Pages', [], { kind: 'NUMBER' }),
+    // Optional book fields (catalog V11__book_attributes.sql); there is no brand: a book has an author and a publisher.
+    attr('subtitle', 'Subtitle', [], { required: false }),
+    attr('series', 'Series', [], { required: false, help: 'Name of the series or collection, if any' }),
+    attr('edition', 'Edition', [], { required: false, help: 'e.g. 2nd edition, revised' }),
+    attr('pubyear', 'Publication year', [], { required: false, kind: 'NUMBER' }),
+    attr('readingAge', 'Reading age', ['Adult', 'Young adult', 'Ages 9-12', 'Ages 6-8', 'Ages 3-5', 'Baby and toddler'], { required: false })
   ], themes: [{ name: 'Format', dimensions: [{ name: 'Format', options: ['Hardcover', 'Paperback'] }] }] },
   custom: { code: 'custom', label: 'your requested category', identifierRule: 'gtin', traits: NO_TRAITS, attributes: [
     attr('brand', 'Brand'),

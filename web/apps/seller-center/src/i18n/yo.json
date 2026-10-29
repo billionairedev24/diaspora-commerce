@@ -1042,5 +1042,6 @@
   "sc.pf.bar.label": "Àwọn ìgbésẹ̀ ìpolówó",
   "sc.pf.bar.noChanges": "Kò sí àyípadà láti fi pamọ́.",
   "sc.pf.images.addMore": "Fi àwọn àwòrán míràn kún un",
-  "sc.pf.images.reorderHint": "Fa àwọn àwòrán láti tún wọn tò. Àkọ́kọ́ ni àwòrán pàtàkì."
+  "sc.pf.images.reorderHint": "Fa àwọn àwòrán láti tún wọn tò. Àkọ́kọ́ ni àwòrán pàtàkì.",
+  "sc.pf.titleHelpPlain": "Orúkọ ọjà + àlàyé pàtàkì · {count}/200"
 }

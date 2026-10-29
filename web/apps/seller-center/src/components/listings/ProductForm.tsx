@@ -335,7 +335,7 @@ export function ProductForm({ productId }: { productId?: string }) {
           <FormSection {...section('basics')} hint={editing ? undefined : t('sc.pf.s.basicsHint')}>
             <CategoryPicker tree={tree.data} s={s} locked={live} error={err(fieldId.category)}
               onChoose={(leaf: CategoryLeaf | null, request) => update((prev) => withCategory(prev, leaf, request ?? null))} />
-            <TextField id={fieldId.title} label={t('sc.pf.field.title')} help={t('sc.pf.titleHelp', { count: s.title.trim().length })} value={s.title} error={err(fieldId.title)} maxLength={200}
+            <TextField id={fieldId.title} label={t('sc.pf.field.title')} help={t(brandDef ? 'sc.pf.titleHelp' : 'sc.pf.titleHelpPlain', { count: s.title.trim().length })} value={s.title} error={err(fieldId.title)} maxLength={200}
               onChange={(e) => patch({ title: e.target.value })} />
             {brandDef ? (
               <div className={GRID}>

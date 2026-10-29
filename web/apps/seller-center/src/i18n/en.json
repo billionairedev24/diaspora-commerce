@@ -1035,5 +1035,6 @@
   "sc.pf.bar.label": "Listing actions",
   "sc.pf.bar.noChanges": "No changes to save.",
   "sc.pf.images.addMore": "Add more images",
-  "sc.pf.images.reorderHint": "Drag images to reorder them. The first image is the main one."
+  "sc.pf.images.reorderHint": "Drag images to reorder them. The first image is the main one.",
+  "sc.pf.titleHelpPlain": "Product name + key detail · {count}/200"
 }

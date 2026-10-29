@@ -1042,5 +1042,6 @@
   "sc.pf.bar.label": "Acciones del anuncio",
   "sc.pf.bar.noChanges": "No hay cambios que guardar.",
   "sc.pf.images.addMore": "Añadir más imágenes",
-  "sc.pf.images.reorderHint": "Arrastra las imágenes para reordenarlas. La primera es la imagen principal."
+  "sc.pf.images.reorderHint": "Arrastra las imágenes para reordenarlas. La primera es la imagen principal.",
+  "sc.pf.titleHelpPlain": "Nombre del producto + detalle clave · {count}/200"
 }
