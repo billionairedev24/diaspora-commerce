@@ -13,7 +13,7 @@ class LegalIT extends ContentIntegrationTest {
 
     @Test
     void smsAndPrivacyWordingIsServedWithContactsFilledIn() {
-        assertThat(json(get("/v1/legal")).get("documents").size()).isEqualTo(9);
+        assertThat(json(get("/v1/legal")).get("documents").size()).isEqualTo(21);
         String program = json(get("/v1/site-config")).get("smsProgramName").asString();
         JsonNode sms = json(get("/v1/legal/sms-terms"));
         assertThat(sms.get("draftBanner").asBoolean()).isTrue();
@@ -28,7 +28,7 @@ class LegalIT extends ContentIntegrationTest {
         assertThat(privacy.get("body").asString())
                 .contains("No mobile information will be shared with third parties or affiliates for marketing");
         assertThat(json(get("/v1/legal/conditions-of-use")).get("versions").size()).isEqualTo(3);
-        assertThat(get("/v1/legal/unknown").statusCode()).isEqualTo(422);
+        assertThat(get("/v1/legal/unknown").statusCode()).isEqualTo(404);
     }
 
     @Test

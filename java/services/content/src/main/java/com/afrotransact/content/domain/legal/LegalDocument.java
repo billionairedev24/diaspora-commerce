@@ -18,7 +18,7 @@ import com.afrotransact.content.domain.ContentRuleViolation;
 public record LegalDocument(LegalDocumentType type, LegalVersion current) {
 
     /** Locales a body may be provided in (the locales the legal center offers). */
-    public static final Set<String> LOCALES = Set.of("en", "fr", "es", "ar");
+    public static final Set<String> LOCALES = Set.of("en", "fr", "es", "ar", "yo");
 
     /**
      * Raises the version: the new version becomes CURRENT and the previous one is archived (still retrievable).

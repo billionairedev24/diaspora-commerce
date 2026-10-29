@@ -13,6 +13,7 @@ import com.afrotransact.content.application.ContentSettings;
 import com.afrotransact.content.application.LegalService;
 import com.afrotransact.content.domain.legal.LegalDocument.NewVersion;
 import com.afrotransact.content.domain.legal.LegalDocumentType;
+import com.afrotransact.platform.web.error.NotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
@@ -56,14 +57,14 @@ class LegalController {
     @GetMapping("/{type}")
     ResponseEntity<PageResponse> current(@PathVariable @Parameter(example = "sms-terms") String type,
                                          @RequestParam(required = false, defaultValue = "en") String locale) {
-        return cached(PageResponse.of(legal.current(LegalDocumentType.fromKey(type), locale)));
+        return cached(PageResponse.of(legal.current(typeOf(type), locale)));
     }
 
     @Operation(summary = "All versions of a document, newest first (archived ones stay retrievable)")
     @SecurityRequirements
     @GetMapping("/{type}/versions")
     ResponseEntity<List<VersionDto>> versions(@PathVariable String type) {
-        return cached(legal.history(LegalDocumentType.fromKey(type)).stream().map(VersionDto::of).toList());
+        return cached(legal.history(typeOf(type)).stream().map(VersionDto::of).toList());
     }
 
     @Operation(summary = "One version of a document (current or archived)")
@@ -71,14 +72,14 @@ class LegalController {
     @GetMapping("/{type}/versions/{version}")
     ResponseEntity<PageResponse> version(@PathVariable String type, @PathVariable String version,
                                          @RequestParam(required = false, defaultValue = "en") String locale) {
-        return cached(PageResponse.of(legal.version(LegalDocumentType.fromKey(type), version, locale)));
+        return cached(PageResponse.of(legal.version(typeOf(type), version, locale)));
     }
 
     @Operation(summary = "Raise the version; the previous version is archived (content:legal.edit)")
     @PostMapping("/{type}/versions")
     @ResponseStatus(HttpStatus.CREATED)
     VersionResponse raise(@PathVariable String type, @Valid @RequestBody RaiseRequest body) {
-        return VersionResponse.of(legal.raise(LegalDocumentType.fromKey(type), new NewVersion(body.version(),
+        return VersionResponse.of(legal.raise(typeOf(type), new NewVersion(body.version(),
                 body.effectiveDate(), body.draftBanner() == null || body.draftBanner(), body.bodies(),
                 body.changeSummary())));
     }
@@ -86,8 +87,14 @@ class LegalController {
     @Operation(summary = "Amend the current version: counsel sign-off, effective date, translations (content:legal.edit)")
     @PatchMapping("/{type}/current")
     VersionResponse amend(@PathVariable String type, @RequestBody AmendRequest body) {
-        return VersionResponse.of(legal.amend(LegalDocumentType.fromKey(type), body.draftBanner(),
+        return VersionResponse.of(legal.amend(typeOf(type), body.draftBanner(),
                 body.effectiveDate(), body.bodies()));
+    }
+
+    /** An unknown document key is a 404 (not a validation problem): the URL names a page that does not exist. */
+    private static LegalDocumentType typeOf(String key) {
+        return LegalDocumentType.find(key).orElseThrow(() -> new NotFoundException("content.legal-not-found",
+                "There is no legal document " + key));
     }
 
     private <T> ResponseEntity<T> cached(T body) {
