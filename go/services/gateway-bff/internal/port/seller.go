@@ -254,6 +254,16 @@ type SellerApplicationCompliance struct {
 	AgreementsAccepted       *bool                  `json:"agreementsAccepted,omitempty"`
 	W9Certified              *bool                  `json:"w9Certified,omitempty"`
 	W9SignerName             string                 `json:"w9SignerName,omitempty"`
+	// Agreements are the legal documents accepted with the version shown (seller's AgreementRef when saving,
+	// AcceptedAgreement when reading).
+	Agreements []SellerAgreement `json:"agreements,omitempty"`
+}
+
+// SellerAgreement is a legal document accepted in onboarding: its key, the version shown and (when read) the date.
+type SellerAgreement struct {
+	Key        string `json:"key"`
+	Version    string `json:"version"`
+	AcceptedOn string `json:"acceptedOn,omitempty"`
 }
 
 // SellerApplicationDocument is seller's DocumentRef.

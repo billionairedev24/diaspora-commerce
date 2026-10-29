@@ -10,11 +10,25 @@ const DOCS: Array<[string, string]> = [
   ['cookies', 'Cookie Notice'],
   ['privacy-choices', 'Your Privacy Choices'],
   ['returns', 'Returns & Refunds'],
-  ['seller-terms', 'Seller & Provider Terms'],
+  ['seller-terms', 'Seller Terms'],
   ['prohibited-items', 'Prohibited & Restricted Items'],
   ['accessibility', 'Accessibility Statement'],
-  ['sms-terms', 'SMS & Notification Terms']
+  ['sms-terms', 'SMS & Notification Terms'],
+  ['gift-card-terms', 'Gift Card Terms'],
+  ['store-credit-terms', 'Store Credit Terms'],
+  ['membership-terms', 'Plus Membership Terms'],
+  ['referral-terms', 'Referral Program Terms'],
+  ['preorder-delivery-terms', 'Pre-order and Delivery Run Terms'],
+  ['community-guidelines', 'Community Guidelines'],
+  ['ip-policy', 'Intellectual Property and Copyright Policy'],
+  ['provider-terms', 'Service Provider Terms'],
+  ['payments-terms', 'Payment Terms for Sellers and Providers'],
+  ['subprocessors', 'Sub-processors and Service Providers'],
+  ['data-processing', 'Data Processing Terms'],
+  ['seller-fees', 'Seller Fees Summary']
 ];
+
+const GROUPS = ['Customers', 'Payments and money', 'Sellers and providers', 'Privacy and cookies', 'Policies'];
 
 async function consent(context: BrowserContext) {
   const c = (await context.cookies()).find((x) => x.name === 'at_consent');
@@ -37,11 +51,60 @@ for (const [slug, title] of DOCS) {
   });
 }
 
-test('legacy slugs redirect and unknown documents are 404', async ({ page }) => {
+for (const [slug, title] of DOCS) {
+  test(`${title} in French shows the translation notice above the binding English text`, async ({ page, context, baseURL }) => {
+    await context.addCookies([{ name: 'at_locale', value: 'fr', url: baseURL ?? 'http://localhost:3005' }]);
+    await page.goto(`/legal/${slug}`);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByRole('note').filter({ hasText: /anglais|English/ }).first()).toBeVisible();
+    await expect(page.locator('article[lang="en"]')).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
+  });
+}
+
+test('the legal center lists every document under its group', async ({ page }) => {
+  await page.goto('/legal');
+  await expect(page.getByRole('heading', { level: 1, name: 'Legal & privacy' })).toBeVisible();
+  for (const group of GROUPS) await expect(page.getByRole('heading', { level: 2, name: group })).toBeVisible();
+  for (const [slug, title] of DOCS) {
+    await expect(page.locator('main').getByRole('link', { name: title, exact: true }).first()).toHaveAttribute('href', `/legal/${slug}`);
+  }
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test('every footer legal link and the legal center link land on a page', async ({ page }) => {
+  await page.goto('/');
+  const links = page.getByRole('navigation', { name: 'Legal' }).getByRole('link');
+  const hrefs = await links.evaluateAll((as) => as.map((a) => a.getAttribute('href') ?? ''));
+  expect(hrefs).toContain('/legal');
+  expect(hrefs.length).toBeGreaterThanOrEqual(7);
+  for (const href of hrefs) {
+    const res = await page.goto(href);
+    expect(res?.status(), href).toBe(200);
+  }
+});
+
+test('legacy slugs redirect and unknown documents are 404 with a way back', async ({ page }) => {
   await page.goto('/legal/terms');
   await expect(page).toHaveURL(/\/legal\/conditions-of-use$/);
+  for (const [alias, key] of [['gift-cards', 'gift-card-terms'], ['dpa', 'data-processing'], ['fees', 'seller-fees'], ['refunds', 'returns']]) {
+    await page.goto(`/legal/${alias}`);
+    await expect(page).toHaveURL(new RegExp(`/legal/${key}$`));
+  }
   const res = await page.goto('/legal/not-a-policy');
   expect(res?.status()).toBe(404);
+  await expect(page.getByRole('heading', { level: 1, name: 'Document not found' })).toBeVisible();
+  await page.getByRole('link', { name: 'All legal documents' }).click();
+  await expect(page).toHaveURL(/\/legal$/);
+});
+
+test('an archived version shows the notice and links to the current one; the print button is offered', async ({ page }) => {
+  await page.goto('/legal/conditions-of-use?version=3.1');
+  await expect(page.getByText('You are reading version 3.1, which is no longer in force.')).toBeVisible();
+  await page.getByRole('link', { name: 'Read the current version' }).click();
+  await expect(page).toHaveURL(/\/legal\/conditions-of-use$/);
+  await expect(page.getByRole('button', { name: 'Print' })).toBeVisible();
 });
 
 test('cookie banner: Accept all is remembered', async ({ page, context }) => {

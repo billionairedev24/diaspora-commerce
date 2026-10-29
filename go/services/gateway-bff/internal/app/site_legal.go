@@ -20,6 +20,26 @@ func legalNotFound() *domain.Problem {
 	return domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "We couldn't find that document.")
 }
 
+// LegalIndex is content's index limited to the documents this BFF knows (so a newer content service never leaks a
+// key the storefront cannot route), in the legal center's order.
+func (s *siteServiceImpl) LegalIndex(ctx context.Context) (domain.LegalIndex, error) {
+	idx, err := s.d.Content.LegalIndex(ctx)
+	if err != nil {
+		return domain.LegalIndex{Documents: []domain.LegalSummary{}}, mapErr("content", err)
+	}
+	byKey := make(map[string]domain.LegalSummary, len(idx.Documents))
+	for _, d := range idx.Documents {
+		byKey[d.Key] = d
+	}
+	out := domain.LegalIndex{Documents: make([]domain.LegalSummary, 0, len(byKey))}
+	for _, k := range domain.LegalDocumentKeys {
+		if d, ok := byKey[k]; ok {
+			out.Documents = append(out.Documents, d)
+		}
+	}
+	return out, nil
+}
+
 func (s *siteServiceImpl) LegalDocument(ctx context.Context, key, version, locale string) (domain.LegalPage, error) {
 	if !domain.IsLegalDocument(key) {
 		return domain.LegalPage{}, legalNotFound()

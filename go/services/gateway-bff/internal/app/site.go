@@ -28,6 +28,8 @@ type SiteService interface {
 	Subscribe(ctx context.Context, email string) (string, error)
 	Jobs(ctx context.Context) ([]domain.Job, error)
 	Apply(ctx context.Context, jobID string, a domain.JobApplication) (domain.ApplicationReceipt, error)
+	// LegalIndex lists the current version of every published legal document (the legal center index).
+	LegalIndex(ctx context.Context) (domain.LegalIndex, error)
 	// LegalDocument serves a legal page (current version, or `version`); unknown documents/versions are 404.
 	LegalDocument(ctx context.Context, key, version, locale string) (domain.LegalPage, error)
 	// CookiePolicy is the cookie banner configuration and the cookie table.

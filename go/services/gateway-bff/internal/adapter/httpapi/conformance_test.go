@@ -16,6 +16,7 @@ import (
 	"github.com/getkin/kin-openapi/routers"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
 
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/testkit"
 )
 
@@ -157,6 +158,21 @@ func TestContractConformance(t *testing.T) {
 	b.do("POST", "/v1/cart/items", map[string]any{"offerId": "ATSHEAV001", "quantity": 1})
 	b.do("GET", "/v1/checkout/summary", nil)
 	b.do("POST", "/v1/checkout/orders", map[string]any{"addressId": "", "deliverySelections": []any{}})
+	// Legal & privacy center: the index, every document (success and 404) and the cookie / consent / privacy answers.
+	b.do("GET", "/v1/legal", nil)
+	for _, key := range domain.LegalDocumentKeys {
+		b.do("GET", "/v1/legal/"+key, nil)
+	}
+	b.do("GET", "/v1/legal/sms-terms?locale=fr&version=1.0", nil)
+	b.do("GET", "/v1/legal/nope", nil)
+	b.do("GET", "/v1/consent/cookie-policy", nil)
+	b.do("POST", "/v1/consent/records", map[string]any{"categories": map[string]bool{"analytics": true}, "source": "banner"})
+	b.do("POST", "/v1/consent/records", map[string]any{"categories": map[string]bool{}, "source": "nope"})
+	b.do("POST", "/v1/privacy/requests", map[string]any{"type": "access", "email": "ada@example.com", "state": "TX"})
+	b.do("POST", "/v1/privacy/requests", map[string]any{"type": "nope", "email": "x", "state": "ZZ"})
+	b.do("GET", "/v1/help/articles", nil)
+	b.do("GET", "/v1/help/articles/help-center", nil)
+	b.do("GET", "/v1/help/articles/nope", nil)
 	// Careers.
 	b.do("GET", "/v1/careers/jobs", nil)
 	b.do("POST", "/v1/careers/uploads", map[string]any{"fileName": "cv.pdf", "contentType": "application/pdf", "size": 120000})
@@ -171,6 +187,8 @@ func TestContractConformance(t *testing.T) {
 		"removeCartLine", "selectAllCartLines", "saveForLater", "moveToCart", "removeSaved", "getMe", "startHostedLogin",
 		"startSocialLogin", "signOut", "signedOut", "listAddresses",
 		"createAddress", "deleteAddress", "listPaymentMethods", "createSetupIntent", "getCheckoutSummary", "placeOrder",
+		"listLegalDocuments", "getLegalDocument", "getCookiePolicy", "recordConsent", "submitPrivacyRequest",
+		"listHelpArticles", "getHelpArticle",
 		"listJobs", "applyToJob", "listStockAlerts", "removeStockAlert",
 		"requestResumeUpload", "completeResumeUpload", "startPhoneVerification", "confirmPhoneVerification"} {
 		if validated[op] == 0 {

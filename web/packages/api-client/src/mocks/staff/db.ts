@@ -1,6 +1,7 @@
 /* In-memory state of the mock staff BFF (stored on globalThis so the route handler, server components and tests share
    it). Seeded from the Backoffice prototype (backoffice-data.js, backoffice-config.js, at-site.js) relative to today. */
 import { type ExportJob } from '../../schemas/exports';
+import { legalGroupTitle } from '../../schemas/legal';
 import { type ActivityEntry, type ResourceKey } from '../../schemas/staff';
 import { HELP_ARTICLES } from '../fixtures/help';
 import { type MockDispatch, seedDispatch } from './dispatch';
@@ -412,11 +413,26 @@ function seed(now: Date): MockStaffDb {
     ['cookies', 'Cookie Notice', '2.1', day(40)],
     ['privacy-choices', 'Your Privacy Choices', '1.3', day(40)],
     ['returns', 'Returns & Refunds', '2.0', day(130)],
-    ['seller-terms', 'Seller & Provider Terms', '2.4', day(40)],
+    ['seller-terms', 'Seller Terms', '2.4', day(40)],
     ['prohibited-items', 'Prohibited & Restricted Items', '1.6', day(88)],
     ['accessibility', 'Accessibility Statement', '1.2', day(52)],
-    ['sms-terms', 'SMS & Notification Terms', '1.0', day(1)]
-  ].map(([key, title, version, effective]) => rec(key as string, { key: key as string, title: title as string, version: version as string, effectiveDate: effective as string, draftBanner: true, href: `/legal/${key as string}` }));
+    ['sms-terms', 'SMS & Notification Terms', '1.0', day(1)],
+    ['gift-card-terms', 'Gift Card Terms', '1.0', day(28)],
+    ['store-credit-terms', 'Store Credit Terms', '1.0', day(28)],
+    ['membership-terms', 'Plus Membership Terms', '1.0', day(28)],
+    ['referral-terms', 'Referral Program Terms', '1.0', day(28)],
+    ['preorder-delivery-terms', 'Pre-order and Delivery Run Terms', '1.0', day(28)],
+    ['community-guidelines', 'Community Guidelines', '1.0', day(28)],
+    ['ip-policy', 'Intellectual Property and Copyright Policy', '1.0', day(28)],
+    ['provider-terms', 'Service Provider Terms', '1.0', day(28)],
+    ['payments-terms', 'Payment Terms for Sellers and Providers', '1.0', day(28)],
+    ['subprocessors', 'Sub-processors and Service Providers', '1.0', day(28)],
+    ['data-processing', 'Data Processing Terms', '1.0', day(28)],
+    ['seller-fees', 'Seller Fees Summary', '1.0', day(28)]
+  ].map(([key, title, version, effective]) => rec(key as string, {
+    key: key as string, title: title as string, group: legalGroupTitle(key as string), version: version as string, effectiveDate: effective as string,
+    draftBanner: true, state: 'Draft for counsel', href: `/legal/${key as string}`
+  }));
 
   const helpArticles = HELP_ARTICLES.map((a) => rec(a.slug, {
     slug: a.slug, title: a.title, summary: a.summary, topic: a.topic, topicTitle: a.topicTitle, status: 'PUBLISHED', updatedAt: a.updatedAt,

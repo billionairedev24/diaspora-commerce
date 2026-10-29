@@ -1,13 +1,23 @@
 import { Fragment, type ReactNode } from 'react';
 
-/* Legal documents are Markdown from content-service (`# Title`, `## Section`, paragraphs, `-` / `1.` lists, **bold**,
-   [links](…)). This renders exactly that subset to React elements — never HTML strings — so a document can't inject
-   markup. Email addresses become mailto: links. */
+/* Legal documents are Markdown from content-service (`# Title`, `## Section`, `###` sub-headings, paragraphs, `-` / `1.`
+   lists with one nested level, pipe tables, `>` quotes, `---` rules, **bold**, *italic*, `code`, [links](…)). This
+   renders exactly that subset to React elements — never HTML strings — so a document can't inject markup. Email
+   addresses become mailto: links. */
 
-export type LegalBlock = { kind: 'p'; text: string } | { kind: 'ul' | 'ol'; items: string[] };
+export type Align = 'left' | 'right' | 'center' | null;
+
+export type LegalBlock =
+  | { kind: 'p'; text: string }
+  | { kind: 'ul' | 'ol'; items: string[]; children?: Array<LegalBlock | undefined> }
+  | { kind: 'h3' | 'h4'; text: string; id: string }
+  | { kind: 'quote'; text: string }
+  | { kind: 'hr' }
+  | { kind: 'table'; head: string[]; rows: string[][]; align: Align[] };
 
 export interface LegalSection {
   id: string;
+  /** Heading text as shown (a leading "1." / "2.1" is dropped: the page numbers its sections itself). */
   title: string;
   blocks: LegalBlock[];
 }
@@ -27,19 +37,56 @@ export const headingId = (title: string): string =>
     .trim()
     .replace(/\s+/g, '-');
 
+/** "2. Definitions" / "2.1) Scope" → "Definitions" / "Scope". */
+const stripNumbering = (title: string): string => title.replace(/^\d+(?:\.\d+)*[.)]?\s+(?=\S)/, '');
+
+const LIST_ITEM = /^(\s*)(?:([-*+])|(\d+)[.)])\s+(.+)$/;
+const TABLE_ROW = /^\|.*\|\s*$/;
+const TABLE_RULE = /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+
+const cells = (row: string): string[] =>
+  row
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((c) => c.trim());
+
+const alignOf = (cell: string): Align => {
+  const left = cell.startsWith(':');
+  const right = cell.endsWith(':');
+  return left && right ? 'center' : right ? 'right' : left ? 'left' : null;
+};
+
 export function parseLegalMarkdown(body: string, outline: ReadonlyArray<{ id: string; title: string }> = []): ParsedLegalDocument {
   const intro: LegalBlock[] = [];
   const sections: LegalSection[] = [];
+  const used = new Set<string>(outline.map((o) => o.id));
+  const unique = (id: string): string => {
+    let candidate = id || 'section';
+    for (let n = 2; used.has(candidate); n++) candidate = `${id || 'section'}-${n}`;
+    used.add(candidate);
+    return candidate;
+  };
   let para: string[] = [];
-  let list: { kind: 'ul' | 'ol'; items: string[] } | null = null;
+  let quote: string[] = [];
+  let list: Extract<LegalBlock, { kind: 'ul' | 'ol' }> | null = null;
+  let table: { head: string[]; align: Align[]; rows: string[][] } | null = null;
+  let headings = 0;
   const target = () => (sections.length ? (sections[sections.length - 1] as LegalSection).blocks : intro);
   const flush = () => {
     if (para.length) target().push({ kind: 'p', text: para.join(' ') });
     para = [];
+    if (quote.length) target().push({ kind: 'quote', text: quote.join(' ') });
+    quote = [];
     if (list) target().push(list);
     list = null;
+    if (table) target().push({ kind: 'table', ...table });
+    table = null;
   };
-  for (const raw of body.replace(/\r\n?/g, '\n').split('\n')) {
+  const lines = body.replace(/\r\n?/g, '\n').split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i] ?? '';
     const line = raw.trim();
     if (!line) {
       flush();
@@ -49,26 +96,77 @@ export function parseLegalMarkdown(body: string, outline: ReadonlyArray<{ id: st
       flush();
       continue; // the document title is the page's <h1>
     }
-    const h = /^#{2,3}\s+(.+)$/.exec(line);
-    if (h) {
+    const h2 = /^##\s+(.+)$/.exec(line);
+    if (h2) {
       flush();
-      const title = (h[1] ?? '').trim();
-      const fromOutline = outline[sections.length];
-      sections.push({ id: fromOutline && fromOutline.title === title ? fromOutline.id : headingId(title), title, blocks: [] });
+      const original = (h2[1] ?? '').trim();
+      const fromOutline = outline[headings++];
+      const id = fromOutline && fromOutline.title === original ? fromOutline.id : unique(headingId(original));
+      sections.push({ id, title: stripNumbering(original), blocks: [] });
       continue;
     }
-    const li = /^(?:([-*])|(\d+)[.)])\s+(.+)$/.exec(line);
+    const sub = /^(#{3,6})\s+(.+)$/.exec(line);
+    if (sub) {
+      flush();
+      const text = stripNumbering((sub[2] ?? '').trim());
+      target().push({ kind: sub[1] === '###' ? 'h3' : 'h4', text, id: unique(headingId(text)) });
+      continue;
+    }
+    if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(line)) {
+      flush();
+      target().push({ kind: 'hr' });
+      continue;
+    }
+    if (TABLE_ROW.test(line) && !table && TABLE_RULE.test((lines[i + 1] ?? '').trim())) {
+      flush();
+      const align = cells(lines[i + 1] ?? '').map(alignOf);
+      table = { head: cells(line), align, rows: [] };
+      i += 1;
+      continue;
+    }
+    if (table) {
+      if (TABLE_ROW.test(line)) {
+        const row = cells(line);
+        const width = table.head.length;
+        table.rows.push(Array.from({ length: width }, (_, c) => row[c] ?? ''));
+        continue;
+      }
+      flush();
+    }
+    if (line.startsWith('>')) {
+      if (para.length || list) flush();
+      quote.push(line.replace(/^>\s?/, ''));
+      continue;
+    }
+    if (quote.length) flush();
+    const li = LIST_ITEM.exec(raw);
     if (li) {
       if (para.length) {
         target().push({ kind: 'p', text: para.join(' ') });
         para = [];
       }
-      const kind = li[1] ? 'ul' : 'ol';
+      const nested = (li[1] ?? '').length >= 2 && list !== null;
+      const kind = li[2] ? 'ul' : 'ol';
+      const text = li[4] ?? '';
+      if (nested && list) {
+        const at = list.items.length - 1;
+        const children = (list.children ??= []);
+        const parent = children[at];
+        if (parent && (parent.kind === 'ul' || parent.kind === 'ol')) parent.items.push(text);
+        else children[at] = { kind, items: [text] };
+        continue;
+      }
       if (!list || list.kind !== kind) {
         if (list) target().push(list);
         list = { kind, items: [] };
       }
-      list.items.push(li[3] ?? '');
+      list.items.push(text);
+      continue;
+    }
+    if (list && /^\s{2,}\S/.test(raw)) {
+      // A wrapped continuation line of the previous list item.
+      const at = list.items.length - 1;
+      list.items[at] = `${list.items[at] ?? ''} ${line}`;
       continue;
     }
     if (list) {
@@ -81,7 +179,7 @@ export function parseLegalMarkdown(body: string, outline: ReadonlyArray<{ id: st
   return { intro, sections };
 }
 
-const INLINE = /\*\*(.+?)\*\*|\[([^\]]+)\]\(([^)\s]+)\)|([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g;
+const INLINE = /`([^`]+)`|\*\*(.+?)\*\*|(?<![\w*])\*([^*\s][^*]*?)\*(?![\w*])|(?<![\w_])_([^_\s][^_]*?)_(?![\w_])|\[([^\]]+)\]\(([^)\s]+)\)|([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g;
 
 /** Only same-site paths, https, mailto: and tel: links are rendered as links. */
 export function safeHref(href: string): string | null {
@@ -90,7 +188,7 @@ export function safeHref(href: string): string | null {
   return null;
 }
 
-/** Renders the inline subset: **bold**, [text](href) and email addresses. */
+/** Renders the inline subset: `code`, **bold**, *italic*, [text](href) and email addresses. */
 export function renderInline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
   let last = 0;
@@ -98,33 +196,99 @@ export function renderInline(text: string): ReactNode[] {
   for (const m of text.matchAll(INLINE)) {
     const at = m.index;
     if (at > last) out.push(text.slice(last, at));
-    if (m[1] !== undefined) out.push(<strong key={n++}>{m[1]}</strong>);
-    else if (m[2] !== undefined) {
-      const href = safeHref(m[3] ?? '');
-      out.push(href ? <a key={n++} href={href}>{m[2]}</a> : <Fragment key={n++}>{m[2]}</Fragment>);
-    } else if (m[4] !== undefined) out.push(<a key={n++} href={`mailto:${m[4]}`}>{m[4]}</a>);
+    if (m[1] !== undefined) out.push(<code key={n++}>{m[1]}</code>);
+    else if (m[2] !== undefined) out.push(<strong key={n++}>{renderInline(m[2])}</strong>);
+    else if (m[3] !== undefined) out.push(<em key={n++}>{m[3]}</em>);
+    else if (m[4] !== undefined) out.push(<em key={n++}>{m[4]}</em>);
+    else if (m[5] !== undefined) {
+      const href = safeHref(m[6] ?? '');
+      out.push(href ? <a key={n++} href={href}>{m[5]}</a> : <Fragment key={n++}>{m[5]}</Fragment>);
+    } else if (m[7] !== undefined) out.push(<a key={n++} href={`mailto:${m[7]}`}>{m[7]}</a>);
     last = at + m[0].length;
   }
   if (last < text.length) out.push(text.slice(last));
   return out;
 }
 
-export function LegalBlocks({ blocks, className }: { blocks: LegalBlock[]; className?: string }) {
-  return blocks.map((b, i) => {
-    if (b.kind === 'p') {
+export interface LegalBlockClasses {
+  /** Paragraphs and lists. */
+  body?: string;
+  subheading?: string;
+  quote?: string;
+  tableWrap?: string;
+  table?: string;
+  cell?: string;
+  rule?: string;
+}
+
+function Block({ block, classes }: { block: LegalBlock; classes: LegalBlockClasses }) {
+  switch (block.kind) {
+    case 'p':
+      return <p className={classes.body}>{renderInline(block.text)}</p>;
+    case 'h3':
       return (
-        <p key={i} className={className}>
-          {renderInline(b.text)}
-        </p>
+        <h3 id={block.id} className={classes.subheading}>
+          {block.text}
+        </h3>
+      );
+    case 'h4':
+      return (
+        <h4 id={block.id} className={classes.subheading}>
+          {block.text}
+        </h4>
+      );
+    case 'quote':
+      return <blockquote className={classes.quote}>{renderInline(block.text)}</blockquote>;
+    case 'hr':
+      return <hr className={classes.rule} />;
+    case 'table':
+      return (
+        <div className={classes.tableWrap}>
+          <table className={classes.table}>
+            <thead>
+              <tr>
+                {block.head.map((h, c) => (
+                  <th key={c} scope="col" className={classes.cell} style={block.align[c] ? { textAlign: block.align[c] } : undefined}>
+                    {renderInline(h)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {block.rows.map((row, r) => (
+                <tr key={r}>
+                  {row.map((cell, c) => (
+                    <td key={c} className={classes.cell} style={block.align[c] ? { textAlign: block.align[c] } : undefined}>
+                      {renderInline(cell)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    case 'ul':
+    case 'ol': {
+      const List = block.kind;
+      return (
+        <List className={classes.body}>
+          {block.items.map((it, j) => {
+            const child = block.children?.[j];
+            return (
+              <li key={j}>
+                {renderInline(it)}
+                {child && <Block block={child} classes={classes} />}
+              </li>
+            );
+          })}
+        </List>
       );
     }
-    const List = b.kind;
-    return (
-      <List key={i} className={className}>
-        {b.items.map((it, j) => (
-          <li key={j}>{renderInline(it)}</li>
-        ))}
-      </List>
-    );
-  });
+  }
+}
+
+export function LegalBlocks({ blocks, className, classes }: { blocks: LegalBlock[]; className?: string; classes?: LegalBlockClasses }) {
+  const merged: LegalBlockClasses = { body: className, ...classes };
+  return blocks.map((b, i) => <Block key={i} block={b} classes={merged} />);
 }

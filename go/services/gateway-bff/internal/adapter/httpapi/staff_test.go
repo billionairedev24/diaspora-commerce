@@ -765,7 +765,10 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"revision": 14, "smsProgramName": "AfroTransact Alerts", "contacts": map[string]any{"supportPhone": "+18324300000", "supportPhoneDisplay": "(832) 430-0000",
 			"emails": map[string]any{"support": "help@afrotransact.com"}}, "socials": []any{map[string]any{"network": "instagram", "url": "https://instagram.com/afrotransact"}}})
 	case p == "/v1/legal":
-		writeJ(w, 200, map[string]any{"documents": []any{map[string]any{"key": "terms", "title": "Conditions of Use", "version": "3.2", "effectiveDate": "2026-09-01"}}})
+		writeJ(w, 200, map[string]any{"documents": []any{
+			map[string]any{"key": "privacy", "title": "Privacy Notice", "version": "4.0", "effectiveDate": "2026-09-01", "draftBanner": false},
+			map[string]any{"key": "seller-fees", "title": "Seller Fees Summary", "version": "1.0", "effectiveDate": "2026-10-01", "draftBanner": true},
+			map[string]any{"key": "conditions-of-use", "title": "Conditions of Use", "version": "3.2", "effectiveDate": "2026-09-01", "draftBanner": true}}})
 	case strings.HasPrefix(p, "/v1/legal/"):
 		writeJ(w, 200, []any{map[string]any{"version": "3.2", "effectiveDate": "2026-09-01", "status": "CURRENT"}})
 	case p == "/v1/help/admin/articles":
@@ -1236,6 +1239,20 @@ func TestStaffContractConformance(t *testing.T) {
 		t.Fatalf("site config body = %v", b)
 	}
 	do("support", "PATCH", "/v1/staff/resources/markets/CA", map[string]any{"values": map[string]any{"status": "LIVE"}}, 403)
+	// Legal documents: listed in the legal center's order with their group and state; a new version carries translations.
+	legal := do("admin", "GET", "/v1/staff/resources/legal-documents", nil, 200)
+	rows := legal["rows"].([]any)
+	if len(rows) != 3 || rows[0].(map[string]any)["id"] != "conditions-of-use" || rows[1].(map[string]any)["id"] != "seller-fees" || rows[2].(map[string]any)["id"] != "privacy" {
+		t.Fatalf("legal rows not in the legal center's order: %v", legal)
+	}
+	if cells := rows[1].(map[string]any)["cells"].(map[string]any); cells["group"] != "Payments and money" || cells["state"] != "Draft for counsel" {
+		t.Fatalf("seller-fees row = %v", rows[1])
+	}
+	do("admin", "POST", "/v1/staff/resources/legal-documents/seller-fees/actions/raise-version", map[string]any{"values": map[string]any{
+		"version": "1.1", "effectiveDate": "2026-11-01", "changeSummary": "Referral fees", "body": "# Seller Fees\n\n## Fees\n\nText", "bodyFr": " # Frais ", "bodyYo": "", "draftBanner": true}}, 200)
+	if b := f.bodies["POST /v1/legal/seller-fees/versions"]; b["version"] != "1.1" || b["bodies"].(map[string]any)["fr"] != "# Frais" || len(b["bodies"].(map[string]any)) != 2 {
+		t.Fatalf("raise body = %v", b)
+	}
 	// Help center pages: one Markdown text in the form, sections at "## " headings, the version read last.
 	help := do("admin", "GET", "/v1/staff/resources/help-articles/shipping", nil, 200)
 	if help["title"] != "Shipping & delivery" {

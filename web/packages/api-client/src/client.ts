@@ -33,6 +33,8 @@ import {
   type CookiePolicy,
   CookiePolicySchema,
   type LegalDocumentKey,
+  type LegalIndex,
+  LegalIndexSchema,
   type LegalPage,
   LegalPageSchema,
   type PrivacyRequestInput,
@@ -61,6 +63,8 @@ export function createApiClient(options: ApiClientOptions) {
     subscribeNewsletter: (email: string) => request('/v1/newsletter/subscriptions', NewsletterResponseSchema, { method: 'POST', body: { email } }),
 
     /* Legal & privacy center */
+    /** The legal center index: the current version of every published document. */
+    getLegalIndex: (signal?: AbortSignal): Promise<LegalIndex> => request('/v1/legal', LegalIndexSchema, { signal }),
     /** A legal document: the current version, or an archived one with `version`. English is binding. */
     getLegalDocument: (key: LegalDocumentKey, opts: { version?: string; locale?: string } = {}, signal?: AbortSignal): Promise<LegalPage> =>
       request(`/v1/legal/${encodeURIComponent(key)}`, LegalPageSchema, { query: { version: opts.version, locale: opts.locale }, signal }),

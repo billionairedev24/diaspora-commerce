@@ -364,6 +364,9 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     const c = await api.saveOnboardingCompliance({ categories: ['groceries'], foodPermit: { permitType: 'COTTAGE_FOOD', permitNumber: 'CF-1', expiresOn: '2030-01-01', documentAssetId: 'asset-doc-2' },
       agreementsAccepted: true, w9Certified: true, w9SignerName: 'Titi Adebayo' });
     expect(c.resumeStep).toBe('review');
+    // The documents accepted are recorded with the version in force, sellers: seller terms, payments terms, DPA.
+    expect(c.form.compliance.agreements.map((a) => `${a.key}@${a.version}`)).toEqual(['seller-terms@2.4', 'payments-terms@1.0', 'data-processing@1.0']);
+    expect(c.form.compliance.agreements.every((a) => a.acceptedOn !== null)).toBe(true);
     const submitted = await api.submitOnboarding();
     expect(submitted).toMatchObject({ status: 'PENDING_REVIEW', canResume: false });
     expect(submitted.steps.at(-1)).toMatchObject({ key: 'REVIEW', state: 'WAITING' });

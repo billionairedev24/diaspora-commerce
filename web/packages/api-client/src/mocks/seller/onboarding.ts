@@ -2,6 +2,7 @@
    decides it (a step is complete only with its required data; Stripe verification and Payouts from what "Stripe"
    reports), the step to resume at, the local Stripe stand-in and submission. Mirrors contracts/openapi/
    gateway-bff-seller.yaml; the rules mirror the seller service's DefaultApplicationRules. */
+import { PROVIDER_AGREEMENTS, SELLER_AGREEMENTS } from '../../schemas/legal';
 import {
   type OnboardingComplianceInput,
   type OnboardingDetailsInput,
@@ -16,7 +17,17 @@ import {
   type OnboardingStripe,
   type OrgKind
 } from '../../schemas/seller';
+import { LEGAL_DOCUMENTS } from '../fixtures/legal';
 import { type MockOrg, type MockSellerDb, plansFor } from './db';
+
+/** The legal documents an application accepts, each at the version in force (what gateway-bff records). */
+export function acceptedAgreements(offering: string | null, on: string): OnboardingForm['compliance']['agreements'] {
+  const keys: string[] = offering === 'SERVICES' ? [...PROVIDER_AGREEMENTS] : offering === 'BOTH' ? [...new Set([...SELLER_AGREEMENTS, ...PROVIDER_AGREEMENTS])] : [...SELLER_AGREEMENTS];
+  return keys.map((key) => {
+    const doc = LEGAL_DOCUMENTS.find((d) => d.key === key);
+    return { key, version: doc?.versions.find((v) => v.status === 'CURRENT')?.version ?? '1.0', acceptedOn: on };
+  });
+}
 
 /** Mock state of one application beyond its answers. */
 export interface MockApplication {
@@ -67,7 +78,7 @@ export function accountForm(db: MockSellerDb, kind: OrgKind): OnboardingForm {
     payouts: { ...NO_BANK },
     plan: { planCode: null, planName: null, cadence: null, paymentMethodKind: null, cardBrand: null, cardLast4: null, cardExpMonth: null, cardExpYear: null, firstCharge: null,
       planFeeCollection: null, planFeeCollectionAvailable: true, planFeeCollectionDefault: 'CARD' },
-    compliance: { categories: [], foodPermit: null, beautyLabellingConfirmed: null, services: [], insuranceDocumentAssetId: null, agreementsAccepted: null, w9Certified: null, w9SignerName: null },
+    compliance: { categories: [], foodPermit: null, beautyLabellingConfirmed: null, services: [], insuranceDocumentAssetId: null, agreementsAccepted: null, w9Certified: null, w9SignerName: null, agreements: [] },
     documents: [],
     prefilled: ['business.contactEmail', 'business.phone', 'details.address', 'details.legalFirstName', 'details.legalLastName'],
     editable: true
@@ -84,7 +95,8 @@ function submittedForm(db: MockSellerDb, org: MockOrg): OnboardingForm {
     owners: [{ firstName: 'Kwame', lastName: 'Asante', title: 'Owner', email: 'kwame@bonwire.example', ownershipPercent: 100, significantControl: true, dateOfBirth: '1984-05-02', address: { ...ACCOUNT_ADDRESS } }],
     payouts: { status: 'READY', bankName: 'Chase', accountLast4: '4417', bankStatus: 'verified', linked: true },
     plan: { ...f.plan, planCode: 'seller_essentials', planName: 'Seller Essentials', cadence: 'MONTHLY' },
-    compliance: { ...f.compliance, categories: ['groceries'], foodPermit: { permitType: 'FOOD_ESTABLISHMENT', permitNumber: 'HC-FE-1', issuingAuthority: 'Harris County', expiresOn: '2025-12-31', documentAssetId: 'asset-permit' }, agreementsAccepted: true, w9Certified: true, w9SignerName: 'Kwame Asante' },
+    compliance: { ...f.compliance, categories: ['groceries'], foodPermit: { permitType: 'FOOD_ESTABLISHMENT', permitNumber: 'HC-FE-1', issuingAuthority: 'Harris County', expiresOn: '2025-12-31', documentAssetId: 'asset-permit' }, agreementsAccepted: true, w9Certified: true, w9SignerName: 'Kwame Asante',
+      agreements: acceptedAgreements('PRODUCTS', '2026-09-01') },
     prefilled: []
   };
 }
@@ -213,7 +225,7 @@ export function stepErrors(key: OnboardingStepKey, app: MockApplication, kind: O
         req(blank(s.documentAssetId), `compliance.services[${i}].documentAssetId`);
       });
       if (c.services.some((s) => s.regulated)) req(blank(c.insuranceDocumentAssetId), 'compliance.insuranceDocumentAssetId');
-      if (c.agreementsAccepted !== true) e['compliance.agreementsAccepted'] = 'Accept the Seller & Provider Terms';
+      if (c.agreementsAccepted !== true) e['compliance.agreementsAccepted'] = 'Accept the Seller Terms';
       if (c.w9Certified !== true) e['compliance.w9Certified'] = 'Certify your taxpayer details (W-9)';
       break;
     }
@@ -387,7 +399,8 @@ export function saveCompliance(app: MockApplication, c: OnboardingComplianceInpu
       foodPermit: p ? { permitType: p.permitType ?? null, permitNumber: trimOrNull(p.permitNumber), issuingAuthority: trimOrNull(p.issuingAuthority), expiresOn: trimOrNull(p.expiresOn), documentAssetId: trimOrNull(p.documentAssetId) } : null,
       beautyLabellingConfirmed: c.beautyLabellingConfirmed ?? null,
       services: (c.services ?? []).map((s) => ({ serviceName: s.serviceName, regulated: s.regulated === true, licenceNumber: trimOrNull(s.licenceNumber), issuingState: trimOrNull(s.issuingState)?.toUpperCase() ?? null, expiresOn: trimOrNull(s.expiresOn), documentAssetId: trimOrNull(s.documentAssetId) })),
-      insuranceDocumentAssetId: trimOrNull(c.insuranceDocumentAssetId), agreementsAccepted: c.agreementsAccepted ?? null, w9Certified: c.w9Certified ?? null, w9SignerName: trimOrNull(c.w9SignerName)
+      insuranceDocumentAssetId: trimOrNull(c.insuranceDocumentAssetId), agreementsAccepted: c.agreementsAccepted ?? null, w9Certified: c.w9Certified ?? null, w9SignerName: trimOrNull(c.w9SignerName),
+      agreements: c.agreementsAccepted ? acceptedAgreements(app.form.business.offering, new Date().toISOString().slice(0, 10)) : []
     }
   });
   return null;

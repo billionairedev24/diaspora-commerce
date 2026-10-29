@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccountHealthView } from '@/components/onboarding/AccountHealthView';
 import { OnboardingView, OnboardingWizard } from '@/components/onboarding/OnboardingView';
 import { Stepper } from '@/components/onboarding/Stepper';
+import { agreementKeys, ComplianceStep } from '@/components/onboarding/steps/ComplianceStep';
 import { PayoutsStep } from '@/components/onboarding/steps/PayoutsStep';
 import { type StepHandle } from '@/components/onboarding/WizardKit';
 import { Header } from '@/components/shell/Header';
@@ -282,6 +283,33 @@ describe('progress stepper', () => {
     expect(screen.getByText('Step 3 of 8')).toBeInTheDocument();
     expect(screen.getByText('· Owners')).toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '38');
+  });
+});
+
+describe('the agreements step', () => {
+  beforeEach(() => resetSellerDb(new Date()));
+
+  it('names the documents each kind of application accepts and links them to the legal center', async () => {
+    expect(agreementKeys('PRODUCTS')).toEqual(['seller-terms', 'payments-terms', 'data-processing', 'seller-fees']);
+    expect(agreementKeys('SERVICES')).toEqual(['provider-terms', 'payments-terms', 'data-processing', 'seller-fees']);
+    expect(agreementKeys('BOTH')).toEqual(['seller-terms', 'payments-terms', 'data-processing', 'provider-terms', 'seller-fees']);
+    await started();
+    const status = await mockApi().getOnboarding();
+    await renderScreen(<ComplianceStep status={status} />);
+    const terms = screen.getByRole('checkbox', { name: /I agree to the/ });
+    expect(terms).toBeInTheDocument();
+    const links = within(terms.closest('label') as HTMLElement).getAllByRole('link');
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      'http://localhost:3000/legal/seller-terms',
+      'http://localhost:3000/legal/payments-terms',
+      'http://localhost:3000/legal/data-processing',
+      'http://localhost:3000/legal/seller-fees'
+    ]);
+    expect(links.every((a) => a.getAttribute('target') === '_blank' && a.getAttribute('rel') === 'noopener noreferrer')).toBe(true);
+    expect(within(screen.getByRole('checkbox', { name: /I will follow the/ }).closest('label') as HTMLElement).getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual([
+      'http://localhost:3000/legal/prohibited-items',
+      'http://localhost:3000/legal/community-guidelines'
+    ]);
   });
 });
 

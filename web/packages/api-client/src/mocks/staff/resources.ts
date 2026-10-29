@@ -619,7 +619,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   'legal-documents': {
     title: 'Legal documents',
-    columns: [col('title', 'Document', 'strong', 36), col('key', 'Key', 'mono', 20), col('version', 'Version', 'text', 14), col('effectiveDate', 'Effective', 'date', 30)],
+    columns: [col('title', 'Document', 'strong', 28), col('group', 'Group', 'text', 18), col('key', 'Key', 'mono', 18), col('version', 'Version', 'text', 10), col('effectiveDate', 'Effective', 'date', 12), col('state', 'Status', 'text', 14)],
     facets: [],
     exportable: false,
     titleOf: (r) => str(r.fields.title),
@@ -627,14 +627,14 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     actions: [
       {
         key: 'raise-version', label: 'New version', tone: 'primary', permission: 'content:legal.edit', when: () => null,
-        form: () => form('Raise the version (the current one is archived)', 'Publish version', [field('version', 'Version', 'text', true, { pattern: '^[0-9]+\\.[0-9]+$', placeholder: '3.3' }), field('effectiveDate', 'Effective date', 'date', true), field('changeSummary', 'What changed', 'textarea', true, { maxLength: 1000 }), field('body', 'Document (Markdown)', 'textarea', true)]),
-        apply: (r, v, ctx) => { r.fields.version = str(v.version); r.fields.effectiveDate = str(v.effectiveDate); log(r, ctx, `Version ${str(v.version)} published — ${str(v.changeSummary)}`); }
+        form: () => form('Raise the version (the current one is archived)', 'Publish version', [field('version', 'Version', 'text', true, { pattern: '^[0-9]+\\.[0-9]+$', placeholder: '3.3' }), field('effectiveDate', 'Effective date', 'date', true), field('changeSummary', 'What changed', 'textarea', true, { maxLength: 1000 }), field('body', 'Document (Markdown, English, binding)', 'textarea', true), field('bodyFr', 'Français (optional)', 'textarea', false), field('bodyEs', 'Español (optional)', 'textarea', false), field('bodyAr', 'العربية (optional)', 'textarea', false), field('bodyYo', 'Yorùbá (optional)', 'textarea', false), field('draftBanner', 'Show the draft banner', 'toggle', false)]),
+        apply: (r, v, ctx) => { r.fields.version = str(v.version); r.fields.effectiveDate = str(v.effectiveDate); r.fields.draftBanner = v.draftBanner === true; r.fields.state = v.draftBanner === true ? 'Draft for counsel' : 'In force'; log(r, ctx, `Version ${str(v.version)} published — ${str(v.changeSummary)}`); }
       }
     ],
     edit: {
       permission: 'content:legal.edit',
       form: (r) => form('Amend the current version', 'Save', [field('effectiveDate', 'Effective date', 'date', true, { value: str(r.fields.effectiveDate) }), field('draftBanner', 'Show the draft banner', 'toggle', false, { value: r.fields.draftBanner === true })]),
-      apply: (r, v) => { r.fields.effectiveDate = str(v.effectiveDate); r.fields.draftBanner = v.draftBanner === true; }
+      apply: (r, v) => { r.fields.effectiveDate = str(v.effectiveDate); r.fields.draftBanner = v.draftBanner === true; r.fields.state = v.draftBanner === true ? 'Draft for counsel' : 'In force'; }
     }
   },
   'help-articles': {

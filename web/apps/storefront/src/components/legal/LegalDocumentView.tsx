@@ -1,4 +1,4 @@
-import { LEGAL_DOCUMENT_KEYS, type LegalDocumentKey, legalHref, type LegalPage } from '@afrotransact/api-client';
+import { LEGAL_GROUPS, type LegalDocumentKey, legalHref, type LegalPage } from '@afrotransact/api-client';
 import { type Translator } from '@afrotransact/i18n';
 import { LogoMark, wordmarkClassName } from '@afrotransact/ui';
 import Link from 'next/link';
@@ -8,7 +8,7 @@ import { type MessageKey } from '@/i18n/t';
 
 import styles from './Legal.module.css';
 import { FocusHeadingOnNavigate, PrintButton } from './LegalClient';
-import { LegalBlocks, parseLegalMarkdown } from './markdown';
+import { type LegalBlockClasses, LegalBlocks, parseLegalMarkdown } from './markdown';
 
 /** Localised document title (the binding English title comes from content-service). */
 export const legalTitle = (t: Translator<MessageKey>, key: LegalDocumentKey): string => t(`legal.doc.${key}` as MessageKey);
@@ -21,6 +21,15 @@ export function formatLegalDate(iso: string, locale: string): string {
     return iso;
   }
 }
+
+const BLOCK_CLASSES: LegalBlockClasses = {
+  subheading: styles.subheading,
+  quote: styles.quote,
+  tableWrap: styles.docTableWrap,
+  table: styles.docTable,
+  cell: styles.docCell,
+  rule: styles.rule
+};
 
 export interface LegalDocumentViewProps {
   docKey: LegalDocumentKey;
@@ -59,16 +68,25 @@ export function LegalDocumentView({ docKey, page, locale, t, children }: LegalDo
               ← {t('common.backToShop')}
             </Link>
           </div>
-          <h2 className={styles.eyebrow}>{t('legal.docs')}</h2>
-          <ul className={styles.docsList}>
-            {LEGAL_DOCUMENT_KEYS.map((k) => (
-              <li key={k}>
-                <Link href={legalHref(k)} className={styles.docLink} aria-current={k === docKey ? 'page' : undefined}>
-                  {legalTitle(t, k)}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <Link href="/legal" className={styles.centerLink}>
+            {t('legal.allDocs')}
+          </Link>
+          {LEGAL_GROUPS.map((g) => (
+            <section key={g.id} aria-labelledby={`legal-group-${g.id}`} className={styles.docsGroup}>
+              <h2 id={`legal-group-${g.id}`} className={styles.eyebrow}>
+                {t(`legal.group.${g.id}` as MessageKey)}
+              </h2>
+              <ul className={styles.docsList}>
+                {g.documents.map((k) => (
+                  <li key={k}>
+                    <Link href={legalHref(k)} className={styles.docLink} aria-current={k === docKey ? 'page' : undefined}>
+                      {legalTitle(t, k)}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
         </nav>
 
         <div className={styles.main}>
@@ -127,13 +145,13 @@ export function LegalDocumentView({ docKey, page, locale, t, children }: LegalDo
           )}
 
           <article lang="en" dir="ltr" className={styles.article}>
-            <LegalBlocks blocks={doc.intro} className={styles.body} />
+            <LegalBlocks blocks={doc.intro} className={styles.body} classes={BLOCK_CLASSES} />
             {doc.sections.map((s, i) => (
               <section key={s.id} aria-labelledby={s.id} className={styles.section}>
                 <h2 id={s.id} tabIndex={-1} className={styles.sectionTitle}>
                   {i + 1}. {s.title}
                 </h2>
-                <LegalBlocks blocks={s.blocks} className={styles.body} />
+                <LegalBlocks blocks={s.blocks} className={styles.body} classes={BLOCK_CLASSES} />
               </section>
             ))}
           </article>

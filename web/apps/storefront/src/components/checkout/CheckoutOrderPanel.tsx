@@ -1,6 +1,6 @@
 'use client';
 
-import { type CartPreorder, type CheckoutPackage, type CheckoutSummary } from '@afrotransact/api-client';
+import { type CartPreorder, type CheckoutPackage, type CheckoutSummary, legalHref } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, CheckCircle, Circle, CircleNotch, ImagePlaceholder, LockSimple, PoweredByStripe, Tag } from '@afrotransact/ui';
 import Link from 'next/link';
@@ -270,8 +270,14 @@ export function CheckoutOrderPanel(props: Props) {
 
         <div className={styles.legalBlock}>
           <p className={styles.fine}>
-            {t('co.agreePrefix')} <Link href="/legal/conditions-of-use">{t('co.conditions')}</Link> {t('co.and')} <Link href="/legal/privacy">{t('co.privacy')}</Link>.
+            {t('co.agreePrefix')} <Link href={legalHref('conditions-of-use')}>{t('co.conditions')}</Link> {t('co.and')} <Link href={legalHref('privacy')}>{t('co.privacy')}</Link>.{' '}
+            {t('co.returnsPrefix')} <Link href={legalHref('returns')}>{t('legal.doc.returns')}</Link>.
           </p>
+          {preRun && (
+            <p className={styles.fine} data-testid="preorder-terms-note">
+              {t('co.preorderPrefix')} <Link href={legalHref('preorder-delivery-terms')}>{t('legal.doc.preorder-delivery-terms')}</Link>.
+            </p>
+          )}
           <div className={styles.stripeLine}>
             <PoweredByStripe height={22} />
             <span>{t('co.chargeNote')}</span>

@@ -2,6 +2,7 @@ package com.afrotransact.seller.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -183,6 +184,40 @@ class DefaultApplicationRulesTest {
         ComplianceSection complete = new ComplianceSection(List.of("groceries"), new ComplianceSection.FoodPermit(
                 "FE-1", "Harris County", TODAY.plusYears(1), "asset-permit", "COTTAGE_FOOD"), null, List.of(), null, true, true, "Ade");
         assertThat(rules.compliance(complete, Offering.PRODUCTS, SELLER, true).errors()).isEmpty();
+    }
+
+    @Test
+    void acceptedAgreementsAreRecordedWithTheShownVersionAndMustBeThoseTheApplicationRequires() {
+        List<ComplianceSection.AcceptedAgreement> seller = List.of(
+                new ComplianceSection.AcceptedAgreement("seller-terms", "2.4", null),
+                new ComplianceSection.AcceptedAgreement("payments-terms", "1.0", null),
+                new ComplianceSection.AcceptedAgreement("data-processing", "1.0", null));
+        ComplianceSection ok = new ComplianceSection(List.of("clothing"), null, null, List.of(), null, true, true, "Ade",
+                seller);
+        Validated<ComplianceSection> accepted = rules.compliance(ok, Offering.PRODUCTS, SELLER, true);
+        assertThat(accepted.errors()).isEmpty();
+        assertThat(accepted.value().agreements()).extracting(ComplianceSection.AcceptedAgreement::key,
+                ComplianceSection.AcceptedAgreement::version, ComplianceSection.AcceptedAgreement::acceptedOn)
+                .containsExactly(
+                        tuple("seller-terms", "2.4", TODAY),
+                        tuple("payments-terms", "1.0", TODAY),
+                        tuple("data-processing", "1.0", TODAY));
+
+        // A provider accepts the provider terms, not the seller terms.
+        ComplianceSection wrong = new ComplianceSection(List.of(), null, null, List.of(), null, true, true, "Ama", seller);
+        assertThat(rules.compliance(wrong, Offering.SERVICES, PROVIDER, false).errors())
+                .containsKey("compliance.agreements[0].key");
+        // Missing documents and a malformed version are reported.
+        ComplianceSection partial = new ComplianceSection(List.of("clothing"), null, null, List.of(), null, true, true,
+                "Ade", List.of(new ComplianceSection.AcceptedAgreement("seller-terms", "v2", null)));
+        assertThat(rules.compliance(partial, Offering.PRODUCTS, SELLER, false).errors())
+                .containsKeys("compliance.agreements[0].version", "compliance.agreements");
+        // Nothing is recorded until the agreements are accepted, and a legacy caller that names none records none.
+        ComplianceSection unaccepted = new ComplianceSection(List.of("clothing"), null, null, List.of(), null, false, null,
+                null, seller);
+        assertThat(rules.compliance(unaccepted, Offering.PRODUCTS, SELLER, false).value().agreements()).isEmpty();
+        assertThat(rules.compliance(new ComplianceSection(List.of("clothing"), null, null, List.of(), null, true, true,
+                "Ade"), Offering.PRODUCTS, SELLER, true).value().agreements()).isEmpty();
     }
 
     @Test

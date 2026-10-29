@@ -1,13 +1,16 @@
-import { createApiClient, LEGAL_DOCUMENT_KEYS } from '@afrotransact/api-client';
+import { createApiClient, LEGAL_DOCUMENT_KEYS, LEGAL_GROUPS } from '@afrotransact/api-client';
+import { createTranslator, LOCALES } from '@afrotransact/i18n';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CookieBanner } from '@/components/legal/CookieBanner';
-import { headingId, parseLegalMarkdown, renderInline, safeHref } from '@/components/legal/markdown';
+import { LegalCenter } from '@/components/legal/LegalCenter';
+import { headingId, LegalBlocks, parseLegalMarkdown, renderInline, safeHref } from '@/components/legal/markdown';
 import { PrivacyChoices } from '@/components/legal/PrivacyChoices';
-import { tEn } from '@/i18n/t';
+import { messagesFor } from '@/i18n/catalogs';
+import { EN_MESSAGES, tEn } from '@/i18n/t';
 import {
   ACCEPT_ALL,
   allows,
@@ -40,9 +43,15 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() })
 }));
 vi.mock('@/lib/api/server', () => ({ serverApi: async () => createApiClient({ baseUrl: `${window.location.origin}/api/bff` }) }));
+const locale = vi.hoisted(() => ({ current: 'en' as 'en' | 'fr' | 'es' | 'ar' | 'yo' }));
 vi.mock('@/i18n/server', async () => {
-  const { tEn: t } = await import('@/i18n/t');
-  return { getLocale: async () => 'en', getT: async () => t };
+  const { createTranslator } = await import('@afrotransact/i18n');
+  const { messagesFor } = await import('@/i18n/catalogs');
+  const { EN_MESSAGES } = await import('@/i18n/t');
+  return {
+    getLocale: async () => locale.current,
+    getT: async () => createTranslator(EN_MESSAGES, locale.current, messagesFor(locale.current))
+  };
 });
 
 installMockBff();
@@ -134,6 +143,66 @@ describe('legal markdown', () => {
   });
 });
 
+describe('legal markdown: the richer subset written documents use', () => {
+  it('parses sub-headings, tables, nested lists, quotes and rules, drops heading numbers and keeps anchors unique', () => {
+    const md = [
+      '# Title', '', '## 1. Definitions', '', '### 1.1 Terms', '', 'Plain *italic* and `code`.', '',
+      '| Fee | Rate |', '| :-- | --: |', '| Referral | 8% |', '| Closing | $1.80 |', '',
+      '- one', '  - nested a', '  - nested b', '- two', '  continued', '', '> Important notice', '', '---', '',
+      '## Definitions', '', 'Again.'
+    ].join('\n');
+    const doc = parseLegalMarkdown(md);
+    expect(doc.sections.map((s) => [s.id, s.title])).toEqual([['1-definitions', 'Definitions'], ['definitions', 'Definitions']]);
+    expect(parseLegalMarkdown('## Scope\n\nA\n\n## Scope\n\nB').sections.map((s) => s.id)).toEqual(['scope', 'scope-2']);
+    const blocks = doc.sections[0]?.blocks ?? [];
+    expect(blocks.map((b) => b.kind)).toEqual(['h3', 'p', 'table', 'ul', 'quote', 'hr']);
+    expect(blocks[0]).toMatchObject({ kind: 'h3', text: 'Terms' });
+    expect(blocks[2]).toEqual({ kind: 'table', head: ['Fee', 'Rate'], align: ['left', 'right'], rows: [['Referral', '8%'], ['Closing', '$1.80']] });
+    expect(blocks[3]).toMatchObject({ kind: 'ul', items: ['one', 'two continued'], children: [{ kind: 'ul', items: ['nested a', 'nested b'] }] });
+  });
+
+  it('renders tables, nested lists and inline formatting as elements, never as raw HTML', () => {
+    const doc = parseLegalMarkdown('## Fees\n\n| Fee | Rate |\n| --- | --- |\n| Referral | **8%** |\n\n- a\n  - b\n\nSee <script>alert(1)</script> and *this*.');
+    const { container } = renderWithProviders(<LegalBlocks blocks={doc.sections[0]?.blocks ?? []} />);
+    expect(container.querySelector('table th')?.textContent).toBe('Fee');
+    expect(container.querySelector('table td strong')?.textContent).toBe('8%');
+    expect(container.querySelector('li > ul > li')?.textContent).toBe('b');
+    expect(container.querySelector('script')).toBeNull();
+    expect(container.querySelector('em')?.textContent).toBe('this');
+  });
+});
+
+describe('legal center index', () => {
+  it('groups every document once under the five sections and links each', () => {
+    renderWithProviders(<LegalCenter documents={[]} locale="en" t={tEn} />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Legal & privacy' })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Customers', 'Payments and money', 'Sellers and providers', 'Privacy and cookies', 'Policies']);
+    const links = screen.getAllByRole('link');
+    expect(links).toHaveLength(LEGAL_DOCUMENT_KEYS.length);
+    for (const g of LEGAL_GROUPS) {
+      const group = within(screen.getByRole('region', { name: tEn(`legal.group.${g.id}`) }));
+      expect(group.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(g.documents.map((k) => `/legal/${k}`));
+    }
+  });
+
+  it('shows version and effective date when the index loaded', () => {
+    renderWithProviders(
+      <LegalCenter documents={[{ key: 'gift-card-terms', title: 'Gift Card Terms', version: '1.2', effectiveDate: '2026-11-01', href: '/legal/gift-card-terms', draftBanner: false }]} locale="en" t={tEn} />
+    );
+    expect(screen.getByText(/Version 1\.2 · Effective/)).toBeInTheDocument();
+    expect(screen.getByText('November 1, 2026')).toBeInTheDocument();
+  });
+
+  it('has a title and intro in every locale', () => {
+    for (const l of LOCALES) {
+      const t = createTranslator(EN_MESSAGES, l.code, messagesFor(l.code));
+      expect(t('legal.centerIntro')).not.toBe('');
+      for (const g of LEGAL_GROUPS) expect(t(`legal.group.${g.id}`)).not.toBe(`legal.group.${g.id}`);
+      for (const k of LEGAL_DOCUMENT_KEYS) expect(t(`legal.doc.${k}`)).not.toBe('');
+    }
+  });
+});
+
 describe('/legal/[doc] routing', () => {
   const run = async (doc: string, version?: string) => {
     const { default: Page } = await import('@/app/legal/[doc]/page');
@@ -157,6 +226,21 @@ describe('/legal/[doc] routing', () => {
       expect(screen.getByRole('link', { name: tEn(`legal.doc.${key}`) })).toHaveAttribute('aria-current', 'page');
       view.unmount();
     }
+  });
+
+  it('renders every document in a non-English locale with the translation notice above the binding English text', async () => {
+    for (const l of ['fr', 'es', 'ar', 'yo'] as const) {
+      locale.current = l;
+      const t = createTranslator(EN_MESSAGES, l, messagesFor(l));
+      for (const key of LEGAL_DOCUMENT_KEYS) {
+        const view = withConsent(await run(key));
+        expect(screen.getByRole('heading', { level: 1, name: t(`legal.doc.${key}`) })).toBeInTheDocument();
+        expect(screen.getByText(t('legal.translation'))).toBeInTheDocument();
+        expect(document.querySelector('article')).toHaveAttribute('lang', 'en');
+        view.unmount();
+      }
+    }
+    locale.current = 'en';
   });
 
   it('shows an archived version with a link back to the current one', async () => {

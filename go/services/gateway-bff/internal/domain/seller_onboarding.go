@@ -1,5 +1,7 @@
 package domain
 
+import "strings"
+
 // The seller / provider application wizard (S286, S288): GET /v1/seller/onboarding and the step saves.
 
 // OnboardingStep is one step of the wizard. Key is the upper-case step key (BUSINESS, BUSINESS_DETAILS, …, REVIEW),
@@ -190,6 +192,37 @@ type OnboardingCompliance struct {
 	AgreementsAccepted       *bool                      `json:"agreementsAccepted"`
 	W9Certified              *bool                      `json:"w9Certified"`
 	W9SignerName             *string                    `json:"w9SignerName"`
+	// Agreements are the legal documents accepted, each with the version that was shown and the date.
+	Agreements []OnboardingAgreement `json:"agreements"`
+}
+
+// OnboardingAgreement is a legal document an applicant accepted: its key, the version shown and the date accepted.
+type OnboardingAgreement struct {
+	Key        string  `json:"key"`
+	Version    string  `json:"version"`
+	AcceptedOn *string `json:"acceptedOn"`
+}
+
+// OnboardingAgreementInput is a document and version as the applicant saw it.
+type OnboardingAgreementInput struct {
+	Key     string `json:"key"`
+	Version string `json:"version"`
+}
+
+// RequiredAgreements are the legal documents (content keys) an application must accept before it can be submitted:
+// sellers the seller terms, payments terms and data processing addendum; providers the provider terms in place of the
+// seller terms; an application for both accepts both sets. Mirrors seller-service ComplianceSection.
+func RequiredAgreements(offering string) []string {
+	products := []string{"seller-terms", "payments-terms", "data-processing"}
+	services := []string{"provider-terms", "payments-terms", "data-processing"}
+	switch strings.ToUpper(strings.TrimSpace(offering)) {
+	case "SERVICES":
+		return services
+	case "BOTH":
+		return []string{"seller-terms", "provider-terms", "payments-terms", "data-processing"}
+	default:
+		return products
+	}
 }
 
 // OnboardingDocument is an uploaded document of the application.
@@ -294,6 +327,9 @@ type OnboardingComplianceInput struct {
 	AgreementsAccepted       bool                       `json:"agreementsAccepted"`
 	W9Certified              bool                       `json:"w9Certified"`
 	W9SignerName             string                     `json:"w9SignerName"`
+	// Agreements are the documents and versions the applicant was shown; the BFF records the current version of each
+	// required document and rejects the save when one changed since (the applicant must read it again).
+	Agreements []OnboardingAgreementInput `json:"agreements"`
 }
 
 // OnboardingStripeSession is POST /v1/seller/onboarding/stripe/session: what Connect.js needs to show Stripe's

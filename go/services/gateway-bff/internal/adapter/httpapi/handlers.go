@@ -125,6 +125,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("GET /v1/home", h.home)
 	route("POST /v1/newsletter/subscriptions", lookup(h.newsletter))
 	// Legal & privacy center
+	route("GET /v1/legal", h.legalIndex)
 	route("GET /v1/legal/{key}", h.legalDocument)
 	// Help center
 	route("GET /v1/help/articles", h.helpArticles)
@@ -292,6 +293,11 @@ func (h *handlersImpl) publicJSON(w http.ResponseWriter, r *http.Request, v any,
 		w.Header().Set("Vary", "Accept-Encoding")
 	}
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) legalIndex(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Site.LegalIndex(r.Context())
+	h.publicJSON(w, r, v, err)
 }
 
 func (h *handlersImpl) legalDocument(w http.ResponseWriter, r *http.Request) {

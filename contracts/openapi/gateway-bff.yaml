@@ -195,6 +195,24 @@ paths:
               schema: {$ref: '#/components/schemas/NewsletterResponse'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/legal:
+    get:
+      tags: [Legal]
+      operationId: listLegalDocuments
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: The legal center index (the current version of every published document)
+      description: |
+        One row per published document, in the legal center's order (the storefront groups them: Customers, Payments and
+        money, Sellers and providers, Privacy and cookies, Policies). Public and cacheable.
+      responses:
+        '200':
+          description: The documents
+          headers:
+            Cache-Control: {schema: {type: string}, example: 'public, max-age=60'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LegalIndex'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/legal/{key}:
     get:
       tags: [Legal]
@@ -202,11 +220,10 @@ paths:
       security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: A legal document (current version, or an archived one with `version`), placeholders filled in
       description: |
-        Keys: conditions-of-use, privacy, cookies, privacy-choices, returns, seller-terms, prohibited-items,
-        accessibility, sms-terms. English is binding; other locales fall back to English with
-        `translationFallback: true`. Public and cacheable.
+        Keys: see `LegalDocumentKey` (twenty-one documents). English is binding; other locales (fr, es, ar, yo) fall
+        back to English with `translationFallback: true`. Unknown keys and versions are 404. Public and cacheable.
       parameters:
-        - {name: key, in: path, required: true, schema: {type: string}, example: sms-terms}
+        - {name: key, in: path, required: true, schema: {$ref: '#/components/schemas/LegalDocumentKey'}, example: sms-terms}
         - {name: version, in: query, required: false, schema: {type: string}, description: An archived or the current version, example: '3.1'}
         - {name: locale, in: query, required: false, schema: {type: string, default: en}}
       responses:
@@ -4373,6 +4390,28 @@ components:
       required: [status]
       properties:
         status: {type: string, enum: [pending_confirmation, subscribed]}
+    LegalDocumentKey:
+      type: string
+      description: A document of the legal center (content-service LegalDocumentType keys; also the storefront slugs under /legal/)
+      enum: [conditions-of-use, privacy, cookies, privacy-choices, returns, seller-terms, prohibited-items, accessibility, sms-terms, gift-card-terms, store-credit-terms, membership-terms, referral-terms, preorder-delivery-terms, community-guidelines, ip-policy, provider-terms, payments-terms, subprocessors, data-processing, seller-fees]
+    LegalSummary:
+      type: object
+      description: The current version of one legal document
+      required: [key, title, version, effectiveDate, href, draftBanner]
+      properties:
+        key: {$ref: '#/components/schemas/LegalDocumentKey'}
+        title: {type: string, example: Conditions of Use}
+        version: {type: string, example: '3.2'}
+        effectiveDate: {type: string, format: date}
+        href: {type: string, example: /legal/conditions-of-use}
+        draftBanner: {type: boolean}
+    LegalIndex:
+      type: object
+      required: [documents]
+      properties:
+        documents:
+          type: array
+          items: {$ref: '#/components/schemas/LegalSummary'}
     LegalPage:
       type: object
       description: A rendered legal document (Markdown body with `##` sections; `outline` lists their anchors)

@@ -3,7 +3,9 @@ package com.afrotransact.seller.domain;
 import java.math.BigDecimal;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,6 +27,7 @@ public class DefaultApplicationRules implements ApplicationRules {
             "VA", "WA", "WV", "WI", "WY", "PR", "GU", "VI", "AS", "MP");
 
     private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]{2,}$");
+    private static final Pattern AGREEMENT_VERSION = Pattern.compile("^\\d{1,3}\\.\\d{1,3}(\\.\\d{1,3})?$");
     private static final Pattern ZIP = Pattern.compile("^\\d{5}(-\\d{4})?$");
     private static final Pattern COUNTRY = Pattern.compile("^[A-Z]{2}$");
     private static final BigDecimal QUARTER = BigDecimal.valueOf(25);
@@ -337,9 +340,54 @@ public class DefaultApplicationRules implements ApplicationRules {
                 e.put("w9Certified", "Certify your taxpayer details (W-9)");
             }
         }
+        List<ComplianceSection.AcceptedAgreement> agreements = Boolean.TRUE.equals(in.agreementsAccepted())
+                ? acceptedAgreements(in.agreements(), offering, ctx, e) : List.of();
         return new Validated<>(new ComplianceSection(categories, permit, in.beautyLabellingConfirmed(), in.services(),
-                in.insuranceDocumentAssetId(), in.agreementsAccepted(), in.w9Certified(), trim(in.w9SignerName())),
-                e.map());
+                in.insuranceDocumentAssetId(), in.agreementsAccepted(), in.w9Certified(), trim(in.w9SignerName()),
+                agreements), e.map());
+    }
+
+    /**
+     * The documents accepted, stamped with today's date. When the caller names documents they must be the ones this
+     * application requires (sellers: seller-terms, payments-terms, data-processing; providers: provider-terms,
+     * payments-terms, data-processing) and each needs a version like 2.4. A caller that names none records none.
+     */
+    private static List<ComplianceSection.AcceptedAgreement> acceptedAgreements(
+            List<ComplianceSection.AcceptedAgreement> given, Offering offering, RuleContext ctx, Errors e) {
+        if (given.isEmpty()) {
+            return List.of();
+        }
+        Set<String> required = new LinkedHashSet<>();
+        if (offering == null || offering.includesProducts()) {
+            required.addAll(ComplianceSection.SELLER_AGREEMENTS);
+        }
+        if (offering != null && offering.includesServices()) {
+            required.addAll(ComplianceSection.PROVIDER_AGREEMENTS);
+        }
+        List<ComplianceSection.AcceptedAgreement> out = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (int i = 0; i < given.size(); i++) {
+            ComplianceSection.AcceptedAgreement a = given.get(i);
+            String p = "agreements[" + i + "].";
+            String key = a.key() == null ? "" : a.key().trim();
+            String version = a.version() == null ? "" : a.version().trim();
+            if (!required.contains(key)) {
+                e.put(p + "key", "Not a document this application accepts");
+            } else if (!seen.add(key)) {
+                e.put(p + "key", "Listed twice");
+            }
+            if (!AGREEMENT_VERSION.matcher(version).matches()) {
+                e.put(p + "version", "Use the version shown, like 2.4");
+            }
+            out.add(new ComplianceSection.AcceptedAgreement(key, version, ctx.today()));
+        }
+        for (String key : required) {
+            if (!seen.contains(key)) {
+                e.put("agreements", "Accept every document: " + String.join(", ", required));
+                break;
+            }
+        }
+        return out;
     }
 
     @Override

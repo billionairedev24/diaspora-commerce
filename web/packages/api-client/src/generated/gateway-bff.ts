@@ -80,6 +80,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/legal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The legal center index (the current version of every published document)
+         * @description One row per published document, in the legal center's order (the storefront groups them: Customers, Payments and
+         *     money, Sellers and providers, Privacy and cookies, Policies). Public and cacheable.
+         */
+        get: operations["listLegalDocuments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/legal/{key}": {
         parameters: {
             query?: never;
@@ -89,9 +110,8 @@ export interface paths {
         };
         /**
          * A legal document (current version, or an archived one with `version`), placeholders filled in
-         * @description Keys: conditions-of-use, privacy, cookies, privacy-choices, returns, seller-terms, prohibited-items,
-         *     accessibility, sms-terms. English is binding; other locales fall back to English with
-         *     `translationFallback: true`. Public and cacheable.
+         * @description Keys: see `LegalDocumentKey` (twenty-one documents). English is binding; other locales (fr, es, ar, yo) fall
+         *     back to English with `translationFallback: true`. Unknown keys and versions are 404. Public and cacheable.
          */
         get: operations["getLegalDocument"];
         put?: never;
@@ -3601,6 +3621,27 @@ export interface components {
             /** @enum {string} */
             status: "pending_confirmation" | "subscribed";
         };
+        /**
+         * @description A document of the legal center (content-service LegalDocumentType keys; also the storefront slugs under /legal/)
+         * @enum {string}
+         */
+        LegalDocumentKey: "conditions-of-use" | "privacy" | "cookies" | "privacy-choices" | "returns" | "seller-terms" | "prohibited-items" | "accessibility" | "sms-terms" | "gift-card-terms" | "store-credit-terms" | "membership-terms" | "referral-terms" | "preorder-delivery-terms" | "community-guidelines" | "ip-policy" | "provider-terms" | "payments-terms" | "subprocessors" | "data-processing" | "seller-fees";
+        /** @description The current version of one legal document */
+        LegalSummary: {
+            key: components["schemas"]["LegalDocumentKey"];
+            /** @example Conditions of Use */
+            title: string;
+            /** @example 3.2 */
+            version: string;
+            /** Format: date */
+            effectiveDate: string;
+            /** @example /legal/conditions-of-use */
+            href: string;
+            draftBanner: boolean;
+        };
+        LegalIndex: {
+            documents: components["schemas"]["LegalSummary"][];
+        };
         /** @description A rendered legal document (Markdown body with `##` sections; `outline` lists their anchors) */
         LegalPage: {
             /** @example conditions-of-use */
@@ -5478,6 +5519,29 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    listLegalDocuments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The documents */
+            200: {
+                headers: {
+                    /** @example public, max-age=60 */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalIndex"];
+                };
+            };
+            503: components["responses"]["Problem"];
+        };
+    };
     getLegalDocument: {
         parameters: {
             query?: {
@@ -5491,7 +5555,7 @@ export interface operations {
             header?: never;
             path: {
                 /** @example sms-terms */
-                key: string;
+                key: components["schemas"]["LegalDocumentKey"];
             };
             cookie?: never;
         };

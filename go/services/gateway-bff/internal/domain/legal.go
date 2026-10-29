@@ -8,7 +8,37 @@ import (
 
 // LegalDocumentKeys are the documents of the Legal & privacy center (content-service LegalDocumentType keys).
 var LegalDocumentKeys = []string{"conditions-of-use", "privacy", "cookies", "privacy-choices", "returns", "seller-terms",
-	"prohibited-items", "accessibility", "sms-terms"}
+	"prohibited-items", "accessibility", "sms-terms", "gift-card-terms", "store-credit-terms", "membership-terms",
+	"referral-terms", "preorder-delivery-terms", "community-guidelines", "ip-policy", "provider-terms", "payments-terms",
+	"subprocessors", "data-processing", "seller-fees"}
+
+// LegalGroups are the sections of the legal center index, in order, with the documents of each in reading order. Every
+// document is in exactly one group; the storefront groups its index the same way (LEGAL_GROUPS in @afrotransact/api-client).
+var LegalGroups = []struct {
+	ID, Title string
+	Documents []string
+}{
+	{"customers", "Customers", []string{"conditions-of-use", "returns", "preorder-delivery-terms", "membership-terms", "referral-terms"}},
+	{"payments", "Payments and money", []string{"gift-card-terms", "store-credit-terms", "payments-terms", "seller-fees"}},
+	{"sellers", "Sellers and providers", []string{"seller-terms", "provider-terms", "data-processing"}},
+	{"privacy", "Privacy and cookies", []string{"privacy", "cookies", "privacy-choices", "sms-terms", "subprocessors"}},
+	{"policies", "Policies", []string{"community-guidelines", "ip-policy", "prohibited-items", "accessibility"}},
+}
+
+// LegalGroupTitle is the legal center section a document belongs to ("" for an unknown key).
+func LegalGroupTitle(key string) string {
+	for _, g := range LegalGroups {
+		for _, k := range g.Documents {
+			if k == key {
+				return g.Title
+			}
+		}
+	}
+	return ""
+}
+
+// LegalLocales are the locales a legal document may carry a translation in (English is the binding text).
+var LegalLocales = []string{"fr", "es", "ar", "yo"}
 
 // IsLegalDocument reports whether key names a legal document.
 func IsLegalDocument(key string) bool {
@@ -18,6 +48,21 @@ func IsLegalDocument(key string) bool {
 		}
 	}
 	return false
+}
+
+// LegalSummary is one row of the legal center index: a document's current version.
+type LegalSummary struct {
+	Key           string `json:"key"`
+	Title         string `json:"title"`
+	Version       string `json:"version"`
+	EffectiveDate string `json:"effectiveDate"`
+	Href          string `json:"href"`
+	DraftBanner   bool   `json:"draftBanner"`
+}
+
+// LegalIndex lists the current version of every published legal document, in the legal center's order.
+type LegalIndex struct {
+	Documents []LegalSummary `json:"documents"`
 }
 
 // LegalPage is a rendered legal document (contracts/openapi/gateway-bff.yaml LegalPage).

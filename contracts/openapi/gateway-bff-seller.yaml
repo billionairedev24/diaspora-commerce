@@ -2863,7 +2863,7 @@ components:
             planFeeCollectionDefault: {$ref: '#/components/schemas/PlanFeeCollectionMode'}
         compliance:
           type: object
-          required: [categories, foodPermit, beautyLabellingConfirmed, services, insuranceDocumentAssetId, agreementsAccepted, w9Certified, w9SignerName]
+          required: [categories, foodPermit, beautyLabellingConfirmed, services, insuranceDocumentAssetId, agreementsAccepted, w9Certified, w9SignerName, agreements]
           properties:
             categories: {type: array, items: {type: string}}
             foodPermit:
@@ -2876,6 +2876,10 @@ components:
             agreementsAccepted: {type: [boolean, 'null']}
             w9Certified: {type: [boolean, 'null']}
             w9SignerName: {type: [string, 'null']}
+            agreements:
+              type: array
+              description: The legal documents accepted, each with the version in force when accepted and the date (sellers - seller-terms, payments-terms, data-processing; providers - provider-terms in place of seller-terms)
+              items: {$ref: '#/components/schemas/OnboardingAgreement'}
         documents:
           type: array
           items:
@@ -2982,6 +2986,23 @@ components:
         agreementsAccepted: {type: boolean}
         w9Certified: {type: boolean}
         w9SignerName: {type: string, maxLength: 120}
+        agreements:
+          type: array
+          description: The documents and versions the applicant was shown. The BFF records the current version of every document the application requires and answers 422 LEGAL_DOCUMENT_CHANGED when one differs from what was shown.
+          items: {$ref: '#/components/schemas/OnboardingAgreementInput'}
+    OnboardingAgreement:
+      type: object
+      required: [key, version, acceptedOn]
+      properties:
+        key: {type: string, example: seller-terms}
+        version: {type: string, example: '2.4'}
+        acceptedOn: {type: [string, 'null'], format: date}
+    OnboardingAgreementInput:
+      type: object
+      required: [key, version]
+      properties:
+        key: {type: string, example: seller-terms}
+        version: {type: string, example: '2.4'}
     OnboardingStripeSession:
       type: object
       required: [accountId, clientSecret, publishableKey, expiresAt, localTest]

@@ -116,7 +116,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	clientCreds := upstreams.IdentityOptions{ClientID: u.ClientID, ClientSecret: u.Secret, Now: clock.Now}
 	media := upstreams.NewMedia(client("media", base))
 	sellerCases := upstreams.NewSellerCases(client("tax-returns", base), client("trust-ops", base))
-	sellerDeps := app.SellerDeps{Cases: sellerCases, Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", base)), Addresses: identity,
+	sellerDeps := app.SellerDeps{Cases: sellerCases, Content: content, Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", base)), Addresses: identity,
 		Catalog: upstreams.NewSellerCatalog(client("catalog", base), cache, 10*time.Minute), Stock: upstreams.NewStock(client("inventory", base)),
 		Listing: upstreams.NewSellerListing(client("catalog", base)), Writer: upstreams.NewListingWriter(client("ai-gateway", base)),
 		Offers: upstreams.NewOffers(offersClient), Media: media,
