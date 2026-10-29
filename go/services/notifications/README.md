@@ -168,7 +168,7 @@ time zone and market, and channels the user switched off in their account are dr
 | … → `ready` with `deliveryMethod=PICKUP` | `customerId` | `shipment.ready_for_pickup` | email, sms, push |
 | … → `delivery_failed` | `customerId` | `shipment.delivery_failed` | email, sms, push |
 | `orders.shipment.delivered` | `customerId` | `shipment.delivered` | email, push |
-| `orders.shipment.cancelled` | `customerId` | `shipment.cancelled` (refund note from `captured`) | email, push |
+| `orders.shipment.cancelled` | `customerId` | `shipment.cancelled` (refund note from `captured`) | email, push; also sms when AfroTransact cancelled a pre-order (its window or run): "refunded in full, delivery fee included" |
 | `seller.application.submitted` / `info_requested` / `approved` / `rejected` | `applicantUserId` | `seller.application.*` | email (+ sms for info requested / approved, + push for approved) |
 | `seller.compliance.reminder` | org owners | `seller.compliance.reminder` | payload `channels` (`in_app` → push), default email, sms |
 | `seller.compliance.changed` (new items, or → RESTRICTED_SOON / RESTRICTED) | org owners | `seller.compliance.action_needed` | as above |
@@ -191,7 +191,8 @@ time zone and market, and channels the user switched off in their account are dr
 | `content.newsletter.confirmation_requested` | payload `email` | `newsletter.confirm` | email |
 | `delivery-runs.run.announced` (S262) | the location's subscribers per channel (`locationId`) | `run.announced` | email, push |
 | `delivery-runs.run.opened` / `.cutoff_reminder` (S262) | the location's subscribers per channel | `run.opened` / `run.cutoff_reminder` | email, sms, push (+ WhatsApp templates when enabled) |
-| `delivery-runs.run.out_for_delivery` (dispatch, S262) | the customers in `orders[]` (own `handoverCode` at a pickup point) | `run.out_for_delivery` | sms, push, email |
+| `delivery-runs.run.out_for_delivery` (dispatch, S262; not a pre-order window's run) | the customers in `orders[]` (own `handoverCode` at a pickup point) | `run.out_for_delivery` | sms, push, email |
+| `preorder.comms.due` `kind=OUT_FOR_DELIVERY` (S262: delivery-runs publishes it once when a window's run leaves) | the window's paid customers in `orders[]` (own `handoverCode` for a pickup-only window) | `preorder.out_for_delivery` | sms, push |
 | `delivery-runs.run.confirmed` (not a pre-order window's run) | the customers in `orders[]` | `run.confirmed` | email, push |
 | `delivery-runs.run.cancelled` (not a pre-order window's run) | the customers in `orders[]` | `run.cancelled` (refunded in full, delivery fee included) | email, sms, push |
 | `delivery-runs.subscription.created` (pending, with `confirmUrl`) | payload `email` (never looked up) | `run.subscription.confirm` (double opt-in) | email |
@@ -216,8 +217,10 @@ happens to their order.
   is the location page with the same UTM (the run id is dropped to keep the text short, so a run SMS is two GSM-7
   segments at most; every other SMS stays at one).
 - **Dispatch and cancellation.** `.out_for_delivery` (the run left) and `.confirmed` go to the customers in `orders[]`.
-  A run handed over from a pre-order window (`reason` "PREORDER <code>") is already covered by that window's own emails,
-  and a run cancelled with its window (`reason` "Pre-order <code> cancelled: …") by the cancelled pre-order email
+  A run handed over from a pre-order window (`reason` "PREORDER <code>") is already covered by that window's own messages
+  (its confirmation by `preorder.confirmed`, its dispatch by `preorder.out_for_delivery`, which delivery-runs publishes
+  once, with each customer's handover code, when that run leaves; a window that is paused or has switched the message off
+  sends nothing), and a run cancelled with its window (`reason` "Pre-order <code> cancelled: …") by the cancelled pre-order email
   orders-service sends per shipment, so neither is messaged twice. A run staff scheduled and then cancelled tells every
   customer on it, in email, SMS and push, that the order is refunded in full, delivery fee included (a card hold is
   released, nothing is charged).
@@ -225,15 +228,79 @@ happens to their order.
   (`run.subscription.confirm`; nothing else is sent until it is used); a confirmed or signed-in subscriber gets the
   welcome with the location's WhatsApp community link. Withdrawing consent sends nothing: delivery-runs stops listing
   the member.
-- **WhatsApp.** Off by default (`deliveryRuns.whatsapp.enabled`, env `DELIVERY_RUNS_WHATSAPP_ENABLED`). WhatsApp only
-  allows business-initiated messages as **templates that Meta has approved**, which cannot be done from this repository.
-  Before switching it on, create and get approved (Meta Business Manager, language `en`, category utility or marketing)
-  `afrotransact_run_opened` and `afrotransact_run_cutoff_reminder`, each with five body parameters in this order: town,
-  delivery day, cutoff, delivery fee, link; set `WHATSAPP_TOKEN` and `whatsapp.phoneNumberId`. The names and the
-  parameter lines live in the seeded `chat` rows of `run.opened` and `run.cutoff_reminder` (migration `0019`), editable in
-  the staff console. Only members who opted in on WhatsApp (and have a verified phone in identity) receive them.
-- **Locales.** The run templates are seeded in `en`, like the rest of this service's templates; other locales fall back
-  to it.
+- **WhatsApp.** Off by default (`deliveryRuns.whatsapp.enabled`, env `DELIVERY_RUNS_WHATSAPP_ENABLED`) and it stays off
+  until Meta has approved the templates: that is a review by Meta outside this repository and nothing here pretends
+  otherwise. See "WhatsApp approval" below for the exact steps, names and bodies. Only members who opted in on WhatsApp
+  (and have a verified phone in identity) receive them.
+- **Locales.** The run and pre-order messages (`run.*`, `preorder.*`) exist in `en`, `fr`, `es`, `ar` and `yo`
+  (migrations `0009`/`0011`/`0013`/`0019` for `en`, `0023` for the rest). The language is the event's `locale`, else the
+  signed-in customer's language from identity; email-only subscribers have none yet, so they get English, and any other
+  language falls back to English. `TestRunAndPreorderTemplatesExistInEveryLocale` fails when a locale, a channel or a
+  placeholder is missing, so a new `run.*` / `preorder.*` message must come with all five. `fr` and `es` text messages
+  are one GSM-7 segment (no `á í ó ú ê â ç`); `ar` and `yo` cannot be GSM-7 (UCS-2, 70 characters a segment) and may take
+  more segments. The translations were written without a native-speaker review: have them reviewed before launch.
+- **Pre-order announcement links.** Every `emailUrl` / `smsUrl` / `pushUrl` of a `preorder.comms.due` message is the
+  pre-order page with the order attribution (`src` = email, sms or app for push, `po` = window code, `cr` = the message:
+  announce, waitlist, remind, last, closed, ofd) and the UTM tags `utm_source` = `utm_medium` = the channel,
+  `utm_campaign` = `preorder-<code>`, `utm_content` = the message, the same format delivery-runs builds
+  (`PreorderUtm`). An order placed from the link is credited to that campaign in the staff pre-order analytics
+  ("UTM campaign" chart). SMS with those links may take two segments, as run alerts do.
+- **Cancelled windows and runs.** A pre-order window staff cancel (`preorder.window.cancelled`) is refunded by
+  orders-service shipment by shipment; each `orders.shipment.cancelled` (PREORDER, actor not the customer) tells the
+  customer by email, text message and push that the order is refunded in full, delivery fee included (or that nothing was
+  charged and the card hold is released). A cancelled run says the same through `run.cancelled`.
+
+### WhatsApp approval
+
+WhatsApp only allows a business to start a conversation with a **template message that Meta has approved**. Until all of
+the following is done, keep `deliveryRuns.whatsapp.enabled=false` (the default in every environment); email, text
+message and push announcements are not affected. Nothing below can be done or tested from this repository.
+
+1. **Business verification.** In Meta Business Manager (business.facebook.com) → Business settings → Security centre →
+   start business verification for the AfroTransact legal entity. Without it the sending limits stay at the lowest tier.
+2. **WhatsApp Business Account and number.** Create the WhatsApp Business Account, add a phone number that is not
+   registered on a personal WhatsApp account, and get its display name approved. Note the **phone number ID**
+   (WhatsApp Manager → Phone numbers) for `whatsapp.phoneNumberId` in the environment config.
+3. **Templates.** WhatsApp Manager → Message templates → Create template, once per language below (same name, one
+   language each: `en`, `fr`, `es`, `ar`, `yo`). Category **Marketing** (an announcement that a run is open is
+   promotional; Meta re-categorises a promotional text submitted as Utility). Body only, no header, footer or buttons.
+   Variables are positional and fixed: `{{1}}` town, `{{2}}` delivery day, `{{3}}` cutoff, `{{4}}` delivery fee, `{{5}}`
+   link (the run link with UTM). Sample values for the review: Bastrop; Saturday, October 24; Thu, Oct 22 at 8:00 PM CDT;
+   $7.99; https://afrotransact.com/delivery-runs/bastrop-tx?utm_source=whatsapp. Review takes minutes to a day; a
+   template must be **Active** before it is used. The bodies do not tell the customer to reply STOP: replies to the
+   business number are not processed by this service, so opting out is in the account (and the consent record).
+
+   | Template name | Language | Body |
+   |---|---|---|
+   | `afrotransact_run_opened` | en | The {{1}} delivery run is open. We deliver on {{2}}. Order by {{3}}. Delivery fee: {{4}}. See the run and order: {{5}} Manage your alerts in your AfroTransact account. |
+   | `afrotransact_run_opened` | fr | La tournée de livraison à {{1}} est ouverte. Livraison le {{2}}. Commandez avant {{3}}. Frais de livraison : {{4}}. Voir la tournée et commander : {{5}} Gérez vos alertes dans votre compte AfroTransact. |
+   | `afrotransact_run_opened` | es | La ruta de entrega a {{1}} está abierta. Entregamos el {{2}}. Pide antes de {{3}}. Costo de entrega: {{4}}. Ver la ruta y pedir: {{5}} Gestiona tus alertas en tu cuenta de AfroTransact. |
+   | `afrotransact_run_opened` | ar | جولة التوصيل إلى {{1}} مفتوحة. نوصّل في {{2}}. اطلب قبل {{3}}. رسوم التوصيل: {{4}}. شاهد الجولة واطلب: {{5}} أدِر تنبيهاتك من حسابك في أفروترانزاكت. |
+   | `afrotransact_run_opened` | yo | Ìrìn ìfiránṣẹ́ sí {{1}} ti ṣí. A ń fi ránṣẹ́ ní {{2}}. Paṣẹ ṣáájú {{3}}. Owó ìfiránṣẹ́: {{4}}. Wo ìrìn náà kí o sì paṣẹ: {{5}} Ṣàkóso àwọn ìkìlọ̀ rẹ nínú àkọọ́lẹ̀ AfroTransact rẹ. |
+   | `afrotransact_run_cutoff_reminder` | en | Last chance for the {{1}} delivery run. We deliver on {{2}}. Order by {{3}}. Delivery fee: {{4}}. Order here: {{5}} Manage your alerts in your AfroTransact account. |
+   | `afrotransact_run_cutoff_reminder` | fr | Dernière chance pour la tournée de livraison à {{1}}. Livraison le {{2}}. Commandez avant {{3}}. Frais de livraison : {{4}}. Commander ici : {{5}} Gérez vos alertes dans votre compte AfroTransact. |
+   | `afrotransact_run_cutoff_reminder` | es | Última oportunidad para la ruta de entrega a {{1}}. Entregamos el {{2}}. Pide antes de {{3}}. Costo de entrega: {{4}}. Pide aquí: {{5}} Gestiona tus alertas en tu cuenta de AfroTransact. |
+   | `afrotransact_run_cutoff_reminder` | ar | الفرصة الأخيرة لجولة التوصيل إلى {{1}}. نوصّل في {{2}}. اطلب قبل {{3}}. رسوم التوصيل: {{4}}. اطلب من هنا: {{5}} أدِر تنبيهاتك من حسابك في أفروترانزاكت. |
+   | `afrotransact_run_cutoff_reminder` | yo | Àǹfààní ìkẹyìn fún ìrìn ìfiránṣẹ́ sí {{1}}. A ń fi ránṣẹ́ ní {{2}}. Paṣẹ ṣáájú {{3}}. Owó ìfiránṣẹ́: {{4}}. Paṣẹ níbí: {{5}} Ṣàkóso àwọn ìkìlọ̀ rẹ nínú àkọọ́lẹ̀ AfroTransact rẹ. |
+
+   The names and the parameter lines are the seeded `chat` rows of `run.opened` and `run.cutoff_reminder` (subject = the
+   template name, one body line per parameter: town, delivery day, cutoff, fee, WhatsApp link; migrations `0019` and
+   `0023`). The language code sent to Meta is the notification's locale (`en`, `fr`, `es`, `ar`, `yo`). If Meta does not
+   offer a language for templates, or one is not approved, a send in that language is refused permanently and is not
+   retried: either get it approved, or remove that language's `chat` rows in a new migration, **before** enabling.
+4. **Access token.** Business settings → System users → add a system user, give it the WhatsApp account with the
+   `whatsapp_business_messaging` permission, generate a token that never expires, and store it as the secret
+   `WHATSAPP_TOKEN` (never in a config file). Set `whatsapp.phoneNumberId` (and `apiVersion` if Meta retires `v21.0`).
+5. **Opt-in.** Meta requires the customer's opt-in; the record is the per-channel WhatsApp consent in delivery-runs, and
+   only those members are listed for the WhatsApp channel. The location page asks for it with the other channels.
+6. **Try it in uat first**, then production: send a test run announcement to a team phone that opted in; check the
+   delivery receipt in the staff console and the template's quality rating in WhatsApp Manager.
+7. **Switch on** with `DELIVERY_RUNS_WHATSAPP_ENABLED=true` (`deliveryRuns.whatsapp.enabled`) for notifications and roll
+   the pods. To switch off, set it back to `false`; nothing else changes.
+
+Not covered here: replies to the business number (there is no inbound WhatsApp webhook, so a customer cannot opt out
+by replying) and the mobile customer app's subscription screen (not built; the storefront location page is the only
+place to subscribe).
 
 trust-ops also publishes `notification.requested` for `claim.opened`, `claim.decided` and `claim.withdrawn` (with the
 seller org id as `recipient.id`, which identity cannot resolve as a user). Those keys (`SupersededGenericTemplates`)

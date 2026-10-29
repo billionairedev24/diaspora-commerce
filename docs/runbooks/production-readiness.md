@@ -83,6 +83,33 @@ and tick; "who" is the role that signs it off. Anything marked **blocker** must 
   payout hold started.
 - [ ] Inventory: opening stock received with the right currency and exchange rate; expiry dates and lots correct.
 - [ ] Staff on call know the maintenance-mode runbook (`docs/runbooks/maintenance-mode.md`) and where to turn it on.
+- [ ] Delivery run and pre-order announcements (S262): email, text message and push go out in the customer's language
+  (`en`, `fr`, `es`, `ar`, `yo`) and the translations in `go/services/notifications/.../0023_run_preorder_locales.sql`
+  have been read by a native speaker of each language; every announcement link carries UTM tags (check one in a
+  received email). A window staff cancel tells each customer by email, text and push that the order is refunded in
+  full, delivery fee included.
+- [ ] **WhatsApp run announcements are off, on purpose, until Meta approves the templates** (not a launch blocker:
+  `deliveryRuns.whatsapp.enabled=false` is the default and email, SMS and push are unaffected). It waits on Meta and
+  cannot be done from the repository. Steps, in order (full text and all bodies in `go/services/notifications/README.md`,
+  "WhatsApp approval"):
+  1. Business verification of the AfroTransact entity in Meta Business Manager (Business settings → Security centre).
+  2. A WhatsApp Business Account with its own phone number and an approved display name; note the phone number ID.
+  3. In WhatsApp Manager create the message templates, category Marketing, body only, once per language (`en`, `fr`,
+     `es`, `ar`, `yo`), with five positional variables: `{{1}}` town, `{{2}}` delivery day, `{{3}}` cutoff, `{{4}}`
+     delivery fee, `{{5}}` link:
+     - `afrotransact_run_opened` (en): "The {{1}} delivery run is open. We deliver on {{2}}. Order by {{3}}. Delivery
+       fee: {{4}}. See the run and order: {{5}} Manage your alerts in your AfroTransact account."
+     - `afrotransact_run_cutoff_reminder` (en): "Last chance for the {{1}} delivery run. We deliver on {{2}}. Order by
+       {{3}}. Delivery fee: {{4}}. Order here: {{5}} Manage your alerts in your AfroTransact account."
+     - the fr, es, ar and yo bodies are in the README table; wait for status **Active** on every one (if Meta does not
+       offer a language or rejects it, remove that language's `chat` rows in a new migration before enabling, because a
+       send in a language without an approved template fails for good).
+  4. A system user with the `whatsapp_business_messaging` permission; its never-expiring token goes in the secret
+     `WHATSAPP_TOKEN`; the phone number ID in `whatsapp.phoneNumberId`.
+  5. Test in uat with a team phone that opted in on WhatsApp, then set `DELIVERY_RUNS_WHATSAPP_ENABLED=true` in prod and
+     roll notifications. Switch off by setting it back to `false`.
+  Replies to the business number are not processed (no inbound WhatsApp webhook); the mobile customer app has no
+  subscription screen yet (the storefront location page is the only place to subscribe).
 
 ## 8. Observability and incident response
 
