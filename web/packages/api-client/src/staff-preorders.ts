@@ -331,6 +331,10 @@ export const PreorderSummarySchema = z.object({
   /** Calendar days (YYYY-MM-DD) from the opening day; afterClose marks days after the closing date. */
   byDay: z.array(z.object({ date: z.string(), count: z.number().int(), afterClose: z.boolean() })),
   byChannel: z.array(z.object({ channel: PreorderChannelSchema, count: z.number().int() })),
+  /** Orders that came from one of the window's own messages, per UTM tags of its link (utm_campaign = preorder-<code>). */
+  byCampaign: z
+    .array(z.object({ utmSource: z.string(), utmMedium: z.string(), utmCampaign: z.string(), utmContent: z.string(), orders: z.number().int() }))
+    .default([]),
   topProducts: z.array(z.object({ name: z.string(), units: z.number().int() })),
   fulfilmentSplit: z.object({ door: z.number().int(), pickup: z.number().int() }),
   placements: z.array(
@@ -810,9 +814,13 @@ export function lateAddProblems(d: LateAddDraft, status: PreorderStatus): LateAd
 
 /** Placeholder notifications replaces with the tracked SMS link (go/services/notifications rules_preorder.go). */
 export const SMS_LINK_TOKEN = '{link}';
-/** One SMS segment: 160 GSM-7 septets, or 70 characters when the text needs UCS-2 (delivery-runs Gsm7). */
+/** One SMS segment: 160 GSM-7 septets, or 70 characters when the text needs UCS-2 (delivery-runs Gsm7). The copy itself fits one. */
 export const SMS_GSM7_LIMIT = 160;
 export const SMS_UCS2_LIMIT = 70;
+/** The announcement SMS as sent (copy plus the tracked link with its UTM tags) may take two messages: 153 septets or 67 characters each once joined. */
+export const SMS_MAX_SEGMENTS = 2;
+export const SMS_GSM7_SENT_LIMIT = SMS_MAX_SEGMENTS * 153;
+export const SMS_UCS2_SENT_LIMIT = SMS_MAX_SEGMENTS * 67;
 /** Window code used for the length estimate before the server assigns one (CITY-NN, e.g. LBK-7 → 3 letters, dash, 2 digits). */
 const ESTIMATE_CODE = 'XXX-00';
 
@@ -831,12 +839,14 @@ export function gsm7Septets(text: string): number | null {
 }
 
 /**
- * The tracked SMS link notifications puts in place of `{link}`: `<PUBLIC_WEB_URL>/pre-orders?src=sms&po=<CODE>&cr=announce`
- * (announce is the longest SMS slot; last call and out-for-delivery links are shorter).
+ * The tracked SMS link notifications puts in place of `{link}`:
+ * `<PUBLIC_WEB_URL>/pre-orders?src=sms&po=<CODE>&cr=announce&utm_source=sms&utm_medium=sms&utm_campaign=preorder-<CODE>&utm_content=announce`
+ * (the order attribution plus the UTM tags every pre-order announcement link carries; announce is the longest SMS slot).
  */
 export function preorderSmsLink(storefrontUrl: string, code: string | null | undefined): string {
   const base = storefrontUrl.replace(/\/+$/, '');
-  return `${base}/pre-orders?src=sms&po=${encodeURIComponent(code || ESTIMATE_CODE)}&cr=announce`;
+  const po = encodeURIComponent(code || ESTIMATE_CODE);
+  return `${base}/pre-orders?src=sms&po=${po}&cr=announce&utm_source=sms&utm_medium=sms&utm_campaign=preorder-${po}&utm_content=announce`;
 }
 
 /** What notifications does to SMS text before sending (smsSafeDisplay): typographic characters become GSM-7 ones. */
@@ -849,6 +859,7 @@ export interface SmsPreview {
   text: string;
   /** Septets (GSM-7) or characters (UCS-2) of `text`. */
   length: number;
+  /** What `text` may take: two messages (306 septets, 134 characters). */
   limit: number;
   encoding: 'GSM-7' | 'UCS-2';
   fits: boolean;
@@ -857,15 +868,20 @@ export interface SmsPreview {
   usesLink: boolean;
 }
 
-/** The SMS a window's copy turns into, counted the way carriers count it, so the 160 limit is honest. */
+/**
+ * The SMS a window's copy turns into, counted the way carriers count it. The copy itself (with `{link}` as typed) must
+ * fit one message, as delivery-runs checks; the text as sent, with the long tracked link, may take two.
+ */
 export function smsPreview(copy: string, storefrontUrl: string, code?: string | null): SmsPreview {
   const link = preorderSmsLink(storefrontUrl, code);
   const usesLink = copy.includes(SMS_LINK_TOKEN);
   const text = smsSafeDisplay(copy.trim().replaceAll(SMS_LINK_TOKEN, link));
   const septets = gsm7Septets(text);
   const length = septets ?? [...text].length;
-  const limit = septets === null ? SMS_UCS2_LIMIT : SMS_GSM7_LIMIT;
-  return { text, length, limit, encoding: septets === null ? 'UCS-2' : 'GSM-7', fits: length <= limit, linkLength: usesLink ? link.length : 0, usesLink };
+  const limit = septets === null ? SMS_UCS2_SENT_LIMIT : SMS_GSM7_SENT_LIMIT;
+  const copySeptets = gsm7Septets(copy.trim());
+  const copyFits = copySeptets === null ? [...copy.trim()].length <= SMS_UCS2_LIMIT : copySeptets <= SMS_GSM7_LIMIT;
+  return { text, length, limit, encoding: septets === null ? 'UCS-2' : 'GSM-7', fits: copyFits && length <= limit, linkLength: usesLink ? link.length : 0, usesLink };
 }
 
 /** RFC 4180 CSV text (Excel and Sheets open it). */

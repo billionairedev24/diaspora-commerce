@@ -55,24 +55,26 @@ class PreorderWindowTest {
     }
 
     @Test
-    void theAnnouncementSmsMustFitOneMessageWithItsTrackedLink() {
+    void theAnnouncementSmsMustFitTwoMessagesWithItsTrackedLinkAndItsUtmTags() {
         WindowDetails base = Preorders.lubbock();
         String copy = "AfroTransact: Lubbock pre-order is open until Thu Oct 22. Egusi, garri, palm oil and more. "
                 + "Order: {link} Reply STOP to opt out";
         PreorderWindow w = Preorders.draft(withSms(base, copy)).withCreative(CreativeSlot.HERO, Preorders.HERO,
                 Preorders.OPENS);
         String page = "https://afrotransact.com/pre-orders";
-        assertThat(w.smsAsSent(page)).contains(page + "?src=sms&po=LUB-7&cr=announce").doesNotContain("{link}");
+        assertThat(w.smsAsSent(page)).contains(page + "?src=sms&po=LUB-7&cr=announce&utm_source=sms&utm_medium=sms"
+                + "&utm_campaign=preorder-LUB-7&utm_content=announce").doesNotContain("{link}");
         assertThat(copy.length()).as("raw copy fits").isLessThanOrEqualTo(160);
-        assertThat(w.publishChecks(FEES, page)).extracting(RuleViolation::code)
-                .containsExactly("delivery-runs.preorder-sms-too-long");
-        assertThatThrownBy(() -> w.publish(FEES, page, Preorders.OPENS))
-                .isInstanceOf(PublishBlockedException.class);
+        assertThat(Gsm7.segments(w.smsAsSent(page))).as("the UTM tags take it past one message").isEqualTo(2);
+        assertThat(w.publishChecks(FEES, page)).isEmpty();
 
-        PreorderWindow shortCopy = Preorders.draft(withSms(base, "AfroTransact: Lubbock pre-order is open. {link} "
+        PreorderWindow emoji = Preorders.draft(withSms(base, "\uD83C\uDF89 Lubbock pre-order is open. {link} "
                 + "Reply STOP to opt out")).withCreative(CreativeSlot.HERO, Preorders.HERO, Preorders.OPENS);
-        assertThat(shortCopy.publishChecks(FEES, page)).isEmpty();
-        assertThat(w.publishChecks(FEES)).as("without a page URL the link is not checked").isEmpty();
+        assertThat(emoji.publishChecks(FEES, page)).extracting(RuleViolation::code)
+                .containsExactly("delivery-runs.preorder-sms-too-long");
+        assertThatThrownBy(() -> emoji.publish(FEES, page, Preorders.OPENS))
+                .isInstanceOf(PublishBlockedException.class);
+        assertThat(emoji.publishChecks(FEES)).as("without a page URL the link is not checked").isEmpty();
     }
 
     private static WindowDetails withSms(WindowDetails d, String sms) {
@@ -219,6 +221,10 @@ class PreorderWindowTest {
         assertThat(Gsm7.fitsOneSegment("a".repeat(161))).isFalse();
         assertThat(Gsm7.fitsOneSegment("🎉" + "a".repeat(70))).isFalse();
         assertThat(Gsm7.fitsOneSegment("🎉" + "a".repeat(69))).isTrue();
+        assertThat(Gsm7.segments("a".repeat(160))).isEqualTo(1);
+        assertThat(Gsm7.segments("a".repeat(306))).isEqualTo(2);
+        assertThat(Gsm7.segments("a".repeat(307))).isEqualTo(3);
+        assertThat(Gsm7.segments("🎉" + "a".repeat(70))).as("UCS-2: 71 characters + the emoji's pair").isEqualTo(2);
     }
 
     @Test

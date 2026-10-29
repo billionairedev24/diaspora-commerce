@@ -13,6 +13,7 @@ import java.util.Map;
 
 import com.afrotransact.deliveryruns.domain.Channel;
 import com.afrotransact.deliveryruns.domain.Location;
+import com.afrotransact.deliveryruns.domain.PreorderUtm;
 import com.afrotransact.deliveryruns.domain.Run;
 import org.springframework.stereotype.Component;
 
@@ -95,6 +96,20 @@ class RunLinks {
     String windowAdvertorialUrl(String windowCode, String creative) {
         return windowUrl() + "?src=page&cr=" + encode(creative) + "&po=" + encode(windowCode) + "&"
                 + utm("storefront", "advertorial", "preorder-" + windowCode, creative);
+    }
+
+    /**
+     * A pre-order announcement on {@code channel} (email, sms, push): the order attribution the storefront keeps until
+     * checkout ({@code src}, {@code po}, {@code cr} = the message slot) plus the UTM of the click, so the message is
+     * attributed in analytics like a run announcement ({@link PreorderUtm}).
+     */
+    String windowAnnouncementUrl(String pageUrl, String windowCode, String channel, String slot) {
+        return pageUrl + "?" + PreorderUtm.query(channel, windowCode, slot);
+    }
+
+    /** A pre-order share link for a social network ({@code src} ig, fb, tt, wa; {@code cr} the creative slot). */
+    String windowSocialUrl(String pageUrl, String windowCode, String network, String src, String creative) {
+        return pageUrl + "?" + PreorderUtm.socialQuery(network, src, windowCode, creative);
     }
 
     String confirmUrl(String token) {

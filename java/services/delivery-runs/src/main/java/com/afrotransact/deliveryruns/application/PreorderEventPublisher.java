@@ -18,6 +18,7 @@ import com.afrotransact.deliveryruns.domain.FeeSnapshot;
 import com.afrotransact.deliveryruns.domain.PaymentSettings;
 import com.afrotransact.deliveryruns.domain.PreorderOrder;
 import com.afrotransact.deliveryruns.domain.PreorderSettings;
+import com.afrotransact.deliveryruns.domain.PreorderUtm;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
 import com.afrotransact.deliveryruns.domain.WindowDecision;
 import com.afrotransact.deliveryruns.domain.WindowDetails;
@@ -39,9 +40,11 @@ class PreorderEventPublisher {
     private final PreorderOptions options;
     private final FeeBook book;
     private final AdvertorialLifecycle advertorials;
+    private final RunLinks rl;
 
     PreorderEventPublisher(DomainEventPublisher events, DeliveryRunsSettings settings, PreorderOptions options,
-                           FeeBook book, AdvertorialLifecycle advertorials) {
+                           FeeBook book, AdvertorialLifecycle advertorials, RunLinks rl) {
+        this.rl = rl;
         this.book = book;
         this.advertorials = advertorials;
         this.events = events;
@@ -81,6 +84,12 @@ class PreorderEventPublisher {
         List<PreorderEventPayload.OrderRef> refs = orders == null ? null : orders.stream().filter(PreorderOrder::counts)
                 .map(o -> new PreorderEventPayload.OrderRef(o.orderId(), o.customerId(), o.fulfilment().name()))
                 .toList();
+        commsDueTo(w, kind, dueAt, payment, now, refs);
+    }
+
+    /** A message due to these orders' customers (OUT_FOR_DELIVERY: with the pickup-point handover codes). */
+    void commsDueTo(PreorderWindow w, CommKind kind, Instant dueAt, PaymentSettings payment, Instant now,
+                    List<PreorderEventPayload.OrderRef> refs) {
         events.publish(DeliveryRunsEvents.PREORDER_COMMS_DUE, DeliveryRunsEvents.AGGREGATE, w.id().toString(),
                 payload(w, payment, kind.name(), dueAt, now, refs, null, null));
     }
@@ -152,17 +161,23 @@ class PreorderEventPublisher {
         return settings.publicWebUrl() + options.pagePath() + "/" + w.code();
     }
 
-    /** {@code ?src=<channel>&po=<CODE>&cr=<slot>} per channel. */
-    Map<String, String> links(PreorderWindow w) {
-        String base = pageUrl(w) + "?";
+    /**
+     * The pre-order page per channel: {@code ?src=&po=&cr=} (order attribution) plus {@code utm_source},
+     * {@code utm_medium}, {@code utm_campaign} (preorder-<code>) and {@code utm_content} (the message), so every
+     * announcement is attributed in analytics. {@code kind} is the message of a {@code preorder.comms.due}; other
+     * window events carry the page links for staff to copy.
+     */
+    Map<String, String> links(PreorderWindow w, CommKind kind) {
+        String page = settings.publicWebUrl() + options.pagePath();
+        String slot = kind == null ? "window" : PreorderUtm.SLOTS.getOrDefault(kind, "window");
         Map<String, String> links = new LinkedHashMap<>();
-        links.put("email", base + "src=email&po=" + w.code() + "&cr=email");
-        links.put("sms", base + "src=sms&po=" + w.code());
-        links.put("push", base + "src=app&po=" + w.code());
-        links.put("whatsapp", base + "src=wa&po=" + w.code() + "&cr=story");
-        links.put("instagram", base + "src=ig&po=" + w.code() + "&cr=story");
-        links.put("facebook", base + "src=fb&po=" + w.code() + "&cr=feed");
-        links.put("tiktok", base + "src=tt&po=" + w.code() + "&cr=story");
+        for (String channel : List.of("email", "sms", "push")) {
+            links.put(channel, rl.windowAnnouncementUrl(page, w.code(), channel, slot));
+        }
+        links.put("whatsapp", rl.windowSocialUrl(page, w.code(), "whatsapp", "wa", "story"));
+        links.put("instagram", rl.windowSocialUrl(page, w.code(), "instagram", "ig", "story"));
+        links.put("facebook", rl.windowSocialUrl(page, w.code(), "facebook", "fb", "feed"));
+        links.put("tiktok", rl.windowSocialUrl(page, w.code(), "tiktok", "tt", "story"));
         return links;
     }
 
@@ -182,7 +197,8 @@ class PreorderEventPublisher {
                 d.smsCopy(), d.categories().stream().sorted().toList(), d.door(), d.pickup(), door, pickup,
                 d.currency(), payment.pickupWindow(), d.pickupAddress(),
                 d.comms().stream().sorted().map(Enum::name).toList(), hero == null ? null : hero.url(),
-                email == null ? null : email.url(), w.runId(), pageUrl(w), links(w), options.supportPhone(),
+                email == null ? null : email.url(), w.runId(), pageUrl(w), links(w, kind == null ? null : CommKind.valueOf(kind)),
+                options.supportPhone(),
                 DATE_TIME.format(d.opensAt().atZone(d.timeZone())), DATE_TIME.format(d.closesAt().atZone(d.timeZone())),
                 DATE.format(d.deliversOn()), orders, actorId, d.minOrders(), decision == null ? null
                 : new PreorderEventPayload.Decision(decision.kind().name(), decision.reason(), decision.actor(),

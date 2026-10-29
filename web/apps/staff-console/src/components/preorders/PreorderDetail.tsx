@@ -18,7 +18,7 @@ import { CreativesPanel } from './CreativesPanel';
 import { type DecisionAction, DecisionBanner, DecisionButtons, DecisionDialog, DecisionLog, MinimumLine, RefundProgress } from './Decisions';
 import { LateAddDialog } from './LateAddDialog';
 import { fD, fDT, fS, href, money2, num, STATUS_PILL, wholeMoney } from './model';
-import { ByDayChart, channelRows, HBars } from './PreorderCharts';
+import { ByDayChart, campaignRows, channelRows, HBars } from './PreorderCharts';
 import { PreorderOrders } from './PreorderOrders';
 import { outlineButton, Pill, smallButton, usePreorderAccess,usePreordersApi } from './primitives';
 import { switchText, WindowSwitchToggle } from './WindowSwitch';
@@ -300,6 +300,7 @@ export function PreorderDetail({ id }: { id: string }) {
               <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-5">
                 <ByDayChart days={s.byDay} />
                 <HBars title="By channel" color="green" rows={channelRows(s)} />
+                <HBars title={`UTM campaign preorder-${w.code}`} color="green" rows={campaignRows(s)} />
               </div>
               {tab === 'analytics' ? <Analytics s={s} w={w} canExport={access.canExport} onExport={() => void exportCsv('advertorial-report')} /> : null}
             </>

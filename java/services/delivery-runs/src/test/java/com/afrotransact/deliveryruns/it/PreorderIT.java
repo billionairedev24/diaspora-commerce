@@ -20,6 +20,7 @@ import java.util.UUID;
 
 import com.afrotransact.deliveryruns.application.LocationService;
 import com.afrotransact.deliveryruns.application.OrderPlaced;
+import com.afrotransact.deliveryruns.application.PreorderDeliveryDayService;
 import com.afrotransact.deliveryruns.application.PreorderProjectionService;
 import com.afrotransact.deliveryruns.application.PreorderSchedulerService;
 import com.afrotransact.deliveryruns.application.PreorderSettingsService;
@@ -52,15 +53,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.client.RestClient;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -79,12 +79,26 @@ import tools.jackson.databind.json.JsonMapper;
     "at.delivery-runs.geo.base-url=http://127.0.0.1:1"})
 @ActiveProfiles("local")
 @Import(ItSupport.class)
-@Testcontainers
 class PreorderIT {
 
-    @Container
-    @ServiceConnection
+    /** Set {@code AT_IT_POSTGRES_URL} (jdbc:postgresql://…) to run without Docker. */
+    static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
+
+    static {
+        if (EXTERNAL_DB == null) {
+            POSTGRES.start();
+        }
+    }
+
+    @DynamicPropertySource
+    static void datasource(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", () -> EXTERNAL_DB != null ? EXTERNAL_DB : POSTGRES.getJdbcUrl());
+        registry.add("spring.datasource.username", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_USER", "postgres") : POSTGRES.getUsername());
+        registry.add("spring.datasource.password", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_PASSWORD", "") : POSTGRES.getPassword());
+    }
 
     private static final ZoneId CHICAGO = ZoneId.of("America/Chicago");
 
@@ -106,12 +120,15 @@ class PreorderIT {
     private final LocationService locations;
     private final RunService runs;
     private final JdbcClient jdbc;
+    private final PreorderDeliveryDayService deliveryDay;
 
     @Autowired
     PreorderIT(@LocalServerPort int port, JsonMapper json, MutableClock clock, FakeUpstreams upstreams,
                PreorderWindowService windows, PreorderSettingsService settings, PreorderProjectionService projection,
                PreorderSchedulerService scheduler, PreorderWindowRepository windowRepository,
-               LocationService locations, RunService runs, JdbcClient jdbc, SubscriptionService subscriptions) {
+               LocationService locations, RunService runs, JdbcClient jdbc, SubscriptionService subscriptions,
+               PreorderDeliveryDayService deliveryDay) {
+        this.deliveryDay = deliveryDay;
         this.base = "http://localhost:" + port;
         this.http = RestClient.builder().baseUrl(base).build();
         this.subscriptions = subscriptions;
@@ -555,7 +572,21 @@ class PreorderIT {
                 .containsExactly("ANNOUNCE", "REMIND_48H", "LAST_CALL_6H", "CLOSED");
         JsonNode announce = json.readTree(outboxPayloads("preorder.comms.due", w.id().toString()).get(0));
         assertThat(announce.path("smsCopy").asString()).isEqualTo("AfroTransact: pre-order open");
-        assertThat(announce.path("links").path("sms").asString()).endsWith("src=sms&po=" + w.code());
+        // Every announcement link carries the order attribution and the UTM tags (S262), content = the message.
+        String campaign = "utm_campaign=preorder-" + w.code();
+        assertThat(announce.path("links").path("sms").asString()).contains("/pre-orders?src=sms&po=" + w.code()
+                + "&cr=announce&utm_source=sms&utm_medium=sms&" + campaign + "&utm_content=announce");
+        assertThat(announce.path("links").path("email").asString()).contains("src=email&po=" + w.code()
+                + "&cr=announce&utm_source=email&utm_medium=email&" + campaign + "&utm_content=announce");
+        assertThat(announce.path("links").path("push").asString()).contains("src=app&po=" + w.code()
+                + "&cr=announce&utm_source=push&utm_medium=push&" + campaign + "&utm_content=announce");
+        assertThat(announce.path("links").path("instagram").asString()).contains("src=ig&po=" + w.code()
+                + "&cr=story&utm_source=instagram&utm_medium=social&" + campaign + "&utm_content=story");
+        JsonNode remind = json.readTree(outboxPayloads("preorder.comms.due", w.id().toString()).get(1));
+        assertThat(remind.path("kind").asString()).isEqualTo("REMIND_48H");
+        assertThat(remind.path("links").path("email").asString()).contains("cr=remind").contains("utm_content=remind");
+        JsonNode lastCall = json.readTree(outboxPayloads("preorder.comms.due", w.id().toString()).get(2));
+        assertThat(lastCall.path("links").path("sms").asString()).contains("cr=last").contains("utm_content=last");
         assertThat(announce.path("doorFeeMinor").asLong()).isEqualTo(799);
         assertThat(outboxTypes(w.id().toString())).contains("preorder.window.opened", "preorder.window.closed");
         assertThat(outboxTypes(run.id().toString())).contains("delivery-runs.run.confirmed");
@@ -567,6 +598,52 @@ class PreorderIT {
         assertThat(scheduler.process(w.id())).isEqualTo(1);
         assertThat(outboxTypes(w.id().toString())).contains("preorder.window.delivered");
         assertThat(scheduler.candidates(100)).doesNotContain(w.id());
+    }
+
+    @Test
+    void aWindowsCustomersAreToldOnceWhenTheRunTheirOrdersWereHandedToLeaves() {
+        locations.create(Fixtures.town(Fixtures.slug("cedar-creek"), "Cedar Creek"));
+        settings.addArea("US/TX/Cedar Creek");
+        Instant now = clock.instant();
+        Instant opens = now.plus(Duration.ofHours(1));
+        Instant closes = now.plus(Duration.ofDays(3));
+        PreorderWindow w = publish("Cedar Creek Pre-order #1", "US/TX/Cedar Creek", opens, closes);
+        clock.set(opens.plusSeconds(60));
+        scheduler.process(w.id());
+        String order = UUID.randomUUID().toString();
+        String second = UUID.randomUUID().toString();
+        projection.onOrderPlaced(UUID.randomUUID(), placed(order, w.id(), "cust-1", "sms", PreorderFulfilment.DOOR,
+                2799, 799, clock.instant()));
+        projection.onOrderPlaced(UUID.randomUUID(), placed(second, w.id(), "cust-2", "sms", PreorderFulfilment.DOOR,
+                2799, 799, clock.instant()));
+        clock.set(closes.plusSeconds(60));
+        scheduler.process(w.id());
+        Run run = runs.get(windowRepository.findById(w.id()).orElseThrow().runId());
+        assertThat(outboxPayloads("preorder.comms.due", w.id().toString()))
+                .extracting(p -> json.readTree(p).path("kind").asString())
+                .as("nothing is said about delivery before the run leaves").doesNotContain("OUT_FOR_DELIVERY");
+
+        runs.startCollecting(run.id());
+        runs.outForDelivery(run.id());
+
+        List<String> due = outboxPayloads("preorder.comms.due", w.id().toString());
+        assertThat(due).extracting(p -> json.readTree(p).path("kind").asString()).containsOnlyOnce("OUT_FOR_DELIVERY");
+        JsonNode ofd = json.readTree(due.get(due.size() - 1));
+        assertThat(ofd.path("kind").asString()).isEqualTo("OUT_FOR_DELIVERY");
+        assertThat(ofd.path("code").asString()).isEqualTo(w.code());
+        assertThat(ofd.path("orders")).extracting(o -> o.path("customerId").asString())
+                .containsExactlyInAnyOrder("cust-1", "cust-2");
+        assertThat(jdbc.sql("select count(*) from preorder_comms_log where window_id = :id and step = "
+                + "'COMMS_OUT_FOR_DELIVERY'").param("id", w.id()).query(Integer.class).single()).isOne();
+        JsonNode runEvent = json.readTree(outboxPayloads("delivery-runs.run.out_for_delivery", run.id().toString())
+                .getFirst());
+        assertThat(runEvent.path("reason").asString()).as("the generic run message is not sent on top")
+                .isEqualTo("PREORDER " + w.code());
+
+        // A repeated driver event, a retry or another replica: the step row is there, nobody is told twice.
+        assertThat(deliveryDay.onRunOutForDelivery(run, List.of())).contains("PREORDER " + w.code());
+        assertThat(outboxPayloads("preorder.comms.due", w.id().toString()))
+                .extracting(p -> json.readTree(p).path("kind").asString()).containsOnlyOnce("OUT_FOR_DELIVERY");
     }
 
     @Test

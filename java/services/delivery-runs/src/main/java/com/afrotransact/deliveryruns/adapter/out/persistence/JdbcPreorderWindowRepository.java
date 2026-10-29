@@ -102,6 +102,11 @@ class JdbcPreorderWindowRepository implements PreorderWindowRepository {
     }
 
     @Override
+    public Optional<PreorderWindow> findByRunId(UUID runId) {
+        return one("select * from preorder_window where run_id = :id", runId);
+    }
+
+    @Override
     public Optional<PreorderWindow> lockById(UUID id) {
         return one("select * from preorder_window where id = :id for update", id);
     }

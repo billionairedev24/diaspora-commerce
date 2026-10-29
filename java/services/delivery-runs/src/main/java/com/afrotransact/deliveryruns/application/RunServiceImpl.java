@@ -321,7 +321,7 @@ class RunServiceImpl implements RunService {
             slots.add(runOrders.insert(RunOrder.reserve(UUID.randomUUID(), run.id(), o.orderId(), customer, 1, null,
                     now).confirm(code, now)));
         }
-        preorders.events().run(DeliveryRunsEvents.RUN_CONFIRMED, location, run, null, null, "PREORDER " + w.code(),
+        preorders.events().run(DeliveryRunsEvents.RUN_CONFIRMED, location, run, null, null, PreorderDeliveryDayService.REASON_PREFIX + w.code(),
                 slots, sellersOf(paid));
         LOG.info("Pre-order {} handed {} orders to run {} at {}", w.code(), slots.size(), run.id(), location.slug());
         return Optional.of(run);

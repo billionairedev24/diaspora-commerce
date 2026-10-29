@@ -58,6 +58,42 @@ class PreorderSummaryTest {
     }
 
     @Test
+    void ordersFromTheWindowsOwnMessagesAreCreditedToTheirUtmCampaign() {
+        PreorderWindow w = Preorders.published();
+        Instant day1 = Instant.parse("2026-10-06T16:00:00Z");
+        PreorderOrder announce = Preorders.order(w.id(), "1", "c1", AttributionChannel.EMAIL, PreorderFulfilment.DOOR,
+                day1, PreorderOrderStatus.PAID, EGUSI);
+        PreorderOrder announce2 = Preorders.order(w.id(), "2", "c2", AttributionChannel.EMAIL, PreorderFulfilment.DOOR,
+                day1, PreorderOrderStatus.PAID, EGUSI);
+        PreorderOrder lastCall = Preorders.order(w.id(), "3", "c3", AttributionChannel.SMS, PreorderFulfilment.DOOR,
+                day1, PreorderOrderStatus.PAID, EGUSI);
+        PreorderOrder push = Preorders.order(w.id(), "4", "c4", AttributionChannel.APP, PreorderFulfilment.DOOR, day1,
+                PreorderOrderStatus.PAID, EGUSI);
+        PreorderOrder story = Preorders.order(w.id(), "5", "c5", AttributionChannel.INSTAGRAM, PreorderFulfilment.DOOR,
+                day1, PreorderOrderStatus.PAID, EGUSI);
+        PreorderOrder cancelled = Preorders.order(w.id(), "6", "c6", AttributionChannel.EMAIL, PreorderFulfilment.DOOR,
+                day1, PreorderOrderStatus.CANCELLED, EGUSI);
+        PreorderOrder untagged = Preorders.order(w.id(), "7", "c7", AttributionChannel.SITE_HERO,
+                PreorderFulfilment.DOOR, day1, PreorderOrderStatus.PAID, EGUSI);
+
+        PreorderSummary s = PreorderSummary.of(w, List.of(
+                Preorders.tagged(announce, "src=email&cr=announce&po=LUB-7"),
+                Preorders.tagged(announce2, "src=email&cr=announce&po=LUB-7"),
+                Preorders.tagged(lastCall, "src=sms&cr=last&po=LUB-7"),
+                Preorders.tagged(push, "src=app&cr=remind&po=LUB-7"),
+                Preorders.tagged(story, "src=ig&cr=story&po=LUB-7"),
+                Preorders.tagged(cancelled, "src=email&cr=announce&po=LUB-7"),
+                untagged), Instant.parse("2026-10-30T00:00:00Z"));
+
+        assertThat(s.byCampaign()).extracting(PreorderSummary.CampaignCount::utmSource,
+                PreorderSummary.CampaignCount::utmMedium, PreorderSummary.CampaignCount::utmCampaign,
+                PreorderSummary.CampaignCount::utmContent, PreorderSummary.CampaignCount::orders)
+                .containsExactly(tuple("email", "email", "preorder-LUB-7", "announce", 2),
+                        tuple("push", "push", "preorder-LUB-7", "remind", 1),
+                        tuple("sms", "sms", "preorder-LUB-7", "last", 1));
+    }
+
+    @Test
     void ordersByDayRunFromOpeningToTwoDaysAfterCloseAndFlagLateDays() {
         PreorderWindow w = Preorders.published();
         List<PreorderOrder> orders = List.of(

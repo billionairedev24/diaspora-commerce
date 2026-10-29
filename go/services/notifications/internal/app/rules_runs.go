@@ -17,7 +17,8 @@ import (
 //     delivery-run-<slug>-<yyyymmdd>, utm_content = the event), so every announcement is attributed in analytics.
 //   - .out_for_delivery (dispatch) and .confirmed go to the customers on the run (orders[]), with their own handover
 //     code at a pickup point. A run handed over from a pre-order window (reason "PREORDER <code>") is already covered
-//     by the window's own emails, so its confirmation is not sent twice.
+//     by the window's own messages (preorder.closed / preorder.confirmed, and preorder.out_for_delivery which
+//     delivery-runs publishes when that run leaves), so neither is sent twice.
 //   - .cancelled tells the customers on a run staff scheduled that every order is refunded in full, delivery fee
 //     included; a run cancelled with its window ("Pre-order <code> cancelled: …") is covered by the cancelled
 //     pre-order email orders-service sends for each shipment, so it is skipped here.
@@ -47,7 +48,7 @@ func RunRulesWithWhatsApp(whatsApp bool) map[string][]EventRule {
 		"delivery-runs.run.cutoff_reminder": {{Topic: TopicDeliveryRuns, Template: "run.cutoff_reminder", Channels: remind,
 			Recipient: RecipientLocation, IDField: "locationId", Enrich: enrichRun}},
 		"delivery-runs.run.out_for_delivery": {{Topic: TopicDeliveryRuns, Template: "run.out_for_delivery",
-			Channels: chSMSPushEmail, Recipient: RecipientCustomers, IDField: "orders", Enrich: enrichRun}},
+			Channels: chSMSPushEmail, Recipient: RecipientCustomers, IDField: "orders", When: runNotFromWindow, Enrich: enrichRun}},
 		"delivery-runs.run.confirmed": {{Topic: TopicDeliveryRuns, Template: "run.confirmed", Channels: chEmailPush,
 			Recipient: RecipientCustomers, IDField: "orders", When: runNotFromWindow, Enrich: enrichRun}},
 		"delivery-runs.run.cancelled": {{Topic: TopicDeliveryRuns, Template: "run.cancelled", Channels: chEmailSMSPush,

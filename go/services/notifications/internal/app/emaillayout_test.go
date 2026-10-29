@@ -223,17 +223,29 @@ func TestFullDocumentsAreSentAsIs(t *testing.T) {
 	}
 }
 
-// maxSmsSegments is one GSM-7 segment for every text, two for delivery run alerts: their link carries the UTM
-// attribution (source, medium, campaign, content) that makes every announcement visible in analytics.
-func maxSmsSegments(key string) int {
-	if strings.HasPrefix(key, "run.") {
+// maxSmsSegments is one GSM-7 segment for every text, two for the texts whose link carries the UTM attribution
+// (source, medium, campaign, content) that makes every announcement visible in analytics: delivery run alerts and the
+// pre-order announcement, last call and out-for-delivery texts (the pay-now text carries a payment link, not UTM).
+//
+// Arabic and Yoruba (S262) cannot be GSM-7: their scripts and tone marks force UCS-2 (70 characters a segment, 67
+// once concatenated; a link with UTM tags alone is ~140), so they get a larger allowance and the encoding check
+// applies to the GSM-7 languages only.
+func maxSmsSegments(key, locale string) int {
+	utm := strings.HasPrefix(key, "run.") || strings.HasPrefix(key, "preorder.") && key != "preorder.late_order.payment_link"
+	switch {
+	case locale == "ar" || locale == "yo":
+		if utm {
+			return 5
+		}
+		return 3
+	case utm:
 		return 2
 	}
 	return 1
 }
 
 // TestSmsTemplatesAreShortAndCompliant: every SMS starts with the brand, non-security texts carry STOP, and each
-// renders as one GSM-7 segment (two for run alerts) with its sample data.
+// renders as one GSM-7 segment (two for the texts with a UTM link) with its sample data.
 func TestSmsTemplatesAreShortAndCompliant(t *testing.T) {
 	samples, _ := app.NewTemplateSamples(context.Background(), sampleLinks)
 	r := brandedRenderer()
@@ -253,7 +265,8 @@ func TestSmsTemplatesAreShortAndCompliant(t *testing.T) {
 		if tpl.Category != domain.CategorySecurity && !strings.Contains(out.Text, "STOP") {
 			t.Errorf("%s: no STOP: %q", tpl.Key, out.Text)
 		}
-		if seg := domain.CountSmsSegments(out.Text); seg.Encoding != domain.EncodingGSM7 || seg.Segments > maxSmsSegments(tpl.Key) {
+		wantGSM := tpl.Locale != "ar" && tpl.Locale != "yo"
+		if seg := domain.CountSmsSegments(out.Text); wantGSM && seg.Encoding != domain.EncodingGSM7 || seg.Segments > maxSmsSegments(tpl.Key, tpl.Locale) {
 			t.Errorf("%s: %s, %d segments (%d units): %q", tpl.Key, seg.Encoding, seg.Segments, seg.Units, out.Text)
 		}
 	}

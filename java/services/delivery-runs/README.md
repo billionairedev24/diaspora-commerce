@@ -347,6 +347,16 @@ zone, window, cutoff, seller pickup, pre-formatted `deliveryDay`, `windowDisplay
 `PUBLIC_WEB_URL`, `links.{email,sms,push,whatsapp,social}` (same link with UTM per channel, `utm_campaign =
 delivery-run-<slug>-<yyyymmdd>`, `utm_content = <event>`) and the WhatsApp community link.
 
+Pre-order announcement links (`preorder.comms.due`, `links.{email,sms,push,...}`) carry the order attribution
+`?src=&po=<code>&cr=<message>` and the same four UTM tags (`utm_source` / `utm_medium` = the channel, `utm_campaign =
+preorder-<code>`, `utm_content = <message>`: announce, remind, last, closed, ofd; `PreorderUtm`). Orders placed from
+them are counted per campaign in the pre-order summary (`byCampaign`, shown in the staff console's pre-order
+analytics). `OUT_FOR_DELIVERY` goes out once (step `COMMS_OUT_FOR_DELIVERY` in `preorder_comms_log`) when the run the
+window's orders were handed to leaves (`PreorderDeliveryDayService`, called when a run moves to `OUT_FOR_DELIVERY`):
+to the window's paid customers, with each one's handover code at a pickup-only window, unless the window is paused or
+has the message switched off. The run's own `out_for_delivery` event then carries `reason = "PREORDER <code>"` so
+notifications does not send the generic run message on top.
+
 ## Integration plan
 
 What the other services do. **Done for ADR 0005**: orders (window checkout, pay at order, cancel before close with a full

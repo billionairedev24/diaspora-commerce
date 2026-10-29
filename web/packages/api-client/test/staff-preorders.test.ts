@@ -111,20 +111,26 @@ describe('pre-order rules', () => {
   });
 
   it('counts {link} as the tracked SMS link notifications sends', () => {
-    expect(preorderSmsLink('https://afrotransact.com/', 'LBK-7')).toBe('https://afrotransact.com/pre-orders?src=sms&po=LBK-7&cr=announce');
+    expect(preorderSmsLink('https://afrotransact.com/', 'LBK-7')).toBe(
+      'https://afrotransact.com/pre-orders?src=sms&po=LBK-7&cr=announce&utm_source=sms&utm_medium=sms&utm_campaign=preorder-LBK-7&utm_content=announce'
+    );
     const link = preorderSmsLink('https://afrotransact.com', 'LBK-7');
     const p = smsPreview('AfroTransact: Lubbock pre-order is open. {link} Reply STOP to opt out', 'https://afrotransact.com', 'LBK-7');
     expect(p.text).toBe(`AfroTransact: Lubbock pre-order is open. ${link} Reply STOP to opt out`);
     expect(p.linkLength).toBe(link.length);
     expect(p.length).toBe(p.text.length);
-    expect(p).toMatchObject({ encoding: 'GSM-7', limit: 160, fits: true, usesLink: true });
-    // The raw copy fits 160 but the expanded link pushes it over: the counter is honest.
+    // The UTM tags make the link long, so the text as sent may take two messages (306 septets); the copy itself, one.
+    expect(p).toMatchObject({ encoding: 'GSM-7', limit: 306, fits: true, usesLink: true });
     const long = `${'x'.repeat(150)} {link}`;
     expect(long.length).toBeLessThanOrEqual(160);
-    expect(smsPreview(long, 'https://afrotransact.com', null).fits).toBe(false);
-    // Typography is made SMS-safe like notifications does; emoji switch to UCS-2 (70).
+    expect(smsPreview(long, 'https://afrotransact.com', null).fits).toBe(true);
+    // A long storefront address pushes the raw copy that fits 160 over two messages: the counter is honest.
+    expect(smsPreview(long, 'https://storefront.example-afrotransact-staging.example.com', null).fits).toBe(false);
+    // A copy over one message is refused even when the sent text would fit two.
+    expect(smsPreview(`${'x'.repeat(160)} {link}`, 'https://a.b', null).fits).toBe(false);
+    // Typography is made SMS-safe like notifications does; emoji switch to UCS-2 (70 for the copy, 134 as sent).
     expect(smsPreview('Order by Thu · 6 PM – thanks…', 'https://a.b').text).toBe('Order by Thu at 6 PM - thanks...');
-    expect(smsPreview('Fresh egusi 🍲', 'https://a.b')).toMatchObject({ encoding: 'UCS-2', limit: 70, usesLink: false, linkLength: 0 });
+    expect(smsPreview('Fresh egusi 🍲', 'https://a.b')).toMatchObject({ encoding: 'UCS-2', limit: 134, usesLink: false, linkLength: 0 });
   });
 
   it('quotes CSV cells', () => expect(toCsvText([['a', 'b,c'], ['say "hi"', 1]])).toBe('a,"b,c"\n"say ""hi""",1'));
@@ -161,6 +167,11 @@ describe('mock /v1/staff/preorders', () => {
     expect(s1.ordersTotal).toBe(142);
     expect(s1.kpis.preorders + s1.kpis.cancelled).toBe(142);
     expect(s1.byDay.some((d) => d.afterClose)).toBe(false);
+    // Orders that came from the window's own email, text and push messages are credited to their UTM campaign (S262).
+    const messages = s1.byChannel.filter((c) => ['EMAIL', 'SMS', 'APP'].includes(c.channel)).reduce((a, c) => a + c.count, 0);
+    expect(messages).toBeGreaterThan(0);
+    expect(s1.byCampaign.reduce((a, c) => a + c.orders, 0)).toBe(messages);
+    expect(s1.byCampaign.every((c) => c.utmCampaign === 'preorder-LBK-7' && c.utmSource === c.utmMedium && c.utmContent.length > 0)).toBe(true);
     const closed = await api().summary('ama-4');
     expect(closed.kpis.lateAdds).toBe(3);
     const page = await api().orders('lbk-7', { status: 'CANCELLED', page: 0, size: 12 });

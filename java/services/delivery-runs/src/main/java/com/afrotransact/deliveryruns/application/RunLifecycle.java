@@ -29,14 +29,16 @@ class RunLifecycle {
     private final HandoverCodes codes;
     private final DeliveryRunsEventPublisher events;
     private final RunActionLog log;
+    private final PreorderDeliveryDayService deliveryDay;
 
     RunLifecycle(RunRepository runs, RunOrderRepository runOrders, HandoverCodes codes,
-                 DeliveryRunsEventPublisher events, RunActionLog log) {
+                 DeliveryRunsEventPublisher events, RunActionLog log, PreorderDeliveryDayService deliveryDay) {
         this.runs = runs;
         this.runOrders = runOrders;
         this.codes = codes;
         this.events = events;
         this.log = log;
+        this.deliveryDay = deliveryDay;
     }
 
     /**
@@ -78,12 +80,18 @@ class RunLifecycle {
         return saved;
     }
 
-    /** Saves a plain transition and publishes {@code type} (no event when null); orders are attached when asked. */
+    /**
+     * Saves a plain transition and publishes {@code type} (no event when null); orders are attached when asked. A run
+     * that leaves with a pre-order window's orders tells the window's customers (the window's own message) and is
+     * marked as the window's, so notifications does not send the generic run message on top.
+     */
     Run moved(Location location, Run moved, RunStatus previous, String type, boolean withOrders) {
         Run saved = runs.update(moved);
         if (type != null) {
-            events.run(type, location, saved, previous, null, null,
-                    withOrders ? runOrders.findActiveByRun(saved.id()) : null);
+            List<RunOrder> orders = withOrders ? runOrders.findActiveByRun(saved.id()) : null;
+            String reason = DeliveryRunsEvents.RUN_OUT_FOR_DELIVERY.equals(type)
+                    ? deliveryDay.onRunOutForDelivery(saved, orders).orElse(null) : null;
+            events.run(type, location, saved, previous, null, reason, orders);
         }
         return saved;
     }
