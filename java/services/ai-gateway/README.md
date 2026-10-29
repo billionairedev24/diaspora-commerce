@@ -90,6 +90,27 @@ Micrometer: `ai_model_latency_seconds{task,model,outcome}`, `ai_tokens_total{tas
 `ai_guardrail_total{kind}`, `ai_tool_calls_total{tool,outcome}`, plus Spring AI's `gen_ai_client_*` observations
 (prompt/completion logging disabled). Logs never contain prompts; personal data is redacted first.
 
+## Provider privacy (OpenRouter)
+
+The privacy notice ("AI features") promises that model providers do not train on our users' content and keep it as
+briefly as possible. The code enforces that: `SpringAiModelRouter` adds OpenRouter provider preferences to the body of
+every chat, stream and embeddings request (Spring AI `extraBody`):
+
+```json
+{"provider": {"data_collection": "deny", "zdr": true}}
+```
+
+- `at.ai.provider-privacy.data-collection` (`AI_PROVIDER_DATA_COLLECTION`): `deny` (default) routes only to providers
+  that do not store prompts or train on them; `allow` sends nothing (OpenRouter default). Any other value fails startup.
+- `at.ai.provider-privacy.zero-data-retention` (`AI_PROVIDER_ZDR`): `true` adds `"zdr": true` (zero-data-retention
+  endpoints only). Default `false` in `local`/`dev`, `true` in `uat` and `prod`.
+- A model with no matching endpoint answers 404 "No endpoints found matching your data policy". That is classified as
+  `PRIVACY_POLICY`, not retried, logged as skipped (model and task only, never the prompt), counted in
+  `ai.model.fallback`, and the next candidate of the route is tried. If every candidate is skipped the request fails as
+  `ai.model-unavailable`, which is the intended outcome: we do not fall back to a provider that retains data.
+- This is request-side only. The OpenRouter account settings (logging off, training consent off, account ZDR policy,
+  allowed providers, DPAs) must also be set: see `docs/runbooks/production-readiness.md` section 10.
+
 ## Configuration
 
 | Env var | Purpose |
@@ -101,6 +122,8 @@ Micrometer: `ai_model_latency_seconds{task,model,outcome}`, `ai_tokens_total{tas
 | `KAFKA_BOOTSTRAP` | outbox relay |
 | `AUTH_ISSUER_URL` | identity issuer (JWT validation) |
 | `SEARCH_URL`, `CATALOG_URL`, `OFFERS_URL`, `PROMISE_URL`, `ORDERS_URL`, `BOOKINGS_URL` | downstream APIs |
+| `AI_PROVIDER_DATA_COLLECTION` | `deny` (default) or `allow`: OpenRouter `provider.data_collection` |
+| `AI_PROVIDER_ZDR` | `true` = `provider.zdr`; default `false`, `true` in uat/prod |
 | `EMBEDDING_DIMENSIONS` | vector size (must match the search index) |
 
 Routing table, prices and budgets: `at.ai.*` in `application.yml`, overridden per profile (`local`, `dev` uses

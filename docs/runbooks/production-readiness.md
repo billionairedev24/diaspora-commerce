@@ -103,6 +103,14 @@ and tick; "who" is the role that signs it off. Anything marked **blocker** must 
 ## 10. Legal, support and launch
 
 - [ ] Terms, privacy notice, cookie banner and marketplace-facilitator tax disclosures are published and accurate.
+- [ ] **blocker** OpenRouter account privacy settings match the privacy notice ("AI features"). In the OpenRouter account
+  settings: turn prompt/response logging OFF; turn OFF the "inputs/outputs logging" and "training" consent options; set the
+  account-level privacy / zero-data-retention (ZDR) policy; restrict the allowed providers to those that do not train on
+  prompts. Check that `AI_PROVIDER_DATA_COLLECTION` is `deny` (or unset) and `AI_PROVIDER_ZDR` is `true` on ai-gateway in uat
+  and prod. Record the date and who checked: ______ (date), ______ (name), re-check every quarter and whenever a model id in
+  `at.ai.routes` changes.
+- [ ] **blocker** Data processing agreements are signed with OpenRouter and with each model provider we route to (for example
+  Google and OpenAI) if we process EU or UK personal data; the signed copies are filed and the subprocessor list is current.
 - [ ] Support inbox, customer support console and escalation contacts are staffed for launch week.
 - [ ] Seller onboarding (applications → two-person review → approval) tested with a real test application, including the
   "return to applicant" path.
