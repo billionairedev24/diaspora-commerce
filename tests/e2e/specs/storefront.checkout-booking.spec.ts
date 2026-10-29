@@ -20,7 +20,12 @@ test.describe('storefront · signed-in shopper', () => {
     // One page: the default address, every package with delivery or pickup and its items, payment, the summary.
     await expect(page.getByTestId('checkout-address').first()).toBeVisible();
     await expect(page.getByTestId('checkout-payment').first()).toBeVisible();
+    // A saved method is selected, so the card form stays closed until the shopper chooses another payment method.
+    await expect(page.getByTestId('checkout-new-method')).toBeHidden();
+    await page.getByTestId('checkout-use-new').click();
     await expect(page.getByTestId('checkout-new-method')).toBeVisible();
+    await page.getByTestId('checkout-payment').first().click();
+    await expect(page.getByTestId('checkout-new-method')).toBeHidden();
     await expect(page.getByRole('group', { name: 'Express checkout' })).toHaveCount(0);
     const pkg = page.getByTestId('checkout-package').first();
     await expect(pkg.getByTestId('checkout-item').first()).toBeVisible();
