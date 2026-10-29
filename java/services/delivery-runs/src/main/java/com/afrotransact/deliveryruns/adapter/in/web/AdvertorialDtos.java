@@ -144,6 +144,8 @@ final class AdvertorialDtos {
 
     @Schema(name = "AdvertorialEventRequest")
     record EventRequest(@NotNull @Schema(description = "VIEW: it was shown; CLICK: its button was clicked")
-                        Event type) {
+                        Event type,
+                        @Size(max = 64) @Schema(description = "The visitor id also sent for sticky variants; one "
+                                + "visitor counts once per advertorial and kind in the event window") String visitor) {
     }
 }

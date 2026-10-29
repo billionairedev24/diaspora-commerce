@@ -17,6 +17,7 @@ import com.afrotransact.deliveryruns.domain.AdvertorialStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -131,12 +132,23 @@ class AdvertorialController {
 
     @Operation(summary = "Count a view or a click (no sign-in)",
             description = "Best effort: the shop front sends VIEW once per visit and CLICK on the button. 404 for an "
-                    + "unknown advertorial.")
+                    + "unknown advertorial. 204 without counting when the advertorial is not live and servable now "
+                    + "(draft, paused, ended, outside its schedule, or its window or run is closed) or when the same "
+                    + "visitor (or client address) already counted this kind in the event window.")
     @SecurityRequirements
     @PostMapping("/v1/public/advertorials/{id}/events")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void advertorialEvent(@PathVariable UUID id, @Valid @RequestBody EventRequest body) {
-        serving.record(id, body.type());
+    void advertorialEvent(@PathVariable UUID id, @Valid @RequestBody EventRequest body, HttpServletRequest request) {
+        serving.record(id, body.type(), body.visitor(), clientAddress(request));
+    }
+
+    /** The first hop of {@code X-Forwarded-For} (the gateway sets it), else the socket's remote address. */
+    private static String clientAddress(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 
     private static ResponseEntity<AdvertorialResponse> tagged(AdvertorialView view) {

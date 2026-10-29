@@ -1,11 +1,16 @@
 package com.afrotransact.deliveryruns.application;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -16,6 +21,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import com.afrotransact.deliveryruns.application.AdvertorialSources.Info;
 import com.afrotransact.deliveryruns.domain.AdvertorialSource;
 import com.afrotransact.deliveryruns.domain.CreativeRef;
 import com.afrotransact.deliveryruns.domain.CreativeSlot;
@@ -27,6 +33,7 @@ import com.afrotransact.deliveryruns.domain.Resolution;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
 import com.afrotransact.deliveryruns.port.AdvertorialRepository;
 import com.afrotransact.platform.web.error.NotFoundException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,18 +49,26 @@ class AdvertorialServingImpl implements AdvertorialServing {
     }
 
     private final AdvertorialRepository advertorials;
+    private final AdvertorialSources sources;
     private final PublicRunService publicRuns;
     private final PreorderPublicService preorders;
     private final RunLinks links;
     private final Clock clock;
+    private final Duration eventWindow;
+    private final int clientLimit;
 
-    AdvertorialServingImpl(AdvertorialRepository advertorials, PublicRunService publicRuns,
-                           PreorderPublicService preorders, RunLinks links, Clock clock) {
+    AdvertorialServingImpl(AdvertorialRepository advertorials, AdvertorialSources sources,
+                           PublicRunService publicRuns, PreorderPublicService preorders, RunLinks links, Clock clock,
+                           @Value("${at.delivery-runs.advertorial.event-window:PT30M}") Duration eventWindow,
+                           @Value("${at.delivery-runs.advertorial.client-limit:30}") int clientLimit) {
         this.advertorials = advertorials;
+        this.sources = sources;
         this.publicRuns = publicRuns;
         this.preorders = preorders;
         this.links = links;
         this.clock = clock;
+        this.eventWindow = eventWindow;
+        this.clientLimit = Math.max(clientLimit, 1);
     }
 
     @Override
@@ -91,11 +106,41 @@ class AdvertorialServingImpl implements AdvertorialServing {
 
     @Override
     @Transactional
-    public void record(UUID advertorialId, Event event) {
-        advertorials.findById(advertorialId).orElseThrow(() -> new NotFoundException(
+    public void record(UUID advertorialId, Event event, String visitor, String client) {
+        LocalAdvertorial a = advertorials.findById(advertorialId).orElseThrow(() -> new NotFoundException(
                 "delivery-runs.advertorial-not-found", "Advertorial not found"));
-        advertorials.count(advertorialId, Instant.now(clock).atZone(ZoneOffset.UTC).toLocalDate(),
-                event == Event.VIEW ? 1 : 0, event == Event.CLICK ? 1 : 0);
+        Instant now = Instant.now(clock);
+        if (!servable(a, now)) {
+            return;
+        }
+        String kind = event.name();
+        boolean counted;
+        if (hasText(visitor)) {
+            counted = advertorials.admit(a.id(), "v:" + digest(visitor), kind, now, eventWindow, 1)
+                    && (!hasText(client) || advertorials.admit(a.id(), "c:" + digest(client), kind, now, eventWindow,
+                    clientLimit));
+        } else {
+            counted = advertorials.admit(a.id(), hasText(client) ? "c:" + digest(client) : "none", kind, now,
+                    eventWindow, hasText(client) ? 1 : clientLimit);
+        }
+        if (counted) {
+            advertorials.count(a.id(), now.atZone(ZoneOffset.UTC).toLocalDate(), event == Event.VIEW ? 1 : 0,
+                    event == Event.CLICK ? 1 : 0);
+        }
+    }
+
+    /** Live, inside its own schedule, and its window or run takes orders right now: what {@link #serve} would show. */
+    private boolean servable(LocalAdvertorial a, Instant now) {
+        return a.servesAt(now) && sources.find(a.source(), a.sourceId(), now).map(Info::open).orElse(false);
+    }
+
+    private static String digest(String value) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(value.trim().getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash, 0, 16);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is part of every Java runtime", e);
+        }
     }
 
     private Optional<Candidate> windowCandidate(AdvertorialQuery q) {

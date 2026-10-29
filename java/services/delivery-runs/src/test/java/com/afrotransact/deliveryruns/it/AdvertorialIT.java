@@ -245,14 +245,12 @@ class AdvertorialIT {
         String a = call(HttpMethod.GET, "/v1/advertorials?source=WINDOW&sourceId=" + f.window.id(), null, null)
                 .body().path("items").get(0).path("id").asString();
         for (int i = 0; i < 4; i++) {
-            assertThat(call(HttpMethod.POST, "/v1/public/advertorials/" + a + "/events", Map.of("type", "VIEW"), null)
-                    .status()).isEqualTo(204);
+            assertThat(event(a, "VIEW", "viewer-" + i).status()).isEqualTo(204);
         }
-        call(HttpMethod.POST, "/v1/public/advertorials/" + a + "/events", Map.of("type", "CLICK"), null);
+        event(a, "CLICK", "viewer-0");
         assertThat(call(HttpMethod.POST, "/v1/public/advertorials/" + UUID.randomUUID() + "/events",
                 Map.of("type", "VIEW"), null).status()).isEqualTo(404);
-        assertThat(call(HttpMethod.POST, "/v1/public/advertorials/" + a + "/events", Map.of("type", "LIKE"), null)
-                .status()).isEqualTo(400);
+        assertThat(event(a, "LIKE", "viewer-0").status()).isEqualTo(400);
 
         // Two orders came through the advertorial link (src=page&cr=adv-…), one by another route.
         String creative = "adv-" + a.replace("-", "");
@@ -268,6 +266,55 @@ class AdvertorialIT {
         assertThat(r.path("clicks").asLong()).isEqualTo(1);
         assertThat(r.path("ctrPct").asDouble()).isEqualTo(25.0);
         assertThat(r.path("orders").asInt()).isEqualTo(2);
+    }
+
+    @Test
+    void onlyALiveServableAdvertorialCountsAndEachVisitorCountsOncePerWindow() {
+        Fixture f = fixture("Adv Gate #7", "Plainview", 2);
+        String a = call(HttpMethod.GET, "/v1/advertorials?source=WINDOW&sourceId=" + f.window.id(), null, null)
+                .body().path("items").get(0).path("id").asString();
+
+        assertThat(event(a, "VIEW", "v-1").status()).isEqualTo(204);
+        assertThat(event(a, "VIEW", "v-1").status()).as("the same visitor again: 204, not counted").isEqualTo(204);
+        assertThat(event(a, "VIEW", "v-2").status()).isEqualTo(204);
+        assertThat(event(a, "CLICK", "v-1").status()).isEqualTo(204);
+        assertThat(event(a, "CLICK", "v-1").status()).isEqualTo(204);
+        assertThat(results(a)).containsExactly(2L, 1L);
+
+        clock.set(clock.instant().plus(Duration.ofMinutes(31)));
+        event(a, "VIEW", "v-1");
+        assertThat(results(a)).as("a new window counts the visitor again").containsExactly(3L, 1L);
+
+        for (int i = 0; i < 60; i++) {
+            event(a, "VIEW", "flood-" + UUID.randomUUID());
+        }
+        assertThat(results(a)[0]).as("fresh visitor ids from one client stop at the client limit (30 a window, "
+                + "one of them was v-1's)").isEqualTo(3L + 29L);
+
+        // A draft, a paused and a scheduled-for-later variant never count; neither does a closed source.
+        String draft = call(HttpMethod.POST, "/v1/advertorials", Map.of("source", "WINDOW", "sourceId", f.window.id()
+                .toString(), "headline", "Draft", "ctaLabel", "Go"), null).body().path("id").asString();
+        assertThat(event(draft, "VIEW", "v-9").status()).isEqualTo(204);
+        assertThat(results(draft)).containsExactly(0L, 0L);
+        call(HttpMethod.POST, "/v1/advertorials/" + draft + "/publish", null, null);
+        call(HttpMethod.POST, "/v1/advertorials/" + draft + "/pause", null, null);
+        event(draft, "VIEW", "v-9");
+        assertThat(results(draft)).as("paused").containsExactly(0L, 0L);
+        String later = call(HttpMethod.POST, "/v1/advertorials", Map.of("source", "WINDOW", "sourceId", f.window.id()
+                .toString(), "headline", "Later", "ctaLabel", "Go", "startsAt", clock.instant().plus(Duration.ofHours(5))
+                .toString()), null).body().path("id").asString();
+        call(HttpMethod.POST, "/v1/advertorials/" + later + "/publish", null, null);
+        event(later, "VIEW", "v-9");
+        assertThat(results(later)).as("live but outside its schedule").containsExactly(0L, 0L);
+
+        long before = results(a)[0];
+        clock.set(f.closes.plusSeconds(60));
+        event(a, "VIEW", "v-late");
+        assertThat(results(a)[0]).as("the window closed").isEqualTo(before);
+        call(HttpMethod.POST, "/v1/advertorials/" + a + "/end", null, null);
+        clock.set(Instant.now().truncatedTo(ChronoUnit.SECONDS));
+        event(a, "CLICK", "v-new");
+        assertThat(results(a)[1]).as("ended").isEqualTo(1L);
     }
 
     @Test
@@ -372,6 +419,17 @@ class AdvertorialIT {
         Res r = call(HttpMethod.GET, "/v1/public/advertorials?country=US&region=TX&city=" + f.city() + "&visitor="
                 + visitor, null, null);
         return r.body().path("items").get(0).path("variant").asString();
+    }
+
+    private Res event(String advertorial, String type, String visitor) {
+        return call(HttpMethod.POST, "/v1/public/advertorials/" + advertorial + "/events",
+                Map.of("type", type, "visitor", visitor), null);
+    }
+
+    /** {views, clicks} of an advertorial as staff see them. */
+    private long[] results(String advertorial) {
+        JsonNode r = call(HttpMethod.GET, "/v1/advertorials/" + advertorial, null, null).body().path("results");
+        return new long[] {r.path("views").asLong(), r.path("clicks").asLong()};
     }
 
     private List<String> servedIds(Fixture f) {

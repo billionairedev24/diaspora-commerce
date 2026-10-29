@@ -19,8 +19,17 @@ public interface AdvertorialServing {
      */
     List<ServedAdvertorial> serve(AdvertorialQuery query);
 
-    /** Counts one view or click (404 for an unknown advertorial). Best effort, never changes what is served. */
-    void record(UUID advertorialId, Event event);
+    /**
+     * Counts one view or click (404 for an unknown advertorial). Best effort, never changes what is served. Only an
+     * advertorial that is live, inside its schedule and whose window or run takes orders right now counts; a draft,
+     * paused, ended or out-of-schedule one is ignored without an error. Each visitor counts once per advertorial and
+     * kind in the event window (a visitor id, else the client address), and one client address only a few times, so a
+     * direct POST cannot inflate the results.
+     *
+     * @param visitor the visitor id the storefront also sends for sticky variants (null when none)
+     * @param client  the client address the request came from (null when unknown)
+     */
+    void record(UUID advertorialId, Event event, String visitor, String client);
 
     /** What happened. */
     enum Event {
