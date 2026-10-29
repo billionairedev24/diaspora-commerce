@@ -19,10 +19,10 @@ Gift cards are issued by [[LEGAL: Q01 legal entity name]] ("AfroTransact", "we")
 ## Buying a gift card
 
 - You can buy a gift card for any amount from the minimum to the maximum shown on the gift card page. At launch, that is **$10 to $500** per card. These limits are set by AfroTransact and can change; the page always shows the current limits. [[LEGAL: Q08 confirm limits, per-day and per-customer purchase limits and any state limits]]
-- You pay in the usual way, by card or another payment method shown at checkout, and you agree to the Conditions of Use and Stripe's terms for that payment. You cannot pay for a gift card with store credit or another gift card. [[LEGAL: Q12 confirm]]
+- You pay with a card or another payment method shown at checkout, and you agree to the Conditions of Use and Stripe's terms for that payment. The payment is collected when you buy, because nothing is shipped. You cannot pay for a gift card with store credit or another gift card. [[LEGAL: Q12 confirm]]
 - You enter the recipient's email address and a message, and choose to send it now or on a date you pick. We send the card by email on that date. You are responsible for entering the right address. Please check it, because we cannot know who owns an address.
 - A gift card may be refused or cancelled, and the amount refunded, if we think that the purchase may be fraud or a payment is reversed.
-- Gift cards are not boosted by Plus membership or referral offers, and they do not earn credit-back benefits. Credit on a purchase of a gift card may not be given. [[LEGAL: Q08 confirm which membership and promotional benefits apply]]
+- A gift card is paid for in full at purchase, so it is not boosted by Plus membership or referral offers. [[LEGAL: Q08 confirm which membership and promotional benefits apply to gift card purchases]]
 
 ## Getting the card
 
