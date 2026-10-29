@@ -11,6 +11,7 @@ import java.util.UUID;
 
 import com.afrotransact.deliveryruns.domain.AttributionKind;
 import com.afrotransact.deliveryruns.domain.UtmTags;
+import com.afrotransact.deliveryruns.port.AttributedOrders;
 import com.afrotransact.deliveryruns.port.AttributionRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -106,18 +107,26 @@ class JdbcAttributionRepository implements AttributionRepository {
     }
 
     @Override
-    public Map<String, Integer> runOrdersByCreative(Collection<String> creatives) {
-        Map<String, Integer> out = new HashMap<>();
+    public Map<String, AttributedOrders> runOrdersByCreative(Collection<String> creatives) {
+        Map<String, AttributedOrders> out = new HashMap<>();
         if (creatives.isEmpty()) {
             return out;
         }
+        // Per attributed order: it stands when any of its run slots is active, else it is cancelled (an order moved to
+        // another run has a released slot and an active one, so it stands).
         jdbc.sql("""
-                select a.creative, count(distinct o.order_id) as n
-                from order_attribution a join run_order o on o.order_id = a.order_id
-                where a.creative in (:creatives) and o.status in ('RESERVED', 'CONFIRMED')
-                group by a.creative
+                select creative,
+                       count(*) filter (where active) as live,
+                       count(*) filter (where not active) as cancelled
+                from (
+                    select a.creative, a.order_id, bool_or(o.status in ('RESERVED', 'CONFIRMED')) as active
+                    from order_attribution a join run_order o on o.order_id = a.order_id
+                    where a.creative in (:creatives)
+                    group by a.creative, a.order_id
+                ) per_order
+                group by creative
                 """).param("creatives", List.copyOf(creatives)).query((rs, n) -> {
-                    out.put(rs.getString("creative"), rs.getInt("n"));
+                    out.put(rs.getString("creative"), new AttributedOrders(rs.getInt("live"), rs.getInt("cancelled")));
                     return null;
                 }).list();
         return out;

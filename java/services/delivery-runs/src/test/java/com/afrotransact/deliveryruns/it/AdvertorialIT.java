@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.afrotransact.deliveryruns.application.AttributionService;
 import com.afrotransact.deliveryruns.application.ExtendCommand;
 import com.afrotransact.deliveryruns.application.LocationService;
 import com.afrotransact.deliveryruns.application.OrderPlaced;
@@ -24,7 +25,9 @@ import com.afrotransact.deliveryruns.application.PreorderDecisionService;
 import com.afrotransact.deliveryruns.application.PreorderProjectionService;
 import com.afrotransact.deliveryruns.application.PreorderSchedulerService;
 import com.afrotransact.deliveryruns.application.PreorderWindowService;
+import com.afrotransact.deliveryruns.application.ReserveCommand;
 import com.afrotransact.deliveryruns.application.RunService;
+import com.afrotransact.deliveryruns.application.RunSlotService;
 import com.afrotransact.deliveryruns.application.WindowCommand;
 import com.afrotransact.deliveryruns.application.WindowView;
 import com.afrotransact.deliveryruns.domain.CommKind;
@@ -91,12 +94,15 @@ class AdvertorialIT {
     private final PreorderSchedulerService scheduler;
     private final LocationService locations;
     private final RunService runs;
+    private final RunSlotService slots;
+    private final AttributionService attribution;
 
     @Autowired
     AdvertorialIT(@LocalServerPort int port, JsonMapper json, MutableClock clock, FakeUpstreams upstreams,
                   PreorderWindowService windows, PreorderDecisionService decisions,
                   PreorderProjectionService projection, PreorderSchedulerService scheduler,
-                  LocationService locations, RunService runs) {
+                  LocationService locations, RunService runs, RunSlotService slots,
+                  AttributionService attribution) {
         this.http = RestClient.builder().baseUrl("http://localhost:" + port).build();
         this.json = json;
         this.clock = clock;
@@ -107,6 +113,8 @@ class AdvertorialIT {
         this.scheduler = scheduler;
         this.locations = locations;
         this.runs = runs;
+        this.slots = slots;
+        this.attribution = attribution;
     }
 
     @DynamicPropertySource
@@ -266,6 +274,53 @@ class AdvertorialIT {
         assertThat(r.path("clicks").asLong()).isEqualTo(1);
         assertThat(r.path("ctrPct").asDouble()).isEqualTo(25.0);
         assertThat(r.path("orders").asInt()).isEqualTo(2);
+    }
+
+    /**
+     * One rule for both sources: an order that came through the advertorial counts while it stands; a cancelled or
+     * refunded one is shown apart. The same three orders, one of them cancelled, give the same result for a window
+     * (tracking tag, cancelled pre-order) and a run (attribution, released slot); cancelling the run cancels the rest.
+     */
+    @Test
+    void windowAndRunOrdersAreCountedOnTheSameBasis() {
+        Fixture f = fixture("Adv Basis #8", "Plainview", 2);
+        String wa = call(HttpMethod.GET, "/v1/advertorials?source=WINDOW&sourceId=" + f.window.id(), null, null)
+                .body().path("items").get(0).path("id").asString();
+        String windowCreative = "adv-" + wa.replace("-", "");
+        List<String> windowOrders = List.of(UUID.randomUUID().toString(), UUID.randomUUID().toString(),
+                UUID.randomUUID().toString());
+        for (String order : windowOrders) {
+            projection.onOrderPlaced(UUID.randomUUID(), placed(order, f.window.id(), clock.instant(), "page",
+                    windowCreative, f.window.code()));
+        }
+        projection.onOrderPlaced(UUID.randomUUID(), placed(UUID.randomUUID().toString(), f.window.id(),
+                clock.instant(), "ig", "story", f.window.code()));
+        projection.onOrderCancelled(UUID.randomUUID(), windowOrders.get(0), clock.instant());
+
+        UUID location = locations.create(Fixtures.bastrop(Fixtures.slug("basis"), DropMode.DOORSTEP, null,
+                CutoffPolicy.CANCEL)).id();
+        Run run = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(3), 2));
+        runs.announce(run.id());
+        runs.open(run.id());
+        String ra = call(HttpMethod.GET, "/v1/advertorials?source=RUN&sourceId=" + run.id(), null, null).body()
+                .path("items").get(0).path("id").asString();
+        String runCreative = "adv-" + ra.replace("-", "");
+        List<String> runOrders = List.of("basis-" + UUID.randomUUID(), "basis-" + UUID.randomUUID(),
+                "basis-" + UUID.randomUUID());
+        for (String order : runOrders) {
+            slots.reserve(new ReserveCommand(run.id(), order, "cust-basis", 1, false));
+            attribution.orderPlaced(order, runCreative, "page", clock.instant());
+        }
+        slots.release(run.id(), runOrders.get(0));
+
+        assertThat(orders(wa)).as("window: two stand, one cancelled").containsExactly(2, 1);
+        assertThat(orders(ra)).as("run: the same rule").containsExactly(2, 1);
+
+        runs.cancel(run.id(), "Storm warning");
+        assertThat(orders(ra)).as("a cancelled run refunds its orders").containsExactly(0, 3);
+        projection.onOrderCancelled(UUID.randomUUID(), windowOrders.get(1), clock.instant());
+        projection.onOrderCancelled(UUID.randomUUID(), windowOrders.get(2), clock.instant());
+        assertThat(orders(wa)).as("window: all cancelled").containsExactly(0, 3);
     }
 
     @Test
@@ -430,6 +485,12 @@ class AdvertorialIT {
     private long[] results(String advertorial) {
         JsonNode r = call(HttpMethod.GET, "/v1/advertorials/" + advertorial, null, null).body().path("results");
         return new long[] {r.path("views").asLong(), r.path("clicks").asLong()};
+    }
+
+    /** {orders, cancelledOrders} of an advertorial as staff see them. */
+    private int[] orders(String advertorial) {
+        JsonNode r = call(HttpMethod.GET, "/v1/advertorials/" + advertorial, null, null).body().path("results");
+        return new int[] {r.path("orders").asInt(-1), r.path("cancelledOrders").asInt(-1)};
     }
 
     private List<String> servedIds(Fixture f) {

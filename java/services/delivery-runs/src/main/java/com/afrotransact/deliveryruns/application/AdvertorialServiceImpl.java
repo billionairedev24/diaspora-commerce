@@ -20,6 +20,7 @@ import com.afrotransact.deliveryruns.domain.LocalAdvertorial;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
 import com.afrotransact.deliveryruns.port.AdvertorialRepository;
 import com.afrotransact.deliveryruns.port.AdvertorialRepository.Counters;
+import com.afrotransact.deliveryruns.port.AttributedOrders;
 import com.afrotransact.deliveryruns.port.AttributionRepository;
 import com.afrotransact.deliveryruns.port.DuplicateEntryException;
 import com.afrotransact.deliveryruns.port.PreorderOrderRepository;
@@ -192,7 +193,7 @@ class AdvertorialServiceImpl implements AdvertorialService {
     private List<AdvertorialView> views(List<LocalAdvertorial> list) {
         Instant now = Instant.now(clock);
         Map<UUID, Counters> counters = advertorials.counters(list.stream().map(LocalAdvertorial::id).toList());
-        Map<String, Integer> attributed = new HashMap<>(orders.attributedOrders(list.stream()
+        Map<String, AttributedOrders> attributed = new HashMap<>(orders.attributedOrders(list.stream()
                 .filter(a -> a.source() == AdvertorialSource.WINDOW).map(LocalAdvertorial::creative).toList()));
         attributed.putAll(attribution.runOrdersByCreative(list.stream()
                 .filter(a -> a.source() == AdvertorialSource.RUN).map(LocalAdvertorial::creative).toList()));
@@ -200,7 +201,7 @@ class AdvertorialServiceImpl implements AdvertorialService {
         return list.stream().map(a -> {
             Optional<Info> info = infos.computeIfAbsent(a.sourceId(), id -> sources.find(a.source(), id, now));
             Counters c = counters.getOrDefault(a.id(), new Counters(0, 0));
-            int sold = attributed.getOrDefault(a.creative(), 0);
+            AttributedOrders sold = attributed.getOrDefault(a.creative(), AttributedOrders.NONE);
             return new AdvertorialView(a, info.map(Info::name).orElse(null), info.map(Info::code).orElse(null),
                     info.map(Info::status).orElse(null), info.map(Info::closes).orElse(null),
                     info.map(Info::locationName).orElse(null),

@@ -237,6 +237,8 @@ class AttributionIT {
         runs.cancel(run.id(), "Storm warning");
         assertThat(advertorials.get(generated.advertorial().id()).results().orders())
                 .as("a cancelled run refunds its orders, so none count").isZero();
+        assertThat(advertorials.get(generated.advertorial().id()).results().cancelledOrders())
+                .as("they are shown apart as cancelled").isEqualTo(2);
     }
 
     @Test
