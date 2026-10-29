@@ -16,6 +16,7 @@ import com.afrotransact.content.domain.legal.LegalDocumentType;
 import com.afrotransact.platform.web.error.NotFoundException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -37,6 +38,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/v1/legal")
 class LegalController {
 
+    private static final String KEYS = "conditions-of-use, privacy, cookies, privacy-choices, returns, seller-terms, "
+            + "prohibited-items, accessibility, sms-terms, gift-card-terms, store-credit-terms, membership-terms, "
+            + "referral-terms, preorder-delivery-terms, community-guidelines, ip-policy, provider-terms, payments-terms, "
+            + "subprocessors, data-processing, seller-fees";
+
     private final LegalService legal;
     private final ContentSettings settings;
 
@@ -53,14 +59,16 @@ class LegalController {
     }
 
     @Operation(summary = "A document's current version, rendered (placeholders filled from the site config)")
+    @ApiResponse(responseCode = "404", description = "No such document")
     @SecurityRequirements
     @GetMapping("/{type}")
-    ResponseEntity<PageResponse> current(@PathVariable @Parameter(example = "sms-terms") String type,
+    ResponseEntity<PageResponse> current(@PathVariable @Parameter(example = "sms-terms", description = "Document key: " + KEYS) String type,
                                          @RequestParam(required = false, defaultValue = "en") String locale) {
         return cached(PageResponse.of(legal.current(typeOf(type), locale)));
     }
 
     @Operation(summary = "All versions of a document, newest first (archived ones stay retrievable)")
+    @ApiResponse(responseCode = "404", description = "No such document")
     @SecurityRequirements
     @GetMapping("/{type}/versions")
     ResponseEntity<List<VersionDto>> versions(@PathVariable String type) {
@@ -68,6 +76,7 @@ class LegalController {
     }
 
     @Operation(summary = "One version of a document (current or archived)")
+    @ApiResponse(responseCode = "404", description = "No such document or version")
     @SecurityRequirements
     @GetMapping("/{type}/versions/{version}")
     ResponseEntity<PageResponse> version(@PathVariable String type, @PathVariable String version,

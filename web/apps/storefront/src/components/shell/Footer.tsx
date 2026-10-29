@@ -276,6 +276,11 @@ export function FooterView({ config, locale, year = new Date().getFullYear() }: 
                   </Link>
                 </li>
               ))}
+              <li>
+                <Link className={styles.legalLink} href="/legal">
+                  {t('legal.center')}
+                </Link>
+              </li>
             </ul>
           </nav>
           <span className={styles.flex} />
