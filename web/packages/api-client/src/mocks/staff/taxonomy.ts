@@ -7,7 +7,11 @@ import { z } from 'zod';
 
 import { type FieldValue, type FormField, type StaffForm } from '../../schemas/staff';
 import {
+  type BrandBulkResult,
+  type BrandStatus,
   type CategoryApprovalPlan,
+  type StaffBrand,
+  type StaffBrandList,
   type TaxonomyAttribute,
   type TaxonomyAudit,
   type TaxonomyAuditItem,
@@ -30,8 +34,12 @@ export interface MockTaxonomyState {
   nodes: TaxonomyNode[];
   types: Omit<TaxonomyProductType, 'usedBy' | 'productCount'>[];
   audit: (TaxonomyAuditItem & { subjectId: string })[];
+  /** The brand registry (catalog V13): approved brands, the review queue and decided ones. */
+  brands: MockBrand[];
   seq: number;
 }
+
+export type MockBrand = Omit<StaffBrand, 'scope'> & { scope: string[] };
 
 const PERMISSION = 'catalog:taxonomy';
 const NEW_TYPE = '__new__';
@@ -57,7 +65,9 @@ const attr = (key: string, label: string, extra: Partial<TaxonomyAttribute> = {}
   ...extra
 });
 const choice = (key: string, label: string, options: string[], extra: Partial<TaxonomyAttribute> = {}) => attr(key, label, { kind: 'ENUM', options, ...extra });
-const BRAND = attr('brand', 'Brand');
+const BRAND = attr('brand', 'Brand or label', { kind: 'BRAND', options: ['UNBRANDED', 'HANDMADE'], help: 'The label on the garment. Choose “No brand” or “Handmade” if it has none.' });
+const BRAND_REQUIRED = attr('brand', 'Brand', { kind: 'BRAND', help: 'The brand printed on the product.' });
+const BRAND_OPTIONAL = attr('brand', 'Brand', { kind: 'BRAND', required: false, options: ['UNBRANDED'], help: 'The brand on the package.' });
 const ORIGIN = attr('origin', 'Made in');
 const traits = (t: Partial<TaxonomyTraits> = {}): TaxonomyTraits => ({ food: false, perishable: false, regulated: false, preorder: false, ...t });
 
@@ -98,7 +108,7 @@ const TYPES: MockTaxonomyState['types'] = [
     updatedAt: null,
     themes: [{ name: 'Option' }],
     attributes: [
-      BRAND,
+      BRAND_OPTIONAL,
       attr('ingredients', 'Ingredients', { kind: 'MULTILINE', section: 'FOOD' }),
       choice('allergens', 'Allergens', ['None', 'Contains peanuts', 'Contains gluten', 'Contains soy'], { section: 'FOOD' }),
       attr('shelf', 'Shelf life', { kind: 'NUMBER', units: ['days', 'months'], section: 'FOOD', help: 'From the date of manufacture, unopened' }),
@@ -116,7 +126,7 @@ const TYPES: MockTaxonomyState['types'] = [
     updatedAt: null,
     themes: [{ name: 'Option' }],
     attributes: [
-      BRAND,
+      BRAND_REQUIRED,
       attr('inci', 'Ingredients (INCI)', { kind: 'MULTILINE' }),
       choice('skin', 'Skin type', ['All', 'Dry', 'Oily', 'Sensitive']),
       attr('mocra', 'MoCRA product listing number', { section: 'REGULATED', help: 'FDA Cosmetics Direct product listing number (MoCRA)' }),
@@ -208,7 +218,27 @@ export function seedTaxonomy(): MockTaxonomyState {
       leaves.forEach(([name, type, count], li) => node(c, name, 'PRODUCT_TYPE', li, type, count));
     });
   });
-  return { nodes, types: structuredClone(TYPES), audit: [], seq };
+  return { nodes, types: structuredClone(TYPES), audit: [], brands: seedBrands(nodes), seq };
+}
+
+/** Approved brands and a review queue, scoped to the departments they were entered in. */
+function seedBrands(nodes: TaxonomyNode[]): MockBrand[] {
+  const dept = (name: string) => nodes.find((n) => n.level === 'DEPARTMENT' && n.name === name)?.id ?? '';
+  const at = '2026-10-01T10:00:00.000Z';
+  const brand = (id: string, name: string, status: BrandStatus, department: string, by: string | null, products: number, sellers: number): MockBrand => ({
+    id, name, status, mergedIntoId: null, mergedIntoName: null, createdByName: by, createdAt: at, updatedAt: at, version: 0, decidedBy: null, decidedAt: null,
+    decisionReason: null, products, sellers, scope: [dept(department)]
+  });
+  return [
+    brand('brand-nike', 'Nike', 'APPROVED', 'Fashion', null, 120, 18),
+    brand('brand-levis', 'Levi’s', 'APPROVED', 'Fashion', null, 64, 9),
+    brand('brand-maggi', 'Maggi', 'APPROVED', 'Groceries', null, 310, 41),
+    brand('brand-cantu', 'Cantu', 'APPROVED', 'Beauty', null, 77, 12),
+    brand('brand-cotedivoire', 'Cotedivoire', 'PENDING', 'Fashion', 'Lagos Threads', 2, 1),
+    brand('brand-nikee', 'Nikee', 'PENDING', 'Fashion', 'Accra Spice Co.', 1, 1),
+    brand('brand-adire', 'Adire Lagos', 'PENDING', 'Fashion', 'Nile Beauty', 5, 3),
+    brand('brand-shea', 'Shea Gold', 'PENDING', 'Beauty', 'Nile Beauty', 3, 1)
+  ];
 }
 
 /** Counts and children computed from the stored nodes (the tree is read, never stored with them). */
@@ -452,7 +482,7 @@ const Name = z.string().trim().min(2, '2 to 80 characters').max(80, '2 to 80 cha
 const AttributeBody = z.object({
   key: z.string().trim().regex(/^[a-z][a-z0-9_]{1,39}$/, 'Lower-case letters, digits and _, starting with a letter'),
   label: z.string().trim().min(1, 'Give it a label').max(120),
-  kind: z.enum(['TEXT', 'MULTILINE', 'ENUM', 'NUMBER']),
+  kind: z.enum(['TEXT', 'MULTILINE', 'ENUM', 'NUMBER', 'BRAND']),
   options: z.array(z.string().trim().max(80)).default([]),
   units: z.array(z.string().trim().max(20)).default([]),
   required: z.boolean().default(false),
@@ -529,7 +559,7 @@ export function taxonomyHandlers(W: string, deps: PreorderHandlerDeps) {
       if (seen.has(a.key)) errors[`attributes[${i}].key`] = 'Used twice';
       seen.add(a.key);
       if (a.kind === 'ENUM' && a.options.filter(Boolean).length === 0) errors[`attributes[${i}].options`] = 'Add the values to choose from';
-      if (a.kind !== 'ENUM' && a.options.filter(Boolean).length > 0) errors[`attributes[${i}].options`] = 'Only choice attributes have values';
+      if (a.kind !== 'ENUM' && a.kind !== 'BRAND' && a.options.filter(Boolean).length > 0) errors[`attributes[${i}].options`] = 'Only choice attributes have values';
       if (a.applies && a.section === 'FOOD' && !t.food) errors[`attributes[${i}].section`] = 'The food section needs the food trait';
       if (a.applies && a.section === 'REGULATED' && !t.regulated) errors[`attributes[${i}].section`] = 'The regulated section needs the regulated trait';
     });
@@ -542,7 +572,7 @@ export function taxonomyHandlers(W: string, deps: PreorderHandlerDeps) {
     return errors;
   };
   const toAttribute = (a: z.infer<typeof AttributeBody>): TaxonomyAttribute => ({
-    key: a.key, label: a.label, kind: a.kind, options: a.kind === 'ENUM' ? a.options.filter(Boolean) : [], units: a.kind === 'NUMBER' ? a.units : [],
+    key: a.key, label: a.label, kind: a.kind, options: a.kind === 'ENUM' || a.kind === 'BRAND' ? a.options.filter(Boolean) : [], units: a.kind === 'NUMBER' ? a.units : [],
     required: a.applies && a.required, section: a.section, help: a.help || null, applies: a.applies, multiline: a.kind === 'MULTILINE'
   });
   const newType = (ctx: PreorderCtx, b: z.infer<typeof NewTypeBody>, label: string, reason: string) => {
@@ -562,8 +592,168 @@ export function taxonomyHandlers(W: string, deps: PreorderHandlerDeps) {
     log(ctx, 'TYPE_CREATED', 'PRODUCT_TYPE', code, label, reason, `Created product type ${label} with ${created.attributes.length} attributes`);
     return created;
   };
+  const brandOf = (ctx: PreorderCtx, id: string | undefined) => {
+    const b = st(ctx).brands.find((x) => x.id === id);
+    if (!b) throw problem(404, 'NOT_FOUND', 'Not found', 'No such brand.');
+    return b;
+  };
+  const brandKey = (s: string) => s.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  const brandView = (ctx: PreorderCtx, b: MockBrand): StaffBrand => ({
+    ...b,
+    scope: b.scope.flatMap((id) => {
+      const n = st(ctx).nodes.find((x) => x.id === id);
+      return n ? [{ nodeId: n.id, path: n.path, level: n.level }] : [];
+    })
+  });
+  /** Another live brand with the name whose scope overlaps (one node is, or lies under, the other). */
+  const brandClash = (ctx: PreorderCtx, name: string, scope: string[], except?: string) => {
+    const under = (a: string, b: string) => {
+      for (let n = st(ctx).nodes.find((x) => x.id === a); n; n = st(ctx).nodes.find((x) => x.id === n?.parentId)) if (n.id === b) return true;
+      return false;
+    };
+    return st(ctx).brands.find((o) => o.id !== except && (o.status === 'APPROVED' || o.status === 'PENDING') && brandKey(o.name) === brandKey(name) && o.scope.some((a) => scope.some((b) => under(a, b) || under(b, a))));
+  };
+  const brandScope = (ctx: PreorderCtx, scope: string[]) => {
+    const missing = scope.find((id) => !st(ctx).nodes.some((n) => n.id === id && n.active));
+    if (scope.length === 0 || missing) throw invalid({ scope: 'Choose where the brand applies' });
+    return [...new Set(scope)];
+  };
+  const brandReload = (ctx: PreorderCtx, b: MockBrand, version: number) => {
+    ifMatch(ctx, version, b.name);
+  };
+  const decide = (ctx: PreorderCtx, b: MockBrand, status: BrandStatus, action: string, reason: string, summary: string, extra: Partial<MockBrand> = {}) => {
+    Object.assign(b, { status, version: b.version + 1, decidedBy: ctx.action.actor, decidedAt: ctx.now.toISOString(), decisionReason: reason, updatedAt: ctx.now.toISOString() }, extra);
+    log(ctx, action, 'BRAND', b.id, b.name, reason, summary);
+  };
   const T = `${W}/taxonomy`;
   return [
+    http.get(
+      `${T}/brands`,
+      route((ctx): StaffBrandList => {
+        view(ctx);
+        const params = new URL(ctx.request.url).searchParams;
+        const statuses = (params.get('status') ?? '').split(',').filter(Boolean);
+        const q = brandKey(params.get('q') ?? '');
+        const scope = params.get('scope');
+        const rows = st(ctx).brands
+          .filter((b) => (statuses.length === 0 || statuses.includes(b.status)) && (!q || brandKey(b.name).includes(q)) && (!scope || b.scope.includes(scope)))
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.name.localeCompare(b.name));
+        const offset = Number(params.get('offset') ?? 0);
+        const limit = Number(params.get('limit') ?? 50);
+        const counts: Record<string, number> = { PENDING: 0, APPROVED: 0, REJECTED: 0, MERGED_INTO: 0, RETIRED: 0 };
+        st(ctx).brands.forEach((b) => (counts[b.status] = (counts[b.status] ?? 0) + 1));
+        return { brands: rows.slice(offset, offset + limit).map((b) => brandView(ctx, b)), total: rows.length, counts, canEdit: canEdit(ctx) };
+      })
+    ),
+    http.post(
+      `${T}/brands`,
+      route(async (ctx) => {
+        const b = await json(ctx.request, z.object({ name: z.string().trim().min(2, '2 to 120 characters').max(120, '2 to 120 characters'), scope: z.array(z.string()), reason: Reason }));
+        edit(ctx);
+        const scope = brandScope(ctx, b.scope);
+        if (brandKey(b.name) === '') throw invalid({ name: 'Use letters or digits' });
+        if (brandClash(ctx, b.name, scope)) throw problem(409, 'catalog.brand-exists', 'Conflict', `${b.name} already exists in this scope`);
+        st(ctx).seq += 1;
+        const now = ctx.now.toISOString();
+        const made: MockBrand = {
+          id: `brand-${st(ctx).seq}`, name: b.name.replace(/\s+/g, ' '), status: 'APPROVED', mergedIntoId: null, mergedIntoName: null, createdByName: null, createdAt: now, updatedAt: now,
+          version: 0, decidedBy: ctx.action.actor, decidedAt: now, decisionReason: b.reason, products: 0, sellers: 0, scope
+        };
+        st(ctx).brands.unshift(made);
+        log(ctx, 'BRAND_CREATED', 'BRAND', made.id, made.name, b.reason, `Added brand ${made.name}`);
+        return brandView(ctx, made);
+      }, 201)
+    ),
+    http.post(
+      `${T}/brands/bulk`,
+      route(async (ctx): Promise<BrandBulkResult> => {
+        const b = await json(ctx.request, z.object({ names: z.array(z.string()).optional(), text: z.string().optional(), scope: z.array(z.string()), reason: Reason }));
+        edit(ctx);
+        const scope = brandScope(ctx, b.scope);
+        const names = [...(b.names ?? []), ...(b.text ?? '').split(/[\r\n,;]+/)].map((n) => n.trim().replace(/\s+/g, ' ')).filter(Boolean);
+        if (names.length === 0 || names.length > 500) throw invalid({ names: 'Paste between 1 and 500 brands, one per line' });
+        const out: BrandBulkResult = { results: [], created: 0, existing: 0, invalid: 0 };
+        const seen = new Set<string>();
+        for (const name of names) {
+          if (name.length < 2 || name.length > 120 || brandKey(name) === '') {
+            out.results.push({ name, outcome: 'INVALID', brandId: null, message: '2 to 120 characters' });
+            out.invalid += 1;
+            continue;
+          }
+          const clash = brandClash(ctx, name, scope);
+          if (seen.has(brandKey(name)) || clash) {
+            out.results.push({ name, outcome: 'EXISTS', brandId: clash?.id ?? null, message: clash ? `Already listed as ${clash.name}` : 'Listed twice' });
+            out.existing += 1;
+            continue;
+          }
+          seen.add(brandKey(name));
+          st(ctx).seq += 1;
+          const now = ctx.now.toISOString();
+          const made: MockBrand = { id: `brand-${st(ctx).seq}`, name, status: 'APPROVED', mergedIntoId: null, mergedIntoName: null, createdByName: null, createdAt: now, updatedAt: now, version: 0, decidedBy: ctx.action.actor, decidedAt: now, decisionReason: b.reason, products: 0, sellers: 0, scope };
+          st(ctx).brands.unshift(made);
+          out.results.push({ name, outcome: 'CREATED', brandId: made.id, message: null });
+          out.created += 1;
+        }
+        if (out.created > 0) log(ctx, 'BRANDS_ADDED', 'BRAND', 'bulk', `${out.created} brands`, b.reason, `Added ${out.created} brands`);
+        return out;
+      })
+    ),
+    http.patch(
+      `${T}/brands/:id`,
+      route(async (ctx, p) => {
+        const b = await json(ctx.request, z.object({ name: z.string().trim().min(2, '2 to 120 characters').max(120, '2 to 120 characters').optional(), scope: z.array(z.string()).optional(), reason: Reason }));
+        edit(ctx);
+        const brand = brandOf(ctx, p.id);
+        brandReload(ctx, brand, brand.version);
+        if (brand.status === 'MERGED_INTO') throw problem(409, 'catalog.brand-state', 'Conflict', `${brand.name} was merged; edit the brand it was merged into`);
+        const name = b.name?.replace(/\s+/g, ' ');
+        const scope = b.scope ? brandScope(ctx, b.scope) : brand.scope;
+        const sameScope = scope.length === brand.scope.length && scope.every((id) => brand.scope.includes(id));
+        if ((name === undefined || name === brand.name) && sameScope) throw invalid({ name: 'Nothing has changed. Change it to save.' });
+        if (brandClash(ctx, name ?? brand.name, scope, brand.id)) throw problem(409, 'catalog.brand-exists', 'Conflict', `${name ?? brand.name} already exists in this scope`);
+        const from = brand.name;
+        Object.assign(brand, { name: name ?? brand.name, scope });
+        decide(ctx, brand, brand.status, 'BRAND_UPDATED', b.reason, `Changed ${from}: ${[name !== undefined && name !== from ? 'name' : '', sameScope ? '' : 'scope'].filter(Boolean).join(' and ')}`);
+        return brandView(ctx, brand);
+      })
+    ),
+    ...(['approve', 'reject', 'retire'] as const).map((action) =>
+      http.post(
+        `${T}/brands/:id/${action}`,
+        route(async (ctx, p) => {
+          const b = await json(ctx.request, z.object({ reason: Reason }));
+          edit(ctx);
+          const brand = brandOf(ctx, p.id);
+          brandReload(ctx, brand, brand.version);
+          if (action === 'approve' && (brand.status === 'APPROVED' || brand.status === 'MERGED_INTO')) throw problem(409, 'catalog.brand-state', 'Conflict', `${brand.name} is already ${brand.status === 'APPROVED' ? 'approved' : 'merged'}`);
+          if (action === 'reject' && brand.status !== 'PENDING') throw problem(409, 'catalog.brand-state', 'Conflict', 'Only brands awaiting review can be rejected');
+          if (action === 'retire' && brand.status !== 'APPROVED') throw problem(409, 'catalog.brand-state', 'Conflict', 'Only approved brands can be retired');
+          const next: BrandStatus = action === 'approve' ? 'APPROVED' : action === 'reject' ? 'REJECTED' : 'RETIRED';
+          const verb = action === 'approve' ? 'Approved' : action === 'reject' ? 'Rejected' : 'Retired';
+          decide(ctx, brand, next, `BRAND_${next}`, b.reason, `${verb} ${brand.name}`);
+          return brandView(ctx, brand);
+        })
+      )
+    ),
+    http.post(
+      `${T}/brands/:id/merge`,
+      route(async (ctx, p) => {
+        const b = await json(ctx.request, z.object({ targetId: z.string().min(1, 'Choose the brand to merge into'), reason: Reason }));
+        edit(ctx);
+        const brand = brandOf(ctx, p.id);
+        brandReload(ctx, brand, brand.version);
+        if (b.targetId === brand.id) throw invalid({ targetId: 'Choose another brand' });
+        if (brand.status === 'MERGED_INTO') throw problem(409, 'catalog.brand-state', 'Conflict', `${brand.name} was already merged`);
+        const target = brandOf(ctx, b.targetId);
+        if (target.status !== 'APPROVED') throw invalid({ targetId: 'Must be approved' });
+        target.scope = [...new Set([...target.scope, ...brand.scope])];
+        target.products += brand.products;
+        target.sellers += brand.sellers;
+        target.version += 1;
+        decide(ctx, brand, 'MERGED_INTO', 'BRAND_MERGED', b.reason, `Merged ${brand.name} into ${target.name}`, { mergedIntoId: target.id, mergedIntoName: target.name, products: 0 });
+        return brandView(ctx, brand);
+      })
+    ),
     http.get(
       `${T}/tree`,
       route((ctx): TaxonomyTree => {
@@ -790,5 +980,6 @@ const stripMultiline = ({ multiline: _multiline, ...a }: TaxonomyAttribute) => a
 
 const ACTION_LABELS: Record<string, string> = {
   NODE_CREATED: 'Created', NODE_RENAMED: 'Renamed', NODE_MOVED: 'Moved', NODE_RETIRED: 'Retired', NODE_RESTORED: 'Restored', NODES_REORDERED: 'Reordered',
-  TYPE_CREATED: 'Product type created', TYPE_UPDATED: 'Product type changed'
+  TYPE_CREATED: 'Product type created', TYPE_UPDATED: 'Product type changed', BRAND_CREATED: 'Brand added', BRANDS_ADDED: 'Brands added', BRAND_UPDATED: 'Brand changed',
+  BRAND_APPROVED: 'Brand approved', BRAND_REJECTED: 'Brand rejected', BRAND_RETIRED: 'Brand retired', BRAND_MERGED: 'Brand merged'
 };

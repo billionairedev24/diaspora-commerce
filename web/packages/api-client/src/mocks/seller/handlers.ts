@@ -57,7 +57,7 @@ import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
 import { exportFileOf } from '../export-file';
 import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
-import { capabilitiesOf, CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, resetSellerDb, SELLER_ORG } from './db';
+import { capabilitiesOf, CATEGORY_TREE, departmentsOf, getSellerDb, MOCK_BRANDS, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, resetSellerDb, SELLER_ORG } from './db';
 import {
   advanceImport,
   categoryLeaves,
@@ -635,6 +635,8 @@ const W = '*/v1/seller';
 /** Reviews this mock member has already reported (one report per member and review). */
 const reported = new WeakMap<MockSellerDb, Set<string>>();
 const query = (ctx: Ctx) => new URL(ctx.request.url).searchParams;
+/** Comparison key of a brand name: case, accents and punctuation ignored (as the catalog does). */
+const normaliseBrand = (s: string) => s.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 const nextId = (db: MockSellerDb, prefix: string) => `${prefix}-${++db.seq}`;
 
 const BusinessPageBody = z.object({ description: z.string().max(2000).default(''), brandColor: z.string().max(7).default(''), logoUrl: z.string().max(2048).default('') });
@@ -1518,19 +1520,46 @@ export const sellerHandlers = [
     `${W}/catalog/brands`,
     route((ctx) => {
       require(ctx, 'listings', 'VIEW', 'SELLER');
-      const q = (query(ctx).get('q') ?? '').toLowerCase();
-      const counts = new Map<string, number>();
+      const params = query(ctx);
+      const scope = { category: params.get('category'), productType: params.get('productType') };
+      if (!scope.category && !scope.productType) throw invalid({ category: 'Choose a category first' });
+      const depts = departmentsOf(CATEGORY_TREE, scope);
+      if (depts.length === 0) throw invalid({ category: 'Unknown category' });
+      const q = normaliseBrand(params.get('q') ?? '');
+      const own = new Map<string, number>();
       for (const l of ctx.db.listings) {
-        const brand = (l as { attributes?: Record<string, string> }).attributes?.brand;
-        if (brand) counts.set(brand, (counts.get(brand) ?? 0) + 1);
+        const brandId = (l as { attributes?: Record<string, string> }).attributes?.brand_id;
+        if (brandId) own.set(brandId, (own.get(brandId) ?? 0) + 1);
       }
-      for (const b of ['Ankara House', 'Mama Africa', 'Shea Gold', 'Lagos Kitchen']) if (!counts.has(b)) counts.set(b, 0);
-      const brands = [...counts.entries()]
-        .filter(([name]) => !q || name.toLowerCase().startsWith(q) || name.toLowerCase().includes(` ${q}`))
-        .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))
-        .map(([name, products]) => ({ name, source: products > 0 ? 'OWN' : 'CATALOG', products }));
-      return { brands };
+      const inScope = (d: string) => depts.some((x) => x.id === d);
+      const approved = MOCK_BRANDS.filter((b) => inScope(b.departmentId)).map((b) => ({ id: b.id, name: b.name, status: 'APPROVED' as const, products: b.products }));
+      const pending = ctx.db.pendingBrands.filter((b) => inScope(b.departmentId)).map((b) => ({ id: b.id, name: b.name, status: 'PENDING' as const, products: own.get(b.id) ?? 0 }));
+      const brands = [...approved, ...pending]
+        .filter((b) => !q || normaliseBrand(b.name).includes(q))
+        .map((b) => ({ id: b.id, name: b.name, source: b.status === 'PENDING' || (own.get(b.id) ?? 0) > 0 ? ('OWN' as const) : ('CATALOG' as const), status: b.status, ownProducts: own.get(b.id) ?? 0, products: b.products }))
+        .sort((x, y) => y.ownProducts - x.ownProducts || y.products - x.products || x.name.localeCompare(y.name));
+      return { departmentId: depts.length === 1 ? (depts[0]?.id ?? null) : null, departmentName: depts.length === 1 ? (depts[0]?.name ?? null) : null, brands };
     })
+  ),
+  http.post(
+    `${W}/catalog/brands`,
+    route(async (ctx) => {
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      const b = await body(ctx.request, z.object({ name: z.string(), category: z.string().optional(), productType: z.string().optional() }));
+      const name = b.name.trim().replace(/\s+/g, ' ');
+      if (name.length < 2 || name.length > 120 || normaliseBrand(name) === '') throw invalid({ name: '2 to 120 characters' });
+      const depts = departmentsOf(CATEGORY_TREE, { category: b.category ?? null, productType: b.productType ?? null });
+      if (depts.length === 0) throw invalid({ category: 'Choose a category first' });
+      const key = normaliseBrand(name);
+      const deptIds = depts.map((d) => d.id);
+      const known = MOCK_BRANDS.find((x) => normaliseBrand(x.name) === key && deptIds.includes(x.departmentId));
+      if (known) return { created: false, brand: { id: known.id, name: known.name, source: 'CATALOG' as const, status: 'APPROVED' as const, ownProducts: 0, products: known.products } };
+      const mine = ctx.db.pendingBrands.find((x) => normaliseBrand(x.name) === key && deptIds.includes(x.departmentId));
+      if (mine) return { created: false, brand: { id: mine.id, name: mine.name, source: 'OWN' as const, status: 'PENDING' as const, ownProducts: 0, products: 0 } };
+      const made = { id: nextId(ctx.db, 'brand'), name, departmentId: depts[0]?.id ?? '' };
+      ctx.db.pendingBrands.push(made);
+      return { created: true, brand: { id: made.id, name, source: 'OWN' as const, status: 'PENDING' as const, ownProducts: 0, products: 0 } };
+    }, (out) => ((out as { created: boolean }).created ? 201 : 200))
   ),
   http.post(
     `${W}/uploads`,

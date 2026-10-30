@@ -849,7 +849,8 @@ export const CategoryNodeSchema: z.ZodType<CategoryNode> = z.lazy(() =>
   z.object({ id: z.string(), name: z.string(), level: z.string(), productType: nullableString, path: z.string(), children: z.array(CategoryNodeSchema) })
 );
 
-export const AttributeKindSchema = z.enum(['TEXT', 'MULTILINE', 'ENUM', 'NUMBER']);
+/** BRAND: chosen from the brand registry of the category; its options are the no-brand choices (UNBRANDED, HANDMADE). */
+export const AttributeKindSchema = z.enum(['TEXT', 'MULTILINE', 'ENUM', 'NUMBER', 'BRAND']);
 export type AttributeKind = z.infer<typeof AttributeKindSchema>;
 export const AttributeSectionSchema = z.enum(['DETAILS', 'FOOD', 'REGULATED']);
 export type AttributeSection = z.infer<typeof AttributeSectionSchema>;
@@ -1142,10 +1143,30 @@ export const AttachLibraryImagesResultSchema = z.object({
   skipped: z.array(z.object({ sku: z.string(), reason: z.string() }))
 });
 export type AttachLibraryImagesResult = z.infer<typeof AttachLibraryImagesResultSchema>;
-export const BrandSchema = z.object({ name: z.string(), source: z.enum(['OWN', 'CATALOG']), products: z.number().int() });
+/** One brand choice: OWN (typed in or used by this organisation) or CATALOG; PENDING ones await review (author only). */
+export const BrandSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  source: z.enum(['OWN', 'CATALOG']),
+  status: z.enum(['APPROVED', 'PENDING']),
+  ownProducts: z.number().int(),
+  products: z.number().int()
+});
 export type Brand = z.infer<typeof BrandSchema>;
-export const BrandListSchema = z.object({ brands: z.array(BrandSchema) });
+/** The brands of one category: its department heads the group ("Brands in Fashion"); never other departments' brands. */
+export const BrandListSchema = z.object({ departmentId: z.string().nullable(), departmentName: z.string().nullable(), brands: z.array(BrandSchema) });
 export type BrandList = z.infer<typeof BrandListSchema>;
+/** Typing a brand in: the existing match (created false) or a new pending brand. */
+export const CreatedBrandSchema = z.object({ brand: BrandSchema, created: z.boolean() });
+export type CreatedBrand = z.infer<typeof CreatedBrandSchema>;
+/** Which category (node id or code) or product type the brands are for. */
+export interface BrandScope {
+  category?: string;
+  productType?: string;
+}
+/** The no-brand choices a BRAND attribute may offer (its options). */
+export const UNBRANDED_REASONS = ['UNBRANDED', 'HANDMADE'] as const;
+export type UnbrandedReason = (typeof UNBRANDED_REASONS)[number];
 export const ProductImportRowSchema = z.object({
   rowNumber: z.number().int(),
   groupKey: z.string(),

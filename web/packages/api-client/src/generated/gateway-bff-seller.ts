@@ -1446,12 +1446,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Brands for the product form's brand combobox (the organisation's, most used first)
-         * @description catalog `GET /v1/brands`.
+         * Brands for the product form's brand combobox, scoped to the chosen category
+         * @description catalog `GET /v1/brands`. Approved brands whose scope covers the category (or product type) or one of its ancestors, plus the organisation's own pending brands there; the organisation's most used first, then the most popular. Never brands of unrelated departments. 422 when neither `category` nor `productType` is sent.
          */
         get: operations["listBrands"];
         put?: never;
-        post?: never;
+        /**
+         * Add a brand the seller typed (reviewed by AfroTransact, usable at once)
+         * @description catalog `POST /v1/brands`. Returns the existing brand with `created` false when the registry already has this name in the category (case, accents and punctuation ignored); otherwise creates a PENDING brand scoped to the category's department, visible only to this organisation until staff approve it.
+         */
+        post: operations["createBrand"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3664,8 +3668,11 @@ export interface components {
             path: string;
             children: components["schemas"]["CategoryNode"][];
         };
-        /** @enum {string} */
-        AttributeKind: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER";
+        /**
+         * @description BRAND: chosen from the brand registry of the category; options are the no-brand choices (UNBRANDED, HANDMADE)
+         * @enum {string}
+         */
+        AttributeKind: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER" | "BRAND";
         /**
          * @description Where the form shows it: product details, the food section or the regulated-items section
          * @enum {string}
@@ -4052,15 +4059,32 @@ export interface components {
             }[];
         };
         BrandList: {
-            brands: {
-                name: string;
-                /**
-                 * @description Used by your products, or by live products of other sellers
-                 * @enum {string}
-                 */
-                source: "OWN" | "CATALOG";
-                products: number;
-            }[];
+            /** @description The department of the category; null when a product type is used in several */
+            departmentId: string | null;
+            /** @description Heads the group "Brands in <department>" */
+            departmentName: string | null;
+            brands: components["schemas"]["Brand"][];
+        };
+        Brand: {
+            id: string;
+            name: string;
+            /**
+             * @description OWN: typed in or used by this organisation
+             * @enum {string}
+             */
+            source: "OWN" | "CATALOG";
+            /**
+             * @description PENDING brands await AfroTransact review and are visible to their author only
+             * @enum {string}
+             */
+            status: "APPROVED" | "PENDING";
+            ownProducts: number;
+            products: number;
+        };
+        CreatedBrand: {
+            brand: components["schemas"]["Brand"];
+            /** @description False when the brand already existed and is returned as the match */
+            created: boolean;
         };
         ProductImportRowPage: {
             items: components["schemas"]["ProductImportRow"][];
@@ -7478,6 +7502,11 @@ export interface operations {
     listBrands: {
         parameters: {
             query?: {
+                /** @description Category node id or code (a product type, category or department) */
+                category?: string;
+                /** @description Product-type code: every category that uses it */
+                productType?: string;
+                /** @description What was typed; case, accents and punctuation are ignored */
                 q?: string;
             };
             header?: never;
@@ -7497,6 +7526,49 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createBrand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    category?: string;
+                    productType?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The brand already existed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedBrand"];
+                };
+            };
+            /** @description A pending brand was created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedBrand"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

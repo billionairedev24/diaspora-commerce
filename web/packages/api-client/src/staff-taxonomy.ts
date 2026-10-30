@@ -97,7 +97,7 @@ export const TaxonomyAuditItemSchema = z.object({
   actorName: z.string(),
   action: z.string(),
   actionLabel: z.string(),
-  subjectKind: z.enum(['NODE', 'PRODUCT_TYPE', 'REQUEST']),
+  subjectKind: z.enum(['NODE', 'PRODUCT_TYPE', 'REQUEST', 'BRAND']),
   subjectLabel: z.string(),
   reason: z.string(),
   summary: z.string()
@@ -112,6 +112,83 @@ export const CategoryApprovalPlanSchema = z.object({
   productsMoving: z.number().int()
 });
 export type CategoryApprovalPlan = z.infer<typeof CategoryApprovalPlanSchema>;
+
+/* ── Brands (Catalog → Categories → Brands) ───────────── */
+
+export const BrandStatusSchema = z.enum(['PENDING', 'APPROVED', 'REJECTED', 'MERGED_INTO', 'RETIRED']);
+export type BrandStatus = z.infer<typeof BrandStatusSchema>;
+
+export const BrandScopeNodeSchema = z.object({ nodeId: z.string(), path: z.string(), level: TaxonomyLevelSchema });
+export type BrandScopeNode = z.infer<typeof BrandScopeNodeSchema>;
+
+export const StaffBrandSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: BrandStatusSchema,
+  mergedIntoId: z.string().nullable(),
+  mergedIntoName: z.string().nullable(),
+  /** The seller who typed it in; null for brands staff listed. */
+  createdByName: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  /** Sent as If-Match when the brand is changed. */
+  version: z.number().int(),
+  decidedBy: z.string().nullable(),
+  decidedAt: z.string().nullable(),
+  decisionReason: z.string().nullable(),
+  /** Listings that hold the brand, and the distinct sellers behind them. */
+  products: z.number().int(),
+  sellers: z.number().int(),
+  scope: z.array(BrandScopeNodeSchema)
+});
+export type StaffBrand = z.infer<typeof StaffBrandSchema>;
+
+export const StaffBrandListSchema = z.object({
+  brands: z.array(StaffBrandSchema),
+  total: z.number().int(),
+  /** Brands per status, for the tab badges. */
+  counts: z.record(z.string(), z.number().int()),
+  canEdit: z.boolean()
+});
+export type StaffBrandList = z.infer<typeof StaffBrandListSchema>;
+
+export const BrandBulkResultSchema = z.object({
+  results: z.array(z.object({ name: z.string(), outcome: z.enum(['CREATED', 'EXISTS', 'INVALID']), brandId: z.string().nullable(), message: z.string().nullable() })),
+  created: z.number().int(),
+  existing: z.number().int(),
+  invalid: z.number().int()
+});
+export type BrandBulkResult = z.infer<typeof BrandBulkResultSchema>;
+
+export interface BrandQuery {
+  status?: BrandStatus[];
+  q?: string;
+  scope?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** Splits a pasted list (new lines, commas, semicolons) into tidy, de-duplicated names (case and accents ignored). */
+export function splitBrandList(text: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of text.split(/[\r\n,;]+/)) {
+    const name = raw.trim().replace(/\s+/g, ' ');
+    const key = name.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+    if (name && key && !seen.has(key)) {
+      seen.add(key);
+      out.push(name);
+    }
+  }
+  return out;
+}
+
+/** Whether an edit of a brand's name or scope changes anything: a form with no change cannot be saved. */
+export function brandChanged(brand: Pick<StaffBrand, 'name' | 'scope'>, name: string, scope: string[]): boolean {
+  const before = brand.scope.map((s) => s.nodeId).sort();
+  const after = [...scope].sort();
+  return name.trim().replace(/\s+/g, ' ') !== brand.name || before.length !== after.length || before.some((id, i) => id !== after[i]);
+}
 
 /* ── Requests ──────────────────────────────────────────── */
 
@@ -187,6 +264,30 @@ export function createStaffTaxonomyApi(request: Requester) {
     /** Only the fields present change; `attributes` is the whole new list. */
     updateProductType: (code: string, body: TaxonomyProductTypeChange, version: number): Promise<TaxonomyProductType> =>
       request(`${T}/product-types/${enc(code)}`, TaxonomyProductTypeSchema, { method: 'PATCH', body, headers: ifMatch(version) }),
+    /** The review queue is `status: ['PENDING']`; the seller who typed a brand is named, never an id. */
+    brands: (query: BrandQuery = {}, signal?: AbortSignal): Promise<StaffBrandList> =>
+      request(`${T}/brands`, StaffBrandListSchema, {
+        query: { status: query.status?.join(','), q: query.q || undefined, scope: query.scope, limit: query.limit ? String(query.limit) : undefined, offset: query.offset ? String(query.offset) : undefined },
+        signal
+      }),
+    /** 409 when the name already exists in an overlapping scope. */
+    createBrand: (body: { name: string; scope: string[]; reason: string }): Promise<StaffBrand> =>
+      request(`${T}/brands`, StaffBrandSchema, { method: 'POST', body }),
+    /** A pasted list (`text`, one per line) added to one scope; entries that exist or are invalid are reported, not fatal. */
+    createBrands: (body: { text: string; scope: string[]; reason: string }): Promise<BrandBulkResult> =>
+      request(`${T}/brands/bulk`, BrandBulkResultSchema, { method: 'POST', body }),
+    /** Only the fields present change; 422 when nothing differs from what is stored, 412 when it changed since `version`. */
+    updateBrand: (id: string, body: { name?: string; scope?: string[]; reason: string }, version: number): Promise<StaffBrand> =>
+      request(`${T}/brands/${enc(id)}`, StaffBrandSchema, { method: 'PATCH', body, headers: ifMatch(version) }),
+    approveBrand: (id: string, reason: string, version: number): Promise<StaffBrand> =>
+      request(`${T}/brands/${enc(id)}/approve`, StaffBrandSchema, { method: 'POST', body: { reason }, headers: ifMatch(version) }),
+    rejectBrand: (id: string, reason: string, version: number): Promise<StaffBrand> =>
+      request(`${T}/brands/${enc(id)}/reject`, StaffBrandSchema, { method: 'POST', body: { reason }, headers: ifMatch(version) }),
+    retireBrand: (id: string, reason: string, version: number): Promise<StaffBrand> =>
+      request(`${T}/brands/${enc(id)}/retire`, StaffBrandSchema, { method: 'POST', body: { reason }, headers: ifMatch(version) }),
+    /** Listings that hold the brand are re-pointed to `targetId` (an approved brand) and show its name. */
+    mergeBrand: (id: string, targetId: string, reason: string, version: number): Promise<StaffBrand> =>
+      request(`${T}/brands/${enc(id)}/merge`, StaffBrandSchema, { method: 'POST', body: { targetId, reason }, headers: ifMatch(version) }),
     audit: (subject?: string, signal?: AbortSignal): Promise<TaxonomyAudit> =>
       request(`${T}/audit`, TaxonomyAuditSchema, { query: { subject, limit: '50' }, signal }),
     /** What approving a category request with these choices would create; nothing is created. */
@@ -205,6 +306,7 @@ export const staffTaxonomyKeys = {
   types: () => [...staffTaxonomyKeys.all, 'product-types'] as const,
   type: (code: string) => [...staffTaxonomyKeys.all, 'product-type', code] as const,
   audit: (subject?: string) => [...staffTaxonomyKeys.all, 'audit', subject ?? 'all'] as const,
+  brands: (query: BrandQuery) => [...staffTaxonomyKeys.all, 'brands', query] as const,
   preview: (requestId: string, choice: CategoryApprovalChoice) => [...staffTaxonomyKeys.all, 'approval-preview', requestId, choice] as const
 };
 
@@ -213,6 +315,8 @@ export const staffTaxonomyQueries = {
   types: (api: StaffTaxonomyApi) => queryOptions({ queryKey: staffTaxonomyKeys.types(), queryFn: ({ signal }) => api.productTypes(signal), staleTime: 10_000 }),
   type: (api: StaffTaxonomyApi, code: string) =>
     queryOptions({ queryKey: staffTaxonomyKeys.type(code), queryFn: ({ signal }) => api.productType(code, signal), staleTime: 10_000 }),
+  brands: (api: StaffTaxonomyApi, query: BrandQuery) =>
+    queryOptions({ queryKey: staffTaxonomyKeys.brands(query), queryFn: ({ signal }) => api.brands(query, signal), staleTime: 5_000 }),
   audit: (api: StaffTaxonomyApi, subject?: string) =>
     queryOptions({ queryKey: staffTaxonomyKeys.audit(subject), queryFn: ({ signal }) => api.audit(subject, signal), staleTime: 10_000 }),
   preview: (api: StaffTaxonomyApi, requestId: string, choice: CategoryApprovalChoice) =>
@@ -266,7 +370,7 @@ export interface PreviewField {
   label: string;
   required: boolean;
   help: string | null;
-  control: 'text' | 'textarea' | 'select' | 'number';
+  control: 'text' | 'textarea' | 'select' | 'number' | 'brand';
   options: string[];
   units: string[];
 }
@@ -283,7 +387,7 @@ export interface PreviewSection {
  */
 export function sellerFormPreview(type: Pick<TaxonomyProductType, 'identifierRule' | 'traits' | 'attributes'>): PreviewSection[] {
   const control = (a: TaxonomyAttribute): PreviewField['control'] =>
-    a.kind === 'MULTILINE' ? 'textarea' : a.kind === 'ENUM' ? 'select' : a.kind === 'NUMBER' ? 'number' : 'text';
+    a.kind === 'MULTILINE' ? 'textarea' : a.kind === 'ENUM' ? 'select' : a.kind === 'NUMBER' ? 'number' : a.kind === 'BRAND' ? 'brand' : 'text';
   const fieldOf = (a: TaxonomyAttribute): PreviewField => ({
     key: a.key,
     label: a.label,
@@ -342,6 +446,10 @@ export function attributeProblems(attributes: TaxonomyAttribute[], traits: Taxon
     seen.add(a.key);
     if (a.label.trim() === '') errors[`${at}label`] = 'Give it a label';
     if (a.kind === 'ENUM' && a.options.filter((o) => o.trim() !== '').length === 0) errors[`${at}options`] = 'Add the values to choose from';
+    if (a.kind === 'BRAND') {
+      if (a.key !== 'brand') errors[`${at}key`] = 'The brand attribute is keyed brand';
+      if (a.options.some((o) => o !== 'UNBRANDED' && o !== 'HANDMADE')) errors[`${at}options`] = 'Only No brand and Handmade can be offered instead of a brand';
+    }
     if (a.applies && a.section === 'FOOD' && !traits.food) errors[`${at}section`] = 'The food section needs the food trait';
     if (a.applies && a.section === 'REGULATED' && !traits.regulated) errors[`${at}section`] = 'The regulated section needs the regulated trait';
   });

@@ -58,6 +58,8 @@ export interface MockSellerDb {
   labels: Record<string, string>;
   listings: (ListingRow & { variants: { sku: string; quantity: number }[] })[];
   categoryRequests: CategoryRequest[];
+  /** Brands this organisation typed in: pending review, visible to it only, scoped to a department. */
+  pendingBrands: { id: string; name: string; departmentId: string }[];
   payouts: Payout[];
   availableMinor: number;
   /** Payments compliance hold on the seller org (past-due Stripe requirement; Seller Center shows a banner). */
@@ -335,6 +337,30 @@ export function plansFor(kind: OrgKind, currentCode: string): Plan[] {
   });
 }
 
+/** The brand registry of the mock catalog: approved brands and the departments they are sold in (catalog V13). */
+export const MOCK_BRANDS: { id: string; name: string; departmentId: string; products: number }[] = [
+  { id: 'brand-nike', name: 'Nike', departmentId: 'dep-fashion', products: 12 },
+  { id: 'brand-levis', name: 'Levi’s', departmentId: 'dep-fashion', products: 9 },
+  { id: 'brand-zara', name: 'Zara', departmentId: 'dep-fashion', products: 7 },
+  { id: 'brand-maggi', name: 'Maggi', departmentId: 'dep-groceries', products: 31 },
+  { id: 'brand-tilda', name: 'Tilda', departmentId: 'dep-groceries', products: 22 },
+  { id: 'brand-golden', name: 'Golden Penny', departmentId: 'dep-groceries', products: 14 },
+  { id: 'brand-cantu', name: 'Cantu', departmentId: 'dep-beauty', products: 11 },
+  { id: 'brand-nivea', name: 'Nivea', departmentId: 'dep-beauty', products: 8 }
+];
+
+/** The department id above a category tree node id or a product type code (every node using that type). */
+export function departmentsOf(tree: CategoryNode[], idOrCode: { category?: string | null; productType?: string | null }): CategoryNode[] {
+  const out: CategoryNode[] = [];
+  const walk = (dept: CategoryNode, n: CategoryNode) => {
+    const hit = idOrCode.category ? n.id === idOrCode.category || n.path === idOrCode.category : n.productType !== null && n.productType === idOrCode.productType;
+    if (hit && !out.includes(dept)) out.push(dept);
+    n.children.forEach((c) => walk(dept, c));
+  };
+  tree.forEach((d) => walk(d, d));
+  return out;
+}
+
 export const CATEGORY_TREE: CategoryNode[] = [
   { id: 'dep-groceries', name: 'Groceries', level: 'DEPARTMENT', productType: null, path: 'Groceries', children: [
     { id: 'cat-pantry', name: 'Pantry', level: 'CATEGORY', productType: null, path: 'Groceries › Pantry', children: [
@@ -369,11 +395,14 @@ type Attr = ProductTypeSchema['attributes'][number];
 const attr = (key: string, label: string, options: string[] = [], extra: Partial<Attr> = {}): Attr => ({
   key, label, options, required: true, multiline: false, kind: options.length ? 'ENUM' : 'TEXT', units: [], section: 'DETAILS', help: null, ...extra
 });
+/** The brand attribute of a type (catalog V13): label, required, help and the no-brand choices all come from the type. */
+const brandAttr = (label: string, required: boolean, reasons: string[], help: string): Attr =>
+  attr('brand', label, reasons, { required, kind: 'BRAND', help });
 const NO_TRAITS = { food: false, perishable: false, regulated: false, preorder: false };
 
 export const PRODUCT_TYPES: Record<string, ProductTypeSchema> = {
   grocery: { code: 'grocery', label: 'packaged food', identifierRule: 'gtin', traits: { food: true, perishable: false, regulated: false, preorder: true }, attributes: [
-    attr('brand', 'Brand'),
+    brandAttr('Brand', false, ['UNBRANDED'], 'The brand on the package. Leave it empty or choose “No brand” for loose or unlabelled produce.'),
     attr('ingredients', 'Ingredients', [], { multiline: true, kind: 'MULTILINE', section: 'FOOD' }),
     attr('allergens', 'Allergens (FALCPA)', ['None', 'Contains peanuts', 'Contains shellfish', 'Contains fish', 'Contains wheat', 'Contains soy'], { section: 'FOOD' }),
     attr('shelf', 'Shelf life', [], { kind: 'NUMBER', units: ['days', 'months'], section: 'FOOD', help: 'From the date of manufacture, unopened' }),
@@ -381,21 +410,21 @@ export const PRODUCT_TYPES: Record<string, ProductTypeSchema> = {
     attr('origin', 'Country of origin')
   ], themes: [{ name: 'Net weight', dimensions: [{ name: 'Net weight', options: ['8 oz', '1 lb', '2 lb', '5 lb', '10 lb'] }] }, { name: 'Net weight × Pack', dimensions: [{ name: 'Net weight', options: ['1 lb', '5 lb'] }, { name: 'Pack', options: ['1', '2', '4'] }] }] },
   perishable: { code: 'perishable', label: 'frozen & perishable food', identifierRule: 'gtin', traits: { food: true, perishable: true, regulated: true, preorder: true }, attributes: [
-    attr('brand', 'Brand'),
+    brandAttr('Brand', false, ['UNBRANDED'], 'The brand on the package. Leave it empty or choose “No brand” for loose or unlabelled produce.'),
     attr('ingredients', 'Ingredients', [], { multiline: true, kind: 'MULTILINE', section: 'FOOD' }),
     attr('temp', 'Storage temperature', ['Frozen (≤ 0°F)', 'Chilled (33–40°F)'], { section: 'FOOD', help: 'How the product must be kept until it reaches the shopper' }),
     attr('shelf', 'Shelf life', [], { required: false, kind: 'NUMBER', units: ['days', 'months'], section: 'FOOD', help: 'Frozen: from the date of freezing' }),
     attr('permit', 'Food facility / permit no.', [], { section: 'REGULATED', help: 'FDA food facility registration or state permit number' })
   ], themes: [{ name: 'Net weight', dimensions: [{ name: 'Net weight', options: ['1 lb', '2 lb', '5 lb'] }] }] },
   dress: { code: 'dress', label: 'women’s dresses', identifierRule: 'gtin', traits: NO_TRAITS, attributes: [
-    attr('brand', 'Brand'),
+    brandAttr('Brand or label', true, ['UNBRANDED', 'HANDMADE'], 'The label on the garment. Choose “No brand” or “Handmade” if it has none.'),
     attr('material', 'Material', ['Cotton wax print', 'Cotton', 'Lace', 'Silk', 'Polyester blend']),
     attr('fit', 'Fit', ['Regular', 'Fitted', 'Relaxed', 'Plus size']),
     attr('length', 'Length', ['Mini', 'Knee', 'Midi', 'Maxi']),
     attr('care', 'Care', [], { required: false, help: 'e.g. Cold wash, line dry' })
   ], themes: [{ name: 'Size × Color', dimensions: [{ name: 'Size', options: ['XS', 'S', 'M', 'L', 'XL', '2XL'] }, { name: 'Color', options: COLORS }] }, { name: 'Size', dimensions: [{ name: 'Size', options: ['XS', 'S', 'M', 'L', 'XL', '2XL'] }] }] },
   beauty: { code: 'beauty', label: 'beauty & personal care', identifierRule: 'gtin', traits: { ...NO_TRAITS, regulated: true }, attributes: [
-    attr('brand', 'Brand'),
+    brandAttr('Brand', true, [], 'The brand printed on the product. Regulated products must show their brand or responsible business.'),
     attr('inci', 'Ingredients (INCI)', [], { multiline: true, kind: 'MULTILINE' }),
     attr('skin', 'Skin / hair type', ['All', 'Dry', 'Oily', 'Sensitive']),
     attr('mocra', 'MoCRA product listing no.', [], { section: 'REGULATED', help: 'FDA Cosmetics Direct product listing number (MoCRA)' })
@@ -413,7 +442,7 @@ export const PRODUCT_TYPES: Record<string, ProductTypeSchema> = {
     attr('readingAge', 'Reading age', ['Adult', 'Young adult', 'Ages 9-12', 'Ages 6-8', 'Ages 3-5', 'Baby and toddler'], { required: false })
   ], themes: [{ name: 'Format', dimensions: [{ name: 'Format', options: ['Hardcover', 'Paperback'] }] }] },
   custom: { code: 'custom', label: 'your requested category', identifierRule: 'gtin', traits: NO_TRAITS, attributes: [
-    attr('brand', 'Brand'),
+    brandAttr('Brand', false, ['UNBRANDED'], 'The brand, if the product has one.'),
     attr('material', 'Material / main ingredient'),
     attr('details', 'Key details shoppers need', [], { multiline: true, kind: 'MULTILINE' })
   ], themes: [{ name: 'Option', dimensions: [{ name: 'Option', options: ['Standard', 'Small', 'Medium', 'Large'] }] }, { name: 'Size × Color', dimensions: [{ name: 'Size', options: ['S', 'M', 'L', 'XL'] }, { name: 'Color', options: ['Black', 'White', 'Gold', 'Multicolour'] }] }] }
@@ -458,6 +487,7 @@ function freshDb(now: Date): MockSellerDb {
     drafts: [],
     imports: [],
     listings: seedListings(now),
+    pendingBrands: [],
     categoryRequests: [{ id: 'cr-1', reference: 'REQ-4821', path: 'Fashion › Women › Bridal aso-ebi sets', status: 'PENDING_REVIEW', decisionNote: null, createdAt: iso(new Date(now.getTime() - 2 * DAY)) }],
     payouts: [
       { id: 'po_77012', amountMinor: 93210, currency: 'USD', status: 'PAID', requestedAt: iso(new Date(now.getTime() - 7 * DAY)), holdReason: null, failureMessage: null },

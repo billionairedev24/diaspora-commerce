@@ -3,6 +3,30 @@
 /* eslint-disable */
 
 export interface paths {
+    "/v1/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Brands for the product form's brand combobox
+         * @description Approved brands whose scope covers the category or product type (or an ancestor of it), plus the organisation's own pending brands there; the organisation's most used first, then the most popular. Never brands of unrelated departments. 422 when neither category nor productType is sent. q ignores case, accents and punctuation.
+         */
+        get: operations["listBrands"];
+        put?: never;
+        /**
+         * Add a brand the seller typed (pending staff review)
+         * @description Returns the existing brand (created=false) when the registry already has this name in the category, ignoring case, accents and punctuation. Otherwise creates a PENDING brand scoped to the category's department, usable at once by this organisation. 201 when created, 200 for a match.
+         */
+        post: operations["createBrand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/categories": {
         parameters: {
             query?: never;
@@ -52,6 +76,40 @@ export interface paths {
         get: operations["mine"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/category-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One category request with the products waiting on it (catalog:taxonomy) */
+        get: operations["requestDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/category-requests/{id}/approval-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What approving would create, without creating it (catalog:taxonomy) */
+        post: operations["previewApproval"];
         delete?: never;
         options?: never;
         head?: never;
@@ -166,26 +224,6 @@ export interface paths {
          * @description For the image library page (used by). An image counts for every SKU of a product whose images include it and for the variant whose image or swatch it is.
          */
         post: operations["imageUsage"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/brands": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Brands for the product form's brand combobox
-         * @description The organisation's brands (from its products' brand attribute) with how many of its products use each, most used first; q filters by prefix of the name or of a word (case-insensitive).
-         */
-        get: operations["listBrands"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -867,26 +905,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/public/products/{atin}/reviews": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Published reviews of a live product, with its rating
-         * @description Sorted NEWEST (default), HIGHEST or LOWEST, optionally only reviews with the given stars. Reviewers show as first name and last initial, always Verified purchase.
-         */
-        get: operations["publicProductReviews"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/public/products/{atin}/reports": {
         parameters: {
             query?: never;
@@ -901,6 +919,26 @@ export interface paths {
          * @description One report per user and listing: a repeated report returns 200 with the earlier report (created=false) and publishes nothing. Listings that are not publicly visible return 404.
          */
         post: operations["reportListing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/products/{atin}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Published reviews of a live product, with its rating
+         * @description Sorted NEWEST (default), HIGHEST or LOWEST, optionally only reviews with the given stars. Reviewers show as first name and last initial, always Verified purchase.
+         */
+        get: operations["publicProductReviews"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -944,60 +982,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/variants/{atin}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * A variant in any status with its product, by variant ATIN
-         * @description Service clients and staff with catalog:read (retail-service links draft AfroTransact Retail products before they go live); members of the owning organisation with catalog:write. Unlike GET /v1/public/variants/{atin}, drafts, products in review, paused, rejected, taken-down and hidden products are returned with their status. 404 catalog.variant-not-found.
-         */
-        get: operations["variantAnyStatus"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/category-requests/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** One category request with the products waiting on it (catalog:taxonomy) */
-        get: operations["requestDetail"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/category-requests/{id}/approval-preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** What approving would create, without creating it (catalog:taxonomy) */
-        post: operations["previewApproval"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/taxonomy/audit": {
         parameters: {
             query?: never;
@@ -1009,6 +993,151 @@ export interface paths {
         get: operations["taxonomyAudit"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/taxonomy/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Brands by status, name and scope with their usage
+         * @description status is a comma-separated list (PENDING is the review queue); q ignores case, accents and punctuation; scope narrows to brands applying to a taxonomy node. counts holds brands per status.
+         */
+        get: operations["listBrandRegistry"];
+        put?: never;
+        /**
+         * Add an approved brand
+         * @description 409 catalog.brand-exists when the name exists in an overlapping scope.
+         */
+        post: operations["createRegistryBrand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/taxonomy/brands/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add many approved brands at once
+         * @description Entries that exist or are invalid are reported per entry; the rest are created.
+         */
+        post: operations["createRegistryBrands"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/taxonomy/brands/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One brand with usage and scope */
+        get: operations["getBrandRegistryEntry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit a brand's name and scope
+         * @description A rename follows to the listings. 422 Nothing to change when nothing differs. If-Match: the version read with the brand (412 catalog.version-mismatch when it changed since, 428 when missing). Every change carries a reason and is audited with the taxonomy changes.
+         */
+        patch: operations["updateRegistryBrand"];
+        trace?: never;
+    };
+    "/v1/taxonomy/brands/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a pending brand
+         * @description If-Match: the version read with the brand (412 catalog.version-mismatch when it changed since, 428 when missing). Every change carries a reason and is audited with the taxonomy changes.
+         */
+        post: operations["approveRegistryBrand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/taxonomy/brands/{id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge a brand into an existing approved brand
+         * @description Listings that hold the brand are re-pointed and show the target's name; the target's scope grows by the scope of the merged brand. If-Match: the version read with the brand (412 catalog.version-mismatch when it changed since, 428 when missing). Every change carries a reason and is audited with the taxonomy changes.
+         */
+        post: operations["mergeRegistryBrand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/taxonomy/brands/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject a pending brand
+         * @description If-Match: the version read with the brand (412 catalog.version-mismatch when it changed since, 428 when missing). Every change carries a reason and is audited with the taxonomy changes.
+         */
+        post: operations["rejectRegistryBrand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/taxonomy/brands/{id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire an approved brand
+         * @description If-Match: the version read with the brand (412 catalog.version-mismatch when it changed since, 428 when missing). Every change carries a reason and is audited with the taxonomy changes.
+         */
+        post: operations["retireRegistryBrand"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1183,6 +1312,26 @@ export interface paths {
         };
         /** The whole tree with retired nodes, product counts and the pending-request count */
         get: operations["taxonomyTree"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/variants/{atin}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A variant in any status with its product, by variant ATIN
+         * @description Service clients and staff with catalog:read (retail-service links draft AfroTransact Retail products before they go live); members of the owning organisation with catalog:write. Unlike GET /v1/public/variants/{atin}, drafts, products in review, paused, rejected, taken-down and hidden products are returned with their status. 404 catalog.variant-not-found.
+         */
+        get: operations["variantAnyStatus"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1834,7 +1983,7 @@ export interface components {
             required?: boolean;
             multiline?: boolean;
             /** @enum {string} */
-            kind?: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER";
+            kind?: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER" | "BRAND";
             units?: string[];
             /** @enum {string} */
             section?: "DETAILS" | "FOOD" | "REGULATED";
@@ -2009,17 +2158,23 @@ export interface components {
             skus: string[];
         };
         BrandList: {
-            brands: components["schemas"]["Brand"][];
+            /** Format: uuid */
+            departmentId?: string;
+            departmentName?: string;
+            brands?: components["schemas"]["Brand"][];
         };
         Brand: {
-            name: string;
-            /**
-             * @description OWN = used by the organisation's products, CATALOG = live products of other sellers
-             * @enum {string}
-             */
-            source: "OWN" | "CATALOG";
-            /** Format: int32 */
-            products: number;
+            /** Format: uuid */
+            id?: string;
+            name?: string;
+            /** @enum {string} */
+            source?: "OWN" | "CATALOG";
+            /** @enum {string} */
+            status?: "APPROVED" | "PENDING";
+            /** Format: int64 */
+            ownProducts?: number;
+            /** Format: int64 */
+            products?: number;
         };
         /** @description parentId null orders the departments; ids must be every child of the parent, retired ones included */
         ReorderTaxonomyNodes: {
@@ -2071,7 +2226,7 @@ export interface components {
             options?: string[];
             required?: boolean;
             /** @enum {string} */
-            kind: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER";
+            kind: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER" | "BRAND";
             units?: string[];
             /** @enum {string} */
             section?: "DETAILS" | "FOOD" | "REGULATED";
@@ -2199,6 +2354,110 @@ export interface components {
             atin?: string;
             title?: string;
         };
+        CreateBrandAdmin: {
+            name: string;
+            scope: string[];
+            reason: string;
+        };
+        BrandAdmin: {
+            /** Format: uuid */
+            id?: string;
+            name?: string;
+            /** @enum {string} */
+            status?: "APPROVED" | "PENDING" | "REJECTED" | "MERGED_INTO" | "RETIRED";
+            /** Format: uuid */
+            mergedIntoId?: string;
+            mergedIntoName?: string;
+            createdByOrg?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: int64 */
+            version?: number;
+            decidedBy?: string;
+            /** Format: date-time */
+            decidedAt?: string;
+            decisionReason?: string;
+            /** Format: int64 */
+            products?: number;
+            /** Format: int64 */
+            sellers?: number;
+            scope?: components["schemas"]["BrandScopeNode"][];
+        };
+        BrandScopeNode: {
+            /** Format: uuid */
+            nodeId?: string;
+            path?: string;
+            /** @enum {string} */
+            level?: "DEPARTMENT" | "CATEGORY" | "PRODUCT_TYPE";
+        };
+        MergeBrand: {
+            /** Format: uuid */
+            targetId?: string;
+            reason: string;
+        };
+        /** @description One brand per entry (the console splits a pasted list on new lines and commas); duplicates and invalid names are reported per entry */
+        CreateBrandsBulk: {
+            names: string[];
+            scope: string[];
+            reason: string;
+        };
+        BulkBrandOutcome: {
+            name?: string;
+            /** @enum {string} */
+            outcome?: "CREATED" | "EXISTS" | "INVALID";
+            /** Format: uuid */
+            brandId?: string;
+            message?: string;
+        };
+        BulkBrandResult: {
+            results?: components["schemas"]["BulkBrandOutcome"][];
+            /** Format: int32 */
+            created?: number;
+            /** Format: int32 */
+            existing?: number;
+            /** Format: int32 */
+            invalid?: number;
+        };
+        Usage: {
+            usage?: components["schemas"]["ImageUse"][];
+            knownSkus?: string[];
+        };
+        AttachResult: {
+            /** Format: int32 */
+            productsUpdated?: number;
+            /** Format: int32 */
+            imagesAttached?: number;
+            skipped?: components["schemas"]["Skipped"][];
+        };
+        Skipped: {
+            sku?: string;
+            reason?: string;
+        };
+        CreateBrandRequest: {
+            name: string;
+            productType?: string;
+            category?: string;
+        };
+        CreatedBrand: {
+            brand?: components["schemas"]["Brand"];
+            created?: boolean;
+        };
+        /** @description Only the fields sent change; at least one must differ from the stored value */
+        UpdateBrandAdmin: {
+            name?: string;
+            scope?: string[];
+            reason: string;
+        };
+        BrandAdminList: {
+            brands?: components["schemas"]["BrandAdmin"][];
+            /** Format: int64 */
+            total?: number;
+            counts?: {
+                [key: string]: number;
+            };
+        };
     };
     responses: never;
     parameters: never;
@@ -2208,6 +2467,55 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listBrands: {
+        parameters: {
+            query?: {
+                productType?: string;
+                category?: string;
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BrandList"];
+                };
+            };
+        };
+    };
+    createBrand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBrandRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CreatedBrand"];
+                };
+            };
+        };
+    };
     tree: {
         parameters: {
             query?: {
@@ -2292,6 +2600,54 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["CategoryRequest"][];
+                };
+            };
+        };
+    };
+    requestDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CategoryRequestDetail"];
+                };
+            };
+        };
+    };
+    previewApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApproveCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ApprovalPlan"];
                 };
             };
         };
@@ -2438,29 +2794,6 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["ImageUsage"];
-                };
-            };
-        };
-    };
-    listBrands: {
-        parameters: {
-            query?: {
-                q?: string;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["BrandList"];
                 };
             };
         };
@@ -3518,6 +3851,32 @@ export interface operations {
             };
         };
     };
+    reportListing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportListingRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ListingFlag"];
+                };
+            };
+        };
+    };
     publicProductReviews: {
         parameters: {
             query?: {
@@ -3541,32 +3900,6 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["PublicReviewPage"];
-                };
-            };
-        };
-    };
-    reportListing: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                atin: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReportListingRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ListingFlag"];
                 };
             };
         };
@@ -3618,76 +3951,6 @@ export interface operations {
             };
         };
     };
-    variantAnyStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                atin: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["VariantLookup"];
-                };
-            };
-        };
-    };
-    requestDetail: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["CategoryRequestDetail"];
-                };
-            };
-        };
-    };
-    previewApproval: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ApproveCategoryRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["ApprovalPlan"];
-                };
-            };
-        };
-    };
     taxonomyAudit: {
         parameters: {
             query?: {
@@ -3707,6 +3970,242 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["TaxonomyAuditEntry"][];
+                };
+            };
+        };
+    };
+    listBrandRegistry: {
+        parameters: {
+            query?: {
+                status?: string;
+                q?: string;
+                scope?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BrandAdminList"];
+                };
+            };
+        };
+    };
+    createRegistryBrand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBrandAdmin"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BrandAdmin"];
+                };
+            };
+        };
+    };
+    createRegistryBrands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBrandsBulk"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BulkBrandResult"];
+                };
+            };
+        };
+    };
+    getBrandRegistryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BrandAdmin"];
+                };
+            };
+        };
+    };
+    updateRegistryBrand: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBrandAdmin"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BrandAdmin"];
+                };
+            };
+        };
+    };
+    approveRegistryBrand: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxonomyReason"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BrandAdmin"];
+                };
+            };
+        };
+    };
+    mergeRegistryBrand: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MergeBrand"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BrandAdmin"];
+                };
+            };
+        };
+    };
+    rejectRegistryBrand: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxonomyReason"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BrandAdmin"];
+                };
+            };
+        };
+    };
+    retireRegistryBrand: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxonomyReason"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BrandAdmin"];
                 };
             };
         };
@@ -3981,6 +4480,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["TaxonomyTree"];
+                };
+            };
+        };
+    };
+    variantAnyStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["VariantLookup"];
                 };
             };
         };
