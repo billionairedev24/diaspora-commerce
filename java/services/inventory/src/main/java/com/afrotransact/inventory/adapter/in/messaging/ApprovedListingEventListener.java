@@ -7,10 +7,9 @@ import java.util.UUID;
 
 import com.afrotransact.inventory.application.InboundCommands;
 import com.afrotransact.inventory.application.InboundShipmentService;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -26,7 +25,6 @@ class ApprovedListingEventListener {
 
     static final String APPROVED = "catalog.product.approved";
 
-    private static final Logger LOG = LoggerFactory.getLogger(ApprovedListingEventListener.class);
 
     private final InboundShipmentService inbound;
     private final JsonMapper json;
@@ -55,16 +53,13 @@ class ApprovedListingEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", APPROVED, rec.topic(),
-                    rec.partition(), rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(APPROVED, rec);
         }
         ProductMessage m;
         try {
             m = json.readValue(rec.value(), ProductMessage.class);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", APPROVED, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(APPROVED, ex);
         }
         if (m == null || m.ownerOrgId() == null || m.variants() == null || !"AFROTRANSACT".equals(m.fulfilment())
                 || "PLATFORM".equals(m.ownerKind())) {

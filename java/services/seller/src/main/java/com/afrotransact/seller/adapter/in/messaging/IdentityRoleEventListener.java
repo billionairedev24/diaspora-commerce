@@ -5,13 +5,12 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.afrotransact.seller.application.OrgMemberSyncService;
 import com.afrotransact.seller.application.OrgMemberSyncService.RoleChange;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -28,8 +27,6 @@ class IdentityRoleEventListener {
 
     static final String ROLE_GRANTED = "identity.role.granted";
     static final String ROLE_REVOKED = "identity.role.revoked";
-
-    private static final Logger LOG = LoggerFactory.getLogger(IdentityRoleEventListener.class);
 
     private final OrgMemberSyncService sync;
     private final JsonMapper json;
@@ -59,16 +56,13 @@ class IdentityRoleEventListener {
         }
         Optional<UUID> eventId = header(rec, "event-id").flatMap(IdentityRoleEventListener::uuid);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", type, rec.topic(),
-                    rec.partition(), rec.offset());
-            return false;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         RoleChangedMessage m;
         try {
             m = json.readValue(rec.value(), RoleChangedMessage.class);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return false;
+            throw MalformedEvent.of(type, ex);
         }
         if (m == null || m.orgId() == null) {
             return false;

@@ -10,6 +10,7 @@ import java.util.UUID;
 import com.afrotransact.fulfilment.application.RunDispatchService;
 import com.afrotransact.fulfilment.domain.RunPickupPoint;
 import com.afrotransact.fulfilment.port.DeliveryRunsClient.RunPlan;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,14 +52,12 @@ class DeliveryRunsEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", type, rec.topic(),
-                    rec.partition(), rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         try {
             handle(type, eventId.get(), json.readTree(rec.value()));
         } catch (JacksonException | IllegalArgumentException | DateTimeParseException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
+            throw MalformedEvent.of(type, ex);
         }
     }
 

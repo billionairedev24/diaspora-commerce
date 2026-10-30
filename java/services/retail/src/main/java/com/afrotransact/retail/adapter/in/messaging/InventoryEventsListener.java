@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.afrotransact.retail.application.CogsPostingService;
 import com.afrotransact.retail.application.ShippedLine;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -40,8 +41,11 @@ class InventoryEventsListener {
     void onReservationEvent(ConsumerRecord<String, String> record) {
         String type = header(record, "event-type");
         String eventId = header(record, "event-id");
-        if (!COMMITTED.equals(type) || eventId == null) {
+        if (!COMMITTED.equals(type)) {
             return;
+        }
+        if (eventId == null) {
+            throw MalformedEvent.missingEventId(type, record);
         }
         handle(UUID.fromString(eventId), record.value());
     }

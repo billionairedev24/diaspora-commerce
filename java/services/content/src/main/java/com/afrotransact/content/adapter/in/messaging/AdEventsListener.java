@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import com.afrotransact.content.application.AdDeliveryService;
 import com.afrotransact.content.domain.ads.AdClick;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
@@ -60,9 +61,7 @@ class AdEventsListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", type, rec.topic(), rec.partition(),
-                    rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         try {
             if (IMPRESSION.equals(type)) {
@@ -84,7 +83,7 @@ class AdEventsListener {
                     blankToNull(m.customerId()), m.priceMinor(), m.market() == null ? "US" : m.market().toUpperCase(Locale.ROOT),
                     m.query(), m.occurredAt()));
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
+            throw MalformedEvent.of(type, ex);
         }
     }
 

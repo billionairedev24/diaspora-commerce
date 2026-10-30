@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.deliveryruns.application.RunMoneyService;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
 import org.slf4j.Logger;
@@ -51,9 +52,7 @@ class PaymentEventsListener {
         try {
             n = json.readTree(rec.value());
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} at {}-{}@{}: {}", type, rec.topic(), rec.partition(), rec.offset(),
-                    ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         handle(type, n, instant(n, "occurredAt"));
     }

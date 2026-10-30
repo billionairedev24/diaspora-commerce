@@ -6,11 +6,10 @@ import java.time.format.DateTimeParseException;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.afrotransact.seller.application.SellerMetricsService;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -33,8 +32,6 @@ class RewardMetricsEventListener {
     static final String SHIPMENT_DELIVERED = "orders.shipment.delivered";
     static final String BOOKING_COMPLETED = "booking.completed";
     static final String OFFER_PREFIX = "offers.offer.";
-
-    private static final Logger LOG = LoggerFactory.getLogger(RewardMetricsEventListener.class);
 
     private final SellerMetricsService metrics;
     private final JsonMapper json;
@@ -61,16 +58,13 @@ class RewardMetricsEventListener {
         }
         Optional<UUID> eventId = header(rec, "event-id").flatMap(RewardMetricsEventListener::uuid);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", type, rec.topic(),
-                    rec.partition(), rec.offset());
-            return false;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         JsonNode p;
         try {
             p = json.readTree(rec.value());
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return false;
+            throw MalformedEvent.of(type, ex);
         }
         Instant at = header(rec, "occurred-at").flatMap(RewardMetricsEventListener::instant).orElse(null);
         if (SHIPMENT_DELIVERED.equals(type)) {

@@ -4,10 +4,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 import com.afrotransact.bookings.application.PaymentEventIngest;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -25,8 +24,6 @@ import tools.jackson.databind.json.JsonMapper;
         matchIfMissing = true)
 public class PaymentEventsListener {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PaymentEventsListener.class);
-
     private final PaymentEventIngest ingest;
     private final JsonMapper json;
 
@@ -40,15 +37,17 @@ public class PaymentEventsListener {
     public void onMessage(ConsumerRecord<String, String> record) {
         String eventId = header(record, "event-id");
         String type = header(record, "event-type");
-        if (eventId == null || type == null || !type.startsWith("payments.intent.")) {
+        if (type == null || !type.startsWith("payments.intent.")) {
             return;
+        }
+        if (eventId == null) {
+            throw MalformedEvent.missingEventId(type, record);
         }
         JsonNode payload;
         try {
             payload = json.readTree(record.value());
         } catch (RuntimeException e) {
-            LOG.warn("Unreadable payment event {} skipped: {}", eventId, e.getMessage());
-            return;
+            throw MalformedEvent.of(type, e);
         }
         ingest.handle(UUID.fromString(eventId), type, new PaymentEventIngest.IntentEvent(
                 payload.path("orderId").asString(record.key()), uuid(payload, "paymentId"),

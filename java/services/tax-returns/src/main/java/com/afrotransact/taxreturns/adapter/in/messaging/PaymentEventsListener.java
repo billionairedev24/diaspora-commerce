@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.afrotransact.taxreturns.application.PaymentRefunded;
 import com.afrotransact.taxreturns.application.TaxLedgerService;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -44,16 +45,13 @@ class PaymentEventsListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping payments.refunded at {}-{}@{}: missing event-id", rec.topic(), rec.partition(),
-                    rec.offset());
-            return;
+            throw MalformedEvent.missingEventId("payments.refunded", rec);
         }
         JsonNode n;
         try {
             n = json.readTree(rec.value());
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed payments.refunded {}: {}", eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of("payments.refunded", ex);
         }
         String refundId = Json.text(n, "refundId");
         if (refundId == null || Json.text(n, "orderId") == null) {

@@ -7,9 +7,8 @@ import java.util.UUID;
 
 import com.afrotransact.offers.application.OrderStockService;
 import com.afrotransact.offers.application.OrderStockService.SoldLine;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -28,7 +27,6 @@ class OrderStockEventListener {
     static final String SHIPMENT_CANCELLED = "orders.shipment.cancelled";
     static final String SELLER_FULFILLED = "SELLER_FULFILLED";
 
-    private static final Logger LOG = LoggerFactory.getLogger(OrderStockEventListener.class);
 
     private final OrderStockService stock;
     private final JsonMapper json;
@@ -48,16 +46,13 @@ class OrderStockEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", type, rec.topic(),
-                    rec.partition(), rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         JsonNode n;
         try {
             n = json.readTree(rec.value());
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         handle(type, eventId.get(), n);
     }

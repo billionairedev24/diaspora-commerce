@@ -16,6 +16,7 @@ import com.afrotransact.deliveryruns.application.RunProgressService;
 import com.afrotransact.deliveryruns.domain.PreorderFulfilment;
 import com.afrotransact.deliveryruns.domain.PreorderLine;
 import com.afrotransact.deliveryruns.domain.RefundStatus;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
 import org.slf4j.Logger;
@@ -74,16 +75,13 @@ class OrderEventsListener {
         }
         Optional<UUID> eventId = header(rec, "event-id").flatMap(OrderEventsListener::uuid);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", type, rec.topic(),
-                    rec.partition(), rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         JsonNode n;
         try {
             n = json.readTree(rec.value());
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         handle(type, eventId.get(), n);
     }
