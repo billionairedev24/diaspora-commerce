@@ -72,6 +72,28 @@ name, with the path they asked for and how many of their products are waiting). 
   review.
 - **Reject** needs a reason; the seller sees it and the waiting products are rejected with it.
 
+### Brands
+
+Under **Catalog, Brands** (same `catalog:taxonomy` permission) you decide which brands sellers can pick. The tab opens
+on **Waiting for review**: brands a seller typed in because they were not listed, with the seller's name, how many
+products hold the brand, where it applies and when it was asked for. Use the buttons above the table to see approved,
+rejected, merged or retired brands, and the search box to find one by name. Open a row to act on it; every decision asks
+for a reason and is kept in the brand's history with your name:
+
+- **Approve** offers the brand to sellers wherever it applies (a rejected or retired brand can be approved again).
+- **Reject** is for names that are not real brands; products that hold it must pick another brand when next edited.
+- **Merge into another brand** is for spelling variants (*Nikee* into *Nike*): search the approved brands, and the sheet
+  says how many products move before you confirm.
+- **Edit name and scope** renames the brand (listings follow) and chooses the departments, categories or product types
+  it applies to. Save stays disabled until something changed.
+- **Retire** stops new listings choosing a brand; existing ones keep it.
+- **Add a brand** creates an approved brand at once. **Add many** takes a pasted list, one name per line: choose where
+  they apply, check the preview (new, already listed, not valid), then add the new ones.
+
+When you edit a product type's details, **Brand** is a kind of answer: sellers search the approved brands of the
+category or add one for review. You can also let them choose **No brand** or **Handmade**; the preview shows exactly
+what the seller sees.
+
 ## Payouts and Stripe
 
 **Payouts** lists every seller payout. Open one for the seller's details, amounts, the Stripe payout/transfer IDs

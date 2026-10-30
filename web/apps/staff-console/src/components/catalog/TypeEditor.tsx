@@ -28,7 +28,13 @@ const KINDS: { value: AttributeKind; label: MessageKey }[] = [
   { value: 'TEXT', label: 'st.catalog.kind.text' },
   { value: 'MULTILINE', label: 'st.catalog.kind.multiline' },
   { value: 'ENUM', label: 'st.catalog.kind.choice' },
-  { value: 'NUMBER', label: 'st.catalog.kind.number' }
+  { value: 'NUMBER', label: 'st.catalog.kind.number' },
+  { value: 'BRAND', label: 'st.catalog.kind.brand' }
+];
+/** What a seller may choose instead of a brand. */
+const NO_BRAND: { value: string; label: MessageKey }[] = [
+  { value: 'UNBRANDED', label: 'st.brand.option.UNBRANDED' },
+  { value: 'HANDMADE', label: 'st.brand.option.HANDMADE' }
 ];
 const SECTIONS: { value: TaxonomyAttribute['section']; label: MessageKey }[] = [
   { value: 'DETAILS', label: 'st.catalog.section.details' },
@@ -108,7 +114,7 @@ function AttributeRow({ attribute: a, index, total, fresh, open, disabled, error
             help={fresh ? t('st.catalog.attr.keyHelpNew') : t('st.catalog.attr.keyHelp')}
             value={a.key}
             maxLength={40}
-            disabled={disabled || !fresh}
+            disabled={disabled || !fresh || a.kind === 'BRAND'}
             error={errors[`${at}key`]}
             onChange={(e) => onChange({ ...a, key: e.currentTarget.value }, true)}
           />
@@ -122,7 +128,8 @@ function AttributeRow({ attribute: a, index, total, fresh, open, disabled, error
               error={errors[`${at}kind`]}
               onChange={(e) => {
                 const kind = e.currentTarget.value as AttributeKind;
-                onChange({ ...a, kind, options: kind === 'ENUM' ? a.options : [], units: kind === 'NUMBER' ? a.units : [] });
+                const options = kind === 'ENUM' ? a.options : kind === 'BRAND' ? a.options.filter((o) => NO_BRAND.some((n) => n.value === o)) : [];
+                onChange({ ...a, kind, key: kind === 'BRAND' ? 'brand' : a.key, options, units: kind === 'NUMBER' ? a.units : [] }, kind === 'BRAND');
               }}
             />
             <Select
@@ -154,6 +161,21 @@ function AttributeRow({ attribute: a, index, total, fresh, open, disabled, error
               />
               <span className="text-xs text-muted">{errors[`${at}options`] ?? t('st.catalog.attr.optionsHelp')}</span>
             </div>
+          ) : null}
+          {a.kind === 'BRAND' ? (
+            <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
+              <legend className="p-0 text-sm font-semibold">{t('st.catalog.attr.noBrand')}</legend>
+              {NO_BRAND.map((n) => (
+                <Checkbox
+                  key={n.value}
+                  label={t(n.label)}
+                  checked={a.options.includes(n.value)}
+                  disabled={disabled}
+                  onChange={(e) => onChange({ ...a, options: NO_BRAND.map((x) => x.value).filter((v) => (v === n.value ? e.currentTarget.checked : a.options.includes(v))) })}
+                />
+              ))}
+              <span className="text-xs text-muted">{errors[`${at}options`] ?? t('st.catalog.attr.brandHelp')}</span>
+            </fieldset>
           ) : null}
           {a.kind === 'NUMBER' ? (
             <TextField

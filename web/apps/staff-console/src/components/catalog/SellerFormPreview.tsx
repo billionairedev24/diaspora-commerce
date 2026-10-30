@@ -25,6 +25,22 @@ function Control({ f }: { f: PreviewField }) {
       </div>
     );
   }
+  if (f.control === 'brand') {
+    return (
+      <div className="flex flex-col gap-1" data-testid="preview-brand-control">
+        <div className={`${BOX} justify-between`}>
+          <span>{t('st.catalog.preview.brandSearch')}</span>
+          <span aria-hidden>▾</span>
+        </div>
+        <span className="text-xs text-muted">{t('st.catalog.preview.brandAdd')}</span>
+        {f.options.length ? (
+          <span className="text-xs text-muted">
+            {t('st.catalog.preview.brandInstead')} {f.options.map((o) => t(o === 'HANDMADE' ? 'st.brand.option.HANDMADE' : 'st.brand.option.UNBRANDED')).join(' · ')}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
   if (f.control === 'number') {
     return (
       <div className="flex gap-2">
