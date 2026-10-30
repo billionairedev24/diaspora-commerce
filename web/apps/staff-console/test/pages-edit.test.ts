@@ -5,8 +5,8 @@ import { insertLink, insertSectionLink, insertTable, offsetOfLine, prefixLines, 
 import { blocksPublish, blocksSave, checkForm, type EditorForm, fieldProblems, initialForm, isDirty, nextMinor, toInput } from '@/components/pages/form';
 import { hasStructure, htmlToMarkdown } from '@/components/pages/paste';
 
-import en from '../../storefront/src/i18n/en.json';
 import ar from '../../storefront/src/i18n/ar.json';
+import en from '../../storefront/src/i18n/en.json';
 import es from '../../storefront/src/i18n/es.json';
 import fr from '../../storefront/src/i18n/fr.json';
 import yo from '../../storefront/src/i18n/yo.json';
@@ -105,7 +105,7 @@ describe('the editor form', () => {
 });
 
 describe('the words around a page in each language match the storefront catalogues', () => {
-  const storefront = { en, fr, es, ar, yo } as Record<string, Record<string, string>>;
+  const storefront = { en, fr, es, ar, yo } as unknown as Record<string, Record<string, string>>;
   it.each(['en', 'fr', 'es', 'ar', 'yo'] as const)('%s', (locale) => {
     const c = storefront[locale] as Record<string, string>;
     expect(PREVIEW_CHROME[locale]).toEqual({

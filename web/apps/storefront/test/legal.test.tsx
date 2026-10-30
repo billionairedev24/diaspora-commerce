@@ -1,4 +1,5 @@
 import { createApiClient, LEGAL_DOCUMENT_KEYS, LEGAL_GROUPS } from '@afrotransact/api-client';
+import { headingId, LegalBlocks, parseLegalMarkdown, renderInline, safeHref } from '@afrotransact/content';
 import { createTranslator, LOCALES } from '@afrotransact/i18n';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -7,7 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CookieBanner } from '@/components/legal/CookieBanner';
 import { LegalCenter } from '@/components/legal/LegalCenter';
-import { headingId, LegalBlocks, parseLegalMarkdown, renderInline, safeHref } from '@afrotransact/content';
 import { PrivacyChoices } from '@/components/legal/PrivacyChoices';
 import { messagesFor } from '@/i18n/catalogs';
 import { EN_MESSAGES, tEn } from '@/i18n/t';

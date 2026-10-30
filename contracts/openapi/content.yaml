@@ -1020,6 +1020,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/LegalDocumentIndex'
       security: []
+  /v1/legal/overview:
+    get:
+      tags:
+      - Legal
+      summary: Every document's current version, who published it and its draft (content:legal.view)
+      operationId: getLegalOverview
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LegalOverviewEntry'
   /v1/legal/{type}:
     get:
       tags:
@@ -2574,6 +2589,8 @@ components:
       properties:
         key:
           type: string
+        title:
+          type: string
         version:
           type: string
         baseVersion:
@@ -3586,6 +3603,9 @@ components:
           type: string
         hasDraft:
           type: boolean
+        revision:
+          type: integer
+          format: int32
     PublishHelpDraftRequest:
       type: object
       properties:
@@ -4260,6 +4280,8 @@ components:
       properties:
         key:
           type: string
+        title:
+          type: string
         version:
           type: string
         effectiveDate:
@@ -4314,6 +4336,35 @@ components:
           type: string
           format: date-time
         archivedAt:
+          type: string
+          format: date-time
+    LegalOverviewEntry:
+      type: object
+      description: A document's current version, who published it, and its draft if any (staff)
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+        version:
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+        draftBanner:
+          type: boolean
+        publishedBy:
+          type: string
+        publishedAt:
+          type: string
+          format: date-time
+        hasDraft:
+          type: boolean
+        draftVersion:
+          type: string
+        draftUpdatedBy:
+          type: string
+        draftUpdatedAt:
           type: string
           format: date-time
     HelpArticlePage:
