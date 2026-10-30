@@ -71,7 +71,7 @@ tags:
       documents and help pages the editor behind it: the page as published, a draft that changes nothing public, any
       past version (to preview or compare), publication with a reason and rollback. Legal documents need a second
       approver (the person who saved the draft last cannot publish it) and the Approve level on Site content & legal;
-      every save, publication and rollback is audited by content (who, when, what changed) and shows in the Audit log.
+      every save, publication and rollback is audited by content (who, when, the reason and what changed) in its audit log, and the history of each page shows the same.
       Live links are absolute storefront URLs (`PUBLIC_WEB_URL`); the console opens them in a new tab.
   - name: Fees
     description: Fee-schedule editor (commission per category, seller overrides, card and FBA fees, AfroTransact Delivery pricing) over payments' immutable versions

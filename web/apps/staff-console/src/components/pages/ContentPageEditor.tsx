@@ -376,7 +376,7 @@ function Editor({ page, locale, setLocale, device, setDevice }: { page: ContentP
                   </div>
                 </div>
 
-                <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 border-t border-border bg-surface px-1 py-3">
+                <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-2 border-t border-border bg-surface py-3 ps-1 pe-1 sm:pe-40">
                   <p className="m-0 text-sm text-muted" aria-live="polite">
                     {dirty ? t('st.pages.unsaved') : page.draft ? t('st.pages.draftSaved') : t('st.pages.noChanges')}
                     {markersTotal > 0 ? ` · ${t('st.pages.markersLeft', { n: markersTotal })}` : ''}

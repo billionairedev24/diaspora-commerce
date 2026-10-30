@@ -18,7 +18,8 @@ import { LEGAL_DOCUMENTS } from '../fixtures/legal';
 import { allows, levelOf } from './model';
 import { type PreorderCtx, type PreorderHandlerDeps } from './preorders';
 
-export const MOCK_STOREFRONT_URL = 'http://localhost:3000';
+/** The storefront the mock live links open: the deployment's own (PUBLIC_WEB_URL), else the local one (infra/local/PORTS.md). */
+export const MOCK_STOREFRONT_URL = (typeof process !== 'undefined' ? (process.env.PUBLIC_WEB_URL || process.env.NEXT_PUBLIC_STOREFRONT_URL) : undefined)?.replace(/\/+$/, '') || 'http://localhost:3000';
 
 interface LegalVersion {
   version: string;

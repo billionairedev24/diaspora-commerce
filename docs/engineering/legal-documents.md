@@ -15,8 +15,10 @@ gateway-bff  GET /v1/legal, /v1/legal/{key}?locale=&version=         (allow-list
 storefront  /legal (index) and /legal/<key>; seller-center and staff-console link to the same pages
 ```
 
-Staff keep working in the staff console (Settings, Legal documents): raising a version, counsel sign-off (draft banner off),
-effective dates and translations. The migration is how the *first written text* and later *repository-reviewed* releases get in.
+**The seed loader is only for the initial load.** After launch staff change documents in the staff console (Settings → Published pages): edit a draft in
+Markdown with a live preview, translations, checks and a diff, then a *second* person with the Approve level publishes it with a reason; every version stays in
+the history and can be restored. Do not regenerate the migration to change live wording; use `docs/runbooks/editing-published-pages.md` and
+`docs/engineering/admin-content-management.md`. The migration is how the *first written text* and, if ever needed, *repository-reviewed* releases get in.
 
 ## The documents
 
