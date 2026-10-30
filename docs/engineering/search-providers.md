@@ -13,7 +13,8 @@ Locally put it in `.local/secrets.env`. `make up` then starts Meilisearch (`http
 local key is `local-meili-master-key` (`config/local.yaml`). Outside local, set `MEILISEARCH_URL` and
 `MEILISEARCH_API_KEY` on both services.
 
-**Switching engines starts with an empty index.** Re-run the indexer backfill (and the embedding backfill) after
+**Switching engines starts with an empty index.** Rebuild it from events (no catalog backfill exists; see
+`docs/runbooks/kafka-replay.md`, "Rebuild the search index") and let the embedding backfill run after
 switching; nothing is copied between engines.
 
 ## How the two compare

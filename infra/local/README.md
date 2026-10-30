@@ -48,7 +48,8 @@ one-shot init jobs below. If 5432 is already taken on your machine: `POSTGRES_HO
   openfga. Password = name. `geo` has PostGIS + pg_trgm. A `monitoring` role (pg_monitor) feeds the exporter.
   Adding a service: append it to `SERVICES` in the script, then `make reset && make up`.
 - **Kafka topics** (`kafka/topics.txt` → `kafka-init`): `at.<aggregate>.events` and `at.<aggregate>.events.dlq` for
-  every aggregate (3 partitions, 7-day retention). Auto-create is also on. Append aggregates to `topics.txt`.
+  every aggregate (3 partitions; 7-day retention, 14 days for the `.dlq` topics the Java consumers dead-letter into,
+  see [`docs/runbooks/kafka-replay.md`](../../docs/runbooks/kafka-replay.md)). Auto-create is also on. Append aggregates to `topics.txt`.
 - **Buckets** (`minio/create-buckets.sh`): `media` (anonymous download), `labels`, `exports`, `kyc-evidence`
   (object lock, default GOVERNANCE retention 30 days, versioned).
 - **Elasticsearch** (`elasticsearch/init.sh`): slow-log thresholds for `products*` indices and an `at-logs` ILM policy.

@@ -30,3 +30,31 @@ notification
 carrier
 review
 ai
+
+# Aggregates published today (contracts/asyncapi/events.yaml). `tools/ops/dlq-topics.sh --check` fails if one is missing.
+ads
+ai-handoff
+bookings
+carrier-shipment
+delivery-runs
+identity
+inventory-inbound
+inventory-reconciliation
+inventory-reservation
+mcp-tool
+offers
+product-import
+product-review
+retail
+search
+seller-application
+seller-compliance
+seller-org
+seller-subscription
+taxonomy
+taxreturns
+trustops
+
+# Literal topic names (leading "="): the Go consumers' own dead-letter topics. They get no further ".dlq".
+=at.indexer.dlq.events
+=at.authz-sync.dlq.events

@@ -2,6 +2,9 @@
 # Enough for ~20-200 users of event traffic (a few events per order); it is NOT highly available. A node restart
 # pauses event delivery for ~30 s and producers/consumers reconnect; nothing is lost (offsets and logs are on the disk).
 # Topics are auto-created on first use (3 partitions) so Terraform's Confluent topic module is not needed.
+# The <topic>.dlq dead-letter topics are the exception: the kafka-dlq-topics Job at the end creates them with 14-day
+# retention (the 3-day broker default is too short to triage a DLQ); docs/runbooks/kafka-replay.md. Keep its list in
+# step with contracts/asyncapi/events.yaml: `tools/ops/dlq-topics.sh --check`.
 # Services reach it at kafka.kafka.svc.cluster.local:9092 (KAFKA_BOOTSTRAP), plaintext, inside the cluster network only.
 apiVersion: v1
 kind: Service
@@ -94,3 +97,59 @@ spec:
             matchLabels: {app.kubernetes.io/part-of: afrotransact}
       ports:
         - {port: 9092}
+    # The DLQ topic Job below runs in this namespace.
+    - from:
+        - podSelector:
+            matchLabels: {app.kubernetes.io/name: kafka-dlq-topics}
+      ports:
+        - {port: 9092}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-dlq-topics
+  namespace: kafka
+  labels: {app.kubernetes.io/name: kafka-dlq-topics}
+spec:
+  backoffLimit: 30
+  ttlSecondsAfterFinished: 120
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: kafka-dlq-topics}
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: create
+          image: apache/kafka:4.1.0
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              KT=/opt/kafka/bin/kafka-topics.sh
+              for topic in $TOPICS; do
+                "$KT" --bootstrap-server kafka-0.kafka.kafka.svc.cluster.local:9092 --create --if-not-exists \
+                  --topic "$topic" --partitions 3 --replication-factor 1 --config retention.ms=1209600000
+              done
+          env:
+            - name: TOPICS
+              value: >-
+                at.ads.events.dlq at.ai-handoff.events.dlq at.bookings.events.dlq at.carrier-shipment.events.dlq
+                at.category-request.events.dlq at.content.events.dlq at.delivery-runs.events.dlq
+                at.fulfilment.events.dlq at.identity.events.dlq at.inventory-inbound.events.dlq
+                at.inventory-reconciliation.events.dlq at.inventory-reservation.events.dlq at.inventory.events.dlq
+                at.mcp-tool.events.dlq at.offers.events.dlq at.order.events.dlq at.payment.events.dlq
+                at.payout.events.dlq at.product-import.events.dlq at.product-review.events.dlq at.product.events.dlq
+                at.retail.events.dlq at.search.events.dlq at.seller-application.events.dlq
+                at.seller-compliance.events.dlq at.seller-org.events.dlq at.seller-subscription.events.dlq
+                at.taxonomy.events.dlq at.taxreturns.events.dlq at.trustops.events.dlq
+                at.indexer.dlq.events at.authz-sync.dlq.events
+          resources:
+            requests: {cpu: 50m, memory: 256Mi}
+            limits: {memory: 384Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}

@@ -1,1 +1,2 @@
 com.afrotransact.platform.events.PlatformEventsAutoConfiguration
+com.afrotransact.platform.events.consumer.EventConsumerErrorHandlingAutoConfiguration
