@@ -41,3 +41,38 @@ export function outlineOf(markdown: string): OutlineEntry[] {
   }
   return out;
 }
+
+export interface MarkdownSection {
+  heading: string;
+  body: string;
+}
+
+/**
+ * Splits a help page's Markdown at each `## Heading` line into sections (the BFF and content-service do the same).
+ * Text before the first heading is dropped; the editor flags it.
+ */
+export function parseSections(markdown: string): MarkdownSection[] {
+  const out: MarkdownSection[] = [];
+  let body: string[] = [];
+  const close = () => {
+    const last = out[out.length - 1];
+    if (last) last.body = body.join('\n').trim();
+    body = [];
+  };
+  for (const line of markdown.replace(/\r\n?/g, '\n').split('\n')) {
+    const h = /^##\s+(.*)$/.exec(line.trim());
+    if (h) {
+      close();
+      out.push({ heading: (h[1] ?? '').trim(), body: '' });
+    } else if (out.length > 0) {
+      body.push(line);
+    }
+  }
+  close();
+  return out;
+}
+
+/** The inverse of {@link parseSections}. */
+export function sectionsMarkdown(sections: ReadonlyArray<MarkdownSection>): string {
+  return sections.map((s) => `## ${s.heading}\n\n${s.body.trim()}`).join('\n\n');
+}

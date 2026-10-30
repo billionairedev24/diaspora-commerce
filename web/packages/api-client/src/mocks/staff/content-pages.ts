@@ -102,6 +102,11 @@ export function seedContent(now: Date, helpPages: { slug: string; title: string;
       }))
     };
   }
+  // Documents still with counsel carry [[LEGAL: …]] markers where a decision is open, like the real first drafts.
+  const accessibility = legal.accessibility?.versions.find((v) => v.status === 'CURRENT');
+  if (accessibility?.bodies.en) {
+    accessibility.bodies.en += '\n\n## Open points\n\nWe will state the audit date once it is booked. [[LEGAL: Q17 state the audit status and date]]';
+  }
   // A colleague has a change to returns waiting for a second person to approve it.
   const returns = legal.returns;
   if (returns) {

@@ -13,6 +13,7 @@ import { MarketsView } from '@/components/markets/MarketsView';
 import { EmbeddedInSettings } from '@/components/module/ModulePage';
 import { ModuleView } from '@/components/module/ModuleView';
 import { NotificationsView } from '@/components/notifications/NotificationsView';
+import { PublishedPagesView } from '@/components/pages/PublishedPagesView';
 import { SettingsPanel as PlanSettingsPanel } from '@/components/plans/SettingsPanel';
 import { ResourceTable } from '@/components/resources/ResourceTable';
 import { EconomicsSettingsView } from '@/components/runs/EconomicsSettingsView';
@@ -25,6 +26,8 @@ import { SETTINGS_GROUPS, SETTINGS_SECTIONS, settingsHref, type SettingsSection,
 function SectionBody({ section }: { section: SettingsSection }): ReactNode {
   const t = useT();
   switch (section.key) {
+    case 'published-pages':
+      return <PublishedPagesView />;
     case 'general':
       return <ModuleView module="siteCfg" />;
     case 'markets':

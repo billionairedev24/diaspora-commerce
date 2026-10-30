@@ -14,5 +14,5 @@ export {
   renderInline,
   safeHref
 } from './markdown';
-export { fillPlaceholders, type OutlineEntry, outlineOf, placeholdersUsed, slugOf } from './text';
+export { fillPlaceholders, type MarkdownSection, type OutlineEntry, outlineOf, parseSections, placeholdersUsed, sectionsMarkdown, slugOf } from './text';
 export { type ContentIssue, errorsOf, type IssueCode, type IssueLevel, validateMarkdown, type ValidateOptions } from './validate';

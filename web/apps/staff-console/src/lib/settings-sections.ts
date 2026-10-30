@@ -18,6 +18,15 @@ export interface SettingsSection {
 }
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
+  {
+    key: 'published-pages',
+    label: 'Published pages',
+    description: 'Every public page with its live link, when it was last changed and by whom: preview, edit and publish legal documents and help pages without a developer.',
+    labelKey: 'st.settings.pages.label',
+    descriptionKey: 'st.settings.pages.description',
+    module: 'siteCfg',
+    group: 'platform'
+  },
   { key: 'general', label: 'General', description: 'Contact details, social links, help centre and the legal documents shown on the site.', module: 'siteCfg', group: 'platform' },
   { key: 'markets', label: 'Markets & locations', description: 'Turn AfroTransact on or off by country and by state.', module: 'markets', group: 'platform' },
   { key: 'notifications', label: 'Notifications', description: 'The email, SMS, push and WhatsApp messages the platform sends: preview, history and new versions.', module: 'notifications', group: 'platform' },

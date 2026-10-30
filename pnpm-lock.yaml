@@ -515,6 +515,9 @@ importers:
       '@afrotransact/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@afrotransact/content':
+        specifier: workspace:*
+        version: link:../../packages/content
       '@afrotransact/data-table':
         specifier: workspace:*
         version: link:../../packages/data-table

@@ -80,6 +80,8 @@ export function LegalDocumentView({ docKey, page, locale, t, children }: LegalDo
           title={legalTitle(t, docKey)}
           body={page.body}
           outline={page.outline}
+          bodyLang={page.locale}
+          bodyDir={page.locale === 'ar' ? 'rtl' : 'ltr'}
           versionLabel={t('legal.version', { version: page.version })}
           effectiveLabel={t('legal.effective')}
           effectiveDate={page.effectiveDate}
