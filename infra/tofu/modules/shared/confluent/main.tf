@@ -56,11 +56,28 @@ variable "services" {
   type        = list(string)
 }
 
+variable "dlq_retention_ms" {
+  description = "Retention of the <topic>.dlq dead-letter topics (default 14 days, longer than the source topics)."
+  type        = number
+  default     = 1209600000
+}
+
 locals {
-  cloud     = upper(var.cloud)
-  prefix    = var.context.name
-  acl_write = merge([for t, v in var.topics : { for s in v.producers : "${s}/${t}" => { svc = s, topic = t } }]...)
-  acl_read  = merge([for t, v in var.topics : { for s in v.consumers : "${s}/${t}" => { svc = s, topic = t } }]...)
+  cloud  = upper(var.cloud)
+  prefix = var.context.name
+  # Java consumers (platform-events) dead-letter a record they cannot process into <topic>.dlq, so every consumer
+  # of a topic may WRITE to its DLQ. Replay (tools/ops/kafka-replay) uses the admin identity. See docs/runbooks/kafka-replay.md.
+  dlq_topics = {
+    for t, v in var.topics : "${t}.dlq" => {
+      partitions   = v.partitions
+      retention_ms = var.dlq_retention_ms
+      producers    = v.consumers
+      consumers    = []
+    }
+  }
+  all_topics = merge(var.topics, local.dlq_topics)
+  acl_write  = merge([for t, v in local.all_topics : { for s in v.producers : "${s}/${t}" => { svc = s, topic = t } }]...)
+  acl_read   = merge([for t, v in local.all_topics : { for s in v.consumers : "${s}/${t}" => { svc = s, topic = t } }]...)
   rest      = confluent_kafka_cluster.this.rest_endpoint
   admin_credentials = {
     key    = confluent_api_key.admin.id
@@ -133,7 +150,7 @@ resource "confluent_api_key" "admin" {
 }
 
 resource "confluent_kafka_topic" "this" {
-  for_each         = var.topics
+  for_each         = local.all_topics
   topic_name       = each.key
   partitions_count = each.value.partitions
   rest_endpoint    = local.rest
