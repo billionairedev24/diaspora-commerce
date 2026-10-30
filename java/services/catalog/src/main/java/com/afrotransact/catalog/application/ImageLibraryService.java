@@ -22,9 +22,6 @@ public interface ImageLibraryService {
     /** Which of the organisation's SKUs use these image URLs, and which of these SKUs exist. */
     Usage usage(List<String> urls, List<String> skus);
 
-    /** The organisation's brands (from its products' brand attribute), most used first; q filters by word prefix. */
-    List<BrandUse> brands(String q, int limit);
-
     record AttachResult(int productsUpdated, int imagesAttached, List<Skipped> skipped) {
     }
 
@@ -35,8 +32,5 @@ public interface ImageLibraryService {
     }
 
     record ImageUse(String url, List<String> skus) {
-    }
-
-    record BrandUse(String name, int products) {
     }
 }

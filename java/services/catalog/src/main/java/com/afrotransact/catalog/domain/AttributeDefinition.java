@@ -4,8 +4,12 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import com.afrotransact.catalog.domain.brand.BrandNames;
+import com.afrotransact.catalog.domain.brand.UnbrandedReason;
 
 /**
  * A detail shoppers need for a product type (e.g. material, allergens, MoCRA number).
@@ -52,6 +56,13 @@ public record AttributeDefinition(String key, String label, List<String> options
         this(key, label, options, required, multiline, null, null, null, null, null);
     }
 
+    /** The no-brand choices of a brand attribute ({@code options} read as reason codes). */
+    public List<UnbrandedReason> unbrandedReasons() {
+        return kind == AttributeKind.BRAND
+                ? options.stream().map(UnbrandedReason::ofCode).flatMap(Optional::stream).toList()
+                : List.of();
+    }
+
     public boolean accepts(String value) {
         return problem(value) == null;
     }
@@ -65,6 +76,7 @@ public record AttributeDefinition(String key, String label, List<String> options
         return switch (kind) {
             case ENUM -> options.isEmpty() || options.contains(v) ? null : "Choose one of " + options;
             case NUMBER -> numberProblem(v);
+            case BRAND -> v.length() > BrandNames.MAX_LENGTH ? "Too long" : null;
             case TEXT, MULTILINE -> v.length() > (kind == AttributeKind.MULTILINE ? 5000 : 500) ? "Too long" : null;
         };
     }

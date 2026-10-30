@@ -22,7 +22,7 @@ select p.id as product_id, p.owner_org, p.created_at, btrim(p.attributes ->> 'br
 from product p
 join legacy_node_dept nd on nd.node_id = p.category_id
 join product_type pt on pt.code = p.product_type
-where not (p.attributes ? 'brand_id')
+where (p.attributes ->> 'brand_id') is null
   and btrim(coalesce(p.attributes ->> 'brand', '')) <> ''
   and brand_key(p.attributes ->> 'brand') <> ''
   and exists (select 1 from jsonb_array_elements(pt.attributes) a

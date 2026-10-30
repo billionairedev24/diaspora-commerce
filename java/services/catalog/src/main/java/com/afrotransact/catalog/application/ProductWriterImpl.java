@@ -45,11 +45,12 @@ class ProductWriterImpl implements ProductWriter {
     private final IdentifierIssuer ids;
     private final ProductDraftPolicy policy;
     private final ProductEvents events;
+    private final BrandResolver brands;
     private final Clock clock;
 
     ProductWriterImpl(ProductRepository products, CategoryRepository categories, CategoryRequestRepository requests,
                       ProductDraftRepository drafts, IdentifierIssuer ids, ProductDraftPolicy policy,
-                      ProductEvents events, Clock clock) {
+                      ProductEvents events, BrandResolver brands, Clock clock) {
         this.products = products;
         this.categories = categories;
         this.requests = requests;
@@ -57,13 +58,15 @@ class ProductWriterImpl implements ProductWriter {
         this.ids = ids;
         this.policy = policy;
         this.events = events;
+        this.brands = brands;
         this.clock = clock;
     }
 
     @Override
     public Product create(ListingOwner owner, CreateProductCommand cmd) {
         Placement placement = placement(cmd.categoryId(), cmd.categoryRequestId(), owner);
-        Map<String, String> attributes = normalised(placement.type(), cmd.attributes());
+        Map<String, String> attributes = brands.resolve(owner, node(placement.categoryId()), placement.type(),
+                normalised(placement.type(), cmd.attributes()), Map.of());
         ProductDraft draft = new ProductDraft(placement.type(), cmd.title(), attributes, cmd.images(),
                 cmd.variationTheme(), cmd.variants(), cmd.details());
         policy.validate(draft);
@@ -118,7 +121,8 @@ class ProductWriterImpl implements ProductWriter {
             typeCode = placement.type().code();
         }
         ProductType type = type(typeCode);
-        Map<String, String> attributes = normalised(type, cmd.attributes());
+        Map<String, String> attributes = brands.resolve(current.owner(), node(categoryId), type,
+                normalised(type, cmd.attributes()), current.attributes());
         ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, cmd.images(), cmd.variationTheme(),
                 cmd.variants(), cmd.details());
         policy.validate(draft);
@@ -240,6 +244,10 @@ class ProductWriterImpl implements ProductWriter {
             throw new CatalogRuleViolation("That category request was rejected", Map.of("category", "Rejected"));
         }
         return new Placement(null, request, type(ProductType.CUSTOM));
+    }
+
+    private CategoryNode node(UUID categoryId) {
+        return categoryId == null ? null : categories.findById(categoryId).orElse(null);
     }
 
     private ProductType type(String code) {

@@ -16,6 +16,8 @@ import com.afrotransact.catalog.domain.AttributeSection;
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
 import com.afrotransact.catalog.domain.CategoryLevel;
 import com.afrotransact.catalog.domain.ProductTypeTraits;
+import com.afrotransact.catalog.domain.brand.BrandKeys;
+import com.afrotransact.catalog.domain.brand.UnbrandedReason;
 
 /**
  * The rules staff edits of the taxonomy must satisfy: names, codes, the three-level shape and what a product type's
@@ -146,6 +148,7 @@ public final class TaxonomyRules {
         }
         Map<String, String> errors = new LinkedHashMap<>();
         Set<String> seen = new HashSet<>();
+        Set<String> seenBrand = new HashSet<>();
         List<AttributeDefinition> out = new ArrayList<>();
         for (int i = 0; i < attributes.size(); i++) {
             AttributeDefinition a = attributes.get(i);
@@ -160,7 +163,16 @@ public final class TaxonomyRules {
                 errors.put(at + "label", "1 to 120 characters");
             }
             List<String> options = a.options().stream().map(String::trim).filter(o -> !o.isEmpty()).toList();
-            if (a.kind() == AttributeKind.ENUM && options.isEmpty()) {
+            if (a.kind() == AttributeKind.BRAND) {
+                if (!BrandKeys.NAME.equals(a.key())) {
+                    errors.put(at + "key", "The brand attribute is keyed brand");
+                } else if (!seenBrand.add(a.key())) {
+                    errors.put(at + "kind", "Only one attribute can be the brand");
+                }
+                if (options.stream().anyMatch(o -> UnbrandedReason.ofCode(o).isEmpty()) || options.size() > 2) {
+                    errors.put(at + "options", "Only UNBRANDED and HANDMADE can be offered instead of a brand");
+                }
+            } else if (a.kind() == AttributeKind.ENUM && options.isEmpty()) {
                 errors.put(at + "options", "Add the values to choose from");
             } else if (a.kind() != AttributeKind.ENUM && !options.isEmpty()) {
                 errors.put(at + "options", "Only choice attributes have values");

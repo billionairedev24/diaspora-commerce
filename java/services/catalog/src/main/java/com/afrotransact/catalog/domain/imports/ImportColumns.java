@@ -6,7 +6,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import com.afrotransact.catalog.domain.AttributeDefinition;
@@ -17,6 +16,7 @@ import com.afrotransact.catalog.domain.ItemCondition;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.VariationDimension;
 import com.afrotransact.catalog.domain.VariationTheme;
+import com.afrotransact.catalog.domain.brand.UnbrandedReason;
 
 /**
  * The columns of the bulk upload template, generated from the product type definitions so templates and the parser
@@ -90,10 +90,8 @@ public final class ImportColumns {
      */
     public static List<ImportColumn> forType(ProductType type, List<String> categoryPaths) {
         List<ImportColumn> cols = new ArrayList<>(head(categoryPaths, categoryPaths.size() > 1));
-        Optional<AttributeDefinition> brand = type.attribute(BRAND);
-        cols.add(new ImportColumn(BRAND, brand.map(AttributeDefinition::label).orElse("Brand"),
-                "The brand or maker shoppers search for.", brand.map(AttributeDefinition::required).orElse(false),
-                ColumnKind.TEXT, List.of(), "Adire Lagos", true));
+        type.brandAttribute().ifPresent(brand -> cols.add(new ImportColumn(BRAND, brand.label(), brandHelp(brand),
+                brand.required(), ColumnKind.TEXT, List.of(), "Adire Lagos", true)));
         cols.addAll(listingColumns());
         cols.addAll(variantColumns(type.identifierRule()));
         if (!type.themes().isEmpty()) {
@@ -107,7 +105,7 @@ public final class ImportColumns {
             }
         }
         for (AttributeDefinition a : type.applicableAttributes()) {
-            if (BRAND.equals(a.key())) {
+            if (a.kind() == AttributeKind.BRAND || BRAND.equals(a.key())) {
                 continue;
             }
             cols.add(attributeColumn(a));
@@ -123,6 +121,14 @@ public final class ImportColumns {
                     + "this product (default Yes for food).", false, ColumnKind.BOOLEAN, YES_NO, YES, true));
         }
         return List.copyOf(cols);
+    }
+
+    private static String brandHelp(AttributeDefinition brand) {
+        String base = brand.help() != null ? brand.help() : "The brand shoppers search for.";
+        String reasons = brand.unbrandedReasons().isEmpty() ? ""
+                : " Write \"" + (brand.unbrandedReasons().contains(UnbrandedReason.UNBRANDED) ? "No brand" : "Handmade")
+                + "\" if it has none.";
+        return base + reasons + " A brand we do not know yet is added and reviewed by AfroTransact.";
     }
 
     /** Columns of the generic template: any category, attributes as "key: value" pairs. */
@@ -226,7 +232,7 @@ public final class ImportColumns {
             case ENUM -> ColumnKind.ENUM;
             case NUMBER -> ColumnKind.DECIMAL;
             case MULTILINE -> ColumnKind.LONG_TEXT;
-            case TEXT -> ColumnKind.TEXT;
+            case TEXT, BRAND -> ColumnKind.TEXT;
         };
         String description = a.help() != null ? a.help() + "." : a.label() + ".";
         if (a.kind() == AttributeKind.ENUM) {

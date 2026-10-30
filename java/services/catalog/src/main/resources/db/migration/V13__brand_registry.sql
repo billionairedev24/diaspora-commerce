@@ -36,7 +36,7 @@ create table brand_scope (
 create index brand_scope_node on brand_scope (node_id);
 
 -- Products keep the brand id next to the display name (attributes.brand) and an unbranded reason when they have none.
-create index product_brand_id on product ((attributes ->> 'brand_id')) where attributes ? 'brand_id';
+create index product_brand_id on product ((attributes ->> 'brand_id')) where (attributes ->> 'brand_id') is not null;
 
 alter table taxonomy_audit drop constraint taxonomy_audit_subject_kind_check;
 alter table taxonomy_audit add constraint taxonomy_audit_subject_kind_check

@@ -29,6 +29,8 @@ import com.afrotransact.catalog.domain.ProductDraftPolicy;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.VariationDimension;
 import com.afrotransact.catalog.domain.VariationTheme;
+import com.afrotransact.catalog.domain.brand.BrandKeys;
+import com.afrotransact.catalog.domain.brand.UnbrandedReason;
 
 /**
  * Validates every row of an uploaded sheet and reads the products it describes. Messages name the column, so the
@@ -354,18 +356,59 @@ public final class ImportValidator {
 
     // ------------------------------------------------------------------ product-level values
 
+    /**
+     * The brand cell, judged like the product form does: a type without a brand attribute ignores it, "No brand" or
+     * "Handmade" stand for a reason (only where the type allows them) instead of a made-up brand, and a name is kept
+     * as typed for the writer to match to the registry (or add as a pending brand).
+     */
+    private void brand(List<SheetRow> rows, ProductType type, boolean create, Map<String, String> out) {
+        SheetRow first = rows.getFirst();
+        String raw = productText(rows, ImportColumns.BRAND);
+        Optional<AttributeDefinition> def = type.brandAttribute();
+        if (def.isEmpty()) {
+            if (!raw.isEmpty()) {
+                add(first, RowMessage.warning(ImportColumns.BRAND, idx(ImportColumns.BRAND),
+                        "Ignored: " + type.label() + " have no brand"));
+            }
+            return;
+        }
+        AttributeDefinition d = def.get();
+        boolean mayLeave = !d.unbrandedReasons().isEmpty();
+        if (raw.isEmpty()) {
+            if (create && d.required()) {
+                add(first, err(ImportColumns.BRAND, mayLeave ? "Required. Write \"No brand\" or \"Handmade\" if it has none"
+                        : "Required"));
+            }
+            return;
+        }
+        Optional<UnbrandedReason> reason = UnbrandedReason.ofText(raw);
+        if (reason.isPresent()) {
+            if (d.unbrandedReasons().contains(reason.get())) {
+                out.put(BrandKeys.REASON, reason.get().name());
+            } else {
+                add(first, err(ImportColumns.BRAND, "Name the brand; this category does not accept items without one"));
+            }
+            return;
+        }
+        String problem = d.problem(raw);
+        if (problem != null) {
+            add(first, err(ImportColumns.BRAND, problem));
+        } else {
+            out.put(ImportColumns.BRAND, raw.trim());
+        }
+    }
+
     private Map<String, String> attributes(List<SheetRow> rows, ProductType type, boolean create) {
         SheetRow first = rows.getFirst();
         Map<String, String> out = new LinkedHashMap<>();
         Map<String, String> generic = ctx.fixedType() == null ? pairs(first, ImportColumns.ATTRIBUTES) : Map.of();
-        String brand = productText(rows, ImportColumns.BRAND);
-        if (!brand.isEmpty()) {
-            out.put(ImportColumns.BRAND, brand);
-        }
+        brand(rows, type, create, out);
         for (AttributeDefinition a : type.applicableAttributes()) {
-            String col = ImportColumns.BRAND.equals(a.key()) ? ImportColumns.BRAND : ImportColumns.ATTR_PREFIX + a.key();
-            String value = ctx.fixedType() == null && !ImportColumns.BRAND.equals(a.key())
-                    ? generic.getOrDefault(a.key().toLowerCase(Locale.ROOT), "")
+            if (a.kind() == AttributeKind.BRAND || BrandKeys.NAME.equals(a.key())) {
+                continue;
+            }
+            String col = ImportColumns.ATTR_PREFIX + a.key();
+            String value = ctx.fixedType() == null ? generic.getOrDefault(a.key().toLowerCase(Locale.ROOT), "")
                     : productText(rows, col);
             if (ctx.fixedType() != null && a.kind() == AttributeKind.NUMBER && !value.isEmpty()) {
                 String unit = productText(rows, col + ImportColumns.UNIT_SUFFIX);
@@ -376,13 +419,9 @@ public final class ImportValidator {
             if (value.isEmpty() && !create) {
                 continue;
             }
-            if (value.isEmpty() && ImportColumns.BRAND.equals(a.key()) && !brand.isEmpty()) {
-                continue;
-            }
             String problem = a.problem(value);
             if (problem != null) {
-                String column = ctx.fixedType() == null && !ImportColumns.BRAND.equals(a.key())
-                        ? ImportColumns.ATTRIBUTES : col;
+                String column = ctx.fixedType() == null ? ImportColumns.ATTRIBUTES : col;
                 add(first, err(column, (ctx.fixedType() == null ? a.label() + ": " : "") + problem));
             } else if (!value.isEmpty()) {
                 out.put(a.key(), a.normalise(value));
