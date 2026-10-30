@@ -395,13 +395,15 @@ export interface FilterSelectProps {
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
   testId?: string;
+  /** Lets a link elsewhere on the page move focus to the select ("Change the time range"). */
+  id?: string;
 }
 
-export function FilterSelect({ label, value, onChange, options, testId }: FilterSelectProps) {
+export function FilterSelect({ label, value, onChange, options, testId, id }: FilterSelectProps) {
   return (
     <label className={styles.filter}>
       {label}
-      <select className={styles.filterSelect} value={value} onChange={(e) => onChange(e.target.value)} data-testid={testId}>
+      <select id={id} className={styles.filterSelect} value={value} onChange={(e) => onChange(e.target.value)} data-testid={testId}>
         {options.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}

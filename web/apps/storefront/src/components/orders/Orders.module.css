@@ -1,68 +1,87 @@
-.layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--at-space-5); align-items: start; }
-.order { border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); overflow: hidden; background: var(--at-color-surface); }
-.orderHead { display: grid; grid-template-columns: repeat(3, auto) minmax(0, 1fr); gap: var(--at-space-2) var(--at-space-6); padding: var(--at-space-3) var(--at-space-5); background: var(--at-color-surface-muted); border-bottom: 1px solid var(--at-color-border); font-size: var(--at-text-xs); color: var(--at-color-text-muted); text-transform: uppercase; }
-.orderHead strong { display: block; color: var(--at-color-text); font-size: var(--at-text-sm); text-transform: none; }
-.orderNo { text-align: right; }
-.shipment { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--at-space-3); padding: var(--at-space-4) var(--at-space-5); border-top: 1px solid var(--at-color-border); }
-.shipment:first-of-type { border-top: 0; }
-.shipStatus { margin: 0; font-size: var(--at-text-lg); font-weight: var(--at-weight-bold); }
-.statusBlock { display: flex; flex-direction: column; gap: var(--at-space-2); }
-.shipStatus.success { color: var(--at-color-success); }
-.shipStatus.brand { color: var(--at-color-text); }
-.shipStatus.neutral { color: var(--at-color-text-muted); }
-.shipStatus.danger { color: var(--at-color-danger); }
-.track { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--at-space-1); max-width: 420px; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
-.track li { padding-top: var(--at-space-2); border-top: 4px solid var(--at-color-border); }
-.track li.done { border-top-color: var(--at-color-action-secondary); color: var(--at-color-text); }
-.track li.current { font-weight: var(--at-weight-bold); }
-.toolbar { display: flex; flex-direction: column; gap: var(--at-space-3); }
-.filters { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: var(--at-space-3); align-items: end; }
-.more { display: flex; flex-direction: column; gap: var(--at-space-2); align-items: center; padding: var(--at-space-3) 0; }
-.shipActions { display: flex; flex-direction: column; gap: var(--at-space-2); min-width: 180px; }
-.code { display: inline-flex; gap: var(--at-space-2); align-items: center; padding: var(--at-space-1) var(--at-space-3); border-radius: var(--at-radius-sm); background: var(--at-color-surface-brand); font-size: var(--at-text-sm); }
-.aside { display: flex; flex-direction: column; gap: var(--at-space-4); position: sticky; top: var(--at-space-4); }
-.timeline { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-3); border-left: 2px solid var(--at-color-border); }
-.step { position: relative; padding-left: var(--at-space-4); font-size: var(--at-text-sm); }
-.step::before { content: ''; position: absolute; left: -7px; top: 4px; width: 12px; height: 12px; border-radius: var(--at-radius-pill); background: var(--at-color-action-secondary); }
-.when { display: block; color: var(--at-color-text-muted); font-size: var(--at-text-xs); }
-.lines { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-2); }
-.line { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: var(--at-space-3); align-items: center; font-size: var(--at-text-sm); }
-.placed { display: flex; gap: var(--at-space-3); align-items: center; padding: var(--at-space-4); border-radius: var(--at-radius-md); background: var(--at-color-success-bg); color: var(--at-color-success); }
+/* Orders and order details in the flat account language: hairlines between blocks, no boxed panels, logical properties
+   only (Arabic mirrors by itself), design tokens only. */
+.muted { margin: 0; color: var(--at-color-text-muted); font-size: var(--at-text-sm); line-height: var(--at-leading-normal); }
 
-.shipMain { display: flex; flex-direction: column; gap: var(--at-space-3); min-width: 0; }
-.items { display: flex; flex-direction: column; gap: var(--at-space-2); }
-.itemList { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-2); }
-.item { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto auto; gap: var(--at-space-3); align-items: center; font-size: var(--at-text-sm); }
-.itemTitle { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.thumb { width: 56px; height: 56px; object-fit: cover; border-radius: var(--at-radius-sm); background: var(--at-color-surface-muted); border: 1px solid var(--at-color-border); }
-.codeBlock { display: flex; flex-direction: column; align-items: flex-start; gap: var(--at-space-2); }
-.codeCallout { display: flex; gap: var(--at-space-3); align-items: flex-start; padding: var(--at-space-3) var(--at-space-4); border-radius: var(--at-radius-sm); background: var(--at-color-surface-brand); max-width: 420px; }
-.codeCallout > div { display: flex; flex-direction: column; gap: var(--at-space-1); font-size: var(--at-text-sm); }
-.codeCallout p { margin: 0; }
-.codeDigits { font-family: var(--at-font-mono, monospace); font-size: var(--at-text-xl); letter-spacing: 0.2em; font-weight: var(--at-weight-bold); }
-.codeList { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-3); }
-.codeRow { display: flex; flex-direction: column; gap: var(--at-space-1); padding-top: var(--at-space-3); border-top: 1px solid var(--at-color-border); font-size: var(--at-text-sm); }
-.codeRow:first-child { border-top: 0; padding-top: 0; }
-.codeWhat { overflow: hidden; text-overflow: ellipsis; }
-
-@media (max-width: 899px) {
-  .filters { grid-template-columns: 1fr; }
-  .layout { grid-template-columns: 1fr; }
-  .aside { position: static; }
-  .orderHead { grid-template-columns: 1fr 1fr; }
-  .orderNo { text-align: left; }
-  .shipment { grid-template-columns: 1fr; }
+/* Tabs and filters */
+.controls { display: flex; flex-direction: column; gap: var(--at-space-3); }
+.tabs { display: flex; flex-wrap: wrap; gap: var(--at-space-1) var(--at-space-5); border-block-end: 1px solid var(--at-color-border); }
+.tab { margin-block-end: -1px; padding: var(--at-space-2) 0; border: 0; border-block-end: 2px solid transparent; background: none; font: inherit; font-size: var(--at-text-md); color: var(--at-color-text-muted); cursor: pointer; }
+.tab[aria-current='page'] { border-block-end-color: var(--at-color-action-secondary); color: var(--at-color-text); font-weight: var(--at-weight-semibold); }
+.tab:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: 2px; border-radius: var(--at-radius-sm); }
+@media (hover: hover) {
+  .tab:hover { color: var(--at-color-text); }
 }
+@media (pointer: coarse) {
+  .tab { min-block-size: var(--at-size-touch); }
+}
+.tabCount { font-weight: var(--at-weight-regular); color: var(--at-color-text-muted); }
+.search { display: inline-flex; flex: 1 1 18rem; gap: var(--at-space-2); align-items: center; max-inline-size: 28rem; font-size: var(--at-text-md); }
+.search input { flex: 1 1 auto; min-inline-size: 0; }
+.emptyLinks { display: flex; flex-wrap: wrap; gap: var(--at-space-2) var(--at-space-4); align-items: center; font-size: var(--at-text-md); }
+.pageNow { font-weight: var(--at-weight-bold); color: var(--at-color-text); text-decoration: underline; }
 
-/* Pickup shipments: where to collect them (order page and the "order placed" confirmation). */
-.pickup { display: flex; flex-direction: column; gap: var(--at-space-1); padding: var(--at-space-3); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-sm); background: var(--at-color-surface-muted); font-size: var(--at-text-sm); }
-.pickup > span { display: flex; gap: var(--at-space-1); align-items: flex-start; color: var(--at-color-text-muted); }
-.pickup svg { flex: none; margin-top: 2px; }
-.pickupList { display: flex; flex-direction: column; gap: var(--at-space-2); margin-top: var(--at-space-2); }
+/* One order: a thin summary line, then its shipments */
+.orderList { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-6); }
+.order { display: flex; flex-direction: column; min-width: 0; }
+.summary { margin: 0; display: grid; grid-template-columns: repeat(3, auto) minmax(0, 1fr); gap: var(--at-space-2) var(--at-space-8); padding-block: var(--at-space-2); border-block: 1px solid var(--at-color-border-strong); font-size: var(--at-text-sm); }
+.sumItem, .sumEnd { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sumEnd { align-items: flex-end; text-align: end; }
+.sumLabel { color: var(--at-color-text-muted); font-size: var(--at-text-xs); }
+.sumValue { margin: 0; min-width: 0; overflow-wrap: anywhere; font-size: var(--at-text-sm); }
+.popWrap { position: relative; display: inline-block; max-inline-size: 100%; }
+.popover { position: absolute; inset-block-start: 100%; inset-inline-start: 0; z-index: 5; min-inline-size: 15rem; margin-block-start: var(--at-space-1); padding: var(--at-space-3); border: 1px solid var(--at-color-border-strong); border-radius: var(--at-radius-sm); background: var(--at-color-surface); box-shadow: var(--at-shadow-md); }
+.address { display: flex; flex-direction: column; gap: 2px; font-style: normal; font-size: var(--at-text-md); line-height: var(--at-leading-normal); }
 
-/* Proof of delivery (our driver's photo and handover) on a delivered shipment. */
-.proof { display: flex; flex-direction: column; gap: var(--at-space-2); padding: var(--at-space-3); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-sm); background: var(--at-color-surface-muted); }
-.proofTitle { margin: 0; font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); }
-.proofHow { margin: 0; font-size: var(--at-text-sm); }
-.proofPictures { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 200px)); gap: var(--at-space-3); }
+/* A shipment: status, items and code on the start side, the stacked actions on the end side */
+.shipment { display: grid; grid-template-columns: minmax(0, 1fr) 13rem; gap: var(--at-space-3) var(--at-space-8); align-items: start; padding-block: var(--at-space-4); }
+.shipment + .shipment { border-block-start: 1px solid var(--at-color-border); }
+.shipMain { display: flex; flex-direction: column; gap: var(--at-space-3); min-width: 0; }
+.headlineBlock { display: flex; flex-direction: column; gap: 2px; }
+.headline { margin: 0; font-size: var(--at-text-lg); line-height: var(--at-leading-tight); }
+.items { display: flex; flex-direction: column; gap: var(--at-space-2); }
+.itemList { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-3); }
+.item { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: var(--at-space-3); align-items: start; font-size: var(--at-text-md); }
+.itemBody { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.itemBody > button { min-block-size: var(--at-size-control-sm); padding-block: 0; }
+.itemLink { color: var(--at-color-link); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.thumb { inline-size: 64px; block-size: 64px; flex: none; object-fit: cover; border-radius: var(--at-radius-sm); background: var(--at-color-surface-muted); }
+.actions { display: flex; flex-direction: column; gap: var(--at-space-2); min-width: 0; }
+.dialogActions { display: flex; flex-wrap: wrap; gap: var(--at-space-2) var(--at-space-3); justify-content: flex-end; }
+
+/* Delivery and pickup codes, printed plainly */
+.code { margin: 0; display: flex; flex-wrap: wrap; gap: var(--at-space-1) var(--at-space-3); align-items: baseline; font-size: var(--at-text-md); }
+.digits { font-family: var(--at-font-mono, monospace); font-size: var(--at-text-xl); letter-spacing: 0.2em; font-weight: var(--at-weight-bold); }
+.tracking { margin: 0; display: flex; gap: var(--at-space-2); align-items: center; font-size: var(--at-text-md); }
+
+/* Pickup: where to collect (order details and the order-placed confirmation) */
+.pickup { display: flex; flex-direction: column; gap: var(--at-space-1); font-size: var(--at-text-md); }
+.pickup > span { display: flex; gap: var(--at-space-2); align-items: flex-start; color: var(--at-color-text-muted); }
+.pickup svg { flex: none; margin-block-start: 3px; }
+.pickupList { display: flex; flex-direction: column; gap: var(--at-space-3); }
+
+/* Proof of delivery (our driver's handover and photos) in its dialog */
+.proof { display: flex; flex-direction: column; gap: var(--at-space-3); }
+.proofHow { margin: 0; font-size: var(--at-text-md); }
+.proofPictures { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 220px)); gap: var(--at-space-3); }
 .proofFigure { margin: 0; display: flex; flex-direction: column; gap: var(--at-space-1); font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+
+/* Order details: Ship to / Payment method / Order summary in three columns */
+.cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--at-space-6) var(--at-space-8); padding-block: var(--at-space-3); border-block: 1px solid var(--at-color-border-strong); }
+.col { display: flex; flex-direction: column; gap: var(--at-space-2); min-width: 0; }
+.colTitle { margin: 0; font-size: var(--at-text-base); font-weight: var(--at-weight-bold); }
+/* The photo is out of flow so the title's first line is the cell's baseline and the price lines up with it. */
+.lineItem { position: relative; display: block; min-inline-size: 12rem; min-block-size: 64px; padding-inline-start: 76px; }
+.lineItem .thumb { position: absolute; inset-inline-start: 0; inset-block-start: 0; }
+
+@media (max-width: 1023px) {
+  .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .shipment { grid-template-columns: minmax(0, 1fr) 11rem; gap: var(--at-space-3) var(--at-space-5); }
+}
+@media (max-width: 639px) {
+  .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--at-space-2) var(--at-space-4); }
+  .sumEnd { align-items: flex-start; text-align: start; }
+  .shipment { grid-template-columns: minmax(0, 1fr); }
+  .cols { grid-template-columns: minmax(0, 1fr); }
+  .search { flex-basis: 100%; max-inline-size: none; }
+  .lineItem { min-inline-size: 0; }
+}

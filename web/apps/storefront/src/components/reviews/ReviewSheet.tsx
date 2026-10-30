@@ -241,12 +241,12 @@ export function ReviewSheet({ atin, title, imageUrl, open, onOpenChange }: { ati
 }
 
 /** "Rate this item" (or "Your review" once written): opens the review sheet. Offered for delivered items only. */
-export function RateItemButton({ atin, title, imageUrl, size = 'sm', block = false }: { atin: string; title: string; imageUrl?: string | null; size?: 'sm' | 'md'; block?: boolean }) {
+export function RateItemButton({ atin, title, imageUrl, size = 'sm', block = false, variant = 'neutral' }: { atin: string; title: string; imageUrl?: string | null; size?: 'sm' | 'md'; block?: boolean; variant?: 'neutral' | 'link' }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button variant="neutral" size={size} block={block} onClick={() => setOpen(true)} aria-label={`${t('rev.rateThisItem')}: ${title}`} data-testid="rate-item">
+      <Button variant={variant} size={size} block={block} onClick={() => setOpen(true)} aria-label={`${t('rev.rateThisItem')}: ${title}`} data-testid="rate-item">
         {t('rev.rateThisItem')}
       </Button>
       {open && <ReviewSheet atin={atin} title={title} imageUrl={imageUrl} open={open} onOpenChange={setOpen} />}

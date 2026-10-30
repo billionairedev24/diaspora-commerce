@@ -7,7 +7,7 @@ import { useT } from '@/i18n/t';
 
 import styles from './Orders.module.css';
 
-/** Where a pickup shipment is collected: name, address, opening hours and when it is ready. */
+/** Where a pickup shipment is collected: name, address, opening hours and when it is ready, as plain lines. */
 export function PickupDetails({ pickup }: { pickup: OrderPickup }) {
   const t = useT();
   return (

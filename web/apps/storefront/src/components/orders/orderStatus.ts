@@ -51,30 +51,35 @@ export function matchesOrder(o: { orderNumber: string; shipTo: string; shipments
   return [o.orderNumber, o.shipTo, ...o.shipments.flatMap((s) => [s.label, s.items])].some((v) => v.toLowerCase().includes(needle));
 }
 
-export type OrderRange = 'all' | '3m' | '6m' | `y${number}`;
+export type OrderRange = 'all' | '30d' | '3m' | '6m' | `y${number}`;
 
-/** Amazon-style time filter: the past 3 or 6 months, then this year and the previous two years. */
-export function rangeOptions(now: Date): Array<{ value: OrderRange; labelKey: 'ord.r.all' | 'ord.r.3m' | 'ord.r.6m' | 'ord.r.year'; vars?: Record<string, number> }> {
+/** Amazon-style time filter: the last 30 days, 3 or 6 months, then this year and the previous two years, then everything. */
+export function rangeOptions(now: Date): Array<{ value: OrderRange; labelKey: 'ord.r.all' | 'ord.r.30d' | 'ord.r.3m' | 'ord.r.6m' | 'ord.r.year'; vars?: Record<string, number> }> {
   const y = now.getFullYear();
   return [
-    { value: 'all', labelKey: 'ord.r.all' },
+    { value: '30d', labelKey: 'ord.r.30d' },
     { value: '3m', labelKey: 'ord.r.3m' },
     { value: '6m', labelKey: 'ord.r.6m' },
     { value: `y${y}`, labelKey: 'ord.r.year', vars: { year: y } },
     { value: `y${y - 1}`, labelKey: 'ord.r.year', vars: { year: y - 1 } },
-    { value: `y${y - 2}`, labelKey: 'ord.r.year', vars: { year: y - 2 } }
+    { value: `y${y - 2}`, labelKey: 'ord.r.year', vars: { year: y - 2 } },
+    { value: 'all', labelKey: 'ord.r.all' }
   ];
+}
+
+/** The start of a rolling range (30 days, 3 or 6 months); null for all orders and for a calendar year. */
+function windowStart(range: OrderRange, now: Date): Date | null {
+  const from = new Date(now);
+  if (range === '30d') from.setDate(from.getDate() - 30);
+  else if (range === '3m' || range === '6m') from.setMonth(from.getMonth() - (range === '3m' ? 3 : 6));
+  else return null;
+  return from;
 }
 
 /** The start of the range (null for all orders and for a calendar year, which has its own end). */
 export function rangeStart(range: OrderRange, now: Date): Date | null {
   if (range === 'all') return null;
-  if (range === '3m' || range === '6m') {
-    const from = new Date(now);
-    from.setMonth(from.getMonth() - (range === '3m' ? 3 : 6));
-    return from;
-  }
-  return new Date(Number(range.slice(1)), 0, 1);
+  return windowStart(range, now) ?? new Date(Number(range.slice(1)), 0, 1);
 }
 
 /** True when the order was placed inside the range. */
@@ -82,10 +87,29 @@ export function inRange(placedAt: string, range: OrderRange, now: Date): boolean
   if (range === 'all') return true;
   const at = new Date(placedAt);
   if (Number.isNaN(at.getTime())) return true;
-  if (range === '3m' || range === '6m') {
-    const from = new Date(now);
-    from.setMonth(from.getMonth() - (range === '3m' ? 3 : 6));
-    return at >= from;
-  }
+  const from = windowStart(range, now);
+  if (from) return at >= from;
   return at.getFullYear() === Number(range.slice(1));
+}
+
+export type OrderTab = 'ALL' | 'NOT_SHIPPED' | 'CANCELLED';
+
+/** The shipment is open and has not gone out yet (ordered, being prepared or ready). */
+export function notYetShipped(s: { status: string; deliveredAt?: string | null }): boolean {
+  const look = shipmentLook(s.status, s.deliveredAt);
+  return look.group === 'IN_PROGRESS' && look.step >= 0 && look.step < 3;
+}
+
+/** Amazon's three tabs: every order, orders with something not yet shipped, and cancelled orders. */
+export function inTab(o: { shipments: Array<{ status: string; deliveredAt?: string | null }> }, tab: OrderTab): boolean {
+  if (tab === 'ALL') return true;
+  if (tab === 'CANCELLED') return orderGroup(o.shipments) === 'CLOSED';
+  return o.shipments.some(notYetShipped);
+}
+
+/** A package can be tracked once it is out with the carrier or the driver, or has a tracking number; never when closed or delivered. */
+export function canTrack(s: { status: string; deliveredAt?: string | null; trackingNumber?: string | null }): boolean {
+  const look = shipmentLook(s.status, s.deliveredAt);
+  if (look.group !== 'IN_PROGRESS' || look.step < 0) return false;
+  return look.step >= 3 || Boolean(s.trackingNumber);
 }

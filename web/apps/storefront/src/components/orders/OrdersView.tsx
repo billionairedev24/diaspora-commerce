@@ -1,14 +1,14 @@
 'use client';
 
-import { isApiError, orderKeys, type OrderSummary } from '@afrotransact/api-client';
+import { type OrderSummary } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, CheckCircle, ChipGroup, Key, Select, Skeleton, Sparkle, TextField, useToast } from '@afrotransact/ui';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { buttonClassName, EmptyState, fieldStyles, FilterBar, FilterSelect, FlatPage, Message, Pager, Section, Skeleton, TextLinkButton,textLinkClassName } from '@afrotransact/ui';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-import pageStyles from '@/components/account/Pages.module.css';
+import { AccountHeader } from '@/components/account/AccountHeader';
 import { PlacedConfirmation } from '@/components/preorder/PreorderConfirmation';
 import { RateItemButton } from '@/components/reviews/ReviewSheet';
 import { useLolaLauncher } from '@/components/shell/LolaLauncher';
@@ -16,59 +16,14 @@ import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 
-import { CancelShipment } from './CancelShipment';
+import { AddressPopover, isClosed, placedDate, ProductLink, rateInColumn, ShipmentActions, ShipmentCode, ShipmentHeadline, SummaryItem, Thumb, useCancelShipment } from './OrderParts';
 import styles from './Orders.module.css';
-import { inRange, matchesOrder, type OrderGroup, orderGroup, type OrderRange, rangeOptions, rangeStart, shipmentLook } from './orderStatus';
+import { inRange, inTab, matchesOrder, type OrderRange, type OrderTab, rangeOptions, rangeStart } from './orderStatus';
 import { PickupDetails } from './PickupDetails';
 
 const MAX_FILTER_PAGES = 10;
-
-export const placedDate = (tag: string, iso: string) => new Date(iso).toLocaleDateString(tag, { month: 'long', day: 'numeric', year: 'numeric' });
-
-/** "On the way" with a four-step track (ordered, packed, on the way, delivered); closed shipments just say what happened. */
-function ShipmentStatus({ status, deliveredAt }: { status: string; deliveredAt?: string | null }) {
-  const t = useT();
-  const look = shipmentLook(status, deliveredAt);
-  const steps = ['ordered', 'packed', 'onTheWay', 'delivered'] as const;
-  return (
-    <div className={styles.statusBlock}>
-      <p className={`${styles.shipStatus} ${styles[look.tone]}`}>{t(`ord.s.${look.key}`)}</p>
-      {look.step >= 0 && (
-        <ol className={styles.track} aria-label={t('ord.progress')}>
-          {steps.map((k, i) => (
-            <li key={k} className={i < look.step ? styles.done : i === look.step - 1 ? styles.current : undefined} aria-current={i === look.step - 1 ? 'step' : undefined}>
-              {t(`ord.step.${k}`)}
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
-  );
-}
-
-/** The delivery code stays hidden (it is a secret until the handover) behind a link on the shipment; clicking shows it. */
-function DeliveryCode({ code }: { code: string }) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={styles.codeBlock}>
-      <Button variant="link" icon={<Key aria-hidden />} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        {open ? t('ord.hideCode') : t('ord.showCode')}
-      </Button>
-      {open && (
-        <div className={styles.codeCallout} role="status">
-          <div>
-            <span>{t('ord.deliveryCode')}</span>
-            <strong className={styles.codeDigits}>{code}</strong>
-            <p className={pageStyles.muted}>{t('ord.codeHelp')}</p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-const isClosed = (status: string) => ['cancelled', 'canceled', 'returned'].includes(status.toLowerCase());
+const PAGE_SIZE = 10;
+const RANGE_ID = 'orders-range';
 
 /** What is in the shipment: up to three products with photo, name and quantity, then "+ N more"; sold by the seller. */
 function ShipmentItems({ shipment }: { shipment: OrderSummary['shipments'][number] }) {
@@ -76,92 +31,69 @@ function ShipmentItems({ shipment }: { shipment: OrderSummary['shipments'][numbe
   const lines = shipment.lines ?? [];
   if (lines.length === 0) {
     return (
-      <>
-        <p className={pageStyles.muted}>{shipment.label}</p>
-        <p className={pageStyles.muted}>{shipment.items}</p>
-      </>
+      <div className={styles.items}>
+        <p>{shipment.label}</p>
+        <p className={styles.muted}>{shipment.items}</p>
+      </div>
     );
   }
   const shown = lines.slice(0, 3);
+  const rateBeside = Boolean(shipment.deliveredAt) && !rateInColumn(shipment);
   return (
     <div className={styles.items}>
       <ul className={styles.itemList}>
         {shown.map((l, i) => (
           <li key={`${l.productAtin ?? l.title}-${i}`} className={styles.item}>
-            {l.imageUrl ? <img src={l.imageUrl} alt="" loading="lazy" className={styles.thumb} /> : <span className={styles.thumb} aria-hidden />}
-            <span className={styles.itemTitle}>{l.title}</span>
-            {l.quantity > 1 && <span className={pageStyles.muted}>{t('ord.qty', { count: l.quantity })}</span>}
-            {shipment.deliveredAt && l.productAtin && <RateItemButton atin={l.productAtin} title={l.title} imageUrl={l.imageUrl} />}
+            <Thumb src={l.imageUrl} />
+            <div className={styles.itemBody}>
+              <ProductLink atin={l.productAtin} title={l.title} />
+              {l.quantity > 1 && <span className={styles.muted}>{t('ord.qty', { count: l.quantity })}</span>}
+              {rateBeside && l.productAtin && <RateItemButton atin={l.productAtin} title={l.title} imageUrl={l.imageUrl} variant="link" />}
+            </div>
           </li>
         ))}
       </ul>
-      {lines.length > shown.length && <p className={pageStyles.muted}>{t('ord.moreItems', { count: lines.length - shown.length })}</p>}
-      {shipment.sellerName && <p className={pageStyles.muted}>{t('ord.soldBy', { seller: shipment.sellerName })}</p>}
+      {lines.length > shown.length && <p className={styles.muted}>{t('ord.moreItems', { count: lines.length - shown.length })}</p>}
+      {shipment.sellerName && <p className={styles.muted}>{t('ord.soldBy', { seller: shipment.sellerName })}</p>}
     </div>
   );
 }
 
-function OrderCard({ order }: { order: OrderSummary }) {
+/** One order: a thin summary line over its shipments, separated by hairlines, never a box. */
+function OrderBlock({ order }: { order: OrderSummary }) {
   const fmt = useFormatters();
   const t = useT();
-  const qc = useQueryClient();
-  const toast = useToast();
-  const cancel = useMutation({
-    mutationFn: (shipmentId: string) => browserApi().cancelShipment(order.orderNumber, shipmentId),
-    onSuccess: async () => { await qc.invalidateQueries({ queryKey: orderKeys.all }); toast.show(t('ord.cancelled')); },
-    onError: (e) => toast.show(isApiError(e) ? e.message : t('auth.genericError'))
-  });
-  const delivered = order.shipments.some((s) => s.deliveredAt);
+  const cancel = useCancelShipment(order.orderNumber);
+  const detailHref = `/orders/${encodeURIComponent(order.orderNumber)}`;
   return (
+    <li>
     <article className={styles.order} data-testid="order" aria-label={t('ord.orderAria', { number: order.orderNumber })}>
-      <div className={styles.orderHead}>
-        <span>
-          {t('ord.placed')}
-          <strong>{placedDate(fmt.tag, order.placedAt)}</strong>
-        </span>
-        <span>
-          {t('ord.total')}
-          <strong>{fmt.money(order.totalMinor)}</strong>
-        </span>
-        <span>
-          {t('ord.shipTo')}
-          <strong>{order.shipTo}</strong>
-        </span>
-        <span className={styles.orderNo}>
-          {t('ord.number', { number: order.orderNumber })}
-          <strong>
-            <Link href={`/orders/${encodeURIComponent(order.orderNumber)}`}>{t('ord.details')}</Link>
-          </strong>
-        </span>
-      </div>
+      <dl className={styles.summary}>
+        <SummaryItem label={t('ord.placed')}>{placedDate(fmt.tag, order.placedAt)}</SummaryItem>
+        <SummaryItem label={t('ord.total')}>{fmt.money(order.totalMinor)}</SummaryItem>
+        <SummaryItem label={t('ord.shipTo')}>
+          <AddressPopover orderNumber={order.orderNumber} shipTo={order.shipTo} />
+        </SummaryItem>
+        <SummaryItem label={t('ord.number', { number: order.orderNumber })} end>
+          <Link href={detailHref}>{t('ord.details')}</Link>
+        </SummaryItem>
+      </dl>
       {order.shipments.map((s) => (
-        <div key={s.shipmentId} className={styles.shipment}>
+        <div key={s.shipmentId} className={styles.shipment} data-testid="order-shipment">
           <div className={styles.shipMain}>
-            <ShipmentStatus status={s.status} deliveredAt={s.deliveredAt} />
+            <ShipmentHeadline shipment={s} />
             <ShipmentItems shipment={s} />
-            {s.deliveryCode && !s.deliveredAt && !isClosed(s.status) && <DeliveryCode code={s.deliveryCode} />}
+            {s.deliveryCode && !s.deliveredAt && !isClosed(s.status) && <ShipmentCode code={s.deliveryCode} />}
           </div>
-          <div className={styles.shipActions}>
-            {s.status.toLowerCase() !== 'cancelled' && (
-              <Link href={`/orders/${encodeURIComponent(order.orderNumber)}#${s.shipmentId}`} className={buttonClassName({ variant: 'primary', size: 'sm', block: true })}>
-                {t('ord.track')}
-              </Link>
-            )}
-            <CancelShipment shipment={s} block onCancel={() => cancel.mutate(s.shipmentId)} loading={cancel.isPending && cancel.variables === s.shipmentId} />
-            {s.deliveredAt && (
-              <Link href={`/account/help/new?order=${encodeURIComponent(order.orderNumber)}`} className={buttonClassName({ variant: 'neutral', size: 'sm', block: true })}>
-                {t('ord.getHelp')}
-              </Link>
-            )}
-          </div>
+          <ShipmentActions orderNumber={order.orderNumber} shipment={s} cancel={cancel} trackHref={`${detailHref}#${s.shipmentId}`} />
         </div>
       ))}
-      {!delivered && order.shipments.length === 0 && <p className={pageStyles.muted}>{t('ord.noShipments')}</p>}
+      {order.shipments.length === 0 && <p className={styles.muted}>{t('ord.noShipments')}</p>}
     </article>
+    </li>
   );
 }
 
-/** Your Orders (S148): every order with its shipments, delivery codes, track, cancel (until packed) and return. */
 /** The just-placed order's pickup shipments: where and when to collect them. */
 function PlacedPickups({ orderNumber }: { orderNumber: string }) {
   const order = useQuery(shopperQueries.order(browserApi(), orderNumber));
@@ -176,120 +108,194 @@ function PlacedPickups({ orderNumber }: { orderNumber: string }) {
   );
 }
 
+const NONE_KEY = { '30d': 'ord.none.30d', '3m': 'ord.none.3m', '6m': 'ord.none.6m' } as const;
+
+/**
+ * Your orders, as Amazon's "Your Orders": a title with breadcrumb, Orders / Not yet shipped / Cancelled orders, a search box and
+ * a time range, then each order as a flat block. Orders are newest first and load a page at a time; a time range keeps
+ * loading until an order older than it arrives, a search or tab looks at most MAX_FILTER_PAGES pages back, and Next loads
+ * more while there are any. The pages of ten are cut client-side from what is loaded.
+ */
 export function OrdersView() {
   const t = useT();
   const api = browserApi();
   const orders = useInfiniteQuery(shopperQueries.infiniteOrders(api));
   const placed = useSearchParams().get('placed');
   const lola = useLolaLauncher();
-  const [group, setGroup] = useState<'ALL' | OrderGroup>('ALL');
+  const [tab, setTab] = useState<OrderTab>('ALL');
   const [text, setText] = useState('');
-  const [range, setRange] = useState<OrderRange>('all');
+  const [range, setRange] = useState<OrderRange>('3m');
+  const [page, setPage] = useState(0);
   const items = useMemo(() => orders.data?.pages.flatMap((p) => p.items) ?? [], [orders.data]);
-  const count = (g: OrderGroup) => items.filter((o) => orderGroup(o.shipments) === g).length;
   const now = useMemo(() => new Date(), []);
-  const shown = items.filter((o) => (group === 'ALL' || orderGroup(o.shipments) === group) && inRange(o.placedAt, range, now) && matchesOrder(o, text));
-  const filtering = group !== 'ALL' || range !== 'all' || text.trim() !== '';
-  /* Scroll-based paging: the next page loads when the end of the list comes into view. Orders are newest first, so a time
-     range stops loading once an order older than it has arrived; a search or status filter looks at most MAX_FILTER_PAGES
-     pages back, then offers the button (a server-side filter would not have this limit). */
-  const sentinel = useRef<HTMLDivElement | null>(null);
+  const inScope = items.filter((o) => inRange(o.placedAt, range, now));
+  const shown = inScope.filter((o) => inTab(o, tab) && matchesOrder(o, text));
+  const filtering = tab !== 'ALL' || range !== 'all' || text.trim() !== '';
   const pagesLoaded = orders.data?.pages.length ?? 0;
   const from = rangeStart(range, now);
   const pastRange = from !== null && items.length > 0 && new Date(items[items.length - 1]?.placedAt ?? now) < from;
-  const canAutoLoad = Boolean(orders.hasNextPage) && !orders.isFetchingNextPage && !pastRange && (!filtering || range !== 'all' || pagesLoaded < MAX_FILTER_PAGES);
+  const canAutoLoad = Boolean(orders.hasNextPage) && !orders.isFetchingNextPage && !pastRange && filtering && (range !== 'all' || pagesLoaded < MAX_FILTER_PAGES);
   const { fetchNextPage } = orders;
   useEffect(() => {
-    const el = sentinel.current;
-    if (!el || !canAutoLoad || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) void fetchNextPage(); }, { rootMargin: '400px' });
-    io.observe(el);
-    return () => io.disconnect();
+    if (canAutoLoad) void fetchNextPage();
   }, [canAutoLoad, fetchNextPage, pagesLoaded]);
+
+  const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const current = Math.min(page, pageCount - 1);
+  const start = current * PAGE_SIZE;
+  const visible = shown.slice(start, start + PAGE_SIZE);
+  const moreToLoad = Boolean(orders.hasNextPage) && !pastRange;
+  const loadingMore = orders.isFetchingNextPage || canAutoLoad;
+  const reset = () => setPage(0);
+  const count = (o: OrderTab) => inScope.filter((x) => inTab(x, o)).length;
+  const next = async () => {
+    if (current + 1 < pageCount) return setPage(current + 1);
+    if (!moreToLoad) return;
+    await fetchNextPage();
+    setPage(current + 1);
+  };
+  const tabs: Array<{ value: OrderTab; label: string }> = [
+    { value: 'ALL', label: t('ord.tab.all') },
+    { value: 'NOT_SHIPPED', label: t('ord.tab.notShipped') },
+    { value: 'CANCELLED', label: t('ord.tab.cancelled') }
+  ];
+  const changeRange = () => document.getElementById(RANGE_ID)?.focus();
+  const empty =
+    range === 'all' && items.length === 0
+      ? t('ord.none')
+      : tab === 'NOT_SHIPPED' && inScope.length > 0
+        ? t('ord.noneTab.notShipped')
+        : tab === 'CANCELLED' && inScope.length > 0
+          ? t('ord.noneTab.cancelled')
+          : text.trim() && inScope.length > 0
+            ? t('ord.noMatch')
+            : range === 'all'
+              ? t('ord.noMatch')
+              : range.startsWith('y')
+                ? t('ord.none.year', { year: range.slice(1) })
+                : t(NONE_KEY[range as keyof typeof NONE_KEY]);
+
   return (
-    <div className={pageStyles.page}>
+    <FlatPage width="wide">
       {placed && (
         <PlacedConfirmation
           orderNumber={placed}
           fallback={
-            <div className={styles.placed} role="status">
-              <CheckCircle size={28} weight="fill" aria-hidden />
-              <div>
-                <strong>{t('ord.placedThanks')}</strong>
-                <p className={pageStyles.muted}>{t('ord.placedSub', { number: placed })}</p>
-                <PlacedPickups orderNumber={placed} />
-              </div>
-            </div>
+            <Section title={t('ord.placedThanks')} testId="order-placed">
+              <Message tone="success">{t('ord.placedSub', { number: placed })}</Message>
+              <PlacedPickups orderNumber={placed} />
+            </Section>
           }
         />
       )}
-      <h1 className={pageStyles.h1}>{t('account.orders')}</h1>
-      <div className={styles.layout}>
-        <div className={pageStyles.form}>
-          {orders.isPending && <Skeleton height={180} />}
-          {orders.isError && (
-            <p className={pageStyles.error} role="alert">
-              {t('acct.loadError')} <Button variant="link" onClick={() => void orders.refetch()}>{t('ord.retry')}</Button>
-            </p>
-          )}
-          {items.length > 0 && (
-            <div className={styles.toolbar}>
-              <div className={styles.filters}>
-                <TextField label={t('ord.search')} placeholder={t('ord.searchPlaceholder')} type="search" value={text} onChange={(e) => setText(e.currentTarget.value)} />
-                <Select label={t('ord.range')} value={range} onChange={(e) => setRange(e.currentTarget.value as OrderRange)} options={rangeOptions(now).map((o) => ({ value: o.value, label: t(o.labelKey, o.vars) }))} />
-              </div>
-              <ChipGroup
-                label={t('ord.filters')}
-                value={group}
-                onChange={setGroup}
-                options={[
-                  { value: 'ALL', label: `${t('ord.f.all')} (${items.length}${orders.hasNextPage ? '+' : ''})` },
-                  { value: 'IN_PROGRESS', label: `${t('ord.f.inProgress')} (${count('IN_PROGRESS')})` },
-                  { value: 'DELIVERED', label: `${t('ord.f.delivered')} (${count('DELIVERED')})` },
-                  { value: 'CLOSED', label: `${t('ord.f.closed')} (${count('CLOSED')})` }
-                ]}
-              />
-            </div>
-          )}
-          {orders.isSuccess && items.length === 0 && (
-            <div className={pageStyles.empty}>
-              <p className={pageStyles.muted}>{t('ord.none')}</p>
-              <Link href="/" className={buttonClassName()}>
-                {t('common.backToShop')}
-              </Link>
-            </div>
-          )}
-          {items.length > 0 && shown.length === 0 && (
-            <div className={pageStyles.empty}>
-              <p className={pageStyles.muted}>{t('ord.noMatch')}</p>
-              {orders.hasNextPage && <p className={pageStyles.muted}>{t('ord.noMatchMore')}</p>}
-            </div>
-          )}
-          {shown.map((o) => (
-            <OrderCard key={o.orderNumber} order={o} />
+      <AccountHeader title={t('account.orders')} />
+      <div className={styles.controls}>
+        <nav className={styles.tabs} aria-label={t('ord.tabs')}>
+          {tabs.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              className={styles.tab}
+              aria-current={tab === o.value ? 'page' : undefined}
+              onClick={() => {
+                setTab(o.value);
+                reset();
+              }}
+              data-testid={`orders-tab-${o.value}`}
+            >
+              {o.label}
+              {items.length > 0 && o.value !== 'ALL' && <span className={styles.tabCount}> ({count(o.value)})</span>}
+            </button>
           ))}
-          {items.length > 0 && (
-            <div className={styles.more}>
-              <p className={pageStyles.muted} role="status">{t(filtering ? 'ord.showingFiltered' : 'ord.showing', { shown: shown.length, count: items.length })}</p>
-              <div ref={sentinel} aria-hidden />
-              {orders.hasNextPage && !pastRange && (
-                <Button variant="neutral" loading={orders.isFetchingNextPage} onClick={() => void orders.fetchNextPage()}>
-                  {t('ord.loadMore')}
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-        <aside className={styles.aside}>
-          <section className={pageStyles.card}>
-            <strong>{t('ord.helpTitle')}</strong>
-            <p className={pageStyles.muted}>{t('ord.helpBody')}</p>
-            <Button variant="neutral" icon={<Sparkle weight="fill" aria-hidden />} onClick={() => lola.open(t('ord.lolaPrompt'))}>
-              {t('account.askLola')}
-            </Button>
-          </section>
-        </aside>
+        </nav>
+        {items.length > 0 || range !== 'all' ? (
+          <FilterBar label={t('ord.range')}>
+            <label className={styles.search}>
+              {t('ord.search')}
+              <input
+                type="search"
+                className={fieldStyles.control}
+                value={text}
+                placeholder={t('ord.searchPlaceholder')}
+                onChange={(e) => {
+                  setText(e.currentTarget.value);
+                  reset();
+                }}
+                data-testid="orders-search"
+              />
+            </label>
+            <FilterSelect
+              id={RANGE_ID}
+              label={t('ord.range')}
+              value={range}
+              onChange={(v) => {
+                setRange(v as OrderRange);
+                reset();
+              }}
+              options={rangeOptions(now).map((o) => ({ value: o.value, label: t(o.labelKey, o.vars) }))}
+              testId="orders-range"
+            />
+          </FilterBar>
+        ) : null}
       </div>
-    </div>
+
+      {orders.isPending && <Skeleton height={180} />}
+      {orders.isError && (
+        <Message tone="error">
+          {t('acct.loadError')} <TextLinkButton onClick={() => void orders.refetch()}>{t('ord.retry')}</TextLinkButton>
+        </Message>
+      )}
+      {orders.isSuccess && shown.length === 0 && loadingMore && <Skeleton height={120} />}
+      {orders.isSuccess && shown.length === 0 && !loadingMore && (
+        <EmptyState
+          testId="orders-empty"
+          title={empty}
+          action={
+            <span className={styles.emptyLinks}>
+              {range !== 'all' && (
+                <TextLinkButton onClick={changeRange} data-testid="orders-change-range">
+                  {t('ord.changeRange')}
+                </TextLinkButton>
+              )}
+              <Link href="/" className={buttonClassName({ variant: 'primary', size: 'sm' })}>
+                {t('ord.keepShopping')}
+              </Link>
+            </span>
+          }
+        />
+      )}
+      {visible.length > 0 && (
+        <ol className={styles.orderList} aria-label={t('account.orders')}>
+          {visible.map((o) => (
+            <OrderBlock key={o.orderNumber} order={o} />
+          ))}
+        </ol>
+      )}
+      {shown.length > 0 && (pageCount > 1 || moreToLoad) && (
+        <Pager label={t('ord.pages')} info={t('ord.showingRange', { from: start + 1, to: start + visible.length, count: shown.length })}>
+          <TextLinkButton disabled={current === 0} onClick={() => setPage(current - 1)}>
+            {t('ord.prev')}
+          </TextLinkButton>
+          {Array.from({ length: pageCount }, (_, i) => (
+            <TextLinkButton key={i} className={i === current ? styles.pageNow : undefined} aria-current={i === current ? 'page' : undefined} aria-label={t('ord.pageN', { n: i + 1 })} onClick={() => setPage(i)}>
+              {i + 1}
+            </TextLinkButton>
+          ))}
+          <TextLinkButton disabled={current + 1 >= pageCount && !moreToLoad} onClick={() => void next()}>
+            {orders.isFetchingNextPage ? t('common.loading') : t('ord.next')}
+          </TextLinkButton>
+        </Pager>
+      )}
+
+      <Section title={t('ord.helpTitle')} lead={t('ord.helpBody')}>
+        <div>
+          <TextLinkButton onClick={() => lola.open(t('ord.lolaPrompt'))}>{t('account.askLola')}</TextLinkButton>
+          {' · '}
+          <Link href="/account/help" className={textLinkClassName}>
+            {t('account.help')}
+          </Link>
+        </div>
+      </Section>
+    </FlatPage>
   );
 }

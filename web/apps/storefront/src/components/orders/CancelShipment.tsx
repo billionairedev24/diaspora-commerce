@@ -4,8 +4,9 @@ import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, Dialog } from '@afrotransact/ui';
 import { useState } from 'react';
 
-import pageStyles from '@/components/account/Pages.module.css';
 import { useT } from '@/i18n/t';
+
+import styles from './Orders.module.css';
 
 interface Props {
   shipment: { items: string; cancellable?: boolean; cancellableUntil?: string | null };
@@ -31,9 +32,9 @@ export function CancelShipment({ shipment, onCancel, loading, block }: Props) {
       <Button size="sm" variant="neutral" block={block} onClick={() => setOpen(true)} loading={loading}>
         {t('ord.cancelItems')}
       </Button>
-      {until && <p className={pageStyles.muted}>{t('ord.cancelUntil', { time: until })}</p>}
+      {until && <p className={styles.muted}>{t('ord.cancelUntil', { time: until })}</p>}
       <Dialog open={open} onOpenChange={setOpen} title={t('ord.cancelConfirmTitle')} description={t('ord.cancelConfirmBody', { items: shipment.items })}>
-        <div className={pageStyles.actions}>
+        <div className={styles.dialogActions}>
           <Button variant="neutral" onClick={() => setOpen(false)}>
             {t('ord.cancelKeep')}
           </Button>
