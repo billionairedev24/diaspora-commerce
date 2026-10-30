@@ -14,6 +14,7 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 | [Settings in the staff console](settings.md) | where every platform setting lives, who calculates sales tax (our rules or Stripe Tax), finding a transfer in Stripe |
 | [Production readiness review](production-readiness.md) | what was checked, what could not be, and what blocks go-live |
 | [Cost](cost.md) | a budget alert fired; the monthly cost review |
+| [Kafka dead letters, replay and recovery](kafka-replay.md) | an event was not applied by a consumer: inspect a DLQ, replay records, reset a consumer group's offsets, re-publish outbox rows, rebuild a read model (`tools/ops/kafka-replay`) |
 | [Carrier sandboxes](carrier-sandboxes.md) | proving USPS / UPS / FedEx / DHL against their sandboxes; carrier credentials |
 
 ## Alerts
@@ -34,6 +35,7 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 | [KafkaConsumerLagGrowing](KafkaConsumerLagGrowing.md) | page |
 | [KafkaConsumerLagHigh](KafkaConsumerLagHigh.md) | ticket |
 | [KafkaDeadLetterMessages](KafkaDeadLetterMessages.md) | ticket |
+| [KafkaDeadLetterWriteFailing](KafkaDeadLetterWriteFailing.md) | page |
 | [NotificationDeliveryBudgetBurn](NotificationDeliveryBudgetBurn.md) | page / ticket |
 | [OtelCollectorExportFailures](OtelCollectorExportFailures.md) | ticket |
 | [OutboxBacklogGrowing](OutboxBacklogGrowing.md) | ticket |
