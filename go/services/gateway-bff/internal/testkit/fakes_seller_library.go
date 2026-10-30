@@ -3,6 +3,7 @@ package testkit
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 // libraryRoutes fakes the upstreams behind a seller's plan capabilities: offers' seller coupons, media's image library,
@@ -59,8 +60,30 @@ func (u *Upstreams) libraryRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/image-library/attach", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"productsUpdated": 1, "imagesAttached": 1, "skipped": []map[string]any{{"sku": "NOPE-1", "reason": "No such listing"}}})
 	})
-	mux.HandleFunc("GET /v1/brands", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, map[string]any{"brands": []map[string]any{{"name": "Mama Tee", "source": "OWN", "products": 4}, {"name": "Tilda", "source": "CATALOG", "products": 31}}})
+	// Brands of a category: the department's brands only (the real catalog scopes them; the fake mirrors two departments).
+	mux.HandleFunc("GET /v1/brands", func(w http.ResponseWriter, r *http.Request) {
+		cat := r.URL.Query().Get("category") + r.URL.Query().Get("productType")
+		if cat == "" {
+			problem(w, 422, "catalog.rule-violation", "Choose a category or a product type", map[string]any{"category": "Required"})
+			return
+		}
+		if strings.Contains(cat, "grocery") {
+			writeJSON(w, 200, map[string]any{"departmentId": "dept-groceries", "departmentName": "Groceries", "brands": []map[string]any{
+				{"id": "b-tilda", "name": "Tilda", "source": "CATALOG", "status": "APPROVED", "ownProducts": 0, "products": 31}}})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"departmentId": "dept-fashion", "departmentName": "Fashion", "brands": []map[string]any{
+			{"id": "b-nike", "name": "Nike", "source": "CATALOG", "status": "APPROVED", "ownProducts": 0, "products": 12},
+			{"id": "b-mama", "name": "Mama Tee", "source": "OWN", "status": "PENDING", "ownProducts": 4, "products": 4}}})
+	})
+	mux.HandleFunc("POST /v1/brands", func(w http.ResponseWriter, r *http.Request) {
+		var b struct{ Name string }
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if strings.EqualFold(b.Name, "nike") {
+			writeJSON(w, 200, map[string]any{"created": false, "brand": map[string]any{"id": "b-nike", "name": "Nike", "source": "CATALOG", "status": "APPROVED", "ownProducts": 0, "products": 12}})
+			return
+		}
+		writeJSON(w, 201, map[string]any{"created": true, "brand": map[string]any{"id": "b-new", "name": b.Name, "source": "OWN", "status": "PENDING", "ownProducts": 0, "products": 0}})
 	})
 	mux.HandleFunc("GET /v1/labels/by-tracking/{carrier}/{tracking}/document", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/pdf")

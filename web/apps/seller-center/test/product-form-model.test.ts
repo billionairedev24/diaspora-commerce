@@ -73,7 +73,7 @@ describe('one-step product form: sections follow the product type', () => {
 describe('one-step product form: validation and readiness', () => {
   it('lists what is missing with field ids the readiness panel links to', () => {
     const p = validateForm(withCategory(emptyForm(), { id: 'pt-spices', path: 'x', productType: 'grocery' }), grocery);
-    expect(Object.keys(p)).toEqual(expect.arrayContaining([fieldId.title, fieldId.brand, fieldId.images, fieldId.attr('ingredients'), fieldId.attr('shelf'), fieldId.sku, fieldId.gtin, fieldId.price, fieldId.qty]));
+    expect(Object.keys(p)).toEqual(expect.arrayContaining([fieldId.title, fieldId.images, fieldId.attr('ingredients'), fieldId.attr('shelf'), fieldId.sku, fieldId.gtin, fieldId.price, fieldId.qty]));
     expect(p[fieldId.attr('ingredients')]?.section).toBe('compliance');
     expect(validateForm(emptyForm(), undefined)[fieldId.category]?.key).toBe('sc.pf.err.category');
   });
@@ -171,6 +171,16 @@ describe('one-step product form: attributes of the type, completion and quality'
     expect(brandOf(book)).toBeUndefined();
     expect(brandOf(dress)?.key).toBe('brand');
     expect(brandOf(undefined)).toBeUndefined();
+    // the type decides: grocery asks for a brand but does not require it, fashion requires one (a no-brand choice satisfies it)
+    expect(brandOf(grocery)?.required).toBe(false);
+    expect(brandOf(dress)).toMatchObject({ label: 'Brand or label', required: true, kind: 'BRAND' });
+    const fashion = withCategory(emptyForm(), { id: 'pt-dresses', path: 'Fashion › Women › Dresses', productType: 'dress' });
+    expect(validateForm(fashion, dress)[fieldId.brand]?.key).toBe('sc.pf.err.required');
+    expect(validateForm({ ...fashion, attrs: { brand_reason: 'HANDMADE' } }, dress)[fieldId.brand]).toBeUndefined();
+    expect(validateForm({ ...fashion, attrs: { brand: 'Nike', brand_id: 'brand-nike' } }, dress)[fieldId.brand]).toBeUndefined();
+    // the brand choice follows a change of category (the field then re-checks it); other details do not
+    const moved = withCategory({ ...fashion, attrs: { brand: 'Nike', brand_id: 'brand-nike', fit: 'Regular' } }, { id: 'pt-spices', path: 'x', productType: 'grocery' });
+    expect(moved.attrs).toEqual({ brand: 'Nike', brand_id: 'brand-nike' });
     expect(validateForm({ ...withCategory(emptyForm(), cookbooks), title: 'Jollof Rice and Other Stories' }, book)[fieldId.brand]).toBeUndefined();
   });
 

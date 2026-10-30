@@ -339,8 +339,9 @@ export function ProductForm({ productId }: { productId?: string }) {
               onChange={(e) => patch({ title: e.target.value })} />
             {brandDef ? (
               <div className={GRID}>
-                <BrandField id={fieldId.brand} label={brandDef.required ? brandDef.label : t('sc.pf.optional', { label: brandDef.label })} value={s.attrs.brand ?? ''}
-                  required={brandDef.required} error={err(fieldId.brand)} onChange={(v) => update((prev) => ({ ...prev, attrs: { ...prev.attrs, brand: v } }))} />
+                <BrandField id={fieldId.brand} def={brandDef} categoryId={s.categoryId} productType={s.productType} keepId={detail.data?.attributes?.brand_id} error={err(fieldId.brand)}
+                  value={{ brand: s.attrs.brand ?? '', brand_id: s.attrs.brand_id ?? '', brand_reason: s.attrs.brand_reason ?? '' }}
+                  onChange={(v) => update((prev) => ({ ...prev, attrs: { ...prev.attrs, brand: v.brand, brand_id: v.brand_id, brand_reason: v.brand_reason } }))} />
               </div>
             ) : null}
             <DescriptionEditor value={s.description} onChange={(v) => patch({ description: v })} error={err(fieldId.description)} ai={aiState} canWrite={s.title.trim().length >= 3}

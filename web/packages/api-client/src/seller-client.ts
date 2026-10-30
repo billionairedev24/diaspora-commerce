@@ -35,6 +35,7 @@ import {
   BookingCardSchema,
   type BrandList,
   BrandListSchema,
+  type BrandScope,
   type BusinessPageSettings,
   type BusinessPageSettingsInput,
   BusinessPageSettingsSchema,
@@ -53,6 +54,8 @@ import {
   ChangePlanResultSchema,
   type ComplianceSummary,
   ComplianceSummarySchema,
+  type CreatedBrand,
+  CreatedBrandSchema,
   type CreateSellerCoupon,
   type CustomerPickupRequest,
   type Dashboard,
@@ -398,8 +401,12 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request(`/v1/seller/image-library/${enc(assetId)}`, ImageLibraryItemSchema, { method: 'PATCH', body: { fileName } }),
     attachLibraryImages: (skus?: string[]): Promise<AttachLibraryImagesResult> =>
       request('/v1/seller/image-library/attach', AttachLibraryImagesResultSchema, { method: 'POST', body: { skus: skus ?? [] } }),
-    listBrands: (q: string, signal?: AbortSignal): Promise<BrandList> =>
-      request('/v1/seller/catalog/brands', BrandListSchema, { query: { q: q || undefined }, signal }),
+    /** The brands of a category (422 without a category or product type). */
+    listBrands: (scope: BrandScope, q: string, signal?: AbortSignal): Promise<BrandList> =>
+      request('/v1/seller/catalog/brands', BrandListSchema, { query: { category: scope.category || undefined, productType: scope.productType || undefined, q: q || undefined }, signal }),
+    /** Adds a brand the seller typed: the existing match, or a pending brand reviewed by AfroTransact. */
+    createBrand: (name: string, scope: BrandScope): Promise<CreatedBrand> =>
+      request('/v1/seller/catalog/brands', CreatedBrandSchema, { method: 'POST', body: { name, category: scope.category, productType: scope.productType } }),
     getCategoryTree: (signal?: AbortSignal): Promise<CategoryNode[]> => request('/v1/seller/catalog/categories', z.array(CategoryNodeSchema), { signal }),
     getProductType: (code: string, signal?: AbortSignal): Promise<ProductTypeSchema> =>
       request(`/v1/seller/catalog/product-types/${enc(code)}`, ProductTypeSchemaSchema, { signal }),

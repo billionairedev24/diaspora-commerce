@@ -145,4 +145,23 @@ class TaxonomyRulesTest {
         assertThat(books.attribute("brand")).isEmpty();
         assertThat(books.attribute("author")).isPresent();
     }
+
+    @Test
+    void theBrandAttributeOffersOnlyKnownNoBrandChoices() {
+        AttributeDefinition ok = new AttributeDefinition("brand", "Brand or label", List.of("UNBRANDED", "HANDMADE"),
+                true, false, AttributeKind.BRAND, List.of(), AttributeSection.DETAILS, "The label", true);
+        assertThat(TaxonomyRules.attributes(List.of(ok), ProductTypeTraits.NONE, null)).singleElement()
+                .satisfies(a -> assertThat(a.unbrandedReasons()).hasSize(2));
+
+        AttributeDefinition wrongKey = new AttributeDefinition("maker", "Maker", List.of(), false, false,
+                AttributeKind.BRAND, List.of(), AttributeSection.DETAILS, null, true);
+        assertThatThrownBy(() -> TaxonomyRules.attributes(List.of(wrongKey), ProductTypeTraits.NONE, null))
+                .isInstanceOfSatisfying(CatalogRuleViolation.class,
+                        e -> assertThat(e.fieldErrors()).containsKey("attributes[0].key"));
+        AttributeDefinition badOption = new AttributeDefinition("brand", "Brand", List.of("GENERIC"), false, false,
+                AttributeKind.BRAND, List.of(), AttributeSection.DETAILS, null, true);
+        assertThatThrownBy(() -> TaxonomyRules.attributes(List.of(badOption), ProductTypeTraits.NONE, null))
+                .isInstanceOfSatisfying(CatalogRuleViolation.class,
+                        e -> assertThat(e.fieldErrors()).containsKey("attributes[0].options"));
+    }
 }

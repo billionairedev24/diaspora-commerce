@@ -83,19 +83,28 @@ describe('product form v2 (S309): wide cards of sections with proper dropdowns',
     expect(screen.getByLabelText('New category name')).toHaveValue('Hair pomades');
   });
 
-  it('picks or adds a brand in a combobox', async () => {
+  it('offers the brands of the chosen category only, adds a typed brand and re-checks it when the category changes', async () => {
     const user = userEvent.setup();
     await renderScreen(<ProductForm />);
     await chooseCategory('dresses', /Dresses/);
-    const brand = await screen.findByRole('combobox', { name: 'Brand' });
+    const brand = await screen.findByRole('combobox', { name: 'Brand or label' });
     await user.click(brand);
-    expect(await screen.findByRole('option', { name: 'Mama Africa' })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Nike' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'No brand / unbranded' })).toBeInTheDocument();
+    expect(screen.getByText('Brands in Fashion')).toBeInTheDocument();
+    // a grocery or beauty brand is never offered under a dress
+    expect(screen.queryByRole('option', { name: 'Maggi' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Cantu' })).not.toBeInTheDocument();
     await user.type(brand, 'Zuri Naturals');
-    await user.click(screen.getByRole('option', { name: 'Add “Zuri Naturals” as a new brand' }));
-    expect(brand).toHaveValue('Zuri Naturals');
+    await user.click(screen.getByRole('option', { name: 'Add “Zuri Naturals” as a new brand (reviewed by AfroTransact)' }));
+    await waitFor(() => expect(brand).toHaveValue('Zuri Naturals'));
     await user.click(brand);
-    await user.click(await screen.findByRole('option', { name: 'Shea Gold' }));
-    expect(brand).toHaveValue('Shea Gold');
+    await user.click(await screen.findByRole('option', { name: 'Nike' }));
+    expect(brand).toHaveValue('Nike');
+    // moving to groceries drops the fashion brand: it is not sold there
+    await chooseCategory('spices', /Spices & seasonings/);
+    const grocery = await screen.findByRole('combobox', { name: 'Brand (optional)' });
+    await waitFor(() => expect(grocery).toHaveValue(''));
   });
 
   it('uses a dropdown or a segmented control for every choice', async () => {
@@ -213,7 +222,7 @@ describe('attributes come from the product type (owner feedback)', () => {
     await renderScreen(<ProductForm />);
     expect(screen.queryByRole('combobox', { name: /Brand/ })).not.toBeInTheDocument();
     await chooseCategory('dresses', /Dresses/);
-    const brand = await screen.findByRole('combobox', { name: 'Brand' });
+    const brand = await screen.findByRole('combobox', { name: 'Brand or label' });
     fireEvent.change(brand, { target: { value: 'Zuri' } });
     fireEvent.click(await screen.findByRole('option', { name: /Add “Zuri” as a new brand/ }));
     await chooseCategory('cookbooks', /African & Caribbean cooking/);

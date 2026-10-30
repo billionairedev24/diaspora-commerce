@@ -122,8 +122,10 @@ type SellerListingClient interface {
 	ImageUsage(ctx context.Context, bearer string, urls, skus []string) (CatalogImageUsage, error)
 	// AttachLibraryImages is catalog POST /v1/image-library/attach.
 	AttachLibraryImages(ctx context.Context, bearer string, skus []string) (domain.AttachLibraryImagesResult, error)
-	// Brands is catalog GET /v1/brands.
-	Brands(ctx context.Context, bearer, q string) (domain.BrandList, error)
+	// Brands is catalog GET /v1/brands (the brands of a category).
+	Brands(ctx context.Context, bearer string, q domain.BrandQuery) (domain.BrandList, error)
+	// CreateBrand is catalog POST /v1/brands (adds a pending brand, or returns the existing match).
+	CreateBrand(ctx context.Context, bearer, name string, q domain.BrandQuery) (domain.CreatedBrand, error)
 }
 
 // CatalogImageUsage is catalog's ImageUsage.

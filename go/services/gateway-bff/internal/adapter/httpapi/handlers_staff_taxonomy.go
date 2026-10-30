@@ -18,6 +18,14 @@ func (h *handlersImpl) registerStaffTaxonomy(route func(pattern string, fn http.
 	route("GET /v1/staff/taxonomy/product-types/{code}", h.staffTaxonomyProductType)
 	route("PATCH /v1/staff/taxonomy/product-types/{code}", h.staffUpdateTaxonomyProductType)
 	route("GET /v1/staff/taxonomy/audit", h.staffTaxonomyAudit)
+	route("GET /v1/staff/taxonomy/brands", h.staffBrands)
+	route("POST /v1/staff/taxonomy/brands", h.staffCreateBrand)
+	route("POST /v1/staff/taxonomy/brands/bulk", h.staffCreateBrands)
+	route("PATCH /v1/staff/taxonomy/brands/{id}", h.staffUpdateBrand)
+	route("POST /v1/staff/taxonomy/brands/{id}/approve", h.staffBrandAction("approve"))
+	route("POST /v1/staff/taxonomy/brands/{id}/reject", h.staffBrandAction("reject"))
+	route("POST /v1/staff/taxonomy/brands/{id}/retire", h.staffBrandAction("retire"))
+	route("POST /v1/staff/taxonomy/brands/{id}/merge", h.staffBrandAction("merge"))
 	route("POST /v1/staff/taxonomy/requests/{id}/approval-preview", h.staffTaxonomyApprovalPreview)
 }
 
@@ -130,4 +138,54 @@ func (h *handlersImpl) staffTaxonomyApprovalPreview(w http.ResponseWriter, r *ht
 	}
 	v, err := h.s.Staff.Taxonomy.PreviewApproval(r.Context(), callerFrom(r.Context()), r.PathValue("id"), b)
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffBrands(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	v, err := h.s.Staff.Taxonomy.Brands(r.Context(), callerFrom(r.Context()), q.Get("status"), q.Get("q"), q.Get("scope"), limit, offset)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffCreateBrand(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Taxonomy.CreateBrand(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) staffCreateBrands(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Taxonomy.CreateBrands(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffUpdateBrand(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Taxonomy.UpdateBrand(r.Context(), callerFrom(r.Context()), r.PathValue("id"), r.Header.Get("If-Match"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffBrandAction(action string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		b, err := staffBody(r)
+		if err != nil {
+			h.reply(w, r, 0, nil, err)
+			return
+		}
+		v, err := h.s.Staff.Taxonomy.DecideBrand(r.Context(), callerFrom(r.Context()), r.PathValue("id"), action, r.Header.Get("If-Match"), b)
+		h.reply(w, r, http.StatusOK, v, err)
+	}
 }

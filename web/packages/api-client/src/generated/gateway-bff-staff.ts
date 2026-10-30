@@ -5052,6 +5052,160 @@ export interface paths {
         patch: operations["updateStaffTaxonomyProductType"];
         trace?: never;
     };
+    "/v1/staff/taxonomy/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Brands by status, name and scope with their usage (the seller who typed one is named)
+         * @description catalog `GET /v1/taxonomy/brands`. `status=PENDING` is the review queue. `counts` holds brands per status for the tab badges. `q` ignores case, accents and punctuation.
+         */
+        get: operations["listStaffBrands"];
+        put?: never;
+        /**
+         * Add an approved brand with the places it applies to
+         * @description catalog `POST /v1/taxonomy/brands`. 409 when the name already exists in an overlapping scope.
+         */
+        post: operations["createStaffBrand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/brands/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a pasted list of brands (one per line) to a scope
+         * @description catalog `POST /v1/taxonomy/brands/bulk`. Brands that exist or are invalid are reported per entry; the rest are created.
+         */
+        post: operations["createStaffBrandsBulk"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/brands/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change a brand's name and/or where it applies (If-Match = the brand's version)
+         * @description catalog `PATCH /v1/taxonomy/brands/{id}`. A rename follows to the listings. 422 when nothing differs from what is stored.
+         */
+        patch: operations["updateStaffBrand"];
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/brands/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a brand (bring a rejected or retired one back)
+         * @description catalog `POST /v1/taxonomy/brands/{id}/approve`.
+         */
+        post: operations["approveStaffBrand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/brands/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject a pending brand
+         * @description catalog `POST /v1/taxonomy/brands/{id}/reject`. It is no longer offered; listings that hold it must pick another brand when edited.
+         */
+        post: operations["rejectStaffBrand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/brands/{id}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire an approved brand
+         * @description catalog `POST /v1/taxonomy/brands/{id}/retire`. New listings cannot pick it; existing ones keep it.
+         */
+        post: operations["retireStaffBrand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/taxonomy/brands/{id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge a brand into an existing approved brand (listings are re-pointed)
+         * @description catalog `POST /v1/taxonomy/brands/{id}/merge`. Listings that hold the brand show the target name; the target applies wherever the merged brand did.
+         */
+        post: operations["mergeStaffBrand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/taxonomy/audit": {
         parameters: {
             query?: never;
@@ -5102,6 +5256,100 @@ export interface components {
     schemas: {
         /** @description Why the change is made; recorded in the audit trail with the person's name */
         StaffTaxonomyReason: string;
+        StaffBrandScope: {
+            /** Format: uuid */
+            nodeId: string;
+            /** @description Department, category or product type as a path, e.g. Fashion › Women */
+            path: string;
+            /** @enum {string} */
+            level: "DEPARTMENT" | "CATEGORY" | "PRODUCT_TYPE";
+        };
+        StaffBrand: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            status: "APPROVED" | "PENDING" | "REJECTED" | "MERGED_INTO" | "RETIRED";
+            /** Format: uuid */
+            mergedIntoId: string | null;
+            mergedIntoName: string | null;
+            /** @description The seller who typed it in; null for brands staff listed */
+            createdByName: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /**
+             * Format: int64
+             * @description Send as If-Match when changing it
+             */
+            version: number;
+            /** @description Internal id of the staff member; the audit trail names people */
+            decidedBy: string | null;
+            /** Format: date-time */
+            decidedAt: string | null;
+            decisionReason: string | null;
+            /**
+             * Format: int64
+             * @description Listings that hold the brand
+             */
+            products: number;
+            /**
+             * Format: int64
+             * @description Distinct sellers behind them
+             */
+            sellers: number;
+            scope: components["schemas"]["StaffBrandScope"][];
+        };
+        StaffBrandList: {
+            brands: components["schemas"]["StaffBrand"][];
+            /** Format: int64 */
+            total: number;
+            /** @description Brands per status */
+            counts: {
+                [key: string]: number;
+            };
+            canEdit: boolean;
+        };
+        StaffBrandCreateBody: {
+            name: string;
+            /** @description Departments, categories or product types it applies to */
+            scope: string[];
+            reason: string;
+        };
+        StaffBrandBulkBody: {
+            names?: string[];
+            /** @description A pasted list, split on new lines, commas and semicolons */
+            text?: string;
+            scope: string[];
+            reason: string;
+        };
+        StaffBrandBulkResult: {
+            results: {
+                name: string;
+                /** @enum {string} */
+                outcome: "CREATED" | "EXISTS" | "INVALID";
+                /** Format: uuid */
+                brandId: string | null;
+                message: string | null;
+            }[];
+            created: number;
+            existing: number;
+            invalid: number;
+        };
+        StaffBrandUpdateBody: {
+            name?: string;
+            scope?: string[];
+            reason: string;
+        };
+        StaffBrandMergeBody: {
+            /**
+             * Format: uuid
+             * @description An approved brand to merge into
+             */
+            targetId: string;
+            reason: string;
+        };
         StaffTaxonomyReasonBody: {
             reason: components["schemas"]["StaffTaxonomyReason"];
         };
@@ -5174,7 +5422,7 @@ export interface components {
             key: string;
             label: string;
             /** @enum {string} */
-            kind: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER";
+            kind: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER" | "BRAND";
             /** @description The allowed values of a choice (ENUM); empty for other kinds */
             options?: string[];
             /** @description The units of a NUMBER; the first is the default */
@@ -17862,6 +18110,280 @@ export interface operations {
             404: components["responses"]["Problem"];
             412: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffBrands: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated: PENDING, APPROVED, REJECTED, MERGED_INTO, RETIRED */
+                status?: string;
+                q?: string;
+                /** @description Only brands applying to this taxonomy node */
+                scope?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Brands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBrandList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffBrand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffBrandCreateBody"];
+            };
+        };
+        responses: {
+            /** @description Brand */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBrand"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffBrandsBulk: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffBrandBulkBody"];
+            };
+        };
+        responses: {
+            /** @description What happened to each entry */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBrandBulkResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffBrand: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The version of the node or schema as loaded (optimistic locking); 412 VERSION_CONFLICT when someone changed it since. */
+                "If-Match": components["parameters"]["TaxonomyIfMatch"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffBrandUpdateBody"];
+            };
+        };
+        responses: {
+            /** @description Brand */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBrand"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            428: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    approveStaffBrand: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The version of the node or schema as loaded (optimistic locking); 412 VERSION_CONFLICT when someone changed it since. */
+                "If-Match": components["parameters"]["TaxonomyIfMatch"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxonomyReasonBody"];
+            };
+        };
+        responses: {
+            /** @description Brand */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBrand"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            428: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    rejectStaffBrand: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The version of the node or schema as loaded (optimistic locking); 412 VERSION_CONFLICT when someone changed it since. */
+                "If-Match": components["parameters"]["TaxonomyIfMatch"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxonomyReasonBody"];
+            };
+        };
+        responses: {
+            /** @description Brand */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBrand"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            428: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    retireStaffBrand: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The version of the node or schema as loaded (optimistic locking); 412 VERSION_CONFLICT when someone changed it since. */
+                "If-Match": components["parameters"]["TaxonomyIfMatch"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxonomyReasonBody"];
+            };
+        };
+        responses: {
+            /** @description Brand */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBrand"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            428: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    mergeStaffBrand: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The version of the node or schema as loaded (optimistic locking); 412 VERSION_CONFLICT when someone changed it since. */
+                "If-Match": components["parameters"]["TaxonomyIfMatch"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffBrandMergeBody"];
+            };
+        };
+        responses: {
+            /** @description Brand */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBrand"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            428: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

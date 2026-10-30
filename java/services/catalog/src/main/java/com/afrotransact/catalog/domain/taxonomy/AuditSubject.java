@@ -7,5 +7,7 @@ public enum AuditSubject {
     /** A product-type schema (attributes, identifier rule, traits). */
     PRODUCT_TYPE,
     /** A seller's category request. */
-    REQUEST
+    REQUEST,
+    /** A brand of the brand registry. */
+    BRAND
 }

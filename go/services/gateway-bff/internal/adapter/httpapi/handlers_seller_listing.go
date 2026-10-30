@@ -240,6 +240,27 @@ func (h *handlersImpl) attachLibraryImages(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *handlersImpl) brands(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.SellerImports.Brands(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("q"))
+	qs := r.URL.Query()
+	v, err := h.s.SellerImports.Brands(r.Context(), callerFrom(r.Context()),
+		domain.BrandQuery{Q: qs.Get("q"), Category: qs.Get("category"), ProductType: qs.Get("productType")})
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) createBrand(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Name        string `json:"name"`
+		Category    string `json:"category"`
+		ProductType string `json:"productType"`
+	}
+	if err := decode(r, &b, true); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerImports.CreateBrand(r.Context(), callerFrom(r.Context()), b.Name,
+		domain.BrandQuery{Category: b.Category, ProductType: b.ProductType})
+	status := http.StatusOK
+	if v.Created {
+		status = http.StatusCreated
+	}
+	h.reply(w, r, status, v, err)
 }

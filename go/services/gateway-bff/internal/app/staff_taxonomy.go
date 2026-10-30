@@ -33,6 +33,13 @@ type StaffTaxonomyService interface {
 	CreateProductType(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
 	UpdateProductType(ctx context.Context, c *domain.Caller, code, ifMatch string, body map[string]any) (any, error)
 	Audit(ctx context.Context, c *domain.Caller, subject string, limit int) (any, error)
+	// Brands is the Brands tab (staff_taxonomy_brands.go): the review queue and the brand registry.
+	Brands(ctx context.Context, c *domain.Caller, status, q, scope string, limit, offset int) (any, error)
+	CreateBrand(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	CreateBrands(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	UpdateBrand(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
+	// DecideBrand is approve, reject, retire or merge (body.targetId).
+	DecideBrand(ctx context.Context, c *domain.Caller, id, action, ifMatch string, body map[string]any) (any, error)
 	// PreviewApproval says what approving a category request with these choices would create; nothing is created.
 	PreviewApproval(ctx context.Context, c *domain.Caller, requestID string, body map[string]any) (any, error)
 }
@@ -60,7 +67,7 @@ var (
 	productTypeRe   = regexp.MustCompile(`^[a-z][a-z0-9_]{1,39}$`)
 	taxonomyLevels  = []string{"DEPARTMENT", "CATEGORY", "PRODUCT_TYPE"}
 	identifierRules = []string{"GTIN", "ISBN"}
-	attributeKinds  = []string{"TEXT", "MULTILINE", "ENUM", "NUMBER"}
+	attributeKinds  = []string{"TEXT", "MULTILINE", "ENUM", "NUMBER", "BRAND"}
 	attributeSecs   = []string{"DETAILS", "FOOD", "REGULATED"}
 )
 
@@ -266,6 +273,8 @@ var auditActions = map[string]string{
 	"NODE_CREATED": "Created", "NODE_RENAMED": "Renamed", "NODE_MOVED": "Moved", "NODE_RETIRED": "Retired", "NODE_RESTORED": "Restored",
 	"NODES_REORDERED": "Reordered", "TYPE_CREATED": "Product type created", "TYPE_UPDATED": "Product type changed",
 	"REQUEST_APPROVED": "Request approved", "REQUEST_REJECTED": "Request rejected",
+	"BRAND_CREATED": "Brand added", "BRANDS_ADDED": "Brands added", "BRAND_APPROVED": "Brand approved", "BRAND_REJECTED": "Brand rejected",
+	"BRAND_RETIRED": "Brand retired", "BRAND_MERGED": "Brand merged", "BRAND_UPDATED": "Brand changed",
 }
 
 func auditActionLabel(action string) string {
@@ -316,6 +325,26 @@ func auditSummary(e jobj) string {
 		return "Approved and created " + jstr(d, "createdPath")
 	case "REQUEST_REJECTED":
 		return "Rejected " + label
+	case "BRAND_CREATED":
+		return "Added brand " + label
+	case "BRANDS_ADDED":
+		return "Added " + label + ": " + strings.Join(strs(d, "brands"), ", ")
+	case "BRAND_APPROVED":
+		return "Approved " + label
+	case "BRAND_REJECTED":
+		return "Rejected " + label
+	case "BRAND_RETIRED":
+		return "Retired " + label
+	case "BRAND_MERGED":
+		return "Merged " + label + " into " + jstr(d, "into")
+	case "BRAND_UPDATED":
+		parts := []string{}
+		for _, k := range []string{"name", "scope"} {
+			if _, ok := d[k]; ok {
+				parts = append(parts, k)
+			}
+		}
+		return "Changed " + label + ": " + strings.Join(parts, " and ")
 	default:
 		return label
 	}

@@ -129,10 +129,14 @@ export function searchLeaves(leaves: CategoryLeaf[], query: string, limit = 8): 
   return leaves.filter((l) => words.every((w) => fold(l.path).includes(w))).slice(0, limit);
 }
 
+/** The brand choice (name, registry id, no-brand reason) carried to another category; the brand field re-validates it there. */
+const pickBrand = (attrs: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(['brand', 'brand_id', 'brand_reason'].flatMap((k) => (attrs[k] ? [[k, attrs[k]]] : [])));
+
 /** Choosing another category resets what depends on the product type. */
 export function withCategory(s: FormState, leaf: { id: string; path: string; productType: string } | null, request: FormState['request'] = null): FormState {
   return { ...s, categoryId: leaf?.id ?? null, categoryPath: request?.path ?? leaf?.path ?? '', productType: request ? 'custom' : (leaf?.productType ?? null), request,
-    attrs: s.attrs.brand ? { brand: s.attrs.brand } : {}, units: {}, theme: '', selected: {}, rows: {}, hasVariants: false };
+    attrs: pickBrand(s.attrs), units: {}, theme: '', selected: {}, rows: {}, hasVariants: false };
 }
 
 /* ── Sections ── */
@@ -157,7 +161,7 @@ export const attributesIn = (type: ProductTypeSchema | undefined, section: Attri
   (type?.attributes ?? []).filter((a) => a.section === section && a.key !== 'brand');
 
 /** The brand attribute of a product type: the Brand field is shown only when the type defines it (a book has an author, not a brand). */
-export const brandOf = (type: ProductTypeSchema | undefined) => type?.attributes.find((a) => a.key === 'brand');
+export const brandOf = (type: ProductTypeSchema | undefined) => type?.attributes.find((a) => a.kind === 'BRAND') ?? type?.attributes.find((a) => a.key === 'brand');
 
 /** Up to `limit` filled-in attributes for the shopper preview, brand / author first (what a search result line shows). */
 export function previewAttributes(type: ProductTypeSchema | undefined, s: FormState, limit = 4): { label: string; value: string }[] {
@@ -292,7 +296,7 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
   if (title.length < 10) add(fieldId.title, 'basics', 'sc.pf.field.title', title ? 'sc.pf.err.titleShort' : 'sc.pf.err.required');
   else if (title.length > 200) add(fieldId.title, 'basics', 'sc.pf.field.title', 'sc.pf.err.titleLong');
   const brandDef = brandOf(type);
-  if (brandDef?.required && !(s.attrs.brand ?? '').trim()) add(fieldId.brand, 'basics', 'sc.pf.field.brand', 'sc.pf.err.required');
+  if (brandDef?.required && !(s.attrs.brand ?? '').trim() && !(s.attrs.brand_reason ?? '').trim()) add(fieldId.brand, 'basics', 'sc.pf.field.brand', 'sc.pf.err.required');
   if (s.description.length > MAX_DESCRIPTION) add(fieldId.description, 'basics', 'sc.pf.field.description', 'sc.pf.err.descriptionLong');
   const kws = keywordsOf(s.keywords);
   if (kws.length > MAX_KEYWORDS) add(fieldId.keywords, 'basics', 'sc.pf.field.keywords', 'sc.pf.err.keywordsMany');
@@ -486,7 +490,7 @@ export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined
     title: s.title.trim(),
     attributes: Object.fromEntries(
       Object.entries(s.attrs)
-        .filter(([k, v]) => v.trim() !== '' && (!type || type.attributes.some((a) => a.key === k)))
+        .filter(([k, v]) => v.trim() !== '' && (!type || type.attributes.some((a) => a.key === k) || (Boolean(brandOf(type)) && (k === 'brand_id' || k === 'brand_reason'))))
         .map(([k, v]) => [k, attrValue(type?.attributes.find((a) => a.key === k), v, s.units[k])])
     ),
     images: s.images.filter((i) => i.url).map(imageInput),

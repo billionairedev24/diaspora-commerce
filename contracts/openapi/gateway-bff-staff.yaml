@@ -5797,6 +5797,193 @@ paths:
         '412': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/brands:
+    get:
+      tags: [Taxonomy]
+      operationId: listStaffBrands
+      security: [{sessionCookie: []}]
+      summary: Brands by status, name and scope with their usage (the seller who typed one is named)
+      description: >-
+        catalog `GET /v1/taxonomy/brands`. `status=PENDING` is the review queue. `counts` holds brands per status for the
+        tab badges. `q` ignores case, accents and punctuation.
+      parameters:
+        - {name: status, in: query, required: false, schema: {type: string, maxLength: 80}, description: 'Comma-separated: PENDING, APPROVED, REJECTED, MERGED_INTO, RETIRED'}
+        - {name: q, in: query, required: false, schema: {type: string, maxLength: 80}}
+        - {name: scope, in: query, required: false, schema: {type: string, format: uuid}, description: 'Only brands applying to this taxonomy node'}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: offset, in: query, required: false, schema: {type: integer, minimum: 0, default: 0}}
+      responses:
+        '200': {description: Brands, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBrandList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Taxonomy]
+      operationId: createStaffBrand
+      security: [{sessionCookie: []}]
+      summary: Add an approved brand with the places it applies to
+      description: catalog `POST /v1/taxonomy/brands`. 409 when the name already exists in an overlapping scope.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffBrandCreateBody'}
+      responses:
+        '201': {description: Brand, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBrand'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/brands/bulk:
+    post:
+      tags: [Taxonomy]
+      operationId: createStaffBrandsBulk
+      security: [{sessionCookie: []}]
+      summary: Add a pasted list of brands (one per line) to a scope
+      description: catalog `POST /v1/taxonomy/brands/bulk`. Brands that exist or are invalid are reported per entry; the rest are created.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffBrandBulkBody'}
+      responses:
+        '200': {description: What happened to each entry, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBrandBulkResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/brands/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    patch:
+      tags: [Taxonomy]
+      operationId: updateStaffBrand
+      security: [{sessionCookie: []}]
+      summary: Change a brand's name and/or where it applies (If-Match = the brand's version)
+      description: catalog `PATCH /v1/taxonomy/brands/{id}`. A rename follows to the listings. 422 when nothing differs from what is stored.
+      parameters:
+        - $ref: '#/components/parameters/TaxonomyIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffBrandUpdateBody'}
+      responses:
+        '200': {description: Brand, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBrand'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '428': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/brands/{id}/approve:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Taxonomy]
+      operationId: approveStaffBrand
+      security: [{sessionCookie: []}]
+      summary: Approve a brand (bring a rejected or retired one back)
+      description: catalog `POST /v1/taxonomy/brands/{id}/approve`.
+      parameters:
+        - $ref: '#/components/parameters/TaxonomyIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffTaxonomyReasonBody'}
+      responses:
+        '200': {description: Brand, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBrand'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '428': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/brands/{id}/reject:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Taxonomy]
+      operationId: rejectStaffBrand
+      security: [{sessionCookie: []}]
+      summary: Reject a pending brand
+      description: catalog `POST /v1/taxonomy/brands/{id}/reject`. It is no longer offered; listings that hold it must pick another brand when edited.
+      parameters:
+        - $ref: '#/components/parameters/TaxonomyIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffTaxonomyReasonBody'}
+      responses:
+        '200': {description: Brand, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBrand'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '428': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/brands/{id}/retire:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Taxonomy]
+      operationId: retireStaffBrand
+      security: [{sessionCookie: []}]
+      summary: Retire an approved brand
+      description: catalog `POST /v1/taxonomy/brands/{id}/retire`. New listings cannot pick it; existing ones keep it.
+      parameters:
+        - $ref: '#/components/parameters/TaxonomyIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffTaxonomyReasonBody'}
+      responses:
+        '200': {description: Brand, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBrand'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '428': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/taxonomy/brands/{id}/merge:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Taxonomy]
+      operationId: mergeStaffBrand
+      security: [{sessionCookie: []}]
+      summary: Merge a brand into an existing approved brand (listings are re-pointed)
+      description: catalog `POST /v1/taxonomy/brands/{id}/merge`. Listings that hold the brand show the target name; the target applies wherever the merged brand did.
+      parameters:
+        - $ref: '#/components/parameters/TaxonomyIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffBrandMergeBody'}
+      responses:
+        '200': {description: Brand, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBrand'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '428': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/taxonomy/audit:
     get:
       tags: [Taxonomy]
@@ -5903,6 +6090,85 @@ components:
   schemas:
     # ── taxonomy (Catalog → Categories)
     StaffTaxonomyReason: {type: string, minLength: 3, maxLength: 1000, description: Why the change is made; recorded in the audit trail with the person's name}
+    StaffBrandScope:
+      type: object
+      required: [nodeId, path, level]
+      properties:
+        nodeId: {type: string, format: uuid}
+        path: {type: string, description: 'Department, category or product type as a path, e.g. Fashion › Women'}
+        level: {type: string, enum: [DEPARTMENT, CATEGORY, PRODUCT_TYPE]}
+    StaffBrand:
+      type: object
+      required: [id, name, status, mergedIntoId, mergedIntoName, createdByName, createdAt, updatedAt, version, decidedBy, decidedAt, decisionReason, products, sellers, scope]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        status: {type: string, enum: [APPROVED, PENDING, REJECTED, MERGED_INTO, RETIRED]}
+        mergedIntoId: {type: [string, 'null'], format: uuid}
+        mergedIntoName: {type: [string, 'null']}
+        createdByName: {type: [string, 'null'], description: 'The seller who typed it in; null for brands staff listed'}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        version: {type: integer, format: int64, description: 'Send as If-Match when changing it'}
+        decidedBy: {type: [string, 'null'], description: 'Internal id of the staff member; the audit trail names people'}
+        decidedAt: {type: [string, 'null'], format: date-time}
+        decisionReason: {type: [string, 'null']}
+        products: {type: integer, format: int64, description: 'Listings that hold the brand'}
+        sellers: {type: integer, format: int64, description: 'Distinct sellers behind them'}
+        scope: {type: array, items: {$ref: '#/components/schemas/StaffBrandScope'}}
+    StaffBrandList:
+      type: object
+      required: [brands, total, counts, canEdit]
+      properties:
+        brands: {type: array, items: {$ref: '#/components/schemas/StaffBrand'}}
+        total: {type: integer, format: int64}
+        counts: {type: object, additionalProperties: {type: integer, format: int64}, description: 'Brands per status'}
+        canEdit: {type: boolean}
+    StaffBrandCreateBody:
+      type: object
+      required: [name, scope, reason]
+      properties:
+        name: {type: string, minLength: 2, maxLength: 120}
+        scope: {type: array, minItems: 1, maxItems: 50, items: {type: string, format: uuid}, description: 'Departments, categories or product types it applies to'}
+        reason: {type: string, minLength: 3, maxLength: 1000}
+    StaffBrandBulkBody:
+      type: object
+      required: [scope, reason]
+      properties:
+        names: {type: array, maxItems: 500, items: {type: string, maxLength: 200}}
+        text: {type: string, maxLength: 60000, description: 'A pasted list, split on new lines, commas and semicolons'}
+        scope: {type: array, minItems: 1, maxItems: 50, items: {type: string, format: uuid}}
+        reason: {type: string, minLength: 3, maxLength: 1000}
+    StaffBrandBulkResult:
+      type: object
+      required: [results, created, existing, invalid]
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+            required: [name, outcome, brandId, message]
+            properties:
+              name: {type: string}
+              outcome: {type: string, enum: [CREATED, EXISTS, INVALID]}
+              brandId: {type: [string, 'null'], format: uuid}
+              message: {type: [string, 'null']}
+        created: {type: integer}
+        existing: {type: integer}
+        invalid: {type: integer}
+    StaffBrandUpdateBody:
+      type: object
+      required: [reason]
+      properties:
+        name: {type: string, minLength: 2, maxLength: 120}
+        scope: {type: array, minItems: 1, maxItems: 50, items: {type: string, format: uuid}}
+        reason: {type: string, minLength: 3, maxLength: 1000}
+    StaffBrandMergeBody:
+      type: object
+      required: [targetId, reason]
+      properties:
+        targetId: {type: string, format: uuid, description: 'An approved brand to merge into'}
+        reason: {type: string, minLength: 3, maxLength: 1000}
     StaffTaxonomyReasonBody:
       type: object
       required: [reason]
@@ -5958,7 +6224,7 @@ components:
       properties:
         key: {type: string, pattern: '^[a-z][a-z0-9_]{1,39}$'}
         label: {type: string, minLength: 1, maxLength: 120}
-        kind: {type: string, enum: [TEXT, MULTILINE, ENUM, NUMBER]}
+        kind: {type: string, enum: [TEXT, MULTILINE, ENUM, NUMBER, BRAND]}
         options: {type: array, maxItems: 60, items: {type: string, maxLength: 80}, description: 'The allowed values of a choice (ENUM); empty for other kinds'}
         units: {type: array, maxItems: 8, items: {type: string, maxLength: 20}, description: 'The units of a NUMBER; the first is the default'}
         required: {type: boolean}

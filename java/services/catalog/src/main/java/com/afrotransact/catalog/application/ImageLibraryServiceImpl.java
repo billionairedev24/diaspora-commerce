@@ -1,8 +1,6 @@
 package com.afrotransact.catalog.application;
 
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -17,7 +15,6 @@ import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.domain.VariantDraft;
 import com.afrotransact.catalog.domain.imports.ImageLibrary;
-import com.afrotransact.catalog.domain.imports.ImportColumns;
 import com.afrotransact.catalog.domain.imports.LibraryImage;
 import com.afrotransact.catalog.port.ImageLibraryLookup;
 import com.afrotransact.catalog.port.ProductRepository;
@@ -157,30 +154,6 @@ class ImageLibraryServiceImpl implements ImageLibraryService {
         List<ImageUse> usage = byUrl.entrySet().stream()
                 .map(e -> new ImageUse(e.getKey(), List.copyOf(e.getValue()))).toList();
         return new Usage(usage, List.copyOf(known));
-    }
-
-    @Override
-    public List<BrandUse> brands(String q, int limit) {
-        ListingOwner owner = owner(CatalogRelations.ORG_VIEW_PRODUCTS);
-        String needle = q == null ? "" : q.strip().toLowerCase(Locale.ROOT);
-        Map<String, Integer> counts = new HashMap<>();
-        Map<String, String> names = new HashMap<>();
-        for (Product p : products.findByOwnerOrg(owner.orgId())) {
-            String brand = p.attributes().get(ImportColumns.BRAND);
-            if (brand == null || brand.isBlank()) {
-                continue;
-            }
-            String k = brand.strip().toLowerCase(Locale.ROOT);
-            names.putIfAbsent(k, brand.strip());
-            counts.merge(k, 1, Integer::sum);
-        }
-        return counts.entrySet().stream()
-                .filter(e -> needle.isEmpty() || e.getKey().startsWith(needle) || e.getKey().contains(" " + needle))
-                .sorted(Map.Entry.<String, Integer>comparingByValue(Comparator.reverseOrder())
-                        .thenComparing(Map.Entry.comparingByKey()))
-                .limit(Math.clamp(limit, 1, 50))
-                .map(e -> new BrandUse(names.get(e.getKey()), e.getValue()))
-                .toList();
     }
 
     private ListingOwner owner(String relation) {

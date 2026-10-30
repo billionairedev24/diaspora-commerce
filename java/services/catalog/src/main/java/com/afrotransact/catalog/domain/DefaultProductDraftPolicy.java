@@ -7,6 +7,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import com.afrotransact.catalog.domain.brand.BrandKeys;
+
 /** The catalog rules from the product builder design, applied server-side so no client can skip them. */
 public class DefaultProductDraftPolicy implements ProductDraftPolicy {
 
@@ -23,6 +25,9 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
         }
 
         for (AttributeDefinition def : type.applicableAttributes()) {
+            if (def.kind() == AttributeKind.BRAND && draft.attributes().containsKey(BrandKeys.REASON)) {
+                continue;
+            }
             String problem = def.problem(draft.attributes().get(def.key()));
             if (problem != null) {
                 errors.put("attributes." + def.key(), problem);

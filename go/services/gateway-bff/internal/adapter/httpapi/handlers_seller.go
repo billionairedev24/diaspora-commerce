@@ -115,6 +115,7 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("DELETE /v1/seller/image-library/{assetId}", h.removeLibraryImage)
 		route("POST /v1/seller/image-library/attach", h.attachLibraryImages)
 		route("GET /v1/seller/catalog/brands", h.brands)
+		route("POST /v1/seller/catalog/brands", h.createBrand)
 	}
 	route("GET /v1/seller/catalog/categories", h.categoryTree)
 	route("GET /v1/seller/catalog/product-types/{code}", h.productType)

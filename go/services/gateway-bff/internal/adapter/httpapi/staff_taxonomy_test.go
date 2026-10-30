@@ -25,6 +25,14 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
+const txBrand = "88888888-8888-4888-8888-888888888888"
+
+func txBrandRow(status string, version int) map[string]any {
+	return map[string]any{"id": txBrand, "name": "Cotedivoire", "status": status, "mergedIntoId": nil, "mergedIntoName": nil, "createdByOrg": "org_adaeze",
+		"createdAt": "2026-10-01T10:00:00Z", "updatedAt": "2026-10-01T10:00:00Z", "version": version, "decidedBy": nil, "decidedAt": nil, "decisionReason": nil,
+		"products": 2, "sellers": 1, "scope": []any{map[string]any{"nodeId": txFashion, "path": "Fashion", "level": "DEPARTMENT"}}}
+}
+
 const (
 	txWomen    = "11111111-1111-4111-8111-111111111111"
 	txDresses  = "22222222-2222-4222-8222-222222222222"
@@ -132,7 +140,7 @@ func (f *fakeTaxonomy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJ(w, 200, txNode(txWomen, txFashion, "Ladies", "CATEGORY", "Fashion › Ladies", 4, true, 3))
-	case strings.HasSuffix(p, "/retire"):
+	case strings.HasSuffix(p, "/retire") && strings.Contains(p, "/nodes/"):
 		if strings.Contains(p, txBusyNode) {
 			w.Header().Set("Content-Type", "application/problem+json")
 			w.WriteHeader(409)
@@ -171,6 +179,37 @@ func (f *fakeTaxonomy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			map[string]any{"id": "77777777-7777-4777-8777-777777777777", "at": "2026-10-01T09:00:00Z", "actorId": "system", "action": "TYPE_UPDATED",
 				"subjectKind": "PRODUCT_TYPE", "subjectId": "dress", "subjectLabel": "Women's dresses", "reason": "Add brand",
 				"details": map[string]any{"attributes": map[string]any{"added": []any{"brand"}}}}})
+
+	// brands
+	case p == "/v1/taxonomy/brands" && r.Method == http.MethodGet:
+		writeJ(w, 200, map[string]any{"brands": []any{txBrandRow("PENDING", 0)}, "total": 1, "counts": map[string]any{"PENDING": 1, "APPROVED": 56}})
+	case p == "/v1/taxonomy/brands" && r.Method == http.MethodPost:
+		if body["name"] == "Dup" {
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(409)
+			_ = json.NewEncoder(w).Encode(map[string]any{"type": "about:blank", "title": "Conflict", "status": 409, "code": "catalog.brand-exists", "detail": "Dup already exists in this scope"})
+			return
+		}
+		writeJ(w, 201, txBrandRow("APPROVED", 0))
+	case p == "/v1/taxonomy/brands/bulk":
+		writeJ(w, 200, map[string]any{"created": 1, "existing": 1, "invalid": 0, "results": []any{
+			map[string]any{"name": "Nike", "outcome": "EXISTS", "brandId": txBrand, "message": "Already listed as Nike"},
+			map[string]any{"name": "Kente Co", "outcome": "CREATED", "brandId": txBrand, "message": nil}}})
+	case strings.HasPrefix(p, "/v1/taxonomy/brands/"):
+		if stale() {
+			problemJ(w, 412, "catalog.version-mismatch")
+			return
+		}
+		status := "APPROVED"
+		switch {
+		case strings.HasSuffix(p, "/reject"):
+			status = "REJECTED"
+		case strings.HasSuffix(p, "/retire"):
+			status = "RETIRED"
+		case strings.HasSuffix(p, "/merge"):
+			status = "MERGED_INTO"
+		}
+		writeJ(w, 200, txBrandRow(status, 1))
 
 	// category requests
 	case p == "/v1/category-requests" && r.Method == http.MethodGet:
@@ -453,6 +492,50 @@ func TestStaffTaxonomy(t *testing.T) {
 	if rejected["status"] != "REJECTED" {
 		t.Fatalf("rejected = %v", rejected)
 	}
+
+	// Brands: the queue names the seller, every change has its reason and version, the BFF names invalid fields.
+	brandQueue := do("mgr", "GET", "/v1/staff/taxonomy/brands?status=pending&q=Coted", nil, 200)
+	brandRow := brandQueue["brands"].([]any)[0].(map[string]any)
+	if brandRow["createdByName"] != "Adaeze Fabrics" || brandRow["createdByOrg"] != nil || brandQueue["canEdit"] != true || strings.Contains(mustJSON(t, brandQueue), "org_adaeze") {
+		t.Fatalf("the queue must name the seller, not show an id: %v", brandQueue)
+	}
+	if b := f.bodies["GET /v1/taxonomy/brands"]; b == nil || !strings.Contains(strings.Join(f.calls, "\n"), "GET /v1/taxonomy/brands") {
+		t.Fatalf("brands not read from catalog: %v", f.calls)
+	}
+	do("mgr", "GET", "/v1/staff/taxonomy/brands?status=BOGUS", nil, 422)
+	do("mgr", "POST", "/v1/staff/taxonomy/brands", map[string]any{"name": "Kente Co", "scope": []string{}, "reason": "Real label"}, 422)
+	do("mgr", "POST", "/v1/staff/taxonomy/brands", map[string]any{"name": "K", "scope": []string{txFashion}, "reason": "ab"}, 422)
+	do("mgr", "POST", "/v1/staff/taxonomy/brands", map[string]any{"name": "Dup", "scope": []string{txFashion}, "reason": "Already there"}, 409)
+	do("mgr", "POST", "/v1/staff/taxonomy/brands", map[string]any{"name": "  Kente   Co ", "scope": []string{txFashion}, "reason": "Real label"}, 201)
+	if b := f.bodies["POST /v1/taxonomy/brands"]; b["name"] != "Dup" && b["name"] != "Kente Co" {
+		t.Fatalf("name not tidied: %s", mustJSON(t, b))
+	}
+	bulk := do("mgr", "POST", "/v1/staff/taxonomy/brands/bulk", map[string]any{"text": "Nike\nKente Co, Nike;  ", "scope": []string{txFashion}, "reason": "Starter list"}, 200)
+	if bulk["created"] != float64(1) {
+		t.Fatalf("bulk = %v", bulk)
+	}
+	if names := f.bodies["POST /v1/taxonomy/brands/bulk"]["names"].([]any); len(names) != 3 {
+		t.Fatalf("a pasted list is split on lines, commas and semicolons: %v", names)
+	}
+	do("mgr", "POST", "/v1/staff/taxonomy/brands/bulk", map[string]any{"text": " ", "scope": []string{txFashion}, "reason": "Starter list"}, 422)
+	do("mgr", "PATCH", "/v1/staff/taxonomy/brands/"+txBrand, map[string]any{"reason": "no change"}, 422, "If-Match", `"0"`)
+	do("mgr", "PATCH", "/v1/staff/taxonomy/brands/"+txBrand, map[string]any{"name": "Côte d'Ivoire", "reason": "Proper spelling"}, 422)
+	do("mgr", "PATCH", "/v1/staff/taxonomy/brands/"+txBrand, map[string]any{"name": "Côte d'Ivoire", "reason": "Proper spelling"}, 200, "If-Match", `"0"`)
+	do("mgr", "PATCH", "/v1/staff/taxonomy/brands/"+txBrand, map[string]any{"scope": []string{txFashion, txWomen}, "reason": "Wider"}, 412, "If-Match", `"9"`)
+	do("mgr", "PATCH", "/v1/staff/taxonomy/brands/not-an-id", map[string]any{"name": "Nope", "reason": "Missing"}, 404, "If-Match", `"0"`)
+	do("mgr", "POST", "/v1/staff/taxonomy/brands/"+txBrand+"/approve", map[string]any{"reason": "Real label"}, 422)
+	do("mgr", "POST", "/v1/staff/taxonomy/brands/"+txBrand+"/approve", map[string]any{"reason": "Real label"}, 200, "If-Match", `"0"`)
+	do("mgr", "POST", "/v1/staff/taxonomy/brands/"+txBrand+"/reject", map[string]any{"reason": "Not a brand"}, 200, "If-Match", `"0"`)
+	do("mgr", "POST", "/v1/staff/taxonomy/brands/"+txBrand+"/retire", map[string]any{"reason": "Closed down"}, 200, "If-Match", `"1"`)
+	do("mgr", "POST", "/v1/staff/taxonomy/brands/"+txBrand+"/merge", map[string]any{"reason": "Duplicate"}, 422, "If-Match", `"0"`)
+	do("mgr", "POST", "/v1/staff/taxonomy/brands/"+txBrand+"/merge", map[string]any{"targetId": txBrand, "reason": "Duplicate"}, 422, "If-Match", `"0"`)
+	merged := do("mgr", "POST", "/v1/staff/taxonomy/brands/"+txBrand+"/merge", map[string]any{"targetId": txFashion, "reason": "Typo of Nike"}, 200, "If-Match", `"0"`)
+	if merged["status"] != "MERGED_INTO" || f.bodies["POST /v1/taxonomy/brands/"+txBrand+"/merge"]["targetId"] != txFashion {
+		t.Fatalf("merged = %v", merged)
+	}
+	do("viewer", "POST", "/v1/staff/taxonomy/brands/"+txBrand+"/approve", map[string]any{"reason": "Real label"}, 403, "If-Match", `"0"`)
+	do("viewer", "GET", "/v1/staff/taxonomy/brands", nil, 200)
+	do("ops", "GET", "/v1/staff/taxonomy/brands", nil, 403)
 
 	// Permissions: a viewer reads but changes nothing; Operations lacks catalog:taxonomy; customers and guests are out.
 	do("viewer", "PATCH", "/v1/staff/taxonomy/nodes/"+txWomen, map[string]any{"name": "Ladies", "reason": "Better wording"}, 403, "If-Match", `"3"`)
