@@ -267,10 +267,25 @@ func (k *sellerListingImpl) AttachLibraryImages(ctx context.Context, bearer stri
 	return out, err
 }
 
-func (k *sellerListingImpl) Brands(ctx context.Context, bearer, q string) (domain.BrandList, error) {
-	v := url.Values{"limit": {"20"}}
-	if q != "" {
-		v.Set("q", q)
+func (k *sellerListingImpl) CreateBrand(ctx context.Context, bearer, name string, q domain.BrandQuery) (domain.CreatedBrand, error) {
+	body := map[string]any{"name": name}
+	if q.ProductType != "" {
+		body["productType"] = q.ProductType
+	}
+	if q.Category != "" {
+		body["category"] = q.Category
+	}
+	var out domain.CreatedBrand
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/brands", Bearer: bearer, JSON: body}, &out)
+	return out, err
+}
+
+func (k *sellerListingImpl) Brands(ctx context.Context, bearer string, q domain.BrandQuery) (domain.BrandList, error) {
+	v := url.Values{"limit": {"30"}}
+	for key, val := range map[string]string{"q": q.Q, "productType": q.ProductType, "category": q.Category} {
+		if val != "" {
+			v.Set(key, val)
+		}
 	}
 	var out domain.BrandList
 	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/brands", Query: v, Bearer: bearer}, &out)

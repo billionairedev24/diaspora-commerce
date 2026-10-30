@@ -192,7 +192,21 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("PATCH", "/v1/seller/image-library/img-1", map[string]any{"fileName": ""}), 422)
 	mustStatus(t, b.do("POST", "/v1/seller/image-library/attach", map[string]any{"skus": []string{"OFADA-5LB", "NOPE-1"}}), 200)
 	mustStatus(t, b.do("DELETE", "/v1/seller/image-library/img-1", nil), 204)
-	mustStatus(t, b.do("GET", "/v1/seller/catalog/brands?q=ma", nil), 200)
+	// Brands: only those of the chosen category's department, never another's; a category (or type) is required.
+	mustStatus(t, b.do("GET", "/v1/seller/catalog/brands?q=ma", nil), 422)
+	if r := b.do("GET", "/v1/seller/catalog/brands?category=cat-dress", nil); r.status != 200 || !strings.Contains(string(r.body), `"Nike"`) ||
+		!strings.Contains(string(r.body), `"departmentName":"Fashion"`) || strings.Contains(string(r.body), "Tilda") {
+		t.Fatalf("fashion brands = %d %s", r.status, r.body)
+	}
+	if r := b.do("GET", "/v1/seller/catalog/brands?productType=grocery", nil); r.status != 200 || strings.Contains(string(r.body), "Nike") || !strings.Contains(string(r.body), "Tilda") {
+		t.Fatalf("grocery brands = %d %s", r.status, r.body)
+	}
+	if r := b.do("POST", "/v1/seller/catalog/brands", map[string]any{"name": "Cotedivoire", "category": "cat-dress"}); r.status != 201 || !strings.Contains(string(r.body), `"status":"PENDING"`) {
+		t.Fatalf("create brand = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("POST", "/v1/seller/catalog/brands", map[string]any{"name": "NIKE", "category": "cat-dress"}), 200)
+	mustStatus(t, b.do("POST", "/v1/seller/catalog/brands", map[string]any{"name": "x", "category": "cat-dress"}), 422)
+	mustStatus(t, b.do("POST", "/v1/seller/catalog/brands", map[string]any{"name": "Nike"}), 422)
 
 	// Listings and the product builder.
 	mustStatus(t, b.do("GET", "/v1/seller/listings?page=0&size=25", nil), 200)

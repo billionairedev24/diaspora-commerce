@@ -28,7 +28,9 @@ type SellerImportService interface {
 	RemoveLibraryImage(ctx context.Context, c *domain.Caller, assetID string) error
 	RenameLibraryImage(ctx context.Context, c *domain.Caller, assetID, fileName string) (domain.ImageLibraryItem, error)
 	AttachLibraryImages(ctx context.Context, c *domain.Caller, skus []string) (domain.AttachLibraryImagesResult, error)
-	Brands(ctx context.Context, c *domain.Caller, q string) (domain.BrandList, error)
+	// Brands lists the brands of a category for the product form; CreateBrand adds one the seller typed (pending review).
+	Brands(ctx context.Context, c *domain.Caller, q domain.BrandQuery) (domain.BrandList, error)
+	CreateBrand(ctx context.Context, c *domain.Caller, name string, q domain.BrandQuery) (domain.CreatedBrand, error)
 }
 
 type sellerImportImpl struct {

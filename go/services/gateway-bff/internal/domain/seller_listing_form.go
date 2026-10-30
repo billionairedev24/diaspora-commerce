@@ -284,16 +284,35 @@ type AttachLibrarySkipped struct {
 	Reason string `json:"reason"`
 }
 
-// BrandList is the product form's brand suggestions.
-type BrandList struct {
-	Brands []Brand `json:"brands"`
+// BrandQuery asks for the brands of a category (a node id or code) or of every category using a product type.
+type BrandQuery struct {
+	ProductType string
+	Category    string
+	Q           string
 }
 
-// Brand is one brand suggestion: OWN (used by the organisation's products) or CATALOG.
+// BrandList is the product form's brand choices for one category: the brands of its department and below, never the
+// brands of unrelated departments. DepartmentName heads the group ("Brands in Fashion").
+type BrandList struct {
+	DepartmentID   *string `json:"departmentId"`
+	DepartmentName *string `json:"departmentName"`
+	Brands         []Brand `json:"brands"`
+}
+
+// Brand is one brand choice: OWN (the organisation typed it in or uses it) or CATALOG; PENDING brands await review.
 type Brand struct {
-	Name     string `json:"name"`
-	Source   string `json:"source"`
-	Products int    `json:"products"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Source      string `json:"source"`
+	Status      string `json:"status"`
+	OwnProducts int    `json:"ownProducts"`
+	Products    int    `json:"products"`
+}
+
+// CreatedBrand is the answer to typing in a brand: the existing match (Created false) or a new pending brand.
+type CreatedBrand struct {
+	Brand   Brand `json:"brand"`
+	Created bool  `json:"created"`
 }
 
 // ProductImportRowPage is one page of the preview.

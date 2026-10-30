@@ -1522,14 +1522,48 @@ paths:
       tags: [Listings]
       operationId: listBrands
       security: [{sessionCookie: []}]
-      summary: Brands for the product form's brand combobox (the organisation's, most used first)
-      description: catalog `GET /v1/brands`.
+      summary: Brands for the product form's brand combobox, scoped to the chosen category
+      description: >-
+        catalog `GET /v1/brands`. Approved brands whose scope covers the category (or product type) or one of its
+        ancestors, plus the organisation's own pending brands there; the organisation's most used first, then the most
+        popular. Never brands of unrelated departments. 422 when neither `category` nor `productType` is sent.
       parameters:
-        - {name: q, in: query, schema: {type: string, maxLength: 80}}
+        - {name: category, in: query, schema: {type: string, maxLength: 120}, description: 'Category node id or code (a product type, category or department)'}
+        - {name: productType, in: query, schema: {type: string, maxLength: 40}, description: 'Product-type code: every category that uses it'}
+        - {name: q, in: query, schema: {type: string, maxLength: 80}, description: 'What was typed; case, accents and punctuation are ignored'}
       responses:
         '200': {description: Brands, content: {application/json: {schema: {$ref: '#/components/schemas/BrandList'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Listings]
+      operationId: createBrand
+      security: [{sessionCookie: []}]
+      summary: Add a brand the seller typed (reviewed by AfroTransact, usable at once)
+      description: >-
+        catalog `POST /v1/brands`. Returns the existing brand with `created` false when the registry already has this
+        name in the category (case, accents and punctuation ignored); otherwise creates a PENDING brand scoped to the
+        category's department, visible only to this organisation until staff approve it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string, minLength: 2, maxLength: 120}
+                category: {type: string, maxLength: 120}
+                productType: {type: string, maxLength: 40}
+      responses:
+        '200': {description: The brand already existed, content: {application/json: {schema: {$ref: '#/components/schemas/CreatedBrand'}}}}
+        '201': {description: A pending brand was created, content: {application/json: {schema: {$ref: '#/components/schemas/CreatedBrand'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/inventory:
@@ -3818,7 +3852,7 @@ components:
         productType: {type: [string, 'null']}
         path: {type: string}
         children: {type: array, items: {$ref: '#/components/schemas/CategoryNode'}}
-    AttributeKind: {type: string, enum: [TEXT, MULTILINE, ENUM, NUMBER]}
+    AttributeKind: {type: string, enum: [TEXT, MULTILINE, ENUM, NUMBER, BRAND], description: 'BRAND: chosen from the brand registry of the category; options are the no-brand choices (UNBRANDED, HANDMADE)'}
     AttributeSection: {type: string, enum: [DETAILS, FOOD, REGULATED], description: 'Where the form shows it: product details, the food section or the regulated-items section'}
     ProductTypeSchema:
       type: object
@@ -4201,17 +4235,29 @@ components:
               reason: {type: string}
     BrandList:
       type: object
-      required: [brands]
+      required: [departmentId, departmentName, brands]
       properties:
+        departmentId: {type: [string, 'null'], description: 'The department of the category; null when a product type is used in several'}
+        departmentName: {type: [string, 'null'], description: 'Heads the group "Brands in <department>"'}
         brands:
           type: array
-          items:
-            type: object
-            required: [name, source, products]
-            properties:
-              name: {type: string}
-              source: {type: string, enum: [OWN, CATALOG], description: 'Used by your products, or by live products of other sellers'}
-              products: {type: integer}
+          items: {$ref: '#/components/schemas/Brand'}
+    Brand:
+      type: object
+      required: [id, name, source, status, ownProducts, products]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        source: {type: string, enum: [OWN, CATALOG], description: 'OWN: typed in or used by this organisation'}
+        status: {type: string, enum: [APPROVED, PENDING], description: 'PENDING brands await AfroTransact review and are visible to their author only'}
+        ownProducts: {type: integer}
+        products: {type: integer}
+    CreatedBrand:
+      type: object
+      required: [brand, created]
+      properties:
+        brand: {$ref: '#/components/schemas/Brand'}
+        created: {type: boolean, description: 'False when the brand already existed and is returned as the match'}
     ProductImportRowPage:
       type: object
       required: [items, total, page, size]

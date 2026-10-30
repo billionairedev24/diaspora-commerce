@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 )
@@ -165,20 +166,71 @@ func (s *sellerImportImpl) AttachLibraryImages(ctx context.Context, c *domain.Ca
 	return res, nil
 }
 
-func (s *sellerImportImpl) Brands(ctx context.Context, c *domain.Caller, q string) (domain.BrandList, error) {
-	if len(q) > 80 {
-		return domain.BrandList{}, domain.ValidationProblem(map[string]string{"q": "At most 80 characters"})
+func (s *sellerImportImpl) Brands(ctx context.Context, c *domain.Caller, q domain.BrandQuery) (domain.BrandList, error) {
+	q, err := cleanBrandQuery(q)
+	if err != nil {
+		return domain.BrandList{}, err
 	}
-	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView, domain.CapImageLibrary); err != nil {
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView); err != nil {
 		return domain.BrandList{}, err
 	}
 	cl, err := s.client()
 	if err != nil {
 		return domain.BrandList{}, err
 	}
-	b, err := cl.Brands(ctx, c.BearerToken, strings.TrimSpace(q))
+	b, err := cl.Brands(ctx, c.BearerToken, q)
 	if err != nil {
 		return domain.BrandList{}, mapErr("catalog", err)
 	}
 	return b, nil
+}
+
+func (s *sellerImportImpl) CreateBrand(ctx context.Context, c *domain.Caller, name string, q domain.BrandQuery) (domain.CreatedBrand, error) {
+	name = strings.Join(strings.Fields(name), " ")
+	errs := map[string]string{}
+	if n := utf8.RuneCountInString(name); n < 2 || n > 120 {
+		errs["name"] = "2 to 120 characters"
+	}
+	q, err := cleanBrandQuery(q)
+	if err != nil {
+		return domain.CreatedBrand{}, err
+	}
+	if len(errs) > 0 {
+		return domain.CreatedBrand{}, domain.ValidationProblem(errs)
+	}
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
+		return domain.CreatedBrand{}, err
+	}
+	cl, err := s.client()
+	if err != nil {
+		return domain.CreatedBrand{}, err
+	}
+	out, err := cl.CreateBrand(ctx, c.BearerToken, name, q)
+	if err != nil {
+		return domain.CreatedBrand{}, mapErr("catalog", err)
+	}
+	return out, nil
+}
+
+// cleanBrandQuery checks what the form sent: a category or a product type is required, so a brand is never offered
+// without knowing where it is for.
+func cleanBrandQuery(q domain.BrandQuery) (domain.BrandQuery, error) {
+	q.Q, q.Category, q.ProductType = strings.TrimSpace(q.Q), strings.TrimSpace(q.Category), strings.TrimSpace(q.ProductType)
+	errs := map[string]string{}
+	if utf8.RuneCountInString(q.Q) > 80 {
+		errs["q"] = "At most 80 characters"
+	}
+	if len(q.Category) > 120 {
+		errs["category"] = "Choose a category"
+	}
+	if len(q.ProductType) > 40 {
+		errs["productType"] = "Unknown product type"
+	}
+	if q.Category == "" && q.ProductType == "" {
+		errs["category"] = "Choose a category first"
+	}
+	if len(errs) > 0 {
+		return q, domain.ValidationProblem(errs)
+	}
+	return q, nil
 }
