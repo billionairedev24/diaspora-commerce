@@ -236,11 +236,6 @@ function Editor({ page, locale, setLocale, device, setDevice }: { page: ContentP
                     }}
                     options={sourceItems}
                   />
-                  {page.access.canEdit ? (
-                    <Button variant="neutral" onClick={() => setMode('edit')}>
-                      {t('st.pages.mode.edit')}
-                    </Button>
-                  ) : null}
                 </div>
                 {controls}
                 {preview ? (

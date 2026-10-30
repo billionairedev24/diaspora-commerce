@@ -309,8 +309,11 @@ func (n *staffNames) lookupOrders(ctx context.Context, sc staffCtx, ids []string
 	})
 }
 
-// isSystem is the actor of a job or a seed ("system", "system:seed"), not a person.
-func isSystem(id string) bool { return id == "system" || strings.HasPrefix(id, "system:") }
+// isSystem is the actor of a job or a seed ("system", "system:seed", the seed migrations' "seed" and the legal document
+// loader's "legal-loader"), not a person.
+func isSystem(id string) bool {
+	return id == "system" || strings.HasPrefix(id, "system:") || id == "seed" || id == "legal-loader"
+}
 
 // isPlainText is a value that is already something a person wrote (a name or an email), not an identifier.
 func isPlainText(s string) bool { return strings.ContainsAny(s, " @") }
