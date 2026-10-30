@@ -14,7 +14,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   // Workspace packages ship TypeScript source.
-  transpilePackages: ['@afrotransact/account', '@afrotransact/ui', '@afrotransact/data-table', '@afrotransact/api-client', '@afrotransact/tokens', '@afrotransact/i18n', '@afrotransact/telemetry'],
+  transpilePackages: ['@afrotransact/account', '@afrotransact/content', '@afrotransact/ui', '@afrotransact/data-table', '@afrotransact/api-client', '@afrotransact/tokens', '@afrotransact/i18n', '@afrotransact/telemetry'],
   // Allows a separate build output (e.g. NEXT_DIST_DIR=.next-e2e) without clobbering .next.
   distDir: process.env.NEXT_DIST_DIR || '.next',
   // Local LAN mode (make up MOBILE_HOST=lan): the dev server is opened as http://<LAN IP>:<port> from a phone; Next.js

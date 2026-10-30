@@ -54,7 +54,7 @@ public record LegalDocument(LegalDocumentType type, LegalVersion current) {
                 effectiveDate == null ? current.effectiveDate() : effectiveDate, merged);
     }
 
-    private static Map<String, String> bodyProblems(Map<String, String> bodies) {
+    static Map<String, String> bodyProblems(Map<String, String> bodies) {
         Map<String, String> errors = new LinkedHashMap<>();
         if (bodies == null || bodies.getOrDefault(LegalVersion.BINDING_LOCALE, "").isBlank()) {
             errors.put("bodies.en", "The English text is required: it is the binding version");

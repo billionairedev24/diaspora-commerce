@@ -91,6 +91,14 @@ func helpArticleBody(v jobj, expected *int64) (jobj, error) {
 	return body, nil
 }
 
+// helpPath is the storefront path of a help page.
+func helpPath(slug string) string {
+	if slug == domain.HelpHub {
+		return "/help"
+	}
+	return "/help/" + slug
+}
+
 func helpArticlesResource() *staffResource {
 	load := func(ctx context.Context, sc staffCtx, q staffQuery) ([]jobj, error) {
 		var raw any
@@ -100,10 +108,8 @@ func helpArticlesResource() *staffResource {
 		out := []jobj{}
 		for _, a := range jpage(raw).items {
 			if q.Status == "" || jstr(a, "status") == q.Status {
-				a["href"] = "/help/" + jstr(a, "slug")
-				if jstr(a, "slug") == domain.HelpHub {
-					a["href"] = "/help"
-				}
+				a["path"] = helpPath(jstr(a, "slug"))
+				a["href"] = sc.storefrontLink(jstr(a, "path"))
 				out = append(out, a)
 			}
 		}
@@ -119,18 +125,19 @@ func helpArticlesResource() *staffResource {
 		list:       list,
 		get:        findIn(list, "slug"),
 		titleOf:    func(o jobj) string { return jstr(o, "title") },
-		subtitleOf: func(o jobj) string { return jstr(o, "topicTitle") + " · " + jstr(o, "href") },
+		subtitleOf: func(o jobj) string { return jstr(o, "topicTitle") + " · " + jstr(o, "path") },
 		sections: func(o jobj) []domain.DetailSection {
-			return autoSections(o, "status", "sections", "href", "version", "topic")
+			return autoSections(o, "status", "sections", "path", "version", "topic")
 		},
 		tables: func(o jobj) []domain.DetailTable {
 			return []domain.DetailTable{tableOf("Sections", objs(o, "sections"), []domain.Column{col("heading", "Heading", "strong", 30), col("body", "Text (Markdown)", "text", 70)}, "heading")}
 		},
 		links: func(o jobj) []domain.RecordLink {
-			if jstr(o, "status") != "PUBLISHED" {
-				return nil
+			links := []domain.RecordLink{{Label: "Preview, edit and publish", Href: "/settings/pages/help/" + jstr(o, "slug")}}
+			if jstr(o, "status") == "PUBLISHED" {
+				links = append(links, domain.RecordLink{Label: "Open the live page", Href: jstr(o, "path"), Storefront: true})
 			}
-			return []domain.RecordLink{{Label: "Open the published page", Href: jstr(o, "href")}}
+			return links
 		},
 		version: func(o jobj) string { return jstr(o, "version") },
 		edit: &staffEdit{permission: "content:site.edit",

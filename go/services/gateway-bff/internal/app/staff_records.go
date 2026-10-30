@@ -228,7 +228,7 @@ func (s *staffRecordsImpl) detail(ctx context.Context, r *staffResource, sc staf
 	}
 	if r.links != nil {
 		if l := r.links(o); l != nil {
-			d.Links = l
+			d.Links = liveLinks(sc, l)
 		}
 	}
 	if r.version != nil {
@@ -411,4 +411,21 @@ func (s *staffRecordsImpl) AddNote(ctx context.Context, c *domain.Caller, name, 
 		return domain.RecordDetail{}, domain.ValidationProblem(map[string]string{"text": "Write a note of up to 2,000 characters"})
 	}
 	return domain.RecordDetail{}, domain.UpstreamUnavailable("notes")
+}
+
+// liveLinks makes the storefront links of a sheet absolute (the console opens them in a new tab on the storefront);
+// when the storefront origin is unknown they are dropped, never left as a path the console would 404 on.
+func liveLinks(sc staffCtx, in []domain.RecordLink) []domain.RecordLink {
+	out := make([]domain.RecordLink, 0, len(in))
+	for _, l := range in {
+		if l.Storefront {
+			l.Href = sc.storefrontLink(l.Href)
+			l.External = true
+			if l.Href == "" {
+				continue
+			}
+		}
+		out = append(out, l)
+	}
+	return out
 }

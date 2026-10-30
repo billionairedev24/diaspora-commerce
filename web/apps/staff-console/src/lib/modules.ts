@@ -122,6 +122,8 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
     { resource: 'site-settings', label: 'Contacts & social links' },
     { resource: 'legal-documents', label: 'Legal documents' },
     { resource: 'help-articles', label: 'Help center' },
+    { resource: 'careers-jobs', label: 'Careers' },
+    { resource: 'cookie-definitions', label: 'Cookies' },
     { resource: 'privacy-requests', label: 'Privacy requests' }
   ],
   dev: [{ resource: 'identity-providers', label: 'Identity providers' }],

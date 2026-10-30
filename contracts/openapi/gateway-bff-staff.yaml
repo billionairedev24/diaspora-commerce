@@ -65,6 +65,14 @@ tags:
       AfroTransact's plan catalogue (versions, publish, migrations, invites, entitlements), trial campaigns, reward
       rules with a preview, the grants log and the per-seller billing panel with audited adjustments (S292–S297), over
       the seller service. AfroTransact issues and collects its own invoices; Stripe only moves card money.
+  - name: Published pages
+    description: >-
+      Settings → Published pages: every public page with its live link, last update and who made it, and for legal
+      documents and help pages the editor behind it: the page as published, a draft that changes nothing public, any
+      past version (to preview or compare), publication with a reason and rollback. Legal documents need a second
+      approver (the person who saved the draft last cannot publish it) and the Approve level on Site content & legal;
+      every save, publication and rollback is audited by content (who, when, the reason and what changed) in its audit log, and the history of each page shows the same.
+      Live links are absolute storefront URLs (`PUBLIC_WEB_URL`); the console opens them in a new tab.
   - name: Fees
     description: Fee-schedule editor (commission per category, seller overrides, card and FBA fees, AfroTransact Delivery pricing) over payments' immutable versions
   - name: Dispatch
@@ -3508,6 +3516,149 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/content/pages:
+    get:
+      tags: [Published pages]
+      operationId: listStaffContentPages
+      security: [{sessionCookie: []}]
+      summary: Every public page with its live link, last update, who made it and whether a draft is waiting
+      description: |
+        Needs VIEW on Site content & legal. Legal documents (content `GET /v1/legal/overview`) and help pages (content
+        `GET /v1/help/admin/articles`) come with their editor (`editor: page`); the other public surfaces (contacts and
+        social links, the maintenance notice, announcements, banners, notification templates) point at the table or screen
+        that edits them (`editor: record`); pages whose text still ships with the code say `developer`. `liveUrl` is built
+        on the storefront origin (`PUBLIC_WEB_URL`) and is null when it is not configured or the page is hidden.
+      responses:
+        '200': {description: Pages, content: {application/json: {schema: {$ref: '#/components/schemas/StaffContentPageList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/content/pages/{kind}/{key}:
+    parameters:
+      - $ref: '#/components/parameters/ContentPageKind'
+      - $ref: '#/components/parameters/ContentPageKey'
+    get:
+      tags: [Published pages]
+      operationId: getStaffContentPage
+      security: [{sessionCookie: []}]
+      summary: A page as published, its draft, its history, the placeholder values and what this person may do
+      description: |
+        Legal: content `GET /v1/legal/{key}/history`, `/versions/{current}/source` and `/draft`. Help: content
+        `GET /v1/help/admin/articles`, `/articles/{slug}/revisions` and `/draft`. `placeholders` are the values the
+        `{phone}`, `{legal}`, `{address}` tokens of legal Markdown are filled with, so a preview reads as shoppers will see it.
+      responses:
+        '200': {description: Page, content: {application/json: {schema: {$ref: '#/components/schemas/StaffContentPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/content/pages/{kind}/{key}/versions/{version}:
+    parameters:
+      - $ref: '#/components/parameters/ContentPageKind'
+      - $ref: '#/components/parameters/ContentPageKey'
+      - $ref: '#/components/parameters/ContentPageVersion'
+    get:
+      tags: [Published pages]
+      operationId: getStaffContentVersion
+      security: [{sessionCookie: []}]
+      summary: A past version's Markdown as written, to preview or to compare with another
+      responses:
+        '200': {description: Version, content: {application/json: {schema: {$ref: '#/components/schemas/StaffContentDocument'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/content/pages/{kind}/{key}/draft:
+    parameters:
+      - $ref: '#/components/parameters/ContentPageKind'
+      - $ref: '#/components/parameters/ContentPageKey'
+    put:
+      tags: [Published pages]
+      operationId: saveStaffContentDraft
+      security: [{sessionCookie: []}]
+      summary: Save the draft (nothing public changes); the first save starts it from the published page
+      description: |
+        The whole draft as the editor shows it. `rowVersion` is the draft version the editor loaded (omit on the first
+        save); 409 when someone saved in between. Needs `content:legal.edit` (legal) or `content:site.edit` (help) and
+        EDIT on Site content & legal. 422 names the fields: English required, no repeated section names, links that go
+        somewhere (https://, /path, #section, mailto:, tel:), translations only for fr / es / ar / yo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffContentDraftInput'}
+      responses:
+        '200': {description: Draft saved, content: {application/json: {schema: {$ref: '#/components/schemas/StaffContentDocument'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [Published pages]
+      operationId: discardStaffContentDraft
+      security: [{sessionCookie: []}]
+      summary: Throw the draft away
+      responses:
+        '204': {description: Discarded}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/content/pages/{kind}/{key}/publication:
+    parameters:
+      - $ref: '#/components/parameters/ContentPageKind'
+      - $ref: '#/components/parameters/ContentPageKey'
+    post:
+      tags: [Published pages]
+      operationId: publishStaffContentPage
+      security: [{sessionCookie: []}]
+      summary: Publish the draft with a reason; the previous version stays in the history
+      description: |
+        `rowVersion` is the draft the approver reviewed (409 when it changed). Legal documents: a different person than
+        the draft's last editor must publish (403 `content.second-approver-required`), the Approve level is needed, and a
+        document published as final (draft banner off) may not hold `[[LEGAL: …]]` markers (422 on `bodies`). The reason
+        (5 to 500 characters) is kept in the audit trail.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffContentPublishInput'}
+      responses:
+        '201': {description: Published, content: {application/json: {schema: {$ref: '#/components/schemas/StaffContentPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/content/pages/{kind}/{key}/rollback:
+    parameters:
+      - $ref: '#/components/parameters/ContentPageKind'
+      - $ref: '#/components/parameters/ContentPageKey'
+    post:
+      tags: [Published pages]
+      operationId: rollbackStaffContentPage
+      security: [{sessionCookie: []}]
+      summary: Go back to an earlier version by publishing it as a new one
+      description: |
+        Help pages: the revision's text is published at once as the newest revision (reason required). Legal documents:
+        a new draft starts from the older text, numbered one minor version up, and a second person publishes it; 409 when
+        a draft already exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffContentRollbackInput'}
+      responses:
+        '201': {description: Rolled back (help) or draft started (legal), content: {application/json: {schema: {$ref: '#/components/schemas/StaffContentPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/places:
     get:
       tags: [Markets]
@@ -5728,6 +5879,9 @@ components:
     TemplateKey: {name: key, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9][a-z0-9_.-]{0,119}$'}, example: order.confirmed}
     IdempotencyKey: {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}, description: Makes retries safe (same key = same result).}
     IdempotencyKeyRequired: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 128}, description: Same key = same refund; never refunds twice.}
+    ContentPageKind: {name: kind, in: path, required: true, schema: {type: string, enum: [legal, help]}}
+    ContentPageKey: {name: key, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9][a-z0-9-]{1,59}$'}, description: 'A legal document key (conditions-of-use…) or a help page slug'}
+    ContentPageVersion: {name: version, in: path, required: true, schema: {type: string, pattern: '^[0-9]{1,3}(\.[0-9]{1,3}){0,2}$'}, description: 'A legal version (3.2) or a help revision number (7)'}
     MarketCountryCode: {name: code, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z]{2}$'}}
     MarketRegionCode: {name: region, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9]{1,10}$'}}
     IfMatch: {name: If-Match, in: header, required: false, schema: {type: string, maxLength: 40}, description: The version from the ETag (optimistic locking).}
@@ -6727,6 +6881,121 @@ components:
       properties:
         version: {type: integer}
         changes: {$ref: '#/components/schemas/StaffMarketChanges'}
+    StaffContentPageRow:
+      type: object
+      required: [kind, key, title, group, livePath, liveUrl, status, version, effectiveDate, updatedAt, updatedByName, hasDraft, draftUpdatedByName, editor, resource, resourceId, consoleHref, canEdit, locales]
+      properties:
+        kind: {type: string, description: 'legal, help, or record for content edited in its own table'}
+        key: {type: string}
+        title: {type: string}
+        group: {type: string, description: 'The legal center group, the help topic, or the area of the site'}
+        livePath: {type: [string, 'null'], description: 'Storefront path, for example /legal/privacy'}
+        liveUrl: {type: [string, 'null'], description: 'Absolute storefront address (PUBLIC_WEB_URL + livePath); open it in a new tab'}
+        status: {type: string, enum: [PUBLISHED, DRAFT_FOR_COUNSEL, HIDDEN, DEVELOPER_ONLY]}
+        version: {type: string, description: 'Legal version (3.2) or help revision number; empty for record rows'}
+        effectiveDate: {type: [string, 'null'], format: date}
+        updatedAt: {type: [string, 'null'], format: date-time}
+        updatedByName: {type: [string, 'null'], description: 'The person''s name, never an id'}
+        hasDraft: {type: boolean}
+        draftUpdatedByName: {type: [string, 'null']}
+        editor: {type: string, enum: [page, record, developer]}
+        resource: {type: [string, 'null'], description: 'Resource table that edits a record row'}
+        resourceId: {type: [string, 'null']}
+        consoleHref: {type: [string, 'null'], description: 'A console path for content with its own screen'}
+        canEdit: {type: boolean}
+        locales: {type: array, items: {type: string, enum: [en, fr, es, ar, yo]}}
+    StaffContentPageList:
+      type: object
+      required: [storefrontUrl, items]
+      properties:
+        storefrontUrl: {type: [string, 'null']}
+        items: {type: array, items: {$ref: '#/components/schemas/StaffContentPageRow'}}
+    StaffContentDocument:
+      type: object
+      required: [version, effectiveDate, draftBanner, title, summary, topic, sortOrder, bodies, needsReview, changeSummary, rowVersion, updatedAt, updatedByName, reason]
+      properties:
+        version: {type: string}
+        effectiveDate: {type: [string, 'null'], format: date}
+        draftBanner: {type: [boolean, 'null'], description: Legal only; shows the counsel-review banner}
+        title: {type: string}
+        summary: {type: [string, 'null'], description: Help only}
+        topic: {type: [string, 'null'], description: Help only}
+        sortOrder: {type: [integer, 'null']}
+        bodies:
+          type: object
+          description: 'Markdown per locale (en always). Help pages: the sections as one text, a `## Heading` line before each.'
+          additionalProperties: {type: string}
+        needsReview: {type: array, items: {type: string}, description: Translations a reviewer still has to check}
+        changeSummary: {type: [string, 'null']}
+        rowVersion: {type: [integer, 'null'], description: 'A draft''s optimistic-locking counter'}
+        updatedAt: {type: [string, 'null'], format: date-time}
+        updatedByName: {type: [string, 'null']}
+        reason: {type: [string, 'null'], description: Why a help revision was published}
+    StaffContentVersionRef:
+      type: object
+      required: [version, status, effectiveDate, changeSummary, reason, publishedAt, publishedByName, draftBanner, locales]
+      properties:
+        version: {type: string}
+        status: {type: string, enum: [CURRENT, ARCHIVED]}
+        effectiveDate: {type: [string, 'null'], format: date}
+        changeSummary: {type: [string, 'null']}
+        reason: {type: [string, 'null']}
+        publishedAt: {type: [string, 'null'], format: date-time}
+        publishedByName: {type: [string, 'null']}
+        draftBanner: {type: [boolean, 'null']}
+        locales: {type: array, items: {type: string}}
+    StaffContentAccess:
+      type: object
+      required: [canEdit, canPublish, secondApprover, reason]
+      properties:
+        canEdit: {type: boolean}
+        canPublish: {type: boolean}
+        secondApprover: {type: boolean, description: 'Someone other than the draft''s last editor must publish it'}
+        reason: {type: [string, 'null'], description: Why this person cannot publish}
+    StaffContentPage:
+      type: object
+      required: [kind, key, title, group, livePath, liveUrl, locales, published, draft, versions, placeholders, topics, access]
+      properties:
+        kind: {type: string, enum: [legal, help]}
+        key: {type: string}
+        title: {type: string}
+        group: {type: string}
+        livePath: {type: [string, 'null']}
+        liveUrl: {type: [string, 'null']}
+        locales: {type: array, items: {type: string, enum: [en, fr, es, ar, yo]}}
+        published: {$ref: '#/components/schemas/StaffContentDocument'}
+        draft: {oneOf: [{$ref: '#/components/schemas/StaffContentDocument'}, {type: 'null'}]}
+        versions: {type: array, items: {$ref: '#/components/schemas/StaffContentVersionRef'}}
+        placeholders: {type: object, additionalProperties: {type: string}}
+        topics: {type: array, items: {$ref: '#/components/schemas/FieldOption'}, description: Help topics to choose from}
+        access: {$ref: '#/components/schemas/StaffContentAccess'}
+    StaffContentDraftInput:
+      type: object
+      required: [bodies]
+      properties:
+        version: {type: string, pattern: '^[0-9]{1,3}\.[0-9]{1,3}(\.[0-9]{1,3})?$', description: Legal only; must be higher than the published version}
+        effectiveDate: {type: string, format: date}
+        draftBanner: {type: boolean}
+        title: {type: string, maxLength: 120}
+        summary: {type: string, maxLength: 300}
+        topic: {type: string}
+        sortOrder: {type: integer, minimum: 0, maximum: 1000}
+        bodies: {type: object, additionalProperties: {type: string, maxLength: 200000}}
+        needsReview: {type: array, items: {type: string, enum: [fr, es, ar, yo]}}
+        changeSummary: {type: string, maxLength: 1000}
+        rowVersion: {type: integer, description: The draft version the editor loaded}
+    StaffContentPublishInput:
+      type: object
+      required: [reason, rowVersion]
+      properties:
+        reason: {type: string, minLength: 5, maxLength: 500}
+        rowVersion: {type: integer}
+    StaffContentRollbackInput:
+      type: object
+      required: [version]
+      properties:
+        version: {type: string}
+        reason: {type: string, maxLength: 500, description: Required for help pages}
     StaffPlaceList:
       type: object
       required: [items, label, total]
@@ -6897,7 +7166,7 @@ components:
     ResourceKey:
       type: string
       enum: [users, roles, applications, organisations, connect-accounts, orders, products, category-requests, moderation, product-reviews, claims, returns, payouts, inventory, purchase-orders,
-        routes, support-cases, audit, markets, site-settings, legal-documents, help-articles, privacy-requests, announcements,
+        routes, support-cases, audit, markets, site-settings, legal-documents, help-articles, careers-jobs, cookie-definitions, privacy-requests, announcements,
         placements, identity-providers, fee-schedules, tax-rates, tax-codes, tax-rules, tax-review, dispatch-shipments, sos-alerts, vehicle-defects,
         driver-events, pickup-locations, coupons, reconciliation, reconciliation-runs, ledger-adjustments, recoveries, credit-adjustments, gift-cards, credit-liabilities, money-settings, membership-tiers, memberships, membership-settings, membership-report, referrals, referral-settings, stripe-lookup, payment-settings, tax-settings, maintenance, tax-filings, tax-nexus,
         oauth-clients, identity-sessions, signing-keys, auth-settings, exchange-rates]

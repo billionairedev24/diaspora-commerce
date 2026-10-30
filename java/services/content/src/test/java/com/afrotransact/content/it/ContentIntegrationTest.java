@@ -40,12 +40,23 @@ abstract class ContentIntegrationTest {
     static final JsonMapper JSON = JsonMapper.builder().build();
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
+    /** Set CONTENT_IT_JDBC_URL (with CONTENT_IT_DB_USER / CONTENT_IT_DB_PASSWORD) to run on an existing empty PostgreSQL instead of a container. */
+    private static final String LOCAL_URL = System.getenv("CONTENT_IT_JDBC_URL");
+
     static {
-        POSTGRES.start();
+        if (LOCAL_URL == null) {
+            POSTGRES.start();
+        }
     }
 
     @DynamicPropertySource
     static void datasource(DynamicPropertyRegistry registry) {
+        if (LOCAL_URL != null) {
+            registry.add("spring.datasource.url", () -> LOCAL_URL);
+            registry.add("spring.datasource.username", () -> System.getenv().getOrDefault("CONTENT_IT_DB_USER", "postgres"));
+            registry.add("spring.datasource.password", () -> System.getenv().getOrDefault("CONTENT_IT_DB_PASSWORD", ""));
+            return;
+        }
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);

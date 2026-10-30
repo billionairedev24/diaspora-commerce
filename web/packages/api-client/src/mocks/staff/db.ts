@@ -4,6 +4,8 @@ import { type ExportJob } from '../../schemas/exports';
 import { legalGroupTitle } from '../../schemas/legal';
 import { type ActivityEntry, type ResourceKey } from '../../schemas/staff';
 import { HELP_ARTICLES } from '../fixtures/help';
+import { COOKIE_CATEGORIES, COOKIE_TABLE } from '../fixtures/legal';
+import { MOCK_STOREFRONT_URL, type MockContentState, seedContent } from './content-pages';
 import { type MockDispatch, seedDispatch } from './dispatch';
 import { seedExchangeRates } from './exchange-rates';
 import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
@@ -56,6 +58,8 @@ export interface MockStaffDb {
   preorders: MockPreorderState;
   /** content's draft markets: countries → states → cities (Markets & locations). */
   markets: MockMarketsState;
+  /** content's legal and help authoring: versions, revisions and working drafts (Settings → Published pages). */
+  content: MockContentState;
   /** catalog's category tree, product-type details and the audit of changes (Catalog → Categories). */
   taxonomy: MockTaxonomyState;
   /** seller's plan catalogue, trial campaigns, reward rules, grants and per-seller billing (S292–S297). */
@@ -431,12 +435,29 @@ function seed(now: Date): MockStaffDb {
     ['seller-fees', 'Seller Fees Summary', '1.0', day(28)]
   ].map(([key, title, version, effective]) => rec(key as string, {
     key: key as string, title: title as string, group: legalGroupTitle(key as string), version: version as string, effectiveDate: effective as string,
-    draftBanner: true, state: 'Draft for counsel', href: `/legal/${key as string}`
+    draftBanner: true, state: 'Draft for counsel', path: `/legal/${key as string}`, href: `${MOCK_STOREFRONT_URL}/legal/${key as string}`
   }));
 
   const helpArticles = HELP_ARTICLES.map((a) => rec(a.slug, {
     slug: a.slug, title: a.title, summary: a.summary, topic: a.topic, topicTitle: a.topicTitle, status: 'PUBLISHED', updatedAt: a.updatedAt,
-    sections: a.sections.map((x) => `## ${x.heading}\n\n${x.body}`).join('\n\n'), href: a.slug === 'help-center' ? '/help' : `/help/${a.slug}`
+    sections: a.sections.map((x) => `## ${x.heading}\n\n${x.body}`).join('\n\n'), path: a.slug === 'help-center' ? '/help' : `/help/${a.slug}`, href: `${MOCK_STOREFRONT_URL}${a.slug === 'help-center' ? '/help' : `/help/${a.slug}`}`
+  }));
+
+  const careers = [
+    ['support-agent-houston', 'Customer support agent', 'Operations', 'Houston, TX', 'Full-time', '$22–26/hr', 'OPEN', 20],
+    ['driver-atlanta', 'Delivery driver', 'Delivery', 'Atlanta, GA', 'Hourly', '$20–24/hr', 'OPEN', 18],
+    ['senior-engineer-remote-us', 'Senior software engineer', 'Engineering', 'Remote (US)', 'Full-time', '$150–185k', 'DRAFT', 7],
+    ['warehouse-lead-edison', 'Warehouse lead', 'Warehouse', 'Edison, NJ', 'Full-time', '$26–31/hr', 'CLOSED', 90]
+  ].map(([id, title, team, location, type, pay, status, daysAgo]) => rec(id as string, {
+    title: title as string, team: team as string, location: location as string, type: type as string, pay: pay as string, status: status as string, sortOrder: 0,
+    summary: `Join the ${team as string} team at AfroTransact and help diaspora communities shop, sell and get things delivered.`,
+    responsibilities: 'Own meaningful work end to end\nShip improvements every week\nWork closely with sellers and customers', requirements: 'Relevant experience\nClear communication\nCare for diaspora communities',
+    postedAt: ago(daysAgo as number), href: `${MOCK_STOREFRONT_URL}/careers`, path: '/careers'
+  }));
+
+  const cookieDefinitions = COOKIE_TABLE.map((c) => rec(c.name, {
+    name: c.name, provider: c.provider, purpose: c.purpose, duration: c.duration, category: c.category,
+    categoryName: COOKIE_CATEGORIES.find((k) => k.key === c.category)?.name ?? c.category, path: '/legal/cookies'
   }));
 
   const privacyRequests = [
@@ -651,7 +672,7 @@ function seed(now: Date): MockStaffDb {
     user: { id: 'stf-1', firstName: 'Ifeoma', lastName: 'Okafor', email: 'ifeoma@afrotransact.com' },
     records: {
       users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, 'category-requests': seedCategoryRequests(now), moderation, 'product-reviews': productReviews, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
-      'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
+      'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'careers-jobs': careers, 'cookie-definitions': cookieDefinitions, 'privacy-requests': privacyRequests, announcements, placements,
       'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, recoveries, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now),
@@ -665,6 +686,7 @@ function seed(now: Date): MockStaffDb {
     templates: { rows: seedTemplateRows(), samples: seedTemplateSamples() },
     preorders: seedPreorders(now),
     markets: seedMarkets(),
+    content: seedContent(now, helpArticles.map((r) => ({ slug: r.id, title: String(r.fields.title), summary: String(r.fields.summary), topic: String(r.fields.topic), status: String(r.fields.status), body: String(r.fields.sections), updatedAt: String(r.fields.updatedAt) }))),
     taxonomy: seedTaxonomy(),
     plans: seedPlans(now),
     feeRates: seedFeeRates(now),
@@ -678,6 +700,7 @@ export function getStaffDb(): MockStaffDb {
   // A database seeded before pre-orders existed (dev server kept across reloads) gets them on first use.
   g[KEY].preorders ??= seedPreorders(g[KEY].now);
   g[KEY].markets ??= seedMarkets();
+  g[KEY].content ??= seedContent(g[KEY].now, []);
   g[KEY].taxonomy ??= seedTaxonomy();
   g[KEY].plans ??= seedPlans(g[KEY].now);
   g[KEY].feeRates ??= seedFeeRates(g[KEY].now);

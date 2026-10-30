@@ -105,6 +105,23 @@ The location history lists every run with its cost, margin and break-even and wh
 margin per run, lists the pre-orders the location delivered, and shows subscribers who joined, who left and the net each month. When
 you create a pre-order, the break-even panel also shows what a full run would earn (or lose) at the location's capacity.
 
+## Published pages: preview, edit and publish a public page
+
+Settings → **Published pages** (also the first tab of Site content) lists every page shoppers can read, with its live link (opens the storefront in a
+new tab), when it was last changed and by whom. Legal documents and help pages are changed here, without a developer:
+
+1. **Preview** shows the page as shoppers read it. Switch the language (a missing translation shows the English text with a notice) and the width
+   (desktop, tablet, phone). A draft for counsel shows the banner, and any `[[LEGAL: …]]` text is highlighted and counted.
+2. **Edit** has a toolbar (headings, bold, lists, links, tables), accepts text pasted from Word or Google Docs, and shows the page beside the text as you
+   type. The checks list repeated section names and links that go nowhere. **Save draft** changes nothing public.
+3. **Publish** asks for a reason. A legal document is published by a *second* person with the Approve level: the person who saved the last change cannot
+   approve it. A final document (banner off) cannot be published while a `[[LEGAL: …]]` marker is left.
+4. **History** lists every version with who, when and why, compares any two, and goes back: a help page republishes the old text; a legal document starts a
+   new draft from it.
+
+Careers roles and the cookie table are tabs of Site content. The About page still needs a developer; the index says so. Runbook:
+`docs/runbooks/editing-published-pages.md`.
+
 ## Settings
 
 All configuration lives in one place: **Settings** (sidebar). Sections include General (including the Help

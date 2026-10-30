@@ -55,7 +55,7 @@ var supportPerms = []string{"bookings:read", "catalog:moderate", "delivery:dispa
 	"orders:update-status", "orgs:read", "payments:read", "refunds:issue", "reports:read", "returns:manage", "support:respond", "users:read"}
 
 var adminPerms = []string{"access:admin", "access:read", "applications:approve", "applications:review", "audit:read", "catalog:moderate", "identity:admin", "content:legal.edit",
-	"content:markets.edit", "content:placements.approve", "content:placements.edit", "content:site.edit", "delivery:dispatch", "disputes:manage",
+	"content:markets.edit", "content:placements.approve", "content:placements.edit", "content:site.edit", "content:careers.edit", "delivery:dispatch", "disputes:manage",
 	"inventory:adjust", "inventory:read", "notifications:manage", "notifications:read", "notifications:templates:write", "orders:manage", "orders:read", "ledger:adjust", "ledger:approve", "payments:configure", "payments:read", "payouts:approve", "payouts:read",
 	"refunds:issue", "reports:read", "retail:po:approve", "retail:po:write", "returns:manage", "support:respond", "tax:configure", "users:read"}
 
@@ -821,6 +821,40 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"slug": "shipping"})
 	case strings.HasPrefix(p, "/v1/help/articles/"):
 		writeJ(w, 200, map[string]any{"slug": strings.TrimPrefix(p, "/v1/help/articles/")})
+	case p == "/v1/careers/admin/jobs":
+		jobs := []any{map[string]any{"id": "support-agent-houston", "title": "Support agent", "team": "Operations", "location": "Houston, TX", "type": "Full-time", "pay": "$22-26/hr",
+			"summary": "Help shoppers.", "responsibilities": []any{"Answer chats", "Resolve cases"}, "requirements": []any{"Fluent English"}, "status": "DRAFT", "postedAt": now}}
+		f.mu.Lock()
+		created := f.bodies["POST /v1/careers/jobs"]
+		f.mu.Unlock()
+		if created != nil {
+			jobs = append(jobs, map[string]any{"id": created["id"], "title": "Support agent", "team": "Operations", "location": "Houston, TX", "type": "Full-time", "pay": "$22-26/hr",
+				"summary": "Help shoppers.", "responsibilities": []any{}, "requirements": []any{}, "status": "OPEN", "postedAt": now})
+		}
+		writeJ(w, 200, jobs)
+	case strings.HasPrefix(p, "/v1/careers/jobs"):
+		if r.Method == http.MethodPost {
+			writeJ(w, 201, map[string]any{"id": "x"})
+			return
+		}
+		writeJ(w, 200, map[string]any{"id": "support-agent-houston"})
+	case p == "/v1/consent/cookie-policy":
+		cookieRows := []any{map[string]any{"name": "at_session", "provider": "AfroTransact", "purpose": "Keeps you signed in", "duration": "Session", "category": "necessary"}}
+		f.mu.Lock()
+		createdCookie := f.bodies["PUT /v1/consent/cookies/at_theme"]
+		f.mu.Unlock()
+		if createdCookie != nil {
+			cookieRows = append(cookieRows, map[string]any{"name": "at_theme", "provider": createdCookie["provider"], "purpose": createdCookie["purpose"], "duration": createdCookie["duration"], "category": createdCookie["category"]})
+		}
+		writeJ(w, 200, map[string]any{"noticeVersion": "2.1", "effectiveDate": "2026-09-01", "noticeHref": "/legal/cookies",
+			"categories": []any{map[string]any{"key": "necessary", "name": "Strictly necessary"}, map[string]any{"key": "analytics", "name": "Analytics"}, map[string]any{"key": "functional", "name": "Functional"}},
+			"cookies": cookieRows})
+	case strings.HasPrefix(p, "/v1/consent/cookies/"):
+		if r.Method == http.MethodDelete {
+			w.WriteHeader(204)
+			return
+		}
+		writeJ(w, 200, map[string]any{"name": strings.TrimPrefix(p, "/v1/consent/cookies/")})
 	case p == "/v1/privacy/requests":
 		writeJ(w, 200, []any{map[string]any{"id": "0b1c", "reference": "PR-100001", "type": "access", "email": "ada@example.com", "state": "TX",
 			"status": "RECEIVED", "overdue": false, "submittedAt": now, "dueAt": now, "version": 0}})
@@ -1354,6 +1388,47 @@ func TestStaffContractConformance(t *testing.T) {
 	}
 	newHelp["slug"] = "shipping"
 	do("admin", "POST", "/v1/staff/resources/help-articles", map[string]any{"values": newHelp}, 422)
+	// Careers: open roles are edited, opened and closed in the console, with bullets typed one per line.
+	jobs := do("admin", "GET", "/v1/staff/resources/careers-jobs", nil, 200)
+	if rows := jobs["rows"].([]any); len(rows) != 1 || rows[0].(map[string]any)["id"] != "support-agent-houston" {
+		t.Fatalf("careers rows = %v", jobs)
+	}
+	careerJob := do("admin", "GET", "/v1/staff/resources/careers-jobs/support-agent-houston", nil, 200)
+	if careerJob["actions"] == nil || careerJob["editForm"] == nil {
+		t.Fatalf("job sheet = %v", careerJob)
+	}
+	do("admin", "POST", "/v1/staff/resources/careers-jobs/support-agent-houston/actions/open", map[string]any{}, 200)
+	if b := f.bodies["PUT /v1/careers/jobs/support-agent-houston"]; b["status"] != "OPEN" || b["title"] != "Support agent" {
+		t.Fatalf("open body = %v", b)
+	}
+	jobValues := map[string]any{"title": "Support agent", "team": "Operations", "location": "Houston, TX", "type": "Full-time", "pay": "$22-26/hr", "status": "OPEN", "summary": "Help shoppers.",
+		"responsibilities": "- Answer chats\n\nResolve cases ", "requirements": "Fluent English", "sortOrder": 5}
+	do("admin", "PATCH", "/v1/staff/resources/careers-jobs/support-agent-houston", map[string]any{"values": jobValues}, 200)
+	if b := f.bodies["PUT /v1/careers/jobs/support-agent-houston"]; len(b["responsibilities"].([]any)) != 2 || b["responsibilities"].([]any)[0] != "Answer chats" || b["sortOrder"] != float64(5) {
+		t.Fatalf("job body = %v", b)
+	}
+	do("admin", "POST", "/v1/staff/resources/careers-jobs", map[string]any{"values": map[string]any{"id": "x"}}, 422)
+	newJob := map[string]any{"id": "data-engineer-remote-us"}
+	for k, v := range jobValues {
+		newJob[k] = v
+	}
+	do("admin", "POST", "/v1/staff/resources/careers-jobs", map[string]any{"values": newJob}, 201)
+	if b := f.bodies["POST /v1/careers/jobs"]; b["id"] != "data-engineer-remote-us" || b["job"].(map[string]any)["team"] != "Operations" {
+		t.Fatalf("create job body = %v", b)
+	}
+	do("support", "PATCH", "/v1/staff/resources/careers-jobs/support-agent-houston", map[string]any{"values": jobValues}, 403)
+	// Cookies: the table on the cookie notice.
+	cookies := do("admin", "GET", "/v1/staff/resources/cookie-definitions", nil, 200)
+	if rows := cookies["rows"].([]any); len(rows) != 1 || rows[0].(map[string]any)["cells"].(map[string]any)["categoryName"] != "Strictly necessary" {
+		t.Fatalf("cookie rows = %v", cookies)
+	}
+	do("admin", "PATCH", "/v1/staff/resources/cookie-definitions/at_session", map[string]any{"values": map[string]any{"provider": "AfroTransact", "purpose": "Keeps you signed in", "duration": "Session", "category": "necessary"}}, 200)
+	if b := f.bodies["PUT /v1/consent/cookies/at_session"]; b["category"] != "necessary" || b["duration"] != "Session" {
+		t.Fatalf("cookie body = %v", b)
+	}
+	do("admin", "POST", "/v1/staff/resources/cookie-definitions", map[string]any{"values": map[string]any{"name": "at_theme", "provider": "AfroTransact", "purpose": "Dark mode", "duration": "1 year", "category": "functional"}}, 201)
+	do("admin", "POST", "/v1/staff/resources/cookie-definitions", map[string]any{"values": map[string]any{"name": "bad name!", "provider": "x", "purpose": "x", "duration": "x", "category": "necessary"}}, 422)
+	do("admin", "POST", "/v1/staff/resources/cookie-definitions/at_session/actions/delete", map[string]any{}, 200)
 	do("admin", "POST", "/v1/staff/resources/claims/clm-1/notes", map[string]any{"text": "Called the seller"}, 503)
 
 	// Exports: small ones finish within the request, behind a signed, expiring link.

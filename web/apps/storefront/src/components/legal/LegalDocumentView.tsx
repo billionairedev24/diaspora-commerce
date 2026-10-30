@@ -1,4 +1,5 @@
 import { LEGAL_GROUPS, type LegalDocumentKey, legalHref, type LegalPage } from '@afrotransact/api-client';
+import { LegalDocumentContent, LegalDraftBanner, LegalNote } from '@afrotransact/content';
 import { type Translator } from '@afrotransact/i18n';
 import { LogoMark, wordmarkClassName } from '@afrotransact/ui';
 import Link from 'next/link';
@@ -8,7 +9,6 @@ import { type MessageKey } from '@/i18n/t';
 
 import styles from './Legal.module.css';
 import { FocusHeadingOnNavigate, PrintButton } from './LegalClient';
-import { type LegalBlockClasses, LegalBlocks, parseLegalMarkdown } from './markdown';
 
 /** Localised document title (the binding English title comes from content-service). */
 export const legalTitle = (t: Translator<MessageKey>, key: LegalDocumentKey): string => t(`legal.doc.${key}` as MessageKey);
@@ -21,15 +21,6 @@ export function formatLegalDate(iso: string, locale: string): string {
     return iso;
   }
 }
-
-const BLOCK_CLASSES: LegalBlockClasses = {
-  subheading: styles.subheading,
-  quote: styles.quote,
-  tableWrap: styles.docTableWrap,
-  table: styles.docTable,
-  cell: styles.docCell,
-  rule: styles.rule
-};
 
 export interface LegalDocumentViewProps {
   docKey: LegalDocumentKey;
@@ -46,17 +37,12 @@ export interface LegalDocumentViewProps {
  * is English (binding) and marked lang="en" whatever the page language.
  */
 export function LegalDocumentView({ docKey, page, locale, t, children }: LegalDocumentViewProps) {
-  const doc = parseLegalMarkdown(page.body, page.outline);
   const archived = page.status === 'ARCHIVED';
   const older = page.versions.filter((v) => v.version !== page.version);
   const showTranslationNote = locale !== 'en';
   return (
     <>
-      {page.draftBanner && (
-        <p role="note" className={styles.draft}>
-          {t('legal.draft')}
-        </p>
-      )}
+      {page.draftBanner && <LegalDraftBanner>{t('legal.draft')}</LegalDraftBanner>}
       <div className={styles.layout}>
         <nav aria-label={t('legal.docs')} className={styles.docsNav} data-noprint>
           <div className={styles.brandBlock}>
@@ -89,27 +75,31 @@ export function LegalDocumentView({ docKey, page, locale, t, children }: LegalDo
           ))}
         </nav>
 
-        <div className={styles.main}>
-          <FocusHeadingOnNavigate targetId="legal-title" />
-          {showTranslationNote && (
-            <p role="note" className={styles.note}>
-              {t('legal.translation')}
-            </p>
-          )}
-          {archived && (
-            <p role="note" className={styles.note}>
-              {t('legal.archivedNote', { version: page.version })} <Link href={legalHref(docKey)}>{t('legal.viewCurrent')}</Link>
-            </p>
-          )}
-          <div className={styles.head}>
-            <h1 id="legal-title" tabIndex={-1} className={styles.title}>
-              {legalTitle(t, docKey)}
-            </h1>
-            <div className={styles.meta}>
-              <span>{t('legal.version', { version: page.version })}</span>
-              <span>
-                {t('legal.effective')} <time dateTime={page.effectiveDate}>{formatLegalDate(page.effectiveDate, locale)}</time>
-              </span>
+        <LegalDocumentContent
+          className={styles.main}
+          title={legalTitle(t, docKey)}
+          body={page.body}
+          outline={page.outline}
+          bodyLang={page.locale}
+          bodyDir={page.locale === 'ar' ? 'rtl' : 'ltr'}
+          versionLabel={t('legal.version', { version: page.version })}
+          effectiveLabel={t('legal.effective')}
+          effectiveDate={page.effectiveDate}
+          effectiveText={formatLegalDate(page.effectiveDate, locale)}
+          tocLabel={t('legal.onPage')}
+          before={<FocusHeadingOnNavigate targetId="legal-title" />}
+          notes={
+            <>
+              {showTranslationNote && <LegalNote>{t('legal.translation')}</LegalNote>}
+              {archived && (
+                <LegalNote>
+                  {t('legal.archivedNote', { version: page.version })} <Link href={legalHref(docKey)}>{t('legal.viewCurrent')}</Link>
+                </LegalNote>
+              )}
+            </>
+          }
+          meta={
+            <>
               {older.length > 0 && (
                 <details className={styles.prev} data-noprint>
                   <summary>{t('legal.prev')}</summary>
@@ -126,38 +116,11 @@ export function LegalDocumentView({ docKey, page, locale, t, children }: LegalDo
                 </details>
               )}
               <PrintButton label={t('legal.print')} />
-            </div>
-          </div>
-
-          {doc.sections.length > 0 && (
-            <nav aria-labelledby="legal-toc" className={styles.toc} data-noprint>
-              <h2 id="legal-toc" className={styles.tocTitle}>
-                {t('legal.onPage')}
-              </h2>
-              <ol className={styles.tocList}>
-                {doc.sections.map((s) => (
-                  <li key={s.id}>
-                    <a href={`#${s.id}`}>{s.title}</a>
-                  </li>
-                ))}
-              </ol>
-            </nav>
-          )}
-
-          <article lang="en" dir="ltr" className={styles.article}>
-            <LegalBlocks blocks={doc.intro} className={styles.body} classes={BLOCK_CLASSES} />
-            {doc.sections.map((s, i) => (
-              <section key={s.id} aria-labelledby={s.id} className={styles.section}>
-                <h2 id={s.id} tabIndex={-1} className={styles.sectionTitle}>
-                  {i + 1}. {s.title}
-                </h2>
-                <LegalBlocks blocks={s.blocks} className={styles.body} classes={BLOCK_CLASSES} />
-              </section>
-            ))}
-          </article>
-
+            </>
+          }
+        >
           {!archived && children}
-        </div>
+        </LegalDocumentContent>
       </div>
     </>
   );

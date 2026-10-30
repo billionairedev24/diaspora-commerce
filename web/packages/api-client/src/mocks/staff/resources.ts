@@ -14,6 +14,7 @@ import {
   type ResourceKey,
   type StaffForm
 } from '../../schemas/staff';
+import { MOCK_STOREFRONT_URL } from './content-pages';
 import { type MockRecord, type Scalar } from './db';
 import { exchangeRatesDef } from './exchange-rates';
 import { IDENTITY_RESOURCES } from './identity';
@@ -125,6 +126,27 @@ function tierFields(r: MockRecord | undefined): FormField[] {
     field('monthlyCreditAmount', 'Monthly credit (dollars)', 'number', false, { min: 0, max: 1000, value: n('monthlyCreditAmount') })
   ];
 }
+
+const COOKIE_CATEGORY_NAMES: Record<string, string> = { necessary: 'Strictly necessary', functional: 'Functional', analytics: 'Analytics', advertising: 'Advertising' };
+const JOB_STATUS_OPTIONS = [{ value: 'DRAFT', label: 'Draft (not on the careers page)' }, { value: 'OPEN', label: 'Open (listed, takes applications)' }, { value: 'CLOSED', label: 'Closed' }];
+const jobFields = (f: Record<string, Scalar | FieldValue | undefined>): FormField[] => [
+  field('title', 'Role title', 'text', true, { maxLength: 120, value: str(f.title) }),
+  field('team', 'Team', 'text', true, { maxLength: 60, value: str(f.team) }),
+  field('location', 'Location', 'text', true, { maxLength: 80, value: str(f.location) }),
+  field('type', 'Type (Full-time, Hourly…)', 'text', true, { maxLength: 40, value: str(f.type) || 'Full-time' }),
+  field('pay', 'Pay range shown to candidates', 'text', true, { maxLength: 60, value: str(f.pay) }),
+  field('status', 'Status', 'select', true, { options: JOB_STATUS_OPTIONS, value: str(f.status) || 'DRAFT' }),
+  field('summary', 'About the role', 'textarea', true, { maxLength: 4000, value: str(f.summary) }),
+  field('responsibilities', 'What you will do (one per line)', 'textarea', false, { value: str(f.responsibilities) }),
+  field('requirements', 'What you bring (one per line)', 'textarea', false, { value: str(f.requirements) }),
+  field('sortOrder', 'Order in the list', 'number', false, { min: 0, max: 1000, value: num(f.sortOrder) })
+];
+const cookieFields = (f: Record<string, Scalar | FieldValue | undefined>): FormField[] => [
+  field('provider', 'Who sets it', 'text', true, { maxLength: 80, value: str(f.provider) }),
+  field('purpose', 'What it is for', 'textarea', true, { maxLength: 500, value: str(f.purpose) }),
+  field('duration', 'How long it lives', 'text', true, { maxLength: 40, value: str(f.duration) }),
+  field('category', 'Category', 'select', true, { options: Object.entries(COOKIE_CATEGORY_NAMES).map(([value, label]) => ({ value, label })), value: str(f.category) })
+];
 
 const MARKET_ORDER: Record<string, number> = { LIVE: 0, COMING_SOON: 1, PAUSED: 2, PLANNED: 3 };
 const col = (key: string, label: string, kind: ColumnKind, width: number): ResourceColumn => ({ key, label, kind, width });
@@ -624,6 +646,10 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     exportable: false,
     titleOf: (r) => str(r.fields.title),
     subtitleOf: (r) => `Version ${str(r.fields.version)}`,
+    links: (r) => [
+      { label: 'Preview, edit and publish', href: `/settings/pages/legal/${r.id}` },
+      { label: 'Open the live page', href: str(r.fields.href), external: true }
+    ],
     actions: [
       {
         key: 'raise-version', label: 'New version', tone: 'primary', permission: 'content:legal.edit', when: () => null,
@@ -644,7 +670,11 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     facets: facets('PUBLISHED', 'DRAFT'),
     exportable: false,
     titleOf: (r) => str(r.fields.title),
-    subtitleOf: (r) => `${str(r.fields.topicTitle)} · ${str(r.fields.href)}`,
+    subtitleOf: (r) => `${str(r.fields.topicTitle)} · ${str(r.fields.path)}`,
+    links: (r) => [
+      { label: 'Preview, edit and publish', href: `/settings/pages/help/${r.id}` },
+      ...(str(r.fields.status) === 'PUBLISHED' ? [{ label: 'Open the live page', href: str(r.fields.href), external: true }] : [])
+    ],
     actions: [],
     edit: {
       permission: 'content:site.edit',
@@ -655,6 +685,71 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
         field('sections', 'Page (Markdown: a “## Heading” line before each section)', 'textarea', true, { value: str(r.fields.sections), help: 'Paragraphs, “-” lists, **bold** and [links](/orders); email addresses become links.' })
       ]),
       apply: (r, v) => { r.fields.title = str(v.title); r.fields.summary = str(v.summary); r.fields.status = str(v.status); r.fields.sections = str(v.sections); }
+    }
+  },
+  'careers-jobs': {
+    title: 'Careers',
+    columns: [col('title', 'Role', 'strong', 30), col('team', 'Team', 'text', 16), col('location', 'Location', 'text', 18), col('type', 'Type', 'text', 12), col('status', 'Status', 'status', 12), col('postedAt', 'Opened', 'date', 12)],
+    statusKey: 'status',
+    facets: facets('OPEN', 'DRAFT', 'CLOSED'),
+    exportable: false,
+    titleOf: (r) => str(r.fields.title),
+    subtitleOf: (r) => `${str(r.fields.team)} · ${str(r.fields.location)}`,
+    sections: [['Details', ['location', 'pay', 'postedAt', 'status', 'summary', 'team', 'type']]],
+    links: (r) => (is(r, 'OPEN') ? [{ label: 'Open the careers page', href: `${MOCK_STOREFRONT_URL}/careers`, external: true }] : []),
+    actions: [
+      { key: 'open', label: 'Open the role', tone: 'primary', permission: 'content:careers.edit', confirm: 'List this role on the careers page and accept applications?', when: (r) => stateReason(r, 'DRAFT', 'CLOSED'), apply: setStatus('OPEN', 'Opened') },
+      { key: 'close', label: 'Close the role', tone: 'danger', permission: 'content:careers.edit', confirm: 'Take this role off the careers page? Applications already received stay.', when: (r) => stateReason(r, 'OPEN'), apply: setStatus('CLOSED', 'Closed') }
+    ],
+    edit: {
+      permission: 'content:careers.edit',
+      form: (r) => form('Edit the role', 'Save', jobFields(r.fields)),
+      apply: (r, v) => {
+        for (const k of ['title', 'team', 'location', 'type', 'pay', 'status', 'summary', 'responsibilities', 'requirements']) r.fields[k] = str(v[k]);
+        r.fields.sortOrder = num(v.sortOrder);
+      }
+    },
+    create: {
+      permission: 'content:careers.edit',
+      form: form('New role', 'Create role', [field('id', 'Address (/careers…)', 'text', true, { pattern: '^[a-z0-9][a-z0-9-]{2,59}$', maxLength: 60 }), ...jobFields({})]),
+      build: (v, id, ctx) => ({
+        id: str(v.id) || id,
+        fields: { title: str(v.title), team: str(v.team), location: str(v.location), type: str(v.type), pay: str(v.pay), status: str(v.status), summary: str(v.summary), responsibilities: str(v.responsibilities), requirements: str(v.requirements), sortOrder: num(v.sortOrder), postedAt: ctx.now.toISOString() },
+        activity: [{ at: ctx.now.toISOString(), actor: ctx.actor, text: 'Created' }]
+      })
+    }
+  },
+  'cookie-definitions': {
+    title: 'Cookies',
+    columns: [col('name', 'Cookie', 'mono', 22), col('provider', 'Set by', 'text', 18), col('categoryName', 'Category', 'text', 16), col('duration', 'Lives', 'text', 12), col('purpose', 'Purpose', 'text', 32)],
+    facets: [],
+    exportable: false,
+    titleOf: (r) => str(r.fields.name),
+    subtitleOf: (r) => `${str(r.fields.provider)} · ${str(r.fields.categoryName)}`,
+    sections: [['Details', ['provider', 'categoryName', 'duration', 'purpose']]],
+    links: () => [{ label: 'Open the cookie notice', href: `${MOCK_STOREFRONT_URL}/legal/cookies`, external: true }],
+    actions: [
+      {
+        key: 'delete', label: 'Remove from the table', tone: 'danger', permission: 'content:legal.edit', confirm: 'Remove this cookie from the table on the cookie notice?', when: () => null, removes: true,
+        apply: (r, _v, ctx) => log(r, ctx, 'Removed')
+      }
+    ],
+    edit: {
+      permission: 'content:legal.edit',
+      form: (r) => form('Edit cookie', 'Save', cookieFields(r.fields)),
+      apply: (r, v) => {
+        for (const k of ['provider', 'purpose', 'duration', 'category']) r.fields[k] = str(v[k]);
+        r.fields.categoryName = COOKIE_CATEGORY_NAMES[str(v.category)] ?? str(v.category);
+      }
+    },
+    create: {
+      permission: 'content:legal.edit',
+      form: form('Add a cookie', 'Add cookie', [field('name', 'Cookie name', 'text', true, { pattern: '^[A-Za-z0-9_.\\-]+$', maxLength: 80 }), ...cookieFields({})]),
+      build: (v, id, ctx) => ({
+        id: str(v.name) || id,
+        fields: { name: str(v.name), provider: str(v.provider), purpose: str(v.purpose), duration: str(v.duration), category: str(v.category), categoryName: COOKIE_CATEGORY_NAMES[str(v.category)] ?? str(v.category) },
+        activity: [{ at: ctx.now.toISOString(), actor: ctx.actor, text: 'Added' }]
+      })
     }
   },
   'privacy-requests': {

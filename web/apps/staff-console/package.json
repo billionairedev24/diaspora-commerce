@@ -18,6 +18,7 @@
   "dependencies": {
     "@afrotransact/account": "workspace:*",
     "@afrotransact/api-client": "workspace:*",
+    "@afrotransact/content": "workspace:*",
     "@afrotransact/data-table": "workspace:*",
     "@afrotransact/i18n": "workspace:*",
     "@afrotransact/telemetry": "workspace:*",
