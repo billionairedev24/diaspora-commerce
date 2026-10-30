@@ -2,9 +2,9 @@
 
 import { type DeliveryProof } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { ImagePlaceholder } from '@afrotransact/ui';
+import { Dialog, ImagePlaceholder, TextLinkButton } from '@afrotransact/ui';
+import { useState } from 'react';
 
-import pageStyles from '@/components/account/Pages.module.css';
 import { useT } from '@/i18n/t';
 
 import styles from './Orders.module.css';
@@ -21,10 +21,9 @@ export function DeliveryProofCard({ proof }: { proof: DeliveryProof }) {
         : t('ord.proofSafePlace', { place: (proof.safePlace ?? t('ord.proofSafeDefault')).toLowerCase() });
   const when = new Date(proof.at).toLocaleString(fmt.tag, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   return (
-    <section className={styles.proof} aria-label={t('ord.proofTitle')}>
-      <h3 className={styles.proofTitle}>{t('ord.proofTitle')}</h3>
+    <div className={styles.proof} data-testid="delivery-proof">
       <p className={styles.proofHow}>
-        {how} <span className={pageStyles.muted}>· {when}</span>
+        {how} <span className={styles.muted}>· {when}</span>
       </p>
       {(proof.photoUrl || proof.signatureUrl) && (
         <div className={styles.proofPictures}>
@@ -42,6 +41,22 @@ export function DeliveryProofCard({ proof }: { proof: DeliveryProof }) {
           )}
         </div>
       )}
-    </section>
+    </div>
+  );
+}
+
+/** "View delivery proof": a plain link that opens the proof (who received it, the photo and signature) in a dialog. */
+export function DeliveryProofLink({ proof }: { proof: DeliveryProof }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <TextLinkButton onClick={() => setOpen(true)} data-testid="order-view-proof">
+        {t('ord.viewProof')}
+      </TextLinkButton>
+      <Dialog open={open} onOpenChange={setOpen} title={t('ord.proofTitle')} closeLabel={t('ord.closePopover')} width={520}>
+        <DeliveryProofCard proof={proof} />
+      </Dialog>
+    </>
   );
 }
