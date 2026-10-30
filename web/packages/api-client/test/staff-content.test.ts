@@ -161,8 +161,8 @@ describe('other public content staff change themselves: open roles and the cooki
 
   it('opens a draft role and closes it again; the careers link opens on the storefront', async () => {
     const staff = client();
-    const jobs = await staff.listResource('careers-jobs', { page: 1, size: 50 });
-    const draft = jobs.rows.find((r) => r.cells.status === 'DRAFT');
+    const jobs = await staff.listResource('careers-jobs', { page: 0, size: 50 });
+    const draft = jobs.rows.find((r) => String(r.cells.status).toLowerCase() === 'draft');
     expect(draft).toBeDefined();
     const id = draft?.id ?? '';
     const sheet = await staff.runAction('careers-jobs', id, 'open', {});
@@ -182,7 +182,7 @@ describe('other public content staff change themselves: open roles and the cooki
     expect(edited.sections[0]?.fields.some((f) => f.value === '6 months')).toBe(true);
     const gone = await staff.runAction('cookie-definitions', 'at_theme', 'delete', {});
     expect(gone.removed).toBe(true);
-    const list = await staff.listResource('cookie-definitions', { page: 1, size: 50 });
+    const list = await staff.listResource('cookie-definitions', { page: 0, size: 50 });
     expect(list.rows.some((r) => r.id === 'at_theme')).toBe(false);
   });
 });
