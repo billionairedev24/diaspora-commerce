@@ -242,7 +242,9 @@ func legalResource() *staffResource {
 		},
 		links: func(o jobj) []domain.RecordLink {
 			if p := jstr(o, "path"); p != "" {
-				return []domain.RecordLink{{Label: "Open the live page", Href: p, Storefront: true}}
+				return []domain.RecordLink{
+					{Label: "Preview, edit and publish", Href: "/settings/pages/legal/" + jstr(o, "key")},
+					{Label: "Open the live page", Href: p, Storefront: true}}
 			}
 			return nil
 		},

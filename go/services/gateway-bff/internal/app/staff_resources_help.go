@@ -133,10 +133,11 @@ func helpArticlesResource() *staffResource {
 			return []domain.DetailTable{tableOf("Sections", objs(o, "sections"), []domain.Column{col("heading", "Heading", "strong", 30), col("body", "Text (Markdown)", "text", 70)}, "heading")}
 		},
 		links: func(o jobj) []domain.RecordLink {
-			if jstr(o, "status") != "PUBLISHED" {
-				return nil
+			links := []domain.RecordLink{{Label: "Preview, edit and publish", Href: "/settings/pages/help/" + jstr(o, "slug")}}
+			if jstr(o, "status") == "PUBLISHED" {
+				links = append(links, domain.RecordLink{Label: "Open the live page", Href: jstr(o, "path"), Storefront: true})
 			}
-			return []domain.RecordLink{{Label: "Open the live page", Href: jstr(o, "path"), Storefront: true}}
+			return links
 		},
 		version: func(o jobj) string { return jstr(o, "version") },
 		edit: &staffEdit{permission: "content:site.edit",

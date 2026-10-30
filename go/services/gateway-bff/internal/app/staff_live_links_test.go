@@ -31,12 +31,19 @@ func TestLiveLinksDroppedWithoutStorefrontOrigin(t *testing.T) {
 }
 
 func TestResourceLinksUseTheStorefrontPath(t *testing.T) {
-	help := helpArticlesResource().links(jobj{"status": "PUBLISHED", "path": helpPath("shipping")})
-	legal := legalResource().links(jobj{"path": "/legal/privacy"})
+	help := helpArticlesResource().links(jobj{"status": "PUBLISHED", "slug": "shipping", "path": helpPath("shipping")})
+	legal := legalResource().links(jobj{"key": "privacy", "path": "/legal/privacy"})
 	for name, links := range map[string][]domain.RecordLink{"help": help, "legal": legal} {
-		if len(links) != 1 || !links[0].Storefront || links[0].Href[0] != '/' {
+		if len(links) != 2 || links[0].Storefront || !links[1].Storefront || links[1].Href[0] != '/' {
 			t.Errorf("%s links = %+v", name, links)
 		}
+	}
+	if legal[0].Href != "/settings/pages/legal/privacy" || help[0].Href != "/settings/pages/help/shipping" {
+		t.Errorf("editor links = %+v %+v", legal[0], help[0])
+	}
+	hidden := helpArticlesResource().links(jobj{"status": "DRAFT", "slug": "wip", "path": helpPath("wip")})
+	if len(hidden) != 1 || hidden[0].Storefront {
+		t.Errorf("a hidden page has no live link: %+v", hidden)
 	}
 	if helpPath(domain.HelpHub) != "/help" || helpPath("shipping") != "/help/shipping" {
 		t.Error("help paths")
