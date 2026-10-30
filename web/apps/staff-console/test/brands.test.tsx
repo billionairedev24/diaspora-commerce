@@ -4,10 +4,10 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { BrandsView } from '@/components/catalog/BrandsView';
 import { brandActions, previewBrandList } from '@/components/catalog/brandModel';
-import { CategoriesView } from '@/components/catalog/CategoriesView';
+import { BrandsView } from '@/components/catalog/BrandsView';
 import { CatalogView } from '@/components/catalog/CatalogView';
+import { CategoriesView } from '@/components/catalog/CategoriesView';
 import { SellerFormPreview } from '@/components/catalog/SellerFormPreview';
 
 import { asRoles, mockApi } from './mock-api';
