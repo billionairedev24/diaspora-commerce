@@ -18,6 +18,7 @@ Pick one with `-e SCENARIO=…` (default `smoke`):
 | `smoke` | 1 VU — search: 30 s with 0.5 s think time; checkout: 3 iterations | after every deploy; proves script + environment |
 | `load` | arrival rate ramps to `RATE` over `RAMP` (1 m), holds for `DURATION` (5 m) | the S200 budget check at target load |
 | `stress` | ramps to `RATE`, 2×, 3× and holds 3× for 5 m (≈ 15 min) | find the knee; search does not abort early here |
+| `soak` | constant `SOAK_RATE` (default `RATE`/2) for `SOAK_DURATION` (default 2 h) | leaks, pool exhaustion, lag, disk growth, slow degradation: run 4 to 8 h before a release |
 | `flash` (checkout only) | `FLASH_UNITS + 25` customers order one offer at the same moment | no overselling: exactly `FLASH_UNITS` succeed |
 
 ## Configuration (env, pass with `-e NAME=value`)
@@ -98,3 +99,19 @@ dashboards in Grafana.
 |---|---|---|---|
 | 2026-10-10 | search service (local, ES 9.3 single node, 200 synthetic docs) | smoke 20 s, 1 VU | all thresholds pass · search p95 12 ms · facets p95 13 ms · suggest p95 7 ms · 0 % errors |
 | 2026-10-10 | same | load 150 it/s (≈ 280 req/s) for 30 s | all thresholds pass · search p95 11 ms · facets p95 10 ms · suggest p95 6 ms · 0 % errors |
+
+
+## Soak test
+
+```bash
+# 4 hours of search at 25 iterations/s (about 65 requests/s)
+k6 run -e SCENARIO=soak -e RATE=50 -e SOAK_DURATION=4h tests/load/search.js
+# checkout at 2 orders/s for 4 hours, one customer token per VU (orders are really placed: use a disposable environment)
+k6 run -e SCENARIO=soak -e SOAK_RATE=2 -e SOAK_DURATION=4h -e TOKENS=$(cat .local/tokens.txt) tests/load/checkout.js
+```
+
+Run it against a dedicated environment, not a laptop. While it runs, watch (Grafana): p95/p99 per endpoint over time (a
+slow upward drift is the finding), JVM heap and GC time per service, Postgres connections and slow queries, Kafka
+consumer lag and the outbox backlog, Elasticsearch heap and disk, pod restarts and OOM kills. A soak passes when
+latency and memory are flat after the first 15 minutes, nothing restarts, lag returns to zero, and disk grows only as
+fast as the data you wrote.
