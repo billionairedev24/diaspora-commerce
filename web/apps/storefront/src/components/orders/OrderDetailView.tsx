@@ -32,15 +32,13 @@ function ShipmentSection({ order, shipment: s, cancel }: { order: OrderDetail; s
     <Section
       id={s.shipmentId}
       testId="shipment"
-      title={s.statusLabel}
+      title={s.label}
       action={<StatusText tone="neutral">{t(`ord.method.${s.deliveryMethod}`)}</StatusText>}
     >
       <div className={styles.shipment}>
         <div className={styles.shipMain}>
           <ShipmentHeadline shipment={s} />
-          <p className={styles.muted}>
-            {s.label} · {t('ord.soldBy', { seller: s.sellerName })}
-          </p>
+          <p className={styles.muted}>{t('ord.soldBy', { seller: s.sellerName })}</p>
           {s.membershipWaiver && (
             <p className={styles.muted} data-testid="order-membership-waiver">
               {t('ord.mem.waived', { tier: s.membershipWaiver.tierName, benefit: benefitName(t, fmt, s.membershipWaiver.benefit), amount: fmt.money(s.membershipWaiver.waivedMinor) })}

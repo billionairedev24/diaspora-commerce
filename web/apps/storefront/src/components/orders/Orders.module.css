@@ -68,7 +68,9 @@
 .cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--at-space-6) var(--at-space-8); padding-block: var(--at-space-3); border-block: 1px solid var(--at-color-border-strong); }
 .col { display: flex; flex-direction: column; gap: var(--at-space-2); min-width: 0; }
 .colTitle { margin: 0; font-size: var(--at-text-base); font-weight: var(--at-weight-bold); }
-.lineItem { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: var(--at-space-3); align-items: start; min-inline-size: 12rem; }
+/* The photo is out of flow so the title's first line is the cell's baseline and the price lines up with it. */
+.lineItem { position: relative; display: block; min-inline-size: 12rem; min-block-size: 64px; padding-inline-start: 76px; }
+.lineItem .thumb { position: absolute; inset-inline-start: 0; inset-block-start: 0; }
 
 @media (max-width: 1023px) {
   .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }

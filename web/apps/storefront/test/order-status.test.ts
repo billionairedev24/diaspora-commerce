@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { inRange, matchesOrder, orderGroup, rangeOptions, rangeStart, shipmentLook } from '@/components/orders/orderStatus';
+import { canTrack, inRange, inTab, matchesOrder, notYetShipped, orderGroup, rangeOptions, rangeStart, shipmentLook } from '@/components/orders/orderStatus';
 
 describe('how a shipment reads to a shopper', () => {
   it('names the stage in plain words and says how far along it is', () => {
@@ -33,7 +33,9 @@ describe('how a shipment reads to a shopper', () => {
 
 describe('time range filter', () => {
   const now = new Date('2026-10-17T12:00:00Z');
-  it('keeps orders from the past 3 or 6 months, or from one calendar year', () => {
+  it('keeps orders from the past 30 days, 3 or 6 months, or from one calendar year', () => {
+    expect(inRange('2026-09-25T00:00:00Z', '30d', now)).toBe(true);
+    expect(inRange('2026-09-10T00:00:00Z', '30d', now)).toBe(false);
     expect(inRange('2026-09-01T00:00:00Z', '3m', now)).toBe(true);
     expect(inRange('2026-06-01T00:00:00Z', '3m', now)).toBe(false);
     expect(inRange('2026-06-01T00:00:00Z', '6m', now)).toBe(true);
@@ -42,11 +44,34 @@ describe('time range filter', () => {
     expect(inRange('2020-01-01T00:00:00Z', 'all', now)).toBe(true);
   });
   it('offers this year and the two before', () => {
-    expect(rangeOptions(now).map((o) => o.value)).toEqual(['all', '3m', '6m', 'y2026', 'y2025', 'y2024']);
+    expect(rangeOptions(now).map((o) => o.value)).toEqual(['30d', '3m', '6m', 'y2026', 'y2025', 'y2024', 'all']);
   });
   it('says where a range starts, so loading can stop once older orders arrive', () => {
     expect(rangeStart('all', now)).toBeNull();
+    expect(rangeStart('30d', now)?.toISOString().slice(0, 10)).toBe('2026-09-17');
     expect(rangeStart('3m', now)?.toISOString().slice(0, 10)).toBe('2026-07-17');
     expect(rangeStart('y2025', now)?.getFullYear()).toBe(2025);
+  });
+});
+
+describe('tabs and tracking', () => {
+  it('finds what is not yet shipped, and cancelled orders', () => {
+    expect(notYetShipped({ status: 'confirmed' })).toBe(true);
+    expect(notYetShipped({ status: 'ready' })).toBe(true);
+    expect(notYetShipped({ status: 'in_transit' })).toBe(false);
+    expect(notYetShipped({ status: 'cancelled' })).toBe(false);
+    expect(notYetShipped({ status: 'delivered', deliveredAt: '2026-10-01T10:00:00Z' })).toBe(false);
+    expect(inTab({ shipments: [{ status: 'delivered' }, { status: 'packed' }] }, 'NOT_SHIPPED')).toBe(true);
+    expect(inTab({ shipments: [{ status: 'delivered' }] }, 'NOT_SHIPPED')).toBe(false);
+    expect(inTab({ shipments: [{ status: 'cancelled' }] }, 'CANCELLED')).toBe(true);
+    expect(inTab({ shipments: [{ status: 'delivered' }, { status: 'cancelled' }] }, 'CANCELLED')).toBe(false);
+    expect(inTab({ shipments: [{ status: 'cancelled' }] }, 'ALL')).toBe(true);
+  });
+  it('offers Track package only for a package that is out or has a tracking number', () => {
+    expect(canTrack({ status: 'in_transit' })).toBe(true);
+    expect(canTrack({ status: 'confirmed', trackingNumber: '1Z1' })).toBe(true);
+    expect(canTrack({ status: 'confirmed' })).toBe(false);
+    expect(canTrack({ status: 'delivered', deliveredAt: '2026-10-01T10:00:00Z', trackingNumber: '1Z1' })).toBe(false);
+    expect(canTrack({ status: 'cancelled', trackingNumber: '1Z1' })).toBe(false);
   });
 });
