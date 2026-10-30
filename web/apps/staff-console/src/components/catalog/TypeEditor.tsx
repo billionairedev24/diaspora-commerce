@@ -129,7 +129,7 @@ function AttributeRow({ attribute: a, index, total, fresh, open, disabled, error
               onChange={(e) => {
                 const kind = e.currentTarget.value as AttributeKind;
                 const options = kind === 'ENUM' ? a.options : kind === 'BRAND' ? a.options.filter((o) => NO_BRAND.some((n) => n.value === o)) : [];
-                onChange({ ...a, kind, key: kind === 'BRAND' ? 'brand' : a.key, options, units: kind === 'NUMBER' ? a.units : [] });
+                onChange({ ...a, kind, key: kind === 'BRAND' ? 'brand' : a.key, options, units: kind === 'NUMBER' ? a.units : [] }, kind === 'BRAND');
               }}
             />
             <Select

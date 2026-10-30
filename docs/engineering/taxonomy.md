@@ -75,9 +75,26 @@ the before/after) and publishes `catalog.taxonomy.changed` on `at.taxonomy.event
 `contracts/asyncapi/fragments/catalog.yaml`). The console shows the history of a node in its sheet
 (`GET /v1/staff/taxonomy/audit?subject=`, people by name). Category-request decisions are audited too.
 
+## Brand registry (Catalog, Categories, Brands tab)
+
+Staff manage brands in the console under `catalog:taxonomy` (the tab is hidden without it, and edits need the same edit
+rank as the tree). The tab is a server-driven table over `GET /v1/staff/taxonomy/brands` (status filter, `q` search,
+`limit`/`offset`): it opens on `PENDING`, the brands sellers typed in, naming the seller, the products that hold the
+brand, the places it applies to and when it was asked for. The row sheet offers the decisions the status allows:
+approve, reject, merge into an approved brand (the sheet says how many products move), edit name and scope (a
+multi-select over the department, category and product-type tree), retire, and the history by name. *Add a brand*
+creates an approved one; *Add many* takes a pasted list (one per line; commas and semicolons also split) and previews
+which names are new, already listed or invalid before saving; the client sends only the new ones.
+
+- Every change carries a reason (3 to 1000 characters) and the brand's `version` as `If-Match`; a stale version is a
+  412 and the tab reloads. An edit that changes nothing cannot be saved (the button stays disabled; the API answers 422).
+- A product type asks for a brand with an attribute of kind `BRAND` (key `brand`). Its options may only be `UNBRANDED`
+  ("No brand") and `HANDMADE`; the editor's preview shows the brand search the seller sees, "add it for review", and
+  those choices.
+
 ## Where brand and the other details come from
 
-There is **no brand table**. A product's details are a map `attributes` on the product (`product.attributes`, jsonb),
+Brand *names* now come from the brand registry (next section); the rest of a product's details are not tables. A product's details are a map `attributes` on the product (`product.attributes`, jsonb),
 keyed by the attribute key of its product type's schema. **Brand is simply the attribute with key `brand`** that most
 fashion, grocery, beauty and home schemas ask for; the Books schema has author and publisher instead.
 

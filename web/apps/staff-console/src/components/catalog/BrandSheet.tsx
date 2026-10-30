@@ -247,7 +247,7 @@ function BulkForm({ nodes, onSubmit, result, onDone, ...rest }: FormProps & { no
       busy={rest.busy}
       canSubmit={preview.fresh > 0 && !tooMany && scope.length > 0 && isReason(reason)}
       error={rest.error ?? (tooMany ? t('st.brand.bulk.tooMany') : null)}
-      onSubmit={() => onSubmit(text, scope, reason.trim())}
+      onSubmit={() => onSubmit(preview.rows.filter((r) => r.outcome === 'NEW').map((r) => r.name).join('\n'), scope, reason.trim())}
       onCancel={rest.onCancel}
     >
       <div className="flex flex-col gap-1">
