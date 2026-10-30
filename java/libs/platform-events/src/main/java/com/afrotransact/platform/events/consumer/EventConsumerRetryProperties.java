@@ -14,7 +14,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param initialInterval        first backoff delay
  * @param multiplier             backoff growth factor
  * @param maxInterval            upper bound for a single backoff delay
- * @param jitter                 random extra delay (0 to jitter) added to each backoff so replicas do not retry in step
+ * @param jitter                 random +/- offset applied to each backoff delay so replicas do not retry in step
  * @param maxAttempts            total deliveries of a record (first try included) before it is dead-lettered
  * @param dlqSuffix              appended to the original topic to name the dead-letter topic
  * @param sendTimeout            how long to wait for the broker to acknowledge the dead-letter record

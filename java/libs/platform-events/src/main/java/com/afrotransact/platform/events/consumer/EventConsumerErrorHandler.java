@@ -29,7 +29,6 @@ public class EventConsumerErrorHandler extends DefaultErrorHandler {
         classifier.retryableTypes().forEach(type -> classes.put(type, true));
         setClassifications(classes, true);
         setRetryListeners(retryListener);
-        setCommitRecovered(true);
     }
 
     @Override
