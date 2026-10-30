@@ -394,7 +394,7 @@ export function sellerFormPreview(type: Pick<TaxonomyProductType, 'identifierRul
     required: a.required,
     help: a.help ?? null,
     control: control(a),
-    options: a.kind === 'ENUM' ? a.options : [],
+    options: a.kind === 'ENUM' || a.kind === 'BRAND' ? a.options : [],
     units: a.kind === 'NUMBER' ? a.units : []
   });
   const applying = type.attributes.filter((a) => a.applies);
