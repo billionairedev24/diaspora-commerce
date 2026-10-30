@@ -121,8 +121,9 @@ class ProductWriterImpl implements ProductWriter {
             typeCode = placement.type().code();
         }
         ProductType type = type(typeCode);
+        boolean moved = !Objects.equals(categoryId, current.categoryId());
         Map<String, String> attributes = brands.resolve(current.owner(), node(categoryId), type,
-                normalised(type, cmd.attributes()), current.attributes());
+                normalised(type, cmd.attributes()), moved ? Map.of() : current.attributes());
         ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, cmd.images(), cmd.variationTheme(),
                 cmd.variants(), cmd.details());
         policy.validate(draft);
