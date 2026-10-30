@@ -108,8 +108,8 @@ importers:
         specifier: 3.10.2
         version: 3.10.2(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.29))(html-minifier-terser@7.2.0)(postcss@8.5.29)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@redocly/openapi-core':
-        specifier: ^2.64.0
-        version: 2.64.1
+        specifier: ^2.71.0
+        version: 2.72.1
       '@types/react':
         specifier: 19.3.0
         version: 19.3.0
@@ -4428,15 +4428,15 @@ packages:
   '@redocly/config@0.22.0':
     resolution: {integrity: sha512-gAy93Ddo01Z3bHuVdPWfCwzgfaYgMdaZPcfL7JZ7hWJoK9V0lXDbigTWkhiPFAaLWzbOJ+kbUQG1+XwIm0KRGQ==}
 
-  '@redocly/config@0.66.0':
-    resolution: {integrity: sha512-3UQ2PO3+L9wMvmuJEN32+RTyQw+KZto3on+oG9tiTu97/SkSya9A9vLkrABhV1J93FPYGMZ0iYFTsLPXgMQrXA==}
+  '@redocly/config@0.69.1':
+    resolution: {integrity: sha512-8nnLeyBZquLNRMrIa9xJL+khPViSW0nfvXjHEJEVdzp9d1gp5r6ULbNT401uO5EaRt5VzY+5J9qtdCLnyNEn+g==}
 
   '@redocly/openapi-core@1.34.20':
     resolution: {integrity: sha512-ypeBZ/6BKXR9+7/TtbKhbl4UgD7raHhPS12oknlKno2A8+lnFkxIwiE/Aklu6L2cd/ioH+fCWuMxi9/p3EyAPw==}
     engines: {node: '>=18.17.0', npm: '>=9.5.0'}
 
-  '@redocly/openapi-core@2.64.1':
-    resolution: {integrity: sha512-p/AhLu06DBfKEw+ZL69w1zPvd42pSj5z9e633WJJuAdce9Gp6wlQEk3CADj/ZwZgN1x0Ma6twuja7xh7Emx1Zg==}
+  '@redocly/openapi-core@2.72.1':
+    resolution: {integrity: sha512-VcYW+Yq8Lu2rk16RrHlUAzRqu4tM5jRb0cVvNzPKb/Q0udTCprwoJEGEvdtVgvXhLokYRJcobXcDrSzpQeUccw==}
     engines: {node: '>=22.12.0 || >=20.19.0 <21.0.0', npm: '>=10'}
 
   '@reduxjs/toolkit@2.13.0':
@@ -17925,7 +17925,7 @@ snapshots:
 
   '@redocly/config@0.22.0': {}
 
-  '@redocly/config@0.66.0': {}
+  '@redocly/config@0.69.1': {}
 
   '@redocly/openapi-core@1.34.20(supports-color@10.2.2)':
     dependencies:
@@ -17941,15 +17941,15 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@redocly/openapi-core@2.64.1':
+  '@redocly/openapi-core@2.72.1':
     dependencies:
       '@redocly/ajv': 8.18.3
-      '@redocly/config': 0.66.0
+      '@redocly/config': 0.69.1
       ajv: '@redocly/ajv@8.18.3'
       ajv-formats: 3.0.1(@redocly/ajv@8.18.3)
       colorette: 1.4.0
+      fastest-levenshtein: 1.0.16
       graphql: 16.14.2
-      js-levenshtein: 1.1.6
       js-yaml: 5.4.3
       json-schema-to-ts: 3.1.1
       jsonpath-rfc9535: 1.3.0
