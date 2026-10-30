@@ -144,7 +144,7 @@ test.describe('storefront · your account', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Get help with an order' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Your account');
     // Every page of the area is flat: no element with a bordered card box and a radius.
-    for (const path of ['/account/refer', '/account/payments', '/account/addresses', '/account/help', '/account/credit', '/gift-cards']) {
+    for (const path of ['/account/refer', '/account/payments', '/account/addresses', '/account/help', '/account/credit', '/gift-cards', '/orders', '/orders/AT-2026-104221']) {
       await page.goto(path);
       await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
       const boxed = await page.getByRole('main').evaluate((main) =>
@@ -155,6 +155,41 @@ test.describe('storefront · your account', () => {
       );
       expect(boxed, `${path} has boxed panels`).toBe(0);
     }
+  });
+
+  test('your orders: flat blocks with tabs and a time range; order details with Ship to, Payment method and Order summary @a11y', async ({ page }, testInfo) => {
+    await page.goto('/orders');
+    await expect(page.getByRole('heading', { level: 1, name: 'Your orders' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Your account');
+    const order = page.getByTestId('order').first();
+    await expect(order).toContainText('Order placed');
+    await expect(order.getByRole('link', { name: 'View order details' })).toBeVisible();
+    await expect(order.getByRole('link', { name: 'Get help with this order' })).toBeVisible();
+    // Delivered: nothing to track, and no self-service return or refund anywhere.
+    await expect(order.getByRole('link', { name: 'Track package' })).toHaveCount(0);
+    await expect(page.getByRole('main').getByRole('button', { name: /return|refund/i })).toHaveCount(0);
+    await expectNoSeriousA11yViolations(page, testInfo, { page: 'storefront orders flat' });
+
+    // Tabs and time range keep the same flat list; an empty range says so and offers the way out.
+    await page.getByTestId('orders-tab-CANCELLED').click();
+    await expect(page.getByTestId('orders-empty')).toContainText('You have no cancelled orders');
+    await page.getByTestId('orders-tab-ALL').click();
+    await expect(page.getByTestId('order').first()).toBeVisible();
+    await page.getByTestId('orders-range').selectOption({ label: '2024' });
+    await expect(page.getByTestId('orders-empty')).toContainText('You have not placed any orders in 2024.');
+    await expect(page.getByTestId('orders-empty').getByRole('link', { name: 'Keep shopping' })).toBeVisible();
+
+    // The summary line's link opens the order details.
+    await page.getByTestId('orders-range').selectOption({ label: 'Past 3 months' });
+    await page.getByTestId('order').first().getByRole('link', { name: 'View order details' }).click();
+    await expect(page).toHaveURL(/\/orders\/AT-2026-/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Order details' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Your orders');
+    for (const name of ['Ship to', 'Payment method', 'Order summary']) await expect(page.getByRole('heading', { level: 2, name })).toBeVisible();
+    const shipment = page.getByTestId('shipment').first();
+    await expect(shipment.getByTestId('order-line').first()).toContainText('×');
+    await expect(shipment.getByTestId('order-get-help')).toBeVisible();
+    await expectNoSeriousA11yViolations(page, testInfo, { page: 'storefront order details flat' });
   });
 
   test('login & security: authenticator re-enrolled from the QR code, codes shown once', async ({ page }) => {
