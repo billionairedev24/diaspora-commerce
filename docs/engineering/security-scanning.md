@@ -295,3 +295,18 @@ Trivy 0.69.1 re-scan of the working tree with `trivy.yaml` (`trivy fs .` and `tr
 - IaC: 0 CRITICAL/HIGH; MEDIUM KSV-0125 (images from registries outside Trivy's default trusted list: GHCR
   defaults in the service charts, which GitOps replaces with the cloud registry; OpenFGA and the ES setup job from
   Docker Hub) and AZU-0057 (above), both in `tools/security/trivyignore.yaml` with an expiry.
+
+
+## Accepted dependency advisories (no upstream fix)
+
+`pnpm audit --prod` must be clean except for these, which have **no patched version**, are reached only through build or
+developer tooling (never shipped to users or run in production), and are re-checked at every audit. Each is listed in
+`auditConfig.ignoreGhsas` in the root `package.json`; remove the entry as soon as a fix exists.
+
+| Advisory | Package | Severity | Where | Why it is accepted |
+|---|---|---|---|---|
+| GHSA-86w9-cpqp-85rv | node-forge | high | Expo dev tooling (mobile) | No patched release; only the local Expo dev server uses it |
+| GHSA-gcqx-w48m-w2h4 | deepmerge (4.2.0 to 4.3.1) | low | Docusaurus build (`docs/portal`, `@docusaurus/preset-classic`) | Prototype poisoning needs attacker-controlled input to `mergeObject()`; the portal merges only our own static config at build time; no patched version exists |
+
+Fixed with overrides in the root `package.json` (2026-10-29): `decode-uri-component` to 0.5.1 (GHSA-qr28-fpjm-wq7f, high, via
+expo-router) and `qs` to 6.16.1 (GHSA-6pq8-jhm2-2vcw, moderate, via the Docusaurus dev server).
