@@ -206,6 +206,8 @@ func (s *staffContentPagesImpl) recordRows(sc staffCtx) []domain.ContentPageRow 
 	rows := []domain.ContentPageRow{
 		record("site-settings", "Contacts & social links", "Site", "/", "site-settings", "site", edit(permSiteEdit)),
 		record("maintenance", "Maintenance notice", "Site", "/", "maintenance", "", edit(permSiteEdit)),
+		record("careers", "Careers and open roles", "Company", "/careers", "careers-jobs", "", edit("content:careers.edit")),
+		record("cookie-table", "Cookie table", "Legal", "/legal/cookies", "cookie-definitions", "", edit(permLegalEdit)),
 		record("announcements", "Announcement bar", "Marketing", "/", "announcements", "", sc.access.Can("content:placements.edit") && sc.access.Allows("marketing", domain.LevelEdit)),
 		record("placements", "Homepage banners & tiles", "Marketing", "/", "placements", "", sc.access.Can("content:placements.edit") && sc.access.Allows("marketing", domain.LevelEdit)),
 	}

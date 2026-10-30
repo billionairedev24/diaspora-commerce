@@ -326,6 +326,8 @@ export function contentPageHandlers(W: string, deps: PreorderHandlerDeps) {
         rows.push(
           record('site-settings', 'Contacts & social links', 'Site', '/', 'site-settings', 'site', null, siteEdit),
           record('maintenance', 'Maintenance notice', 'Site', '/', 'maintenance', null, null, siteEdit),
+          record('careers', 'Careers and open roles', 'Company', '/careers', 'careers-jobs', null, null, ctx.permissions.includes('content:careers.edit') && allows(ctx.roles, 'siteCfg', 'EDIT')),
+          record('cookie-table', 'Cookie table', 'Legal', '/legal/cookies', 'cookie-definitions', null, null, canEdit(ctx, 'legal')),
           record('announcements', 'Announcement bar', 'Marketing', '/', 'announcements', null, null, marketing),
           record('placements', 'Homepage banners & tiles', 'Marketing', '/', 'placements', null, null, marketing),
           record('notification-templates', 'Email, SMS and push messages', 'Notifications', null, null, null, '/settings?section=notifications', allows(ctx.roles, 'notifications', 'EDIT')),

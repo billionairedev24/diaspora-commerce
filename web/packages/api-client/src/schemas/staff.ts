@@ -84,7 +84,7 @@ export type StaffDashboard = z.infer<typeof StaffDashboardSchema>;
 
 export const ResourceKeySchema = z.enum([
   'users', 'roles', 'applications', 'organisations', 'connect-accounts', 'orders', 'products', 'category-requests', 'moderation', 'product-reviews', 'claims', 'returns', 'payouts', 'inventory', 'purchase-orders', 'routes',
-  'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'help-articles', 'privacy-requests', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates', 'tax-codes', 'tax-rules', 'tax-review',
+  'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'help-articles', 'careers-jobs', 'cookie-definitions', 'privacy-requests', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates', 'tax-codes', 'tax-rules', 'tax-review',
   'dispatch-shipments', 'sos-alerts', 'vehicle-defects', 'driver-events', 'pickup-locations', 'coupons',
   'reconciliation', 'reconciliation-runs', 'ledger-adjustments', 'recoveries', 'credit-adjustments', 'gift-cards', 'credit-liabilities', 'money-settings', 'membership-tiers', 'memberships', 'membership-settings', 'membership-report', 'referrals', 'referral-settings', 'stripe-lookup', 'payment-settings', 'tax-settings', 'maintenance', 'tax-filings', 'tax-nexus',
   'oauth-clients', 'identity-sessions', 'signing-keys', 'auth-settings', 'exchange-rates'

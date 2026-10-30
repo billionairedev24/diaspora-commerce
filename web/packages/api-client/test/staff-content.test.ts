@@ -155,3 +155,34 @@ describe('a legal document', () => {
     expect((await refused(api().page('faq' as 'legal', 'privacy'))).status).toBe(404);
   });
 });
+
+describe('other public content staff change themselves: open roles and the cookie table', () => {
+  const client = () => createStaffApiClient({ baseUrl: 'http://staff.test/api/bff', headers: {}, fetch: (req) => handleStaffMockRequest(req) });
+
+  it('opens a draft role and closes it again; the careers link opens on the storefront', async () => {
+    const staff = client();
+    const jobs = await staff.listResource('careers-jobs', { page: 1, size: 50 });
+    const draft = jobs.rows.find((r) => r.cells.status === 'DRAFT');
+    expect(draft).toBeDefined();
+    const id = draft?.id ?? '';
+    const sheet = await staff.runAction('careers-jobs', id, 'open', {});
+    expect(sheet.status).toBe('OPEN');
+    expect(sheet.links[0]).toMatchObject({ label: 'Open the careers page', external: true, href: 'http://localhost:3000/careers' });
+    const closed = await staff.runAction('careers-jobs', id, 'close', {});
+    expect(closed.status).toBe('CLOSED');
+    expect(closed.links).toEqual([]);
+  });
+
+  it('adds, edits and removes a cookie in the table of the cookie notice', async () => {
+    const staff = client();
+    const created = await staff.createRecord('cookie-definitions', { name: 'at_theme', provider: 'AfroTransact', purpose: 'Dark mode', duration: '1 year', category: 'functional' });
+    expect(created.id).toBe('at_theme');
+    expect(created.subtitle).toBe('AfroTransact · Functional');
+    const edited = await staff.updateRecord('cookie-definitions', 'at_theme', { provider: 'AfroTransact', purpose: 'Dark mode and text size', duration: '6 months', category: 'functional' }, null);
+    expect(edited.sections[0]?.fields.some((f) => f.value === '6 months')).toBe(true);
+    const gone = await staff.runAction('cookie-definitions', 'at_theme', 'delete', {});
+    expect(gone.removed).toBe(true);
+    const list = await staff.listResource('cookie-definitions', { page: 1, size: 50 });
+    expect(list.rows.some((r) => r.id === 'at_theme')).toBe(false);
+  });
+});
