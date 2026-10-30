@@ -77,7 +77,7 @@ function PreviewSheet({ row, onClose }: { row: ContentPageRow; onClose: () => vo
 export function PublishedPagesView() {
   const t = useT();
   const list = useQuery(staffContentQueries.pages(staffApi().content));
-  const state = useTableState({ searchParams: useSearchParams(), prefix: 'pages', defaultPageSize: 25 });
+  const state = useTableState({ searchParams: useSearchParams(), prefix: 'pages', defaultPageSize: 50 });
   const [kind, setKind] = useState<KindFilter>('all');
   const [looking, setLooking] = useState<ContentPageRow | null>(null);
   const rows = useMemo(() => (list.data?.items ?? []).filter((r) => kind === 'all' || (kind === 'record' ? r.kind === 'record' : r.kind === kind)), [list.data, kind]);
