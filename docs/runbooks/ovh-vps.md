@@ -44,6 +44,24 @@ is gone. For anything real use `DB_MODE=external` with a managed Postgres: **Lay
 Check the provider's backup and point-in-time-recovery terms first. The pipeline only needs the host, an admin user, its password and
 `sslmode`; it creates one role and database per service.
 
+## Frugal defaults (read before you click anything)
+
+The cheapest setup that still gives useful results. Prices are not verified: read each one on the provider's page first.
+
+| Rule | Why |
+|---|---|
+| **The web apps run on Cloudflare Workers, not on this server** ([cloudflare-setup.md](cloudflare-setup.md)) | free in dev, about 5 USD a month if the free size limit is too small; OVH only carries the backend |
+| **A throwaway test uses `DB_MODE=cluster`** (Postgres in a pod on the server) | no second bill, no network hop. The data dies with the server |
+| **Use Layerbase (`DB_MODE=external`) only when the data must survive** a `destroy` | it is a monthly flat fee, running or not |
+| **Valkey and Meilisearch stay on the OVH server** (the pipeline already deploys them there) | Layerbase is then needed for Postgres only. Check its smallest plan that holds about 25 small databases before paying for a bigger one |
+| **Server in `us-east-va`, Layerbase in Virginia** | a few ms per query instead of 60+, and OVH does not meter outbound traffic in its US and European regions (OVH Public Cloud FAQ; Singapore and Sydney are metered: do not pick them) |
+| **Read the hourly price of the flavor in the OVH console** (the default `b3-32` is the biggest cost) and pick the smallest flavor that runs the stack | billing is hourly from provision until the instance is deleted |
+| **`destroy` the server when you stop for the day.** The `down` action does NOT stop billing | state, DNS and images are kept; a new `provision-and-deploy` takes under an hour |
+| **Stay on the free Workers plan until a deploy fails on size; skip Turnstile, extra buckets and snapshots** until needed | each is a small recurring charge |
+
+Not billed as egress by OVH: queries and writes from the server to Layerbase. Layerbase's own outbound traffic is covered by its
+plan according to `docs/engineering/cloud-cost.md`: confirm both in writing.
+
 ## Step by step
 
 ### 1. OVHcloud account and payment method (browser)
