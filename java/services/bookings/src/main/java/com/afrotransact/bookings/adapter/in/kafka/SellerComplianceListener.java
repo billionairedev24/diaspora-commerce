@@ -34,14 +34,11 @@ public class SellerComplianceListener {
     @KafkaListener(topics = "${at.bookings.seller-compliance-events.topic:at.seller-compliance.events}",
             groupId = "${spring.kafka.consumer.group-id:bookings-service}")
     public void onMessage(ConsumerRecord<String, String> record) {
-        String eventId = header(record, "event-id");
         String type = header(record, "event-type");
         if (type == null || !type.startsWith("seller.listings.")) {
             return;
         }
-        if (eventId == null) {
-            throw MalformedEvent.missingEventId(type, record);
-        }
+        UUID eventId = eventId(record, type);
         JsonNode payload;
         try {
             payload = json.readTree(record.value());
@@ -49,8 +46,20 @@ public class SellerComplianceListener {
             throw MalformedEvent.of(type, e);
         }
         String occurred = payload.path("occurredAt").asString(null);
-        ingest.handle(UUID.fromString(eventId), type, payload.path("orgId").asString(record.key()),
+        ingest.handle(eventId, type, payload.path("orgId").asString(record.key()),
                 payload.path("reason").asString(null), occurred == null ? null : Instant.parse(occurred));
+    }
+
+    private static UUID eventId(ConsumerRecord<String, String> record, String type) {
+        String raw = header(record, "event-id");
+        if (raw != null) {
+            try {
+                return UUID.fromString(raw);
+            } catch (IllegalArgumentException ex) {
+                throw MalformedEvent.missingEventId(type, record);
+            }
+        }
+        throw MalformedEvent.missingEventId(type, record);
     }
 
     private static String header(ConsumerRecord<String, String> record, String name) {

@@ -40,14 +40,11 @@ class InventoryEventsListener {
             autoStartup = "${at.retail.consumers.enabled:true}")
     void onReservationEvent(ConsumerRecord<String, String> record) {
         String type = header(record, "event-type");
-        String eventId = header(record, "event-id");
         if (!COMMITTED.equals(type)) {
             return;
         }
-        if (eventId == null) {
-            throw MalformedEvent.missingEventId(type, record);
-        }
-        handle(UUID.fromString(eventId), record.value());
+        UUID eventId = eventId(record, type);
+        handle(eventId, record.value());
     }
 
     /** Parses an {@code inventory.reservation.committed} payload and posts COGS. */
@@ -69,6 +66,18 @@ class InventoryEventsListener {
         String orderId = root.path("orderId").asString();
         cogs.onShipped(eventId, orderId, lines)
                 .ifPresent(e -> LOG.info("COGS {} posted for order {}: {}", e.number(), orderId, e.amountMinor()));
+    }
+
+    private static UUID eventId(ConsumerRecord<String, String> record, String type) {
+        String raw = header(record, "event-id");
+        if (raw != null) {
+            try {
+                return UUID.fromString(raw);
+            } catch (IllegalArgumentException ex) {
+                throw MalformedEvent.missingEventId(type, record);
+            }
+        }
+        throw MalformedEvent.missingEventId(type, record);
     }
 
     private static String header(ConsumerRecord<String, String> record, String name) {
