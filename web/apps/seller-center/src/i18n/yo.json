@@ -1049,5 +1049,10 @@
   "sc.pf.bar.noChanges": "Kò sí àyípadà láti fi pamọ́.",
   "sc.pf.images.addMore": "Fi àwọn àwòrán míràn kún un",
   "sc.pf.images.reorderHint": "Fa àwọn àwòrán láti tún wọn tò. Àkọ́kọ́ ni àwòrán pàtàkì.",
-  "sc.pf.titleHelpPlain": "Orúkọ ọjà + àlàyé pàtàkì · {count}/200"
+  "sc.pf.titleHelpPlain": "Orúkọ ọjà + àlàyé pàtàkì · {count}/200",
+  "sc.img.zip.unreadable": "A kò lè ṣí ZIP yẹn. Rí i pé ZIP lásán ni.",
+  "sc.img.zip.tooMany": "ZIP yẹn ní àwòrán {count}; a lè fi {limit} kún un lẹ́ẹ̀kan ní púpọ̀ jùlọ. Pín in sí àwọn ZIP kéékèèké.",
+  "sc.img.zip.entryTooLarge": "{name} tóbi ju {limit} MB lọ nígbà tí a bá ṣí i. Dín in kù kí o tún gbìyànjú.",
+  "sc.img.zip.tooLarge": "ZIP yẹn yóò tóbi ju {limit} MB lọ nígbà tí a bá ṣí i. Pín in sí àwọn ZIP kéékèèké.",
+  "sc.img.zip.ratio": "A kọ ZIP yẹn: ó gbòòrò ju àkójọ fọ́tò déédé lọ púpọ̀ (ju {ratio} sí 1 lọ)."
 }

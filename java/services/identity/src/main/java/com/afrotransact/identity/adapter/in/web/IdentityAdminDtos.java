@@ -120,11 +120,13 @@ final class IdentityAdminDtos {
     @Schema(name = "AdminSession")
     record SessionResponse(String id, String userId, String userName, String userEmail, String clientId,
                            String clientName, String ipAddress, Instant signedInAt, Instant lastUsedAt,
-                           Instant expiresAt, boolean refreshable) {
+                           Instant expiresAt, boolean refreshable,
+                           @Schema(description = "The browser or app's User-Agent (at most 255 characters), when "
+                                   + "it was recorded at sign-in") String userAgent) {
 
         static SessionResponse of(AdminSession s) {
             return new SessionResponse(s.id(), s.userId(), s.userName(), s.userEmail(), s.clientId(), s.clientName(),
-                    s.ipAddress(), s.signedInAt(), s.lastUsedAt(), s.expiresAt(), s.refreshable());
+                    s.ipAddress(), s.signedInAt(), s.lastUsedAt(), s.expiresAt(), s.refreshable(), s.userAgent());
         }
     }
 

@@ -85,6 +85,9 @@ func TestCareersResumeUpload(t *testing.T) {
 	if got := bff.Upstreams.ServiceTokenRequests; len(got) == 0 || got[len(got)-1] != "" {
 		t.Fatalf("guest uploads must use the BFF's client-credentials token: %v", got)
 	}
+	if bff.Upstreams.LastUploadPurpose != "career-resume" {
+		t.Fatalf("resume purpose = %q, want career-resume", bff.Upstreams.LastUploadPurpose)
+	}
 	for _, bad := range []map[string]any{
 		{"fileName": "cv.docx", "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "size": 1000},
 		{"fileName": "cv.pdf", "contentType": "application/pdf", "size": 6 << 20},

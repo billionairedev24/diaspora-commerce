@@ -25,6 +25,12 @@ const lines = (v: FieldValue | undefined): string[] =>
     .map((l) => l.trim())
     .filter(Boolean);
 const list = (csv: Scalar | undefined): string[] => str(csv).split(',').map((s) => s.trim()).filter(Boolean);
+/** The Go BFF's domain.DeviceLabel for the browsers the mock sign-ins use: "Chrome on macOS". */
+const deviceLabel = (ua: string): string => {
+  const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '';
+  const system = /iPhone/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : '';
+  return browser && system ? `${browser} on ${system}` : browser || system;
+};
 const log = (r: MockRecord, actor: string, now: Date, text: string) => r.activity.unshift({ at: now.toISOString(), actor, text });
 
 /* Step-up (S291): the forms of the most dangerous actions end with the staff member's own password. The real BFF has
@@ -94,7 +100,7 @@ export function seedIdentityAdmin(now: Date): Record<'oauth-clients' | 'identity
     client('media-service', 'Media service account', 'confidential', ['client_credentials'], ['media.read'], [], { enabled: false, status: 'DISABLED' })
   ];
 
-  const session = (id: string, userName: string | null, email: string | null, clientId: string, clientName: string, ip: string | null, signedMin: number, usedMin: number, refreshable: boolean): MockRecord => ({
+  const session = (id: string, userName: string | null, email: string | null, clientId: string, clientName: string, ip: string | null, signedMin: number, usedMin: number, refreshable: boolean, agent: string | null = null): MockRecord => ({
     id,
     fields: {
       userName,
@@ -103,6 +109,8 @@ export function seedIdentityAdmin(now: Date): Record<'oauth-clients' | 'identity
       clientId,
       clientName,
       ipAddress: ip,
+      userAgent: agent,
+      device: agent ? deviceLabel(agent) : null,
       signedInAt: ago(signedMin * MINUTE),
       lastUsedAt: ago(usedMin * MINUTE),
       expiresAt: new Date(now.getTime() + (refreshable ? 29 * DAY : 4 * MINUTE)).toISOString(),
@@ -110,12 +118,15 @@ export function seedIdentityAdmin(now: Date): Record<'oauth-clients' | 'identity
     },
     activity: []
   });
+  const CHROME_MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+  const SAFARI_IOS = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1';
+  const FIREFOX_WIN = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0';
   const sessions: MockRecord[] = [
-    session('auth-1001', 'Amara Nwosu', 'amara@example.com', 'customer-app', 'Customer app', '203.0.113.24', 60 * 24 * 3, 12, true),
-    session('auth-1002', 'Amara Nwosu', 'amara@example.com', 'gateway-bff', 'Gateway BFF', '203.0.113.24', 60 * 6, 3, true),
-    session('auth-1003', 'Kwame Mensah', 'kwame@example.com', 'gateway-bff', 'Gateway BFF', '198.51.100.7', 60 * 30, 90, true),
+    session('auth-1001', 'Amara Nwosu', 'amara@example.com', 'customer-app', 'Customer app', '203.0.113.24', 60 * 24 * 3, 12, true, SAFARI_IOS),
+    session('auth-1002', 'Amara Nwosu', 'amara@example.com', 'gateway-bff', 'Gateway BFF', '203.0.113.24', 60 * 6, 3, true, CHROME_MAC),
+    session('auth-1003', 'Kwame Mensah', 'kwame@example.com', 'gateway-bff', 'Gateway BFF', '198.51.100.7', 60 * 30, 90, true, FIREFOX_WIN),
     session('auth-1004', 'Fatou Diallo', 'fatou@example.com', 'driver-app', 'Driver app', null, 60 * 2, 1, true),
-    session('auth-1005', 'Ifeoma Okafor', 'ifeoma@afrotransact.com', 'gateway-bff', 'Gateway BFF', '192.0.2.88', 45, 2, true),
+    session('auth-1005', 'Ifeoma Okafor', 'ifeoma@afrotransact.com', 'gateway-bff', 'Gateway BFF', '192.0.2.88', 45, 2, true, CHROME_MAC),
     session('auth-1006', null, null, 'inventory-service', 'Inventory service account', null, 5, 1, false)
   ];
 
@@ -319,13 +330,13 @@ const clientDef: MockResource = {
 
 const sessionDef: MockResource = {
   title: 'Sessions & tokens',
-  columns: [col('userName', 'User', 'strong', 20), col('userEmail', 'Email', 'text', 22), col('clientName', 'App', 'text', 16), col('ipAddress', 'IP address', 'mono', 12), col('lastUsedAt', 'Last used', 'datetime', 15), col('refreshable', 'Refresh token', 'text', 15)],
+  columns: [col('userName', 'User', 'strong', 20), col('userEmail', 'Email', 'text', 22), col('clientName', 'App', 'text', 14), col('device', 'Device', 'text', 14), col('ipAddress', 'IP address', 'mono', 11), col('lastUsedAt', 'Last used', 'datetime', 14), col('refreshable', 'Refresh token', 'text', 13)],
   facets: [],
   searchPlaceholder: 'Search by user, email or client',
   exportable: false,
   titleOf: (r) => str(r.fields.userName) || `Service account ${str(r.fields.clientId)}`,
   subtitleOf: (r) => `${str(r.fields.userEmail) || str(r.fields.userId)} · ${str(r.fields.clientName)}`,
-  sections: [['Sign-in', ['userName', 'userEmail', 'userId', 'clientName', 'clientId', 'ipAddress', 'signedInAt', 'lastUsedAt', 'expiresAt', 'refreshable']]],
+  sections: [['Sign-in', ['userName', 'userEmail', 'userId', 'clientName', 'clientId', 'device', 'userAgent', 'ipAddress', 'signedInAt', 'lastUsedAt', 'expiresAt', 'refreshable']]],
   actions: [
     {
       key: 'revoke',

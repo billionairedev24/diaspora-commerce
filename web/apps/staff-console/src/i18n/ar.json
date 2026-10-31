@@ -2073,5 +2073,7 @@
   "st.brand.bulk.submit": "إضافة {n} علامات",
   "st.brand.bulk.result": "تمت إضافة {created}، {existing} موجودة مسبقا، {invalid} غير صالحة",
   "st.brand.bulk.created": "تمت الإضافة",
-  "st.brand.bulk.done": "تم"
+  "st.brand.bulk.done": "تم",
+  "st.col.device": "الجهاز",
+  "st.device.on": "{browser} على {os}"
 }

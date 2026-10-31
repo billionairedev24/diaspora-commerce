@@ -2073,5 +2073,7 @@
   "st.brand.bulk.submit": "Fi ìdánimọ̀ ọjà {n} kún",
   "st.brand.bulk.result": "A fi {created} kún, {existing} ti wà lórí àtòjọ, {invalid} kò tọ̀nà",
   "st.brand.bulk.created": "A fi kún",
-  "st.brand.bulk.done": "Parí"
+  "st.brand.bulk.done": "Parí",
+  "st.col.device": "Ẹ̀rọ",
+  "st.device.on": "{browser} lórí {os}"
 }

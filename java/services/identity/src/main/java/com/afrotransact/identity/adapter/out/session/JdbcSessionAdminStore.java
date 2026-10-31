@@ -26,6 +26,7 @@ class JdbcSessionAdminStore implements SessionAdminStore {
             from oauth2_authorization a
             join oauth2_registered_client c on c.id = a.registered_client_id
             left join user_account u on u.id::text = a.principal_name
+            left join session_device d on d.authorization_id = a.id
             where (a.refresh_token_expires_at > :now or a.access_token_expires_at > :now)
               and (cast(:user as varchar) is null or a.principal_name = :user)
               and (cast(:client as varchar) is null or c.client_id = :client)
@@ -41,7 +42,7 @@ class JdbcSessionAdminStore implements SessionAdminStore {
                    coalesce(a.authorization_code_issued_at, a.access_token_issued_at) as signed_in_at,
                    coalesce(a.access_token_issued_at, a.authorization_code_issued_at) as last_used_at,
                    coalesce(a.refresh_token_expires_at, a.access_token_expires_at) as expires_at,
-                   a.refresh_token_value is not null as refreshable
+                   a.refresh_token_value is not null as refreshable, d.user_agent
             """;
 
     private final JdbcClient jdbc;
@@ -70,6 +71,7 @@ class JdbcSessionAdminStore implements SessionAdminStore {
                 from oauth2_authorization a
                 join oauth2_registered_client c on c.id = a.registered_client_id
                 left join user_account u on u.id::text = a.principal_name
+                left join session_device d on d.authorization_id = a.id
                 where a.id = :id
                 """).param("id", id).query((rs, n) -> map(rs)).optional();
     }
@@ -98,7 +100,7 @@ class JdbcSessionAdminStore implements SessionAdminStore {
         return new AdminSession(rs.getString("id"), rs.getString("principal_name"), name, rs.getString("email"),
                 rs.getString("client_id"), rs.getString("client_name"), remoteAddress(rs.getString("attributes")),
                 instant(rs.getTimestamp("signed_in_at")), instant(rs.getTimestamp("last_used_at")),
-                instant(rs.getTimestamp("expires_at")), rs.getBoolean("refreshable"));
+                instant(rs.getTimestamp("expires_at")), rs.getBoolean("refreshable"), rs.getString("user_agent"));
     }
 
     /** The first {@code remoteAddress} anywhere in the saved principal (WebAuthenticationDetails), if any. */

@@ -16,8 +16,8 @@ import (
 // for a direct upload URL, PUT the file to storage, POST /v1/assets/{id}/complete, then GET /v1/assets/{id} for a
 // fresh signed URL on every download (media signs for 5 minutes; the BFF enforces the 24-hour link lifetime).
 //
-// Media accepts purpose "export" (staff CSV / XLSX). The BFF's own file store (exportfiles) is still the default; this
-// store is used when configured, and answers 503 if media refuses the upload.
+// Media's "export" purpose takes CSV and XLSX up to 50 MB for staff callers and the gateway-bff service client; the
+// dev, uat and prod configs use this store, APP_ENV=local keeps the BFF's own file store (exportfiles).
 type mediaExportsImpl struct {
 	c       httpclient.Client
 	storage *http.Client
@@ -49,7 +49,7 @@ func (m *mediaExportsImpl) Put(ctx context.Context, bearer string, f port.Export
 	body := map[string]any{"purpose": "export", "fileName": f.FileName, "contentType": f.ContentType, "size": f.Size}
 	if _, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/uploads", JSON: body, Bearer: bearer}, &up); err != nil {
 		if p, ok := port.AsUpstreamProblem(err); ok && p.Status == http.StatusUnprocessableEntity {
-			// media does not accept export files yet (purpose / content type).
+			// media refused the export (purpose or content type).
 			return "", fmt.Errorf("media exports: %w", domain.ErrUpstreamUnavailable)
 		}
 		return "", err

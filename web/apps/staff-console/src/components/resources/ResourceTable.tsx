@@ -16,7 +16,7 @@ import { staffApi } from '@/lib/api';
 import { idempotencyKey } from '@/lib/format';
 
 import { BulkActions } from './BulkActions';
-import { Cell } from './cells';
+import { Cell, columnLabel, DeviceCell } from './cells';
 import { FormFields } from './FormFields';
 import { RecordSheet } from './RecordSheet';
 import { RevealDialog } from './RevealDialog';
@@ -92,14 +92,15 @@ export function ResourceTable({ resource, urlPrefix, statusFilter = false }: { r
       (data?.columns ?? []).map((c) => ({
         id: c.key,
         accessorFn: (r: ResourceRow) => r.cells[c.key] ?? undefined,
-        header: c.label,
+        header: columnLabel(t, c),
         // The BFF sends widths as shares of the table; ~12px per percent fills a 1,200px table.
         size: Math.max(72, c.width * 12),
         enableSorting: c.sortable !== false,
-        meta: { label: c.label, kind: c.kind, align: c.kind === 'money' || c.kind === 'number' || c.kind === 'percent' ? 'end' : 'start' },
-        cell: ({ row }) => <Cell kind={c.kind} value={row.original.cells[c.key]} tone={row.original.tone} />
+        meta: { label: columnLabel(t, c), kind: c.kind, align: c.kind === 'money' || c.kind === 'number' || c.kind === 'percent' ? 'end' : 'start' },
+        cell: ({ row }) =>
+          c.key === 'device' ? <DeviceCell value={row.original.cells[c.key]} /> : <Cell kind={c.kind} value={row.original.cells[c.key]} tone={row.original.tone} />
       })),
-    [data?.columns]
+    [data?.columns, t]
   );
 
   const onExport = async (req: TableExportRequest) => {

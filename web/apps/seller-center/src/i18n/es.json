@@ -1049,5 +1049,10 @@
   "sc.pf.bar.noChanges": "No hay cambios que guardar.",
   "sc.pf.images.addMore": "Añadir más imágenes",
   "sc.pf.images.reorderHint": "Arrastra las imágenes para reordenarlas. La primera es la imagen principal.",
-  "sc.pf.titleHelpPlain": "Nombre del producto + detalle clave · {count}/200"
+  "sc.pf.titleHelpPlain": "Nombre del producto + detalle clave · {count}/200",
+  "sc.img.zip.unreadable": "No se pudo abrir ese ZIP. Comprueba que sea un archivo ZIP normal.",
+  "sc.img.zip.tooMany": "Ese ZIP tiene {count} imágenes; se pueden añadir {limit} como máximo a la vez. Divídelo en ZIP más pequeños.",
+  "sc.img.zip.entryTooLarge": "{name} supera {limit} MB una vez abierto. Redúcelo e inténtalo de nuevo.",
+  "sc.img.zip.tooLarge": "Ese ZIP ocuparía más de {limit} MB al abrirse. Divídelo en ZIP más pequeños.",
+  "sc.img.zip.ratio": "Se rechazó ese ZIP: se expande mucho más que un conjunto normal de fotos (más de {ratio} a 1)."
 }

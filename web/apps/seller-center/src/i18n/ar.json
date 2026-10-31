@@ -1049,5 +1049,10 @@
   "sc.pf.bar.noChanges": "لا توجد تغييرات لحفظها.",
   "sc.pf.images.addMore": "أضف المزيد من الصور",
   "sc.pf.images.reorderHint": "اسحب الصور لإعادة ترتيبها. الصورة الأولى هي الرئيسية.",
-  "sc.pf.titleHelpPlain": "اسم المنتج + التفاصيل الرئيسية · {count}/200"
+  "sc.pf.titleHelpPlain": "اسم المنتج + التفاصيل الرئيسية · {count}/200",
+  "sc.img.zip.unreadable": "تعذر فتح ملف ZIP هذا. تأكد من أنه ملف ZIP عادي.",
+  "sc.img.zip.tooMany": "يحتوي ملف ZIP هذا على {count} صورة؛ يمكن إضافة {limit} كحد أقصى في المرة الواحدة. قسّمه إلى ملفات ZIP أصغر.",
+  "sc.img.zip.entryTooLarge": "يتجاوز حجم {name} {limit} ميغابايت بعد فتحه. صغّره وحاول مرة أخرى.",
+  "sc.img.zip.tooLarge": "سيتجاوز حجم ملف ZIP هذا {limit} ميغابايت بعد فتحه. قسّمه إلى ملفات ZIP أصغر.",
+  "sc.img.zip.ratio": "تم رفض ملف ZIP هذا: فهو يتضخم أكثر بكثير من مجموعة صور عادية (أكثر من {ratio} إلى 1)."
 }

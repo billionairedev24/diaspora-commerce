@@ -41,6 +41,7 @@ public class LoginTicketAuthenticationProvider implements AuthenticationProvider
         if (redeemed.isEmpty()) {
             throw new BadCredentialsException("The login ticket is invalid, expired, already used or for another client");
         }
+        request.redeemed(redeemed.get());
         UserDetails account;
         try {
             account = accounts.loadUserByUsername(redeemed.get().userId().toString());

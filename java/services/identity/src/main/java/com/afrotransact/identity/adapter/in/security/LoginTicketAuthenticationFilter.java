@@ -3,6 +3,7 @@ package com.afrotransact.identity.adapter.in.security;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
+import com.afrotransact.identity.domain.SessionDevice;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -53,9 +54,10 @@ public class LoginTicketAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         Authentication result;
+        LoginTicketAuthenticationToken attempt = new LoginTicketAuthenticationToken(ticket,
+                request.getParameter(CLIENT_ID));
         try {
-            result = authenticationManager.authenticate(new LoginTicketAuthenticationToken(ticket,
-                    request.getParameter(CLIENT_ID)));
+            result = authenticationManager.authenticate(attempt);
         } catch (AuthenticationException ex) {
             contexts.clearContext();
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
@@ -65,6 +67,10 @@ public class LoginTicketAuthenticationFilter extends OncePerRequestFilter {
             response.getWriter().write("{\"error\":\"invalid_grant\",\"error_description\":"
                     + "\"The login ticket is invalid, expired or was already used. Sign in again.\"}");
             return;
+        }
+        if (attempt.redeemed() != null && attempt.redeemed().device() != null) {
+            // The authorization store records it with the sign-in (the BFF's own request says nothing about the user).
+            request.setAttribute(SessionDevice.REQUEST_ATTRIBUTE, attempt.redeemed().device());
         }
         SecurityContext context = contexts.createEmptyContext();
         context.setAuthentication(result);

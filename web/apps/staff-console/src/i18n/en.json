@@ -2066,5 +2066,7 @@
   "st.brand.bulk.submit": "Add {n} brands",
   "st.brand.bulk.result": "{created} added, {existing} already listed, {invalid} not valid",
   "st.brand.bulk.created": "Added",
-  "st.brand.bulk.done": "Done"
+  "st.brand.bulk.done": "Done",
+  "st.col.device": "Device",
+  "st.device.on": "{browser} on {os}"
 }
