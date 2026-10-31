@@ -26,7 +26,8 @@ Always allowed (identifiers, not environment hosts):
   - the documented exceptions in EXCEPTIONS below
 
 Every host must also be a real public host (KNOWN_LABELS): <base>, seller., admin., api., auth., media.,
-developers., mcp., grafana., mail., and www. in prod only; staff., sell., provider., www.dev. ... fail anywhere.
+developers., mcp., grafana., mail., and www. in prod only (www.<zone> is the prod STOREFRONT host; the bare apex only
+redirects to it, so a URL https://<zone> is a violation: storefront host rule, docs/engineering/environments.md); staff., sell., provider., www.dev. ... fail anywhere.
 
 Tests and fixtures are skipped (src/test/, *_test.go, *.test.*, *.spec.*, __tests__/, e2e/, tests/, testdata/,
 fixtures/), as are generated clients (*/generated/*) and build output.
@@ -181,6 +182,11 @@ def allowed(rel: str, line: str, start: int, end: int, host: str) -> bool:
     return False
 
 
+def before_is_url(line: str, start: int) -> bool:
+    """True when the host at `start` is the authority of a URL (preceded by a scheme), not a bare domain setting."""
+    return line[:start].endswith("://")
+
+
 def scan_file(path: Path, rel: str, cls: str) -> list[Violation]:
     try:
         text = path.read_text(encoding="utf-8")
@@ -200,6 +206,10 @@ def scan_file(path: Path, rel: str, cls: str) -> list[Violation]:
             if host.startswith("errors."):
                 out.append(Violation(rel, no, host, "non-canonical RFC 9457 problem type base: use "
                                      f"{PROBLEM_TYPE_PREFIX}<code> (go/pkg/problem.TypeURI, ProblemTypes.of)"))
+            elif host == ZONE and before_is_url(line, m.start()):
+                out.append(Violation(rel, no, host, "the prod storefront is https://www." + ZONE + " (storefront host rule: "
+                                     "global.storefrontHost = www, docs/engineering/environments.md); the apex only 301-"
+                                     "redirects to it, so no config may name https://" + ZONE + " as a URL"))
             elif host_label(host) not in KNOWN_LABELS and not (
                     host_label(host) in PROD_ONLY_LABELS and env == "prod"):
                 out.append(Violation(rel, no, host, "not a public host of the platform (see infra/cloudflare "
