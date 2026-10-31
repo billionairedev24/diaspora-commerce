@@ -152,7 +152,7 @@ check cache.
          cache-ttl: ${FGA_CACHE_TTL:5s}      # 0s disables the per-instance cache
    ```
 
-   Profiles: `local` off (security is off locally), `dev` enforced, `uat` shadow then enforced, `prod` last.
+   Profiles: `local` off (security is off locally), `dev` shadow until [docs/runbooks/fga-enforce-check.md](../runbooks/fga-enforce-check.md) passes, then enforced; `uat` shadow then enforced; `prod` last.
    In-cluster URL: `http://openfga.openfga.svc:8080`.
 3. Secret: add `FGA_API_TOKEN` (one of `afrotransact/openfga` `preshared-keys`) to the service's secret and to the key
    list comment in `deploy/helm/values.yaml`.

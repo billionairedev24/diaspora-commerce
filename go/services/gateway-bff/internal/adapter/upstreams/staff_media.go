@@ -16,8 +16,8 @@ import (
 // for a direct upload URL, PUT the file to storage, POST /v1/assets/{id}/complete, then GET /v1/assets/{id} for a
 // fresh signed URL on every download (media signs for 5 minutes; the BFF enforces the 24-hour link lifetime).
 //
-// Gap: media's Purpose enum has no "export" and its contentType enum allows images and PDF only, so until media
-// accepts text/csv and XLSX exports this store answers 503 and the BFF's own file store (exportfiles) is the default.
+// Media accepts purpose "export" (staff CSV / XLSX). The BFF's own file store (exportfiles) is still the default; this
+// store is used when configured, and answers 503 if media refuses the upload.
 type mediaExportsImpl struct {
 	c       httpclient.Client
 	storage *http.Client
