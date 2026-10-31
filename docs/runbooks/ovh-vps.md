@@ -124,8 +124,9 @@ curl -s https://auth.<domain>/.well-known/openid-configuration | jq .issuer
 
 ### 7. Use it
 
-- Staff console / Seller Center / storefront are Cloudflare Workers apps and are not on this server: point their `API_BASE_URL` at
-  `https://api.<domain>` (and the OIDC issuer at `https://auth.<domain>`).
+- Staff console / Seller Center / storefront are Cloudflare Workers apps and are not on this server: deploy them with the `ovh-web`
+  workflow, step by step in [cloudflare-setup.md](cloudflare-setup.md) (storefront at `https://<domain>`, `seller.<domain>`, `admin.<domain>`,
+  all talking to `https://api.<domain>/bff`; the images of the backend come from the `ovh-images` workflow when the per-service pipelines are red).
 - Sign in as the staff admin (`ADMIN_EMAIL` and the password step 4 showed).
 - Stripe: add the webhook `https://api.<domain>/payments/v1/webhooks/stripe`, put its `whsec_...` in `STRIPE_WEBHOOK_SECRET` (re-run
   `make ovh-gh-setup`, then the `services` action).

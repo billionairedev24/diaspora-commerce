@@ -26,7 +26,7 @@ build machine (no Docker, no live Stripe, Kafka, Elasticsearch, browsers or devi
 
 ## Phase 1: the OVH test environment (this week)
 
-1. Follow [ovh-vps.md](ovh-vps.md) (account, project, images, secrets script, pipeline, DNS and certificates).
+1. Follow [ovh-vps.md](ovh-vps.md) (account, project, images, secrets script, pipeline, DNS and certificates), then [cloudflare-setup.md](cloudflare-setup.md) for the three web apps.
 2. Run the same stack as production: real PostgreSQL per service, Kafka, Elasticsearch, OpenFGA + authz-sync, Temporal, media storage.
 3. Demo data must stay out: seeding refuses prod/uat and non-local URLs unless `SEED_ALLOW_REMOTE=1`; use that deliberately here only.
 4. Stripe test mode, Twilio test credentials, carrier sandboxes (you own the accounts: [carrier-sandboxes.md](carrier-sandboxes.md), S204).

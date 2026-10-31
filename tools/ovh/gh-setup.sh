@@ -42,7 +42,8 @@ ADMIN_PASSWORD|secret|gen||password of the first staff admin (generated and show
 BACKUP_PASSPHRASE|secret|gen2||passphrase that encrypts the backups (generated and shown once: without it a backup cannot be restored)
 REGISTRY_PULL_USERNAME|var|opt||GitHub login that owns the pull token (empty = the person who runs the workflow)
 REGISTRY_PULL_TOKEN|secret|opt||classic GitHub token with read:packages only: the server pulls the images from ghcr.io with it (empty = the run token, which stops working after the run: pods that restart later cannot pull)
-CLOUDFLARE_API_TOKEN|secret|opt||Cloudflare API token with Zone: DNS edit: the pipeline then creates the A records api./auth./mcp. itself (empty = you create them)
+CLOUDFLARE_API_TOKEN|secret|opt||Cloudflare API token: Zone DNS edit (the pipeline then creates the A records api./auth./mcp. itself) and, for the ovh-web workflow, Account Workers Scripts edit + Account Settings read + Zone Workers Routes edit + Zone read (see docs/runbooks/cloudflare-setup.md); empty = you create the records yourself
+CLOUDFLARE_ACCOUNT_ID|secret|opt||Cloudflare account id (32 hex characters): the ovh-web workflow deploys the three web apps with it
 CLOUDFLARE_ZONE|var|opt||the Cloudflare zone of the domain, e.g. afrotransact.com (with the token above)
 STRIPE_SECRET_KEY|secret|opt||Stripe TEST secret key sk_test_
 STRIPE_PUBLISHABLE_KEY|secret|opt||Stripe TEST publishable key pk_test_ (gateway-bff will not start without it)

@@ -1,0 +1,107 @@
+# Deploys the three web apps (storefront, Seller Center, staff console) to Cloudflare Workers for the OVH TEST environment,
+# on YOUR domain, pointing at the backend that `ovh-vps` deployed. The per-app pipelines (web-*.yml) are wired to the
+# afrotransact.com hosts of dev/uat/prod; this one takes the hosts from the domain you give it. See docs/runbooks/cloudflare-setup.md.
+#
+#   storefront     -> https://<domain>
+#   Seller Center  -> https://seller.<domain>
+#   staff console  -> https://admin.<domain>
+#   backend        -> https://api.<domain>/bff (DNS records made by the ovh-vps workflow)
+#
+# Needs, as secrets of the GitHub Environment `ovh-vps`: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
+# The domain must be a zone in that Cloudflare account (Workers Custom Domains create their DNS records).
+name: ovh-web
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: "Which apps (space separated: storefront seller-center staff-console)"
+        type: string
+        default: "storefront seller-center staff-console"
+      domain:
+        description: "Base domain of the OVH environment (default: the OVH_DOMAIN variable of the ovh-vps environment)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: deploy ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    environment: ovh-vps
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [storefront, seller-center, staff-console]
+    env:
+      APP: ${{ matrix.app }}
+      APP_DIR: web/apps/${{ matrix.app }}
+      WANTED: ${{ inputs.apps }}
+      DOMAIN_INPUT: ${{ inputs.domain }}
+      DOMAIN_VAR: ${{ vars.OVH_DOMAIN }}
+    steps:
+      - name: Decide
+        id: d
+        run: |
+          set -euo pipefail
+          domain="${DOMAIN_INPUT:-$DOMAIN_VAR}"
+          domain="${domain,,}"
+          [[ "$domain" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$ ]] || { echo "::error::set the domain input or the OVH_DOMAIN variable (got '$domain')"; exit 1; }
+          if [[ " $WANTED " != *" $APP "* ]]; then echo "run=false" >> "$GITHUB_OUTPUT"; echo "::notice::$APP skipped"; exit 0; fi
+          [[ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" && -n "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]] || { echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be secrets of the ovh-vps environment"; exit 1; }
+          echo "run=true" >> "$GITHUB_OUTPUT"
+          echo "domain=$domain" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        if: steps.d.outputs.run == 'true'
+      - uses: pnpm/action-setup@v6
+        if: steps.d.outputs.run == 'true'
+      - uses: actions/setup-node@v7
+        if: steps.d.outputs.run == 'true'
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install
+        if: steps.d.outputs.run == 'true'
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: Next.js build
+        if: steps.d.outputs.run == 'true'
+        working-directory: web
+        run: pnpm --filter "./apps/${APP}" run build
+      - name: OpenNext build (Cloudflare Workers)
+        if: steps.d.outputs.run == 'true'
+        working-directory: ${{ env.APP_DIR }}
+        run: pnpm exec opennextjs-cloudflare build
+      - name: Write the Worker config for this domain
+        if: steps.d.outputs.run == 'true'
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          DOMAIN: ${{ steps.d.outputs.domain }}
+        run: |
+          set -euo pipefail
+          case "$APP" in
+            storefront)    host="$DOMAIN" ;;
+            seller-center) host="seller.$DOMAIN" ;;
+            staff-console) host="admin.$DOMAIN" ;;
+          esac
+          vars=$(jq -nc --arg d "$DOMAIN" --arg app "$APP" '
+            {API_MOCKS:"0", BFF_ORIGIN:("https://api."+$d+"/bff"), PUBLIC_WEB_URL:("https://"+$d)}
+            + (if $app=="storefront" then {SELLER_CENTER_URL:("https://seller."+$d), STAFF_CONSOLE_URL:("https://admin."+$d)} else {} end)')
+          jq -n --arg name "${APP}-ovh" --arg host "$host" --argjson vars "$vars" '
+            {name:$name, main:".open-next/worker.js", compatibility_date:"2026-09-01",
+             compatibility_flags:["nodejs_compat","global_fetch_strictly_public"],
+             assets:{directory:".open-next/assets", binding:"ASSETS"}, observability:{enabled:true},
+             vars:$vars, routes:[{pattern:$host, custom_domain:true}]}' > wrangler.ovh.json
+          cat wrangler.ovh.json
+      - name: Deploy
+        if: steps.d.outputs.run == 'true'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: ${{ env.APP_DIR }}
+          command: deploy -c wrangler.ovh.json
