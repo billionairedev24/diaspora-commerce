@@ -106,5 +106,7 @@ Same module whatever `cloud` is; the deployment/cluster is created in the same c
   filter on the cluster NAT IPs, ILM policies in `shared/elastic/ilm/*.json` applied by
   `scripts/elastic-ilm.sh` (which also mints scoped API keys for `search` and `indexer`).
 - `confluent`: environment with Stream Governance (schema registry), Basic (dev) / Standard cluster,
-  `at.<aggregate>.events` topics, one service account + API key per service, ACLs: WRITE on produced
-  topics, READ on consumed topics, READ on consumer groups `<service>.*`.
+  `at.<aggregate>.events` topics (+ `.dlq`), one service account + API key per service, ACLs: WRITE on produced
+  topics, READ on consumed topics, READ on the service's real consumer group ids by prefix (`payments-service*`, not
+  `<service>.*`), WRITE on `<topic>.dlq` for Java consumers. The lists come from `infra/tofu/kafka-topics.json`
+  (generated; `tools/ops/topics-check.sh`, `docs/engineering/kafka-topics-and-acls.md`).

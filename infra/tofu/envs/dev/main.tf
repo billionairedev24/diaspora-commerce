@@ -95,12 +95,14 @@ locals {
     bookings        = { db = "bookings", buckets = [] }
     trust-ops       = { db = "trustops", buckets = ["kyc-evidence", "exports"] }
     tax-returns     = { db = "taxreturns", buckets = ["exports"] }
+    delivery-runs   = { db = "deliveryruns", buckets = [] }
     content         = { db = "content", buckets = ["media"] }
     ai-gateway      = { db = "ai", buckets = [] }
     mcp-server      = { db = null, buckets = [] }
     gateway-bff     = { db = null, buckets = [] }
     search          = { db = null, buckets = [] }
     indexer         = { db = null, buckets = [] }
+    authz-sync      = { db = null, buckets = [] }
     cart            = { db = "cart", buckets = [] }
     promise         = { db = null, buckets = [] }
     geo             = { db = "geo", buckets = [] }
@@ -127,26 +129,10 @@ locals {
     kyc-evidence = { versioning = true, object_lock = true, retention_days = local.size.kyc_retention_days, archive_after_days = 90 }
   }
 
-  # Events: at.<aggregate>.events, produced by the owning service, consumed by indexer/notifications/... .
-  topics = {
-    "at.product.events"      = { producers = ["catalog"], consumers = ["indexer", "offers", "ai-gateway"] }
-    "at.offer.events"        = { producers = ["offers"], consumers = ["indexer", "cart"] }
-    "at.inventory.events"    = { producers = ["inventory"], consumers = ["indexer", "offers", "promise", "cart"] }
-    "at.order.events"        = { producers = ["orders"], consumers = ["payments", "fulfilment", "inventory", "notifications", "tax-returns", "seller"] }
-    "at.payment.events"      = { producers = ["payments"], consumers = ["orders", "seller", "notifications"] }
-    "at.shipment.events"     = { producers = ["fulfilment", "carrier-gateway"], consumers = ["orders", "notifications", "promise"] }
-    "at.seller.events"       = { producers = ["seller"], consumers = ["identity", "catalog", "indexer", "notifications"] }
-    "at.booking.events"      = { producers = ["bookings"], consumers = ["notifications", "payments", "indexer"] }
-    "at.retail.events"       = { producers = ["retail"], consumers = ["inventory", "catalog"] }
-    "at.trust.events"        = { producers = ["trust-ops"], consumers = ["catalog", "seller", "notifications"] }
-    "at.content.events"      = { producers = ["content"], consumers = ["indexer", "gateway-bff"] }
-    "at.identity.events"     = { producers = ["identity"], consumers = ["seller", "notifications", "cart"] }
-    "at.media.events"        = { producers = ["media"], consumers = ["catalog", "indexer"] }
-    "at.return.events"       = { producers = ["tax-returns"], consumers = ["orders", "payments", "inventory", "notifications"] }
-    "at.search.events"       = { producers = ["search"], consumers = ["indexer", "ai-gateway"] }
-    "at.ads.events"          = { producers = ["search", "content"], consumers = ["indexer", "content"] }
-    "at.notification.events" = { producers = ["notifications"], consumers = ["trust-ops"], retention_ms = 259200000 }
-  }
+  # Events: topics, producers, consumers, consumer-group prefixes and the services that write dead letters are
+  # generated from contracts/asyncapi and the code (tools/ops/topics_model.py --write) and verified in CI by
+  # tools/ops/topics-check.sh. Do not edit the list here.
+  kafka = jsondecode(file("${path.module}/../../kafka-topics.json"))
 
   gh_subject_env = "repo:${var.github_repository}:environment:${local.environment}"
 
@@ -702,14 +688,16 @@ module "elastic" {
 }
 
 module "confluent" {
-  source    = "../../modules/shared/confluent"
-  for_each  = local.on.confluent
-  providers = { confluent = confluent.this[each.key] }
-  context   = local.saas_context
-  cloud     = local.saas_cloud
-  profile   = local.size.saas_profile
-  topics    = local.topics
-  services  = local.service_names
+  source          = "../../modules/shared/confluent"
+  for_each        = local.on.confluent
+  providers       = { confluent = confluent.this[each.key] }
+  context         = local.saas_context
+  cloud           = local.saas_cloud
+  profile         = local.size.saas_profile
+  topics          = local.kafka.topics
+  consumer_groups = local.kafka.consumer_groups
+  dlq_writers     = local.kafka.dlq_writers
+  services        = local.service_names
 }
 
 # Temporal Cloud namespace afrotransact-<env> (orders-service checkout saga; docs/runbooks/first-environment.md).
