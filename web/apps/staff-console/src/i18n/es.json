@@ -2073,5 +2073,7 @@
   "st.brand.bulk.submit": "Añadir {n} marcas",
   "st.brand.bulk.result": "{created} añadidas, {existing} ya listadas, {invalid} no válidas",
   "st.brand.bulk.created": "Añadida",
-  "st.brand.bulk.done": "Hecho"
+  "st.brand.bulk.done": "Hecho",
+  "st.col.device": "Dispositivo",
+  "st.device.on": "{browser} en {os}"
 }

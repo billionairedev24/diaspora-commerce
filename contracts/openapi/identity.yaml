@@ -4127,6 +4127,9 @@ components:
           format: date-time
         refreshable:
           type: boolean
+        userAgent:
+          type: string
+          description: The browser or app's User-Agent (at most 255 characters), when it was recorded at sign-in
     AdminSessionPage:
       type: object
       properties:

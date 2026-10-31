@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -60,7 +61,8 @@ func (f *fakeIdentityAdmin) init() {
 	}
 	f.sessions = []map[string]any{
 		{"id": "auth-1", "userId": "11111111-1111-1111-1111-111111111111", "userName": "Ada Obi", "userEmail": "ada@example.com", "clientId": "customer-app",
-			"clientName": "Customer app", "ipAddress": "203.0.113.9", "signedInAt": "2026-10-24T09:00:00Z", "lastUsedAt": "2026-10-24T09:30:00Z",
+			"clientName": "Customer app", "ipAddress": "203.0.113.9",
+			"userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36", "signedInAt": "2026-10-24T09:00:00Z", "lastUsedAt": "2026-10-24T09:30:00Z",
 			"expiresAt": "2026-11-23T09:00:00Z", "refreshable": true},
 		{"id": "auth-2", "userId": "svc-billing", "clientId": "billing-svc", "clientName": "Billing service", "signedInAt": "2026-10-24T08:00:00Z",
 			"lastUsedAt": "2026-10-24T08:00:00Z", "expiresAt": "2026-10-24T08:05:00Z", "refreshable": false},
@@ -422,7 +424,17 @@ func TestStaffIdentityAdminConformance(t *testing.T) {
 	if rows := sessions["rows"].([]any); len(rows) != 2 || rows[1].(map[string]any)["cells"].(map[string]any)["userName"] != "Service account billing-svc" {
 		t.Fatalf("sessions = %v", sessions["rows"])
 	}
+	// S291: the Device column is the parsed User-Agent; a sign-in without one shows no device; the sheet has the raw agent.
+	if first := sessions["rows"].([]any)[0].(map[string]any)["cells"].(map[string]any); first["device"] != "Chrome on macOS" {
+		t.Fatalf("device cell = %v", first["device"])
+	}
+	if second := sessions["rows"].([]any)[1].(map[string]any)["cells"].(map[string]any); second["device"] != nil {
+		t.Fatalf("service account device cell = %v", second["device"])
+	}
 	person := do("admin", "GET", res("identity-sessions")+"/auth-1", nil, 200)
+	if !strings.Contains(fmt.Sprint(person["sections"]), "Chrome on macOS") || !strings.Contains(fmt.Sprint(person["sections"]), "Chrome/124.0.0.0") {
+		t.Fatalf("session sheet lacks the device: %v", person["sections"])
+	}
 	service := do("admin", "GET", res("identity-sessions")+"/auth-2", nil, 200)
 	for _, a := range service["actions"].([]any) {
 		if a.(map[string]any)["key"] == "revoke-user" && a.(map[string]any)["allowed"] != false {

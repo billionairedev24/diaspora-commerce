@@ -18,12 +18,21 @@ import { sellerApi } from '@/lib/api';
 import { dateTime } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
-import { baseName, droppedFiles, expandFiles, LIBRARY_TYPES, type LibraryType, MAX_FILES_PER_DROP, MAX_LIBRARY_BYTES, parseLibraryName, typeOf } from './library-files';
+import { baseName, droppedFiles, expandFiles, LIBRARY_TYPES, type LibraryType, LibraryZipError, type LibraryZipErrorCode, MAX_FILES_PER_DROP, MAX_LIBRARY_BYTES, parseLibraryName, typeOf } from './library-files';
 
 type Progress = { name: string; state: 'queued' | 'uploading' | 'done' | 'failed' | 'skipped'; note: string };
 
 const STATUS_TONE: Record<ImageLibraryItem['status'], Tone> = { READY: 'good', FLAGGED: 'warn', REJECTED: 'bad' };
 const PARALLEL = 4;
+
+/** The message of each reason a ZIP is refused before it is opened (S310 zip-bomb guard). */
+const ZIP_MESSAGES: Record<LibraryZipErrorCode, 'sc.img.zip.unreadable' | 'sc.img.zip.tooMany' | 'sc.img.zip.entryTooLarge' | 'sc.img.zip.tooLarge' | 'sc.img.zip.ratio'> = {
+  unreadable: 'sc.img.zip.unreadable',
+  'too-many': 'sc.img.zip.tooMany',
+  'entry-too-large': 'sc.img.zip.entryTooLarge',
+  'too-large': 'sc.img.zip.tooLarge',
+  ratio: 'sc.img.zip.ratio'
+};
 
 /** Product images (S310): the organisation's image library. Photos named after a SKU (SKU.MAIN.jpg, SKU.PT01.jpg …,
     SKU.SWCH.jpg) are matched to listings — the bulk upload uses them for rows without image links, and "Attach to
@@ -103,8 +112,8 @@ export function ImageLibraryView() {
     let files: File[];
     try {
       files = await expandFiles(raw);
-    } catch {
-      toast.show(t('sc.img.zipFailed'), 'error');
+    } catch (e) {
+      toast.show(e instanceof LibraryZipError ? t(ZIP_MESSAGES[e.code], e.detail) : t('sc.img.zipFailed'), 'error');
       setBusy(false);
       return;
     }

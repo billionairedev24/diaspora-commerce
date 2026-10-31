@@ -309,13 +309,15 @@ func orDefault(v any, def float64) any {
 func identitySessionsResource() *staffResource {
 	return &staffResource{
 		key: "identity-sessions", module: domain.IdentityModule, title: "Sessions & tokens", searchPlaceholder: "Search by user, email or client",
-		columns: []domain.Column{col("userName", "User", "strong", 20), col("userEmail", "Email", "text", 22), col("clientName", "App", "text", 16),
-			col("ipAddress", "IP address", "mono", 12), col("lastUsedAt", "Last used", "datetime", 15), col("refreshable", "Refresh token", "text", 15)},
+		columns: []domain.Column{col("userName", "User", "strong", 20), col("userEmail", "Email", "text", 22), col("clientName", "App", "text", 14),
+			col("device", "Device", "text", 14), col("ipAddress", "IP address", "mono", 11), col("lastUsedAt", "Last used", "datetime", 14), col("refreshable", "Refresh token", "text", 13)},
 		list: listPaged("/v1/admin/identity/sessions", upIdentity, nil),
 		get:  getByPath("/v1/admin/identity/sessions/", upIdentity),
 		cells: func(o jobj) map[string]any {
 			// Service accounts have no person behind them: the client id stands in for the name.
-			return map[string]any{"userName": cellValue(firstNonEmpty(jstr(o, "userName"), "Service account "+jstr(o, "clientId")))}
+			// The device is the parsed User-Agent identity recorded at sign-in ("Chrome on macOS"); service accounts have none.
+			return map[string]any{"userName": cellValue(firstNonEmpty(jstr(o, "userName"), "Service account "+jstr(o, "clientId"))),
+				"device": cellValue(domain.DeviceLabel(jstr(o, "userAgent")))}
 		},
 		titleOf: func(o jobj) string { return firstNonEmpty(jstr(o, "userName"), "Service account "+jstr(o, "clientId")) },
 		subtitleOf: func(o jobj) string {
@@ -324,7 +326,7 @@ func identitySessionsResource() *staffResource {
 		sections: func(o jobj) []domain.DetailSection {
 			return []domain.DetailSection{{Title: "Sign-in", Fields: []domain.DetailField{
 				fieldOf("User", jstr(o, "userName"), "text"), fieldOf("Email", jstr(o, "userEmail"), "text"), fieldOf("User id", jstr(o, "userId"), "mono"),
-				fieldOf("App (client)", jstr(o, "clientName")+" ("+jstr(o, "clientId")+")", "text"), fieldOf("IP address", jstr(o, "ipAddress"), "mono"),
+				fieldOf("App (client)", jstr(o, "clientName")+" ("+jstr(o, "clientId")+")", "text"), fieldOf("Device", domain.DeviceLabel(jstr(o, "userAgent")), "text"), fieldOf("User agent", jstr(o, "userAgent"), "mono"), fieldOf("IP address", jstr(o, "ipAddress"), "mono"),
 				fieldOf("Signed in", jstr(o, "signedInAt"), "datetime"), fieldOf("Last used", jstr(o, "lastUsedAt"), "datetime"),
 				fieldOf("Expires", jstr(o, "expiresAt"), "datetime"), fieldOf("Refresh token", yesOrNo(boolean(o, "refreshable")), "text")}}}
 		},
