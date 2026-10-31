@@ -6,10 +6,9 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.inventory.application.OfferLinkSyncService;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -26,7 +25,6 @@ class OffersEventListener {
             "offers.offer.withdrawn");
     static final String OCCURRED_AT = "occurred-at";
 
-    private static final Logger LOG = LoggerFactory.getLogger(OffersEventListener.class);
 
     private final OfferLinkSyncService links;
     private final JsonMapper json;
@@ -52,16 +50,13 @@ class OffersEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", type, rec.topic(),
-                    rec.partition(), rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         OfferMessage m;
         try {
             m = json.readValue(rec.value(), OfferMessage.class);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         if (m == null || m.offerId() == null || m.sellerOrgId() == null) {
             return;

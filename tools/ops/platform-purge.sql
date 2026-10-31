@@ -1,7 +1,9 @@
 -- Retention for the platform tables of one service database: platform_inbox (consumer de-duplication) and the
 -- published rows of platform_outbox (db/platform/V0_0_1__outbox_inbox.sql).
 --
--- Nothing in the code purges either table: both grow forever unless this runs (docs/runbooks/kafka-replay.md, "Retention").
+-- platform-events purges both tables itself every day (EventRetentionJob, at.events.retention.*, same rules as below).
+-- Use this script for a catch-up on a database that has run without the job for a long time, or from a service that
+-- opted out (at.events.retention.enabled=false). It follows the job's rules, so the two never disagree.
 --
 -- Why not purge sooner: a duplicate delivery is harmless only while platform_inbox still holds (consumer, event_id).
 -- Duplicates come from an offset reset (up to the topic retention, 7 days), a DLQ replay (the record can sit in the DLQ
@@ -9,11 +11,14 @@
 --     topic retention (7) + DLQ retention (14) + margin (14) = 35 days at the very least.
 -- The default is 90 days; this script refuses anything under 35. After an event is older than the retention you chose,
 -- a re-published or replayed copy WILL be processed again: do not replay or re-publish events older than that.
+-- platform_outbox: only rows already published (published_at set) and older than outbox_days (default 14, minimum 7,
+-- the topic retention) are deleted. Unpublished rows are never touched.
 --
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f tools/ops/platform-purge.sql                       # counts only
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v days=90 -v execute=yes -f tools/ops/platform-purge.sql
 --
--- Variables: days (default 90, minimum 35), batch (rows per transaction, default 5000), execute ('yes' to delete),
+-- Variables: days (inbox retention, default 90, minimum 35), outbox_days (published outbox rows, default 14, minimum 7),
+--            batch (rows per transaction, default 5000), execute ('yes' to delete),
 --            outbox ('no' to leave platform_outbox alone, default 'yes').
 -- Deletes in small committed batches (safe next to live traffic). Idempotent: re-running deletes only what aged out since.
 -- No index exists on platform_inbox(processed_at) or platform_outbox(published_at): on a table with tens of millions
@@ -23,6 +28,10 @@
 \if :{?days}
 \else
   \set days 90
+\endif
+\if :{?outbox_days}
+\else
+  \set outbox_days 14
 \endif
 \if :{?batch}
 \else
@@ -43,7 +52,14 @@ select (:days::int < 35) as too_short \gset
   select 1 / 0 as refused_retention_too_short;
 \endif
 
-select set_config('purge.days', :'days', false) as _d, set_config('purge.batch', :'batch', false) as _b \gset
+select (:outbox_days::int < 7) as outbox_too_short \gset
+\if :outbox_too_short
+  \echo 'Refusing: outbox_days must be at least 7 (the topic retention).'
+  select 1 / 0 as refused_outbox_retention_too_short;
+\endif
+
+select set_config('purge.days', :'days', false) as _d, set_config('purge.outbox_days', :'outbox_days', false) as _o,
+       set_config('purge.batch', :'batch', false) as _b \gset
 
 \echo 'Rows older than the retention window:'
 select 'platform_inbox' as "table", count(*) as rows_to_delete, min(processed_at) as oldest
@@ -51,7 +67,8 @@ from platform_inbox where processed_at < now() - make_interval(days => :days::in
 union all
 select 'platform_outbox (published)', count(*), min(published_at)
 from platform_outbox
-where :'outbox' = 'yes' and published_at is not null and published_at < now() - make_interval(days => :days::int);
+where :'outbox' = 'yes' and published_at is not null
+  and published_at < now() - make_interval(days => :outbox_days::int);
 
 select (:'execute' = 'yes') as do_it \gset
 \if :do_it
@@ -74,7 +91,7 @@ select (:'execute' = 'yes') as do_it \gset
     do $$
     declare
       n int;
-      cutoff timestamptz := now() - make_interval(days => current_setting('purge.days')::int);
+      cutoff timestamptz := now() - make_interval(days => current_setting('purge.outbox_days')::int);
       batch_size int := current_setting('purge.batch')::int;
     begin
       loop

@@ -2,14 +2,11 @@ package com.afrotransact.payments.adapter.in.messaging;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 import com.afrotransact.payments.application.ReferralProgram;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -30,7 +27,6 @@ class ReferralEventListener {
     static final String SHIPMENT_DELIVERED = "orders.shipment.delivered";
     static final String SHIPMENT_CANCELLED = "orders.shipment.cancelled";
 
-    private static final Logger LOG = LoggerFactory.getLogger(ReferralEventListener.class);
 
     private final ReferralProgram program;
     private final JsonMapper json;
@@ -114,13 +110,10 @@ class ReferralEventListener {
     }
 
     private <T> T read(ConsumerRecord<String, String> rec, Class<T> type) {
-        Optional<UUID> eventId = EventHeaders.eventId(rec);
         try {
             return json.readValue(rec.value(), type);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed referral event {} at {}-{}@{}: {}", eventId.map(UUID::toString).orElse("?"),
-                    rec.topic(), rec.partition(), rec.offset(), ex.getMessage());
-            return null;
+            throw MalformedEvent.of(EventHeaders.text(rec, EventHeaders.EVENT_TYPE).orElse("referral"), ex);
         }
     }
 }

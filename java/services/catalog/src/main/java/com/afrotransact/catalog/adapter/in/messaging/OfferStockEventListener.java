@@ -1,14 +1,11 @@
 package com.afrotransact.catalog.adapter.in.messaging;
 
-import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 
 import com.afrotransact.catalog.application.ListingStockSyncService;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -25,7 +22,6 @@ class OfferStockEventListener {
 
     static final Set<String> TYPES = Set.of("offers.offer.created", "offers.offer.updated");
 
-    private static final Logger LOG = LoggerFactory.getLogger(OfferStockEventListener.class);
 
     private final ListingStockSyncService sync;
     private final JsonMapper json;
@@ -48,13 +44,11 @@ class OfferStockEventListener {
         if (!TYPES.contains(type)) {
             return;
         }
-        Optional<UUID> eventId = EventHeaders.eventId(rec);
         OfferMessage m;
         try {
             m = json.readValue(rec.value(), OfferMessage.class);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.orElse(null), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         if (m == null || m.atin() == null || m.sellerOrgId() == null || m.sellerQuantity() == null
                 || "WITHDRAWN".equals(m.status()) || "AFROTRANSACT".equals(m.fulfilment())) {

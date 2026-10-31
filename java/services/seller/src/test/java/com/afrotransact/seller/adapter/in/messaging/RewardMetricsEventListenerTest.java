@@ -1,6 +1,7 @@
 package com.afrotransact.seller.adapter.in.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -8,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.NonRetryableEventException;
 import com.afrotransact.seller.application.SellerMetricsService;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
@@ -68,9 +70,12 @@ class RewardMetricsEventListenerTest {
     @Test
     void otherEventsMissingIdsAndBadJsonAreSkipped() {
         assertThat(listener.handle(rec("orders.order.placed", UUID.randomUUID().toString(), "{}"))).isFalse();
-        assertThat(listener.handle(rec("booking.completed", null, "{\"orgId\":\"org_2\"}"))).isFalse();
-        assertThat(listener.handle(rec("booking.completed", "nope", "{\"orgId\":\"org_2\"}"))).isFalse();
-        assertThat(listener.handle(rec("booking.completed", UUID.randomUUID().toString(), "{not json"))).isFalse();
+        assertThatThrownBy(() -> listener.handle(rec("booking.completed", null, "{\"orgId\":\"org_2\"}")))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.handle(rec("booking.completed", "nope", "{\"orgId\":\"org_2\"}")))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.handle(rec("booking.completed", UUID.randomUUID().toString(), "{not json")))
+                .isInstanceOf(NonRetryableEventException.class);
         assertThat(listener.handle(rec("offers.buybox.changed", UUID.randomUUID().toString(), "{}"))).isFalse();
         assertThat(calls).isEmpty();
     }

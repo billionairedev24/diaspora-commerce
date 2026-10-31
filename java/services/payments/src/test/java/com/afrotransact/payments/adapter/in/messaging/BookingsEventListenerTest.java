@@ -1,6 +1,7 @@
 package com.afrotransact.payments.adapter.in.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -11,6 +12,7 @@ import java.util.UUID;
 import com.afrotransact.payments.application.ProviderFeeNotice;
 import com.afrotransact.payments.application.ProviderFeeService;
 import com.afrotransact.payments.domain.ProviderFee;
+import com.afrotransact.platform.events.consumer.NonRetryableEventException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -74,8 +76,10 @@ class BookingsEventListenerTest {
         listener.onMessage(rec("booking.confirmed", UUID.randomUUID().toString(), cancelled("PROVIDER", 1500)));
         listener.onMessage(rec("booking.cancelled", UUID.randomUUID().toString(), cancelled("CUSTOMER", 0)));
         listener.onMessage(rec("booking.cancelled", UUID.randomUUID().toString(), cancelled("PROVIDER", 0)));
-        listener.onMessage(rec("booking.cancelled", null, cancelled("PROVIDER", 1500)));
-        listener.onMessage(rec("booking.cancelled", UUID.randomUUID().toString(), "{oops"));
+        assertThatThrownBy(() -> listener.onMessage(rec("booking.cancelled", null, cancelled("PROVIDER", 1500))))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.onMessage(rec("booking.cancelled", UUID.randomUUID().toString(), "{oops")))
+                .isInstanceOf(NonRetryableEventException.class);
         assertThat(notices).isEmpty();
     }
 }

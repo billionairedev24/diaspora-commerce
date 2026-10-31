@@ -4,6 +4,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.afrotransact.trustops.application.ModerationService;
 import com.afrotransact.trustops.domain.ListingFlagSource;
 import com.afrotransact.trustops.domain.ListingReport;
@@ -71,16 +72,13 @@ class CatalogProductEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id", type, rec.topic(), rec.partition(),
-                    rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         ProductMessage m;
         try {
             m = json.readValue(rec.value(), ProductMessage.class);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         if (m == null || m.productId() == null || m.ownerOrgId() == null || m.ownerOrgId().isBlank()) {
             LOG.warn("Skipping {} event {} without productId / ownerOrgId", type, eventId.get());

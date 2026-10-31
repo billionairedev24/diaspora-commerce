@@ -1,6 +1,7 @@
 package com.afrotransact.payments.adapter.in.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -12,6 +13,7 @@ import com.afrotransact.payments.application.LabelChargeNotice;
 import com.afrotransact.payments.application.LabelChargeService;
 import com.afrotransact.payments.domain.LabelCharge;
 import com.afrotransact.payments.domain.LabelChargeStatus;
+import com.afrotransact.platform.events.consumer.NonRetryableEventException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -82,9 +84,12 @@ class CarrierShipmentEventListenerTest {
     @Test
     void ignoresTrackingEventsAndUnusableMessages() {
         listener.onMessage(rec("carrier.tracking.updated", UUID.randomUUID().toString(), "{\"carrier\":\"ups\"}"));
-        listener.onMessage(rec("carrier.label.purchased", null, label("lbl-1")));
-        listener.onMessage(rec("carrier.label.purchased", "not-a-uuid", label("lbl-1")));
-        listener.onMessage(rec("carrier.label.purchased", UUID.randomUUID().toString(), "{oops"));
+        assertThatThrownBy(() -> listener.onMessage(rec("carrier.label.purchased", null, label("lbl-1"))))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.onMessage(rec("carrier.label.purchased", "not-a-uuid", label("lbl-1"))))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.onMessage(rec("carrier.label.purchased", UUID.randomUUID().toString(), "{oops")))
+                .isInstanceOf(NonRetryableEventException.class);
         listener.onMessage(rec("carrier.label.purchased", UUID.randomUUID().toString(), "{\"orgId\":\"org_s\"}"));
         assertThat(purchased).isEmpty();
         assertThat(voided).isEmpty();

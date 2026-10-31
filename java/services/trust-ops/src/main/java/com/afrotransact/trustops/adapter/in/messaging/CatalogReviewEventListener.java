@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.afrotransact.trustops.application.ModerationService;
 import com.afrotransact.trustops.domain.ReviewSubmission;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -65,16 +66,13 @@ class CatalogReviewEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id", type, rec.topic(), rec.partition(),
-                    rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         ReviewMessage m;
         try {
             m = json.readValue(rec.value(), ReviewMessage.class);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         if (m == null || m.reviewId() == null) {
             LOG.warn("Skipping {} event {} without reviewId", type, eventId.get());

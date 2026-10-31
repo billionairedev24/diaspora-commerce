@@ -1,6 +1,7 @@
 package com.afrotransact.catalog.adapter.in.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -10,6 +11,7 @@ import java.util.UUID;
 
 import com.afrotransact.catalog.application.ListingEnforcement;
 import com.afrotransact.catalog.application.ListingVisibilityService;
+import com.afrotransact.platform.events.consumer.NonRetryableEventException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -71,8 +73,10 @@ class SellerListingsEventListenerTest {
     @Test
     void ignoresOtherEventsAndUnusableMessages() {
         listener.onMessage(rec("seller.payouts.paused", UUID.randomUUID().toString(), "{\"orgId\":\"org_a\"}"));
-        listener.onMessage(rec("seller.listings.hidden", null, "{\"orgId\":\"org_a\"}"));
-        listener.onMessage(rec("seller.listings.hidden", UUID.randomUUID().toString(), "nope"));
+        assertThatThrownBy(() -> listener.onMessage(rec("seller.listings.hidden", null, "{\"orgId\":\"org_a\"}")))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.onMessage(rec("seller.listings.hidden", UUID.randomUUID().toString(), "nope")))
+                .isInstanceOf(NonRetryableEventException.class);
         listener.onMessage(rec("seller.listings.hidden", UUID.randomUUID().toString(), "{}"));
         assertThat(calls).isEmpty();
     }

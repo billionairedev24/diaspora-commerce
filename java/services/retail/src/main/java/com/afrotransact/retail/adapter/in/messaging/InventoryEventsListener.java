@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.afrotransact.retail.application.CogsPostingService;
 import com.afrotransact.retail.application.ShippedLine;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -13,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -39,11 +41,15 @@ class InventoryEventsListener {
             autoStartup = "${at.retail.consumers.enabled:true}")
     void onReservationEvent(ConsumerRecord<String, String> record) {
         String type = header(record, "event-type");
-        String eventId = header(record, "event-id");
-        if (!COMMITTED.equals(type) || eventId == null) {
+        if (!COMMITTED.equals(type)) {
             return;
         }
-        handle(UUID.fromString(eventId), record.value());
+        UUID eventId = eventId(record, type);
+        try {
+            handle(eventId, record.value());
+        } catch (JacksonException | IllegalArgumentException ex) {
+            throw MalformedEvent.of(type, ex);
+        }
     }
 
     /** Parses an {@code inventory.reservation.committed} payload and posts COGS. */
@@ -65,6 +71,18 @@ class InventoryEventsListener {
         String orderId = root.path("orderId").asString();
         cogs.onShipped(eventId, orderId, lines)
                 .ifPresent(e -> LOG.info("COGS {} posted for order {}: {}", e.number(), orderId, e.amountMinor()));
+    }
+
+    private static UUID eventId(ConsumerRecord<String, String> record, String type) {
+        String raw = header(record, "event-id");
+        if (raw != null) {
+            try {
+                return UUID.fromString(raw);
+            } catch (IllegalArgumentException ex) {
+                throw MalformedEvent.missingEventId(type, record);
+            }
+        }
+        throw MalformedEvent.missingEventId(type, record);
     }
 
     private static String header(ConsumerRecord<String, String> record, String name) {

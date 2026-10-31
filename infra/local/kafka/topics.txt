@@ -1,50 +1,31 @@
 # One topic per aggregate: at.<aggregate>.events  (see EventEnvelope#topic()).
-# Format: <aggregate> [partitions]   — default 3 partitions. Append new aggregates here.
-user
-organization
-product
-category-request
-offer
-coupon
-inventory
-order
-checkout
-shipment
-payment
-refund
-payout
-seller
-purchase-order
-goods-receipt
-fulfilment
-delivery
-booking
-dispute
-moderation
-audit
-return
-content
-cart
-media
-notification
-carrier
-review
-ai
+# Format: <aggregate> [partitions]   — default 3 partitions.
+# This list is EXACTLY the channels of contracts/asyncapi/events.yaml: `tools/ops/topics-check.sh` fails CI when they differ.
+# New aggregate: add its channel to the service's contracts/asyncapi/fragments/<service>.yaml, run
+# `python3 tools/contracts/merge_asyncapi.py` and `python3 tools/ops/topics_model.py --write`, then add it here and to the
+# DLQ list of infra/k8s/platform/lean/kafka.yaml.
 
-# Aggregates published today (contracts/asyncapi/events.yaml). `tools/ops/dlq-topics.sh --check` fails if one is missing.
 ads
 ai-handoff
 bookings
 carrier-shipment
+category-request
+content
 delivery-runs
+fulfilment
 identity
 inventory-inbound
 inventory-reconciliation
 inventory-reservation
+inventory
 mcp-tool
 offers
+order
+payment
+payout
 product-import
 product-review
+product
 retail
 search
 seller-application
@@ -56,5 +37,5 @@ taxreturns
 trustops
 
 # Literal topic names (leading "="): the Go consumers' own dead-letter topics. They get no further ".dlq".
-=at.indexer.dlq.events
 =at.authz-sync.dlq.events
+=at.indexer.dlq.events

@@ -4,8 +4,11 @@
 #   medium (uat)  -> Standard, single zone
 #   large  (prod) -> Standard, multi zone        (Enterprise/Dedicated + PrivateLink when traffic justifies)
 # Stream Governance ESSENTIALS gives the schema registry. Each service gets its own service account and
-# API key; ACLs: WRITE+DESCRIBE on the topics it produces, READ on topics it consumes, READ on its consumer
-# groups (<service>.*). Topics follow at.<aggregate>.events (docs/engineering/new-service-checklist.md).
+# API key; ACLs: WRITE on the topics it produces, READ on topics it consumes, READ on its consumer groups by PREFIX
+# (the real group ids, e.g. payments-service, payments-service-referral; var.consumer_groups), and WRITE on the
+# <topic>.dlq of every topic a Java service consumes (var.dlq_writers). Topics, producers, consumers and group prefixes
+# come from infra/tofu/kafka-topics.json, generated from contracts/asyncapi and the code and checked in CI by
+# tools/ops/topics-check.sh (docs/engineering/kafka-topics-and-acls.md).
 terraform {
   required_version = ">= 1.8"
   required_providers {
@@ -56,6 +59,18 @@ variable "services" {
   type        = list(string)
 }
 
+variable "consumer_groups" {
+  description = "Service => consumer group id prefixes it may READ (PREFIXED ACL). Must cover every group id the service uses."
+  type        = map(list(string))
+  default     = {}
+}
+
+variable "dlq_writers" {
+  description = "Services whose consumers dead-letter into <topic>.dlq (the Java platform-events error handler). Go consumers keep their own dead-letter topic or store."
+  type        = list(string)
+  default     = []
+}
+
 variable "dlq_retention_ms" {
   description = "Retention of the <topic>.dlq dead-letter topics (default 14 days, longer than the source topics)."
   type        = number
@@ -67,17 +82,19 @@ locals {
   prefix = var.context.name
   # Java consumers (platform-events) dead-letter a record they cannot process into <topic>.dlq, so every consumer
   # of a topic may WRITE to its DLQ. Replay (tools/ops/kafka-replay) uses the admin identity. See docs/runbooks/kafka-replay.md.
+  # A topic that already is a dead-letter topic (the Go at.indexer.dlq.events) gets no further .dlq.
   dlq_topics = {
     for t, v in var.topics : "${t}.dlq" => {
       partitions   = v.partitions
       retention_ms = var.dlq_retention_ms
-      producers    = v.consumers
+      producers    = [for c in v.consumers : c if contains(var.dlq_writers, c)]
       consumers    = []
-    }
+    } if !strcontains(t, ".dlq.")
   }
   all_topics = merge(var.topics, local.dlq_topics)
   acl_write  = merge([for t, v in local.all_topics : { for s in v.producers : "${s}/${t}" => { svc = s, topic = t } }]...)
   acl_read   = merge([for t, v in local.all_topics : { for s in v.consumers : "${s}/${t}" => { svc = s, topic = t } }]...)
+  acl_groups = merge([for s, prefixes in var.consumer_groups : { for p in prefixes : "${s}/${p}" => { svc = s, prefix = p } }]...)
   rest      = confluent_kafka_cluster.this.rest_endpoint
   admin_credentials = {
     key    = confluent_api_key.admin.id
@@ -232,11 +249,11 @@ resource "confluent_kafka_acl" "read" {
 }
 
 resource "confluent_kafka_acl" "group" {
-  for_each      = toset(var.services)
+  for_each      = local.acl_groups
   resource_type = "GROUP"
-  resource_name = "${each.key}."
+  resource_name = each.value.prefix
   pattern_type  = "PREFIXED"
-  principal     = "User:${confluent_service_account.service[each.key].id}"
+  principal     = "User:${confluent_service_account.service[each.value.svc].id}"
   host          = "*"
   operation     = "READ"
   permission    = "ALLOW"

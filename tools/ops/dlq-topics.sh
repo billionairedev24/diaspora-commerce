@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Dead-letter topics of the Java consumers: <event topic>.dlq for every event topic in contracts/asyncapi/events.yaml.
 #   dlq-topics.sh            print the DLQ topic names, one per line
-#   dlq-topics.sh --check    fail if infra/local/kafka/topics.txt or infra/k8s/platform/lean/kafka.yaml lacks one
+#   dlq-topics.sh --check    (tools/ops/topics-check.sh runs this and the exact-set checks) fail if infra/local/kafka/topics.txt or infra/k8s/platform/lean/kafka.yaml lacks one
 # The Go consumers' own topics (at.indexer.dlq.events, at.authz-sync.dlq.events) are not listed: they ARE dead-letter
 # topics and get no further suffix.
 set -euo pipefail

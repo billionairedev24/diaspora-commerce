@@ -1,6 +1,7 @@
 package com.afrotransact.identity.adapter.in.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -10,6 +11,7 @@ import java.util.UUID;
 
 import com.afrotransact.identity.application.SellerOrgChange;
 import com.afrotransact.identity.application.SellerOrgSyncService;
+import com.afrotransact.platform.events.consumer.NonRetryableEventException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -86,9 +88,12 @@ class SellerOrgEventListenerTest {
         listener.onMessage(rec("seller.org.updated", UUID.randomUUID().toString(),
                 "{\"orgId\":\"org_a\",\"kind\":\"PROVIDER\",\"status\":\"SUSPENDED\"}"));
         listener.onMessage(rec("seller.org.created", UUID.randomUUID().toString(), "{\"orgId\":\"org_a\"}"));
-        listener.onMessage(rec("seller.org.updated", null, "{\"orgId\":\"org_a\"}"));
-        listener.onMessage(rec("seller.org.updated", "not-a-uuid", "{\"orgId\":\"org_a\"}"));
-        listener.onMessage(rec("seller.org.approved", UUID.randomUUID().toString(), "{not json"));
+        assertThatThrownBy(() -> listener.onMessage(rec("seller.org.updated", null, "{\"orgId\":\"org_a\"}")))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.onMessage(rec("seller.org.updated", "not-a-uuid", "{\"orgId\":\"org_a\"}")))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.onMessage(rec("seller.org.approved", UUID.randomUUID().toString(), "{not json")))
+                .isInstanceOf(NonRetryableEventException.class);
         listener.onMessage(rec("seller.org.approved", UUID.randomUUID().toString(), "{\"kind\":\"SELLER\"}"));
         assertThat(calls).containsExactly("updated");
         assertThat(changes.getFirst().status()).isEqualTo("SUSPENDED");

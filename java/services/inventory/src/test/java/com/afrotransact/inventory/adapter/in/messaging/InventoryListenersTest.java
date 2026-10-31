@@ -1,6 +1,7 @@
 package com.afrotransact.inventory.adapter.in.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
@@ -11,6 +12,7 @@ import java.util.UUID;
 import com.afrotransact.inventory.application.InboundCommands;
 import com.afrotransact.inventory.application.InboundShipmentService;
 import com.afrotransact.inventory.application.OfferLinkSyncService;
+import com.afrotransact.platform.events.consumer.NonRetryableEventException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.internals.RecordHeader;
 import org.junit.jupiter.api.Test;
@@ -39,8 +41,10 @@ class InventoryListenersTest {
                 """.formatted(UUID.randomUUID(), UUID.randomUUID());
         listener.onMessage(record("retail.shipment.stage-changed", UUID.randomUUID().toString(), payload));
         listener.onMessage(record("retail.shipment.booked", UUID.randomUUID().toString(), payload));
-        listener.onMessage(record("retail.shipment.stage-changed", "not-a-uuid", payload));
-        listener.onMessage(record("retail.shipment.stage-changed", UUID.randomUUID().toString(), "{oops"));
+        assertThatThrownBy(() -> listener.onMessage(record("retail.shipment.stage-changed", "not-a-uuid", payload)))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.onMessage(record("retail.shipment.stage-changed", UUID.randomUUID().toString(), "{oops")))
+                .isInstanceOf(NonRetryableEventException.class);
 
         assertThat(seen).hasSize(1);
         assertThat(seen.getFirst().reference()).isEqualTo("SHP-2610-GH01");

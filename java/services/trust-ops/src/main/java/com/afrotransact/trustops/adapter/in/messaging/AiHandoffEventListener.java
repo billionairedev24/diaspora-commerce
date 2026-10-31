@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.afrotransact.trustops.application.HandoffRequest;
 import com.afrotransact.trustops.application.SupportCaseService;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -48,16 +49,13 @@ class AiHandoffEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id", type, rec.topic(), rec.partition(),
-                    rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         HandoffMessage m;
         try {
             m = json.readValue(rec.value(), HandoffMessage.class);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         if (m == null || m.handoffId() == null) {
             LOG.warn("Skipping {} event {} without handoffId", type, eventId.get());

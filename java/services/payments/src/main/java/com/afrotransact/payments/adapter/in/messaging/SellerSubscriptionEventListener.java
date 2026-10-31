@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import com.afrotransact.payments.application.OrgPlanService;
 import com.afrotransact.payments.application.SubscriptionNotice;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
@@ -51,16 +52,13 @@ class SellerSubscriptionEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", type, rec.topic(),
-                    rec.partition(), rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         SubscriptionMessage m;
         try {
             m = json.readValue(rec.value(), SubscriptionMessage.class);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         if (m == null || m.orgId() == null || m.orgId().isBlank()) {
             LOG.warn("Skipping {} event {} without orgId", type, eventId.get());

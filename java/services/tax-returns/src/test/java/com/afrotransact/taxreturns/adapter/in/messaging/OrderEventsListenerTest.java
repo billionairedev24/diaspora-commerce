@@ -1,6 +1,7 @@
 package com.afrotransact.taxreturns.adapter.in.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -9,6 +10,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.NonRetryableEventException;
 import com.afrotransact.taxreturns.application.OrderIntakeService;
 import com.afrotransact.taxreturns.application.OrderPlaced;
 import com.afrotransact.taxreturns.domain.returns.PlacedOrder;
@@ -116,11 +118,14 @@ class OrderEventsListenerTest {
     }
 
     @Test
-    void skipsUnusableMessages() {
-        listener.onMessage(rec("at.order.events", "orders.order.placed", null, "{}"));
-        listener.onMessage(rec("at.order.events", "orders.order.placed", UUID.randomUUID().toString(), "nope"));
-        listener.onMessage(rec("at.order.events", "orders.order.placed", UUID.randomUUID().toString(),
-                "{\"orderId\":\"not-a-uuid\"}"));
+    void deadLettersUnreadableMessagesAndSkipsIncompleteOnes() {
+        assertThatThrownBy(() -> listener.onMessage(rec("at.order.events", "orders.order.placed", null, "{}")))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.onMessage(rec("at.order.events", "orders.order.placed", UUID.randomUUID().toString(), "nope")))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.onMessage(rec("at.order.events", "orders.order.placed", UUID.randomUUID().toString(),
+                "{\"orderId\":\"not-a-uuid\"}")))
+                .isInstanceOf(NonRetryableEventException.class);
         listener.onMessage(rec("at.order.events", "orders.order.placed", UUID.randomUUID().toString(),
                 "{\"orderId\":\"" + UUID.randomUUID() + "\"}"));
         listener.onMessage(rec("at.order.events", "orders.shipment.delivered", UUID.randomUUID().toString(),
