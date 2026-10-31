@@ -1,9 +1,13 @@
-# Plans, trials, credits and rewards: ours; charges: Stripe Billing
+# Plans, trials, credits and rewards, and our own billing
 
 AfroTransact owns the seller and provider **plan catalogue, trials, credits and rewards**, with its own screens (staff
-console › Plans & billing, Seller Center › Plan & billing). Stripe Billing still **executes the charges**: automatic
-collection, Smart Retries, invoices and their PDFs, card updates and 3DS. Nobody manages plans in the Stripe
-Dashboard; the seller service creates and maintains the Stripe objects it needs.
+console › Plans & billing, Seller Center › Plan & billing), and bills plans with **its own invoices**. Stripe Billing is
+removed. Upgrades prorate immediately; downgrades and cadence changes apply at renewal. Invoices are listed and
+printable (HTML printed to PDF by the browser). FBA storage, ads spend and AI credits are metered into invoice lines.
+Collection runs credit, then earnings opt-in, then card, with retry and dunning.
+
+> Parts of this guide below still describe the earlier Stripe Billing design (Stripe sync, Prices, `invoice.created`
+> timing). Where they conflict with the paragraph above, the own-billing design wins; they are being rewritten.
 
 Plan fees are only part of what sellers and providers pay: payments also takes a configurable **commission** on
 product sales and a **connection fee** on service bookings, whose rates can depend on the plan (plan rates in the fee
