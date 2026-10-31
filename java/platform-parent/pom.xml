@@ -23,6 +23,11 @@
         <java.version>25</java.version>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- S268 reproducible jars: every entry timestamp and the manifest are fixed to this instant, so two builds of the
+             same commit give byte-identical jars (tools/ci/reproducible-build-check.sh). Release builds may pass the commit
+             time instead: ./mvnw -Dproject.build.outputTimestamp=<commit time, ISO 8601>. Spring Boot's parent
+             sets 1980-02-01; this value replaces it for every module. -->
+        <project.build.outputTimestamp>2026-01-01T00:00:00Z</project.build.outputTimestamp>
 
         <spring-ai.version>2.0.2</spring-ai.version>
         <springdoc.version>3.1.1</springdoc.version>
@@ -35,6 +40,8 @@
         <jackson-bom.version>3.1.8</jackson-bom.version>
         <jackson-2-bom.version>2.21.8</jackson-2-bom.version>
         <lz4-java.version>1.12.1</lz4-java.version>
+        <!-- S268: json-smart (via spring-boot-starter-oauth2-resource-server / nimbus) must be >= 2.5.2 (CVE-2024-57699). -->
+        <json-smart.version>2.6.0</json-smart.version>
         <!-- Security: Tomcat 11.0.24 (Boot 4.1.1 BOM) has CRITICAL CVE-2026-65182/65905/68525. -->
         <tomcat.version>11.0.25</tomcat.version>
 
@@ -107,6 +114,11 @@
                 <groupId>at.yawk.lz4</groupId>
                 <artifactId>lz4-java</artifactId>
                 <version>${lz4-java.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>net.minidev</groupId>
+                <artifactId>json-smart</artifactId>
+                <version>${json-smart.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.resend</groupId>

@@ -9,6 +9,8 @@
 #     with ZGC. Services with real CPU load can override JAVA_TOOL_OPTIONS (drop -XX:TieredStopAtLevel=1) in their values file.
 #   - two dependency layers (jars that change rarely, then the application jar) so a code change re-pushes ~1-5 MB
 # CI can alternatively use Jib (./mvnw -pl services/<svc> jib:build); it keeps the same JVM flags but cannot slim the JRE.
+# S268: base images are pinned by digest (tools/security/pin-base-images.sh resolves and rewrites them; --check verifies).
+# eclipse-temurin:25-jdk is the one still unpinned: Docker Hub rate-limited the resolver when this was added; run the script once from CI/dev.
 FROM eclipse-temurin:25-jdk AS build
 ARG SERVICE
 WORKDIR /src
@@ -26,7 +28,7 @@ RUN set -eu; \
     jlink --add-modules "${found:+$found,}${base}" --strip-java-debug-attributes --no-man-pages --no-header-files \
           --compress=zip-6 --output /jre
 
-FROM gcr.io/distroless/cc-debian12:nonroot
+FROM gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f
 WORKDIR /app
 COPY --from=build /jre /opt/jre
 COPY --from=build /x/lib/ ./lib/

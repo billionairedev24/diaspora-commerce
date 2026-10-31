@@ -1,0 +1,35 @@
+# S268: two clean builds of the same commit must give byte-identical jars (project.build.outputTimestamp in
+# java/platform-parent/pom.xml). Non-blocking for now: the job reports but never fails the pull request.
+# Hand-written (tools/ci/gen_workflows.py generates only the per-service, web and promote workflows).
+name: reproducible-build
+
+on:
+  pull_request:
+    paths:
+      - java/platform-parent/pom.xml
+      - java/libs/**
+      - tools/ci/reproducible-build-check.sh
+      - .github/workflows/reproducible-build.yml
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reproducible:
+    name: same commit, same jar sha256
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          cache-dependency-path: |
+            java/**/pom.xml
+      - name: Build twice and compare
+        run: tools/ci/reproducible-build-check.sh libs/platform-web
