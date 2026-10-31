@@ -26,6 +26,7 @@ locals {
 
   # Customer storefront host: the apex (<base>) or www.<base>, one explicit setting (variables.tf).
   storefront_host = var.storefront_host == "www" ? "www.${local.base}" : local.base
+
   # The other name of the storefront, answered by a 301 to storefront_host (prod only, environment.tf).
   storefront_redirect_host = var.storefront_host == "www" ? local.base : "www.${var.zone_name}"
 
