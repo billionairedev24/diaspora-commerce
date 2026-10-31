@@ -7,6 +7,22 @@ variable "environment" {
   }
 }
 
+variable "storefront_host" {
+  description = <<-EOT
+    Canonical host of the customer storefront (docs/engineering/environments.md, "Storefront host rule"):
+      apex - <base> serves the storefront; in prod www.<zone> redirects (301) to it (the historic behaviour)
+      www  - www.<base> serves the storefront (DNS record, Workers route); in prod the apex redirects (301) to it
+    Every other app keeps its sub-domain. Keep it equal to global.storefrontHost of infra/argocd/envs/<env>/platform-values.yaml.
+    The redirect rule is a zone-wide ruleset, so only the prod run creates it.
+  EOT
+  type        = string
+  default     = "apex"
+  validation {
+    condition     = contains(["apex", "www"], var.storefront_host)
+    error_message = "storefront_host must be apex or www."
+  }
+}
+
 variable "account_id" {
   description = "Cloudflare account id."
   type        = string
