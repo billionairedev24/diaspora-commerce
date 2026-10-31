@@ -50,7 +50,7 @@ Android verified `https://<web host>/app` intent filter) use the host of `EXPO_P
 | `EXPO_PUBLIC_OIDC_ISSUER` | `http://localhost:8100` | `https://auth.dev.afrotransact.com` | `https://auth.uat.afrotransact.com` | `https://auth.afrotransact.com` |
 | `EXPO_PUBLIC_IDENTITY_URL` (devices, prefs) | `http://localhost:8100` | `https://api.dev.afrotransact.com/identity` | `…uat…/identity` | `https://api.afrotransact.com/identity` |
 | `EXPO_PUBLIC_BOOKINGS_URL` | `http://localhost:8109` | `https://api.dev.afrotransact.com/bookings` | `…uat…/bookings` | `https://api.afrotransact.com/bookings` |
-| `EXPO_PUBLIC_WEB_URL` (legal, help, account pages, share links, universal links) | `http://localhost:3000` | `https://dev.afrotransact.com` | `https://uat.afrotransact.com` | `https://afrotransact.com` |
+| `EXPO_PUBLIC_WEB_URL` (legal, help, account pages, share links, universal links) | `http://localhost:3000` | `https://dev.afrotransact.com` | `https://uat.afrotransact.com` | `https://www.afrotransact.com` |
 | `EXPO_PUBLIC_OIDC_CLIENT_ID` | `customer-app` | `customer-app` | `customer-app` | `customer-app` |
 | `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` | `pk_test_mock` | `pk_test_…` | `pk_test_…` | `pk_live_…` |
 | `EXPO_PUBLIC_STRIPE_MERCHANT_ID` | `merchant.com.afrotransact` | ← | ← | ← |

@@ -30,5 +30,18 @@ export function staffConsoleUrl(): string {
   return (env('STAFF_CONSOLE_URL') ?? 'http://localhost:3002').replace(/\/+$/, '');
 }
 
+/** The storefront's own canonical origin (PUBLIC_WEB_URL: https://www.<domain> in prod, the apex elsewhere; the host rule is
+    global.storefrontHost, docs/engineering/environments.md). Base of canonical URLs and Open Graph URLs; undefined when
+    unset or not an absolute URL (local runs), so relative metadata then resolves against the request. */
+export function publicWebUrl(): URL | undefined {
+  const raw = env('PUBLIC_WEB_URL');
+  if (raw === undefined) return undefined;
+  try {
+    return new URL(raw);
+  } catch {
+    return undefined;
+  }
+}
+
 /** Path the browser uses for every BFF call (same origin; the route handler proxies or mocks). */
 export const BFF_BASE_PATH = '/api/bff';

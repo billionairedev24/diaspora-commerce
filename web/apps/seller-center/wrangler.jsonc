@@ -17,6 +17,6 @@
       "vars": { "API_MOCKS": "1", "BFF_ORIGIN": "", "PUBLIC_WEB_URL": "https://dev.afrotransact.com" }
     },
     "uat": { "name": "seller-center-uat", "vars": {"BFF_ORIGIN": "https://api.uat.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://uat.afrotransact.com"} },
-    "prod": { "name": "seller-center-prod", "vars": {"BFF_ORIGIN": "https://api.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://afrotransact.com"} }
+    "prod": { "name": "seller-center-prod", "vars": {"BFF_ORIGIN": "https://api.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://www.afrotransact.com"} }
   }
 }

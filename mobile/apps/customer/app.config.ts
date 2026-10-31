@@ -14,7 +14,10 @@ if (DEPLOYED) {
 }
 
 /* Universal links (iOS) / verified app links (Android) on the environment's storefront: https://<web host>/app/….
-   The storefront serves apple-app-site-association and assetlinks.json for it. Local builds have none. */
+   The storefront serves apple-app-site-association and assetlinks.json for it. Local builds have none.
+   The host is the canonical storefront host (storefront host rule): www.afrotransact.com in prod, so the associated-domains
+   entitlement (applinks:www.afrotransact.com) and both association files must be served at www; the apex 301-redirects
+   to www and does not need (and must not rely on) its own association files. */
 const WEB_HOST = DEPLOYED ? new URL(process.env.EXPO_PUBLIC_WEB_URL ?? '').host : undefined;
 const SUFFIX = APP_ENV === 'prod' ? '' : `.${APP_ENV}`;
 /** Must match identity's customer-app client: com.afrotransact.customer:/oauth2redirect. */

@@ -16,6 +16,7 @@ import { MaintenanceScreen } from '@/components/shell/MaintenanceScreen';
 import { SignInPending } from '@/components/shell/SignInPending';
 import { messagesFor } from '@/i18n/catalogs';
 import { getLocale, getT } from '@/i18n/server';
+import { publicWebUrl } from '@/lib/config';
 import { CONSENT_COOKIE, headerGpc, parseConsent } from '@/lib/consent/consent';
 import { ConsentGate } from '@/lib/consent/ConsentProvider';
 import { maintenanceNow } from '@/lib/maintenance';
@@ -26,6 +27,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: { default: t('meta.title'), template: '%s · AfroTransact' },
     description: t('meta.description'),
+    metadataBase: publicWebUrl(),
     applicationName: 'AfroTransact',
     icons: { icon: '/logo-mark.svg' },
     openGraph: { siteName: 'AfroTransact', type: 'website' }
