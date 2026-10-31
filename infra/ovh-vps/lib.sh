@@ -14,7 +14,8 @@ die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 load_config() {
   [[ -f "$HERE/config.env" ]] || die "create $HERE/config.env from config.env.example"
   set -a; . "$HERE/config.env"; [[ -f "$HERE/secrets.local.env" ]] && . "$HERE/secrets.local.env"; set +a
-  : "${DOMAIN:?}" "${IMAGE_REGISTRY:?}" "${IMAGE_TAG:?}" "${DB_MODE:=cluster}"
+  : "${DOMAIN:?}" "${IMAGE_REGISTRY:?}" "${IMAGE_TAG:?}" "${DB_MODE:=cluster}" "${STOREFRONT_HOST:=www}"
+  case "$STOREFRONT_HOST" in www|apex) ;; *) die "STOREFRONT_HOST must be www or apex" ;; esac
   [[ "$IMAGE_TAG" =~ ^[0-9a-f]{40}$ ]] || die "IMAGE_TAG must be the full 40-character git sha the CI built"
   case "$DB_MODE" in cluster|external) ;; *) die "DB_MODE must be cluster or external" ;; esac
   if [[ "$DB_MODE" == external ]]; then

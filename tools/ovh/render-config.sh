@@ -12,6 +12,8 @@ kv() { printf '%s=%q\n' "$1" "${2-}"; }
 
 {
   kv DOMAIN "${OVH_DOMAIN:?OVH_DOMAIN (variable) is missing}"
+  # Storefront host rule (docs/engineering/environments.md): www = https://www.<domain>, apex = https://<domain>.
+  kv STOREFRONT_HOST "${OVH_STOREFRONT_HOST:-www}"
   kv ACME_EMAIL "${ACME_EMAIL:?ACME_EMAIL (variable) is missing}"
   kv IMAGE_REGISTRY "${IMAGE_REGISTRY:?}"
   kv IMAGE_TAG "${IMAGE_TAG:?}"
