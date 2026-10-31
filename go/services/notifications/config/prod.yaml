@@ -62,7 +62,7 @@ attachments:
   timeout: 10s
 # Shared PUBLIC_WEB_URL / SELLER_CENTER_URL (Helm library); Provider Hub is the Seller Center app.
 links:
-  storefront: https://afrotransact.com
+  storefront: https://www.afrotransact.com
   sellerCenter: https://seller.afrotransact.com
 auth:
   enabled: true

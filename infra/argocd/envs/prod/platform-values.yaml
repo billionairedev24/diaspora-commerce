@@ -17,6 +17,9 @@ image:
 # (docs/engineering/environments.md). global.urls overrides one derived value env-wide; a service's extraEnv wins.
 global:
   domain: afrotransact.com
+  # The customer storefront lives at https://www.afrotransact.com; the apex 301-redirects to it at the Cloudflare edge
+  # (infra/cloudflare storefront_host = "www"). Every other app keeps its sub-domain. PUBLIC_WEB_URL = https://www.<domain>.
+  storefrontHost: www
   # urls:
   #   MEDIA_PUBLIC_URL: https://cdn.example.net
 
