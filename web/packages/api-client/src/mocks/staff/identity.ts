@@ -87,7 +87,7 @@ export function seedIdentityAdmin(now: Date): Record<'oauth-clients' | 'identity
     activity: []
   });
   const clients: MockRecord[] = [
-    client('gateway-bff', 'Gateway BFF', 'confidential', ['authorization_code', 'client_credentials', 'refresh_token'], ['openid', 'profile', 'email', 'phone', 'offline_access'], ['https://app.afrotransact.com/api/bff/v1/auth/callback'], { platformClient: true }),
+    client('gateway-bff', 'Gateway BFF', 'confidential', ['authorization_code', 'client_credentials', 'refresh_token'], ['openid', 'profile', 'email', 'phone', 'offline_access'], ['https://app.example.test/api/bff/v1/auth/callback'], { platformClient: true }),
     client('customer-app', 'Customer app', 'public', ['authorization_code', 'refresh_token'], ['openid', 'profile', 'email', 'phone', 'offline_access'], ['afrotransact://auth/callback']),
     client('driver-app', 'Driver app', 'public', ['authorization_code', 'refresh_token'], ['openid', 'profile', 'offline_access'], ['afrotransact-driver://auth/callback']),
     client('inventory-service', 'Inventory service account', 'confidential', ['client_credentials'], ['inventory.read', 'inventory.write'], [], { secretRotatedAt: ago(40 * DAY) }),
@@ -456,7 +456,7 @@ export const IDENTITY_RESOURCES = { 'oauth-clients': clientDef, 'identity-sessio
 /* ── token inspector and documents ── */
 
 const b64 = (s: string) => atob(s.replace(/-/g, '+').replace(/_/g, '/'));
-const ISSUER = 'https://id.afrotransact.com';
+const ISSUER = 'https://id.example.test';
 /** The mock accepts a token whose signature part is exactly this text as validly signed (the demo token below has it). */
 export const MOCK_VALID_SIGNATURE = 'bW9jay1zaWduYXR1cmU';
 

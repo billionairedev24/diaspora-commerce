@@ -171,18 +171,18 @@ describe('Identity & access mocks (every answer is parsed by the Zod client)', (
   it('inspects a token without echoing it, and reports what is wrong with a bad one', async () => {
     const api = client();
     const exp = Math.floor(Date.now() / 1000) + 300;
-    const good = jwt({ alg: 'RS256', kid: 'k20260915T090000-3fa1' }, { iss: 'https://id.afrotransact.com', sub: 'user-1', scope: 'openid profile', exp, iat: exp - 300 });
+    const good = jwt({ alg: 'RS256', kid: 'k20260915T090000-3fa1' }, { iss: 'https://id.example.test', sub: 'user-1', scope: 'openid profile', exp, iat: exp - 300 });
     const ok = await api.inspectIdentityToken(good);
     expect(ok).toMatchObject({ wellFormed: true, signatureValid: true, issuerValid: true, valid: true, expired: false, keyId: 'k20260915T090000-3fa1' });
     expect(ok.scopes).toEqual(['openid', 'profile']);
     expect(JSON.stringify(ok)).not.toContain(good);
 
-    const expired = await api.inspectIdentityToken(jwt({ alg: 'RS256', kid: 'k20260915T090000-3fa1' }, { iss: 'https://id.afrotransact.com', exp: exp - 3600 }));
+    const expired = await api.inspectIdentityToken(jwt({ alg: 'RS256', kid: 'k20260915T090000-3fa1' }, { iss: 'https://id.example.test', exp: exp - 3600 }));
     expect(expired.valid).toBe(false);
     expect(expired.expired).toBe(true);
-    const forged = await api.inspectIdentityToken(jwt({ alg: 'RS256', kid: 'k20260915T090000-3fa1' }, { iss: 'https://id.afrotransact.com', exp }, 'forged'));
+    const forged = await api.inspectIdentityToken(jwt({ alg: 'RS256', kid: 'k20260915T090000-3fa1' }, { iss: 'https://id.example.test', exp }, 'forged'));
     expect(forged.signatureValid).toBe(false);
-    const retired = await api.inspectIdentityToken(jwt({ alg: 'RS256', kid: 'identity-1' }, { iss: 'https://id.afrotransact.com', exp }));
+    const retired = await api.inspectIdentityToken(jwt({ alg: 'RS256', kid: 'identity-1' }, { iss: 'https://id.example.test', exp }));
     expect(retired.problems.join(' ')).toMatch(/No published key has the id identity-1/);
     const opaque = await api.inspectIdentityToken('opaque-refresh-token');
     expect(opaque.wellFormed).toBe(false);

@@ -93,7 +93,7 @@ describe('Developer tools › Identity & access (S291)', () => {
     nav.set('/identity?tab=inspector');
     await renderScreen(<IdentityAdminView />);
     const exp = Math.floor(Date.now() / 1000) + 300;
-    const good = `${b64({ alg: 'RS256', kid: 'k20260915T090000-3fa1' })}.${b64({ iss: 'https://id.afrotransact.com', sub: 'user-1', scope: 'openid profile', exp })}.${MOCK_VALID_SIGNATURE}`;
+    const good = `${b64({ alg: 'RS256', kid: 'k20260915T090000-3fa1' })}.${b64({ iss: 'https://id.example.test', sub: 'user-1', scope: 'openid profile', exp })}.${MOCK_VALID_SIGNATURE}`;
     const box = await screen.findByLabelText('Token (JWT)');
     await user.click(box);
     await user.paste(good);
