@@ -48,10 +48,10 @@ and tick; "who" is the role that signs it off. Anything marked **blocker** must 
 - [ ] Documented exceptions are reviewed: the `node-forge` advisory in the Expo dev tool (no upstream fix; dev tooling only).
 - [ ] Images are built reproducibly, signed, and carry an SBOM; the cluster admits signed images only.
 - [ ] TLS everywhere; HSTS on; Cloudflare in front with Authenticated Origin Pulls; the origin is not reachable directly.
-- [ ] **Storefront host rule (prod):** the storefront is `https://www.afrotransact.com`; every other app keeps its sub-domain.
+- [ ] **Storefront host rule:** the storefront is `https://www.<base>` in every environment (prod `https://www.afrotransact.com`, dev and uat `www.dev.` / `www.uat.afrotransact.com`); every other app keeps its sub-domain. The checks below are written for prod; dev and uat are the same with their base.
   - DNS: `www` is a proxied record served by the `storefront-prod` Worker route `www.afrotransact.com/*`; the apex
     `afrotransact.com` is a proxied placeholder (`AAAA 100::`) with no origin and no Worker route, answered by the dynamic
-    redirect rule "apex to www" (301, `https://www.afrotransact.com` + path, query kept). Both are created by `infra/cloudflare`
+    redirect rule "apex to www" (one rule per environment, `afrotransact.com`, `dev.afrotransact.com`, `uat.afrotransact.com`; 301, `https://www.afrotransact.com` + path, query kept). Both are created by `infra/cloudflare`
     with `storefront_host = "www"`. Check: `curl -sI "https://afrotransact.com/p/x?a=1"` returns `301` with
     `location: https://www.afrotransact.com/p/x?a=1`; no A/CNAME record of the old setup is left on the apex or on `www`.
   - Certificates: Universal SSL covers `afrotransact.com` and `*.afrotransact.com` (apex, `www`, `seller`, `admin`, `api`, ...); nothing extra for `www`.

@@ -9,8 +9,11 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   "observability": { "enabled": true },
+  // The storefront is www.<base> in every environment (storefront host rule); the base itself 301-redirects to it at the
+  // edge (infra/cloudflare), so no route is bound to it here.
+  "routes": [{ "pattern": "www.dev.afrotransact.com/*", "zone_name": "afrotransact.com" }],
   "vars": {
-    "PUBLIC_WEB_URL": "https://dev.afrotransact.com",
+    "PUBLIC_WEB_URL": "https://www.dev.afrotransact.com",
     "BFF_ORIGIN": "https://api.dev.afrotransact.com/bff",
     "SELLER_CENTER_URL": "https://seller.dev.afrotransact.com",
     "STAFF_CONSOLE_URL": "https://admin.dev.afrotransact.com",
@@ -20,16 +23,16 @@
     // PR previews: a version of storefront-dev on the in-process mock BFF.
     "preview": {
       "name": "storefront-dev",
-      "vars": { "API_MOCKS": "1", "PUBLIC_WEB_URL": "https://dev.afrotransact.com", "BFF_ORIGIN": "", "SELLER_CENTER_URL": "https://seller.dev.afrotransact.com", "STAFF_CONSOLE_URL": "https://admin.dev.afrotransact.com" }
+      "vars": { "API_MOCKS": "1", "PUBLIC_WEB_URL": "https://www.dev.afrotransact.com", "BFF_ORIGIN": "", "SELLER_CENTER_URL": "https://seller.dev.afrotransact.com", "STAFF_CONSOLE_URL": "https://admin.dev.afrotransact.com" }
     },
     "uat": {
       "name": "storefront-uat",
-      "vars": { "API_MOCKS": "0", "PUBLIC_WEB_URL": "https://uat.afrotransact.com", "BFF_ORIGIN": "https://api.uat.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller.uat.afrotransact.com", "STAFF_CONSOLE_URL": "https://admin.uat.afrotransact.com" }
+      "routes": [{ "pattern": "www.uat.afrotransact.com/*", "zone_name": "afrotransact.com" }],
+      "vars": { "API_MOCKS": "0", "PUBLIC_WEB_URL": "https://www.uat.afrotransact.com", "BFF_ORIGIN": "https://api.uat.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller.uat.afrotransact.com", "STAFF_CONSOLE_URL": "https://admin.uat.afrotransact.com" }
     },
     "prod": {
       "name": "storefront-prod",
-      // The prod storefront is www.afrotransact.com (same zone route as infra/cloudflare, storefront_host = "www").
-      // The apex has no route here: it is 301-redirected to www at the edge (Cloudflare redirect rule), path and query kept.
+      // Prod: www.afrotransact.com; the apex is 301-redirected to www at the edge (Cloudflare redirect rule), path and query kept.
       "routes": [{ "pattern": "www.afrotransact.com/*", "zone_name": "afrotransact.com" }],
       "vars": { "API_MOCKS": "0", "PUBLIC_WEB_URL": "https://www.afrotransact.com", "BFF_ORIGIN": "https://api.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller.afrotransact.com", "STAFF_CONSOLE_URL": "https://admin.afrotransact.com" }
     }

@@ -26,8 +26,8 @@ Always allowed (identifiers, not environment hosts):
   - the documented exceptions in EXCEPTIONS below
 
 Every host must also be a real public host (KNOWN_LABELS): <base>, seller., admin., api., auth., media.,
-developers., mcp., grafana., mail., and www. in prod only (www.<zone> is the prod STOREFRONT host; the bare apex only
-redirects to it, so a URL https://<zone> is a violation: storefront host rule, docs/engineering/environments.md); staff., sell., provider., www.dev. ... fail anywhere.
+developers., mcp., grafana., mail., and www. (the STOREFRONT host of every environment, www.dev.<zone> included; the bare
+base only redirects to it, so a URL https://<base> is a violation: storefront host rule, docs/engineering/environments.md); staff., sell., provider. ... fail anywhere.
 
 Tests and fixtures are skipped (src/test/, *_test.go, *.test.*, *.spec.*, __tests__/, e2e/, tests/, testdata/,
 fixtures/), as are generated clients (*/generated/*) and build output.
@@ -106,11 +106,12 @@ class Violation:
 
 
 # Public host names per environment: <label>.<base> where <base> is dev.<zone>, uat.<zone> or <zone> (prod).
-# infra/cloudflare local.hosts: "" (storefront), seller, admin (staff console), api, auth, media; www is prod only.
+# infra/cloudflare local.hosts: www (storefront, every environment; the bare base only redirects), seller, admin (staff
+# console), api, auth, media.
 # Also in use: developers (docs portal), mcp (mcp-server), grafana, mail (email sending domain). Anything else
-# (staff., sell., provider., identity., www.dev., ...) is not served by the edge.
-KNOWN_LABELS = {"", "seller", "admin", "api", "auth", "media", "developers", "mcp", "grafana", "mail", "*"}
-PROD_ONLY_LABELS = {"www"}
+# (staff., sell., provider., identity., ...) is not served by the edge.
+KNOWN_LABELS = {"", "www", "seller", "admin", "api", "auth", "media", "developers", "mcp", "grafana", "mail", "*"}
+PROD_ONLY_LABELS: set[str] = set()
 
 
 def host_label(host: str) -> str:
@@ -206,15 +207,15 @@ def scan_file(path: Path, rel: str, cls: str) -> list[Violation]:
             if host.startswith("errors."):
                 out.append(Violation(rel, no, host, "non-canonical RFC 9457 problem type base: use "
                                      f"{PROBLEM_TYPE_PREFIX}<code> (go/pkg/problem.TypeURI, ProblemTypes.of)"))
-            elif host == ZONE and before_is_url(line, m.start()):
-                out.append(Violation(rel, no, host, "the prod storefront is https://www." + ZONE + " (storefront host rule: "
-                                     "global.storefrontHost = www, docs/engineering/environments.md); the apex only 301-"
-                                     "redirects to it, so no config may name https://" + ZONE + " as a URL"))
+            elif host_label(host) == "" and before_is_url(line, m.start()):
+                out.append(Violation(rel, no, host, "the storefront is www.<base> in every environment (storefront host "
+                                     "rule: global.storefrontHost = www, docs/engineering/environments.md); the base domain "
+                                     "only 301-redirects to it, so no config may name https://<base> as a URL"))
             elif host_label(host) not in KNOWN_LABELS and not (
                     host_label(host) in PROD_ONLY_LABELS and env == "prod"):
                 out.append(Violation(rel, no, host, "not a public host of the platform (see infra/cloudflare "
                                      "local.hosts and docs/engineering/environments.md: <base>, seller., admin., "
-                                     "api., auth., media.; www. in prod only)"))
+                                     "api., auth., media., www.)"))
             elif cls == "multi":
                 continue
             elif cls == "neutral":

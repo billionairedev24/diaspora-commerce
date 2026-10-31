@@ -16,7 +16,7 @@
       "env": {
         "EXPO_PUBLIC_APP_ENV": "dev",
         "EXPO_PUBLIC_MOCKS": "0",
-        "EXPO_PUBLIC_WEB_URL": "https://dev.afrotransact.com",
+        "EXPO_PUBLIC_WEB_URL": "https://www.dev.afrotransact.com",
         "EXPO_PUBLIC_BFF_URL": "https://api.dev.afrotransact.com/bff",
         "EXPO_PUBLIC_OIDC_ISSUER": "https://auth.dev.afrotransact.com",
         "EXPO_PUBLIC_IDENTITY_URL": "https://api.dev.afrotransact.com/identity",
@@ -52,7 +52,7 @@
       "env": {
         "EXPO_PUBLIC_APP_ENV": "uat",
         "EXPO_PUBLIC_MOCKS": "0",
-        "EXPO_PUBLIC_WEB_URL": "https://uat.afrotransact.com",
+        "EXPO_PUBLIC_WEB_URL": "https://www.uat.afrotransact.com",
         "EXPO_PUBLIC_BFF_URL": "https://api.uat.afrotransact.com/bff",
         "EXPO_PUBLIC_OIDC_ISSUER": "https://auth.uat.afrotransact.com",
         "EXPO_PUBLIC_IDENTITY_URL": "https://api.uat.afrotransact.com/identity",

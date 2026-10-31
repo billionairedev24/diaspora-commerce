@@ -10,17 +10,23 @@ variable "environment" {
 variable "storefront_host" {
   description = <<-EOT
     Canonical host of the customer storefront (docs/engineering/environments.md, "Storefront host rule"):
-      apex - <base> serves the storefront; in prod www.<zone> redirects (301) to it (the historic behaviour)
-      www  - www.<base> serves the storefront (DNS record, Workers route); in prod the apex redirects (301) to it
+      www  - www.<base> serves the storefront (DNS record, Workers route) in every environment; <base> gets a proxied
+             placeholder record and a 301 to www.<base> (the zone-wide redirect ruleset, owned by the manage_zone run)
+      apex - explicit opt-out: <base> serves the storefront and nothing redirects
     Every other app keeps its sub-domain. Keep it equal to global.storefrontHost of infra/argocd/envs/<env>/platform-values.yaml.
-    The redirect rule is a zone-wide ruleset, so only the prod run creates it.
   EOT
   type        = string
-  default     = "apex"
+  default     = "www"
   validation {
-    condition     = contains(["apex", "www"], var.storefront_host)
-    error_message = "storefront_host must be apex or www."
+    condition     = contains(["www", "apex"], var.storefront_host)
+    error_message = "storefront_host must be www or apex."
   }
+}
+
+variable "apex_redirect_environments" {
+  description = "Environments whose base domain (<zone>, dev.<zone>, uat.<zone>) 301-redirects to www.<base>. The redirect ruleset is zone-wide (one per zone and phase), so the manage_zone run owns the rules of all of them; drop an environment here when it sets storefront_host = apex."
+  type        = list(string)
+  default     = ["dev", "uat", "prod"]
 }
 
 variable "account_id" {

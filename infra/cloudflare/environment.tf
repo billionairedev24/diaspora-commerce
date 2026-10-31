@@ -14,23 +14,30 @@ resource "cloudflare_dns_record" "web" {
   tags     = local.tags
 }
 
-# The non-canonical storefront host: a proxied placeholder so the redirect rule below answers. Prod only (the
-# redirect ruleset is zone-wide). storefront_host = www: the apex; storefront_host = apex: www.<zone>.
+# The base domain is not a second storefront: a proxied placeholder so the redirect rule (zone.tf) answers it with a 301 to
+# www.<base>. Nothing is served from it, the IP is never contacted.
 resource "cloudflare_dns_record" "storefront_redirect" {
-  count   = var.environment == "prod" ? 1 : 0
+  count   = var.storefront_host == "www" ? 1 : 0
   zone_id = local.zone_id
-  name    = local.storefront_redirect_host
+  name    = local.base
   type    = "AAAA"
   content = "100::"
   proxied = true
   ttl     = 1
-  comment = "${local.storefront_redirect_host} -> 301 to https://${local.storefront_host} (redirect rule)"
+  comment = "${local.base} -> 301 to https://${local.storefront_host} (redirect rule)"
   tags    = local.tags
 }
 
+# State moves from before the host rule (the storefront was the base domain, prod also had a "www" redirect record): the
+# existing apex record becomes the redirect placeholder and prod's www record becomes the storefront's own record.
 moved {
-  from = cloudflare_dns_record.www
-  to   = cloudflare_dns_record.storefront_redirect
+  from = cloudflare_dns_record.web["storefront"]
+  to   = cloudflare_dns_record.storefront_redirect[0]
+}
+
+moved {
+  from = cloudflare_dns_record.www[0]
+  to   = cloudflare_dns_record.web["storefront"]
 }
 
 # Worker scripts are uploaded by .github/workflows/_web-app.yml (wrangler deploy --name <app>-<env>).
@@ -39,37 +46,6 @@ resource "cloudflare_workers_route" "web" {
   zone_id  = local.zone_id
   pattern  = "${local.hosts[each.key]}/*"
   script   = "${each.key}-${var.environment}"
-}
-
-# There is exactly one storefront host. The other one (the apex when storefront_host = www, www.<zone> when apex)
-# is not a second storefront: it redirects (301) to the canonical host, keeping path and query, so the BFF's origin
-# checks, CSRF and OAuth callbacks only ever see the canonical host.
-resource "cloudflare_ruleset" "storefront_redirect" {
-  count   = var.environment == "prod" ? 1 : 0
-  zone_id = local.zone_id
-  name    = var.storefront_host == "www" ? "apex to www" : "www to apex"
-  kind    = "zone"
-  phase   = "http_request_dynamic_redirect"
-  rules = [{
-    description = "${local.storefront_redirect_host} -> ${local.storefront_host}"
-    expression  = "(http.host eq \"${local.storefront_redirect_host}\")"
-    action      = "redirect"
-    enabled     = true
-    action_parameters = {
-      from_value = {
-        status_code           = 301
-        preserve_query_string = true
-        target_url = {
-          expression = "concat(\"https://${local.storefront_host}\", http.request.uri.path)"
-        }
-      }
-    }
-  }]
-}
-
-moved {
-  from = cloudflare_ruleset.www_redirect
-  to   = cloudflare_ruleset.storefront_redirect
 }
 
 # ------------------------------------------------------------------------------ API origins
