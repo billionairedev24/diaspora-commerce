@@ -1,6 +1,7 @@
 package com.afrotransact.payments.adapter.in.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -13,6 +14,7 @@ import java.util.UUID;
 
 import com.afrotransact.payments.application.OrgPlanService;
 import com.afrotransact.payments.application.SubscriptionNotice;
+import com.afrotransact.platform.events.consumer.NonRetryableEventException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -68,8 +70,10 @@ class SellerSubscriptionEventListenerTest {
     @Test
     void ignoresOtherEventsAndUnusableMessages() {
         listener.onMessage(rec("seller.billing.grant_applied", UUID.randomUUID().toString(), "{\"orgId\":\"org_a\"}"));
-        listener.onMessage(rec("seller.subscription.changed", null, "{\"orgId\":\"org_a\"}"));
-        listener.onMessage(rec("seller.subscription.changed", UUID.randomUUID().toString(), "[1,2"));
+        assertThatThrownBy(() -> listener.onMessage(rec("seller.subscription.changed", null, "{\"orgId\":\"org_a\"}")))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.onMessage(rec("seller.subscription.changed", UUID.randomUUID().toString(), "[1,2")))
+                .isInstanceOf(NonRetryableEventException.class);
         listener.onMessage(rec("seller.subscription.changed", UUID.randomUUID().toString(), "{\"planCode\":\"x\"}"));
         assertThat(notices).isEmpty();
     }

@@ -1,6 +1,7 @@
 package com.afrotransact.payments.adapter.in.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -9,6 +10,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.afrotransact.payments.application.ReferralProgram;
+import com.afrotransact.platform.events.consumer.NonRetryableEventException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -73,7 +75,8 @@ class ReferralEventListenerTest {
     @Test
     void otherIdentityEventsAndMalformedMessagesAreIgnored() {
         listener.onIdentity(rec("at.identity.events", "identity.user.email-verified", "{\"userId\":\"u-1\"}"));
-        listener.onIdentity(rec("at.identity.events", "identity.user.registered", "not json"));
+        assertThatThrownBy(() -> listener.onIdentity(rec("at.identity.events", "identity.user.registered", "not json")))
+                .isInstanceOf(NonRetryableEventException.class);
         listener.onIdentity(rec("at.identity.events", "identity.user.registered", "{\"email\":\"x@example.com\"}"));
         assertThat(signUps).isEmpty();
     }

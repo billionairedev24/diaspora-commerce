@@ -2,8 +2,6 @@ package com.afrotransact.payments.adapter.in.messaging;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
 
 import com.afrotransact.payments.application.ReferralProgram;
 import com.afrotransact.platform.events.consumer.MalformedEvent;
@@ -112,11 +110,10 @@ class ReferralEventListener {
     }
 
     private <T> T read(ConsumerRecord<String, String> rec, Class<T> type) {
-        Optional<UUID> eventId = EventHeaders.eventId(rec);
         try {
             return json.readValue(rec.value(), type);
         } catch (JacksonException | IllegalArgumentException ex) {
-            throw MalformedEvent.of("referral", ex);
+            throw MalformedEvent.of(EventHeaders.text(rec, EventHeaders.EVENT_TYPE).orElse("referral"), ex);
         }
     }
 }

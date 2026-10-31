@@ -1,6 +1,7 @@
 package com.afrotransact.payments.adapter.in.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -10,6 +11,7 @@ import java.util.UUID;
 
 import com.afrotransact.payments.application.EnforcementNotice;
 import com.afrotransact.payments.application.SellerEnforcementService;
+import com.afrotransact.platform.events.consumer.NonRetryableEventException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -66,8 +68,10 @@ class SellerComplianceEventListenerTest {
     void ignoresOtherEventsAndUnusableMessages() {
         listener.onMessage(rec("seller.listings.hidden", UUID.randomUUID().toString(), "{\"orgId\":\"org_a\"}"));
         listener.onMessage(rec("seller.compliance.changed", UUID.randomUUID().toString(), "{\"orgId\":\"org_a\"}"));
-        listener.onMessage(rec("seller.payouts.paused", null, "{\"orgId\":\"org_a\"}"));
-        listener.onMessage(rec("seller.payouts.paused", UUID.randomUUID().toString(), "[1,2"));
+        assertThatThrownBy(() -> listener.onMessage(rec("seller.payouts.paused", null, "{\"orgId\":\"org_a\"}")))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.onMessage(rec("seller.payouts.paused", UUID.randomUUID().toString(), "[1,2")))
+                .isInstanceOf(NonRetryableEventException.class);
         listener.onMessage(rec("seller.payouts.paused", UUID.randomUUID().toString(), "{\"reason\":\"MANUAL\"}"));
         assertThat(calls).isEmpty();
     }

@@ -1,6 +1,7 @@
 package com.afrotransact.payments.adapter.in.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -13,6 +14,7 @@ import com.afrotransact.payments.application.SupplierPaymentNotice;
 import com.afrotransact.payments.application.SupplierPaymentService;
 import com.afrotransact.payments.domain.SupplierPayment;
 import com.afrotransact.payments.domain.SupplierPaymentStatus;
+import com.afrotransact.platform.events.consumer.NonRetryableEventException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -84,8 +86,10 @@ class RetailEventListenerTest {
     @Test
     void ignoresOtherEventsMissingIdsAndMalformedPayloads() {
         listener.onMessage(rec("retail.purchase_order.sent", UUID.randomUUID().toString(), "{}"));
-        listener.onMessage(rec("retail.payment.released", null, "{}"));
-        listener.onMessage(rec("retail.payment.released", UUID.randomUUID().toString(), "not json"));
+        assertThatThrownBy(() -> listener.onMessage(rec("retail.payment.released", null, "{}")))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.onMessage(rec("retail.payment.released", UUID.randomUUID().toString(), "not json")))
+                .isInstanceOf(NonRetryableEventException.class);
         assertThat(released).isEmpty();
     }
 
