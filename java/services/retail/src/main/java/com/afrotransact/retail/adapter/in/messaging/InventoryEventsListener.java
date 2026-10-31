@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -44,7 +45,11 @@ class InventoryEventsListener {
             return;
         }
         UUID eventId = eventId(record, type);
-        handle(eventId, record.value());
+        try {
+            handle(eventId, record.value());
+        } catch (JacksonException | IllegalArgumentException ex) {
+            throw MalformedEvent.of(type, ex);
+        }
     }
 
     /** Parses an {@code inventory.reservation.committed} payload and posts COGS. */
