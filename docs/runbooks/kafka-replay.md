@@ -31,9 +31,16 @@ The partition never stays blocked on a poison record: after the DLQ write succee
   `events_dead_letter_failures_total{consumer,topic}`. `consumer` is the Kafka group id. Logs: WARN
   `Event dead-lettered: consumer=... topic=... partition=... offset=... dlqTopic=... reason=... attempts=... exception=...`
   (no payload).
-* **Known gap:** 37 Java listener classes catch malformed input themselves (`catch (JacksonException ...)`), log `Skipping malformed ...` at WARN and return.
-  Those events are *not* dead-lettered and cannot be replayed from a DLQ; search the service log for `Skipping`. Converting
-  them to throw `NonRetryableEventException` is the follow-up.
+* **Unreadable records are dead-lettered, not skipped.** Every Java listener throws `NonRetryableEventException`
+  (built by `MalformedEvent` in platform-events) for a payload that does not parse, and for a record without a valid
+  `event-id` header when the listener de-duplicates by it (inbox). Rule: *a record the listener cannot read, or cannot
+  de-duplicate, is malformed, so it goes to the DLQ at once; one it can read but chooses not to handle is ignored.* Kept as
+  deliberate ignores (no DLQ, no log): event types the listener does not handle (checked before anything else), and
+  listeners that do not use the inbox and so do not need an id (catalog `OfferStockEventListener`, delivery-runs
+  `PaymentEventsListener`, payments `ReferralEventListener`, which are idempotent by construction). **Remaining gap:** a payload that
+  parses but lacks a required business field (for example `orgId`) is still skipped with a WARN `Skipping ... without ...`; those
+  are not in a DLQ. Search the service log for `Skipping`. The DLQ exception message names the event type and, for a missing id,
+  `topic-partition@offset`; parse errors never quote the payload.
 
 **Go services** keep their own mechanism: the indexer and authz-sync retry with backoff and republish the event to
 `at.indexer.dlq.events` / `at.authz-sync.dlq.events` (envelope rebuilt: key = aggregate id, headers `event-id`,
@@ -92,13 +99,33 @@ around both). An event whose `(consumer, event_id)` row exists is ignored. So:
 * a dead-lettered event was rolled back with its inbox row, so a replay applies it for the first time;
 * the event id is the `event-id` header (= `platform_outbox.id`); a replay keeps it. **Never replay without it.**
 
-**Retention, stated plainly: nothing purges `platform_inbox` or `platform_outbox`. Both grow forever** (verified: no
-delete outside tests). Duplicates are only harmless while the inbox row exists, and the oldest duplicate you can create
-is: offset reset (<= 7 days of topic), DLQ replay (<= 14 days in the DLQ after a failure that happens at most ~7 days
-after publish), outbox re-publish (any age). Policy: keep inbox and published outbox rows at least
-**7 (topic) + 14 (DLQ) + 14 (margin) = 35 days; default 90 days**, and do not replay or re-publish an event older than
-the retention you run. Purge with [`tools/ops/platform-purge.sql`](../../tools/ops/platform-purge.sql) (counts by default,
-`-v execute=yes` deletes in committed batches, refuses under 35 days), monthly, off-peak. No scheduled job runs it yet.
+**Retention.** `platform-events` purges both tables by itself (`EventRetentionJob`, auto-configured in every service with
+a database, daily at 03:30 server time). Duplicates are only harmless while the inbox row exists, and the oldest duplicate
+you can create is: offset reset (<= 7 days of topic), DLQ replay (<= 14 days in the DLQ after a failure that happens at most
+~7 days after publish), outbox re-publish (any age). So the inbox keeps rows at least
+**7 (topic) + 14 (DLQ) + 14 (margin) = 35 days; default 90 days**, and you must not replay or re-publish an event older
+than the retention you run.
+
+| Setting (`at.events.retention.*`) | Default | Rule |
+|---|---|---|
+| `enabled` | `true` | `false` opts the service out (then use the SQL script) |
+| `cron` | `0 30 3 * * *` | Spring cron, server time zone |
+| `inbox-retention` | `90d` | **below `35d` the application refuses to start** (also when `enabled=false`) |
+| `outbox-retention` | `14d` | only rows with `published_at` set are deleted, unpublished rows never; below `7d` refuses to start |
+| `batch-size` / `max-batches` | `5000` / `200` | one autocommit `DELETE` per batch per table; a run deletes at most `batch-size x max-batches` rows per table, the next day continues. Run log says `complete=false` |
+
+* One instance at a time: a PostgreSQL session advisory lock (`pg_try_advisory_lock`) held on a dedicated connection; a
+  replica that does not get it logs `Event retention skipped: another instance is purging`. A crashed holder's lock dies
+  with its session. A database without the platform tables is skipped silently.
+* Metrics: `events_inbox_purged_total`, `events_outbox_purged_total`, and gauge `events_inbox_oldest_age_seconds`
+  (age of the oldest inbox row after the last run, `-1` = empty or no run yet; it should hover just above the retention,
+  ~90 days; a value far above means the purge is not keeping up or is disabled).
+* Neither table has an index on the age column, so each batch scans; run-time cost grows with table size, which is why the
+  batch is small and the job runs at night. Adding the indexes is a migration decision per service (a new platform
+  migration version below the services' latest would fail Flyway validation on existing databases), so it is not done here.
+* Catch-up or opted-out service: [`tools/ops/platform-purge.sql`](../../tools/ops/platform-purge.sql) applies the same
+  rules (`days` default 90 min 35 for the inbox, `outbox_days` default 14 min 7 for published outbox rows; counts by default,
+  `-v execute=yes` deletes in committed batches).
 
 ### Go consumers
 
@@ -368,5 +395,5 @@ Decision:            replay all | replay filter | reset offsets | outbox re-publ
 Commands run:        <exact, with --execute and the ledger file attached>
 Ordering / idempotency checked: <inbox | version guard | n/a>   Side effects checked: <email, Stripe, labels>
 Verification:        lag <>  DLQ count <>  inbox/outbox <>  business check <>
-Follow-ups:          <listener swallows malformed input | retention purge | alert tuning>
+Follow-ups:          <listener skips an unreadable field | retention gauge | alert tuning>
 ```
