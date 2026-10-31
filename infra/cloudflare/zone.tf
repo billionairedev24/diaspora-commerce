@@ -108,6 +108,39 @@ resource "cloudflare_ruleset" "managed_waf" {
   ]
 }
 
+# ------------------------------------------------------------------------------ storefront host rule: apex -> www
+# The storefront is www.<base> in every environment. The base domain of each environment (afrotransact.com,
+# dev.afrotransact.com, uat.afrotransact.com) redirects (301, path and query kept) to it, so the BFF's origin checks, CSRF and
+# OAuth callbacks only ever see the www host. A zone has one ruleset per phase, so this run owns the rules of all environments;
+# each environment's own run creates the proxied placeholder record (environment.tf).
+resource "cloudflare_ruleset" "storefront_redirect" {
+  count   = local.zone_count
+  zone_id = local.zone_id
+  name    = "apex to www"
+  kind    = "zone"
+  phase   = "http_request_dynamic_redirect"
+  rules = [for env, base in local.apex_redirects : {
+    description = "${base} -> www.${base}"
+    expression  = "(http.host eq \"${base}\")"
+    action      = "redirect"
+    enabled     = true
+    action_parameters = {
+      from_value = {
+        status_code           = 301
+        preserve_query_string = true
+        target_url = {
+          expression = "concat(\"https://www.${base}\", http.request.uri.path)"
+        }
+      }
+    }
+  }]
+}
+
+moved {
+  from = cloudflare_ruleset.www_redirect[0]
+  to   = cloudflare_ruleset.storefront_redirect[0]
+}
+
 # ------------------------------------------------------------------------------ WAF: custom rules
 resource "cloudflare_ruleset" "custom_waf" {
   count       = local.zone_count

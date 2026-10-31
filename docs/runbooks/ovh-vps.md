@@ -80,6 +80,7 @@ which keys are set). To skip the questions, put `KEY=value` lines in `.ovh/ovh-v
 | `OVH_SERVICE_NAME` | the project id of step 2 |
 | `TF_STATE_BUCKET` | a name for the Object Storage bucket that holds the Terraform state (the default is fine) |
 | `OVH_DOMAIN`, `ACME_EMAIL` | your test domain and an email for certificate notices |
+| `OVH_STOREFRONT_HOST` | `www` (default): the storefront is `https://www.<domain>` and the bare domain redirects to it; `apex`: the storefront is `https://<domain>`. The backend is deployed with `global.storefrontHost` from it (identity redirect URIs, CORS, links in emails), and the `ovh-web` input `storefront-host` must say the same |
 | `OVH_INSTANCE_FLAVOR` | `b3-32` (8 vCPU / 32 GB). 16 GB is too small |
 | `DB_MODE` | `cluster` for a throwaway test, `external` for a managed Postgres (then host, admin user, admin password, sslmode) |
 | `ADMIN_EMAIL`, `ADMIN_PHONE` | the first staff admin; the password is generated and shown **once**: keep it |
@@ -122,10 +123,13 @@ curl -i https://api.<domain>/bff/healthz
 curl -s https://auth.<domain>/.well-known/openid-configuration | jq .issuer
 ```
 
+The storefront and its apex redirect are not in this list: they are Cloudflare Workers Custom Domains made by `ovh-web` (they need no A record
+pointing at the server). Do not create a manual A/CNAME record for `www.<domain>` or the bare domain; it blocks the Custom Domains.
+
 ### 7. Use it
 
 - Staff console / Seller Center / storefront are Cloudflare Workers apps and are not on this server: deploy them with the `ovh-web`
-  workflow, step by step in [cloudflare-setup.md](cloudflare-setup.md) (storefront at `https://<domain>`, `seller.<domain>`, `admin.<domain>`,
+  workflow, step by step in [cloudflare-setup.md](cloudflare-setup.md) (storefront at `https://www.<domain>`, the bare domain redirecting to it, `seller.<domain>`, `admin.<domain>`,
   all talking to `https://api.<domain>/bff`; the images of the backend come from the `ovh-images` workflow when the per-service pipelines are red).
 - Sign in as the staff admin (`ADMIN_EMAIL` and the password step 4 showed).
 - Stripe: add the webhook `https://api.<domain>/payments/v1/webhooks/stripe`, put its `whsec_...` in `STRIPE_WEBHOOK_SECRET` (re-run
@@ -157,6 +161,8 @@ the only thing that bills.
 | The run cannot SSH in | the instance is still starting (it waits 10 minutes); or the SSH key in the Environment differs from the one used at creation (destroy and apply again) |
 | `ImagePullBackOff` | private packages and no `REGISTRY_PULL_TOKEN` (the run token expired); set the token and run `services` |
 | A service is `CrashLoopBackOff` | `kubectl -n afrotransact-dev logs deploy/<service>`: usually a missing third-party key (gateway-bff needs `STRIPE_PUBLISHABLE_KEY`) or a dependency not ready yet |
+| Sign-in fails with `redirect_uri` mismatch, or CORS errors on the storefront | the backend and the storefront disagree on the storefront host: `OVH_STOREFRONT_HOST` (backend, step 4) must equal the `storefront-host` of the `ovh-web` run. Fix the variable, run `ovh-vps` action `services`, then re-run `ovh-web` for the storefront |
+| The bare domain does not redirect to `www.` / the storefront job fails on the apex | an existing A/CNAME record on the bare domain (delete it), or the record is not proxied; see [cloudflare-setup.md](cloudflare-setup.md) troubleshooting |
 | Certificate stays `False` | DNS not pointing at the server yet, grey cloud off, or a `CAA` record; `kubectl describe certificate -n afrotransact-dev` |
 | Orders cannot start a workflow | orders must use the in-cluster Temporal (`infra/ovh-vps/overrides/orders.yaml`, no mTLS); check `kubectl -n afrotransact-dev logs deploy/orders` for the target it connects to |
 | Authorization errors | `kubectl -n afrotransact-dev logs deploy/authz-sync` and the openfga pod; the store is created on first start |

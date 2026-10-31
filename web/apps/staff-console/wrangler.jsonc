@@ -9,14 +9,14 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   "observability": { "enabled": true },
-  "vars": {"BFF_ORIGIN": "https://api.dev.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://dev.afrotransact.com"},
+  "vars": {"BFF_ORIGIN": "https://api.dev.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://www.dev.afrotransact.com"},
   "env": {
     // PR previews: a version of staff-console-dev on the in-process mock BFF.
     "preview": {
       "name": "staff-console-dev",
-      "vars": { "API_MOCKS": "1", "BFF_ORIGIN": "", "PUBLIC_WEB_URL": "https://dev.afrotransact.com" }
+      "vars": { "API_MOCKS": "1", "BFF_ORIGIN": "", "PUBLIC_WEB_URL": "https://www.dev.afrotransact.com" }
     },
-    "uat": { "name": "staff-console-uat", "vars": {"BFF_ORIGIN": "https://api.uat.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://uat.afrotransact.com"} },
-    "prod": { "name": "staff-console-prod", "vars": {"BFF_ORIGIN": "https://api.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://afrotransact.com"} }
+    "uat": { "name": "staff-console-uat", "vars": {"BFF_ORIGIN": "https://api.uat.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://www.uat.afrotransact.com"} },
+    "prod": { "name": "staff-console-prod", "vars": {"BFF_ORIGIN": "https://api.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://www.afrotransact.com"} }
   }
 }

@@ -24,9 +24,18 @@ locals {
   env_prefix = var.environment == "prod" ? "" : "${var.environment}."
   base       = "${local.env_prefix}${var.zone_name}"
 
+  # Customer storefront host: the apex (<base>) or www.<base>, one explicit setting (variables.tf).
+  storefront_host = var.storefront_host == "www" ? "www.${local.base}" : local.base
+
+  # Base domains of the environments whose apex redirects to www.<base> (the manage_zone run owns the ruleset).
+  apex_redirects = {
+    for e in var.apex_redirect_environments :
+    e => e == "prod" ? var.zone_name : "${e}.${var.zone_name}"
+  }
+
   # Public hostnames for this environment.
   hosts = {
-    storefront    = local.base                 # afrotransact.com | dev.afrotransact.com
+    storefront    = local.storefront_host      # www.afrotransact.com | www.dev.afrotransact.com (apex: <base>)
     seller-center = "seller.${local.base}"     # seller.afrotransact.com
     staff-console = "admin.${local.base}"      # admin.afrotransact.com
     api           = "api.${local.base}"        # gateway-bff (BFF for web + mobile)

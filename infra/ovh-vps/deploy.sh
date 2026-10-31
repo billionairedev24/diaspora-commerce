@@ -167,7 +167,7 @@ install_service() { # install_service SERVICE RUNTIME
   helm upgrade --install "$svc" "$dir" -n "$NS" \
     -f "$dir/values-dev.yaml" -f "$HERE/values-ovh-vps.yaml" ${extra[@]+"${extra[@]}"} \
     --set "image.registry=$IMAGE_REGISTRY" --set "image.repository=$svc" --set "image.tag=$IMAGE_TAG" \
-    --set "global.domain=$DOMAIN" "${pull[@]}" >/dev/null
+    --set "global.domain=$DOMAIN" --set-string "global.storefrontHost=$STOREFRONT_HOST" "${pull[@]}" >/dev/null
 }
 
 deploy_services() {

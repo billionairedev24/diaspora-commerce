@@ -29,6 +29,7 @@ echo "== $REPO, environment $T"
 CATALOGUE='OVH_SERVICE_NAME|var|req||Public Cloud project id (32 hex characters, top left of the project page in the OVHcloud console)
 TF_STATE_BUCKET|var|req||name for the Object Storage bucket holding the Terraform state (the pipeline creates it; lower-case, 3-63 characters)
 OVH_DOMAIN|var|req|test.example.com|public domain of this environment; you create A records for api., auth. and mcp. in front of it (step 6)
+OVH_STOREFRONT_HOST|var|opt|www|where the storefront lives: www = https://www.<domain> (the apex redirects to it) or apex = https://<domain>; the ovh-web workflow input storefront-host must match it
 ACME_EMAIL|var|req||email for Lets Encrypt expiry notices
 OVH_INSTANCE_FLAVOR|var|opt|b3-32|Public Cloud flavor (b3-32 = 8 vCPU / 32 GB; hourly price in the console; billed until the server is destroyed)
 DB_MODE|var|req|cluster|cluster = Postgres on the server (disposable test data only) or external = a managed Postgres (Layerbase, OVHcloud Managed PostgreSQL)

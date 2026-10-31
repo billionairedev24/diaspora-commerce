@@ -48,6 +48,24 @@ and tick; "who" is the role that signs it off. Anything marked **blocker** must 
 - [ ] Documented exceptions are reviewed: the `node-forge` advisory in the Expo dev tool (no upstream fix; dev tooling only).
 - [ ] Images are built reproducibly, signed, and carry an SBOM; the cluster admits signed images only.
 - [ ] TLS everywhere; HSTS on; Cloudflare in front with Authenticated Origin Pulls; the origin is not reachable directly.
+- [ ] **Storefront host rule:** the storefront is `https://www.<base>` in every environment (prod `https://www.afrotransact.com`, dev and uat `www.dev.` / `www.uat.afrotransact.com`); every other app keeps its sub-domain. The checks below are written for prod; dev and uat are the same with their base.
+  - DNS: `www` is a proxied record served by the `storefront-prod` Worker route `www.afrotransact.com/*`; the apex
+    `afrotransact.com` is a proxied placeholder (`AAAA 100::`) with no origin and no Worker route, answered by the dynamic
+    redirect rule "apex to www" (one rule per environment, `afrotransact.com`, `dev.afrotransact.com`, `uat.afrotransact.com`; 301, `https://www.afrotransact.com` + path, query kept). Both are created by `infra/cloudflare`
+    with `storefront_host = "www"`. Check: `curl -sI "https://afrotransact.com/p/x?a=1"` returns `301` with
+    `location: https://www.afrotransact.com/p/x?a=1`; no A/CNAME record of the old setup is left on the apex or on `www`.
+  - Certificates: Universal SSL covers `afrotransact.com` and `*.afrotransact.com` (apex, `www`, `seller`, `admin`, `api`, ...); nothing extra for `www`.
+  - Config: `global.storefrontHost: www` in `infra/argocd/envs/prod/platform-values.yaml` (so `PUBLIC_WEB_URL` is `https://www.afrotransact.com` in every
+    pod, identity redirect URIs and CORS follow) and the seller-center / staff-console `PUBLIC_WEB_URL` Worker vars; roll identity and gateway-bff
+    together with the edge change, then verify a sign-in on `www`, a passkey sign-in (RP id stays `afrotransact.com`) and a sign-out round trip.
+  - HSTS preload: the zone setting is `max-age` 1 year, `includeSubDomains`, `preload`, so one submission of `afrotransact.com` at
+    hstspreload.org covers `www` and every sub-domain. Submit it only when every sub-domain (including `mail.`, `developers.`, `grafana.`) is HTTPS-only;
+    removal from the preload list takes months.
+  - Mobile: the associated-domains entitlement is `applinks:www.afrotransact.com` (the prod build's `EXPO_PUBLIC_WEB_URL`);
+    `/.well-known/apple-app-site-association` and `assetlinks.json` are served at `www.` (Apple does not follow redirects for the association file, so
+    the apex cannot serve them by redirecting). Links to the apex still open in the browser and redirect.
+  - Search engines: canonical URLs are `https://www.afrotransact.com/...` (storefront `metadataBase` from `PUBLIC_WEB_URL`); Search Console property for `www`
+    (or the domain property), and the old apex URLs are covered by the 301.
 - [ ] CORS, cookies (`Secure`, `HttpOnly`, `SameSite`) and CSP checked on the three web apps.
 - [ ] Rate limits and the WAF ruleset are on for sign-in, checkout and the public APIs.
 - [ ] Penetration test or an equivalent review done for sign-in, payments, uploads and the staff console.

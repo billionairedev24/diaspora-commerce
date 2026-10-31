@@ -26,7 +26,7 @@ build machine (no Docker, no live Stripe, Kafka, Elasticsearch, browsers or devi
 
 ## Phase 1: the OVH test environment (this week)
 
-1. Follow [ovh-vps.md](ovh-vps.md) (account, project, images, secrets script, pipeline, DNS and certificates), then [cloudflare-setup.md](cloudflare-setup.md) for the three web apps.
+1. Follow [ovh-vps.md](ovh-vps.md) (account, project, images, secrets script, pipeline, DNS and certificates), then [cloudflare-setup.md](cloudflare-setup.md) for the three web apps. The OVH storefront lives at `https://www.<domain>` and the bare domain redirects to it (`OVH_STOREFRONT_HOST`, `storefront-host`: both default `www`).
 2. Run the same stack as production: real PostgreSQL per service, Kafka, Elasticsearch, OpenFGA + authz-sync, Temporal, media storage.
 3. Demo data must stay out: seeding refuses prod/uat and non-local URLs unless `SEED_ALLOW_REMOTE=1`; use that deliberately here only.
 4. Stripe test mode, Twilio test credentials, carrier sandboxes (you own the accounts: [carrier-sandboxes.md](carrier-sandboxes.md), S204).
@@ -52,7 +52,7 @@ build machine (no Docker, no live Stripe, Kafka, Elasticsearch, browsers or devi
 | OpenRouter: logging and training off, ZDR policy, DPAs | you | checklist items in production-readiness section 10 |
 | Sales tax: registrations in each launch state, remittance process (S318/S319 tools), marketplace facilitator position | you + accountant | |
 | Carriers: production accounts and rates after sandbox passes (S204) | you | |
-| Domains, DNS, Cloudflare, email addresses named in the legal text | you | |
+| Domains, DNS, Cloudflare, email addresses named in the legal text | you | storefront is `https://www.<base>` in every environment (prod `https://www.afrotransact.com`) and the base domain 301-redirects to it ("Storefront host rule", `docs/engineering/environments.md`): `storefront_host = "www"` in `infra/cloudflare/envs/prod.tfvars`, `global.storefrontHost: www` in the prod platform values, HSTS preload submitted for the apex, associated-domains / `apple-app-site-association` / `assetlinks.json` served at `www.` |
 
 ## Phase 4: hardening before real money
 

@@ -10,6 +10,13 @@ tunnel_service = "http://envoy-gateway.ingress.svc.cluster.local:80"
 # origin_mode   = "ingress"
 # origin_target = "k8s-ingress-1234.elb.us-east-1.amazonaws.com" # or the GKE/AKS LB IP
 
+# Customer storefront at https://www.afrotransact.com; the apex 301-redirects to it (path and query kept). Every other
+# app keeps its sub-domain. Matches global.storefrontHost: www in infra/argocd/envs/prod/platform-values.yaml.
+# "www" is the default in every environment; dev and uat serve www.dev.afrotransact.com and www.uat.afrotransact.com.
+storefront_host = "www"
+# The redirect ruleset is zone-wide and owned by this run: it covers afrotransact.com, dev.afrotransact.com, uat.afrotransact.com.
+apex_redirect_environments = ["dev", "uat", "prod"]
+
 workers_routes_enabled = true
 
 # Zone-wide (manage_zone = true only)

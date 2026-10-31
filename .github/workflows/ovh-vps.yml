@@ -173,6 +173,7 @@ jobs:
         if: inputs.action != 'plan' && inputs.action != 'apply' && inputs.action != 'destroy'
         env:
           OVH_DOMAIN: ${{ vars.OVH_DOMAIN }}
+          OVH_STOREFRONT_HOST: ${{ vars.OVH_STOREFRONT_HOST || 'www' }}
           ACME_EMAIL: ${{ vars.ACME_EMAIL }}
           GHCR_USER: ${{ vars.REGISTRY_PULL_USERNAME || github.actor }}
           GHCR_TOKEN: ${{ secrets.REGISTRY_PULL_TOKEN || github.token }}
@@ -228,11 +229,13 @@ jobs:
         if: always() && inputs.action != 'plan' && inputs.action != 'destroy'
         env:
           OVH_DOMAIN: ${{ vars.OVH_DOMAIN }}
+          OVH_STOREFRONT_HOST: ${{ vars.OVH_STOREFRONT_HOST || 'www' }}
         run: |
           {
             echo "### ovh-vps: $ACTION  (${{ job.status }})"
             echo "Images: \`$IMAGE_TAG\`"
             [[ -z "${SERVER_IP:-}" ]] || echo "Server: \`$SERVER_IP\` · \`ssh -i .ovh/ovh-vps-deploy-key ubuntu@$SERVER_IP\`"
             echo "API: https://api.$OVH_DOMAIN/bff · Auth: https://auth.$OVH_DOMAIN · MCP: https://mcp.$OVH_DOMAIN"
+            if [[ "$OVH_STOREFRONT_HOST" == apex ]]; then echo "Storefront: https://$OVH_DOMAIN"; else echo "Storefront: https://www.$OVH_DOMAIN (the apex redirects to it; deploy the web apps with ovh-web, storefront-host=www)"; fi
             echo "**Billing: the server is billed by the hour until you run destroy, even when stopped or scaled down.**"
           } >> "$GITHUB_STEP_SUMMARY"
