@@ -56,8 +56,15 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 	var sellerFiles port.LocalExportFiles
 	switch cfg.Staff.ExportStore {
 	case "media":
+		// Staff exports go to media (purpose export is staff-only, so it takes staff tokens); Seller Center exports carry
+		// a seller's token, which media refuses for that purpose, so they stay on the BFF's own signed-link store.
 		d.Blobs = upstreams.NewMediaExports(media, nil)
-		seller.Blobs = d.Blobs
+		sf, err := exportfiles.NewLocal(exportfiles.Options{Dir: cfg.Staff.ExportDir, SigningKey: cfg.Session.SigningKey, BasePath: cfg.Web.BFFPath,
+			FilesPath: "/v1/seller/export-files/"})
+		if err != nil {
+			return out, seller, nil, fmt.Errorf("seller export store: %w", err)
+		}
+		seller.Blobs, sellerFiles = sf, sf
 	case "", "local":
 		files, err := exportfiles.NewLocal(exportfiles.Options{Dir: cfg.Staff.ExportDir, SigningKey: cfg.Session.SigningKey, BasePath: cfg.Web.BFFPath})
 		if err != nil {

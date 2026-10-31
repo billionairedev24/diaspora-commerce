@@ -164,7 +164,7 @@ commerce:
 stripe:
   publishableKey: "" # STRIPE_PUBLISHABLE_KEY (pk_test_… / pk_live_…)
 staff:
-  exportStore: local
+  exportStore: media
   exportDir: "" # STAFF_EXPORT_DIR (default: the OS temp dir)
 telemetry:
   otlpEndpoint: otel-collector.observability:4318

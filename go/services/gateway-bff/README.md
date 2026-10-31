@@ -89,7 +89,7 @@ served at `/openapi.yaml`, `/docs`, `/redoc`) and
 | `POST /v1/services/bookings`, `GET /v1/account/bookings[/{id}]`, `…/cancellation-quote`, `POST …/{cancel,reschedule,review,payment/sync,new-time/{accept,decline}}` | bookings `POST /v1/bookings` (customer contact from identity `GET /v1/me`; deposit client secret returned), `GET /v1/bookings/mine`, `/v1/bookings/{id}[…]` (Idempotency-Key, client's or derived) | live |
 | `POST /v1/lola/chat` (SSE), `GET /v1/lola/sessions/{id}/messages` | ai-gateway `POST /v1/lola/chat` streamed byte for byte (token relayed, deliver-to ZIP and language added, flushed per chunk; the route is a `httpserver.Stream` route, exempt from the shared server's 30 s write timeout), `GET /v1/lola/sessions/{id}/messages` | live (429 `ai.budget-exceeded` → `RATE_LIMITED` + Retry-After) |
 | `GET /v1/careers/jobs`, `POST /v1/careers/jobs/{id}/applications` | content careers (open roles only; `resumeAssetId` required, `CAR-######` receipts) | live |
-| `POST /v1/careers/uploads`, `POST /v1/careers/uploads/{assetId}/complete` | media `POST /v1/uploads`, `POST /v1/assets/{id}/complete` (PDF ≤ 5 MB; guests use the BFF's client-credentials token; purpose `kyc-document` until media adds a résumé purpose) | live |
+| `POST /v1/careers/uploads`, `POST /v1/careers/uploads/{assetId}/complete` | media `POST /v1/uploads`, `POST /v1/assets/{id}/complete` (PDF ≤ 5 MB; guests use the BFF's client-credentials token; purpose `career-resume`) | live |
 
 ### Product reviews (S324)
 
