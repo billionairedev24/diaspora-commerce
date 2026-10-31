@@ -10,6 +10,7 @@ import java.util.UUID;
 import com.afrotransact.identity.domain.ChallengeKind;
 import com.afrotransact.identity.domain.IdentityRuleViolation;
 import com.afrotransact.identity.domain.LoginTicket;
+import com.afrotransact.identity.domain.SessionDevice;
 import com.afrotransact.identity.domain.MfaPolicy;
 import com.afrotransact.identity.domain.RateLimitExceeded;
 import com.afrotransact.identity.domain.SecretHashing;
@@ -173,7 +174,8 @@ class FirstPartySignInServiceImpl implements FirstPartySignInService {
         }
         protection.audit(new SignInAttempt(userId, null, null, null, clientId, SignInAttempt.FIRST_PARTY,
                 "LOGIN_TICKET", burned.get().method().name().toLowerCase(Locale.ROOT)), "TICKET_REDEEMED");
-        return Optional.of(new RedeemedLoginTicket(userId, burned.get().method(), burned.get().createdAt()));
+        return Optional.of(new RedeemedLoginTicket(userId, burned.get().method(), burned.get().createdAt(),
+                burned.get().device()));
     }
 
     private SignInStep complete(UserAccount user, String client, SignInMethod method, String auditMethod,
@@ -182,7 +184,7 @@ class FirstPartySignInServiceImpl implements FirstPartySignInService {
         String ticket = SecretHashing.randomToken(TICKET_BYTES);
         LoginTicket stored = new LoginTicket(SecretHashing.sha256Hex(ticket), user.id(), ticketClient(client, ctx),
                 method, now,
-                now.plus(LoginTicket.TTL), null);
+                now.plus(LoginTicket.TTL), null, SessionDevice.of(ctx.userAgent(), ctx.ip()));
         store.insertTicket(stored);
         store.purgeExpired(now.minus(RETENTION));
         protection.recordSuccess(attempt(user.id(), user.email(), ctx, client, auditMethod, "ticket-issued"));

@@ -11,6 +11,7 @@ import com.afrotransact.identity.adapter.out.crypto.NimbusJwtInspector;
 import com.afrotransact.identity.adapter.out.crypto.PublishedKeys;
 import com.afrotransact.identity.adapter.out.crypto.StoredJwkSource;
 import com.afrotransact.identity.adapter.out.persistence.GovernedRegisteredClientRepository;
+import com.afrotransact.identity.adapter.out.session.DeviceRecordingAuthorizationService;
 import com.afrotransact.identity.application.AuthSettingsService;
 import com.afrotransact.identity.application.TokenClaimsService;
 import com.afrotransact.identity.port.DiscoveryReader;
@@ -72,7 +73,8 @@ class AuthorizationServerConfiguration {
      * Jackson module adds its mix-ins and allow-lists exactly those principal types (found by PasskeyCeremonyIT, S203).
      */
     @Bean
-    OAuth2AuthorizationService authorizationService(JdbcTemplate jdbc, JdbcRegisteredClientRepository clients) {
+    OAuth2AuthorizationService authorizationService(JdbcTemplate jdbc, JdbcRegisteredClientRepository clients,
+                                                    JdbcClient devices) {
         BasicPolymorphicTypeValidator.Builder allowedTypes = BasicPolymorphicTypeValidator.builder();
         WebauthnJacksonModule webauthn = new WebauthnJacksonModule();
         webauthn.configurePolymorphicTypeValidator(allowedTypes);
@@ -83,7 +85,7 @@ class AuthorizationServerConfiguration {
         JdbcOAuth2AuthorizationService service = new JdbcOAuth2AuthorizationService(jdbc, clients);
         service.setAuthorizationRowMapper(new JsonMapperOAuth2AuthorizationRowMapper(clients, json));
         service.setAuthorizationParametersMapper(new JsonMapperOAuth2AuthorizationParametersMapper(json));
-        return service;
+        return new DeviceRecordingAuthorizationService(service, devices);
     }
 
     @Bean
