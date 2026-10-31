@@ -50,8 +50,9 @@ cannot re-emit past events.
 
 DLQ topics have 14 days retention (event topics 7 days; the single-node OVH Kafka keeps event topics 3 days). They are
 created by `infra/local/kafka/create-topics.sh`, the `kafka-dlq-topics` Job in `infra/k8s/platform/lean/kafka.yaml` and
-the Confluent Terraform module; `tools/ops/dlq-topics.sh --check` fails if one is missing for a topic in
-`contracts/asyncapi/events.yaml`.
+the Confluent Terraform module; `tools/ops/topics-check.sh` (CI workflow `kafka-topics`, includes `dlq-topics.sh --check`) fails if one is missing for a topic in
+`contracts/asyncapi/events.yaml`, or if Terraform, the local list or the lean list differ from it
+([`docs/engineering/kafka-topics-and-acls.md`](../engineering/kafka-topics-and-acls.md)).
 
 ## 2. Decision tree
 
