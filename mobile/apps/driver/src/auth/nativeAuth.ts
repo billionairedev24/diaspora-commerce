@@ -76,6 +76,7 @@ function mockAttempt(): NativeAttempt {
     async password(email, password) {
       who = email.trim().toLowerCase();
       if (!password) throw wrong('Enter your password.', 422, 'VALIDATION_FAILED');
+      if (password === 'limit') throw new ApiProblemError(429, { title: 'Too many attempts', code: 'RATE_LIMITED' }, 45);
       if (password === 'wrong') throw wrong('The email or password is incorrect.', 401, 'INVALID_CREDENTIALS');
       if (who.startsWith('mfa')) {
         needsCode = true;

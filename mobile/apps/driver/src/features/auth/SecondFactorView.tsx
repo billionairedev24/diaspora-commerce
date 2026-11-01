@@ -1,14 +1,23 @@
-/* Second step of the in-app sign-in: the 6-digit code from the authenticator app or a text message, or a recovery
-   code. "Don't ask again on this phone" keeps a trusted-device token (30 days). */
+/* Second step of the in-app sign-in (mandatory two-step verification): the 6-digit code from the authenticator app or a
+   text message (six boxes, submits at the sixth digit), or a recovery code. "Trust this phone" is OFF by default for
+   drivers; the server decides how long a trusted phone skips this step (identity: the trusted-device token's lifetime). */
 import { ArrowLeftIcon as ArrowLeft, WarningCircleIcon as WarningCircle } from 'phosphor-react-native';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
-import { type Factors, isChallengeExpired, type SecondFactor, signInMessage } from '@/domain/nativeSignIn';
+import { formatWait, SMS_RESEND_SECONDS } from '@/domain/cooldown';
+import { type Factors, type SecondFactor } from '@/domain/nativeSignIn';
+import { OTP_LENGTH } from '@/domain/otp';
+import { classifySignInFailure, failureField, type SignInFailure } from '@/domain/signInFailure';
 import { useT } from '@/i18n';
 import { useDriver } from '@/session/DriverProvider';
 import { c, sp, t } from '@/theme';
+import { OtpInput } from '@/ui/OtpInput';
 import { AppText, Banner, Button, Field } from '@/ui/primitives';
+import { useCooldown } from '@/ui/useCooldown';
+
+import { FactorRow } from './FactorRow';
+import { failureMessage } from './failureText';
 
 function firstFactor(f: Factors): SecondFactor {
   return f.totp ? 'TOTP' : f.sms ? 'SMS' : 'RECOVERY_CODE';
@@ -23,40 +32,72 @@ export function SecondFactorView({ factors, onBack }: { factors: Factors; onBack
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState('');
-  const [err, setErr] = useState('');
+  const [failure, setFailure] = useState<SignInFailure | null>(null);
+  const [focusKey, setFocusKey] = useState(0);
+  const resend = useCooldown();
+  const wait = useCooldown();
+  const autoSent = useRef(false);
 
-  const fail = (e: unknown) => {
-    if (isChallengeExpired(e)) return onBack(signInMessage(e, tr('dr.signIn.failed')));
-    setErr(signInMessage(e, tr('dr.signIn.failed')));
+  const fail = (e: unknown, clear: boolean) => {
+    const f = classifySignInFailure(e, 'code');
+    if (f.kind === 'expired') return onBack(failureMessage(tr, f));
+    if (f.kind === 'rate-limited' && f.retryAfterSeconds) wait.start(f.retryAfterSeconds);
+    if (clear) { setCode(''); setFocusKey((k) => k + 1); }
+    setFailure(f);
   };
 
-  const text = async () => {
-    setErr('');
+  const sendText = async () => {
+    setFailure(null);
     setSending(true);
     try {
-      setFactor('SMS');
       setSentTo(await sendSignInCode());
+      resend.start(SMS_RESEND_SECONDS);
+      setFactor('SMS');
+      setCode('');
+      setFocusKey((k) => k + 1);
     } catch (e) {
-      fail(e);
+      fail(e, false);
     } finally {
       setSending(false);
     }
   };
 
-  const submit = async () => {
-    if (!code.trim()) return setErr(tr('dr.mfa.enterCode'));
-    setErr('');
+  // A driver whose only app-less factor is a text message gets the code without having to ask for it.
+  useEffect(() => {
+    if (factor === 'SMS' && !autoSent.current) {
+      autoSent.current = true;
+      void sendText();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const submit = async (value: string) => {
+    const entered = value.trim();
+    if (!entered) return setFailure({ kind: 'field-required', field: 'code' });
+    setFailure(null);
     setBusy(true);
     try {
-      await verifySecondFactor(factor, code, trust);
+      await verifySecondFactor(factor, entered, trust);
     } catch (e) {
-      fail(e);
+      fail(e, factor !== 'RECOVERY_CODE');
     } finally {
       setBusy(false);
     }
   };
 
-  const title = factor === 'RECOVERY_CODE' ? tr('dr.mfa.recoveryTitle') : factor === 'SMS' ? tr('dr.mfa.smsTitle', { hint: sentTo || factors.smsHint || '' }) : tr('dr.mfa.totpTitle');
+  const choose = (next: SecondFactor) => {
+    setFactor(next);
+    setCode('');
+    setFailure(null);
+    setFocusKey((k) => k + 1);
+  };
+
+  const recovery = factor === 'RECOVERY_CODE';
+  const limited = failure?.kind === 'rate-limited' && wait.left > 0;
+  const inCode = failure ? failureField(failure) === 'code' : false;
+  const text = failure ? failureMessage(tr, failure, wait.left) : '';
+  const subtitle = recovery ? tr('dr.mfa.recoveryTitle') : factor === 'SMS' ? tr('dr.mfa.smsTitle', { hint: sentTo || factors.smsHint || '' }) : tr('dr.mfa.totpTitle');
+  const ready = recovery ? code.trim().length > 0 : code.length === OTP_LENGTH;
 
   return (
     <View style={styles.root}>
@@ -64,42 +105,50 @@ export function SecondFactorView({ factors, onBack }: { factors: Factors; onBack
         <ArrowLeft size={20} color={c.text} />
         <AppText variant="small">{tr('dr.mfa.back')}</AppText>
       </Pressable>
-      <AppText variant="display" accessibilityRole="header">{tr('dr.mfa.title')}</AppText>
-      <AppText variant="small" color={c.textMuted}>{title}</AppText>
-      <Field
-        label={factor === 'RECOVERY_CODE' ? tr('dr.mfa.recoveryCode') : tr('dr.mfa.code')}
-        value={code}
-        onChangeText={(v) => { setCode(v); setErr(''); }}
-        keyboardType={factor === 'RECOVERY_CODE' ? 'default' : 'number-pad'}
-        autoCapitalize="none"
-        autoCorrect={false}
-        autoComplete="one-time-code"
-        textContentType="oneTimeCode"
-        maxLength={factor === 'RECOVERY_CODE' ? 32 : 8}
-        autoFocus
-        returnKeyType="go"
-        onSubmitEditing={() => void submit()}
-      />
-      {err ? <Banner tone="danger" icon={WarningCircle}>{err}</Banner> : null}
-      <View style={styles.trust}>
-        <AppText variant="small" style={{ flex: 1 }}>{tr('dr.mfa.trust')}</AppText>
-        <Switch value={trust} onValueChange={setTrust} accessibilityLabel={tr('dr.mfa.trust')} />
+      <View style={{ gap: sp['1'] }}>
+        <AppText variant="display" accessibilityRole="header">{tr('dr.mfa.title')}</AppText>
+        <AppText variant="small" color={c.textMuted}>{subtitle}</AppText>
       </View>
-      <Button label={tr('dr.mfa.verify')} onPress={() => void submit()} loading={busy} />
-      {factors.sms && factor !== 'SMS' ? <Button kind="outline" label={tr('dr.mfa.textMe')} onPress={() => void text()} loading={sending} /> : null}
-      {factors.sms && factor === 'SMS' ? <Button kind="outline" label={tr('dr.mfa.textAgain')} onPress={() => void text()} loading={sending} /> : null}
-      {factors.totp && factor !== 'TOTP' ? <Button kind="outline" label={tr('dr.mfa.useAuthenticator')} onPress={() => { setFactor('TOTP'); setCode(''); setErr(''); }} /> : null}
-      {factors.recoveryCode && factor !== 'RECOVERY_CODE' ? (
-        <Pressable accessibilityRole="button" onPress={() => { setFactor('RECOVERY_CODE'); setCode(''); setErr(''); }}>
-          <AppText variant="small" style={{ textDecorationLine: 'underline' }}>{tr('dr.mfa.useRecovery')}</AppText>
-        </Pressable>
-      ) : null}
+      {recovery ? (
+        <Field
+          label={tr('dr.mfa.recoveryCode')}
+          value={code}
+          onChangeText={(v) => { setCode(v); setFailure(null); }}
+          error={inCode ? text : undefined}
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={32}
+          autoFocus
+          returnKeyType="go"
+          onSubmitEditing={() => void submit(code)}
+        />
+      ) : (
+        <View style={{ gap: sp['2'] }}>
+          <OtpInput value={code} onChange={(v) => { setCode(v); if (failure) setFailure(null); }} onComplete={(v) => void submit(v)} label={tr('dr.mfa.codeLabel')} hint={inCode ? text : undefined} error={inCode} disabled={busy} focusKey={focusKey} />
+          {inCode ? <AppText variant="caption" color={c.danger} accessibilityRole="alert" accessibilityLiveRegion="polite">{text}</AppText> : null}
+        </View>
+      )}
+      {failure && !inCode ? <Banner tone="danger" icon={WarningCircle}>{text}</Banner> : null}
+      <View style={styles.trust}>
+        <View style={{ flex: 1 }}>
+          <AppText variant="bodyStrong">{tr('dr.mfa.trustTitle')}</AppText>
+          <AppText variant="caption" color={c.textMuted}>{tr('dr.mfa.trustHint')}</AppText>
+        </View>
+        <Switch value={trust} onValueChange={setTrust} accessibilityLabel={tr('dr.mfa.trustTitle')} trackColor={{ true: c.success, false: t.ink['200'] }} thumbColor={c.surface} />
+      </View>
+      <Button label={limited ? tr('dr.signIn.tryAgainIn', { time: formatWait(wait.left) }) : tr('dr.mfa.verify')} onPress={() => void submit(code)} loading={busy} disabled={!ready || limited} />
+      <View>
+        {factors.totp && factor !== 'TOTP' ? <FactorRow label={tr('dr.mfa.useAuthenticator')} onPress={() => choose('TOTP')} /> : null}
+        {factors.sms && factor !== 'SMS' ? <FactorRow label={tr('dr.mfa.textMe')} hint={factors.smsHint ? tr('dr.mfa.textMeHint', { hint: factors.smsHint }) : undefined} onPress={() => void sendText()} disabled={sending} /> : null}
+        {factors.sms && factor === 'SMS' ? <FactorRow label={resend.left > 0 ? tr('dr.mfa.sendAgainIn', { time: formatWait(resend.left) }) : tr('dr.mfa.textAgain')} onPress={() => void sendText()} disabled={sending || resend.left > 0} /> : null}
+        {factors.recoveryCode && !recovery ? <FactorRow label={tr('dr.mfa.useRecovery')} onPress={() => choose('RECOVERY_CODE')} /> : null}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: { gap: sp['4'] },
-  back: { flexDirection: 'row', alignItems: 'center', gap: sp['2'], minHeight: t.size.touch },
-  trust: { flexDirection: 'row', alignItems: 'center', gap: sp['3'] }
+  back: { flexDirection: 'row', alignItems: 'center', gap: sp['2'], minHeight: t.size.touch, alignSelf: 'flex-start' },
+  trust: { flexDirection: 'row', alignItems: 'center', gap: sp['3'], paddingVertical: sp['1'] }
 });

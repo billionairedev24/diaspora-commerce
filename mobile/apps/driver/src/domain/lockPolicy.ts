@@ -31,6 +31,12 @@ export function phaseOnLaunch(s: DeviceSecurity): LockPhase {
   return 'locked';
 }
 
+/** "Welcome back, <first name>": the first word of the profile name; empty when the name is only an email address. */
+export function firstNameOf(name: string): string {
+  const first = name.trim().split(/\s+/)[0] ?? '';
+  return first.includes('@') ? '' : first;
+}
+
 /** True while the lock layer hides the app (setup counts: nothing is usable until the passcode exists). */
 export function coversApp(phase: LockPhase): boolean {
   return phase === 'setup' || phase === 'locked';

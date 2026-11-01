@@ -59,7 +59,8 @@ interface Ctx {
   cancelSignIn(): void;
   /** Set when the session ended on its own (the refresh token was refused). */
   notice: string;
-  signOut(): Promise<void>;
+  /** Ends the session (after a last sync). The outbox stays on the phone. `notice` is shown on the sign-in screen. */
+  signOut(opts?: { notice?: string }): Promise<void>;
   recheckAccess(): Promise<void>;
 }
 
@@ -269,11 +270,12 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
   const cancelSignIn = useCallback(() => { attempt.current = null; }, []);
 
-  const signOut = useCallback(async () => {
+  const signOut = useCallback(async (opts?: { notice?: string }) => {
     await engine.flush().catch(() => undefined);
     await clearSession();
     setUser(null);
     setDenied(null);
+    setNotice(opts?.notice ?? '');
     setPhase('signed-out');
   }, [clearSession, engine]);
 
