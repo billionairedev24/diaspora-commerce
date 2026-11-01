@@ -2,6 +2,8 @@
    for the routes that @afrotransact/api-client does not wrap yet. Errors are RFC 9457 problems → ApiError. */
 import { ApiError, type FetchLike, ProblemSchema } from '@afrotransact/api-client';
 
+import { parseRetryAfter } from '@/domain/signInErrors';
+
 export interface TokenSource {
   /** Current access token (refreshed ahead of expiry by the auth layer), or null when signed out. */
   getAccessToken(): Promise<string | null>;
@@ -69,14 +71,17 @@ export function buildUrl(baseUrl: string, path: string, query?: JsonOptions['que
   return `${b}${path}${qs ? `?${qs}` : ''}`;
 }
 
+/** Retry-After (rate limits, sign-in lockout) is a header; it travels with the problem as `retryAfterSeconds` so forms can show the wait. */
 async function problemOf(res: Response): Promise<ApiError> {
+  const wait = parseRetryAfter(res.headers.get('Retry-After'));
+  const extra = wait ? { retryAfterSeconds: wait } : {};
   try {
     const parsed = ProblemSchema.safeParse(await res.json());
-    if (parsed.success) return new ApiError(parsed.data);
+    if (parsed.success) return new ApiError({ ...extra, ...parsed.data });
   } catch {
     /* not JSON */
   }
-  return new ApiError({ type: 'about:blank', title: res.statusText || 'Request failed', status: res.status });
+  return new ApiError({ type: 'about:blank', title: res.statusText || 'Request failed', status: res.status, ...extra });
 }
 
 /** Typed JSON requester against one service. Responses are trusted to match the generated contract types. */

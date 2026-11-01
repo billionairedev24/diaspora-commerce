@@ -9,7 +9,7 @@ import { env } from '@/config/env';
 import { decodeJwt, initialsOf, isExpiring } from '@/domain/jwt';
 import { phaseOnLaunch, type SessionPhase, shouldLockOnResume } from '@/domain/lockPolicy';
 import { type SecondFactor, type SignInStep } from '@/domain/nativeSignIn';
-import { digestsEqual, LOCKED_OUT_MESSAGE, passcodeDigestInput, recordUnlockAttempt, type UnlockResult } from '@/domain/passcode';
+import { digestsEqual, passcodeDigestInput, recordUnlockAttempt, type UnlockResult } from '@/domain/passcode';
 
 import { authenticateBiometric, biometricLabel, biometricsAvailable } from './biometrics';
 import { beginNativeSignIn, type NativeAttempt } from './nativeAuth';
@@ -19,6 +19,12 @@ import { secureStorage } from './secureStorage';
 const K = { tokens: 'at.customer.tokens', passcode: 'at.customer.passcode', faceId: 'at.customer.faceId', setup: 'at.customer.setupComplete', attempts: 'at.customer.passcodeAttempts' };
 
 export type SetupStep = 'face-id' | 'passcode' | 'notifications';
+
+/** Why the person is back on sign-in; the screen words it in the shopper's language (cu.flash.*). `detail` is a dev-only hint. */
+export interface SignOutFlash {
+  code: 'passcode-locked' | 'passcode-reset' | 'session-ended' | 'all-devices';
+  detail?: string;
+}
 
 export interface SessionUser {
   id: string;
@@ -36,8 +42,8 @@ interface AuthContextValue {
   user: SessionUser | null;
   faceId: boolean;
   biometryLabel: string;
-  /** Message shown on the sign-in screen (e.g. after five wrong passcodes). */
-  flash: string;
+  /** Reason shown on the sign-in screen (e.g. after five wrong passcodes); null for a plain sign-out. */
+  flash: SignOutFlash | null;
   tokenSource: TokenSource;
   /** Hosted identity page (browser sheet): social providers, passkeys and creating an account. */
   signIn(intent: SignInIntent): Promise<void>;
@@ -54,7 +60,7 @@ interface AuthContextValue {
   unlockWithBiometrics(): Promise<boolean>;
   verifyPasscode(pin: string): Promise<boolean>;
   lock(): void;
-  signOut(opts?: { flash?: string }): Promise<void>;
+  signOut(opts?: { flash?: SignOutFlash }): Promise<void>;
   /** Face ID (or the app passcode when Face ID is off) for payments over $100 and account changes. */
   confirmWithDevice(reason: string): Promise<boolean>;
   /** Registers work to do before sign-out (e.g. unregister the push token); returns an unsubscribe. */
@@ -83,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [faceId, setFaceIdState] = useState(false);
   const [biometryLabel, setBiometryLabel] = useState('Face ID');
-  const [flash, setFlash] = useState('');
+  const [flash, setFlash] = useState<SignOutFlash | null>(null);
   const [passcodePrompt, setPasscodePrompt] = useState<AuthContextValue['passcodePrompt']>(null);
   const tokens = useRef<TokenSet | null>(null);
   const refreshing = useRef<Promise<string | null> | null>(null);
@@ -139,13 +145,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setFaceIdState(false);
   }, []);
 
-  const signOut = useCallback(async (opts?: { flash?: string }) => {
+  const signOut = useCallback(async (opts?: { flash?: SignOutFlash }) => {
     for (const h of hooks.current) {
       try { await h(); } catch { /* best effort (offline) */ }
     }
     if (tokens.current) await revokeTokens(tokens.current);
     await clearDevice();
-    setFlash(opts?.flash ?? '');
+    setFlash(opts?.flash ?? null);
     setPhase('signed-out');
   }, [clearDevice]);
 
@@ -192,7 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Several requests fail together: the first one ends the session, the rest must not overwrite its reason.
       if (ending.current || !tokens.current) return;
       ending.current = true;
-      void signOut({ flash: `Your session ended. Sign in again.${env.appEnv !== 'prod' && goneReason.current ? ` (${goneReason.current})` : ''}` });
+      void signOut({ flash: { code: 'session-ended', ...(env.appEnv !== 'prod' && goneReason.current ? { detail: goneReason.current } : {}) } });
     }
   }), [refreshAccessToken, signOut]);
 
@@ -202,7 +208,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     goneReason.current = '';
     await persistTokens(t);
     setUser(userFrom(t));
-    setFlash('');
+    setFlash(null);
     await secureStorage.set(K.attempts, '0');
     const passcode = await secureStorage.get(K.passcode);
     const done = (await secureStorage.get(K.setup)) === '1';
@@ -280,7 +286,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const r = recordUnlockAttempt(attempts, await verifyPasscode(pin));
     await secureStorage.set(K.attempts, String(r.attempts));
     if (r.kind === 'unlocked') setPhase('unlocked');
-    if (r.kind === 'locked-out') await signOut({ flash: LOCKED_OUT_MESSAGE });
+    if (r.kind === 'locked-out') await signOut({ flash: { code: 'passcode-locked' } });
     return r;
   }, [signOut, verifyPasscode]);
 
