@@ -8,8 +8,8 @@ import { Pressable, StyleSheet, type TextInput, View } from 'react-native';
 
 import { type SignOutFlash, useAuth } from '@/auth/AuthProvider';
 import { SignInCancelled, type SignInIntent } from '@/auth/oidc';
-import { describeSignInError, isValidEmail } from '@/domain/signInErrors';
 import { type Factors } from '@/domain/nativeSignIn';
+import { describeSignInError, isValidEmail } from '@/domain/signInErrors';
 import { type MessageKey, useT } from '@/i18n';
 import { sp, t } from '@/theme';
 import { PasswordField } from '@/ui/PasswordField';

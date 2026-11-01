@@ -8,7 +8,7 @@ import { type SignInIntent } from '@/auth/oidc';
 import { useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { AppText, Button } from '@/ui/primitives';
-import { ProviderMark, type ProviderId } from '@/ui/ProviderMarks';
+import { type ProviderId,ProviderMark } from '@/ui/ProviderMarks';
 
 const PROVIDERS: Array<{ id: ProviderId; name: string }> = [
   { id: 'google', name: 'Google' },

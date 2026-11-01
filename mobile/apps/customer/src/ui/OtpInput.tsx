@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 
-import { isOtpComplete, normalizeOtp, otpActiveBox, otpBoxes, OTP_LENGTH, shouldAutoSubmit } from '@/domain/otp';
+import { isOtpComplete, normalizeOtp, OTP_LENGTH, otpActiveBox, otpBoxes, shouldAutoSubmit } from '@/domain/otp';
 import { useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 

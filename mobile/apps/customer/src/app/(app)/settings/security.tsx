@@ -19,7 +19,7 @@ export default function Security() {
   const [changing, setChanging] = useState(false);
   const [confirmAll, setConfirmAll] = useState(false);
   if (changing) {
-    return <PasscodeSetupView header={<SubHeader title="Change passcode" onBack={() => setChanging(false)} />} stepLabel="CHANGE PASSCODE" onDone={async (pin) => { await savePasscode(pin); setChanging(false); toast('Passcode updated'); }} />;
+    return <PasscodeSetupView header={<SubHeader title="Change passcode" onBack={() => setChanging(false)} />} onDone={async (pin) => { await savePasscode(pin); setChanging(false); toast('Passcode updated'); }} />;
   }
   return (
     <Screen header={<SubHeader title="Sign-in & security" />}>

@@ -9,13 +9,13 @@ import { I18nManager, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { type Factors, type SecondFactor } from '@/domain/nativeSignIn';
-import { describeSignInError } from '@/domain/signInErrors';
-import { formatCooldown, RESEND_COOLDOWN_SECONDS } from '@/domain/resendCooldown';
 import { isOtpComplete } from '@/domain/otp';
+import { formatCooldown, RESEND_COOLDOWN_SECONDS } from '@/domain/resendCooldown';
+import { describeSignInError } from '@/domain/signInErrors';
 import { useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { OtpInput } from '@/ui/OtpInput';
-import { AppText, Banner, Button, Field } from '@/ui/primitives';
+import { AppText, Button, Field } from '@/ui/primitives';
 
 import { type FactorChoice, FactorChoices } from './FactorChoices';
 import { failureText } from './signInText';
