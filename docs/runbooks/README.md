@@ -42,6 +42,7 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 | [PaymentWebhookLagBudgetBurn](PaymentWebhookLagBudgetBurn.md) | page / ticket |
 | [PayoutOnTimeBudgetBurn](PayoutOnTimeBudgetBurn.md) | page / ticket |
 | [PostgresConnectionsSaturation](PostgresConnectionsSaturation.md) | page |
+| [PostgresDiskUsageHigh](PostgresDiskUsageHigh.md) | page / ticket |
 | [PostgresDown](PostgresDown.md) | page |
 | [SearchLatencyBudgetBurn](SearchLatencyBudgetBurn.md) | page / ticket |
 | [ServiceDown](ServiceDown.md) | page |
