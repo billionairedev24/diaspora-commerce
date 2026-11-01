@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { coversApp, LOCK_GRACE_MS, phaseOnLaunch, shouldLockOnResume } from '../src/domain/lockPolicy';
+import { coversApp, firstNameOf, LOCK_GRACE_MS, phaseOnLaunch, shouldLockOnResume } from '../src/domain/lockPolicy';
 
 describe('lock policy', () => {
   it('locks after the grace period in the background', () => {
@@ -14,6 +14,13 @@ describe('lock policy', () => {
     expect(phaseOnLaunch({ signedIn: true, hasPasscode: false, setupComplete: false })).toBe('setup');
     expect(phaseOnLaunch({ signedIn: true, hasPasscode: true, setupComplete: false })).toBe('setup');
     expect(phaseOnLaunch({ signedIn: true, hasPasscode: true, setupComplete: true })).toBe('locked');
+  });
+
+  it('greets by first name, and not by an email address', () => {
+    expect(firstNameOf('Tunde Adeyemi')).toBe('Tunde');
+    expect(firstNameOf('  Tunde ')).toBe('Tunde');
+    expect(firstNameOf('tunde@afrotransact.com')).toBe('');
+    expect(firstNameOf('')).toBe('');
   });
 
   it('only setup and locked hide the app', () => {
