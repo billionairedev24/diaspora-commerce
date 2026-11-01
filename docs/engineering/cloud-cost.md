@@ -145,7 +145,10 @@ Memory (requests) against ~13 GB allocatable on a 16 GB node:
 CPU is ~2.6 of ~3.9 cores requested; services idle at a few percent. The risk is **deploy time**: starting JVMs together
 spikes CPU. Prod syncs are manual (`autoSync: false`): sync a few services at a time.
 
-**Confirm with Layerbase before you commit** (in writing): which cloud hosts the server, PostGIS, Postgres max connections on the
+**Confirmed with Layerbase (2026-11-01, by the owner, by phone/chat; get it in writing):** PostGIS is available and there are no
+egress charges.
+
+**Still to confirm with Layerbase** (in writing): which cloud hosts the server, Postgres max connections on the
 chosen size, whether mTLS is optional, and what happens at the storage limit (overage price or hard stop).
 
 Database connections: every Java service is capped at 4 connections (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`), about

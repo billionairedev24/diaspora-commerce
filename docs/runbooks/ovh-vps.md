@@ -59,8 +59,9 @@ The cheapest setup that still gives useful results. Prices are not verified: rea
 | **`destroy` the server when you stop for the day.** The `down` action does NOT stop billing | state, DNS and images are kept; a new `provision-and-deploy` takes under an hour |
 | **Stay on the free Workers plan until a deploy fails on size; skip Turnstile, extra buckets and snapshots** until needed | each is a small recurring charge |
 
-Not billed as egress by OVH: queries and writes from the server to Layerbase. Layerbase's own outbound traffic is covered by its
-plan according to `docs/engineering/cloud-cost.md`: confirm both in writing.
+Not billed as egress by OVH: queries and writes from the server to Layerbase (OVH FAQ). Layerbase told the owner (2026-11-01) that
+PostGIS is available and that it has no egress costs; get that in writing. Still to ask: which cloud hosts the server, the
+connection limit on the chosen size, whether mTLS is optional, and what happens at the storage limit.
 
 ## Step by step
 
