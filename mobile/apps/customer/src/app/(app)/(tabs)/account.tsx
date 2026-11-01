@@ -111,7 +111,7 @@ export default function Account() {
       <Sheet visible={confirm} onClose={() => setConfirm(false)}>
         <AppText variant="heading">{tr('cu.account.signOutOfAfrotransact')}</AppText>
         <AppText color={c.textMuted}>{tr('cu.account.signOutBody', { method: biometryLabel })}</AppText>
-        <Button kind="danger" label={tr('cu.account.signOut')} onPress={() => { setConfirm(false); void signOut({ flash: '' }); }} />
+        <Button kind="danger" label={tr('cu.account.signOut')} onPress={() => { setConfirm(false); void signOut(); }} />
         <Button kind="ghost" label={tr('cu.account.cancel')} onPress={() => setConfirm(false)} />
       </Sheet>
     </Screen>
