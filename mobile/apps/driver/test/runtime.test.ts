@@ -24,13 +24,13 @@ describe('driver runtime capabilities', () => {
   it('skips remote push in Expo Go', async () => {
     const { capabilities, isExpoGo } = await load();
     expect(isExpoGo()).toBe(true);
-    expect(capabilities).toEqual({ runtime: 'expo-go', remotePush: false, localNotifications: false });
+    expect(capabilities).toEqual({ runtime: 'expo-go', remotePush: false, localNotifications: false, biometrics: true });
   });
 
   it('registers push in a development or release build', async () => {
     native.executionEnvironment = 'bare';
     const { capabilities } = await load();
-    expect(capabilities).toEqual({ runtime: 'native-build', remotePush: true, localNotifications: true });
+    expect(capabilities).toEqual({ runtime: 'native-build', remotePush: true, localNotifications: true, biometrics: true });
   });
 
   it('never loads expo-notifications on the web preview', async () => {

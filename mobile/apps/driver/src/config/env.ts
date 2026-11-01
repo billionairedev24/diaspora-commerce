@@ -23,6 +23,9 @@ export interface EnvConfig {
   oidcClientId: string;
   redirectScheme: string;
   mocks: boolean;
+  /** Dispatch's phone / email (EXPO_PUBLIC_DISPATCH_PHONE / _EMAIL): "Contact dispatch" shows only when one is set. */
+  dispatchPhone: string;
+  dispatchEmail: string;
 }
 
 type Urls = Pick<EnvConfig, 'bffUrl' | 'fulfilmentUrl' | 'mediaUrl' | 'oidcIssuer' | 'identityApiUrl'>;
@@ -47,6 +50,8 @@ export interface RawEnv {
   mocks?: string;
   /** Host of the local stack (EXPO_PUBLIC_DEV_HOST): localhost, a LAN IP or 10.0.2.2. */
   devHost?: string;
+  dispatchPhone?: string;
+  dispatchEmail?: string;
 }
 
 const isAppEnv = (v: string | undefined): v is AppEnv => v === 'local' || v === 'dev' || v === 'uat' || v === 'prod';
@@ -65,6 +70,8 @@ export function resolveEnv(raw: RawEnv): EnvConfig {
     identityApiUrl: url(raw.identityApiUrl, d.identityApiUrl),
     oidcClientId: pick(raw.oidcClientId, 'driver-app'),
     redirectScheme: 'com.afrotransact.driver',
+    dispatchPhone: (raw.dispatchPhone ?? '').trim(),
+    dispatchEmail: (raw.dispatchEmail ?? '').trim(),
     mocks: appEnv !== 'prod' && (raw.mocks === undefined ? appEnv === 'local' : raw.mocks === '1' || raw.mocks === 'true')
   };
 }
@@ -78,6 +85,8 @@ export const env: EnvConfig = resolveEnv({
   identityApiUrl: process.env.EXPO_PUBLIC_IDENTITY_URL,
   oidcClientId: process.env.EXPO_PUBLIC_OIDC_CLIENT_ID,
   mocks: process.env.EXPO_PUBLIC_MOCKS,
+  dispatchPhone: process.env.EXPO_PUBLIC_DISPATCH_PHONE,
+  dispatchEmail: process.env.EXPO_PUBLIC_DISPATCH_EMAIL,
   // An explicit EXPO_PUBLIC_DEV_HOST wins; otherwise a development phone uses the machine that serves its JS.
   devHost: process.env.EXPO_PUBLIC_DEV_HOST || metroHost()
 });

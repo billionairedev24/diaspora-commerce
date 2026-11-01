@@ -37,6 +37,7 @@ const LOCAL_NETWORK_PLIST = LOCAL_NETWORK
   : {};
 const LOCAL_NETWORK_PLUGINS: NonNullable<ExpoConfig['plugins']> = LOCAL_NETWORK ? [['expo-build-properties', { android: { usesCleartextTraffic: true } }]] : [];
 const CAMERA = 'Take live proof-of-delivery and vehicle photos and scan package labels. Gallery photos are not accepted.';
+const FACE_ID = 'Use Face ID to unlock AfroTransact Delivery. Your face stays on this phone; the app passcode is always the fallback.';
 const LOCATION = 'Stamp proof-of-delivery photos with GPS and check you are at the address (within 150 m).';
 
 const config: ExpoConfig = {
@@ -53,7 +54,7 @@ const config: ExpoConfig = {
     bundleIdentifier: `com.afrotransact.driver${SUFFIX}`,
     icon: './assets/images/icon.png',
     supportsTablet: false,
-    infoPlist: { NSCameraUsageDescription: CAMERA, NSLocationWhenInUseUsageDescription: LOCATION, ITSAppUsesNonExemptEncryption: false, ...LOCAL_NETWORK_PLIST }
+    infoPlist: { NSCameraUsageDescription: CAMERA, NSLocationWhenInUseUsageDescription: LOCATION, NSFaceIDUsageDescription: FACE_ID, ITSAppUsesNonExemptEncryption: false, ...LOCAL_NETWORK_PLIST }
   },
   android: {
     package: `com.afrotransact.driver${SUFFIX}`,
@@ -70,6 +71,7 @@ const config: ExpoConfig = {
     ['expo-splash-screen', SPLASH],
     ...LOCAL_NETWORK_PLUGINS,
     'expo-secure-store',
+    ['expo-local-authentication', { faceIDPermission: FACE_ID }],
     'expo-web-browser',
     'expo-sqlite',
     ['expo-camera', { cameraPermission: CAMERA, recordAudioAndroid: false, barcodeScannerEnabled: true }],

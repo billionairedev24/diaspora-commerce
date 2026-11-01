@@ -14,6 +14,8 @@ export interface Capabilities {
   remotePush: boolean;
   /** Local notification APIs (permission prompt, channels). */
   localNotifications: boolean;
+  /** Biometric unlock. iOS Face ID needs NSFaceIDUsageDescription from our build; Android biometrics work in Expo Go. */
+  biometrics: boolean;
 }
 
 /** Pure mapping of expo-constants' executionEnvironment (+ platform) to a runtime. */
@@ -24,7 +26,8 @@ export function runtimeOf(executionEnvironment: string | undefined, os: string):
 
 export function capabilitiesFor(runtime: Runtime, os: string = 'android'): Capabilities {
   // Expo Go on Android (SDK 53+) throws while expo-notifications loads, so even local notifications need our build.
-  return { runtime, remotePush: runtime === 'native-build', localNotifications: runtime === 'native-build' || (runtime === 'expo-go' && os === 'ios') };
+  const native = runtime === 'native-build';
+  return { runtime, remotePush: native, localNotifications: native || (runtime === 'expo-go' && os === 'ios'), biometrics: native || (runtime === 'expo-go' && os === 'android') };
 }
 
 export const capabilities: Capabilities = capabilitiesFor(runtimeOf(Constants.executionEnvironment, Platform.OS), Platform.OS);

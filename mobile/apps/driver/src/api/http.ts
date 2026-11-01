@@ -10,7 +10,7 @@ export interface TokenSource {
 export type Fetch = (req: Request) => Promise<Response>;
 
 export class ApiProblemError extends Error {
-  constructor(readonly status: number, readonly body: Record<string, unknown>) {
+  constructor(readonly status: number, readonly body: Record<string, unknown>, /** The Retry-After header (seconds) of a 429, when sent. */ readonly retryAfterSeconds?: number) {
     super(typeof body.detail === 'string' ? body.detail : typeof body.title === 'string' ? body.title : `HTTP ${status}`);
     this.name = 'ApiProblemError';
   }

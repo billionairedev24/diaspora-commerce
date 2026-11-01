@@ -11,6 +11,11 @@ describe('driver env', () => {
     expect(resolveEnv({ devHost: '10.0.2.2' }).mediaUrl).toBe('http://10.0.2.2:8207');
   });
 
+  it('has no dispatch contact unless the build sets one', () => {
+    expect(resolveEnv({})).toMatchObject({ dispatchPhone: '', dispatchEmail: '' });
+    expect(resolveEnv({ dispatchPhone: ' +1 713 555 0100 ', dispatchEmail: 'dispatch@example.com' })).toMatchObject({ dispatchPhone: '+1 713 555 0100', dispatchEmail: 'dispatch@example.com' });
+  });
+
   it('uses the URLs the build profile sets', () => {
     expect(resolveEnv({ appEnv: 'prod', mocks: '1' }).mocks).toBe(false);
     expect(resolveEnv({ appEnv: 'dev', fulfilmentUrl: 'https://f.example/' }).fulfilmentUrl).toBe('https://f.example');

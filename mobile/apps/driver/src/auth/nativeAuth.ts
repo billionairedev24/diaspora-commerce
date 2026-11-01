@@ -26,8 +26,16 @@ const request: JsonRequester = async <T,>(path: string, opts: { method: 'POST'; 
     throw new NetworkError(e, new URL(env.bffUrl).host);
   }
   const text = await res.text();
-  const body: unknown = text ? JSON.parse(text) : undefined;
-  if (!res.ok) throw new ApiProblemError(res.status, body && typeof body === 'object' ? (body as Record<string, unknown>) : {});
+  let body: unknown;
+  try {
+    body = text ? JSON.parse(text) : undefined;
+  } catch {
+    body = undefined; // a proxy's HTML error page: the status alone decides the message
+  }
+  if (!res.ok) {
+    const wait = Number.parseInt(res.headers.get('Retry-After') ?? '', 10);
+    throw new ApiProblemError(res.status, body && typeof body === 'object' ? (body as Record<string, unknown>) : {}, Number.isFinite(wait) && wait > 0 ? wait : undefined);
+  }
   return body as T;
 };
 
