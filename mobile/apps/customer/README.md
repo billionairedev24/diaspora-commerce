@@ -123,13 +123,38 @@ pnpm --filter @afrotransact/customer-app export:web      # build sanity check (w
 
 ## Sign-in
 
-Email, password and the 2-step code are entered in the app (`src/app/sign-in.tsx`, `src/features/auth/SecondFactorView.tsx`).
-`src/domain/nativeSignIn.ts` posts them to gateway-bff `POST /v1/auth/native/{password,mfa/sms,mfa/verify}` with the app's
-PKCE challenge; the BFF checks them with identity's first-party sign-in API and redeems the one-time login ticket for
-`customer-app`, so the app receives an authorization code and exchanges it (with its verifier) at identity for its own
-access and refresh tokens. The first sign-in on a phone continues into setup (Face ID, passcode, notifications); later
-opens use Face ID or the passcode. Social providers, passkeys and "Create your account" still open identity's secure
-page. In mock mode any password works; `mfa…@…` emails ask for the code `123456`; the password `wrong` is rejected.
+Email, password and the 2-step code are entered in the app. The screen is `src/app/sign-in.tsx`, built from
+`src/features/auth/`: `SignInHero` (brand picture fading to black, shrinks while the keyboard is up), `SignInForm` (email,
+password with Show/Hide inside the field, "Forgot password?", primary Sign in), `ProviderButtons` (Google / Apple / Facebook
+with their own marks from `src/ui/ProviderMarks.tsx`, then the passkey button), `SignInFooter` (create account, legal line)
+and `SecondFactorView`. `src/domain/nativeSignIn.ts` posts the credentials to gateway-bff
+`POST /v1/auth/native/{password,mfa/sms,mfa/verify}` with the app's PKCE challenge; the BFF checks them with identity's
+first-party sign-in API and redeems the one-time login ticket for `customer-app`, so the app receives an authorization code
+and exchanges it (with its verifier) at identity for its own access and refresh tokens. The first sign-in on a phone
+continues into setup (Face ID, passcode, notifications); later opens use Face ID or the passcode. Social providers,
+passkeys, "Create your account" and "Forgot password?" still open identity's secure page. In mock mode any password works;
+`mfa…@…` emails ask for the code `123456`; the password `wrong` is rejected.
+
+Errors are inline and come from the BFF's problem documents (`src/domain/signInErrors.ts`, unit-tested): a wrong password
+(401 `INVALID_CREDENTIALS`) marks both fields and says so under the password; field validation (422) marks the field the
+server names; a rate limit or lockout (429 `RATE_LIMITED`) shows how long to wait when the server sent `Retry-After`
+(`src/api/http.ts` keeps the header on the problem as `retryAfterSeconds`); a wrong code marks the code boxes; an expired
+attempt (410 `CHALLENGE_EXPIRED`) returns to the password step with the server's message. The server does not report how
+many attempts are left, so none is shown.
+
+Second step: `src/ui/OtpInput.tsx` is six boxes over one hidden text input (`textContentType=oneTimeCode`,
+`autoComplete=one-time-code`, so the SMS code is offered by the keyboard; paste and backspace work) and submits on the
+sixth digit. "Trust this device for 30 days" sends `trustDevice` (the contract: the phone then skips the second factor for
+30 days). A text message is only sent on request (or on open when a text message is the only code factor), with a 30 second
+wait before the next one ("Text again in 0:24"). Recovery codes use a normal text field.
+
+Lock and setup: first-run setup is "1 of 3" Face ID, "2 of 3" passcode (create, confirm), "3 of 3" notifications
+(`src/app/setup.tsx`, `src/brand/OnboardingScreen.tsx`); Face ID and notifications can be skipped, the passcode cannot.
+The unlock screen (`src/features/lock/LockOverlay.tsx`) tries Face ID once on appearing, then shows the passcode keypad with
+"Wrong passcode · N attempts left" (five wrong passcodes sign out; rules in `src/domain/passcode.ts`), "Forgot passcode?
+Sign in with password" and "Not {name}? Sign out". All of these strings are in the five catalogues (`cu.signIn.*`,
+`cu.mfa.*`, `cu.setup.*`, `cu.lock.*`, `cu.pin.*`, `cu.flash.*`). The reason shown after a forced sign-out is a typed
+`SignOutFlash` code that the sign-in screen words in the shopper's language.
 
 A 401 never signs you out by itself: the session ends only when identity refuses the refresh token. If identity cannot be
 reached the request fails and the session is kept. A 401 on every request in local development usually means the app
