@@ -26,6 +26,7 @@ import { ImagesField } from './form/ImagesField';
 import { ListingPreview } from './form/ListingPreview';
 import { goToField, ReadinessPanel } from './form/ReadinessPanel';
 import { SectionNav } from './form/SectionNav';
+import { SizeGuideSection } from './form/SizeGuideSection';
 import { VariantsSection } from './form/VariantsSection';
 import {
   attributesIn,
@@ -88,6 +89,12 @@ export function ProductForm({ productId }: { productId?: string }) {
   const typeCode = s.productType ?? detail.data?.productType ?? '';
   const typeQ = useQuery(sellerQueries.productType(api, typeCode));
   const type: ProductTypeSchema | undefined = typeQ.data;
+  // Sized product types (fashion) link one of the seller's size charts; the chosen chart is read to check its rows against the sizes sold.
+  const sized = Boolean(type?.traits.sizing);
+  const chartsQ = useQuery({ ...sellerQueries.sizeCharts(api, orgId, { productType: typeCode, size: 100 }), enabled: sized });
+  const chartQ = useQuery({ ...sellerQueries.sizeChart(api, orgId, s.sizeChartId), enabled: sized && s.sizeChartId !== '' });
+  const chart = sized && s.sizeChartId && chartQ.data?.id === s.sizeChartId ? chartQ.data : undefined;
+  const chartState = !sized || !s.sizeChartId ? 'none' : chart ? 'ready' : chartQ.isError ? 'error' : 'loading';
 
   // Load the listing (edit) or the draft once, when what it needs has arrived.
   const loaded = useRef(false);
@@ -137,7 +144,7 @@ export function ProductForm({ productId }: { productId?: string }) {
   }, [live, detail.data, type]);
   const lockedSkus = live ? (detail.data?.variants.map((v) => v.sellerSku) ?? []) : [];
   const sections = sectionsFor(type);
-  const problems: Problems = { ...validateForm(s, type, { lockedSkus }), ...serverProblems };
+  const problems: Problems = { ...validateForm(s, type, { lockedSkus, sizeChart: chart, linkedSizeChartId: detail.data?.listing.sizeChartId }), ...serverProblems };
   const ordered = orderedProblems(problems, sections);
   const err = (id: string) => (shown(id) && problems[id] ? t(problems[id].key, problems[id].vars) : undefined);
   /** Jump to a field from the quality panel: its message shows (so the field is announced with it) and the field takes focus. */
@@ -280,6 +287,7 @@ export function ProductForm({ productId }: { productId?: string }) {
       case 'offer': return t('sc.pf.s.offer');
       case 'details': return t('sc.pf.s.details', { type: type?.label ?? '' });
       case 'variants': return t('sc.pf.s.variants');
+      case 'sizeGuide': return t('sc.pf.s.sizeGuide');
       case 'fulfilment': return t('sc.pf.s.fulfilment');
       case 'compliance': return t('sc.pf.s.compliance');
     }
@@ -397,6 +405,12 @@ export function ProductForm({ productId }: { productId?: string }) {
                 </div>
               )}
               {s.hasVariants ? <VariantsSection s={s} type={type} set={update} problems={problems} shown={shown} locked={lockedCombos} /> : null}
+            </FormSection>
+          ) : null}
+
+          {type && sections.includes('sizeGuide') ? (
+            <FormSection {...section('sizeGuide')} hint={t('sc.pf.s.sizeGuideHint')}>
+              <SizeGuideSection s={s} type={type} patch={patch} charts={(chartsQ.data?.items ?? []).filter((c) => !c.retired)} chart={chart} chartState={chartState} error={err(fieldId.sizeChart)} />
             </FormSection>
           ) : null}
 
