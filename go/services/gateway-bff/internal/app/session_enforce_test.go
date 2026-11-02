@@ -130,7 +130,10 @@ func TestIdleSessionIsEndedWith401AndTokensAreRevoked(t *testing.T) {
 }
 
 func TestAbsoluteLimitEndsAnActiveSession(t *testing.T) {
-	r := newRig(t, func(s *domain.Session) { s.CreatedAt = t0.Add(-7*time.Hour - 50*time.Minute); s.LastActivityAt = t0.Add(-time.Minute) })
+	r := newRig(t, func(s *domain.Session) {
+		s.CreatedAt = t0.Add(-7*time.Hour - 50*time.Minute)
+		s.LastActivityAt = t0.Add(-time.Minute)
+	})
 	if _, err := r.at(0, ActivityCounts); err != nil {
 		t.Fatalf("just under 8 hours: %v", err)
 	}

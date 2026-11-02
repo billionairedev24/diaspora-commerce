@@ -4705,7 +4705,7 @@ components:
             Whose policy applies: the web app the person signed in at (storefront `customer-web`, Seller Center and Provider
             Hub `seller`, staff console `staff`), or the mobile app (`customer-app`, `driver`).
         idleTimeoutSeconds: {type: integer, format: int64, description: Seconds without real user activity before sign-out}
-        absoluteTimeoutSeconds: {type: integer, format: int64, description: Seconds after sign-in before sign-out, however active}
+        absoluteTimeoutSeconds: {type: integer, format: int64, description: 'Seconds after sign-in before sign-out, however active'}
         warnSeconds:
           type: integer
           format: int64
