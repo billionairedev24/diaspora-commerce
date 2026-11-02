@@ -77,7 +77,13 @@ export interface MockResource {
   lineColumns?: ResourceColumn[];
   links?: (r: MockRecord) => RecordLink[];
   actions: MockAction[];
-  edit?: { permission: string; form: (r: MockRecord) => StaffForm; apply: (r: MockRecord, values: Record<string, FieldValue>, ctx?: ActionCtx) => void };
+  edit?: {
+    permission: string;
+    form: (r: MockRecord) => StaffForm;
+    /** Rules across fields that the form's own limits cannot say (the server's messages, by field key). */
+    validate?: (r: MockRecord, values: Record<string, FieldValue>) => Record<string, string>;
+    apply: (r: MockRecord, values: Record<string, FieldValue>, ctx?: ActionCtx) => void;
+  };
   create?: { permission: string; form: StaffForm; build: (values: Record<string, FieldValue>, id: string, ctx: ActionCtx) => MockRecord };
 }
 

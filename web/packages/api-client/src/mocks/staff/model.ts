@@ -66,7 +66,7 @@ export const RESOURCE_MODULE: Record<ResourceKey, StaffModuleKey> = {
   coupons: 'marketing', organisations: 'orgs', 'connect-accounts': 'orgs',
   reconciliation: 'payouts', 'reconciliation-runs': 'payouts', 'ledger-adjustments': 'payouts', recoveries: 'payouts', 'credit-adjustments': 'payouts', 'gift-cards': 'payouts', 'credit-liabilities': 'payouts', 'money-settings': 'payouts', 'membership-tiers': 'payouts', memberships: 'payouts', 'membership-settings': 'payouts', 'membership-report': 'payouts', referrals: 'payouts', 'referral-settings': 'payouts', 'stripe-lookup': 'payouts',
   'payment-settings': 'payouts', 'tax-settings': 'fees', maintenance: 'siteCfg', 'tax-filings': 'fees', 'tax-nexus': 'fees',
-  'oauth-clients': 'identity', 'identity-sessions': 'identity', 'signing-keys': 'identity', 'auth-settings': 'identity',
+  'oauth-clients': 'identity', 'identity-sessions': 'identity', 'signing-keys': 'identity', 'auth-settings': 'identity', 'session-policy': 'identity',
   'exchange-rates': 'inventory'
 };
 
