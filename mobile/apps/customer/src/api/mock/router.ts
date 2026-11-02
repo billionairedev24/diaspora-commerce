@@ -4,7 +4,7 @@ import { bffProblemType, type Cart, type CartPackage, type DeliveryPromise, type
 
 import { type Booking, type CheckoutSummary, type OrderConfirmation, type OrderTracking } from '../types';
 import { mockDb, type MockLine, type MockReview, type MockShipment, nextId, productByAtin } from './db';
-import { type FixtureProduct, PRODUCTS, PROVIDERS, USER } from './fixtures';
+import { DRESS_SIZE_CHART, type FixtureProduct, PRODUCTS, PROVIDERS, USER } from './fixtures';
 import { atZoned } from './zoned';
 
 type Params = Record<string, string>;
@@ -45,9 +45,19 @@ export function summaryOf(p: FixtureProduct): ProductSummary {
   };
 }
 
+/** The other variants of a garment (every size and colour), with the current one selected. */
+function variantsOf(p: FixtureProduct): ProductDetail['product']['variants'] {
+  const root = p.family?.root;
+  if (!root) return [];
+  return PRODUCTS.filter((x) => x.family?.root === root).map((x) => ({
+    atin: x.atin, label: x.family?.label ?? 'Standard', selected: x.atin === p.atin, available: x.stock > 0, priceMinor: x.priceMinor, options: { ...x.family?.options }
+  }));
+}
+
 function detailOf(p: FixtureProduct): ProductDetail {
   return {
-    product: { atin: p.atin, title: p.title, brand: p.sellerName, community: p.community, department: p.department, unit: p.unit, origin: p.sellerCity, bullets: [p.description, p.bestBefore], rating: p.rating, reviewCount: p.reviewCount, images: [{ url: null, alt: p.title }], variants: [] },
+    sizeChart: p.sized ? DRESS_SIZE_CHART : null,
+    product: { atin: p.atin, title: p.title, brand: p.sellerName, community: p.community, department: p.department, unit: p.unit, origin: p.sellerCity, bullets: [p.description, p.bestBefore], rating: p.rating, reviewCount: p.reviewCount, images: [{ url: null, alt: p.title }], variants: variantsOf(p) },
     buyBox: { offerId: `of_${p.atin}`, seller: seller(p), priceMinor: p.priceMinor, listPriceMinor: null, currency: 'USD', fulfilment: p.fulfilment, availableQty: p.stock, stockStatus: stockStatus(p.stock), delivery: promiseOf(p) },
     otherOffers: [],
     shipsFrom: p.fulfilment === 'AFROTRANSACT' ? `Shipped by AfroTransact · ${p.shipsFrom}` : `Shipped by ${p.sellerName} · ${p.shipsFrom}`,
@@ -59,7 +69,7 @@ function detailOf(p: FixtureProduct): ProductDetail {
 
 function search(q: string, page: number, size: number): SearchPage {
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const hits = PRODUCTS.filter((p) => words.every((w) => `${p.title} ${p.sellerName} ${p.department}`.toLowerCase().includes(w)));
+  const hits = PRODUCTS.filter((p) => (!p.family || p.family.root === p.atin) && words.every((w) => `${p.title} ${p.sellerName} ${p.department}`.toLowerCase().includes(w)));
   const slice = hits.slice(page * size, page * size + size).map(summaryOf);
   const facet = { department: [], community: [], fulfilment: [], sellerKind: [], rating: [], price: [], delivery: [] };
   return { hits: slice, total: hits.length, page, size, pageCount: Math.ceil(hits.length / size), facets: facet, deliverToLabel: 'Houston 77032', tookMs: 3, services: [] };

@@ -1,4 +1,4 @@
-import { CartSchema, MeSchema, ProductDetailSchema, SearchPageSchema } from '@afrotransact/api-client';
+import { CartSchema, guideCell, MeSchema, pickerDimensions, type ProductDetail, ProductDetailSchema, SearchPageSchema, selectedRowIndex, selectedSize, variantForSize } from '@afrotransact/api-client';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { resetMockDb } from '../src/api/mock/db';
@@ -47,5 +47,33 @@ describe('dev mock backend', () => {
   it('keeps provider calendars in provider time', () => {
     expect(atZoned('2026-10-12', 10 * 60, 'America/Chicago').toISOString()).toBe('2026-10-12T15:00:00.000Z');
     expect(atZoned('2026-12-14', 9 * 60, 'America/New_York').toISOString()).toBe('2026-12-14T14:00:00.000Z');
+  });
+
+  it('serves a sized garment with option chips and its size chart, and keeps the other sizes out of search', async () => {
+    const res = await req('/v1/products/ATADIRE000');
+    const body = await res.json();
+    expect(ProductDetailSchema.safeParse(body).success).toBe(true);
+    const d = body as ProductDetail;
+    expect(d.sizeChart?.rows.map((r) => r.size)).toEqual(['S', 'M', 'UK 12', 'Free size']);
+    expect(d.product.variants).toHaveLength(8);
+    const dims = pickerDimensions(d.product.variants);
+    expect(dims.map((x) => x.name)).toEqual(['Size', 'Color']);
+    expect(selectedSize(d.product.variants)).toBe('S');
+    expect(selectedRowIndex(d.sizeChart!, 'S')).toBe(0);
+    expect(variantForSize(d.product.variants, 'Free size')?.state).toBe('available');
+    // Free size is sold out in Indigo adire: from there the chip goes to the colour that still has it.
+    const indigo = (await (await req('/v1/products/ATADIRE010')).json()) as ProductDetail;
+    expect(selectedSize(indigo.product.variants)).toBe('S');
+    expect(variantForSize(indigo.product.variants, 'Free size')).toEqual({ value: 'Free size', state: 'elsewhere', atin: 'ATADIRE003' });
+    expect(guideCell(d.sizeChart!, d.sizeChart!.rows[0]!, 'bust', 'IN')).toBe('33.1–34.6');
+
+    const found = (await (await req('/v1/search?q=adire')).json()) as { hits: Array<{ atin: string }> };
+    expect(found.hits.map((i) => i.atin)).toEqual(['ATADIRE000']);
+  });
+
+  it('serves products without sizes as before: no chips, no chart', async () => {
+    const d = (await (await req('/v1/products/ATSHITO001')).json()) as ProductDetail;
+    expect(d.sizeChart).toBeNull();
+    expect(pickerDimensions(d.product.variants)).toEqual([]);
   });
 });
