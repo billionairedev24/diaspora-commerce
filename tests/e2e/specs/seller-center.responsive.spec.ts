@@ -26,6 +26,23 @@ const SELLER_ROUTES: AuditRoute[] = [
       }
     }
   },
+  {
+    label: 'new sized listing',
+    path: '/listings/new',
+    // A sized category adds the Size guide section; its chart table, the own-size input and the grouped quality list must fit every width.
+    open: {
+      label: 'sized category chosen',
+      run: async (p) => {
+        await p.getByRole('combobox', { name: 'Category' }).fill('kaftans');
+        await p.getByRole('option', { name: /Kaftans & shirts/ }).click();
+        await p.getByRole('heading', { name: 'Size guide' }).waitFor();
+        await p.getByLabel('Size chart').selectOption({ label: 'Kaftans and shirts' });
+        await p.getByRole('table', { name: 'Size chart Kaftans and shirts' }).waitFor();
+      }
+    }
+  },
+  { label: 'size charts', path: '/listings/size-charts', open: { label: 'chart editor', run: (p) => p.getByRole('button', { name: 'New size chart' }).click() } },
+  { label: 'import size charts', path: '/listings/size-charts/import' },
   { label: 'inventory', path: '/inventory' },
   { label: 'orders', path: '/orders', open: { label: 'order sheet', run: (p) => p.getByTestId('order-row').first().click() } },
   { label: 'ship from', path: '/orders/ship-from' },

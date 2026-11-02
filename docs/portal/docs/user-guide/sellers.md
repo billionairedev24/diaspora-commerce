@@ -41,8 +41,10 @@ ours do not fit; "XL" and "xl" count as one. Write a **size chart** once (**List
 inches, enter each size's measurements as a number (`88`) or a range (`86-90`), say how to measure and whether your
 sizes run small, true to size or large. Then choose the chart on each product. Every size you sell needs a row in the
 chart, and some categories require a chart. Shoppers see the chart beside the size picker with a cm / in switch.
-Charts can also be uploaded from a spreadsheet; use the size chart template and **Preview** first. A chart you retire
-keeps showing on products that already use it.
+You can also write or change a chart without leaving the product form (**Size guide** section). Charts can be uploaded
+from a spreadsheet (**Listings → Size charts → Import charts**): download the template, fill one row per size, then
+**Check the file**; nothing is saved until you import, each chart is saved whole or not at all, and a name you already use
+updates that chart. A chart you retire keeps showing on products that already use it.
 
 ## 3. Fulfil orders
 

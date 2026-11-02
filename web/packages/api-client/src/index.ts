@@ -2,8 +2,8 @@ export { type AddressLookup, addressLookup, type AddressLookupClient, type Addre
 export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike, type PutWithProgress, uploadHelpEvidence, uploadResume } from './client';
 export { CORRELATION_HEADER, newCorrelationId, withCorrelationHeaders } from './correlation';
 export * from './credit-client';
-export * from './custom-values';
 export { creditSplit, MIN_CARD_MINOR } from './credit-split';
+export * from './custom-values';
 export * from './delivery-runs';
 export { ApiError, isApiError } from './errors';
 export * from './fee-rates';
