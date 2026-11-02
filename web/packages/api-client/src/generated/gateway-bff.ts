@@ -3945,7 +3945,7 @@ export interface components {
             idleTimeoutSeconds: number;
             /**
              * Format: int64
-             * @description Seconds after sign-in before sign-out
+             * @description Seconds after sign-in before sign-out, however active
              */
             absoluteTimeoutSeconds: number;
             /**
