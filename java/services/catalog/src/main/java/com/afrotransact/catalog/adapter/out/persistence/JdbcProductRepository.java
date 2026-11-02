@@ -3,6 +3,7 @@ package com.afrotransact.catalog.adapter.out.persistence;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -170,6 +171,28 @@ class JdbcProductRepository implements ProductRepository {
             spec = spec.param("after", afterId);
         }
         return withVariants(spec.query(this::mapProduct).list());
+    }
+
+    @Override
+    public List<Product> findForExport(Set<ProductStatus> statuses, UUID afterId, Instant since, int limit) {
+        StringBuilder where = new StringBuilder(" where status in (:statuses)");
+        Map<String, Object> params = new HashMap<>();
+        params.put("statuses", statuses.stream().map(ProductStatus::name).toList());
+        params.put("limit", limit);
+        if (afterId != null) {
+            where.append(" and id > :after");
+            params.put("after", afterId);
+        }
+        if (since != null) {
+            where.append("""
+                     and (updated_at >= :since
+                          or id in (select product_id from product_rating where updated_at >= :since)
+                          or owner_org in (select org_id from org_listing_suppression where changed_at >= :since))
+                    """);
+            params.put("since", Timestamp.from(since));
+        }
+        return withVariants(jdbc.sql(SELECT + where + " order by id limit :limit").params(params)
+                .query(this::mapProduct).list());
     }
 
     @Override

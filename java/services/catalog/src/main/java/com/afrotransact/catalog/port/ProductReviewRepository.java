@@ -64,6 +64,13 @@ public interface ProductReviewRepository {
     /** Stored ratings of these products (products without one are absent). */
     Map<UUID, RatingSummary> ratings(Collection<UUID> productIds);
 
+    /** Stored ratings of these products with the time they were last recomputed (products without one are absent). */
+    Map<UUID, RatingSnapshot> ratingSnapshots(Collection<UUID> productIds);
+
+    /** A stored rating and when it was last recomputed. */
+    record RatingSnapshot(RatingSummary summary, Instant updatedAt) {
+    }
+
     /** One page of results. */
     record Page<T>(List<T> items, long total, int page, int size) {
     }

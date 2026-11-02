@@ -38,6 +38,8 @@ tags:
 - name: Seller reviews
   description: The product owner sees the published reviews of its products and replies once to each (catalog:write). Sellers
     cannot edit or hide a review; they can report it.
+- name: Search export
+  description: Read-only enumeration of products for rebuilding the search index (indexer reindex command)
 - name: Review moderation
   description: Trust and safety staff and the trust-ops service client (catalog:moderate) approve, reject and remove product
     reviews. Decisions are idempotent; the product's rating follows each decision.
@@ -1741,6 +1743,61 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/SellerReviewPage'
+  /v1/search-export/products:
+    get:
+      tags:
+      - Search export
+      summary: Products as catalog.product.* event payloads, keyset-paged by id, for the search index rebuild
+      description: Service clients with catalog:read (the indexer-service client) and staff. Each item is the payload the indexer
+        would have received for the product's current state (sellerHidden while the owner's listings are hidden), the time
+        that state last changed (version) and the stored rating. Page with after = nextAfter until nextAfter is null. Read-only;
+        publishes nothing.
+      operationId: searchExportProducts
+      parameters:
+      - name: status
+        in: query
+        description: Only these statuses (default LIVE)
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - IN_REVIEW
+            - PENDING_CATEGORY_APPROVAL
+            - LIVE
+            - REJECTED
+            - PAUSED
+            - TAKEN_DOWN
+      - name: after
+        in: query
+        description: 'Exclusive lower bound: the nextAfter of the previous page'
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: since
+        in: query
+        description: Only products changed (own data, rating or owner's listing visibility) at or after this instant
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: size
+        in: query
+        description: Page size, 1 to 200
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SearchExportPage'
   /v1/taxonomy/audit:
     get:
       tags:
@@ -3769,6 +3826,146 @@ components:
         size:
           type: integer
           format: int32
+    SearchExportPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchExportItem'
+        nextAfter:
+          type: string
+          format: uuid
+          description: after for the next page; null on the last page
+    SearchExportItem:
+      type: object
+      properties:
+        product:
+          $ref: '#/components/schemas/ProductEventPayload'
+        version:
+          type: string
+          format: date-time
+          description: When the product's state last changed
+        rating:
+          $ref: '#/components/schemas/SearchExportRating'
+          description: Null when the product never had a published review
+    SearchExportRating:
+      type: object
+      properties:
+        average:
+          type: number
+        count:
+          type: integer
+          format: int32
+        updatedAt:
+          type: string
+          format: date-time
+    ProductEventPayload:
+      type: object
+      description: Payload of catalog.product.* events; consumed by offers, inventory, search indexer and trust-ops.
+      properties:
+        productId:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        ownerKind:
+          type: string
+        ownerOrgId:
+          type: string
+        status:
+          type: string
+        title:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+        productTypeCode:
+          type: string
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariantPayload'
+        note:
+          type: string
+        sellerHidden:
+          type: boolean
+          description: 'The owner''s listings are hidden by seller-service compliance enforcement: keep the product out of
+            public surfaces regardless of status'
+        reasonCode:
+          type: string
+          description: Takedown reason code on catalog.product.taken_down; null otherwise
+        preorderEligible:
+          type: boolean
+        shipsNow:
+          type: boolean
+        imageUrl:
+          type: string
+          description: Public URL of the main (first) image; null without images
+        brand:
+          type: string
+          description: The brand attribute; null when absent
+        communities:
+          type: array
+          description: Diaspora communities from the community / communities attribute; empty when absent
+          items:
+            type: string
+        condition:
+          type: string
+          description: The listed item condition (NEW, RENEWED, USED_*)
+        fulfilment:
+          type: string
+          description: SELLER or AFROTRANSACT (Fulfilled by AfroTransact)
+        handlingDays:
+          type: integer
+          format: int32
+        shipFrom:
+          $ref: '#/components/schemas/ShipFromRef'
+        description:
+          type: string
+          description: The shopper description (searched); null when none
+        keywords:
+          type: array
+          description: The seller's search keywords (searched, as well as the title and description)
+          items:
+            type: string
+    VariantPayload:
+      type: object
+      description: Variant part of the payload; compareAtMinor is the offer's list price ("was" price), may be null.
+      properties:
+        atin:
+          type: string
+        sellerSku:
+          type: string
+        gtin:
+          type: string
+        priceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        compareAtMinor:
+          type: integer
+          format: int64
+    ShipFromRef:
+      type: object
+      description: The seller's ship-from location a listing ships from (snapshot of the seller-service address).
+      properties:
+        locationId:
+          type: string
+        label:
+          type: string
+        city:
+          type: string
+        region:
+          type: string
+        country:
+          type: string
+        postalCode:
+          type: string
     AttributeDefinition:
       type: object
       properties:

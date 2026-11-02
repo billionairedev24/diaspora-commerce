@@ -154,7 +154,7 @@ at:
         type: confidential
         secret: ${INDEXER_CLIENT_SECRET}
         grant-types: [client_credentials]
-        scopes: [sellers:directory, ai:use]
+        scopes: [sellers:directory, ai:use, catalog:read]
       - client-id: offers-service
         name: Offers service
         type: confidential

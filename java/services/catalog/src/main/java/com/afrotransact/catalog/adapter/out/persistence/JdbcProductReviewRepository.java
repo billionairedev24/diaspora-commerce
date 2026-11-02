@@ -272,6 +272,19 @@ class JdbcProductReviewRepository implements ProductReviewRepository {
                 reply, rs.getInt("report_count"), rs.getLong("version"));
     }
 
+    @Override
+    public Map<UUID, RatingSnapshot> ratingSnapshots(Collection<UUID> productIds) {
+        if (productIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, RatingSnapshot> out = new HashMap<>();
+        jdbc.sql("select * from product_rating where product_id in (:ids)").param("ids", productIds)
+                .query((rs, row) -> out.put(rs.getObject("product_id", UUID.class),
+                        new RatingSnapshot(summary(rs, row), rs.getTimestamp("updated_at").toInstant())))
+                .list();
+        return out;
+    }
+
     private static RatingSummary summary(ResultSet rs, int row) throws SQLException {
         return RatingSummary.ofCounts(rs.getInt("star1"), rs.getInt("star2"), rs.getInt("star3"), rs.getInt("star4"),
                 rs.getInt("star5"));

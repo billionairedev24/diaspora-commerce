@@ -1,5 +1,6 @@
 package com.afrotransact.catalog.port;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,16 @@ public interface ProductRepository {
      * @param afterId exclusive lower bound (null for the first page)
      */
     List<Product> findByOwnerOrgAfter(String orgId, UUID afterId, int limit);
+
+    /**
+     * One keyset page of products for the search export, any owner, ordered by id (with variants).
+     *
+     * @param statuses only products in one of these statuses
+     * @param afterId  exclusive lower bound (null for the first page)
+     * @param since    only products whose own data, rating or owner's listing visibility changed at or after this
+     *                 instant (null = every product)
+     */
+    List<Product> findForExport(Set<ProductStatus> statuses, UUID afterId, Instant since, int limit);
 
     ProductPage search(ProductQuery query);
 
