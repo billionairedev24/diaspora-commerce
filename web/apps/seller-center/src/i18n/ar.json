@@ -1079,5 +1079,17 @@
   "sc.pf.err.sizeChartRequired": "اختر جدول مقاسات: يحتاجه المتسوقون لاختيار المقاس.",
   "sc.pf.err.sizeChartRetired": "تم سحب جدول المقاسات «{name}». اختر جدولًا آخر أو أنشئ جدولًا جديدًا.",
   "sc.pf.err.sizeRows": "لا يحتوي «{name}» على صف لـ {sizes}. أضف المقاس إلى الجدول أو اختر جدولًا آخر.",
-  "sc.pf.tip.sizeChart": "أضف جدول مقاسات ليختار المتسوقون المقاس المناسب."
+  "sc.pf.tip.sizeChart": "أضف جدول مقاسات ليختار المتسوقون المقاس المناسب.",
+  "sc.pf.own.label": "أضف قيمتك الخاصة ({dimension})",
+  "sc.pf.own.placeholder": "اكتب أو الصق، مفصولة بفواصل",
+  "sc.pf.own.add": "إضافة",
+  "sc.pf.own.yours": "قيمك الخاصة ({dimension})",
+  "sc.pf.own.remove": "إزالة {value}",
+  "sc.pf.own.count": "{count} من {max} من قيمك الخاصة",
+  "sc.pf.own.added": "تمت إضافة {count}: {values}",
+  "sc.pf.own.err.tooLong": "«{value}» أطول من {max} حرفًا.",
+  "sc.pf.own.err.characters": "«{value}» يحتوي على أحرف غير مسموحة. استخدم الحروف والأرقام والمسافات و . , / + ( ) ' & # - فقط، وابدأ بحرف أو رقم.",
+  "sc.pf.own.err.empty": "اكتب قيمة لإضافتها.",
+  "sc.pf.own.err.duplicate": "«{value}» مضاف بالفعل.",
+  "sc.pf.own.err.limit": "لم تتم إضافة «{value}»: يمكن أن يحتوي المنتج على {max} قيمة خاصة ({dimension}) على الأكثر."
 }

@@ -1,12 +1,13 @@
 'use client';
 
-import { type ProductTypeSchema } from '@afrotransact/api-client';
+import { MAX_CUSTOM_VALUE_LENGTH, MAX_CUSTOM_VALUES_PER_PRODUCT, ownValues, type ProductTypeSchema } from '@afrotransact/api-client';
 import { Button, cx } from '@afrotransact/ui';
-import { useState } from 'react';
+import { X } from '@phosphor-icons/react/ssr';
+import { type ClipboardEvent, type KeyboardEvent, useState } from 'react';
 
-import { useT } from '@/i18n/t';
+import { type MessageKey, useT } from '@/i18n/t';
 
-import { applyToAll, comboKey, combos, emptyRow, fieldId, fillSkus, type FormState, type Problems, type VariantRow } from '../form-model';
+import { addOwnValues, applyToAll, comboKey, combos, emptyRow, fieldId, fillSkus, type FormState, type Problems, type VariantRow } from '../form-model';
 
 interface Props {
   s: FormState;
@@ -19,6 +20,76 @@ interface Props {
 }
 
 type Cell = 'sku' | 'gtin' | 'price' | 'compareAt' | 'qty';
+
+interface OwnProps {
+  dimension: string;
+  suggestions: readonly string[];
+  selected: readonly string[];
+  /** Own values a live listing already sells cannot be removed. */
+  isLocked: (value: string) => boolean;
+  onSelected: (values: string[]) => void;
+}
+
+/** "Add a size / colour" for a dimension that allows the seller's own values: type one, or paste a list; the seller's values show
+    as removable chips beside the category's suggestions; each value that is not accepted says why, and the others are still added. */
+function OwnValues({ dimension, suggestions, selected, isLocked, onSelected }: OwnProps) {
+  const t = useT();
+  const [text, setText] = useState('');
+  const [notes, setNotes] = useState<string[]>([]);
+  const [added, setAdded] = useState('');
+  const own = ownValues(selected, suggestions);
+  const add = (raw: string) => {
+    const r = addOwnValues(selected, suggestions, raw);
+    setNotes(r.rejected.map((x) => t(`sc.pf.own.err.${x.reason}` as MessageKey, { value: x.value, max: x.reason === 'limit' ? MAX_CUSTOM_VALUES_PER_PRODUCT : MAX_CUSTOM_VALUE_LENGTH, dimension: dimension.toLowerCase() })));
+    setAdded(r.added.length ? t('sc.pf.own.added', { count: r.added.length, values: r.added.join(', ') }) : '');
+    if (r.added.length) onSelected(r.selected);
+    // What could not be used stays in the box to be corrected; what was added leaves it.
+    setText(r.rejected.filter((x) => x.reason !== 'duplicate').map((x) => x.value).join(', '));
+  };
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      if (text.trim()) add(text);
+    }
+  };
+  // A pasted list (commas, tabs or line breaks, as copied from a sheet) is added at once.
+  const onPaste = (e: ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData.getData('text');
+    if (/[,;\t\r\n]/.test(pasted)) {
+      e.preventDefault();
+      add(`${text},${pasted}`);
+    }
+  };
+  const id = `pf-own-${dimension.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  return (
+    <div className="flex flex-col gap-1.5" data-testid={`own-${dimension}`}>
+      {own.length ? (
+        <div className="flex flex-wrap gap-1" role="group" aria-label={t('sc.pf.own.yours', { dimension })}>
+          {own.map((v) => (
+            <button key={v} type="button" disabled={isLocked(v)} aria-label={t('sc.pf.own.remove', { value: v })} data-own="true"
+              onClick={() => onSelected(selected.filter((x) => x !== v))}
+              className="inline-flex h-[30px] items-center gap-1 rounded-pill border border-gold-500 bg-gold-50 px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60">
+              {v}{isLocked(v) ? null : <X size={12} aria-hidden />}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <label htmlFor={id} className="text-xs text-muted">{t('sc.pf.own.label', { dimension: dimension.toLowerCase() })}</label>
+          <input id={id} value={text} maxLength={400} placeholder={t('sc.pf.own.placeholder')} onChange={(e) => setText(e.target.value)} onKeyDown={onKey} onPaste={onPaste}
+            className="h-8 w-56 max-w-full rounded-sm border border-border-strong bg-surface px-2 text-sm" />
+        </div>
+        <Button size="sm" variant="neutral" disabled={!text.trim()} onClick={() => add(text)}>{t('sc.pf.own.add')}</Button>
+        {own.length ? <span className="pb-1.5 text-xs text-muted">{t('sc.pf.own.count', { count: own.length, max: MAX_CUSTOM_VALUES_PER_PRODUCT })}</span> : null}
+      </div>
+      <div aria-live="polite" className="flex flex-col gap-0.5">
+        {added ? <span className="text-xs text-success">{added}</span> : null}
+        {notes.map((n) => <span key={n} role="alert" className="text-xs text-danger">{n}</span>)}
+      </div>
+    </div>
+  );
+}
 
 /** Variations: pick how the product varies (axes), the options of each axis, then fill the generated matrix (SKU, barcode, price, compare-at, stock, image per row). */
 export function VariantsSection({ s, type, set, problems, shown, locked }: Props) {
@@ -70,6 +141,10 @@ export function VariantsSection({ s, type, set, problems, shown, locked }: Props
               );
             })}
           </div>
+          {d.allowCustomValues ? (
+            <OwnValues dimension={d.name} suggestions={d.options} selected={s.selected[d.name] ?? []} isLocked={(v) => lockedOption(di, v)}
+              onSelected={(values) => set((prev) => ({ ...prev, selected: { ...prev.selected, [d.name]: values } }))} />
+          ) : null}
         </div>
       ))}
       {list.length ? (

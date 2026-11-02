@@ -1079,5 +1079,17 @@
   "sc.pf.err.sizeChartRequired": "Yan tábìlì ìwọ̀n: àwọn olùrà nílò rẹ̀ láti yan ìwọ̀n.",
   "sc.pf.err.sizeChartRetired": "A ti dá tábìlì ìwọ̀n “{name}” dúró. Yan òmíràn tàbí ṣẹ̀dá tuntun.",
   "sc.pf.err.sizeRows": "“{name}” kò ní ìlà fún {sizes}. Fi ìwọ̀n náà kún tábìlì tàbí yan tábìlì míràn.",
-  "sc.pf.tip.sizeChart": "Fi tábìlì ìwọ̀n kún kí àwọn olùrà lè yan ìwọ̀n tó tọ́."
+  "sc.pf.tip.sizeChart": "Fi tábìlì ìwọ̀n kún kí àwọn olùrà lè yan ìwọ̀n tó tọ́.",
+  "sc.pf.own.label": "Fi tìrẹ kún ({dimension})",
+  "sc.pf.own.placeholder": "Kọ tàbí lẹ̀, pín wọn pẹ̀lú kọ́mà",
+  "sc.pf.own.add": "Fi kún",
+  "sc.pf.own.yours": "Àwọn ìníyelórí tìrẹ ({dimension})",
+  "sc.pf.own.remove": "Yọ {value} kúrò",
+  "sc.pf.own.count": "{count} nínú {max} tìrẹ",
+  "sc.pf.own.added": "A fi {count} kún: {values}",
+  "sc.pf.own.err.tooLong": "“{value}” gùn ju àwọn ọ̀rọ̀ {max} lọ.",
+  "sc.pf.own.err.characters": "“{value}” ní àwọn àmì tí a kò lè lò. Lo lẹ́tà, nọ́ńbà, àlàfo àti . , / + ( ) ' & # - nìkan, bẹ̀rẹ̀ pẹ̀lú lẹ́tà tàbí nọ́ńbà.",
+  "sc.pf.own.err.empty": "Kọ ìníyelórí kan láti fi kún.",
+  "sc.pf.own.err.duplicate": "A ti fi “{value}” kún tẹ́lẹ̀.",
+  "sc.pf.own.err.limit": "A kò fi “{value}” kún: ọjà kan lè ní ìníyelórí tìrẹ ({dimension}) tí kò ju {max} lọ."
 }

@@ -1072,5 +1072,17 @@
   "sc.pf.err.sizeChartRequired": "Choose a size chart: shoppers need it to pick a size.",
   "sc.pf.err.sizeChartRetired": "The size chart “{name}” was retired. Choose another or create a new one.",
   "sc.pf.err.sizeRows": "“{name}” has no row for {sizes}. Add the size to the chart or choose another chart.",
-  "sc.pf.tip.sizeChart": "Add a size chart so shoppers can pick the right size."
+  "sc.pf.tip.sizeChart": "Add a size chart so shoppers can pick the right size.",
+  "sc.pf.own.label": "Add your own {dimension}",
+  "sc.pf.own.placeholder": "Type or paste, separated by commas",
+  "sc.pf.own.add": "Add",
+  "sc.pf.own.yours": "Your own {dimension} values",
+  "sc.pf.own.remove": "Remove {value}",
+  "sc.pf.own.count": "{count} of {max} of your own",
+  "sc.pf.own.added": "Added {count}: {values}",
+  "sc.pf.own.err.tooLong": "“{value}” is longer than {max} characters.",
+  "sc.pf.own.err.characters": "“{value}” has characters that cannot be used. Use letters, digits, spaces and . , / + ( ) ' & # - only, starting with a letter or digit.",
+  "sc.pf.own.err.empty": "Type a value to add.",
+  "sc.pf.own.err.duplicate": "“{value}” is already added.",
+  "sc.pf.own.err.limit": "“{value}” was not added: a product can have at most {max} of your own {dimension} values."
 }

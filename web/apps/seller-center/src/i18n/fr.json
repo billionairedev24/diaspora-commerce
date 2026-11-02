@@ -1079,5 +1079,17 @@
   "sc.pf.err.sizeChartRequired": "Choisissez un tableau des tailles : les clients en ont besoin pour choisir une taille.",
   "sc.pf.err.sizeChartRetired": "Le tableau des tailles « {name} » a été retiré. Choisissez-en un autre ou créez-en un nouveau.",
   "sc.pf.err.sizeRows": "« {name} » n’a pas de ligne pour {sizes}. Ajoutez la taille au tableau ou choisissez un autre tableau.",
-  "sc.pf.tip.sizeChart": "Ajoutez un tableau des tailles pour aider les clients à choisir la bonne taille."
+  "sc.pf.tip.sizeChart": "Ajoutez un tableau des tailles pour aider les clients à choisir la bonne taille.",
+  "sc.pf.own.label": "Ajouter votre propre valeur ({dimension})",
+  "sc.pf.own.placeholder": "Saisissez ou collez, séparés par des virgules",
+  "sc.pf.own.add": "Ajouter",
+  "sc.pf.own.yours": "Vos propres valeurs ({dimension})",
+  "sc.pf.own.remove": "Retirer {value}",
+  "sc.pf.own.count": "{count} sur {max} de vos propres valeurs",
+  "sc.pf.own.added": "{count} ajouté(s) : {values}",
+  "sc.pf.own.err.tooLong": "« {value} » dépasse {max} caractères.",
+  "sc.pf.own.err.characters": "« {value} » contient des caractères non autorisés. Utilisez uniquement des lettres, chiffres, espaces et . , / + ( ) ' & # -, en commençant par une lettre ou un chiffre.",
+  "sc.pf.own.err.empty": "Saisissez une valeur à ajouter.",
+  "sc.pf.own.err.duplicate": "« {value} » est déjà ajouté.",
+  "sc.pf.own.err.limit": "« {value} » n’a pas été ajouté : un produit peut avoir au plus {max} valeurs propres ({dimension})."
 }

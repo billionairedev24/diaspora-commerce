@@ -1079,5 +1079,17 @@
   "sc.pf.err.sizeChartRequired": "Elige una tabla de tallas: los clientes la necesitan para elegir talla.",
   "sc.pf.err.sizeChartRetired": "La tabla de tallas «{name}» se retiró. Elige otra o crea una nueva.",
   "sc.pf.err.sizeRows": "«{name}» no tiene fila para {sizes}. Añade la talla a la tabla o elige otra tabla.",
-  "sc.pf.tip.sizeChart": "Añade una tabla de tallas para que los clientes elijan la talla correcta."
+  "sc.pf.tip.sizeChart": "Añade una tabla de tallas para que los clientes elijan la talla correcta.",
+  "sc.pf.own.label": "Añade tu propio valor ({dimension})",
+  "sc.pf.own.placeholder": "Escribe o pega, separados por comas",
+  "sc.pf.own.add": "Añadir",
+  "sc.pf.own.yours": "Tus propios valores ({dimension})",
+  "sc.pf.own.remove": "Quitar {value}",
+  "sc.pf.own.count": "{count} de {max} propios",
+  "sc.pf.own.added": "Añadidos {count}: {values}",
+  "sc.pf.own.err.tooLong": "«{value}» supera los {max} caracteres.",
+  "sc.pf.own.err.characters": "«{value}» tiene caracteres que no se pueden usar. Usa solo letras, dígitos, espacios y . , / + ( ) ' & # -, empezando por una letra o un dígito.",
+  "sc.pf.own.err.empty": "Escribe un valor para añadir.",
+  "sc.pf.own.err.duplicate": "«{value}» ya está añadido.",
+  "sc.pf.own.err.limit": "«{value}» no se añadió: un producto puede tener como máximo {max} valores propios ({dimension})."
 }
