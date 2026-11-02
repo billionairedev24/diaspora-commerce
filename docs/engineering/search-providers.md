@@ -50,3 +50,17 @@ Meilisearch before 1.13 keeps its vector store behind an experimental switch; th
 
 Implement `port.Index`, `port.IndexAdmin` and `port.AnalyticsStore` (search) and `port.ProductIndex` (indexer), then add a
 case to `newBackend` in each service's `cmd/<service>/backend.go`.
+
+## Embeddings (semantic search)
+
+Hybrid search needs vectors: the indexer stores an embedding with every product and the search service embeds queries of
+three or more words, both through ai-gateway (OpenRouter, `openai/text-embedding-3-small`, 1536 dimensions).
+
+| Environment | State |
+|---|---|
+| dev, uat, prod (and the OVH test server, which runs the `dev` profile) | **on** in `go/services/{indexer,search}/config/<env>.yaml` (`embeddings.enabled: true`, `aiGatewayUrl: http://ai-gateway:8080`). What is needed is a running ai-gateway in the same namespace with `OPENROUTER_API_KEY` set. |
+| local | off. Set `OPENROUTER_API_KEY` in `.local/secrets.env`, then `EMBEDDINGS_ENABLED=true AI_GATEWAY_URL=http://localhost:8113` for the indexer and `AI_GATEWAY_URL=http://localhost:8113` for search, and restart both. |
+
+Without the key the calls fail: indexing never blocks (the backfill fills missing vectors every 15 minutes once the key
+works) and search falls back to text results and reports `semanticSkipped`. Keep `EMBEDDING_DIMENSIONS` (ai-gateway) and
+`EmbeddingDimensions` (`go/pkg/searchindex/embedding.go`) at 1536 together.
