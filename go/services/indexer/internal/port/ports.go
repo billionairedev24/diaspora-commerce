@@ -54,6 +54,26 @@ type SellerDirectory interface {
 	Remember(ctx context.Context, orgID, name string)
 }
 
+// ProductSource enumerates the catalog's products for a reindex (catalog-service GET /v1/search-export/products,
+// client-credentials token of client indexer-service, scope catalog:read).
+type ProductSource interface {
+	// Products returns one keyset page.
+	Products(ctx context.Context, q domain.ProductExportQuery) (domain.ProductExportPage, error)
+}
+
+// BuyBoxSource reads the current buy boxes from offers-service (GET /v1/public/buy-boxes).
+type BuyBoxSource interface {
+	// BuyBoxes returns the buy box of each variant ATIN that has offers (at most 50 ATINs per call); variants without
+	// offers are absent.
+	BuyBoxes(ctx context.Context, variantATINs []string) ([]domain.VariantBuyBox, error)
+}
+
+// StockSource reads current stock from inventory-service (GET /v1/availability).
+type StockSource interface {
+	// Stock returns the per-node quantities of each SKU (at most 100 SKUs per call); unknown SKUs are absent.
+	Stock(ctx context.Context, skus []string) ([]domain.NodeStock, error)
+}
+
 // SellerSource reads organisations from seller-service (client-credentials token of client indexer-service).
 type SellerSource interface {
 	// Directory returns one page (from 0) of every organisation's id, display name, kind and status.
