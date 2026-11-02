@@ -28,6 +28,12 @@ export interface FixtureProduct {
   /** Id of the base product when this is a size/pack variant. */
   variantOf?: string;
   variantLabel?: string;
+  /** The seller-written options of this variant ({ Size: 'UK 12', Color: 'Indigo adire' }); size/pack variants have none. */
+  options?: Record<string, string>;
+  /** Which of the seller's seeded size charts the product links (see mocks/seller/size-charts.ts). */
+  sizeChart?: 'dresses' | 'mensTops' | 'shoes';
+  /** Reachable only through its parent's variant picker: not listed in search, suggestions or the home page. */
+  unlisted?: boolean;
 }
 
 export const PLATFORM_SELLER = 'AfroTransact';
@@ -94,7 +100,45 @@ function expand(base: FixtureProduct[]): FixtureProduct[] {
   return out;
 }
 
-export const PRODUCTS: readonly FixtureProduct[] = expand(BASE);
+/**
+ * A garment sold by size and colour with seller-written labels: the shopper's size picker, size guide and unavailable
+ * combinations can be tried against this family (UK 12 / Free size are not category sizes; "Ankara blue print" is a long colour).
+ */
+const GARMENT_SIZES = ['S', 'M', 'UK 12', 'Free size'] as const;
+const GARMENT_COLOURS = ['Indigo adire', 'Ankara blue print'] as const;
+const GARMENT_ID = 'p24';
+
+function garment(): FixtureProduct[] {
+  const out: FixtureProduct[] = [];
+  GARMENT_COLOURS.forEach((colour, ci) => {
+    GARMENT_SIZES.forEach((size, si) => {
+      const first = ci === 0 && si === 0;
+      // Out of stock: Free size in the blue print. Nearly gone: M in indigo.
+      const stock = size === 'Free size' && ci === 1 ? 0 : size === 'M' && ci === 0 ? 3 : 12 + si;
+      out.push({
+        id: first ? GARMENT_ID : `${GARMENT_ID}${ci}${si}`,
+        name: 'Adire Wrap Dress, Hand-Dyed Cotton',
+        brand: 'Ile Adire Studio',
+        comm: 'Nigerian',
+        cat: 'Fashion',
+        rating: 4.7,
+        reviews: 218,
+        unit: `${size}, ${colour}`,
+        origin: 'Abeokuta, Nigeria',
+        bullets: ['Hand-dyed adire cotton, colour-fast after the first wash', 'Wrap front with a tie waist; midi length', 'Check the size guide: sizes are in centimetres or inches'],
+        offers: [{ seller: 'Ile Adire Studio', city: 'Houston, TX', price: size === 'Free size' ? 92 : 85, ff: 'S', stock }],
+        variantOf: first ? undefined : GARMENT_ID,
+        variantLabel: `${size} · ${colour}`,
+        options: { Size: size, Color: colour },
+        sizeChart: 'dresses',
+        unlisted: !first
+      });
+    });
+  });
+  return out;
+}
+
+export const PRODUCTS: readonly FixtureProduct[] = [...expand(BASE), ...garment()];
 
 /** Product id (p1, p1v0 …) → ATIN, matching the search contract pattern ^AT[0-9A-Z]{8}$. */
 export function atinOf(id: string): string {

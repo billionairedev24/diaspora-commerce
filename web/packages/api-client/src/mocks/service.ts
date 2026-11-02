@@ -7,7 +7,6 @@ import { type FacetBucket } from '../schemas/common';
 import { type Home } from '../schemas/home';
 import { type DeliveryLocation } from '../schemas/location';
 import { PRICE_BUCKETS, type SearchPage, type SearchQuery, type Suggestions } from '../schemas/search';
-import { chartRowFor } from '../size-charts';
 import { getDb, type MockOffer, type MockSession, nextId } from './db';
 import { deliveryOptions, deliveryPromise, etaDays, FREE_SHIPPING_THRESHOLD_MINOR, locationForZip, metroOf, nearestFc, SELLER_SHIPPING_MINOR } from './delivery';
 import { atinOf,DEPARTMENTS, type FixtureProduct, PLATFORM_SELLER } from './fixtures/catalog';
@@ -140,8 +139,9 @@ export function productDetail(atin: string, metro: string, now: Date): ProductDe
   const purchasable = bb.stock > 0;
   const baseId = p.variantOf ?? p.id;
   const family = [...db.products.values()].filter((x) => x.id === baseId || x.variantOf === baseId);
-  // Garments carry the seller's dress size chart so the product page can show a size guide (fabric and stoles are not sized).
-  const chart = p.cat === 'Fashion' && /dress|gown|boubou|kaftan/i.test(p.name) ? seedSizeCharts('fixture', now).find((c) => c.id === SIZE_CHART_IDS.dresses) : undefined;
+  // A product that links a seller's size chart carries it (fixtures name the chart; nothing is decided by category).
+  const chartId = p.sizeChart ? SIZE_CHART_IDS[p.sizeChart] : undefined;
+  const chart = chartId ? seedSizeCharts('fixture', now).find((c) => c.id === chartId) : undefined;
   const isAT = bb.fulfilment === 'AFROTRANSACT' || bb.sellerName === PLATFORM_SELLER;
   return {
     sizeChart: chart ? publicSizeChart(chart) : null,
@@ -164,9 +164,7 @@ export function productDetail(atin: string, metro: string, now: Date): ProductDe
               const xa = atinOf(x.id);
               const xbb = buyBox(db.offersByAtin.get(xa) ?? []);
               const label = x.variantLabel ?? 'Standard';
-              const noOptions: Record<string, string> = {};
-              const size = chart && chartRowFor(chart, label) ? label : null;
-              return { atin: xa, label, selected: xa === atin, available: xbb.stock > 0, priceMinor: xbb.priceMinor, options: size ? { Size: size } : noOptions };
+              return { atin: xa, label, selected: xa === atin, available: xbb.stock > 0, priceMinor: xbb.priceMinor, options: { ...x.options } };
             })
           : []
     },
@@ -210,7 +208,7 @@ export function search(q: SearchQuery, loc: DeliveryLocation, now: Date): Search
   const started = Date.now();
   const db = getDb();
   const metro = metroOf(loc);
-  const cands: Candidate[] = [...db.products.values()].map((p) => ({ p, s: summarize(p, metro, now), score: q.q.trim() ? matchScore(p, q.q) : 1 }));
+  const cands: Candidate[] = [...db.products.values()].filter((p) => !p.unlisted).map((p) => ({ p, s: summarize(p, metro, now), score: q.q.trim() ? matchScore(p, q.q) : 1 }));
   let list = cands.filter((c) => passes(c, q, null));
   const sorters: Record<SearchQuery['sort'], ((a: Candidate, b: Candidate) => number) | null> = {
     relevance: q.q.trim() ? (a, b) => b.score - a.score : null,
@@ -285,7 +283,7 @@ export function suggest(query: string, loc: DeliveryLocation, now: Date): Sugges
   const q = query.trim();
   if (!q) return { query: q, phrases: [], products: [] };
   const terms = completePhrases(q);
-  const ranked = [...db.products.values()]
+  const ranked = [...db.products.values()].filter((p) => !p.unlisted)
     .map((p) => ({ p, sc: matchScore(p, q) }))
     .filter((x) => x.sc > 0)
     .sort((a, b) => b.sc - a.sc)
@@ -304,7 +302,7 @@ export function suggest(query: string, loc: DeliveryLocation, now: Date): Sugges
 export function home(loc: DeliveryLocation, now: Date): Home {
   const db = getDb();
   const metro = metroOf(loc);
-  const all = [...db.products.values()].map((p) => summarize(p, metro, now));
+  const all = [...db.products.values()].filter((p) => !p.unlisted).map((p) => summarize(p, metro, now));
   const rails = PLACEMENTS.rails.map((r) => {
     let items: ProductSummary[] = [];
     if (r.source.kind === 'fulfilled-fastest') items = all.filter((x) => x.fulfilment === 'AFROTRANSACT').sort((a, b) => a.delivery.days - b.delivery.days).slice(0, r.source.limit);
