@@ -1227,6 +1227,10 @@ cmd_down() {
   fi
   # Leftovers this script no longer tracks (older runs): stop any of this repository's services still on their ports.
   for svc in $ALL_SERVICES; do free_port_for "$svc" >/dev/null 2>&1 || true; done
+  # An emulator that was killed rather than shut down leaves its crash handler behind, reparented to init. It then
+  # polls a crash database under /tmp that the system cleaner has since deleted, and logs the failure to whatever
+  # terminal it inherited — forever. Nothing owns it any more, so down takes it with the rest.
+  pkill -f 'Android/sdk/emulator/crashpad_handler' 2>/dev/null || true
   echo "==> stopping infrastructure (data kept; 'make reset' deletes it). Your own Postgres/Valkey keep running."
   # shellcheck disable=SC2086
   compose stop postgres valkey $INFRA_BASE $OBS_BASE postgres-exporter redis-exporter >/dev/null 2>&1 || true
