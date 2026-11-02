@@ -1,0 +1,20 @@
+appId: com.afrotransact.customer.local
+---
+- runFlow: _sign-in.yaml
+- tapOn: "Browse"
+- tapOn:
+    id: "Search AfroTransact"
+- inputText: "adire"
+- tapOn: ".*Adire Wrap Dress.*"
+# Size and Color chips, then the size guide with the chart.
+- assertVisible: "Size"
+- assertVisible: "Color"
+- tapOn: "Size guide"
+- assertVisible: "Dresses and wraps"
+- assertVisible: "Bust"
+- assertVisible: "S \\(your size\\)"
+- tapOn: "Inches"
+- assertVisible: "33.1.*"
+# Selecting another size opens that size's page.
+- tapOn: "Select size M"
+- assertVisible: "Add to cart.*"

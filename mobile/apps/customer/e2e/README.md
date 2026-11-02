@@ -21,6 +21,7 @@ maestro test mobile/apps/customer/e2e/02-checkout.yaml
 | `04-addresses` | Add an address natively; an unverifiable one asks “Fix it / Keep mine”; it appears in the list |
 | `05-bookings` | Opens Book a pro and lists providers (extend with a provider’s name once the labels are final) |
 | `06-account` | Payment methods show the saved card; sign out returns to sign-in |
+| `07-size-guide` | Adire Wrap Dress: Size and Color chips, the Size guide sheet (cm / in, your size marked), Select size opens that size |
 
 These were written from the screens' labels and **have not been run yet** (they need an emulator). The API journeys
 behind them run in CI as `test/flows.test.ts`. Against the real stack, `pnpm smoke` checks products and photos.

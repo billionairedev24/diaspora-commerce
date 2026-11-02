@@ -136,6 +136,34 @@ Sample files: [`samples/size-charts-womens-dresses.csv`](samples/size-charts-wom
 [`samples/products-sized-dresses.csv`](samples/products-sized-dresses.csv). The two chart samples are validated by
 `SizeChartFilesTest`.
 
+## Shopper size guide (storefront and customer app)
+
+The product page reads `sizeChart` and each variant's `options` from `GET /v1/products/{atin}` and does the rest on the
+client with the shared helpers in `web/packages/api-client/src/size-charts.ts` (the web storefront and the customer app
+import the same module, so the two cannot disagree):
+
+- **Option chips** (`pickerDimensions`): one row per option name (Size, Color ...), each value once, in order of
+  appearance. A chip is `selected`, `available` (changing only this value gives an in-stock variant), `elsewhere` (that
+  exact combination is sold out or not made, but the value is in stock in another combination: the click goes to the
+  closest in-stock variant and the chip is dashed and announced as such) or `unavailable` (nothing in stock has it;
+  shown struck through, not clickable). Variants without `options` keep the old list of variant labels.
+- **Size guide** (`SizeGuide` on the web, a bottom sheet in the app): opened from the "Size guide" link beside the Size
+  chips (or on its own when the product has one variant). It shows the seller's chart in cm or inches (`guideUnits`; the
+  chart's own unit first, the server's `alternateValues`, converted client-side only if missing), the fit note and
+  how-to-measure text, and highlights the row of the selected variant's `Size` (`selectedRowIndex`, ignoring case and
+  spacing). Every other row has **Select**, which goes to the in-stock variant of that size, closest to the current
+  colour (`variantForSize`); a size that is sold out everywhere says so.
+- The unit the shopper picks is remembered on the device (`localStorage` on the web, secure storage in the app) and used
+  next time if the chart offers it.
+- A product with no `sizeChart` shows no link; one with a chart but a size that has no row shows "Size X is not in this
+  chart" instead of a highlighted row.
+- Copy is in the five locales (`pdp.chip.*`, `sizeGuide.*` in the storefront catalogues, `cu.pdp.chip.*`,
+  `cu.sizeGuide.*` in the app); non-English strings are machine translations marked for review.
+
+Mock data: the web mock catalogue has "Adire Wrap Dress" (`AT000000P24`, 4 sizes x 2 colours, linked to the seeded dress
+chart; the other variants are `unlisted` so search shows it once); the customer app mock has the same garment
+(`ATADIRE000`, variants `ATADIRE0<colour><size>`).
+
 ## For sellers (plain words)
 
 *Why a size chart?* Shoppers cannot try clothes on. A chart that says what "M" or "UK 12" means in centimetres or
@@ -159,4 +187,6 @@ chart while a product still sells it.
 `ImportSizingTest`, `ChartImportValidatorTest`, `SizeChartFilesTest`, `SizeChartServiceTest`, `ProductWriterSizingTest`,
 `SizeChartDtosTest`, `JsonCodecSizingTest` and the ArchUnit `ArchitectureTest`; `SizeChartIT` (real HTTP, Flyway and
 multipart; needs Docker or a local Postgres); gateway-bff `seller_size_charts_test.go` and the contract conformance tests;
-api-client `size-charts.test.ts`, `staff-taxonomy.test.ts`.
+api-client `size-charts.test.ts`, `size-guide.test.ts`, `staff-taxonomy.test.ts`; storefront `test/size-guide.test.tsx`
+(RTL, mock BFF) and `e2e/size-guide.spec.ts` (Playwright); customer app `test/mock.test.ts` and the Maestro flow
+`e2e/07-size-guide.yaml`.
