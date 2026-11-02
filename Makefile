@@ -35,10 +35,17 @@ ovh-gh-setup: ## One-time set-up of the single-server OVHcloud environment: asks
 up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — the web apps run as production builds (DEV=1 for Next dev servers, REBUILD=1 to force a rebuild), MOBILE_HOST=lan serves it all on your Wi-Fi address for a phone, OBS=0 leaves out Grafana/Prometheus/Loki/Tempo
 	PROD=$(PROD) DEV=$(DEV) REBUILD=$(REBUILD) tools/dev/local.sh up $(SERVICES)
 
-up-infra: ## Start only the full Docker infrastructure incl. observability (Grafana, Prometheus, Loki, Tempo, Kibana; ~12 GB)
-	$(COMPOSE) up -d
+up-infra: ## Start only the full Docker infrastructure incl. observability (Grafana, Prometheus, Loki, Tempo; ~12 GB). Search engine: Meilisearch by default; SEARCH_PROVIDER=elasticsearch (env or .local/secrets.env) adds Elasticsearch, its exporter and Kibana instead
+	@sp="$${SEARCH_PROVIDER:-$$(grep -s '^SEARCH_PROVIDER=' .local/secrets.env | tail -1 | cut -d= -f2)}"; sp="$${sp:-meilisearch}"; \
+	if [ "$$sp" = elasticsearch ]; then \
+	  echo "==> search engine: Elasticsearch"; $(COMPOSE) rm -sf meilisearch >/dev/null 2>&1 || true; $(COMPOSE) up -d; \
+	else \
+	  echo "==> search engine: Meilisearch"; \
+	  $(COMPOSE) rm -sf elasticsearch elasticsearch-init elasticsearch-exporter kibana >/dev/null 2>&1 || true; \
+	  $(COMPOSE) up -d $$($(COMPOSE) config --services | grep -v -E '^(elasticsearch|elasticsearch-init|elasticsearch-exporter|kibana)$$'); \
+	fi
 	@infra/local/wait-healthy.sh 600
-	@echo "Grafana http://localhost:3200 · Kafka UI http://localhost:8090 · Kibana http://localhost:5601 · Temporal http://localhost:8088 · Mailpit http://localhost:8025 · MinIO http://localhost:9001"
+	@echo "Grafana http://localhost:3200 · Kafka UI http://localhost:8090 · Search http://localhost:7700 (Meilisearch) or Kibana http://localhost:5601 (Elasticsearch) · Temporal http://localhost:8088 · Mailpit http://localhost:8025 · MinIO http://localhost:9001"
 
 down: ## Stop everything make up started: web apps, services, infrastructure (keeps data; make reset wipes it)
 	tools/dev/local.sh down
