@@ -69,8 +69,8 @@ describe('size chart import', () => {
     await report.findByRole('heading', { name: 'What broken.csv would do' });
     expect(report.getByTestId('sum-failed')).toHaveTextContent('1');
     expect(report.getByTestId('sum-rowsWithErrors')).toHaveTextContent('2');
-    expect(report.getByText('1 charts cannot be saved.')).toBeInTheDocument();
-    expect(report.getByText(/You can import the other 1 now/)).toBeInTheDocument();
+    expect(report.getByText('1 chart cannot be saved.')).toBeInTheDocument();
+    expect(report.getByText(/You can import the other chart now/)).toBeInTheDocument();
 
     // Only the rows with problems, each naming its column.
     const rows = report.getAllByTestId('chart-row');
@@ -83,8 +83,8 @@ describe('size chart import', () => {
     fireEvent.click(report.getByLabelText(/Only rows with problems/));
     expect(report.getAllByTestId('chart-row')).toHaveLength(4);
 
-    fireEvent.click(report.getByRole('button', { name: 'Import 1 charts' }));
-    expect(await screen.findByText('Imported 1 size charts')).toBeInTheDocument();
+    fireEvent.click(report.getByRole('button', { name: 'Import 1 chart' }));
+    expect(await screen.findByText('Imported 1 size chart')).toBeInTheDocument();
     expect((await mockApi().listSizeCharts({ q: 'Good chart' })).items).toHaveLength(1);
     expect((await mockApi().listSizeCharts({ q: 'Broken chart' })).items).toHaveLength(0);
   });

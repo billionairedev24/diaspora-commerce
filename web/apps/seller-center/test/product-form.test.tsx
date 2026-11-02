@@ -272,7 +272,8 @@ describe('section navigator, listing quality and the sticky actions', () => {
     await waitFor(() => expect(Number(within(panel).getByRole('progressbar').getAttribute('aria-valuenow'))).toBeGreaterThan(before));
     expect(within(panel).getByTestId('quality-percent')).toHaveTextContent(/\d+% complete/);
 
-    const missing = within(panel).getByTestId('missing-list');
+    // What is missing is grouped by form section, in page order, each group naming its section.
+    const missing = within(panel).getByTestId('quality-details');
     expect(within(missing).getByRole('link', { name: /Author/ })).toBeInTheDocument();
     fireEvent.click(within(missing).getByRole('link', { name: /Publisher/ }));
     expect(screen.getByLabelText('Publisher')).toHaveFocus();
@@ -280,7 +281,7 @@ describe('section navigator, listing quality and the sticky actions', () => {
     expect(screen.getByLabelText('Publisher')).toHaveAccessibleDescription('Required');
 
     // Recommended items are listed apart and also jump to their field.
-    const tips = within(panel).getByTestId('tips-list');
+    const tips = within(within(panel).getByTestId('quality-basics')).getByTestId('tips-list');
     fireEvent.click(within(tips).getByRole('link', { name: /Description/ }));
     expect(screen.getByLabelText('Description')).toHaveFocus();
   });
@@ -427,6 +428,19 @@ describe('size guide section', () => {
     fireEvent.change(screen.getByLabelText('How it fits'), { target: { value: 'RUNS_SMALL' } });
     expect(screen.getByLabelText('How it fits')).toHaveValue('RUNS_SMALL');
     await waitFor(() => expect(within(panel).queryByRole('link', { name: /Size chart/ })).not.toBeInTheDocument());
+  });
+
+  it('groups what is left to do by section in the quality panel, and the group heading goes to its section', async () => {
+    const panel = await kaftan();
+    const group = within(panel).getByTestId('quality-sizeGuide');
+    expect(within(group).getByText('1 to fix')).toBeInTheDocument();
+    expect(within(group).getByRole('link', { name: /Size chart/ })).toHaveTextContent('Choose a size chart');
+    expect(within(panel).getByTestId('quality-basics')).toHaveTextContent('Product title');
+    // Page order: Basics comes before Size guide.
+    const order = within(panel).getAllByRole('heading', { level: 3 }).map((h) => h.textContent ?? '');
+    expect(order.findIndex((x) => x.startsWith('Basics'))).toBeLessThan(order.findIndex((x) => x.startsWith('Size guide')));
+    fireEvent.click(within(group).getByRole('link', { name: 'Go to Size guide' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Size guide' })).toHaveFocus();
   });
 
   it('writes a new chart without leaving the form and links it to the product', async () => {

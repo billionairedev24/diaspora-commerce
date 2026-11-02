@@ -507,6 +507,23 @@ export function qualityItems(s: FormState, type: ProductTypeSchema | undefined, 
   return items;
 }
 
+export interface QualityGroup {
+  section: SectionKey;
+  /** What blocks submitting in this section. */
+  problems: [string, Problem][];
+  /** Recommended items of this section that are not done yet. */
+  tips: QualityItem[];
+}
+
+/** The quality panel's content grouped by form section, in page order; a section with nothing to do is left out.
+    Problems and tips of a section the page does not show (a server message) come last. */
+export function groupQuality(problems: [string, Problem][], tips: QualityItem[], sections: SectionKey[]): QualityGroup[] {
+  const keys = [...sections, ...[...problems.map(([, p]) => p.section), ...tips.map((i) => i.section)].filter((k) => !sections.includes(k))];
+  return [...new Set(keys)]
+    .map((section) => ({ section, problems: problems.filter(([, p]) => p.section === section), tips: tips.filter((i) => i.section === section) }))
+    .filter((g) => g.problems.length > 0 || g.tips.length > 0);
+}
+
 /** 0–100: the share of checklist items that are done. */
 export const qualityScore = (items: QualityItem[]) => (items.length ? Math.round((100 * items.filter((i) => i.done).length) / items.length) : 0);
 

@@ -495,11 +495,13 @@ export function ProductForm({ productId }: { productId?: string }) {
               update((prev) => ({ ...prev, sizeChartId: saved.id }));
             }} />
         ) : null}
-        <ReadinessPanel problems={ordered} tips={tips} percent={percent} preview={preview} onGo={jump} />
+        <ReadinessPanel problems={ordered} tips={tips} sections={sections} titleOf={sectionTitle} percent={percent} preview={preview} onGo={jump} />
       </div>
       <ActionBar
         problems={ordered}
         tips={tips}
+        sections={sections}
+        titleOf={sectionTitle}
         percent={percent}
         preview={preview}
         saveState={saveLine}

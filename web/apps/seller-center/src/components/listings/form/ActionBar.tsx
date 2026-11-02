@@ -6,12 +6,14 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 import { useT } from '@/i18n/t';
 
-import { type Problem, type QualityItem } from '../form-model';
+import { type Problem, type QualityItem, type SectionKey } from '../form-model';
 import { QualityBar, QualityLists } from './ReadinessPanel';
 
 interface Props {
   problems: [string, Problem][];
   tips: QualityItem[];
+  sections: SectionKey[];
+  titleOf: (key: SectionKey) => string;
   percent: number;
   preview: ReactNode;
   /** Autosave state line ("Draft saved 10:42"). */
@@ -29,7 +31,7 @@ interface Props {
 
 /** Sticky bottom bar: the draft-saved time, Save draft and the primary action. Below the wide layout it also opens the
     quality list and the preview upwards (the right-hand panel is not on screen there). */
-export function ActionBar({ problems, tips, percent, preview, saveState, primaryLabel, onPrimary, primaryDisabled, onSaveDraft, saveDraftDisabled, busy, savingDraft, onGo }: Props) {
+export function ActionBar({ problems, tips, sections, titleOf, percent, preview, saveState, primaryLabel, onPrimary, primaryDisabled, onSaveDraft, saveDraftDisabled, busy, savingDraft, onGo }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
   /** The "Ask Lola" button is fixed in the same corner: publish this bar's height so it sits above the bar and never covers Submit. */
@@ -56,7 +58,7 @@ export function ActionBar({ problems, tips, percent, preview, saveState, primary
       {open ? (
         <div id="pf-quality-sheet" className="mb-2 flex max-h-[55vh] flex-col gap-3 overflow-y-auto xl:hidden">
           <QualityBar percent={percent} />
-          <QualityLists problems={problems} tips={tips} onGo={(id) => { setOpen(false); onGo(id); }} />
+          <QualityLists problems={problems} tips={tips} sections={sections} titleOf={titleOf} onGo={(id) => { setOpen(false); onGo(id); }} />
           <div className="max-w-48">{preview}</div>
         </div>
       ) : null}

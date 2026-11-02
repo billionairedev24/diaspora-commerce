@@ -84,7 +84,7 @@ describe('My size charts', () => {
     await renderScreen(<SizeChartsView />);
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Kaftans and shirts' }));
     const ed = within(await editor());
-    expect(ed.getByText('1 products use this chart.')).toBeInTheDocument();
+    expect(ed.getByText('1 product uses this chart.')).toBeInTheDocument();
     expect(ed.getByRole('button', { name: 'Save changes' })).toBeDisabled();
     expect(ed.getByLabelText('Chest of size S')).toHaveValue('35–37');
 
@@ -141,7 +141,7 @@ describe('My size charts', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Retire Kaftans and shirts' }));
     expect(await screen.findByRole('heading', { name: 'Retire “Kaftans and shirts”?' })).toBeInTheDocument();
-    expect(screen.getByText(/1 products use it\. They keep showing it/)).toBeInTheDocument();
+    expect(screen.getByText(/1 product uses it\. They keep showing it/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Retire chart' }));
     expect(await screen.findByText('“Kaftans and shirts” retired')).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText('Kaftans and shirts')).not.toBeInTheDocument());

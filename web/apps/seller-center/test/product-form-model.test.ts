@@ -15,8 +15,10 @@ import {
   type FormState,
   fromDetail,
   fromDraftPayload,
+  groupQuality,
   gtinOk,
   leavesOf,
+  orderedProblems,
   packagingOf,
   previewAttributes,
   priceMinor,
@@ -317,6 +319,21 @@ describe('size guide: sized product types link a size chart', () => {
     expect(back.selected.Size).toEqual(['M', 'L', '4XL', 'Free size']);
     expect(back.selected.Color).toEqual(expect.arrayContaining(['Gold', 'Midnight teal']));
     expect(combos(menwear, back).length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('groups what is missing by form section, in page order, with the suggestions of the same section', () => {
+    const s = kaftan();
+    const sections = sectionsFor(menwear);
+    const problems = validateForm(s, menwear);
+    const tips = qualityItems(s, menwear, problems).filter((i) => !i.required && !i.done);
+    const groups = groupQuality(orderedProblems(problems, sections), tips, sections);
+    expect(groups.map((g) => g.section)).toEqual(['basics', 'images', 'sizeGuide']);
+    expect(groups[0]).toMatchObject({ problems: [], tips: [{ id: fieldId.description }] });
+    expect(groups[2]?.problems.map(([id]) => id)).toEqual([fieldId.sizeChart]);
+    // A message about a section the page does not show comes last.
+    const stray = groupQuality([['x', { key: 'sc.pf.err.server', section: 'compliance', label: 'sc.pf.field.form' }]], [], ['basics']);
+    expect(stray.map((g) => g.section)).toEqual(['compliance']);
+    expect(groupQuality([], [], sections)).toEqual([]);
   });
 
   it('gives variants whose names differ only by punctuation different field ids', () => {
