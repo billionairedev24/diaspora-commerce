@@ -200,6 +200,78 @@ class SellersTest(unittest.TestCase):
 
 
 
+class SizeChartsTest(unittest.TestCase):
+    """The size charts the sized fashion products link: written once through catalog, found again by name."""
+
+    CODES = {"Fashion › Women › Dresses": "dress", "Fashion › Women › Tops": "top", "Fashion › Men › Shirts": "menwear",
+             "Fashion › Kids › Kids clothing": "kids"}
+
+    def setUp(self):
+        self.s = seeder()
+        self.catalog = self.s.svc["catalog"]
+        self.charts = []
+        self.catalog.on("GET", "/v1/categories", lambda *a: [{"path": p, "id": f"cat-{c}", "productType": c} for p, c in self.CODES.items()])
+        self.catalog.on("GET", "/v1/size-charts", lambda path, body, kw: {"items": [c for c in self.charts if kw["params"]["q"].lower() in c["name"].lower()]})
+
+        def create(path, body, kw):
+            chart = dict(body, id=f"chart-{len(self.charts)}")
+            self.charts.append(chart)
+            return chart
+
+        self.catalog.on("POST", "/v1/size-charts", create)
+
+    def test_writes_every_chart_for_the_type_of_its_category(self):
+        self.s.step_size_charts()
+
+        self.assertEqual([c["name"] for c in self.charts], [c.name for c in D.SIZE_CHARTS])
+        self.assertEqual(self.s.report.problems, [])
+        dresses = next(c for c in self.charts if c["name"] == "Women's dresses")
+        self.assertEqual(dresses["categoryId"], "cat-dress")
+        self.assertEqual(dresses["unitSystem"], "CM")
+        self.assertEqual([c["key"] for c in dresses["columns"]], ["bust", "waist", "hip"])
+        self.assertEqual(dresses["fitNote"], "TRUE_TO_SIZE")
+        self.assertEqual(dresses["rows"][0], {"size": "XS", "values": {"bust": {"min": 80, "max": 83}, "waist": {"min": 62, "max": 65}, "hip": {"min": 88, "max": 91}}})
+        self.assertIn("UK 12", [r["size"] for r in dresses["rows"]], "the seller's own size labels")
+        mens = next(c for c in self.charts if c["name"] == "Men's shirts and kaftans")
+        self.assertEqual(mens["unitSystem"], "IN")
+        self.assertEqual(mens["rows"][0]["values"]["sleeve_length"], {"min": 24.5}, "a single value is sent without max")
+        self.assertEqual(self.s.report.counts[("size charts", "created")], len(D.SIZE_CHARTS))
+
+    def test_a_re_run_finds_the_charts_by_name_and_writes_nothing(self):
+        self.s.step_size_charts()
+        again = seeder()
+        again.svc = self.s.svc
+        again.step_size_charts()
+
+        self.assertEqual(len(self.charts), len(D.SIZE_CHARTS))
+        self.assertEqual(again.report.counts[("size charts", "existing")], len(D.SIZE_CHARTS))
+        self.assertEqual({c["id"] for c in again.charts.values()}, {c["id"] for c in self.charts})
+
+    def test_a_product_finds_or_writes_its_chart_even_when_only_the_products_step_runs(self):
+        p = next(x for x in D.PRODUCTS if x.key == "dashiki")
+        chart = self.s._chart_for(p, self.s._categories())
+
+        self.assertEqual(chart["name"], "Men's shirts and kaftans")
+        self.assertEqual(len(self.charts), 1)
+        self.assertIs(self.s._chart_for(p, self.s._categories()), chart, "asked again, the same chart")
+        self.assertIsNone(self.s._chart_for(next(x for x in D.PRODUCTS if x.key == "ofada-rice"), {}), "an unsized product links none")
+
+    def test_a_chart_that_cannot_be_written_is_reported_and_the_product_is_listed_without_it(self):
+        def refuse(path, body, kw):
+            raise ApiError("POST", path, 422, {"code": "catalog.invalid"})
+
+        self.catalog.on("POST", "/v1/size-charts", refuse)
+        p = next(x for x in D.PRODUCTS if x.key == "agbada")
+        self.assertIsNone(self.s._chart_for(p, self.s._categories()))
+        self.assertEqual(len(self.s.report.problems), 1)
+        self.assertIn("listed without it", self.s.report.problems[0])
+
+    def test_the_step_comes_before_the_products_that_link_the_charts(self):
+        from seedlib.seeder import STEPS
+
+        self.assertLess(STEPS.index("size-charts"), STEPS.index("products"))
+
+
 class PickupPointsTest(unittest.TestCase):
     def test_saves_every_afrotransact_pickup_point_with_its_fixed_id(self):
         s = seeder()
