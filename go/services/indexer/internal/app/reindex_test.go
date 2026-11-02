@@ -138,7 +138,6 @@ type harness struct {
 	src      *pagedSource
 	boxes    *fakeBuyBoxes
 	stock    *fakeStock
-	handlers map[string]events.Handler
 	ensured  []string
 	ensureFn func(string) error
 }
@@ -346,6 +345,24 @@ func TestStockReadFailureFailsTheBatchAfterRetriesAndTheRunGoesOn(t *testing.T) 
 	}
 	if sum.Failures() != 2 {
 		t.Fatalf("failures = %d", sum.Failures())
+	}
+}
+
+func TestStockSourceThatStaysDownEndsTheRunAfterThreeFailedBatches(t *testing.T) {
+	var items []domain.ProductExportItem
+	for i := range 10 {
+		items = append(items, exportItem(fmt.Sprintf("AT0000000%d", i), fmt.Sprintf("V%d", i)))
+	}
+	h := newHarness(items...)
+	h.stock.err = errors.New("inventory down")
+	rec := &recorder{}
+
+	sum, err := h.reindexer(map[string]events.Handler{"us": rec}).Run(t.Context(), app.ReindexOptions{Markets: []string{"us"}, Batch: 2, After: "AT00000000"})
+	if err == nil {
+		t.Fatal("a run whose stock source is down must end with an error")
+	}
+	if sum.FailedBatches != 3 || sum.Batches != 3 || sum.ResumeAfter != "AT00000000" || len(rec.types()) != 0 {
+		t.Fatalf("summary = %+v, events %v", sum, rec.types())
 	}
 }
 

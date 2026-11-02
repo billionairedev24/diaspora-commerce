@@ -34,7 +34,7 @@ type ReindexOptions struct {
 	Markets []string
 	// Batch is how many products one catalog page holds (0 = 100).
 	Batch int
-	// Concurrency is how many products are projected at once (0 = 2).
+	// Concurrency is how many products are projected at once (0 = 4).
 	Concurrency int
 	// DryRun reads the catalog and counts, and writes nothing (not even the index settings).
 	DryRun bool
@@ -101,10 +101,12 @@ type ReindexDeps struct {
 
 const (
 	defaultBatch       = 100
-	defaultConcurrency = 2
+	defaultConcurrency = 4
 	defaultSkew        = 30 * time.Second
 	defaultBackoff     = 250 * time.Millisecond
 	sourceAttempts     = 3
+	// maxFailedBatchesInARow ends a run whose stock sources are evidently down.
+	maxFailedBatchesInARow = 3
 )
 
 // snapshotType is the event type a reindex gives an exported product. The projector indexes the payload with the
@@ -158,16 +160,30 @@ func (r *reindexerImpl) Run(ctx context.Context, opts ReindexOptions) (ReindexSu
 	}
 
 	after := opts.After
+	streak, streakStart := 0, ""
 	for {
 		page, err := r.page(ctx, domain.ProductExportQuery{After: after, Statuses: opts.Statuses, Since: opts.Since,
 			Size: opts.Batch})
 		if err != nil {
 			return sum, fmt.Errorf("read catalog page after %q: %w", after, err)
 		}
+		failedBefore := sum.FailedBatches
 		if len(page.Items) > 0 {
 			r.batch(ctx, opts, page.Items, &sum)
 		}
 		sum.Batches++
+		// A stock source that stays down fails every batch: stop instead of walking the whole catalog.
+		if sum.FailedBatches > failedBefore {
+			if streak == 0 {
+				streakStart = after
+			}
+			if streak++; streak >= maxFailedBatchesInARow {
+				sum.ResumeAfter = streakStart
+				return sum, fmt.Errorf("%d batches in a row could not read buy boxes or stock; the source looks down", streak)
+			}
+		} else {
+			streak = 0
+		}
 		if page.NextAfter != "" && page.NextAfter == after {
 			return sum, fmt.Errorf("catalog export did not advance past cursor %q", after)
 		}
@@ -366,7 +382,7 @@ func (r *reindexerImpl) apply(ctx context.Context, market string, it domain.Prod
 			}
 		}
 		for _, n := range stock.nodes[v.ATIN] {
-			ae := domain.AvailabilityEvent{SKU: n.SKU, Node: n.Node, Available: n.Available, Version: n.Version}
+			ae := domain.AvailabilityEvent(n) // the same four fields: what inventory would have published
 			if err := r.handle(ctx, h, domain.AvailabilityChanged, n.SKU, at, ae); err != nil {
 				return fmt.Errorf("stock %s@%s: %w", n.SKU, n.Node, err)
 			}

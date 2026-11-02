@@ -33,26 +33,44 @@ import (
 const serviceName = "indexer"
 
 func main() {
+	// `indexer reindex` rebuilds the index from the sources of truth and exits (reindex.go); without a subcommand
+	// the process is the Kafka consumer.
+	if len(os.Args) > 1 && os.Args[1] == reindexCommand {
+		if err := runReindex(os.Args[2:]); err != nil {
+			slog.Error("reindex failed", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(); err != nil {
 		slog.Error("indexer exited", "error", err)
 		os.Exit(1)
 	}
 }
 
+// loadConfig reads config/<APP_ENV>.yaml with the environment overrides (shared by the consumer and the reindex).
+func loadConfig() (config.Config, string, error) {
+	loader := pkgconfig.NewLoader(indexer.Files)
+	var cfg config.Config
+	if err := loader.Load(&cfg); err != nil {
+		return config.Config{}, "", fmt.Errorf("load config: %w", err)
+	}
+	cfg.Resolve(loader.Env())
+	return cfg, loader.Env(), nil
+}
+
 func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	loader := pkgconfig.NewLoader(indexer.Files)
-	var cfg config.Config
-	if err := loader.Load(&cfg); err != nil {
-		return fmt.Errorf("load config: %w", err)
+	cfg, env, err := loadConfig()
+	if err != nil {
+		return err
 	}
-	cfg.Resolve(loader.Env())
-	log := logging.New(serviceName, loader.Env())
+	log := logging.New(serviceName, env)
 	slog.SetDefault(log)
 
-	shutdownTracing, err := telemetry.Setup(ctx, serviceName, loader.Env(), cfg.Telemetry.OTLPEndpoint, cfg.Telemetry.SampleRatio)
+	shutdownTracing, err := telemetry.Setup(ctx, serviceName, env, cfg.Telemetry.OTLPEndpoint, cfg.Telemetry.SampleRatio)
 	if err != nil {
 		return fmt.Errorf("tracing: %w", err)
 	}
