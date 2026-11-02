@@ -14,7 +14,7 @@ customer storefront, whose host follows the **storefront host rule** (below): `w
 | Purpose | local | dev | uat | prod |
 |---|---|---|---|---|
 | Storefront (`PUBLIC_WEB_URL`) | `http://localhost:3000` | `https://www.dev.afrotransact.com` | `https://www.uat.afrotransact.com` | `https://www.afrotransact.com` (the base domain of each environment, e.g. `https://dev.afrotransact.com`, 301-redirects to it, see below) |
-| Seller Center & Provider Hub (`SELLER_CENTER_URL`) | `http://localhost:3001` | `https://seller.dev.afrotransact.com` | `https://seller.uat.afrotransact.com` | `https://seller.afrotransact.com` |
+| Seller Center & Provider Hub (`SELLER_CENTER_URL`) | `http://localhost:3010` | `https://seller.dev.afrotransact.com` | `https://seller.uat.afrotransact.com` | `https://seller.afrotransact.com` |
 | Staff console (`STAFF_CONSOLE_URL`) | `http://localhost:3002` | `https://admin.dev.afrotransact.com` | `https://admin.uat.afrotransact.com` | `https://admin.afrotransact.com` |
 | Public API, gateway-bff (`API_BASE_URL`) | `http://localhost:8200` | `https://api.dev.afrotransact.com` | `https://api.uat.afrotransact.com` | `https://api.afrotransact.com` |
 | Identity / OIDC issuer (`AUTH_ISSUER_URL`) | `http://localhost:8100` | `https://auth.dev.afrotransact.com` | `https://auth.uat.afrotransact.com` | `https://auth.afrotransact.com` |
@@ -84,7 +84,7 @@ Local ports come from `infra/local/PORTS.md`.
 | App | Setting | local default | dev / uat / prod value | Used for |
 |---|---|---|---|---|
 | storefront | `BFF_ORIGIN` | `http://localhost:8200` | `<API_BASE_URL>/bff` (`https://api.<base>/bff`) | `/api/bff` proxy, server components |
-| storefront | `SELLER_CENTER_URL` (`NEXT_PUBLIC_SELLER_CENTER_URL` still read) | `http://localhost:3001` | `https://seller.<base>` | `/sell`, `/provide` redirects |
+| storefront | `SELLER_CENTER_URL` (`NEXT_PUBLIC_SELLER_CENTER_URL` still read) | `http://localhost:3010` | `https://seller.<base>` | `/sell`, `/provide` redirects |
 | storefront | `API_MOCKS` / `NEXT_PUBLIC_API_MOCKS` | `1` in `.env.example` | `0` (`1` on PR previews) | in-process MSW mock BFF |
 | seller-center, staff-console | `BFF_ORIGIN` | `http://localhost:8200` | `https://api.<base>/bff` | `/api/bff` proxy |
 | storefront | `PUBLIC_WEB_URL` | unset (relative metadata) | `https://www.<base>` | `metadataBase`: canonical and Open Graph URLs |

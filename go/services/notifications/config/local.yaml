@@ -58,7 +58,7 @@ attachments:
   timeout: 10s
 links:
   storefront: http://localhost:3000
-  sellerCenter: http://localhost:3001
+  sellerCenter: http://localhost:3010
 auth:
   enabled: false
   issuer: http://localhost:8100

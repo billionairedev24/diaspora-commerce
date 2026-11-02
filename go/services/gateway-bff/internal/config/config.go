@@ -202,7 +202,7 @@ func (c *Config) RedirectURIs() map[string]string {
 			out[o] = pkgconfig.JoinURL(o, strings.TrimRight(c.Web.BFFPath, "/")+OIDCCallbackPath)
 		}
 	}
-	// In local dev, Seller Center may move to port 3010 when 3001 is busy (tools/dev/local.sh).
+	// Seller Center is on 3010 locally; older setups and a moved port still use 3001 (tools/dev/local.sh).
 	// Ensure both local origins have registered callbacks so appOrigin accepts either port.
 	if _, has3001 := out["http://localhost:3001"]; has3001 {
 		if _, has3010 := out["http://localhost:3010"]; !has3010 {

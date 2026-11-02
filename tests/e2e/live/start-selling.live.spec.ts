@@ -13,7 +13,7 @@ import { type Browser, expect, type Page, test } from '@playwright/test';
  */
 
 const STOREFRONT = process.env.LIVE_STOREFRONT_URL ?? 'http://localhost:3000';
-const SELLER = (process.env.LIVE_SELLER_URL ?? process.env.SELLER_CENTER_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
+const SELLER = (process.env.LIVE_SELLER_URL ?? process.env.SELLER_CENTER_URL ?? 'http://localhost:3010').replace(/\/+$/, '');
 const IDENTITY = process.env.LIVE_IDENTITY_URL ?? 'http://localhost:8100';
 const MAILPIT = process.env.LIVE_MAILPIT_URL ?? 'http://localhost:8025';
 const SHOTS = process.env.LIVE_SCREENSHOTS;

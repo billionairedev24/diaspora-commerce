@@ -34,7 +34,7 @@ import tools.jackson.databind.JsonNode;
     "at.consumers.enabled=false",
     "spring.kafka.bootstrap-servers=localhost:1",
     "at.identity.verification.sender=outbox",
-    "at.identity.invitations.accept-url=http://localhost:3001/invitations/accept"})
+    "at.identity.invitations.accept-url=http://localhost:3010/invitations/accept"})
 @ActiveProfiles("local")
 @Testcontainers
 class OrgTeamAndPhoneVerificationIT {
@@ -121,7 +121,7 @@ class OrgTeamAndPhoneVerificationIT {
         String firstToken = invitationToken(bolaEmail);
         JsonNode event = latestInvitationEvent(bolaEmail);
         assertThat(event.get("acceptUrl").asString())
-                .isEqualTo("http://localhost:3001/invitations/accept?token=" + firstToken);
+                .isEqualTo("http://localhost:3010/invitations/accept?token=" + firstToken);
         assertThat(event.get("recipient").get("email").asString()).isEqualTo(bolaEmail);
         assertThat(event.get("orgName").asString()).isEqualTo("Mama Put");
         assertThat(event.get("roleKey").asString()).isEqualTo("seller.catalog");

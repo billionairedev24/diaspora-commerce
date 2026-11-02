@@ -44,7 +44,7 @@ class PasswordResetIT {
     private static final String BFF = "gateway-bff";
     private static final String BFF_SECRET = "local-bff-secret";
     private static final String STOREFRONT_CALLBACK = "http://localhost:3000/api/bff/v1/auth/oidc/callback";
-    private static final String SELLER_CALLBACK = "http://localhost:3001/api/bff/v1/auth/oidc/callback";
+    private static final String SELLER_CALLBACK = "http://localhost:3010/api/bff/v1/auth/oidc/callback";
     private static final String PASSWORD = "Plantain-Jollof-2026";
     private static final String NEW_PASSWORD = "Suya-Spice-Market-2027";
 

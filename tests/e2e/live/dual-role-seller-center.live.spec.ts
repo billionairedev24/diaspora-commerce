@@ -5,7 +5,7 @@ import { type Browser, expect, type Page, test } from '@playwright/test';
 /*
  * A person who is both a customer and an approved seller (customer.houston: APP-30200, approved) opens Seller Center
  * from the storefront, against the running local stack, with Seller Center on whatever port the stack gave it
- * (tools/dev/local.sh moves it to :3010 when :3001 is taken, e.g. by your own Grafana; LIVE_SELLER_URL /
+ * (tools/dev/local.sh moves it to :3020 when :3010 is taken; LIVE_SELLER_URL /
  * SELLER_CENTER_URL). Every main-frame navigation is recorded: the redirect chain must end on the dashboard, signed
  * in, without going round, and a shell that is sent round in circles stops with a panel instead of loading forever.
  * The last journey approves an application while identity is stopped (its approval event waits in Kafka) and starts
@@ -14,7 +14,7 @@ import { type Browser, expect, type Page, test } from '@playwright/test';
  */
 
 const STOREFRONT = process.env.LIVE_STOREFRONT_URL ?? 'http://localhost:3000';
-const SELLER = (process.env.LIVE_SELLER_URL ?? process.env.SELLER_CENTER_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
+const SELLER = (process.env.LIVE_SELLER_URL ?? process.env.SELLER_CENTER_URL ?? 'http://localhost:3010').replace(/\/+$/, '');
 const IDENTITY = process.env.LIVE_IDENTITY_URL ?? 'http://localhost:8100';
 const EMAIL = 'customer.houston@afrotransact.test';
 const PASSWORD = 'Test1234!Local';

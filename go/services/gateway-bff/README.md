@@ -202,8 +202,8 @@ cookie stays first-party on its app's host; identity registers the same three fo
 the derived values. Problem types are `https://developers.afrotransact.com/problems/bff.<code>` (`go/pkg/problem`).
 
 Local defaults: upstreams on their `infra/local/PORTS.md` ports, storefront `http://localhost:3000`, Seller Center
-`http://localhost:3001` and staff console `http://localhost:3002` allowed for CORS/CSRF, identity `http://localhost:8100`,
-redirect URIs `http://localhost:{3000,3001,3002}/api/bff/v1/auth/oidc/callback`, identity client secret `local-bff-secret`, cookie
+`http://localhost:3010` and staff console `http://localhost:3002` allowed for CORS/CSRF, identity `http://localhost:8100`,
+redirect URIs `http://localhost:{3000,3010,3002}/api/bff/v1/auth/oidc/callback`, identity client secret `local-bff-secret`, cookie
 not `Secure` (plain-http localhost).
 
 ## Run and test

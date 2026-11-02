@@ -13,7 +13,7 @@ import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 
 /**
  * Which app the hosted pages are branded for. The web apps' URLs follow PUBLIC_WEB_URL / SELLER_CENTER_URL /
- * STAFF_CONSOLE_URL, so Seller Center on another port (tools/dev/local.sh moves it to :3010 when :3001 is taken) or a
+ * STAFF_CONSOLE_URL, so Seller Center on another port (tools/dev/local.sh moves it to :3020 when :3010 is taken) or a
  * LAN address is still recognised. Without an authorization request, or for anything unrecognised, the pages are
  * neutral: the staff console's branding only ever comes from a staff console request.
  */

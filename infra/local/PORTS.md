@@ -19,8 +19,8 @@
 | mcp-server | Spring Boot + Spring AI MCP | 8114 | MCP tools for shoppers, sellers, staff | — |
 | delivery-runs | Spring Boot | 8115 | community delivery runs: locations, runs (cutoff, minimum, capacity), run slots, subscriptions, run economics; pre-order windows, coverage, waitlist, late adds | Postgres `deliveryruns` |
 | gateway-bff | Go | 8200 | screen-shaped APIs for web/mobile, token relay | Redis |
-| search | Go | 8201 | query, facets, autocomplete, hybrid retrieval | Elasticsearch or Meilisearch (`SEARCH_PROVIDER`) |
-| indexer | Go | 8202 | Kafka → search index projection | Elasticsearch or Meilisearch (`SEARCH_PROVIDER`) |
+| search | Go | 8201 | query, facets, autocomplete, hybrid retrieval | Meilisearch (default) or Elasticsearch (`SEARCH_PROVIDER`) |
+| indexer | Go | 8202 | Kafka → search index projection | Meilisearch (default) or Elasticsearch (`SEARCH_PROVIDER`) |
 | cart | Go | 8203 | carts, save-for-later, merge on login | Redis + Postgres `cart` |
 | promise | Go | 8204 | delivery promises per ZIP | Redis |
 | geo | Go | 8205 | address autocomplete (Google Places / OSM Nominatim), validation | Postgres/PostGIS `geo` |
@@ -58,11 +58,11 @@ pre-order. Details: [docs/engineering/local-development.md](../../docs/engineeri
 | Front-end | Port |
 |---|---|
 | web/apps/storefront | 3000 |
-| web/apps/seller-center | 3001 |
+| web/apps/seller-center | 3010 |
 | web/apps/staff-console | 3002 |
 
 If one of these is taken by another program (Grafana often sits on 3000 or 3001), `make up` moves that app to the next
-free port from 3010, prints it, and gives the new addresses to identity (sign-in return URLs), gateway-bff and
+free port from 3020, prints it, and gives the new addresses to identity (sign-in return URLs), gateway-bff and
 notifications. Pin a port yourself with `STOREFRONT_PORT`, `SELLER_CENTER_PORT` or `STAFF_CONSOLE_PORT`; the choice is
 remembered in `.local/web-ports`.
 | docs/portal (Docusaurus) | 3100 |
@@ -74,7 +74,7 @@ remembered in `.local/web-ports`.
 | Kafka (KRaft) | 9092 |
 | Kafka UI | 8090 |
 | Elasticsearch 9 | 9200 |
-| Meilisearch (`SEARCH_PROVIDER=meilisearch`, instead of Elasticsearch) | 7700 |
+| Meilisearch (default search engine; `SEARCH_PROVIDER=elasticsearch` uses Elasticsearch instead) | 7700 |
 | Kibana | 5601 |
 | Temporal / UI | 7233 / 8088 |
 | OTel Collector (gRPC/HTTP) | 4317 / 4318 |

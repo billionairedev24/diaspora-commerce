@@ -52,7 +52,7 @@ STRIPE_WEBHOOK_SECRET|secret|opt||whsec_ of the platform webhook https://api.<do
 STRIPE_CONNECT_WEBHOOK_SECRET|secret|opt||whsec_ of the Connect webhook
 STRIPE_BILLING_WEBHOOK_SECRET|secret|opt||whsec_ of the billing webhook
 RESEND_API_KEY|secret|opt||Resend API key re_ (email over HTTPS: OVHcloud blocks outbound SMTP on 25, 465 and 587)
-OPENROUTER_API_KEY|secret|opt||OpenRouter key for Lola
+OPENROUTER_API_KEY|secret|opt||OpenRouter key: Lola assistant, AI moderation and the product embeddings for semantic search (without it search is text-only)
 GOOGLE_PLACES_API_KEY|secret|opt||Google Places key (address autocomplete)
 GOOGLE_MAPS_API_KEY|secret|opt||Google Routes key (delivery distance)
 UPLOADTHING_API_KEY|secret|opt||UploadThing key (media uploads)

@@ -14,7 +14,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/port"
 )
 
-// Search engines the service can run on (SEARCH_PROVIDER).
+// Search engines the service can run on (SEARCH_PROVIDER). Meilisearch is the default when it is unset.
 const (
 	providerElasticsearch = "elasticsearch"
 	providerMeilisearch   = "meilisearch"
@@ -33,7 +33,7 @@ type backend struct {
 
 func newBackend(cfg config.Config, synonymsSet string) (backend, error) {
 	switch p := strings.ToLower(strings.TrimSpace(cfg.SearchProvider)); p {
-	case "", providerElasticsearch:
+	case providerElasticsearch:
 		es, err := newElasticsearch(cfg)
 		if err != nil {
 			return backend{}, err
@@ -41,7 +41,7 @@ func newBackend(cfg config.Config, synonymsSet string) (backend, error) {
 		return backend{name: providerElasticsearch, index: elastic.NewIndex(es), admin: elastic.NewAdmin(es, synonymsSet),
 			analytics:       func() port.AnalyticsStore { return elastic.NewAnalyticsStore(es) },
 			ensureAnalytics: func(ctx context.Context, m string) error { return elastic.EnsureAnalyticsIndex(ctx, es, m) }}, nil
-	case providerMeilisearch:
+	case "", providerMeilisearch:
 		if cfg.Meilisearch.URL == "" {
 			return backend{}, fmt.Errorf("SEARCH_PROVIDER=meilisearch needs MEILISEARCH_URL")
 		}

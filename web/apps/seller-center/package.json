@@ -5,10 +5,10 @@
   "description": "AfroTransact Seller Center & Provider Hub (Next.js 16 App Router) \u2014 back offices for approved sellers and service providers.",
   "type": "module",
   "scripts": {
-    "dev": "next dev --port 3001",
-    "dev:mocks": "NEXT_PUBLIC_API_MOCKS=1 next dev --port 3001",
+    "dev": "next dev --port 3010",
+    "dev:mocks": "NEXT_PUBLIC_API_MOCKS=1 next dev --port 3010",
     "build": "next build",
-    "start": "next start --port 3001",
+    "start": "next start --port 3010",
     "lint": "eslint . && stylelint \"src/**/*.css\"",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",

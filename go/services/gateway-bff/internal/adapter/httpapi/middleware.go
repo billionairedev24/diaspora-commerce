@@ -19,7 +19,7 @@ import (
 type SecurityOptions struct {
 	AllowedOrigins []string
 	// LocalDev (APP_ENV=local only) also accepts any http://localhost:<port> or http://127.0.0.1:<port> origin, so a web
-	// app that moved to another port (3001 taken by Grafana → 3010) is never refused as "not an AfroTransact page".
+	// app that moved to another port (3010 taken → 3020) is never refused as "not an AfroTransact page".
 	LocalDev        bool
 	CookieName      string
 	CookieSecure    bool

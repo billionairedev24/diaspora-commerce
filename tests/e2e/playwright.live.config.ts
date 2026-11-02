@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 /*
  * Live journeys against a RUNNING local stack (tools/dev/local.sh up): identity :8100, gateway-bff :8200,
- * storefront :3000, Seller Center :3001, staff console :3002, Mailpit :8025. Nothing is mocked or started here.
+ * storefront :3000, Seller Center :3010, staff console :3002, Mailpit :8025. Nothing is mocked or started here.
  *
  *   pnpm --filter @afrotransact/e2e test:live
  *
