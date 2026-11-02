@@ -75,7 +75,8 @@ class ProductWriterImpl implements ProductWriter {
         Placement placement = placement(cmd.categoryId(), cmd.categoryRequestId(), owner);
         Map<String, String> attributes = brands.resolve(owner, node(placement.categoryId()), placement.type(),
                 normalised(placement.type(), cmd.attributes()), Map.of());
-        List<VariantDraft> submitted = VariantOptions.canonical(placement.type(), cmd.variationTheme(), cmd.variants());
+        List<VariantDraft> submitted = VariantOptions.canonical(placement.type(), cmd.variationTheme(),
+                spelledLikeChart(placement.type(), cmd.details(), owner.orgId(), cmd.variants()));
         ProductDraft draft = new ProductDraft(placement.type(), cmd.title(), attributes, cmd.images(),
                 cmd.variationTheme(), submitted, cmd.details());
         validate(draft, owner.orgId(), null);
@@ -133,7 +134,8 @@ class ProductWriterImpl implements ProductWriter {
         boolean moved = !Objects.equals(categoryId, current.categoryId());
         Map<String, String> attributes = brands.resolve(current.owner(), node(categoryId), type,
                 normalised(type, cmd.attributes()), moved ? Map.of() : current.attributes());
-        List<VariantDraft> submitted = VariantOptions.canonical(type, cmd.variationTheme(), cmd.variants());
+        List<VariantDraft> submitted = VariantOptions.canonical(type, cmd.variationTheme(),
+                spelledLikeChart(type, cmd.details(), current.owner().orgId(), cmd.variants()));
         ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, cmd.images(), cmd.variationTheme(),
                 submitted, cmd.details());
         validate(draft, current.owner().orgId(), current.details().sizeChartId());
@@ -185,6 +187,16 @@ class ProductWriterImpl implements ProductWriter {
             events.publish(CatalogEvents.PRODUCT_RESUBMITTED, saved);
         }
         return saved;
+    }
+
+    /** The sizes of the variants spelled as the seller's size chart spells them (a chart of another owner is ignored). */
+    private List<VariantDraft> spelledLikeChart(ProductType type, ListingDetails details, String ownerOrg,
+                                                List<VariantDraft> variants) {
+        if (details.sizeChartId() == null || type.sizing().isEmpty()) {
+            return variants;
+        }
+        SizeChart chart = charts.findById(details.sizeChartId()).filter(c -> c.ownerOrg().equals(ownerOrg)).orElse(null);
+        return VariantOptions.spelledLikeChart(type.sizing().get().sizeDimension(), chart, variants);
     }
 
     /**

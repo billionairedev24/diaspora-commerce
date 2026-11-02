@@ -34,8 +34,8 @@ public final class ChartImportColumns {
             "inches", MeasurementUnit.IN, "\"", MeasurementUnit.IN);
 
     private static final List<String> INSTRUCTIONS = List.of(
-            "One row per size. Rows with the same Size chart name make one chart; write the name, unit, fit and how to "
-                    + "measure on the chart's first row.",
+            "One row per size. Rows with the same Size chart name make one chart, so repeat the name on every row of the "
+                    + "chart; the unit, fit and how to measure can be written on its first row only.",
             "One column per measurement. The columns after Size are the suggestions of this category: keep, rename or "
                     + "delete them, and add your own (any new column header is a measurement, e.g. \"Shoulder\").",
             "Enter a number (88) or a range (86-90) in the unit of the chart. Every size needs a value for every "
@@ -120,6 +120,9 @@ public final class ChartImportColumns {
     private static String exampleCell(ImportColumn c, int row, String size) {
         if (SIZE.equals(c.key())) {
             return size;
+        }
+        if (CHART_NAME.equals(c.key())) {
+            return c.example();
         }
         if (c.key().startsWith(MEASUREMENT_PREFIX)) {
             String[] parts = c.example().split("-");

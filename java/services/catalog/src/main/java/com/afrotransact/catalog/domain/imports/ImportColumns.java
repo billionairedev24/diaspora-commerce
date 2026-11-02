@@ -289,13 +289,17 @@ public final class ImportColumns {
     /** Every dimension used by the type's themes, once, in theme order (the option columns). */
     public static List<VariationDimension> dimensions(ProductType type) {
         Map<String, Set<String>> options = new LinkedHashMap<>();
+        Set<String> custom = new LinkedHashSet<>();
         for (VariationTheme t : type.themes()) {
             for (VariationDimension d : t.dimensions()) {
                 options.computeIfAbsent(d.name(), k -> new LinkedHashSet<>()).addAll(d.options());
+                if (d.allowCustomValues()) {
+                    custom.add(d.name());
+                }
             }
         }
         List<VariationDimension> out = new ArrayList<>();
-        options.forEach((name, opts) -> out.add(new VariationDimension(name, List.copyOf(opts))));
+        options.forEach((name, opts) -> out.add(new VariationDimension(name, List.copyOf(opts), custom.contains(name))));
         return out;
     }
 
