@@ -53,6 +53,12 @@ public interface ProductRepository {
     /** Every product of an organisation, any status (with variants). */
     List<Product> findByOwnerOrg(String orgId);
 
+    /** Products whose listing links this size chart, any status (with variants), at most {@code limit}. */
+    List<Product> findBySizeChart(UUID sizeChartId, int limit);
+
+    /** How many products link each of these size charts (charts nobody links are absent). */
+    Map<UUID, Long> countBySizeCharts(Collection<UUID> sizeChartIds);
+
     /**
      * One keyset page of an organisation's products, any status (with variants), ordered by id.
      *

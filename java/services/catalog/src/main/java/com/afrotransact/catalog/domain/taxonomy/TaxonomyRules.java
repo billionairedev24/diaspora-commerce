@@ -16,8 +16,13 @@ import com.afrotransact.catalog.domain.AttributeSection;
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
 import com.afrotransact.catalog.domain.CategoryLevel;
 import com.afrotransact.catalog.domain.ProductTypeTraits;
+import com.afrotransact.catalog.domain.VariationDimension;
+import com.afrotransact.catalog.domain.VariationTheme;
 import com.afrotransact.catalog.domain.brand.BrandKeys;
 import com.afrotransact.catalog.domain.brand.UnbrandedReason;
+import com.afrotransact.catalog.domain.sizing.SizeChartRules;
+import com.afrotransact.catalog.domain.sizing.SizingTrait;
+import com.afrotransact.catalog.domain.sizing.SuggestedMeasurement;
 
 /**
  * The rules staff edits of the taxonomy must satisfy: names, codes, the three-level shape and what a product type's
@@ -30,6 +35,8 @@ public final class TaxonomyRules {
     public static final int MAX_REASON = 1000;
     public static final int MAX_ATTRIBUTES = 40;
     public static final int MAX_OPTIONS = 60;
+    public static final int MAX_THEMES = 8;
+    public static final int MAX_MEASUREMENTS = 12;
     /** The key whose options tax-returns maps to tax codes: staff cannot change what it offers. */
     public static final String TAX_CLASS_KEY = "tax_class";
     /** Separator of the human path; a name cannot contain it. */
@@ -128,6 +135,113 @@ public final class TaxonomyRules {
             throw new CatalogRuleViolation("Only food can be perishable", Map.of("traits", "Perishable needs food"));
         }
         return t;
+    }
+
+    /**
+     * Checks a product type's sizing trait against its variation themes and returns it normalised: measurement keys
+     * and labels are unique, and the size dimension exists in a theme. Null (not sized) passes.
+     */
+    public static SizingTrait sizing(SizingTrait sizing, List<VariationTheme> themes) {
+        if (sizing == null) {
+            return null;
+        }
+        Map<String, String> errors = new LinkedHashMap<>();
+        boolean known = themes.stream().anyMatch(t -> t.dimension(sizing.sizeDimension()) != null);
+        if (!known) {
+            errors.put("traits.sizing.sizeDimension", "No variation of this product type has a \""
+                    + sizing.sizeDimension() + "\" dimension");
+        }
+        if (sizing.suggestedMeasurements().size() > MAX_MEASUREMENTS) {
+            errors.put("traits.sizing.suggestedMeasurements", "At most " + MAX_MEASUREMENTS + " measurements");
+        }
+        Set<String> keys = new HashSet<>();
+        Set<String> labels = new HashSet<>();
+        List<SuggestedMeasurement> out = new ArrayList<>();
+        List<SuggestedMeasurement> in = sizing.suggestedMeasurements();
+        for (int i = 0; i < in.size(); i++) {
+            SuggestedMeasurement m = in.get(i);
+            String at = "traits.sizing.suggestedMeasurements[" + i + "].";
+            String label = m.label() == null ? "" : m.label().trim().replaceAll("\\s+", " ");
+            String key = m.key() == null || m.key().isBlank() ? SizeChartRules.keyFrom(label) : m.key().trim();
+            if (label.isEmpty() || label.length() > SizeChartRules.MAX_LABEL) {
+                errors.put(at + "label", "1 to " + SizeChartRules.MAX_LABEL + " characters");
+            } else if (!labels.add(label.toLowerCase(Locale.ROOT))) {
+                errors.put(at + "label", "Used twice");
+            }
+            if (!ATTRIBUTE_KEY.matcher(key).matches()) {
+                errors.put(at + "key", "Lower-case letters, digits and _ (2 to 40), starting with a letter");
+            } else if (!keys.add(key)) {
+                errors.put(at + "key", "Used twice");
+            }
+            if (m.help() != null && m.help().length() > 200) {
+                errors.put(at + "help", "At most 200 characters");
+            }
+            out.add(new SuggestedMeasurement(key, label, m.unit(), m.help()));
+        }
+        if (!errors.isEmpty()) {
+            throw new CatalogRuleViolation("The sizing has " + errors.size() + " problem(s)", errors);
+        }
+        return new SizingTrait(sizing.sizeChartRequired(), sizing.sizeDimension(), out);
+    }
+
+    /** The themes with sellers allowed to write their own values for the size dimension (a sized type needs that). */
+    public static List<VariationTheme> withCustomSizes(List<VariationTheme> themes, SizingTrait sizing) {
+        if (sizing == null) {
+            return themes;
+        }
+        return themes.stream().map(t -> new VariationTheme(t.name(), t.dimensions().stream()
+                .map(d -> d.name().equals(sizing.sizeDimension())
+                        ? new VariationDimension(d.name(), d.options(), true) : d).toList())).toList();
+    }
+
+    /**
+     * Checks the variation themes staff edit: one or two dimensions per theme with different names, and up to
+     * {@link #MAX_OPTIONS} different values of at most 40 characters each (suggestions where sellers may write their
+     * own).
+     */
+    public static List<VariationTheme> themes(List<VariationTheme> themes) {
+        if (themes == null || themes.size() > MAX_THEMES) {
+            throw new CatalogRuleViolation("A product type has at most " + MAX_THEMES + " variation themes",
+                    Map.of("themes", "At most " + MAX_THEMES));
+        }
+        Map<String, String> errors = new LinkedHashMap<>();
+        Set<String> names = new HashSet<>();
+        List<VariationTheme> out = new ArrayList<>();
+        for (int i = 0; i < themes.size(); i++) {
+            VariationTheme t = themes.get(i);
+            String at = "themes[" + i + "].";
+            String name = t.name().trim();
+            if (name.isEmpty() || name.length() > 60) {
+                errors.put(at + "name", "1 to 60 characters");
+            } else if (!names.add(name.toLowerCase(Locale.ROOT))) {
+                errors.put(at + "name", "Used twice");
+            }
+            Set<String> dimNames = new HashSet<>();
+            List<VariationDimension> dims = new ArrayList<>();
+            for (int d = 0; d < t.dimensions().size(); d++) {
+                VariationDimension dim = t.dimensions().get(d);
+                String dat = at + "dimensions[" + d + "].";
+                String dimName = dim.name().trim();
+                if (dimName.isEmpty() || dimName.length() > 40) {
+                    errors.put(dat + "name", "1 to 40 characters");
+                } else if (!dimNames.add(dimName.toLowerCase(Locale.ROOT))) {
+                    errors.put(dat + "name", "Used twice");
+                }
+                List<String> options = dim.options().stream().map(String::trim).filter(o -> !o.isEmpty()).toList();
+                if (options.size() > MAX_OPTIONS || options.stream().map(o -> o.toLowerCase(Locale.ROOT)).distinct()
+                        .count() != options.size() || options.stream().anyMatch(o -> o.length() > 40)) {
+                    errors.put(dat + "options", "Up to " + MAX_OPTIONS + " different values of at most 40 characters");
+                } else if (options.isEmpty() && !dim.allowCustomValues()) {
+                    errors.put(dat + "options", "Add the values to choose from, or let sellers write their own");
+                }
+                dims.add(new VariationDimension(dimName, options, dim.allowCustomValues()));
+            }
+            out.add(new VariationTheme(name, dims));
+        }
+        if (!errors.isEmpty()) {
+            throw new CatalogRuleViolation("The variations have " + errors.size() + " problem(s)", errors);
+        }
+        return List.copyOf(out);
     }
 
     /**

@@ -8,6 +8,7 @@ import java.util.UUID;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.ImageDto;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.VariantResponse;
 import com.afrotransact.catalog.adapter.in.web.ReviewDtos.RatingResponse;
+import com.afrotransact.catalog.adapter.in.web.SizeChartDtos.PublicChartResponse;
 import com.afrotransact.catalog.application.ProductReviewService;
 import com.afrotransact.catalog.application.PublicCatalogService;
 import com.afrotransact.catalog.application.PublicCatalogService.LiveVariant;
@@ -44,13 +45,17 @@ class PublicProductController {
                                  boolean preorderEligible, boolean shipsNow,
                                  @Schema(description = "Average stars, review count and star breakdown over the "
                                          + "product's published reviews (S324); zeros without reviews")
-                                 RatingResponse rating) {
+                                 RatingResponse rating,
+                                 @Schema(description = "The seller's size chart (columns, rows in the chart's unit and "
+                                         + "converted, fit note, how to measure) when the product has one")
+                                 PublicChartResponse sizeChart) {
 
-        static PublicProductResponse of(Product p, RatingResponse rating) {
+        static PublicProductResponse of(Product p, RatingResponse rating, PublicChartResponse sizeChart) {
             return new PublicProductResponse(p.id(), p.atin().value(), p.owner().kind().name(), p.owner().orgId(),
                     p.categoryId(), p.productTypeCode(), p.title(), p.attributes(),
                     p.images().stream().map(ImageDto::of).toList(), p.variationTheme(),
-                    p.variants().stream().map(VariantResponse::of).toList(), p.preorderEligible(), p.shipsNow(), rating);
+                    p.variants().stream().map(VariantResponse::of).toList(), p.preorderEligible(), p.shipsNow(), rating,
+                    sizeChart);
         }
     }
 
@@ -74,6 +79,8 @@ class PublicProductController {
     }
 
     private PublicProductResponse withRating(Product product) {
-        return PublicProductResponse.of(product, RatingResponse.of(reviews.ratingOf(product.id())));
+        PublicChartResponse chart = catalog.sizeChartOf(product)
+                .map(c -> PublicChartResponse.of(c, product.details().fitNote())).orElse(null);
+        return PublicProductResponse.of(product, RatingResponse.of(reviews.ratingOf(product.id())), chart);
     }
 }

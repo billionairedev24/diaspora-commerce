@@ -19,6 +19,7 @@ import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ShipFromRef;
 import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.domain.VariantDraft;
+import com.afrotransact.catalog.domain.sizing.FitNote;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -120,17 +121,25 @@ final class ProductDtos {
                       @Valid PackageDto packaging,
                       @Schema(description = "Business days from order to dispatch, 1–30 (default 2)")
                       Integer handlingDays,
-                      @Valid ShipFromDto shipFrom) {
+                      @Valid ShipFromDto shipFrom,
+                      @Schema(description = "The seller's size chart for this product (POST /v1/size-charts). Required "
+                              + "when the product type's sizing trait says sizeChartRequired; every size the variants "
+                              + "sell needs a row in it. Must be a chart of the same organisation.")
+                      UUID sizeChartId,
+                      @Schema(description = "How the sizes fit; shown beside the size chart (defaults to the "
+                              + "chart's own fit note)")
+                      FitNote fitNote) {
 
         ListingDetails toDomain() {
             return new ListingDetails(description, condition, keywords, fulfilment,
                     packaging == null ? null : packaging.toDomain(), handlingDays == null ? 0 : handlingDays,
-                    shipFrom == null ? null : shipFrom.toDomain());
+                    shipFrom == null ? null : shipFrom.toDomain(), sizeChartId, fitNote);
         }
 
         static ListingDto of(ListingDetails d) {
             return new ListingDto(d.description(), d.condition(), d.keywords(), d.fulfilment(),
-                    PackageDto.of(d.packaging()), d.handlingDays(), ShipFromDto.of(d.shipFrom()));
+                    PackageDto.of(d.packaging()), d.handlingDays(), ShipFromDto.of(d.shipFrom()), d.sizeChartId(),
+                    d.fitNote());
         }
     }
 

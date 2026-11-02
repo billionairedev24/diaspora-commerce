@@ -8,6 +8,8 @@ import com.afrotransact.catalog.domain.CategoryLevel;
 import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.IdentifierRule;
 import com.afrotransact.catalog.domain.ProductTypeTraits;
+import com.afrotransact.catalog.domain.VariationTheme;
+import com.afrotransact.catalog.domain.sizing.SizingTrait;
 import com.afrotransact.catalog.domain.taxonomy.StoredProductType;
 import com.afrotransact.catalog.domain.taxonomy.TaxonomyAuditEntry;
 
@@ -94,8 +96,18 @@ public interface TaxonomyAdminService {
                       NewProductType newProductType, String reason) {
     }
 
-    /** Fields left null stay as they are; at least one must change. */
-    record ProductTypeChange(String label, IdentifierRule identifierRule, ProductTypeTraits traits,
-                             List<AttributeDefinition> attributes, String reason) {
+    /**
+     * Fields left null stay as they are; at least one must change.
+     *
+     * @param traits the flags (food, perishable, regulated, preorder); their sizing is ignored, see {@code sizing}
+     * @param sizing the sizing trait: null leaves it as it is, an edit with a null trait switches sizing off
+     * @param themes the whole new list of variation themes
+     */
+    record ProductTypeChange(String label, IdentifierRule identifierRule, ProductTypeTraits traits, SizingEdit sizing,
+                             List<AttributeDefinition> attributes, List<VariationTheme> themes, String reason) {
+    }
+
+    /** A change of the sizing trait: set it to {@code trait}, or switch sizing off when {@code trait} is null. */
+    record SizingEdit(SizingTrait trait) {
     }
 }

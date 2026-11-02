@@ -26,11 +26,15 @@ import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.domain.VariantDraft;
+import com.afrotransact.catalog.domain.VariantOptions;
+import com.afrotransact.catalog.domain.sizing.SizeChart;
+import com.afrotransact.catalog.domain.sizing.SizeChartPolicy;
 import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.CategoryRequestRepository;
 import com.afrotransact.catalog.port.IdentifierIssuer;
 import com.afrotransact.catalog.port.ProductDraftRepository;
 import com.afrotransact.catalog.port.ProductRepository;
+import com.afrotransact.catalog.port.SizeChartRepository;
 import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Component;
@@ -44,19 +48,23 @@ class ProductWriterImpl implements ProductWriter {
     private final ProductDraftRepository drafts;
     private final IdentifierIssuer ids;
     private final ProductDraftPolicy policy;
+    private final SizeChartPolicy sizePolicy;
+    private final SizeChartRepository charts;
     private final ProductEvents events;
     private final BrandResolver brands;
     private final Clock clock;
 
     ProductWriterImpl(ProductRepository products, CategoryRepository categories, CategoryRequestRepository requests,
                       ProductDraftRepository drafts, IdentifierIssuer ids, ProductDraftPolicy policy,
-                      ProductEvents events, BrandResolver brands, Clock clock) {
+                      SizeChartPolicy sizePolicy, SizeChartRepository charts, ProductEvents events, BrandResolver brands, Clock clock) {
         this.products = products;
         this.categories = categories;
         this.requests = requests;
         this.drafts = drafts;
         this.ids = ids;
         this.policy = policy;
+        this.sizePolicy = sizePolicy;
+        this.charts = charts;
         this.events = events;
         this.brands = brands;
         this.clock = clock;
@@ -67,10 +75,11 @@ class ProductWriterImpl implements ProductWriter {
         Placement placement = placement(cmd.categoryId(), cmd.categoryRequestId(), owner);
         Map<String, String> attributes = brands.resolve(owner, node(placement.categoryId()), placement.type(),
                 normalised(placement.type(), cmd.attributes()), Map.of());
+        List<VariantDraft> submitted = VariantOptions.canonical(placement.type(), cmd.variationTheme(), cmd.variants());
         ProductDraft draft = new ProductDraft(placement.type(), cmd.title(), attributes, cmd.images(),
-                cmd.variationTheme(), cmd.variants(), cmd.details());
-        policy.validate(draft);
-        for (VariantDraft v : cmd.variants()) {
+                cmd.variationTheme(), submitted, cmd.details());
+        validate(draft, owner.orgId(), null);
+        for (VariantDraft v : submitted) {
             if (products.sellerSkuTaken(owner.orgId(), sku(v))) {
                 throw new ConflictException("catalog.sku-taken",
                         "SKU " + v.sellerSku() + " is already used by another of your products");
@@ -81,7 +90,7 @@ class ProductWriterImpl implements ProductWriter {
         Instant now = Instant.now(clock);
         String currency = cmd.currency() == null ? "USD" : cmd.currency().toUpperCase(Locale.ROOT);
         List<Variant> variants = new ArrayList<>();
-        for (VariantDraft v : cmd.variants()) {
+        for (VariantDraft v : submitted) {
             variants.add(newVariant(v, currency));
         }
         ProductStatus status = placement.request() == null
@@ -124,15 +133,16 @@ class ProductWriterImpl implements ProductWriter {
         boolean moved = !Objects.equals(categoryId, current.categoryId());
         Map<String, String> attributes = brands.resolve(current.owner(), node(categoryId), type,
                 normalised(type, cmd.attributes()), moved ? Map.of() : current.attributes());
+        List<VariantDraft> submitted = VariantOptions.canonical(type, cmd.variationTheme(), cmd.variants());
         ProductDraft draft = new ProductDraft(type, cmd.title(), attributes, cmd.images(), cmd.variationTheme(),
-                cmd.variants(), cmd.details());
-        policy.validate(draft);
+                submitted, cmd.details());
+        validate(draft, current.owner().orgId(), current.details().sizeChartId());
 
         Map<String, Variant> bySku = new HashMap<>();
         current.variants().forEach(v -> bySku.put(v.sellerSku(), v));
         List<Variant> next = new ArrayList<>();
         boolean termsChanged = !sameTerms(current.details(), cmd.details());
-        for (VariantDraft v : cmd.variants()) {
+        for (VariantDraft v : submitted) {
             String sku = sku(v);
             Variant old = bySku.remove(sku);
             if (old == null) {
@@ -175,6 +185,27 @@ class ProductWriterImpl implements ProductWriter {
             events.publish(CatalogEvents.PRODUCT_RESUBMITTED, saved);
         }
         return saved;
+    }
+
+    /**
+     * The product rules and the size chart rules together, so the seller sees every problem at once.
+     *
+     * @param linkedChartId the size chart the stored product already links (it may stay linked once retired)
+     */
+    private void validate(ProductDraft draft, String ownerOrg, UUID linkedChartId) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        try {
+            policy.validate(draft);
+        } catch (CatalogRuleViolation ex) {
+            errors.putAll(ex.fieldErrors());
+        }
+        UUID chartId = draft.details().sizeChartId();
+        SizeChart chart = chartId == null ? null : charts.findById(chartId).orElse(null);
+        sizePolicy.problems(new SizeChartPolicy.SizedListing(draft.productType(), ownerOrg, draft.variationTheme(),
+                draft.variants(), chartId, chart, linkedChartId)).forEach(errors::putIfAbsent);
+        if (!errors.isEmpty()) {
+            throw new CatalogRuleViolation("The product has " + errors.size() + " problem(s)", errors);
+        }
     }
 
     private Variant newVariant(VariantDraft v, String currency) {

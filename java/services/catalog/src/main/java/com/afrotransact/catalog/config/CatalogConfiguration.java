@@ -25,6 +25,8 @@ import com.afrotransact.catalog.domain.barcode.DefaultLabelPolicy;
 import com.afrotransact.catalog.domain.barcode.LabelPolicy;
 import com.afrotransact.catalog.domain.prefill.CategoryHintPolicy;
 import com.afrotransact.catalog.domain.prefill.DefaultCategoryHintPolicy;
+import com.afrotransact.catalog.domain.sizing.DefaultSizeChartPolicy;
+import com.afrotransact.catalog.domain.sizing.SizeChartPolicy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -38,6 +40,11 @@ class CatalogConfiguration {
     @Bean
     ProductDraftPolicy productDraftPolicy() {
         return new DefaultProductDraftPolicy();
+    }
+
+    @Bean
+    SizeChartPolicy sizeChartPolicy() {
+        return new DefaultSizeChartPolicy();
     }
 
     @Bean

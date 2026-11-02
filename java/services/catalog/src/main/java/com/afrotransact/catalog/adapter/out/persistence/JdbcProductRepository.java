@@ -163,6 +163,27 @@ class JdbcProductRepository implements ProductRepository {
     }
 
     @Override
+    public List<Product> findBySizeChart(UUID sizeChartId, int limit) {
+        return withVariants(jdbc.sql(SELECT + " where listing ->> 'sizeChartId' = :chart order by created_at limit :limit")
+                .param("chart", sizeChartId.toString()).param("limit", limit).query(this::mapProduct).list());
+    }
+
+    @Override
+    public Map<UUID, Long> countBySizeCharts(Collection<UUID> sizeChartIds) {
+        Map<UUID, Long> out = new HashMap<>();
+        if (sizeChartIds.isEmpty()) {
+            return out;
+        }
+        jdbc.sql("""
+                select listing ->> 'sizeChartId' as chart, count(*) as n from product
+                where listing ->> 'sizeChartId' in (:charts) group by 1
+                """)
+                .param("charts", sizeChartIds.stream().map(UUID::toString).toList())
+                .query((rs, i) -> out.put(UUID.fromString(rs.getString("chart")), rs.getLong("n"))).list();
+        return out;
+    }
+
+    @Override
     public List<Product> findByOwnerOrgAfter(String orgId, UUID afterId, int limit) {
         String sql = SELECT + (afterId == null ? " where owner_org = :org" : " where owner_org = :org and id > :after")
                 + " order by id limit :limit";

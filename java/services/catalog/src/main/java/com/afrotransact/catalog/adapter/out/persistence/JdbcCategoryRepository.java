@@ -5,7 +5,6 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -169,7 +168,7 @@ class JdbcCategoryRepository implements CategoryRepository {
                 """)
                 .param("code", t.code()).param("label", t.label()).param("rule", t.identifierRule().name())
                 .param("attributes", json.write(t.attributes())).param("themes", json.write(t.themes()))
-                .param("traits", json.write(traitsOf(t)))
+                .param("traits", json.write(json.traitsDocument(t.traits())))
                 .update();
         return findStoredProductType(t.code()).orElseThrow();
     }
@@ -179,22 +178,18 @@ class JdbcCategoryRepository implements CategoryRepository {
         int rows = jdbc.sql("""
                 update product_type set label = :label, identifier_rule = :rule,
                        attributes = cast(:attributes as jsonb), traits = cast(:traits as jsonb),
-                       version = version + 1, updated_at = now()
+                       themes = cast(:themes as jsonb), version = version + 1, updated_at = now()
                 where code = :code and version = :version
                 """)
                 .param("code", t.code()).param("label", t.label()).param("rule", t.identifierRule().name())
-                .param("attributes", json.write(t.attributes())).param("traits", json.write(traitsOf(t)))
+                .param("attributes", json.write(t.attributes())).param("themes", json.write(t.themes()))
+                .param("traits", json.write(json.traitsDocument(t.traits())))
                 .param("version", expectedVersion)
                 .update();
         if (rows == 0) {
             throw new StaleVersionException("This product type changed since you opened it. Reload and try again.");
         }
         return findStoredProductType(t.code()).orElseThrow();
-    }
-
-    private static Map<String, Boolean> traitsOf(ProductType t) {
-        return Map.of("food", t.traits().food(), "perishable", t.traits().perishable(),
-                "regulated", t.traits().regulated(), "preorder", t.traits().preorder());
     }
 
     private static String escapeLike(String text) {

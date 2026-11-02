@@ -8,6 +8,7 @@ import java.util.UUID;
 import com.afrotransact.catalog.application.TaxonomyAdminService.CategoryNodeView;
 import com.afrotransact.catalog.application.TaxonomyAdminService.NewProductType;
 import com.afrotransact.catalog.application.TaxonomyAdminService.ProductTypeView;
+import com.afrotransact.catalog.application.TaxonomyAdminService.SizingEdit;
 import com.afrotransact.catalog.application.TaxonomyAdminService.TaxonomyTree;
 import com.afrotransact.catalog.application.TaxonomyAdminService.TypeUse;
 import com.afrotransact.catalog.domain.AttributeDefinition;
@@ -18,11 +19,16 @@ import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.IdentifierRule;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.ProductTypeTraits;
+import com.afrotransact.catalog.domain.VariationDimension;
 import com.afrotransact.catalog.domain.VariationTheme;
+import com.afrotransact.catalog.domain.sizing.MeasurementUnit;
+import com.afrotransact.catalog.domain.sizing.SizingTrait;
+import com.afrotransact.catalog.domain.sizing.SuggestedMeasurement;
 import com.afrotransact.catalog.domain.taxonomy.TaxonomyAuditEntry;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -87,12 +93,68 @@ final class TaxonomyDtos {
         }
     }
 
-    @Schema(name = "TaxonomyTraits")
-    record TraitsBody(Boolean food, Boolean perishable, Boolean regulated, Boolean preorder) {
+    @Schema(name = "TaxonomyTraits", description = "The flags replace the stored flags. sizing: absent leaves the "
+            + "sizing trait as it is, {enabled: false} switches it off, anything else sets it")
+    record TraitsBody(Boolean food, Boolean perishable, Boolean regulated, Boolean preorder,
+                      @Valid SizingBody sizing) {
 
+        /** The flags and, for a new product type, the sizing trait. */
         ProductTypeTraits toDomain() {
             return new ProductTypeTraits(Boolean.TRUE.equals(food), Boolean.TRUE.equals(perishable),
-                    Boolean.TRUE.equals(regulated), Boolean.TRUE.equals(preorder));
+                    Boolean.TRUE.equals(regulated), Boolean.TRUE.equals(preorder),
+                    sizing == null ? null : sizing.toDomain());
+        }
+
+        /** The sizing edit of an update: null when the body does not mention sizing. */
+        SizingEdit sizingEdit() {
+            return sizing == null ? null : new SizingEdit(sizing.toDomain());
+        }
+    }
+
+    @Schema(name = "TaxonomySizing", description = "Marks the product type as sized: sellers attach size charts they "
+            + "write themselves and write their own size labels (the size variation then allows custom values). "
+            + "suggestedMeasurements pre-fill the seller's chart editor and the bulk template.")
+    record SizingBody(@Schema(description = "false switches sizing off; default true") Boolean enabled,
+                      @Schema(description = "A listing needs a size chart whose rows cover every size it sells")
+                      Boolean sizeChartRequired,
+                      @Schema(description = "The variation dimension that holds the size; default Size")
+                      @Size(max = 40) String sizeDimension,
+                      @Size(max = 12) List<@Valid MeasurementBody> suggestedMeasurements) {
+
+        SizingTrait toDomain() {
+            if (Boolean.FALSE.equals(enabled)) {
+                return null;
+            }
+            return new SizingTrait(sizeChartRequired, sizeDimension, suggestedMeasurements == null ? List.of()
+                    : suggestedMeasurements.stream().map(MeasurementBody::toDomain).toList());
+        }
+    }
+
+    @Schema(name = "TaxonomySuggestedMeasurement")
+    record MeasurementBody(@Size(max = 40) String key, @NotBlank @Size(max = 40) String label, MeasurementUnit unit,
+                           @Size(max = 200) String help) {
+
+        SuggestedMeasurement toDomain() {
+            return new SuggestedMeasurement(key, label, unit, help);
+        }
+    }
+
+    @Schema(name = "TaxonomyVariationTheme", description = "One way a product varies: one or two dimensions")
+    record ThemeBody(@NotBlank @Size(max = 60) String name,
+                     @NotEmpty @Size(max = 2) List<@Valid DimensionBody> dimensions) {
+
+        VariationTheme toDomain() {
+            return new VariationTheme(name, dimensions.stream().map(DimensionBody::toDomain).toList());
+        }
+    }
+
+    @Schema(name = "TaxonomyVariationDimension")
+    record DimensionBody(@NotBlank @Size(max = 40) String name, List<@Size(max = 40) String> options,
+                         @Schema(description = "Sellers may write values of their own; options are then suggestions")
+                         Boolean allowCustomValues) {
+
+        VariationDimension toDomain() {
+            return new VariationDimension(name, options, allowCustomValues);
         }
     }
 
@@ -158,6 +220,9 @@ final class TaxonomyDtos {
     @Schema(name = "UpdateTaxonomyProductType", description = "Only the fields sent change; attributes, when sent, "
             + "is the whole new list")
     record UpdateTypeBody(@Size(max = 80) String label, IdentifierRule identifierRule, @Valid TraitsBody traits,
-                          @Valid List<AttributeBody> attributes, @NotBlank @Size(max = 1000) String reason) {
+                          @Valid List<AttributeBody> attributes,
+                          @Schema(description = "The whole new list of variation themes, when changing them")
+                          @Valid @Size(max = 8) List<ThemeBody> themes,
+                          @NotBlank @Size(max = 1000) String reason) {
     }
 }

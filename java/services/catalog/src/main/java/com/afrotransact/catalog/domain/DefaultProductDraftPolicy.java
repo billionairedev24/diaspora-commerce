@@ -1,10 +1,12 @@
 package com.afrotransact.catalog.domain;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import com.afrotransact.catalog.domain.brand.BrandKeys;
@@ -101,21 +103,22 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
         }
         Set<String> skus = new HashSet<>();
         Set<String> combos = new HashSet<>();
+        Map<String, Map<String, String>> customSpellings = new HashMap<>();
         for (int i = 0; i < draft.variants().size(); i++) {
             VariantDraft v = draft.variants().get(i);
             String p = "variants[" + i + "].";
             List<VariationDimension> dims = theme == null ? List.of() : theme.dimensions();
             for (VariationDimension dim : dims) {
-                String value = v.options().get(dim.name());
-                if (value == null || !dim.options().contains(value)) {
-                    errors.put(p + "options." + dim.name(), "Choose a " + dim.name().toLowerCase(Locale.ROOT));
+                String problem = optionProblem(dim, v.options().get(dim.name()), customSpellings);
+                if (problem != null) {
+                    errors.put(p + "options." + dim.name(), problem);
                 }
             }
             if (v.options().size() != dims.size()) {
                 errors.put(p + "options", theme == null ? "A product without variations has no options"
                         : "Expected values for " + theme.name());
             }
-            if (!combos.add(String.valueOf(v.options()))) {
+            if (!combos.add(comboKey(dims, v.options()))) {
                 errors.put(p + "options", "Duplicate variation");
             }
             String sku = v.sellerSku() == null ? "" : v.sellerSku().trim().toUpperCase(Locale.ROOT);
@@ -142,6 +145,53 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
                 errors.put(p + "images", "Use JPG, PNG or WebP of at most 8 MB");
             }
         }
+    }
+
+    /**
+     * Why a variant's value of this dimension is refused, or null. A dimension that allows custom values accepts the
+     * category's options and values of the seller's own within {@link CustomValues}' limits; the same value spelled two
+     * ways on one product and more than {@link CustomValues#MAX_PER_PRODUCT} different ones are refused.
+     */
+    private static String optionProblem(VariationDimension dim, String value, Map<String, Map<String, String>> seen) {
+        String what = dim.name().toLowerCase(Locale.ROOT);
+        if (value == null || value.isBlank()) {
+            return "Choose a " + what;
+        }
+        if (!dim.allowCustomValues()) {
+            return dim.options().contains(value) ? null : "Choose a " + what;
+        }
+        if (dim.options().contains(value)) {
+            return null;
+        }
+        String problem = CustomValues.problem(dim.name(), value);
+        if (problem != null) {
+            return problem;
+        }
+        String cleaned = CustomValues.clean(value);
+        Optional<String> suggestion = dim.suggestion(cleaned);
+        if (suggestion.isPresent() && !suggestion.get().equals(value)) {
+            return "Write it as " + suggestion.get();
+        }
+        Map<String, String> spellings = seen.computeIfAbsent(dim.name(), k -> new HashMap<>());
+        String earlier = spellings.putIfAbsent(CustomValues.key(cleaned), value);
+        if (earlier != null && !earlier.equals(value)) {
+            return "\"" + value + "\" and \"" + earlier + "\" are the same " + what + "; use one spelling";
+        }
+        if (earlier == null && spellings.size() > CustomValues.MAX_PER_PRODUCT) {
+            return "Up to " + CustomValues.MAX_PER_PRODUCT + " different " + what + " values on one product";
+        }
+        return null;
+    }
+
+    private static String comboKey(List<VariationDimension> dims, Map<String, String> options) {
+        if (dims.isEmpty()) {
+            return String.valueOf(options);
+        }
+        StringBuilder key = new StringBuilder();
+        for (VariationDimension dim : dims) {
+            key.append(dim.name()).append('=').append(CustomValues.key(options.get(dim.name()))).append('|');
+        }
+        return key.toString();
     }
 
     private static void checkIdentifier(VariantDraft v, IdentifierRule rule, String p, Map<String, String> errors) {

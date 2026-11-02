@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import com.afrotransact.catalog.domain.brand.BrandKeys;
+import com.afrotransact.catalog.domain.sizing.SizingTrait;
 
 /**
  * Category-specific schema for products: required details, variation themes, identifier rule and traits (food,
@@ -29,6 +30,11 @@ public record ProductType(String code, String label, List<AttributeDefinition> a
     public ProductType(String code, String label, List<AttributeDefinition> attributes, List<VariationTheme> themes,
                        IdentifierRule identifierRule) {
         this(code, label, attributes, themes, identifierRule, ProductTypeTraits.NONE);
+    }
+
+    /** The sizing trait when staff marked this type as needing sizes and size charts. */
+    public Optional<SizingTrait> sizing() {
+        return traits.sizingTrait();
     }
 
     public Optional<VariationTheme> theme(String name) {

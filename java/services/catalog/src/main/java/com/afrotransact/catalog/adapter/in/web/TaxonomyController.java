@@ -122,7 +122,7 @@ class TaxonomyController {
         return ProductTypeAdminResponse.of(taxonomy.createProductType(body.toDomain(), body.reason()));
     }
 
-    @Operation(summary = "Edit a product type: label, identifier rule, traits and attributes",
+    @Operation(summary = "Edit a product type: label, identifier rule, traits (including sizing), attributes and variations",
             description = "Only the fields sent change. Sales-tax question (tax_class) wording and choices are owned by "
                     + "tax-returns and cannot be edited. " + IF_MATCH_NOTE)
     @PatchMapping("/v1/taxonomy/product-types/{code}")
@@ -132,8 +132,11 @@ class TaxonomyController {
         return ProductTypeAdminResponse.of(taxonomy.updateProductType(code, IfMatch.expected(ifMatch),
                 new ProductTypeChange(body.label(), body.identifierRule(),
                         body.traits() == null ? null : body.traits().toDomain(),
+                        body.traits() == null ? null : body.traits().sizingEdit(),
                         body.attributes() == null ? null
                                 : body.attributes().stream().map(TaxonomyDtos.AttributeBody::toDomain).toList(),
+                        body.themes() == null ? null
+                                : body.themes().stream().map(TaxonomyDtos.ThemeBody::toDomain).toList(),
                         body.reason())));
     }
 

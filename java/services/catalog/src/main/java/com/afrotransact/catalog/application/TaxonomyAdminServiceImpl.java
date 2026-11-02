@@ -24,6 +24,8 @@ import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.ProductTypeTraits;
 import com.afrotransact.catalog.domain.StaleVersionException;
+import com.afrotransact.catalog.domain.VariationTheme;
+import com.afrotransact.catalog.domain.sizing.SizingTrait;
 import com.afrotransact.catalog.domain.taxonomy.AuditSubject;
 import com.afrotransact.catalog.domain.taxonomy.StoredProductType;
 import com.afrotransact.catalog.domain.taxonomy.TaxonomyAuditEntry;
@@ -320,7 +322,14 @@ class TaxonomyAdminServiceImpl implements TaxonomyAdminService {
         ProductType before = stored.type();
         String label = change.label() == null ? before.label() : TaxonomyRules.name(change.label(), "label");
         IdentifierRule rule = change.identifierRule() == null ? before.identifierRule() : change.identifierRule();
-        ProductTypeTraits traits = TaxonomyRules.traits(change.traits() == null ? before.traits() : change.traits());
+        ProductTypeTraits flags = change.traits() == null ? before.traits()
+                : change.traits().withSizing(before.traits().sizing());
+        List<VariationTheme> requestedThemes = change.themes() == null ? before.themes()
+                : TaxonomyRules.themes(change.themes());
+        SizingTrait sizing = TaxonomyRules.sizing(change.sizing() == null ? flags.sizing() : change.sizing().trait(),
+                requestedThemes);
+        List<VariationTheme> themes = TaxonomyRules.withCustomSizes(requestedThemes, sizing);
+        ProductTypeTraits traits = TaxonomyRules.traits(flags.withSizing(sizing));
         List<AttributeDefinition> attributes = change.attributes() == null ? before.attributes()
                 : TaxonomyRules.attributes(change.attributes(), traits, before.attributes());
         if (change.attributes() == null) {
@@ -337,6 +346,9 @@ class TaxonomyAdminServiceImpl implements TaxonomyAdminService {
         if (!traits.equals(before.traits())) {
             details.put("traits", Map.of("from", traitNames(before.traits()), "to", traitNames(traits)));
         }
+        if (!themes.equals(before.themes())) {
+            details.put("themes", Map.of("from", themeSummary(before.themes()), "to", themeSummary(themes)));
+        }
         Map<String, List<String>> attributeChanges = attributeChanges(before.attributes(), attributes);
         if (!attributeChanges.isEmpty()) {
             details.put("attributes", attributeChanges);
@@ -344,7 +356,7 @@ class TaxonomyAdminServiceImpl implements TaxonomyAdminService {
         if (details.isEmpty()) {
             throw nothingToChange("form");
         }
-        ProductType next = new ProductType(code, label, attributes, before.themes(), rule, traits);
+        ProductType next = new ProductType(code, label, attributes, themes, rule, traits);
         StoredProductType saved = categories.updateProductType(next, stored.version());
         writeAudit(actor, "TYPE_UPDATED", AuditSubject.PRODUCT_TYPE, code, label, why, details);
         changed("TYPE_UPDATED", AuditSubject.PRODUCT_TYPE, code, label, saved.version());
@@ -363,14 +375,16 @@ class TaxonomyAdminServiceImpl implements TaxonomyAdminService {
         if (n.identifierRule() == null) {
             throw violation("identifierRule", "Choose GTIN or ISBN");
         }
-        ProductTypeTraits traits = TaxonomyRules.traits(n.traits());
-        List<AttributeDefinition> attributes = TaxonomyRules.attributes(
-                n.attributes() == null ? List.of() : n.attributes(), traits, null);
         String basedOn = n.basedOn() == null || n.basedOn().isBlank() ? ProductType.CUSTOM : n.basedOn().trim();
         ProductType template = categories.findProductType(basedOn).orElseThrow(
                 () -> violation("basedOn", "Unknown product type " + basedOn));
-        StoredProductType saved = categories.insertProductType(
-                new ProductType(code, label, attributes, template.themes(), n.identifierRule(), traits));
+        ProductTypeTraits requested = TaxonomyRules.traits(n.traits());
+        SizingTrait sizing = TaxonomyRules.sizing(requested.sizing(), template.themes());
+        ProductTypeTraits traits = requested.withSizing(sizing);
+        List<AttributeDefinition> attributes = TaxonomyRules.attributes(
+                n.attributes() == null ? List.of() : n.attributes(), traits, null);
+        StoredProductType saved = categories.insertProductType(new ProductType(code, label, attributes,
+                TaxonomyRules.withCustomSizes(template.themes(), sizing), n.identifierRule(), traits));
         writeAudit(actor, "TYPE_CREATED", AuditSubject.PRODUCT_TYPE, code, label, reason,
                 Map.of("identifierRule", n.identifierRule().name(), "attributes", attributes.size(),
                         "variationsFrom", basedOn));
@@ -587,7 +601,16 @@ class TaxonomyAdminServiceImpl implements TaxonomyAdminService {
         if (t.preorder()) {
             names.add("preorder");
         }
+        if (t.sizing() != null) {
+            names.add(t.sizing().sizeChartRequired() ? "sizing (size chart required)" : "sizing");
+        }
         return names;
+    }
+
+    private static List<String> themeSummary(List<VariationTheme> themes) {
+        return themes.stream().map(t -> t.name() + ": " + t.dimensions().stream()
+                .map(d -> d.name() + " (" + d.options().size() + " values" + (d.allowCustomValues()
+                        ? ", sellers add their own" : "") + ")").collect(Collectors.joining(", "))).toList();
     }
 
     private static CatalogRuleViolation violation(String field, String message) {

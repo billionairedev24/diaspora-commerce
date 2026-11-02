@@ -1,5 +1,6 @@
 package com.afrotransact.catalog.adapter.out.persistence;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -8,6 +9,9 @@ import com.afrotransact.catalog.domain.ListingDetails;
 import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ProductTypeTraits;
 import com.afrotransact.catalog.domain.VariationTheme;
+import com.afrotransact.catalog.domain.sizing.ChartColumn;
+import com.afrotransact.catalog.domain.sizing.ChartRow;
+import com.afrotransact.catalog.domain.sizing.SizingTrait;
 import com.afrotransact.catalog.domain.prefill.ProductData;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
@@ -18,11 +22,12 @@ import tools.jackson.databind.json.JsonMapper;
 class JsonCodec {
 
     private static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() { };
-    private static final TypeReference<Map<String, Boolean>> FLAGS = new TypeReference<>() { };
     private static final TypeReference<Map<String, Object>> OBJECT_MAP = new TypeReference<>() { };
     private static final TypeReference<List<ProductImage>> IMAGES = new TypeReference<>() { };
     private static final TypeReference<List<AttributeDefinition>> ATTRIBUTES = new TypeReference<>() { };
     private static final TypeReference<List<VariationTheme>> THEMES = new TypeReference<>() { };
+    private static final TypeReference<List<ChartColumn>> CHART_COLUMNS = new TypeReference<>() { };
+    private static final TypeReference<List<ChartRow>> CHART_ROWS = new TypeReference<>() { };
     private static final TypeReference<List<ProductData>> PRODUCT_DATA = new TypeReference<>() { };
     private static final TypeReference<List<String>> STRINGS = new TypeReference<>() { };
 
@@ -57,14 +62,32 @@ class JsonCodec {
         return json == null ? List.of() : mapper.readValue(json, THEMES);
     }
 
-    /** Traits stored as {"food": true, ...}; absent keys are false. */
+    /** Traits stored as {"food": true, ..., "sizing": {...}}; absent flags are false and absent sizing is none. */
     ProductTypeTraits traits(String json) {
         if (json == null || json.isBlank()) {
             return ProductTypeTraits.NONE;
         }
-        Map<String, Boolean> t = mapper.readValue(json, FLAGS);
-        return new ProductTypeTraits(Boolean.TRUE.equals(t.get("food")), Boolean.TRUE.equals(t.get("perishable")),
-                Boolean.TRUE.equals(t.get("regulated")), Boolean.TRUE.equals(t.get("preorder")));
+        Map<String, Object> t = mapper.readValue(json, OBJECT_MAP);
+        Object sizing = t.get("sizing");
+        return new ProductTypeTraits(flag(t, "food"), flag(t, "perishable"), flag(t, "regulated"), flag(t, "preorder"),
+                sizing == null ? null : mapper.convertValue(sizing, SizingTrait.class));
+    }
+
+    private static boolean flag(Map<String, Object> traits, String name) {
+        return Boolean.TRUE.equals(traits.get(name));
+    }
+
+    /** The stored form of traits: the flags and, for a sized type, the sizing trait. */
+    Map<String, Object> traitsDocument(ProductTypeTraits t) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("food", t.food());
+        out.put("perishable", t.perishable());
+        out.put("regulated", t.regulated());
+        out.put("preorder", t.preorder());
+        if (t.sizing() != null) {
+            out.put("sizing", t.sizing());
+        }
+        return out;
     }
 
     /** Listing details; products saved before S307 ({@code {}}) read as the defaults. */
@@ -82,6 +105,14 @@ class JsonCodec {
     /** A JSON array of strings (review photo URLs). */
     List<String> strings(String json) {
         return json == null || json.isBlank() ? List.of() : mapper.readValue(json, STRINGS);
+    }
+
+    List<ChartColumn> chartColumns(String json) {
+        return json == null ? List.of() : mapper.readValue(json, CHART_COLUMNS);
+    }
+
+    List<ChartRow> chartRows(String json) {
+        return json == null ? List.of() : mapper.readValue(json, CHART_ROWS);
     }
 
     List<ProductData> productData(String json) {
