@@ -63,7 +63,7 @@ class PoiSpreadsheetWriter implements SpreadsheetWriter {
         }
         try (XSSFWorkbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Styles st = new Styles(wb);
-            Sheet products = wb.createSheet("Products");
+            Sheet products = wb.createSheet(spec.sheetName());
             Sheet instructions = wb.createSheet("Instructions");
             Sheet example = wb.createSheet("Example");
             Sheet lists = wb.createSheet("Lists");
@@ -199,7 +199,7 @@ class PoiSpreadsheetWriter implements SpreadsheetWriter {
             DataValidationConstraint constraint = null;
             String error = null;
             switch (col.kind()) {
-                case ENUM, BOOLEAN -> {
+                case ENUM, BOOLEAN, SUGGESTED -> {
                     if (col.options().isEmpty()) {
                         break;
                     }
@@ -213,7 +213,8 @@ class PoiSpreadsheetWriter implements SpreadsheetWriter {
                     name.setNameName("list_" + listCol);
                     name.setRefersToFormula("Lists!$" + letter + "$2:$" + letter + "$" + (col.options().size() + 1));
                     constraint = helper.createFormulaListConstraint("list_" + listCol);
-                    error = "Choose a value from the list.";
+                    error = col.kind() == ColumnKind.SUGGESTED ? "Pick a suggestion from the list or type your own."
+                            : "Choose a value from the list.";
                     listCol++;
                 }
                 case INTEGER -> {
@@ -233,7 +234,8 @@ class PoiSpreadsheetWriter implements SpreadsheetWriter {
                 continue;
             }
             DataValidation v = helper.createValidation(constraint, range);
-            v.setShowErrorBox(true);
+            // A suggested value list lets the seller type their own: no error box.
+            v.setShowErrorBox(col.kind() != ColumnKind.SUGGESTED);
             v.setErrorStyle(DataValidation.ErrorStyle.STOP);
             v.createErrorBox(col.label(), error);
             v.setShowPromptBox(false);
@@ -266,7 +268,7 @@ class PoiSpreadsheetWriter implements SpreadsheetWriter {
             row.createCell(1).setCellValue(col.required() ? "Yes" : "No");
             row.createCell(2).setCellValue(col.description());
             row.createCell(3).setCellValue(col.options().isEmpty() ? kindHint(col.kind())
-                    : truncate(String.join(", ", col.options())));
+                    : truncate((col.kind() == ColumnKind.SUGGESTED ? "Suggestions (or your own): " : "") + String.join(", ", col.options())));
             row.createCell(4).setCellValue(CellSafety.safe(col.example()));
             for (int c = 0; c < 5; c++) {
                 row.getCell(c).setCellStyle(st.wrap);
@@ -300,7 +302,7 @@ class PoiSpreadsheetWriter implements SpreadsheetWriter {
         return switch (col.kind()) {
             case LONG_TEXT, URLS -> 40 * 256;
             case TEXT -> (col.key().equals("title") ? 36 : 20) * 256;
-            case ENUM -> 24 * 256;
+            case ENUM, SUGGESTED -> 24 * 256;
             default -> 16 * 256;
         };
     }

@@ -17,6 +17,8 @@ import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.VariationDimension;
 import com.afrotransact.catalog.domain.VariationTheme;
 import com.afrotransact.catalog.domain.brand.UnbrandedReason;
+import com.afrotransact.catalog.domain.sizing.FitNote;
+import com.afrotransact.catalog.domain.sizing.SizingTrait;
 
 /**
  * The columns of the bulk upload template, generated from the product type definitions so templates and the parser
@@ -49,6 +51,8 @@ public final class ImportColumns {
     public static final String HEIGHT = "package_height_in";
     public static final String WEIGHT = "package_weight_lb";
     public static final String PREORDER = "preorder_eligible";
+    public static final String SIZE_CHART = "size_chart";
+    public static final String FIT_NOTE = "fit_note";
     public static final String OPTION_PREFIX = "option:";
     public static final String ATTR_PREFIX = "attr:";
     public static final String UNIT_SUFFIX = ":unit";
@@ -62,6 +66,10 @@ public final class ImportColumns {
     /** Fulfilment labels in the template; codes (SELLER, AFROTRANSACT) are accepted too. */
     public static final Map<String, FulfilmentMode> FULFILMENTS = Map.of(
             "Ships from you", FulfilmentMode.SELLER, "Fulfilled by AfroTransact", FulfilmentMode.AFROTRANSACT);
+    /** Fit note labels in the template; codes (RUNS_SMALL) are accepted too. */
+    public static final Map<String, FitNote> FIT_NOTES = Map.of("Runs small", FitNote.RUNS_SMALL,
+            "True to size", FitNote.TRUE_TO_SIZE, "Runs large", FitNote.RUNS_LARGE);
+    public static final List<String> FIT_LABELS = List.of("Runs small", "True to size", "Runs large");
     private static final List<String> FULFILMENT_LABELS = List.of("Ships from you", "Fulfilled by AfroTransact");
 
     private ImportColumns() {
@@ -99,11 +107,10 @@ public final class ImportColumns {
                     + "sold in one version only (one row, no Parent SKU).", false, ColumnKind.ENUM,
                     type.themes().stream().map(VariationTheme::name).toList(), type.themes().getFirst().name(), true));
             for (VariationDimension d : dimensions(type)) {
-                cols.add(new ImportColumn(OPTION_PREFIX + d.name(), d.name(), "This variant's " + d.name()
-                        .toLowerCase(Locale.ROOT) + " (when the variation includes it).", false, ColumnKind.ENUM,
-                        d.options(), d.options().isEmpty() ? "" : d.options().getFirst(), false));
+                cols.add(optionColumn(d));
             }
         }
+        type.sizing().ifPresent(sizing -> cols.addAll(sizingColumns(type, sizing)));
         for (AttributeDefinition a : type.applicableAttributes()) {
             if (a.kind() == AttributeKind.BRAND || BRAND.equals(a.key())) {
                 continue;
@@ -121,6 +128,37 @@ public final class ImportColumns {
                     + "this product (default Yes for food).", false, ColumnKind.BOOLEAN, YES_NO, YES, true));
         }
         return List.copyOf(cols);
+    }
+
+    /** The Size / Color style column of a variation dimension; a dropdown that also takes the seller's own values. */
+    private static ImportColumn optionColumn(VariationDimension d) {
+        String what = d.name().toLowerCase(Locale.ROOT);
+        String example = d.options().isEmpty() ? "" : d.options().getFirst();
+        if (d.allowCustomValues()) {
+            return new ImportColumn(OPTION_PREFIX + d.name(), d.name(), "This variant's " + what + " (when the "
+                    + "variation includes it). Pick a suggestion or type your own, e.g. " + customExample(d) + ".",
+                    false, ColumnKind.SUGGESTED, d.options(), example, false);
+        }
+        return new ImportColumn(OPTION_PREFIX + d.name(), d.name(), "This variant's " + what + " (when the variation "
+                + "includes it).", false, ColumnKind.ENUM, d.options(), example, false);
+    }
+
+    private static String customExample(VariationDimension d) {
+        String lower = d.name().toLowerCase(Locale.ROOT);
+        return lower.contains("color") || lower.contains("colour") ? "\"Indigo adire\"" : "\"UK 12\", \"Free size\"";
+    }
+
+    /** The size chart columns of a sized product type's template. */
+    private static List<ImportColumn> sizingColumns(ProductType type, SizingTrait sizing) {
+        return List.of(
+                new ImportColumn(SIZE_CHART, "Size chart", "The name of one of your size charts. Every size in this "
+                        + "product's rows needs a row in the chart." + (sizing.sizeChartRequired() ? "" : " Optional "
+                        + "for this category.") + " Create charts first on the Size charts page or with the size "
+                        + "chart upload.", sizing.sizeChartRequired(), ColumnKind.TEXT, List.of(),
+                        type.label() + " chart", true),
+                new ImportColumn(FIT_NOTE, "Fit", "How the sizes fit: Runs small, True to size or Runs large. "
+                        + "Blank uses the size chart's own fit note.", false, ColumnKind.ENUM, FIT_LABELS,
+                        "True to size", true));
     }
 
     private static String brandHelp(AttributeDefinition brand) {
@@ -148,6 +186,10 @@ public final class ImportColumns {
                 + "separated by \";\", e.g. \"material: Cotton; fit: Regular\". Download the category's own template "
                 + "to see every key and allowed value.", false, ColumnKind.LONG_TEXT, List.of(),
                 "material: Cotton wax print; fit: Regular", true));
+        cols.add(new ImportColumn(SIZE_CHART, "Size chart", "Sized categories (fashion): the name of one of your size "
+                + "charts.", false, ColumnKind.TEXT, List.of(), "", true));
+        cols.add(new ImportColumn(FIT_NOTE, "Fit", "How the sizes fit: Runs small, True to size or Runs large.", false,
+                ColumnKind.ENUM, FIT_LABELS, "", true));
         cols.addAll(fulfilmentColumns());
         cols.add(new ImportColumn(PREORDER, "Pre-order eligible", "Food only: Yes to let community pre-order "
                 + "windows sell this product.", false, ColumnKind.BOOLEAN, YES_NO, "", true));

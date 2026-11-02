@@ -19,6 +19,7 @@ import java.util.regex.Pattern;
 
 import com.afrotransact.catalog.domain.AttributeDefinition;
 import com.afrotransact.catalog.domain.AttributeKind;
+import com.afrotransact.catalog.domain.CustomValues;
 import com.afrotransact.catalog.domain.FulfilmentMode;
 import com.afrotransact.catalog.domain.Gtin;
 import com.afrotransact.catalog.domain.IdentifierRule;
@@ -27,10 +28,15 @@ import com.afrotransact.catalog.domain.ListingDetails;
 import com.afrotransact.catalog.domain.PackageDimensions;
 import com.afrotransact.catalog.domain.ProductDraftPolicy;
 import com.afrotransact.catalog.domain.ProductType;
+import com.afrotransact.catalog.domain.VariantDraft;
 import com.afrotransact.catalog.domain.VariationDimension;
 import com.afrotransact.catalog.domain.VariationTheme;
 import com.afrotransact.catalog.domain.brand.BrandKeys;
 import com.afrotransact.catalog.domain.brand.UnbrandedReason;
+import com.afrotransact.catalog.domain.sizing.DefaultSizeChartPolicy;
+import com.afrotransact.catalog.domain.sizing.FitNote;
+import com.afrotransact.catalog.domain.sizing.SizeChart;
+import com.afrotransact.catalog.domain.sizing.SizeChartPolicy;
 
 /**
  * Validates every row of an uploaded sheet and reads the products it describes. Messages name the column, so the
@@ -49,8 +55,13 @@ public final class ImportValidator {
     private static final Set<String> TRUE = Set.of("yes", "y", "true", "1", "oui", "si", "sí", "bẹẹni");
     private static final Set<String> FALSE = Set.of("no", "n", "false", "0", "non", "rara");
 
+    private static final SizeChartPolicy SIZE_POLICY = new DefaultSizeChartPolicy();
+    private static final Pattern VARIANT_FIELD = Pattern.compile("^variants\\[(\\d+)\\]\\.options\\.(.+)$");
+
     private final ImportContext ctx;
     private final List<ImportColumn> columns;
+    /** The first spelling of each custom option value within the product being read ("free size" after "Free size"). */
+    private final Map<String, String> groupSpelling = new HashMap<>();
     private Map<String, Integer> index;
     private final Map<Integer, List<RowMessage>> messages = new LinkedHashMap<>();
     /** Rows whose SKU repeats an earlier row: never grouped with it. */
@@ -223,6 +234,7 @@ public final class ImportValidator {
 
     private ImportedProduct createGroup(String key, List<SheetRow> rows, Map<Integer, String> skus) {
         SheetRow first = rows.getFirst();
+        groupSpelling.clear();
         if (rows.size() > ImportLimits.MAX_VARIANTS) {
             rows.forEach(r -> add(r, err(ImportColumns.PARENT_SKU, "A product has at most "
                     + ImportLimits.MAX_VARIANTS + " variants")));
@@ -268,9 +280,11 @@ public final class ImportValidator {
             }
             variants.add(variant(r, skus.get(r.rowNumber()), options, type, d.fulfilment(), true));
         }
+        checkCustomCount(rows, vt);
+        Sizing sizing = sizing(rows, type, vt, variants, true);
         return new ImportedProduct(key, null, category, type.code(), title, d.description(), attributes, images,
                 d.keywords(), d.condition(), d.fulfilment(), d.handlingDays(), d.packaging(), d.preorder(),
-                vt == null ? "" : vt.name(), variants);
+                vt == null ? "" : vt.name(), variants, sizing.chartId(), sizing.chartName(), sizing.fit());
     }
 
     private ImportCategory category(SheetRow r, boolean create) {
@@ -349,9 +363,10 @@ public final class ImportValidator {
         for (SheetRow r : rows) {
             variants.add(variant(r, skus.get(r.rowNumber()), Map.of(), type, d.fulfilment(), false));
         }
+        Sizing sizing = sizing(rows, type, null, List.of(), false);
         return new ImportedProduct(key, existing.productId(), null, type.code(), title.isEmpty() ? null : title,
                 d.description(), attributes, images, d.keywords(), d.condition(), d.fulfilment(), d.handlingDays(),
-                d.packaging(), d.preorder(), null, variants);
+                d.packaging(), d.preorder(), null, variants, sizing.chartId(), sizing.chartName(), sizing.fit());
     }
 
     // ------------------------------------------------------------------ product-level values
@@ -651,6 +666,92 @@ public final class ImportValidator {
         return p;
     }
 
+    // ------------------------------------------------------------------ sizes and size charts
+
+    private record Sizing(UUID chartId, String chartName, FitNote fit) {
+    }
+
+    private static final Sizing NO_SIZING = new Sizing(null, null, null);
+
+    /** More different custom values of a dimension than one product may carry. */
+    private void checkCustomCount(List<SheetRow> rows, VariationTheme vt) {
+        if (vt == null) {
+            return;
+        }
+        for (VariationDimension d : vt.dimensions()) {
+            if (!d.allowCustomValues()) {
+                continue;
+            }
+            String column = ctx.fixedType() == null ? ImportColumns.OPTIONS : optionColumn(d.name());
+            Set<String> seen = new HashSet<>();
+            for (SheetRow r : rows) {
+                String raw = ctx.fixedType() == null ? pairs(r, ImportColumns.OPTIONS)
+                        .getOrDefault(d.name().toLowerCase(Locale.ROOT), "") : text(r, column);
+                if (!raw.isEmpty() && d.suggestion(raw).isEmpty() && seen.add(CustomValues.key(raw))
+                        && seen.size() > CustomValues.MAX_PER_PRODUCT) {
+                    add(r, err(column, "Up to " + CustomValues.MAX_PER_PRODUCT + " different "
+                            + d.name().toLowerCase(Locale.ROOT) + " values of your own on one product"));
+                }
+            }
+        }
+    }
+
+    /**
+     * The size chart and fit note of a product: the chart is one of the organisation's own, found by name, and the
+     * same rules as the product form apply (a chart where the category requires one, a row for every size sold).
+     */
+    private Sizing sizing(List<SheetRow> rows, ProductType type, VariationTheme vt, List<ImportedVariant> variants,
+                          boolean create) {
+        SheetRow first = rows.getFirst();
+        String chartName = productText(rows, ImportColumns.SIZE_CHART);
+        String fitRaw = productText(rows, ImportColumns.FIT_NOTE);
+        warnIfDifferent(rows, ImportColumns.SIZE_CHART);
+        warnIfDifferent(rows, ImportColumns.FIT_NOTE);
+        if (type.sizing().isEmpty()) {
+            if (!chartName.isEmpty()) {
+                add(first, RowMessage.warning(ImportColumns.SIZE_CHART, idx(ImportColumns.SIZE_CHART),
+                        "Ignored: " + type.label() + " do not use size charts"));
+            }
+            if (!fitRaw.isEmpty()) {
+                add(first, RowMessage.warning(ImportColumns.FIT_NOTE, idx(ImportColumns.FIT_NOTE),
+                        "Ignored: " + type.label() + " do not use size charts"));
+            }
+            return NO_SIZING;
+        }
+        FitNote fit = null;
+        if (!fitRaw.isEmpty()) {
+            fit = lookup(ImportColumns.FIT_NOTES, fitRaw, FitNote.class);
+            if (fit == null) {
+                add(first, err(ImportColumns.FIT_NOTE, "Choose one of Runs small, True to size, Runs large"));
+            }
+        }
+        SizeChart chart = null;
+        if (!chartName.isEmpty()) {
+            chart = ctx.charts().get(CustomValues.key(chartName));
+            if (chart == null) {
+                add(first, err(ImportColumns.SIZE_CHART, "No size chart called \"" + abbreviate(chartName) + "\" in your "
+                        + "account. Create it first (Size charts page or size chart upload) or check the name"));
+                return new Sizing(null, null, fit);
+            }
+        }
+        if (create) {
+            List<VariantDraft> drafts = variants.stream()
+                    .map(v -> new VariantDraft(v.options(), v.sku(), "", true, 1, 0)).toList();
+            String owner = ctx.ownerOrg() != null ? ctx.ownerOrg() : chart == null ? null : chart.ownerOrg();
+            SIZE_POLICY.problems(new SizeChartPolicy.SizedListing(type, owner, vt == null ? "" : vt.name(), drafts,
+                    chart == null ? null : chart.id(), chart, null)).forEach((field, message) -> {
+                        Matcher m = VARIANT_FIELD.matcher(field);
+                        if (m.matches()) {
+                            String column = ctx.fixedType() == null ? ImportColumns.OPTIONS : optionColumn(m.group(2));
+                            add(rows.get(Integer.parseInt(m.group(1))), err(column, message));
+                        } else {
+                            add(first, err(ImportColumns.SIZE_CHART, message));
+                        }
+                    });
+        }
+        return new Sizing(chart == null ? null : chart.id(), chart == null ? null : chart.name(), fit);
+    }
+
     // ------------------------------------------------------------------ variant-level values
 
     private Map<String, String> options(SheetRow r, ProductType type, VariationTheme theme) {
@@ -675,11 +776,18 @@ public final class ImportValidator {
                 continue;
             }
             Optional<String> value = d.options().stream().filter(o -> o.equalsIgnoreCase(raw)).findFirst();
-            if (value.isEmpty()) {
+            if (value.isEmpty() && d.allowCustomValues()) {
+                String problem = CustomValues.problem(d.name(), raw);
+                if (problem != null) {
+                    add(r, err(col, d.name() + ": " + problem));
+                } else {
+                    value = Optional.of(groupSpelling.computeIfAbsent(d.name() + "|" + CustomValues.key(raw),
+                            k -> CustomValues.clean(raw)));
+                }
+            } else if (value.isEmpty()) {
                 add(r, err(col, d.name() + ": choose one of " + d.options()));
-            } else {
-                out.put(d.name(), value.get());
             }
+            value.ifPresent(v -> out.put(d.name(), v));
         }
         if (ctx.fixedType() != null) {
             for (VariationDimension d : ImportColumns.dimensions(type)) {

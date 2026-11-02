@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.afrotransact.catalog.domain.ProductType;
+import com.afrotransact.catalog.domain.sizing.SizeChart;
 
 /**
  * What row validation needs to know about the catalog and the organisation.
@@ -16,10 +17,20 @@ import com.afrotransact.catalog.domain.ProductType;
  * @param existingGtins the file's GTINs that already have a product page
  * @param existing      Update mode: the organisation's listings by SKU (upper case)
  * @param library       the organisation's library images for the file's SKUs and image file names (S310)
+ * @param ownerOrg      the uploading organisation; size charts are the organisation's own
+ * @param charts        the organisation's active size charts named in the file, by lower-case name
  */
 public record ImportContext(ImportMode mode, ProductType fixedType, Map<String, ProductType> types,
                             List<ImportCategory> categories, Set<String> takenSkus, Set<String> existingGtins,
-                            Map<String, ExistingListing> existing, ImageLibrary library) {
+                            Map<String, ExistingListing> existing, ImageLibrary library, String ownerOrg,
+                            Map<String, SizeChart> charts) {
+
+    /** Without size charts. */
+    public ImportContext(ImportMode mode, ProductType fixedType, Map<String, ProductType> types,
+                         List<ImportCategory> categories, Set<String> takenSkus, Set<String> existingGtins,
+                         Map<String, ExistingListing> existing, ImageLibrary library) {
+        this(mode, fixedType, types, categories, takenSkus, existingGtins, existing, library, null, Map.of());
+    }
 
     /** Without library images. */
     public ImportContext(ImportMode mode, ProductType fixedType, Map<String, ProductType> types,
@@ -29,6 +40,7 @@ public record ImportContext(ImportMode mode, ProductType fixedType, Map<String, 
     }
 
     public ImportContext {
+        charts = charts == null ? Map.of() : Map.copyOf(charts);
         library = library == null ? ImageLibrary.EMPTY : library;
         types = Map.copyOf(types);
         categories = List.copyOf(categories);

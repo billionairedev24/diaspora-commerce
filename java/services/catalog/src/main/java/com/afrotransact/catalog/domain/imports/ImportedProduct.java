@@ -7,6 +7,7 @@ import java.util.UUID;
 import com.afrotransact.catalog.domain.FulfilmentMode;
 import com.afrotransact.catalog.domain.ItemCondition;
 import com.afrotransact.catalog.domain.PackageDimensions;
+import com.afrotransact.catalog.domain.sizing.FitNote;
 
 /**
  * One product of an upload: the rows sharing a Parent SKU (Create mode) or the rows of one existing listing
@@ -14,12 +15,26 @@ import com.afrotransact.catalog.domain.PackageDimensions;
  *
  * @param groupKey  Parent SKU (or the SKU of a product without variations); the product id in Update mode
  * @param productId Update mode: the listing to change; null when creating
+ * @param sizeChartId the seller's size chart named in the Size chart column, resolved by name; null for none
+ * @param fitNote   how the sizes fit; null for none (unchanged in Update mode)
  */
 public record ImportedProduct(String groupKey, UUID productId, ImportCategory category, String productTypeCode,
                               String title, String description, Map<String, String> attributes,
                               List<String> imageUrls, List<String> keywords, ItemCondition condition,
                               FulfilmentMode fulfilment, Integer handlingDays, PackageDimensions packaging,
-                              Boolean preorderEligible, String variationTheme, List<ImportedVariant> variants) {
+                              Boolean preorderEligible, String variationTheme, List<ImportedVariant> variants,
+                              UUID sizeChartId, String sizeChartName, FitNote fitNote) {
+
+    /** A product without a size chart. */
+    public ImportedProduct(String groupKey, UUID productId, ImportCategory category, String productTypeCode,
+                           String title, String description, Map<String, String> attributes, List<String> imageUrls,
+                           List<String> keywords, ItemCondition condition, FulfilmentMode fulfilment,
+                           Integer handlingDays, PackageDimensions packaging, Boolean preorderEligible,
+                           String variationTheme, List<ImportedVariant> variants) {
+        this(groupKey, productId, category, productTypeCode, title, description, attributes, imageUrls, keywords,
+                condition, fulfilment, handlingDays, packaging, preorderEligible, variationTheme, variants, null, null,
+                null);
+    }
 
     public ImportedProduct {
         attributes = attributes == null ? Map.of() : Map.copyOf(attributes);

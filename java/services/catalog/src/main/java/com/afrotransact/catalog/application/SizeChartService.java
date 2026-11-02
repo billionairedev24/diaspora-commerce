@@ -3,6 +3,8 @@ package com.afrotransact.catalog.application;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.catalog.domain.imports.SpreadsheetFormat;
+import com.afrotransact.catalog.domain.imports.ValidatedRow;
 import com.afrotransact.catalog.domain.sizing.ChartContent;
 import com.afrotransact.catalog.domain.sizing.MeasurementUnit;
 import com.afrotransact.catalog.domain.sizing.SizeChart;
@@ -55,6 +57,61 @@ public interface SizeChartService {
      * @param productType the product type code; one of the two is required
      */
     Suggestions suggestions(UUID categoryId, String productType);
+
+    /**
+     * The size chart upload template: one row per size, the product type's suggested measurements as columns (the
+     * generic template when neither is given).
+     *
+     * @param productType the product type code, or
+     * @param categoryId  a product-type category node
+     */
+    FileContent template(String productType, UUID categoryId, SpreadsheetFormat format);
+
+    /**
+     * Reads a size chart sheet (.xlsx or .csv) and saves its charts for the organisation: a chart whose name matches
+     * one of the organisation's active charts updates it (nothing changes when the content is the same), any other
+     * name creates a chart, and re-uploading the file is harmless. A chart is saved whole or not at all. Unreadable
+     * files are refused with a 422 and nothing is saved; row problems are reported per row.
+     *
+     * @param productType the product type the charts are made for (as the template's); null = any
+     * @param dryRun      validate and report what would happen without saving anything
+     */
+    ImportReport importCharts(String fileName, byte[] content, String productType, UUID categoryId, boolean dryRun);
+
+    /** A generated file. */
+    record FileContent(String fileName, String contentType, byte[] content) {
+    }
+
+    /** What an import did (or, for a dry run, would do) to one chart. */
+    enum ImportAction { CREATE, UPDATE, UNCHANGED, FAILED }
+
+    /**
+     * @param chartId the saved chart; null for a dry run's new charts and for failed ones
+     * @param rows    the file rows of the chart
+     * @param message why a chart failed; null otherwise
+     */
+    record ChartOutcome(String name, ImportAction action, UUID chartId, List<Integer> rows, String message) {
+
+        public ChartOutcome {
+            rows = List.copyOf(rows);
+        }
+    }
+
+    /**
+     * The result of a size chart upload.
+     *
+     * @param applied false for a dry run
+     * @param rows    every data row with its status and messages (group key = chart name, sku = size)
+     */
+    record ImportReport(boolean applied, String fileName, List<String> fileWarnings, int chartCount,
+                        List<ChartOutcome> charts, List<ValidatedRow> rows) {
+
+        public ImportReport {
+            fileWarnings = List.copyOf(fileWarnings);
+            charts = List.copyOf(charts);
+            rows = List.copyOf(rows);
+        }
+    }
 
     /** A chart with how many products use it. */
     record ChartView(SizeChart chart, long productCount) {

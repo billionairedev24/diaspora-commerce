@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -185,6 +186,30 @@ public final class SizeChartRules {
     public static BigDecimal round(BigDecimal value) {
         BigDecimal rounded = value.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros();
         return rounded.scale() < 0 ? rounded.setScale(0) : rounded;
+    }
+
+    /** Whether two contents say the same (numbers compared by value, not by scale). */
+    public static boolean same(ChartContent a, ChartContent b) {
+        if (!a.name().equals(b.name()) || a.unitSystem() != b.unitSystem() || a.fitNote() != b.fitNote()
+                || !Objects.equals(a.productTypeCode(), b.productTypeCode())
+                || !Objects.equals(a.categoryId(), b.categoryId()) || !Objects.equals(a.howToMeasure(), b.howToMeasure())
+                || !a.columns().equals(b.columns()) || a.rows().size() != b.rows().size()) {
+            return false;
+        }
+        for (int i = 0; i < a.rows().size(); i++) {
+            ChartRow x = a.rows().get(i);
+            ChartRow y = b.rows().get(i);
+            if (!x.size().equals(y.size()) || !x.values().keySet().equals(y.values().keySet())) {
+                return false;
+            }
+            for (Map.Entry<String, MeasurementRange> e : x.values().entrySet()) {
+                MeasurementRange o = y.values().get(e.getKey());
+                if (e.getValue().min().compareTo(o.min()) != 0 || e.getValue().max().compareTo(o.max()) != 0) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     /** The content in stored form and the problems found in it. */

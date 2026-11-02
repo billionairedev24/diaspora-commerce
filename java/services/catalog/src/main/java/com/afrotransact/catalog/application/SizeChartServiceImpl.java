@@ -3,11 +3,13 @@ package com.afrotransact.catalog.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
@@ -19,6 +21,14 @@ import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.domain.VariationDimension;
+import com.afrotransact.catalog.domain.imports.ChartImportColumns;
+import com.afrotransact.catalog.domain.imports.ChartImportContext;
+import com.afrotransact.catalog.domain.imports.ChartImportResult;
+import com.afrotransact.catalog.domain.imports.ChartImportValidator;
+import com.afrotransact.catalog.domain.imports.SpreadsheetFormat;
+import com.afrotransact.catalog.domain.imports.SpreadsheetRejected;
+import com.afrotransact.catalog.domain.imports.TemplateSpec;
+import com.afrotransact.catalog.domain.imports.ValidatedRow;
 import com.afrotransact.catalog.domain.sizing.ChartContent;
 import com.afrotransact.catalog.domain.sizing.MeasurementUnit;
 import com.afrotransact.catalog.domain.sizing.SizeChart;
@@ -28,6 +38,8 @@ import com.afrotransact.catalog.domain.sizing.SuggestedMeasurement;
 import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.catalog.port.SizeChartRepository;
+import com.afrotransact.catalog.port.SpreadsheetReader;
+import com.afrotransact.catalog.port.SpreadsheetWriter;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.platform.security.PrincipalType;
@@ -51,17 +63,21 @@ class SizeChartServiceImpl implements SizeChartService {
     private final PermissionChecker permissions;
     private final ResourceAccessChecker access;
     private final OwnerResolver owners;
+    private final SpreadsheetReader reader;
+    private final SpreadsheetWriter writer;
     private final Clock clock;
 
     SizeChartServiceImpl(SizeChartRepository charts, ProductRepository products, CategoryRepository categories,
                          PermissionChecker permissions, ResourceAccessChecker access, OwnerResolver owners,
-                         Clock clock) {
+                         SpreadsheetReader reader, SpreadsheetWriter writer, Clock clock) {
         this.charts = charts;
         this.products = products;
         this.categories = categories;
         this.permissions = permissions;
         this.access = access;
         this.owners = owners;
+        this.reader = reader;
+        this.writer = writer;
         this.clock = clock;
     }
 
@@ -100,20 +116,14 @@ class SizeChartServiceImpl implements SizeChartService {
     @Override
     @Transactional
     public ChartView create(ChartContent content) {
-        ListingOwner owner = writer();
-        ChartContent valid = placed(SizeChartRules.validate(content));
-        Instant now = Instant.now(clock);
-        requireNameFree(owner.orgId(), valid.name(), null);
-        SizeChart chart = new SizeChart(UUID.randomUUID(), owner.orgId(), valid.name(), valid.unitSystem(),
-                valid.productTypeCode(), valid.categoryId(), valid.columns(), valid.rows(), valid.fitNote(),
-                valid.howToMeasure(), null, now, now, 0);
-        return view(insert(chart));
+        ListingOwner owner = writingOwner();
+        return view(insertChart(owner, placed(SizeChartRules.validate(content))));
     }
 
     @Override
     @Transactional
     public ChartView update(UUID id, Long expectedVersion, ChartContent content) {
-        ListingOwner owner = writer();
+        ListingOwner owner = writingOwner();
         SizeChart current = owned(owner, id);
         if (current.retired()) {
             throw new ConflictException("catalog.size-chart-retired",
@@ -123,17 +133,13 @@ class SizeChartServiceImpl implements SizeChartService {
             throw new ConflictException("catalog.size-chart-changed",
                     "This size chart was changed since you opened it; reload it and try again");
         }
-        ChartContent valid = placed(SizeChartRules.validate(content));
-        requireNameFree(owner.orgId(), valid.name(), id);
-        SizeChart next = current.replaced(valid, Instant.now(clock));
-        requireSizesStillCovered(next);
-        return view(charts.update(next));
+        return view(updateChart(owner, current, placed(SizeChartRules.validate(content)), true));
     }
 
     @Override
     @Transactional
     public ChartView retire(UUID id) {
-        ListingOwner owner = writer();
+        ListingOwner owner = writingOwner();
         SizeChart current = owned(owner, id);
         if (current.retired()) {
             return view(current);
@@ -144,19 +150,14 @@ class SizeChartServiceImpl implements SizeChartService {
     @Override
     @Transactional
     public ChartView duplicate(UUID id, String newName) {
-        ListingOwner owner = writer();
+        ListingOwner owner = writingOwner();
         SizeChart source = owned(owner, id);
         String name = newName == null || newName.isBlank() ? freeCopyName(owner.orgId(), source.name())
                 : CustomValues.clean(newName);
         ChartContent copy = source.content();
         ChartContent valid = SizeChartRules.validate(new ChartContent(name, copy.unitSystem(), copy.productTypeCode(),
                 copy.categoryId(), copy.columns(), copy.rows(), copy.fitNote(), copy.howToMeasure()));
-        requireNameFree(owner.orgId(), valid.name(), null);
-        Instant now = Instant.now(clock);
-        SizeChart chart = new SizeChart(UUID.randomUUID(), owner.orgId(), valid.name(), valid.unitSystem(),
-                valid.productTypeCode(), valid.categoryId(), valid.columns(), valid.rows(), valid.fitNote(),
-                valid.howToMeasure(), null, now, now, 0);
-        return view(insert(chart));
+        return view(insertChart(owner, valid));
     }
 
     @Override
@@ -181,6 +182,101 @@ class SizeChartServiceImpl implements SizeChartService {
         return suggestionsOf(type);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public FileContent template(String productType, UUID categoryId, SpreadsheetFormat format) {
+        permissions.require(CatalogPermissions.WRITE);
+        TemplateSpec spec = ChartImportColumns.template(typeOf(productType, categoryId));
+        return new FileContent(spec.fileStem() + "." + format.extension(), format.contentType(),
+                writer.template(spec, format));
+    }
+
+    @Override
+    @Transactional
+    public ImportReport importCharts(String fileName, byte[] content, String productType, UUID categoryId,
+                                     boolean dryRun) {
+        ListingOwner owner = writingOwner();
+        SpreadsheetFormat format = SpreadsheetFormat.of(fileName);
+        if (format == null) {
+            throw new SpreadsheetRejected("Upload an Excel (.xlsx) or CSV (.csv) file");
+        }
+        ProductType type = typeOf(productType, categoryId);
+        MeasurementUnit unit = type == null ? MeasurementUnit.CM : suggestionsOf(type).unitSystem();
+        ChartImportResult read = ChartImportValidator.validate(reader.read(content, format),
+                new ChartImportContext(type == null ? null : type.code(), unit));
+        Map<String, SizeChart> existing = charts.activeByNames(owner.orgId(),
+                read.charts().stream().map(ChartImportResult.ParsedChart::name).toList());
+        List<ChartOutcome> outcomes = new ArrayList<>();
+        Set<String> saved = new HashSet<>();
+        for (ChartImportResult.ParsedChart parsed : read.charts()) {
+            saved.add(CustomValues.key(parsed.name()));
+            outcomes.add(importOne(owner, parsed, existing.get(CustomValues.key(parsed.name())), dryRun));
+        }
+        Map<String, List<Integer>> failedRows = new LinkedHashMap<>();
+        Map<String, String> failedNames = new LinkedHashMap<>();
+        for (ValidatedRow row : read.rows()) {
+            String key = CustomValues.key(row.groupKey());
+            if (!key.isEmpty() && !saved.contains(key)) {
+                failedRows.computeIfAbsent(key, k -> new ArrayList<>()).add(row.rowNumber());
+                failedNames.putIfAbsent(key, row.groupKey());
+            }
+        }
+        failedRows.forEach((key, rows) -> outcomes.add(new ChartOutcome(failedNames.get(key), ImportAction.FAILED,
+                null, rows, "Fix the rows with errors and upload the file again; the chart is saved whole")));
+        return new ImportReport(!dryRun, fileName, read.fileWarnings(), read.chartCount(), outcomes, read.rows());
+    }
+
+    /** Creates or updates one chart of the file (or, for a dry run, finds out whether it could be). */
+    private ChartOutcome importOne(ListingOwner owner, ChartImportResult.ParsedChart parsed, SizeChart current,
+                                   boolean dryRun) {
+        try {
+            if (current == null) {
+                ChartContent valid = placed(parsed.content());
+                if (dryRun) {
+                    requireNameFree(owner.orgId(), valid.name(), null);
+                    return new ChartOutcome(parsed.name(), ImportAction.CREATE, null, parsed.rowNumbers(), null);
+                }
+                SizeChart created = insertChart(owner, valid);
+                return new ChartOutcome(parsed.name(), ImportAction.CREATE, created.id(), parsed.rowNumbers(), null);
+            }
+            ChartContent kept = keepingPlacement(parsed.content(), current);
+            if (SizeChartRules.same(kept, current.content())) {
+                return new ChartOutcome(parsed.name(), ImportAction.UNCHANGED, current.id(), parsed.rowNumbers(), null);
+            }
+            SizeChart next = updateChart(owner, current, placed(kept), !dryRun);
+            return new ChartOutcome(parsed.name(), ImportAction.UPDATE, next.id(), parsed.rowNumbers(), null);
+        } catch (CatalogRuleViolation ex) {
+            String detail = ex.fieldErrors().values().stream().findFirst().orElse(ex.getMessage());
+            return new ChartOutcome(parsed.name(), ImportAction.FAILED, null, parsed.rowNumbers(), detail);
+        }
+    }
+
+    /** A re-upload without a product type keeps what the chart was made for. */
+    private static ChartContent keepingPlacement(ChartContent uploaded, SizeChart current) {
+        String type = uploaded.productTypeCode() != null ? uploaded.productTypeCode() : current.productTypeCode();
+        UUID category = Objects.equals(type, current.productTypeCode()) ? current.categoryId() : null;
+        return new ChartContent(uploaded.name(), uploaded.unitSystem(), type, category, uploaded.columns(),
+                uploaded.rows(), uploaded.fitNote(), uploaded.howToMeasure());
+    }
+
+    private ProductType typeOf(String productType, UUID categoryId) {
+        String code = blankToNull(productType);
+        if (categoryId != null) {
+            CategoryNode node = categories.findById(categoryId).filter(CategoryNode::active)
+                    .orElseThrow(() -> new NotFoundException("catalog.category-not-found", "Category not found"));
+            if (node.productTypeCode() == null) {
+                throw new NotFoundException("catalog.product-type-not-found", "Choose a product type (third level)");
+            }
+            code = node.productTypeCode();
+        }
+        if (code == null) {
+            return null;
+        }
+        String wanted = code;
+        return categories.findProductType(wanted).orElseThrow(
+                () -> new NotFoundException("catalog.product-type-not-found", "Unknown product type " + wanted));
+    }
+
     static Suggestions suggestionsOf(ProductType type) {
         Optional<SizingTrait> sizing = type.sizing();
         if (sizing.isEmpty()) {
@@ -202,6 +298,22 @@ class SizeChartServiceImpl implements SizeChartService {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    private SizeChart insertChart(ListingOwner owner, ChartContent valid) {
+        requireNameFree(owner.orgId(), valid.name(), null);
+        Instant now = Instant.now(clock);
+        return insert(new SizeChart(UUID.randomUUID(), owner.orgId(), valid.name(), valid.unitSystem(),
+                valid.productTypeCode(), valid.categoryId(), valid.columns(), valid.rows(), valid.fitNote(),
+                valid.howToMeasure(), null, now, now, 0));
+    }
+
+    /** Saves the new content of an owned chart unless {@code save} is false (a dry run only runs the checks). */
+    private SizeChart updateChart(ListingOwner owner, SizeChart current, ChartContent valid, boolean save) {
+        requireNameFree(owner.orgId(), valid.name(), current.id());
+        SizeChart next = current.replaced(valid, Instant.now(clock));
+        requireSizesStillCovered(next);
+        return save ? charts.update(next) : next;
+    }
 
     private SizeChart insert(SizeChart chart) {
         try {
@@ -279,7 +391,7 @@ class SizeChartServiceImpl implements SizeChartService {
         }
     }
 
-    private ListingOwner writer() {
+    private ListingOwner writingOwner() {
         Actor actor = permissions.require(CatalogPermissions.WRITE);
         ListingOwner owner = owners.ownerFor(actor);
         access.requireForOrg(CatalogPermissions.WRITE, CatalogRelations.ORG_MANAGE_PRODUCTS, owner.orgId());

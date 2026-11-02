@@ -32,6 +32,17 @@ public final class ImportTemplates {
             "Keep the header row: columns are matched by their names, so you can hide or reorder them. Rows whose "
                     + "first cell starts with # are ignored.");
 
+    /** Extra lines for categories with sizes (fashion): sizes, colours and size charts are the seller's own. */
+    public static final List<String> SIZING_INSTRUCTIONS = List.of(
+            "Sizes and colours: the lists are suggestions. Pick one or type your own, for example \"UK 12\", \"EU 38\", "
+                    + "\"Free size\", \"Age 6-7\" or \"Indigo adire\". The same size spelled two ways on one product (XL "
+                    + "and xl) counts as one.",
+            "Size charts: write your charts first (Size charts page, or the size chart upload with its own template: "
+                    + "one row per size, one column per measurement). Then put the chart's name in Size chart. Every "
+                    + "size in a product's rows needs a row in that chart; charts are matched by name and belong to "
+                    + "your account only.",
+            "Fit says how the sizes fit (Runs small, True to size, Runs large); leave it blank to use the chart's own.");
+
     private ImportTemplates() {
     }
 
@@ -39,7 +50,11 @@ public final class ImportTemplates {
     public static TemplateSpec forType(ProductType type, List<ImportCategory> categories) {
         List<String> paths = categories.stream().map(ImportCategory::path).toList();
         List<ImportColumn> columns = ImportColumns.forType(type, paths);
-        return new TemplateSpec(type.label(), "afrotransact-products-" + type.code(), shown(columns), INSTRUCTIONS,
+        List<String> instructions = new ArrayList<>(INSTRUCTIONS);
+        if (type.sizing().isPresent()) {
+            instructions.addAll(SIZING_INSTRUCTIONS);
+        }
+        return new TemplateSpec(type.label(), "afrotransact-products-" + type.code(), shown(columns), instructions,
                 examples(shown(columns), type));
     }
 

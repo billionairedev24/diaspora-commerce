@@ -21,6 +21,7 @@ import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.domain.VariantDraft;
+import com.afrotransact.catalog.domain.sizing.SizeChart;
 import com.afrotransact.catalog.domain.imports.ExistingListing;
 import com.afrotransact.catalog.domain.imports.ImageLibrary;
 import com.afrotransact.catalog.domain.imports.ImportCategory;
@@ -47,6 +48,7 @@ import com.afrotransact.catalog.port.ImageImporter.ImportedImage;
 import com.afrotransact.catalog.port.ImageLibraryLookup;
 import com.afrotransact.catalog.port.ProductImportRepository;
 import com.afrotransact.catalog.port.ProductRepository;
+import com.afrotransact.catalog.port.SizeChartRepository;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.NotFoundException;
@@ -72,6 +74,7 @@ class ImportJobImpl implements ImportJob {
 
     private final ProductImportRepository imports;
     private final ProductRepository products;
+    private final SizeChartRepository sizeCharts;
     private final CategoryRepository categories;
     private final ProductWriter writer;
     private final ImageImporter images;
@@ -81,11 +84,12 @@ class ImportJobImpl implements ImportJob {
     private final TransactionTemplate tx;
     private final TransactionTemplate savepoint;
 
-    ImportJobImpl(ProductImportRepository imports, ProductRepository products, CategoryRepository categories,
-                  ProductWriter writer, ImageImporter images, ImageLibraryLookup library,
+    ImportJobImpl(ProductImportRepository imports, ProductRepository products, SizeChartRepository sizeCharts,
+                  CategoryRepository categories, ProductWriter writer, ImageImporter images, ImageLibraryLookup library,
                   DomainEventPublisher events, Clock clock, PlatformTransactionManager transactions) {
         this.imports = imports;
         this.products = products;
+        this.sizeCharts = sizeCharts;
         this.categories = categories;
         this.writer = writer;
         this.images = images;
@@ -200,7 +204,7 @@ class ImportJobImpl implements ImportJob {
         }
         ImageLibrary lib = libraryFor(u, fixed, types, cats, rows);
         ImportContext ctx = new ImportContext(u.mode(), fixed, types, cats, Set.of(), Set.of(),
-                existing, lib);
+                existing, lib, u.owner().orgId(), sizeChartsOf(u, fixed, types, cats, rows));
         ParsedSheet sheet = new ParsedSheet(u.header(),
                 rows.stream().map(r -> new SheetRow(r.rowNumber(), r.cells())).toList());
         ValidationResult result = ImportValidator.validate(sheet, ctx);
@@ -210,6 +214,21 @@ class ImportJobImpl implements ImportJob {
             throw new ImportRefused(why);
         }
         return new Remapped(result.products().getFirst(), lib);
+    }
+
+    /** The organisation's size charts named by the rows' Size chart cells, by lower-case name. */
+    private Map<String, SizeChart> sizeChartsOf(ProductImport u, ProductType fixed, Map<String, ProductType> types,
+                                                List<ImportCategory> cats, List<StoredRow> rows) {
+        ImportContext probe = new ImportContext(u.mode(), fixed, types, cats, Set.of(), Set.of(), Map.of());
+        Integer chartCol = ImportColumns.resolve(u.header(), probe.columns()).get(ImportColumns.SIZE_CHART);
+        Set<String> names = new LinkedHashSet<>();
+        for (StoredRow r : rows) {
+            String name = cell(r, chartCol);
+            if (!name.isBlank()) {
+                names.add(name.strip());
+            }
+        }
+        return sizeCharts.activeByNames(u.owner().orgId(), names);
     }
 
     /** The library images named by the rows' image cells or after their SKUs (throws when media is unavailable). */
@@ -272,7 +291,7 @@ class ImportJobImpl implements ImportJob {
                 v.gtinExempt(), v.priceMinor() == null ? 0 : v.priceMinor(), v.quantity() == null ? 0 : v.quantity(),
                 v.compareAtMinor(), List.of())).toList();
         ListingDetails details = new ListingDetails(p.description(), p.condition(), p.keywords(), p.fulfilment(),
-                p.packaging(), p.handlingDays() == null ? 0 : p.handlingDays(), null);
+                p.packaging(), p.handlingDays() == null ? 0 : p.handlingDays(), null, p.sizeChartId(), p.fitNote());
         return new CreateProductCommand(p.category().id(), null, p.title(), p.attributes(), imgs, p.variationTheme(),
                 variants, "USD", p.preorderEligible(), null, details, null);
     }
@@ -301,7 +320,9 @@ class ImportJobImpl implements ImportJob {
                 p.condition() != null ? p.condition() : d.condition(),
                 p.keywords() != null ? p.keywords() : d.keywords(), d.fulfilment(),
                 p.packaging() != null ? p.packaging() : d.packaging(),
-                p.handlingDays() != null ? p.handlingDays() : d.handlingDays(), d.shipFrom());
+                p.handlingDays() != null ? p.handlingDays() : d.handlingDays(), d.shipFrom(),
+                p.sizeChartId() != null ? p.sizeChartId() : d.sizeChartId(),
+                p.fitNote() != null ? p.fitNote() : d.fitNote());
         return new UpdateProductCommand(null, p.title() != null ? p.title() : current.title(), attributes, imgs,
                 current.variationTheme(), variants, p.preorderEligible(), null, details, null, null);
     }

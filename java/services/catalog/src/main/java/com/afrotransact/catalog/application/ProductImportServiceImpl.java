@@ -45,6 +45,7 @@ import com.afrotransact.catalog.port.ImageImporter.ImageServiceUnavailable;
 import com.afrotransact.catalog.port.ImageLibraryLookup;
 import com.afrotransact.catalog.port.ProductImportRepository;
 import com.afrotransact.catalog.port.ProductRepository;
+import com.afrotransact.catalog.port.SizeChartRepository;
 import com.afrotransact.catalog.port.SpreadsheetReader;
 import com.afrotransact.catalog.port.SpreadsheetWriter;
 import com.afrotransact.platform.security.Actor;
@@ -67,6 +68,7 @@ class ProductImportServiceImpl implements ProductImportService {
 
     private final ProductImportRepository imports;
     private final ProductRepository products;
+    private final SizeChartRepository sizeCharts;
     private final CategoryRepository categories;
     private final SpreadsheetReader reader;
     private final SpreadsheetWriter writer;
@@ -81,13 +83,14 @@ class ProductImportServiceImpl implements ProductImportService {
     private final TransactionTemplate tx;
 
     ProductImportServiceImpl(ProductImportRepository imports, ProductRepository products,
-                             CategoryRepository categories, SpreadsheetReader reader, SpreadsheetWriter writer,
+                             SizeChartRepository sizeCharts, CategoryRepository categories, SpreadsheetReader reader, SpreadsheetWriter writer,
                              ImportJob job, PermissionChecker permissions, ResourceAccessChecker access,
                              OwnerResolver owners, ImportSettings settings, ImageLibraryLookup library,
                              @Qualifier("importExecutor") Executor executor, Clock clock,
                              PlatformTransactionManager transactions) {
         this.imports = imports;
         this.products = products;
+        this.sizeCharts = sizeCharts;
         this.categories = categories;
         this.reader = reader;
         this.writer = writer;
@@ -156,7 +159,12 @@ class ProductImportServiceImpl implements ProductImportService {
         Integer parentCol = index.get(ImportColumns.PARENT_SKU);
         Integer imageCol = index.get(ImportColumns.IMAGES);
         Integer gtinCol = index.get(ImportColumns.GTIN);
+        Integer chartCol = index.get(ImportColumns.SIZE_CHART);
+        Set<String> chartNames = new LinkedHashSet<>();
         for (SheetRow r : sheet.rows()) {
+            if (chartCol != null && !r.cell(chartCol).isBlank()) {
+                chartNames.add(r.cell(chartCol).strip());
+            }
             if (skuCol != null && !r.cell(skuCol).isBlank()) {
                 skus.add(r.cell(skuCol).strip().toUpperCase(Locale.ROOT));
             }
@@ -177,7 +185,7 @@ class ProductImportServiceImpl implements ProductImportService {
         Set<String> librarySkus = new LinkedHashSet<>(skus);
         librarySkus.addAll(parents);
         return new ImportContext(mode, fixed, types, cats, owned.keySet(), existingGtins, existing,
-                libraryFor(orgId, librarySkus, fileNames));
+                libraryFor(orgId, librarySkus, fileNames), orgId, sizeCharts.activeByNames(orgId, chartNames));
     }
 
     /** The library images for these SKUs and file names; empty (rows then need links) when media is unavailable. */

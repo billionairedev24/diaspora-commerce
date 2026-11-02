@@ -6,6 +6,8 @@ public enum ColumnKind {
     LONG_TEXT,
     /** One of the column's options (a dropdown in the Excel template). */
     ENUM,
+    /** The column's options are suggestions: a dropdown that also accepts a value of the seller's own. */
+    SUGGESTED,
     /** Yes or No. */
     BOOLEAN,
     /** A whole number. */

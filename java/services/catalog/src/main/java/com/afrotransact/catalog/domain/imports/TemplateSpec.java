@@ -9,9 +9,16 @@ import java.util.List;
  * @param fileStem     file name without extension
  * @param instructions how-to lines for the Instructions sheet (and CSV comment lines)
  * @param examples     example rows, cells in column order
+ * @param sheetName    the sheet of an .xlsx template that holds the header and the rows to fill
  */
 public record TemplateSpec(String title, String fileStem, List<ImportColumn> columns, List<String> instructions,
-                           List<List<String>> examples) {
+                           List<List<String>> examples, String sheetName) {
+
+    /** The product template: rows go on the "Products" sheet. */
+    public TemplateSpec(String title, String fileStem, List<ImportColumn> columns, List<String> instructions,
+                        List<List<String>> examples) {
+        this(title, fileStem, columns, instructions, examples, "Products");
+    }
 
     public TemplateSpec {
         columns = List.copyOf(columns);

@@ -7,8 +7,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.afrotransact.catalog.application.SizeChartService.ChartOutcome;
 import com.afrotransact.catalog.application.SizeChartService.ChartView;
+import com.afrotransact.catalog.application.SizeChartService.ImportAction;
+import com.afrotransact.catalog.application.SizeChartService.ImportReport;
 import com.afrotransact.catalog.application.SizeChartService.Suggestions;
+import com.afrotransact.catalog.domain.imports.RowMessage;
+import com.afrotransact.catalog.domain.imports.RowStatus;
+import com.afrotransact.catalog.domain.imports.ValidatedRow;
 import com.afrotransact.catalog.domain.sizing.ChartColumn;
 import com.afrotransact.catalog.domain.sizing.ChartContent;
 import com.afrotransact.catalog.domain.sizing.ChartRow;
@@ -168,6 +174,63 @@ final class SizeChartDtos {
             return new SuggestionsResponse(s.productTypeCode(), s.productTypeLabel(), s.sized(), s.sizeChartRequired(),
                     s.sizeDimension(), s.sizes(), s.sizesAllowCustomValues(), s.unitSystem(),
                     s.measurements().stream().map(MeasurementResponse::of).toList());
+        }
+    }
+
+    @Schema(name = "SizeChartImportMessage")
+    record ImportMessage(@Schema(description = "The column key: chart_name, unit, size, fit_note, how_to_measure or "
+            + "m:<measurement key>; null for the row") String column,
+                         @Schema(description = "Position of the column in the uploaded header; -1 when none")
+                         int columnIndex,
+                         @Schema(description = "ERROR blocks the chart, WARNING is informational") String severity,
+                         String message) {
+
+        static ImportMessage of(RowMessage m) {
+            return new ImportMessage(m.column(), m.columnIndex(), m.severity().name(), m.message());
+        }
+    }
+
+    @Schema(name = "SizeChartImportRow")
+    record ImportRow(@Schema(description = "The row number in the spreadsheet (header = 1)") int rowNumber,
+                     String chartName, String size, @Schema(description = "VALID, WARNING or ERROR") String status,
+                     List<ImportMessage> messages, List<String> cells) {
+
+        static ImportRow of(ValidatedRow r) {
+            return new ImportRow(r.rowNumber(), r.groupKey(), r.sku(), r.status().name(),
+                    r.messages().stream().map(ImportMessage::of).toList(), r.cells());
+        }
+    }
+
+    @Schema(name = "SizeChartImportChart")
+    record ImportChart(String name,
+                       @Schema(description = "CREATE or UPDATE (what was done, or with dryRun what would be done), "
+                               + "UNCHANGED (the same chart was already saved) or FAILED") String action,
+                       @Schema(description = "The saved chart; null for a dry run's new charts and failed ones")
+                       UUID chartId, List<Integer> rows,
+                       @Schema(description = "Why the chart failed; null otherwise") String message) {
+
+        static ImportChart of(ChartOutcome o) {
+            return new ImportChart(o.name(), o.action().name(), o.chartId(), o.rows(), o.message());
+        }
+    }
+
+    @Schema(name = "SizeChartImportReport", description = "Row-level result of a size chart upload")
+    record ImportReportResponse(@Schema(description = "false for a dry run: nothing was saved") boolean applied,
+                                String fileName, List<String> fileWarnings, int chartCount, int created, int updated,
+                                int unchanged, int failed, int errorRows, int warningRows, List<ImportChart> charts,
+                                List<ImportRow> rows) {
+
+        static ImportReportResponse of(ImportReport r) {
+            return new ImportReportResponse(r.applied(), r.fileName(), r.fileWarnings(), r.chartCount(),
+                    count(r, ImportAction.CREATE), count(r, ImportAction.UPDATE), count(r, ImportAction.UNCHANGED),
+                    count(r, ImportAction.FAILED),
+                    (int) r.rows().stream().filter(x -> x.status() == RowStatus.ERROR).count(),
+                    (int) r.rows().stream().filter(x -> x.status() == RowStatus.WARNING).count(),
+                    r.charts().stream().map(ImportChart::of).toList(), r.rows().stream().map(ImportRow::of).toList());
+        }
+
+        private static int count(ImportReport r, ImportAction action) {
+            return (int) r.charts().stream().filter(c -> c.action() == action).count();
         }
     }
 
