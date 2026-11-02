@@ -7,12 +7,14 @@ import { type FacetBucket } from '../schemas/common';
 import { type Home } from '../schemas/home';
 import { type DeliveryLocation } from '../schemas/location';
 import { PRICE_BUCKETS, type SearchPage, type SearchQuery, type Suggestions } from '../schemas/search';
+import { chartRowFor } from '../size-charts';
 import { getDb, type MockOffer, type MockSession, nextId } from './db';
 import { deliveryOptions, deliveryPromise, etaDays, FREE_SHIPPING_THRESHOLD_MINOR, locationForZip, metroOf, nearestFc, SELLER_SHIPPING_MINOR } from './delivery';
 import { atinOf,DEPARTMENTS, type FixtureProduct, PLATFORM_SELLER } from './fixtures/catalog';
 import { PLACEMENTS, SPONSORED_SEARCH } from './fixtures/content';
 import { completePhrases, matchScore } from './matching';
 import { fixturePreorderEligible, withPreorderPackage } from './preorders';
+import { publicSizeChart, seedSizeCharts,SIZE_CHART_IDS } from './seller/size-charts';
 import { PROVIDERS, SERVICES } from './shopper-state';
 
 export class MockProblem extends Error {
@@ -138,8 +140,11 @@ export function productDetail(atin: string, metro: string, now: Date): ProductDe
   const purchasable = bb.stock > 0;
   const baseId = p.variantOf ?? p.id;
   const family = [...db.products.values()].filter((x) => x.id === baseId || x.variantOf === baseId);
+  // Garments carry the seller's dress size chart so the product page can show a size guide (fabric and stoles are not sized).
+  const chart = p.cat === 'Fashion' && /dress|gown|boubou|kaftan/i.test(p.name) ? seedSizeCharts('fixture', now).find((c) => c.id === SIZE_CHART_IDS.dresses) : undefined;
   const isAT = bb.fulfilment === 'AFROTRANSACT' || bb.sellerName === PLATFORM_SELLER;
   return {
+    sizeChart: chart ? publicSizeChart(chart) : null,
     product: {
       atin,
       title: p.name,
@@ -158,7 +163,10 @@ export function productDetail(atin: string, metro: string, now: Date): ProductDe
           ? family.map((x) => {
               const xa = atinOf(x.id);
               const xbb = buyBox(db.offersByAtin.get(xa) ?? []);
-              return { atin: xa, label: x.variantLabel ?? 'Standard', selected: xa === atin, available: xbb.stock > 0, priceMinor: xbb.priceMinor };
+              const label = x.variantLabel ?? 'Standard';
+              const noOptions: Record<string, string> = {};
+              const size = chart && chartRowFor(chart, label) ? label : null;
+              return { atin: xa, label, selected: xa === atin, available: xbb.stock > 0, priceMinor: xbb.priceMinor, options: size ? { Size: size } : noOptions };
             })
           : []
     },

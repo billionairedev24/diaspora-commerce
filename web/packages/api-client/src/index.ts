@@ -54,6 +54,7 @@ export { fromApiSearchParams, parseSearchUrl, searchHref, toApiSearchParams, toS
 export { createSellerApiClient, type ImportRowsQuery, type ListingsQuery, type SellerApiClient, type SellerExportRequest, type SellerOrdersQuery } from './seller-client';
 export { createSettingsApiClient, type SettingsApiClient } from './settings-client';
 export { type SlotQuery } from './shopper-client';
+export * from './size-charts';
 export { createStaffApiClient, type ResourceQuery, type StaffApiClient } from './staff-client';
 export * from './staff-content';
 export { createStaffDeliveryFeesApi, staffDeliveryFeeKeys, staffDeliveryFeeQueries, type StaffDeliveryFeesApi } from './staff-delivery-fees';

@@ -2,9 +2,6 @@ package domain
 
 // ---------------------------------------------------------------- size charts and sizes (fashion)
 
-// Fit notes a seller can give a size chart or a product.
-var FitNotes = []string{"RUNS_SMALL", "TRUE_TO_SIZE", "RUNS_LARGE"}
-
 // SuggestedMeasurement is a measurement a sized product type suggests for the seller's size chart (bust, waist, foot
 // length ...). Sellers can use, rename or extend them.
 type SuggestedMeasurement struct {

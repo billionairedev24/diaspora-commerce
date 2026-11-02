@@ -9,16 +9,16 @@ import (
 )
 
 // postFile posts a multipart body the way a browser sends an upload.
-func postFile(b *browser, path, body, contentType string) resp {
+func postFile(b *browser, body, contentType string) resp {
 	b.headers["Content-Type"] = contentType
 	defer delete(b.headers, "Content-Type")
-	return b.do("POST", path, body)
+	return b.do("POST", "/v1/seller/size-charts/import", body)
 }
 
-func chartInput(name string, size string) map[string]any {
+func chartInput(name string) map[string]any {
 	return map[string]any{"name": name, "unitSystem": "CM", "productTypeCode": "dress",
 		"columns": []any{map[string]any{"label": "Bust"}, map[string]any{"label": "Waist"}},
-		"rows": []any{map[string]any{"size": size, "values": map[string]any{
+		"rows": []any{map[string]any{"size": "S", "values": map[string]any{
 			"bust": map[string]any{"min": 84, "max": 88}, "waist": map[string]any{"min": 66}}}},
 		"fitNote": "TRUE_TO_SIZE", "howToMeasure": "Measure over light clothing."}
 }
@@ -40,7 +40,7 @@ func exerciseSellerSizeCharts(t *testing.T, bff *testkit.BFF, b *browser) {
 	mustStatus(t, b.do("GET", "/v1/seller/size-charts/suggestions?productTypeId=nope", nil), 422)
 
 	// Write, read, edit, duplicate, retire.
-	created := b.do("POST", "/v1/seller/size-charts", chartInput("Adire dresses", "S"))
+	created := b.do("POST", "/v1/seller/size-charts", chartInput("Adire dresses"))
 	if created.status != 201 || created.json(t)["ownerOrgId"] != testkit.SellerOrgID || created.json(t)["alternateUnit"] != "IN" {
 		t.Fatalf("create = %d %s", created.status, created.body)
 	}
@@ -48,7 +48,7 @@ func exerciseSellerSizeCharts(t *testing.T, bff *testkit.BFF, b *browser) {
 	if row := created.json(t)["rows"].([]any)[0].(map[string]any); row["alternateValues"].(map[string]any)["bust"] == nil {
 		t.Fatalf("converted values = %v", row)
 	}
-	dup := b.do("POST", "/v1/seller/size-charts", chartInput("adire DRESSES", "S"))
+	dup := b.do("POST", "/v1/seller/size-charts", chartInput("adire DRESSES"))
 	if dup.status != 422 || dup.json(t)["errors"].(map[string]any)["name"] == nil {
 		t.Fatalf("duplicate name = %d %s", dup.status, dup.body)
 	}
@@ -66,7 +66,7 @@ func exerciseSellerSizeCharts(t *testing.T, bff *testkit.BFF, b *browser) {
 	}
 	mustStatus(t, b.do("GET", "/v1/seller/size-charts?size=1000", nil), 422)
 	mustStatus(t, b.do("GET", "/v1/seller/size-charts?productTypeId=nope", nil), 422)
-	edit := chartInput("Adire dresses 2026", "S")
+	edit := chartInput("Adire dresses 2026")
 	edit["version"] = 0
 	if r := b.do("PUT", "/v1/seller/size-charts/"+id, edit); r.status != 200 || r.json(t)["version"] != float64(1) || r.json(t)["name"] != "Adire dresses 2026" {
 		t.Fatalf("update = %d %s", r.status, r.body)
@@ -97,7 +97,7 @@ func exerciseSellerSizeCharts(t *testing.T, bff *testkit.BFF, b *browser) {
 	mustStatus(t, b.do("GET", "/v1/seller/size-charts/import-template?productType=Bad-Type", nil), 422)
 	csv := "Size chart name *,Unit,Size *,Bust *,Waist *\r\nAdire dresses,cm,S,84-88,66-70\r\n"
 	body, ct := multipartFile(t, "charts.csv", csv, map[string]string{"productType": "dress", "dryRun": "true"})
-	dry := postFile(b, "/v1/seller/size-charts/import", body, ct)
+	dry := postFile(b, body, ct)
 	if dry.status != 200 || dry.json(t)["applied"] != false || dry.json(t)["charts"].([]any)[0].(map[string]any)["action"] != "CREATE" {
 		t.Fatalf("dry run = %d %s", dry.status, dry.body)
 	}
@@ -105,11 +105,11 @@ func exerciseSellerSizeCharts(t *testing.T, bff *testkit.BFF, b *browser) {
 		t.Fatalf("upload query = %v", q)
 	}
 	body, ct = multipartFile(t, "charts.csv", csv, map[string]string{"productType": "dress"})
-	if r := postFile(b, "/v1/seller/size-charts/import", body, ct); r.status != 200 || r.json(t)["applied"] != true || r.json(t)["created"] != float64(1) {
+	if r := postFile(b, body, ct); r.status != 200 || r.json(t)["applied"] != true || r.json(t)["created"] != float64(1) {
 		t.Fatalf("upload = %d %s", r.status, r.body)
 	}
 	body, ct = multipartFile(t, "charts.csv", strings.Replace(csv, "84-88", "abc", 1), nil)
-	bad := postFile(b, "/v1/seller/size-charts/import", body, ct)
+	bad := postFile(b, body, ct)
 	if bad.status != 200 || bad.json(t)["failed"] != float64(1) {
 		t.Fatalf("bad row = %d %s", bad.status, bad.body)
 	}
@@ -117,11 +117,11 @@ func exerciseSellerSizeCharts(t *testing.T, bff *testkit.BFF, b *browser) {
 		t.Fatalf("row message = %v", m)
 	}
 	body, ct = multipartFile(t, "charts.pdf", "x", nil)
-	mustStatus(t, postFile(b, "/v1/seller/size-charts/import", body, ct), 422)
+	mustStatus(t, postFile(b, body, ct), 422)
 	body, ct = multipartFile(t, "charts.csv", "", nil)
-	mustStatus(t, postFile(b, "/v1/seller/size-charts/import", body, ct), 422)
+	mustStatus(t, postFile(b, body, ct), 422)
 	body, ct = multipartFile(t, "charts.csv", csv, map[string]string{"dryRun": "maybe"})
-	mustStatus(t, postFile(b, "/v1/seller/size-charts/import", body, ct), 422)
+	mustStatus(t, postFile(b, body, ct), 422)
 
 	// The product form: the size chart and fit note travel in listing and come back on the edit form; the product
 	// type schema carries the sizing trait and the dimensions that allow custom values.
@@ -156,7 +156,7 @@ func TestSellerSizeChartsNeedTheListingsModule(t *testing.T) {
 	for _, path := range []string{"/v1/seller/size-charts", "/v1/seller/size-charts/suggestions?productType=dress"} {
 		mustStatus(t, guest.do("GET", path, nil), http.StatusUnauthorized)
 	}
-	mustStatus(t, guest.do("POST", "/v1/seller/size-charts", chartInput("Adire dresses", "S")), http.StatusUnauthorized)
+	mustStatus(t, guest.do("POST", "/v1/seller/size-charts", chartInput("Adire dresses")), http.StatusUnauthorized)
 }
 
 func TestSizedProductPageShowsTheSellersSizeChart(t *testing.T) {

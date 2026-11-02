@@ -866,14 +866,53 @@ export const AttributeDefSchema = z.object({
   help: nullableString
 });
 export type AttributeDef = z.infer<typeof AttributeDefSchema>;
-export const ProductTypeTraitsSchema = z.object({ food: z.boolean(), perishable: z.boolean(), regulated: z.boolean(), preorder: z.boolean() });
+/** The unit of a size chart's values; the other unit is shown by conversion. */
+export const SizeChartUnitSchema = z.enum(['CM', 'IN']);
+export type SizeChartUnit = z.infer<typeof SizeChartUnitSchema>;
+/** How the sizes fit; shown beside the size chart. */
+export const FitNoteSchema = z.enum(['RUNS_SMALL', 'TRUE_TO_SIZE', 'RUNS_LARGE']);
+export type FitNote = z.infer<typeof FitNoteSchema>;
+/** A measurement a sized category suggests for the seller's size chart (bust, waist, foot length ...). */
+export const SuggestedMeasurementSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  unit: SizeChartUnitSchema.nullish(),
+  /** One line telling the seller how to measure it. */
+  help: nullableString.optional()
+});
+export type SuggestedMeasurement = z.infer<typeof SuggestedMeasurementSchema>;
+/** Staff mark a product type as sized; sellers then write size charts and their own size labels. */
+export const SizingTraitSchema = z.object({
+  /** A listing needs a size chart whose rows cover every size it sells. */
+  sizeChartRequired: z.boolean(),
+  /** The variation dimension that holds the size (Size). Its options are suggestions; custom values are allowed. */
+  sizeDimension: z.string(),
+  suggestedMeasurements: z.array(SuggestedMeasurementSchema)
+});
+export type SizingTrait = z.infer<typeof SizingTraitSchema>;
+export const ProductTypeTraitsSchema = z.object({
+  food: z.boolean(),
+  perishable: z.boolean(),
+  regulated: z.boolean(),
+  preorder: z.boolean(),
+  /** Set for sized product types (fashion): a size chart section and seller-written sizes; null for the others. */
+  sizing: SizingTraitSchema.nullable().default(null)
+});
 export type ProductTypeTraits = z.infer<typeof ProductTypeTraitsSchema>;
+/** One axis of a variation (Size, Color). `options` are the category's values: the only allowed ones, or only suggestions
+ *  (chips) when `allowCustomValues`, in which case the form also offers an "Add size" / "Add colour" input. */
+export const VariationDimensionSchema = z.object({
+  name: z.string(),
+  options: z.array(z.string()),
+  allowCustomValues: z.boolean().default(false)
+});
+export type VariationDimension = z.infer<typeof VariationDimensionSchema>;
 export const ProductTypeSchemaSchema = z.object({
   code: z.string(),
   label: z.string(),
   identifierRule: z.enum(['gtin', 'isbn', 'none']),
   attributes: z.array(AttributeDefSchema),
-  themes: z.array(z.object({ name: z.string(), dimensions: z.array(z.object({ name: z.string(), options: z.array(z.string()) })) })),
+  themes: z.array(z.object({ name: z.string(), dimensions: z.array(VariationDimensionSchema) })),
   traits: ProductTypeTraitsSchema
 });
 export type ProductTypeSchema = z.infer<typeof ProductTypeSchemaSchema>;
@@ -937,7 +976,11 @@ export const ListingDetailsInputSchema = z.object({
   fulfilment: ListingFulfilmentSchema.optional(),
   packaging: PackageDimensionsSchema.nullable().optional(),
   handlingDays: z.number().int().min(1).max(30).optional(),
-  shipFromId: nullableString.optional()
+  shipFromId: nullableString.optional(),
+  /** One of the organisation's size charts; required when the product type's sizing trait says so. */
+  sizeChartId: nullableString.optional(),
+  /** How the sizes fit; defaults to the chart's own. */
+  fitNote: FitNoteSchema.nullable().optional()
 });
 export type ListingDetailsInput = z.infer<typeof ListingDetailsInputSchema>;
 export const ProductDraftSchema = z.object({
@@ -974,9 +1017,141 @@ export const ListingDetailsSchema = z.object({
   fulfilment: ListingFulfilmentSchema,
   packaging: PackageDimensionsSchema.nullable(),
   handlingDays: z.number().int(),
-  shipFromId: nullableString
+  shipFromId: nullableString,
+  sizeChartId: nullableString.default(null),
+  fitNote: FitNoteSchema.nullable().default(null)
 });
 export type ListingDetails = z.infer<typeof ListingDetailsSchema>;
+
+/* ── Size charts (sellers write them; the category only suggests sizes and measurements) ── */
+
+export const SizeChartColumnSchema = z.object({ key: z.string(), label: z.string(), unit: SizeChartUnitSchema });
+export type SizeChartColumn = z.infer<typeof SizeChartColumnSchema>;
+/** One measurement of one size, in the chart's unit: a single value (max equals min) or a range. */
+export const SizeChartValueSchema = z.object({ min: z.number(), max: z.number() });
+export type SizeChartValue = z.infer<typeof SizeChartValueSchema>;
+export const SizeChartRowSchema = z.object({
+  size: z.string(),
+  values: z.record(z.string(), SizeChartValueSchema),
+  /** The same values converted to the chart's `alternateUnit`, one decimal. */
+  alternateValues: z.record(z.string(), SizeChartValueSchema)
+});
+export type SizeChartRow = z.infer<typeof SizeChartRowSchema>;
+export const SizeChartSchema = z.object({
+  id: z.string(),
+  ownerOrgId: z.string(),
+  name: z.string(),
+  unitSystem: SizeChartUnitSchema,
+  alternateUnit: SizeChartUnitSchema,
+  productTypeCode: nullableString,
+  categoryId: nullableString,
+  columns: z.array(SizeChartColumnSchema),
+  rows: z.array(SizeChartRowSchema),
+  fitNote: FitNoteSchema.nullable(),
+  howToMeasure: nullableString,
+  retired: z.boolean(),
+  retiredAt: nullableString,
+  /** Products that use this chart. */
+  productCount: z.number().int(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  /** Send back as `version` when saving. */
+  version: z.number().int()
+});
+export type SizeChart = z.infer<typeof SizeChartSchema>;
+export const SizeChartPageSchema = z.object({ items: z.array(SizeChartSchema), total: z.number().int(), page: z.number().int(), size: z.number().int() });
+export type SizeChartPage = z.infer<typeof SizeChartPageSchema>;
+
+/** A size chart as the seller writes it (POST; PUT adds the `version` the editor loaded). */
+export const SizeChartInputSchema = z.object({
+  name: z.string().trim().min(2, 'Name the chart').max(80),
+  unitSystem: SizeChartUnitSchema,
+  productTypeCode: z.string().max(40).nullish(),
+  /** A product-type (third level) category node; implies the product type. */
+  categoryId: z.string().nullish(),
+  columns: z
+    .array(
+      z.object({
+        /** Derived from the label when absent (Foot length becomes foot_length). */
+        key: z.string().max(40).optional(),
+        label: z.string().trim().min(1, 'Name the measurement').max(40),
+        unit: SizeChartUnitSchema.optional()
+      })
+    )
+    .min(1, 'Add a measurement')
+    .max(12),
+  rows: z
+    .array(
+      z.object({
+        size: z.string().trim().min(1, 'Name the size').max(40),
+        /** A value for every column key: omit `max` for a single value. */
+        values: z.record(z.string(), z.object({ min: z.number().positive().max(1000), max: z.number().positive().max(1000).nullish() }))
+      })
+    )
+    .min(1, 'Add a size')
+    .max(60),
+  fitNote: FitNoteSchema.nullish(),
+  howToMeasure: z.string().max(1000).nullish(),
+  version: z.number().int().min(0).nullish()
+});
+export type SizeChartInput = z.input<typeof SizeChartInputSchema>;
+
+/** What a category suggests for the chart editor and the size input: sizes and measurement columns. */
+export const SizeChartSuggestionsSchema = z.object({
+  productTypeCode: z.string(),
+  productTypeLabel: z.string(),
+  /** false: this product type has no sizes and no size chart. */
+  sized: z.boolean(),
+  sizeChartRequired: z.boolean(),
+  sizeDimension: z.string(),
+  sizes: z.array(z.string()),
+  sizesAllowCustomValues: z.boolean(),
+  unitSystem: SizeChartUnitSchema,
+  measurements: z.array(SuggestedMeasurementSchema)
+});
+export type SizeChartSuggestions = z.infer<typeof SizeChartSuggestionsSchema>;
+
+export const SizeChartImportMessageSchema = z.object({
+  /** chart_name, unit, size, fit_note, how_to_measure or `m:<measurement key>`; null for the row. */
+  column: nullableString,
+  columnIndex: z.number().int(),
+  severity: z.enum(['ERROR', 'WARNING']),
+  message: z.string()
+});
+export const SizeChartImportRowSchema = z.object({
+  rowNumber: z.number().int(),
+  chartName: z.string(),
+  size: z.string(),
+  status: z.enum(['VALID', 'WARNING', 'ERROR']),
+  messages: z.array(SizeChartImportMessageSchema),
+  cells: z.array(z.string())
+});
+export type SizeChartImportRow = z.infer<typeof SizeChartImportRowSchema>;
+export const SizeChartImportChartSchema = z.object({
+  name: z.string(),
+  /** What was done, or with `dryRun` what would be done. */
+  action: z.enum(['CREATE', 'UPDATE', 'UNCHANGED', 'FAILED']),
+  chartId: nullableString,
+  rows: z.array(z.number().int()),
+  message: nullableString
+});
+export type SizeChartImportChart = z.infer<typeof SizeChartImportChartSchema>;
+/** The row-level result of a size chart upload; `applied` is false for a dry run (nothing saved). */
+export const SizeChartImportReportSchema = z.object({
+  applied: z.boolean(),
+  fileName: z.string(),
+  fileWarnings: z.array(z.string()),
+  chartCount: z.number().int(),
+  created: z.number().int(),
+  updated: z.number().int(),
+  unchanged: z.number().int(),
+  failed: z.number().int(),
+  errorRows: z.number().int(),
+  warningRows: z.number().int(),
+  charts: z.array(SizeChartImportChartSchema),
+  rows: z.array(SizeChartImportRowSchema)
+});
+export type SizeChartImportReport = z.infer<typeof SizeChartImportReportSchema>;
 export const SellerProductDetailSchema = z.object({
   productId: z.string(),
   atin: z.string(),

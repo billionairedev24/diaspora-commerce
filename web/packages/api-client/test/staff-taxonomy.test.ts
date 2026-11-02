@@ -309,3 +309,30 @@ describe('category requests', () => {
     await rejects(client('platform.operations_manager').runAction('category-requests', 'req-1', 'reject', { note: 'Not mine to decide' }), { status: 403 });
   });
 });
+
+describe('sizing (fashion product types)', () => {
+  it('marks the sized types and suggests measurements only; sellers write the charts', async () => {
+    const dress = await api().productType('dress');
+    expect(dress.traits.sizing).toMatchObject({ sizeChartRequired: false, sizeDimension: 'Size' });
+    expect(dress.traits.sizing?.suggestedMeasurements.map((m) => m.label)).toEqual(['Bust', 'Waist', 'Hip']);
+    expect((await api().productType('grocery')).traits.sizing ?? null).toBeNull();
+    expect(dress.themes[0]?.dimensions.map((d) => [d.name, d.allowCustomValues])).toEqual([['Size', true], ['Color', true]]);
+  });
+
+  it('changes only the fields sent, and switches sizing off with enabled false', async () => {
+    const dress = await api().productType('dress');
+    const required = await api().updateProductType('dress', { traits: { sizing: { sizeChartRequired: true } }, reason: 'Returns are mostly fit' }, dress.version);
+    expect(required.traits.sizing).toMatchObject({ sizeChartRequired: true, sizeDimension: 'Size' });
+    expect(required.traits.sizing?.suggestedMeasurements).toHaveLength(3);
+    const off = await api().updateProductType('dress', { traits: { sizing: { enabled: false } }, reason: 'Testing' }, required.version);
+    expect(off.traits.sizing ?? null).toBeNull();
+  });
+
+  it('refuses sizing for a type that has no size variation', async () => {
+    const grocery = await api().productType('grocery');
+    await rejects(api().updateProductType('grocery', { traits: { sizing: { sizeChartRequired: false } }, reason: 'Trying' }, grocery.version), {
+      status: 422,
+      errors: { 'traits.sizing.sizeDimension': expect.stringContaining('Size') }
+    });
+  });
+});

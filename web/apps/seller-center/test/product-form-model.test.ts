@@ -146,7 +146,7 @@ describe('one-step product form: submission, edit and drafts', () => {
         { atin: 'AT1', sellerSku: 'ANK-M', gtin: null, gtinExempt: true, options: { Size: 'M' }, priceMinor: 4900, compareAtMinor: null, quantity: 3, images: [] },
         { atin: 'AT1-2', sellerSku: 'ANK-L', gtin: null, gtinExempt: true, options: { Size: 'L' }, priceMinor: 5100, compareAtMinor: 6000, quantity: 0, images: [{ url: 'https://img/l.webp', contentType: 'image/webp' }] }
       ],
-      preorderEligible: false, listing: { description: 'Wax print', condition: 'NEW', keywords: ['ankara'], fulfilment: 'SELLER', packaging: null, handlingDays: 3, shipFromId: null },
+      preorderEligible: false, listing: { description: 'Wax print', condition: 'NEW', keywords: ['ankara'], fulfilment: 'SELLER', packaging: null, handlingDays: 3, shipFromId: null, sizeChartId: null, fitNote: null },
       currency: 'USD', version: 4, updatedAt: '2026-10-10T10:00:00Z'
     };
     const s = fromDetail(detail, dress);

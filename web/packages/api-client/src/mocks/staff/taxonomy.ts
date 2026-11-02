@@ -19,6 +19,8 @@ import {
   type TaxonomyNode,
   type TaxonomyNodes,
   type TaxonomyProductType,
+  type TaxonomySuggestedMeasurement,
+  type TaxonomyTheme,
   type TaxonomyTraits,
   type TaxonomyTree
 } from '../../staff-taxonomy';
@@ -69,17 +71,53 @@ const BRAND = attr('brand', 'Brand or label', { kind: 'BRAND', options: ['UNBRAN
 const BRAND_REQUIRED = attr('brand', 'Brand', { kind: 'BRAND', help: 'The brand printed on the product.' });
 const BRAND_OPTIONAL = attr('brand', 'Brand', { kind: 'BRAND', required: false, options: ['UNBRANDED'], help: 'The brand on the package.' });
 const ORIGIN = attr('origin', 'Made in');
-const traits = (t: Partial<TaxonomyTraits> = {}): TaxonomyTraits => ({ food: false, perishable: false, regulated: false, preorder: false, ...t });
+const traits = (t: Partial<TaxonomyTraits> = {}): TaxonomyTraits => ({ food: false, perishable: false, regulated: false, preorder: false, sizing: null, ...t });
+const measure = (key: string, label: string, help: string): TaxonomySuggestedMeasurement => ({ key, label, unit: 'CM', help });
+/** A sized product type (fashion): sellers write the charts, the type only suggests measurements. */
+const sizedTraits = (sizeChartRequired: boolean, measurements: TaxonomySuggestedMeasurement[]) => traits({ sizing: { sizeChartRequired, sizeDimension: 'Size', suggestedMeasurements: measurements } });
+const SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL'];
+const COLOURS = ['Black', 'White', 'Gold', 'Royal blue', 'Emerald', 'Wine'];
+const sizeColour = (custom: boolean): TaxonomyTheme => ({
+  name: 'Size × Color',
+  dimensions: [{ name: 'Size', options: SIZES, allowCustomValues: custom }, { name: 'Color', options: COLOURS, allowCustomValues: custom }]
+});
+const option = (): TaxonomyTheme => ({ name: 'Option', dimensions: [{ name: 'Option', options: ['Standard', 'Small', 'Medium', 'Large'], allowCustomValues: false }] });
+/** Sizing on makes the size dimension seller-extensible (catalog TaxonomyRules.withCustomSizes). */
+const withCustomSizes = (themes: TaxonomyTheme[], sizeDimension: string): TaxonomyTheme[] =>
+  themes.map((t) => ({ ...t, dimensions: t.dimensions.map((d) => (d.name === sizeDimension ? { ...d, allowCustomValues: true } : d)) }));
+/** Applies a traits body: the flags as sent, sizing merged (absent keeps it, enabled false switches it off). */
+function mergeTraits(current: TaxonomyTraits, body: z.infer<typeof TraitsBody> | undefined): TaxonomyTraits {
+  if (!body) return current;
+  const { sizing: sent, ...flags } = body;
+  let sizing = current.sizing ?? null;
+  if (sent === null) sizing = null;
+  else if (sent !== undefined) {
+    if (sent.enabled === false) sizing = null;
+    else {
+      const base = sizing ?? { sizeChartRequired: false, sizeDimension: 'Size', suggestedMeasurements: [] };
+      sizing = {
+        sizeChartRequired: sent.sizeChartRequired ?? base.sizeChartRequired,
+        sizeDimension: sent.sizeDimension ?? base.sizeDimension,
+        suggestedMeasurements: sent.suggestedMeasurements ?? base.suggestedMeasurements
+      };
+    }
+  }
+  return { ...flags, sizing };
+}
 
 const TYPES: MockTaxonomyState['types'] = [
   {
     code: 'dress',
     label: 'Women’s dresses',
     identifierRule: 'GTIN',
-    traits: traits(),
+    traits: sizedTraits(false, [
+      measure('bust', 'Bust', 'Around the fullest part of the chest'),
+      measure('waist', 'Waist', 'Around the narrowest part of the waist'),
+      measure('hip', 'Hip', 'Around the fullest part of the hips')
+    ]),
     version: 0,
     updatedAt: null,
-    themes: [{ name: 'Size × Color' }],
+    themes: [sizeColour(true)],
     attributes: [
       BRAND,
       choice('material', 'Material', ['Cotton wax print', 'Cotton', 'Lace', 'Silk', 'Polyester blend']),
@@ -93,10 +131,14 @@ const TYPES: MockTaxonomyState['types'] = [
     code: 'top',
     label: 'Women’s tops & wrappers',
     identifierRule: 'GTIN',
-    traits: traits(),
+    traits: sizedTraits(false, [
+      measure('bust', 'Bust', 'Around the fullest part of the chest'),
+      measure('waist', 'Waist', 'Around the narrowest part of the waist'),
+      measure('length', 'Length', 'From the shoulder to the hem')
+    ]),
     version: 0,
     updatedAt: null,
-    themes: [{ name: 'Size × Color' }],
+    themes: [sizeColour(true)],
     attributes: [BRAND, choice('material', 'Material', ['Cotton wax print', 'Cotton', 'Aso-oke', 'Lace']), attr('care', 'Care'), ORIGIN]
   },
   {
@@ -106,7 +148,7 @@ const TYPES: MockTaxonomyState['types'] = [
     traits: traits({ food: true, preorder: true }),
     version: 0,
     updatedAt: null,
-    themes: [{ name: 'Option' }],
+    themes: [option()],
     attributes: [
       BRAND_OPTIONAL,
       attr('ingredients', 'Ingredients', { kind: 'MULTILINE', section: 'FOOD' }),
@@ -124,7 +166,7 @@ const TYPES: MockTaxonomyState['types'] = [
     traits: traits({ regulated: true }),
     version: 0,
     updatedAt: null,
-    themes: [{ name: 'Option' }],
+    themes: [option()],
     attributes: [
       BRAND_REQUIRED,
       attr('inci', 'Ingredients (INCI)', { kind: 'MULTILINE' }),
@@ -140,7 +182,7 @@ const TYPES: MockTaxonomyState['types'] = [
     traits: traits(),
     version: 0,
     updatedAt: null,
-    themes: [{ name: 'Option' }],
+    themes: [option()],
     attributes: [
       attr('author', 'Author'),
       attr('publisher', 'Publisher'),
@@ -155,7 +197,7 @@ const TYPES: MockTaxonomyState['types'] = [
     traits: traits(),
     version: 0,
     updatedAt: null,
-    themes: [{ name: 'Option' }],
+    themes: [option()],
     attributes: [BRAND, attr('material', 'Material'), attr('dims', 'Dimensions', { help: 'e.g. 18 × 18 in' }), ORIGIN]
   },
   {
@@ -165,7 +207,7 @@ const TYPES: MockTaxonomyState['types'] = [
     traits: traits(),
     version: 0,
     updatedAt: null,
-    themes: [{ name: 'Option' }, { name: 'Size × Color' }],
+    themes: [option(), sizeColour(false)],
     attributes: [BRAND, attr('material', 'Material'), attr('details', 'Details', { kind: 'MULTILINE' }), ORIGIN]
   }
 ];
@@ -490,7 +532,22 @@ const AttributeBody = z.object({
   help: z.string().trim().max(200).nullish(),
   applies: z.boolean().default(true)
 });
-const TraitsBody = z.object({ food: z.boolean().default(false), perishable: z.boolean().default(false), regulated: z.boolean().default(false), preorder: z.boolean().default(false) });
+const SizingBody = z.object({
+  enabled: z.boolean().optional(),
+  sizeChartRequired: z.boolean().optional(),
+  sizeDimension: z.string().trim().min(1).max(40).optional(),
+  suggestedMeasurements: z.array(z.object({ key: z.string().max(40).optional(), label: z.string().trim().min(1).max(40), unit: z.enum(['CM', 'IN']).nullish(), help: z.string().max(200).nullish() })).max(12).optional()
+});
+const ThemesBody = z
+  .array(z.object({ name: z.string().trim().min(1).max(60), dimensions: z.array(z.object({ name: z.string().trim().min(1).max(40), options: z.array(z.string().trim().max(40)).max(60), allowCustomValues: z.boolean().default(false) })).min(1).max(2) }))
+  .max(8);
+const TraitsBody = z.object({
+  food: z.boolean().default(false),
+  perishable: z.boolean().default(false),
+  regulated: z.boolean().default(false),
+  preorder: z.boolean().default(false),
+  sizing: SizingBody.nullish()
+});
 const NewTypeBody = z.object({
   code: z.string().regex(/^[a-z][a-z0-9_]{1,39}$/).optional(),
   label: z.string().trim().min(2).max(80).optional(),
@@ -576,7 +633,7 @@ export function taxonomyHandlers(W: string, deps: PreorderHandlerDeps) {
     required: a.applies && a.required, section: a.section, help: a.help || null, applies: a.applies, multiline: a.kind === 'MULTILINE'
   });
   const newType = (ctx: PreorderCtx, b: z.infer<typeof NewTypeBody>, label: string, reason: string) => {
-    const t = traits(b.traits);
+    const t = mergeTraits(traits(), b.traits);
     if (t.perishable && !t.food) throw invalid({ traits: 'Only food can be perishable' });
     const errors = attributeProblems(b.attributes, t);
     if (Object.keys(errors).length) throw invalid(errors);
@@ -587,7 +644,7 @@ export function taxonomyHandlers(W: string, deps: PreorderHandlerDeps) {
       code = `${code.replace(/_\d+$/, '')}_${i}`;
     }
     const base = st(ctx).types.find((x) => x.code === (b.basedOn || 'custom'));
-    const created = { code, label, identifierRule: b.identifierRule, traits: t, attributes: b.attributes.map(toAttribute), themes: structuredClone(base?.themes ?? []), version: 0, updatedAt: ctx.now.toISOString() };
+    const created = { code, label, identifierRule: b.identifierRule, traits: t, attributes: b.attributes.map(toAttribute), themes: t.sizing ? withCustomSizes(structuredClone(base?.themes ?? []), t.sizing.sizeDimension) : structuredClone(base?.themes ?? []), version: 0, updatedAt: ctx.now.toISOString() };
     st(ctx).types.push(created);
     log(ctx, 'TYPE_CREATED', 'PRODUCT_TYPE', code, label, reason, `Created product type ${label} with ${created.attributes.length} attributes`);
     return created;
@@ -928,12 +985,18 @@ export function taxonomyHandlers(W: string, deps: PreorderHandlerDeps) {
     http.patch(
       `${T}/product-types/:code`,
       route(async (ctx, p) => {
-        const b = await json(ctx.request, z.object({ label: z.string().trim().min(2).max(80).optional(), identifierRule: z.enum(['GTIN', 'ISBN']).optional(), traits: TraitsBody.optional(), attributes: z.array(AttributeBody).max(40).optional(), reason: Reason }));
+        const b = await json(ctx.request, z.object({ label: z.string().trim().min(2).max(80).optional(), identifierRule: z.enum(['GTIN', 'ISBN']).optional(), traits: TraitsBody.optional(), attributes: z.array(AttributeBody).max(40).optional(), themes: ThemesBody.optional(), reason: Reason }));
         edit(ctx);
         const t = typeOf(ctx, p.code);
         if (t.code === 'custom') throw invalid({ form: 'The placeholder type used while a category is requested cannot be edited' });
         ifMatch(ctx, t.version, t.label);
-        const nextTraits = b.traits ?? t.traits;
+        const nextTraits = mergeTraits(t.traits, b.traits);
+        const sizeName = nextTraits.sizing?.sizeDimension;
+        const sentThemes = b.themes ?? t.themes;
+        const nextThemes = sizeName ? withCustomSizes(sentThemes, sizeName) : sentThemes;
+        if (nextTraits.sizing && !nextThemes.some((th) => th.dimensions.some((d) => d.name === nextTraits.sizing?.sizeDimension))) {
+          throw invalid({ 'traits.sizing.sizeDimension': `No variation has a ${nextTraits.sizing.sizeDimension} dimension` });
+        }
         if (nextTraits.perishable && !nextTraits.food) throw invalid({ traits: 'Only food can be perishable' });
         const nextAttributes = b.attributes ? b.attributes.map(toAttribute) : t.attributes;
         const errors = b.attributes ? attributeProblems(b.attributes, nextTraits, t.attributes) : {};
@@ -942,9 +1005,10 @@ export function taxonomyHandlers(W: string, deps: PreorderHandlerDeps) {
         if (b.label !== undefined && b.label !== t.label) changes.push('Label');
         if (b.identifierRule !== undefined && b.identifierRule !== t.identifierRule) changes.push('Identifier rule');
         if (JSON.stringify(nextTraits) !== JSON.stringify(t.traits)) changes.push('Traits');
+        if (JSON.stringify(nextThemes) !== JSON.stringify(t.themes)) changes.push('Variations');
         if (JSON.stringify(nextAttributes.map(stripMultiline)) !== JSON.stringify(t.attributes.map(stripMultiline))) changes.push('Attributes');
         if (changes.length === 0) throw invalid({ form: 'Nothing has changed. Change it to save.' });
-        Object.assign(t, { label: b.label ?? t.label, identifierRule: b.identifierRule ?? t.identifierRule, traits: nextTraits, attributes: nextAttributes, version: t.version + 1, updatedAt: ctx.now.toISOString() });
+        Object.assign(t, { label: b.label ?? t.label, identifierRule: b.identifierRule ?? t.identifierRule, traits: nextTraits, attributes: nextAttributes, themes: nextThemes, version: t.version + 1, updatedAt: ctx.now.toISOString() });
         st(ctx).nodes.filter((n) => n.productType === t.code).forEach((n) => (n.productTypeLabel = t.label));
         log(ctx, 'TYPE_UPDATED', 'PRODUCT_TYPE', t.code, t.label, b.reason, `Changed ${t.label}: ${changes.join('; ')}`);
         return typeView(ctx, t);

@@ -2961,6 +2961,43 @@ export interface components {
             selected: boolean;
             available: boolean;
             priceMinor: number;
+            /** @description The variant's value per dimension as the seller wrote it ({"Size": "UK 12", "Color": "Indigo adire"}); match Size to a size chart row */
+            options: {
+                [key: string]: string;
+            };
+        };
+        /** @enum {string} */
+        SizeChartUnit: "CM" | "IN";
+        /**
+         * @description The seller's size chart of a sized product (fashion). Values are in `unitSystem`; `alternateValues` of every row are
+         *     the same values converted to `alternateUnit` (one decimal), so the page can offer a cm / in switch. A value is a single
+         *     number (min equals max) or a range. Match a row to the shopper's variant by `size` ignoring case.
+         */
+        ProductSizeChart: {
+            name: string;
+            unitSystem: components["schemas"]["SizeChartUnit"];
+            alternateUnit: components["schemas"]["SizeChartUnit"];
+            columns: {
+                key: string;
+                label: string;
+                unit: components["schemas"]["SizeChartUnit"];
+            }[];
+            rows: {
+                size: string;
+                values: {
+                    [key: string]: components["schemas"]["SizeChartValue"];
+                };
+                alternateValues: {
+                    [key: string]: components["schemas"]["SizeChartValue"];
+                };
+            }[];
+            /** @description The product's own fit note, else the chart's; null when neither says */
+            fitNote: ("RUNS_SMALL" | "TRUE_TO_SIZE" | "RUNS_LARGE") | null;
+            howToMeasure: string | null;
+        };
+        SizeChartValue: {
+            min: number;
+            max: number;
         };
         /** @description Average stars over a product's published reviews, how many there are and how many gave 1, 2, 3, 4 and 5 stars */
         ReviewRating: {
@@ -3070,6 +3107,8 @@ export interface components {
             status: string;
         };
         ProductDetail: {
+            /** @description The seller's size chart of a sized product (fashion); null for the others */
+            sizeChart: components["schemas"]["ProductSizeChart"] | null;
             product: {
                 atin: components["schemas"]["Atin"];
                 title: string;

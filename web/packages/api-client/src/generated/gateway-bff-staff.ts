@@ -5044,9 +5044,11 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Edit a product type's label, identifier rule, traits or attributes (If-Match = the schema's version)
+         * Edit a product type's label, identifier rule, traits (including sizing), attributes or variations (If-Match = the schema's version)
          * @description catalog `PATCH /v1/taxonomy/product-types/{code}`. Only the fields sent change; `attributes`, when sent, is the whole
-         *     new list (order matters: it is the order of the seller's form). The sales-tax question (`tax_class`) is owned by
+         *     new list (order matters: it is the order of the seller's form); `themes`, when sent, is the whole new list of
+         *     variations. `traits.sizing` marks the type as sized (sellers then write size charts and their own sizes): staff only
+         *     configure it here, they do not write charts. Switching sizing on makes the size dimension seller-extensible. The sales-tax question (`tax_class`) is owned by
          *     tax-returns: its wording and choices cannot be edited. A save in which nothing changed is a 422.
          */
         patch: operations["updateStaffTaxonomyProductType"];
@@ -5416,6 +5418,46 @@ export interface components {
             perishable?: boolean;
             regulated?: boolean;
             preorder?: boolean;
+            /**
+             * @description Marks the product type as sized: sellers attach size charts they write and write their own size labels (the
+             *     size variation then allows custom values). Absent on a PATCH leaves it as it is; `{enabled: false}` switches
+             *     it off; otherwise the fields sent change and the others keep their value.
+             */
+            sizing?: components["schemas"]["StaffTaxonomySizing"] | null;
+        };
+        StaffTaxonomySizing: {
+            /**
+             * @description false switches sizing off (PATCH)
+             * @default true
+             */
+            enabled: boolean;
+            /** @description A listing needs a size chart whose rows cover every size it sells */
+            sizeChartRequired?: boolean;
+            /** @description The variation dimension that holds the size; default Size */
+            sizeDimension?: string;
+            /** @description The whole list of measurement columns the seller's chart editor and bulk template pre-fill (bust, waist, hip; foot length) */
+            suggestedMeasurements?: {
+                /** @description Derived from the label when absent */
+                key?: string;
+                label: string;
+                /** @enum {string|null} */
+                unit?: "CM" | "IN" | null;
+                /** @description One line telling the seller how to measure it */
+                help?: string | null;
+            }[];
+        };
+        StaffTaxonomyTheme: {
+            name: string;
+            dimensions: {
+                name: string;
+                /** @description The category's values: the only allowed ones, or suggestions when allowCustomValues */
+                options: string[];
+                /**
+                 * @description Sellers may write values of their own (sizes such as UK 12, colours such as Indigo adire)
+                 * @default false
+                 */
+                allowCustomValues: boolean;
+            }[];
         };
         /** @description One detail a product type asks sellers for. `applies` false keeps the definition but stops asking (brand is just an attribute; a Books type has none). */
         StaffTaxonomyAttribute: {
@@ -18091,6 +18133,7 @@ export interface operations {
                     identifierRule?: components["schemas"]["StaffTaxonomyIdentifierRule"];
                     traits?: components["schemas"]["StaffTaxonomyTraits"];
                     attributes?: components["schemas"]["StaffTaxonomyAttribute"][];
+                    themes?: components["schemas"]["StaffTaxonomyTheme"][];
                     reason: components["schemas"]["StaffTaxonomyReason"];
                 };
             };

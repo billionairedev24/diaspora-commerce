@@ -1438,6 +1438,158 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/size-charts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organisation's size charts, newest change first
+         * @description catalog `GET /v1/size-charts`. Only the organisation's own charts. `productTypeId` (a product-type category
+         *     node) or `productType` (its code) keeps the charts made for that type and the ones made for any type, to offer
+         *     in the product form. Retired charts are left out unless `includeRetired`. Needs the Listings module at View.
+         */
+        get: operations["listSizeCharts"];
+        put?: never;
+        /**
+         * Write a new size chart
+         * @description catalog `POST /v1/size-charts`. The seller writes the chart: a name, a unit (the other unit is shown by
+         *     conversion), measurement columns and one row per size label, with a value or a min-max range for every column.
+         *     `422` with `errors` keyed by field (`name`, `columns[1].label`, `rows[2].size`, `rows[2].values.bust`). The name must
+         *     differ, ignoring case, from the organisation's other active charts. Needs the Listings module at Edit.
+         */
+        post: operations["createSizeChart"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/size-charts/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a category suggests for a size chart and for the size input
+         * @description catalog `GET /v1/size-charts/suggestions`. The sizes (XS to 3XL ...) and the measurement columns (bust, waist,
+         *     hip ...) that staff configured for the product type: pre-fill the chart editor and offer the sizes as chips. The
+         *     seller can use, rename or extend all of it. `sized: false` for a product type without sizes. Send `productTypeId`
+         *     (the product-type category node the form picked) or `productType` (its code).
+         */
+        get: operations["getSizeChartSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/size-charts/import-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the size chart upload template (Excel or CSV)
+         * @description catalog `GET /v1/size-charts/import-template`. One row per size and one column per measurement: with
+         *     `productType` (or `productTypeId`) the columns are that product type's suggested measurements, otherwise a
+         *     generic template. Any column the seller adds is a measurement; rows with the same *Size chart name* make one
+         *     chart. xlsx: *Size charts*, *Instructions* and *Example* sheets. csv: `#` comment lines and the header.
+         *     Needs the bulk upload feature of the plan.
+         */
+        get: operations["downloadSizeChartTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/size-charts/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload size charts from an Excel or CSV file
+         * @description catalog `POST /v1/size-charts/import`. Each chart is saved whole or not at all. A chart whose name matches one of
+         *     the organisation's active charts is updated (uploading the same file again changes nothing, `UNCHANGED`); other
+         *     names create charts. `dryRun=true` validates and reports without saving (`applied: false`): use it for the
+         *     preview, then upload again with `dryRun=false`. Row problems (unknown or duplicate size, a measurement that is
+         *     not a number, min above max, a missing value, a size that products still sell removed from a chart) come back
+         *     per row in the report with status 200; a file that cannot be read at all (format, 10 MB, 5,000 rows, missing
+         *     *Size chart name* or *Size* column, no measurement column) is 422. Needs the bulk upload feature of the plan and
+         *     the Listings module at Edit.
+         */
+        post: operations["importSizeCharts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/size-charts/{chartId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chartId: string;
+            };
+            cookie?: never;
+        };
+        /** One size chart */
+        get: operations["getSizeChart"];
+        /**
+         * Replace a size chart's content
+         * @description catalog `PUT /v1/size-charts/{id}`. Send the `version` you loaded; `409` when the chart changed since. The
+         *     products that use the chart keep it, so every size they still sell must keep a row (`422` on `rows`). A retired
+         *     chart cannot be edited (`409`).
+         */
+        put: operations["updateSizeChart"];
+        post?: never;
+        /**
+         * Retire a size chart
+         * @description A chart is never deleted: the products that use it keep showing it, but it can no longer be linked to products
+         *     and its name is free again. Answers the retired chart. Retiring twice is harmless.
+         */
+        delete: operations["retireSizeChart"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/size-charts/{chartId}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chartId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Copy a size chart under a new name (for a similar product) */
+        post: operations["duplicateSizeChart"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/catalog/brands": {
         parameters: {
             query?: never;
@@ -3678,6 +3830,189 @@ export interface components {
          * @enum {string}
          */
         AttributeSection: "DETAILS" | "FOOD" | "REGULATED";
+        /**
+         * @description The unit of a chart's values; the other unit is shown by conversion
+         * @enum {string}
+         */
+        SizeChartUnit: "CM" | "IN";
+        /**
+         * @description How the sizes fit; shown beside the size chart
+         * @enum {string}
+         */
+        FitNote: "RUNS_SMALL" | "TRUE_TO_SIZE" | "RUNS_LARGE";
+        SizeChartColumnInput: {
+            /** @description Stable key rows refer to; derived from the label when absent (Foot length becomes foot_length) */
+            key?: string;
+            /** @description What the shopper reads: Bust, Foot length ... */
+            label: string;
+            unit?: components["schemas"]["SizeChartUnit"];
+        };
+        SizeChartColumn: {
+            key: string;
+            label: string;
+            unit: components["schemas"]["SizeChartUnit"];
+        };
+        /** @description A single value (omit max, or max equal to min) or a range, in the chart's unit */
+        SizeChartValueInput: {
+            min: number;
+            max?: number | null;
+        };
+        SizeChartValue: {
+            min: number;
+            max: number;
+        };
+        SizeChartRowInput: {
+            /** @description The size label as the seller writes it on the variants: M, UK 12, Free size, Age 6-7 */
+            size: string;
+            /** @description A value for every column key */
+            values: {
+                [key: string]: components["schemas"]["SizeChartValueInput"];
+            };
+        };
+        SizeChartRow: {
+            size: string;
+            /** @description By column key, in the chart's unit */
+            values: {
+                [key: string]: components["schemas"]["SizeChartValue"];
+            };
+            /** @description The same values converted to alternateUnit, one decimal */
+            alternateValues: {
+                [key: string]: components["schemas"]["SizeChartValue"];
+            };
+        };
+        /**
+         * @description A size chart as the seller writes it. `productTypeCode` / `categoryId` say what it was made for (both optional;
+         *     a category implies its product type). `version` (PUT only) is the version the editor loaded.
+         */
+        SizeChartInput: {
+            name: string;
+            unitSystem: components["schemas"]["SizeChartUnit"];
+            productTypeCode?: string | null;
+            /**
+             * Format: uuid
+             * @description A product-type (third level) category node
+             */
+            categoryId?: string | null;
+            columns: components["schemas"]["SizeChartColumnInput"][];
+            rows: components["schemas"]["SizeChartRowInput"][];
+            fitNote?: components["schemas"]["FitNote"] | null;
+            /** @description Free text telling shoppers how to take their measurements */
+            howToMeasure?: string | null;
+            version?: number | null;
+        };
+        SizeChart: {
+            /** Format: uuid */
+            id: string;
+            ownerOrgId: string;
+            name: string;
+            unitSystem: components["schemas"]["SizeChartUnit"];
+            alternateUnit: components["schemas"]["SizeChartUnit"];
+            productTypeCode: string | null;
+            /** Format: uuid */
+            categoryId: string | null;
+            columns: components["schemas"]["SizeChartColumn"][];
+            rows: components["schemas"]["SizeChartRow"][];
+            fitNote: components["schemas"]["FitNote"] | null;
+            howToMeasure: string | null;
+            retired: boolean;
+            /** Format: date-time */
+            retiredAt: string | null;
+            /** @description Products that use this chart */
+            productCount: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** @description Send back as `version` when saving */
+            version: number;
+        };
+        SizeChartPage: {
+            items: components["schemas"]["SizeChart"][];
+            total: number;
+            page: number;
+            size: number;
+        };
+        SuggestedMeasurement: {
+            key: string;
+            label: string;
+            unit?: components["schemas"]["SizeChartUnit"] | null;
+            /** @description One line telling the seller how to measure it */
+            help?: string | null;
+        };
+        SizeChartSuggestions: {
+            productTypeCode: string;
+            productTypeLabel: string;
+            /** @description false: this product type has no sizes and no size chart */
+            sized: boolean;
+            /** @description A listing needs a size chart whose rows cover every size it sells */
+            sizeChartRequired: boolean;
+            /** @description The variation dimension that holds the size, e.g. Size */
+            sizeDimension: string;
+            /** @description Suggested size labels, in order (XS ... 3XL) */
+            sizes: string[];
+            /** @description The seller may add size labels of their own (always true for a sized type) */
+            sizesAllowCustomValues: boolean;
+            unitSystem: components["schemas"]["SizeChartUnit"];
+            measurements: components["schemas"]["SuggestedMeasurement"][];
+        };
+        SizeChartImportMessage: {
+            /** @description chart_name, unit, size, fit_note, how_to_measure or m:<measurement key>; null for the row */
+            column: string | null;
+            /** @description Position of the column in the uploaded header; -1 when none */
+            columnIndex: number;
+            /** @enum {string} */
+            severity: "ERROR" | "WARNING";
+            message: string;
+        };
+        SizeChartImportRow: {
+            /** @description The row in the spreadsheet (header = 1) */
+            rowNumber: number;
+            chartName: string;
+            size: string;
+            /** @enum {string} */
+            status: "VALID" | "WARNING" | "ERROR";
+            messages: components["schemas"]["SizeChartImportMessage"][];
+            cells: string[];
+        };
+        SizeChartImportChart: {
+            name: string;
+            /**
+             * @description What was done, or with dryRun what would be done
+             * @enum {string}
+             */
+            action: "CREATE" | "UPDATE" | "UNCHANGED" | "FAILED";
+            /** Format: uuid */
+            chartId: string | null;
+            rows: number[];
+            /** @description Why the chart failed */
+            message: string | null;
+        };
+        SizeChartImportReport: {
+            /** @description false for a dry run: nothing was saved */
+            applied: boolean;
+            fileName: string;
+            fileWarnings: string[];
+            chartCount: number;
+            created: number;
+            updated: number;
+            unchanged: number;
+            failed: number;
+            errorRows: number;
+            warningRows: number;
+            charts: components["schemas"]["SizeChartImportChart"][];
+            rows: components["schemas"]["SizeChartImportRow"][];
+        };
+        /**
+         * @description Staff mark a product type as sized. Sellers then write size charts and their own size labels (the size
+         *     dimension allows custom values; its options are suggestions).
+         */
+        SizingTrait: {
+            /** @description A listing needs a size chart whose rows cover every size it sells */
+            sizeChartRequired: boolean;
+            /** @description The variation dimension that holds the size, e.g. Size */
+            sizeDimension: string;
+            suggestedMeasurements: components["schemas"]["SuggestedMeasurement"][];
+        };
         ProductTypeSchema: {
             code: string;
             label: string;
@@ -3699,7 +4034,10 @@ export interface components {
                 name: string;
                 dimensions: {
                     name: string;
+                    /** @description The category's values: suggestions where allowCustomValues, else the only allowed ones */
                     options: string[];
+                    /** @description The seller may use values of their own (sizes such as UK 12, colours such as Indigo adire) besides options; show options as suggestion chips plus an "Add" input */
+                    allowCustomValues: boolean;
                 }[];
             }[];
             /** @description Decide the form's conditional sections and the template's columns */
@@ -3712,6 +4050,8 @@ export interface components {
                 regulated: boolean;
                 /** @description May be sold in community pre-order windows */
                 preorder: boolean;
+                /** @description Set for sized product types (fashion): a size chart section and seller-written sizes */
+                sizing: components["schemas"]["SizingTrait"] | null;
             };
         };
         GtinCheck: {
@@ -3784,6 +4124,13 @@ export interface components {
             handlingDays?: number;
             /** @description A ship-from address id (GET /v1/seller/ship-from-addresses); null = the default */
             shipFromId?: string | null;
+            /**
+             * Format: uuid
+             * @description One of the organisation's size charts (POST /v1/seller/size-charts). Required when the product type's sizing trait says sizeChartRequired; every size the variants sell needs a row in it (422 on sizeChartId or variants[i].options.Size). Another organisation's chart is never accepted.
+             */
+            sizeChartId?: string | null;
+            /** @description How the sizes fit; shown beside the chart (defaults to the chart's own) */
+            fitNote?: components["schemas"]["FitNote"] | null;
         };
         /** @description Exactly one of categoryId or categoryRequestId. variationTheme "" = a product without variations (one variant without options). */
         ProductDraft: {
@@ -3827,6 +4174,9 @@ export interface components {
             packaging: components["schemas"]["PackageDimensions"] | null;
             handlingDays: number;
             shipFromId: string | null;
+            /** Format: uuid */
+            sizeChartId?: string | null;
+            fitNote?: components["schemas"]["FitNote"] | null;
         };
         ProductDetail: {
             productId: string;
@@ -7494,6 +7844,295 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSizeCharts: {
+        parameters: {
+            query?: {
+                productTypeId?: string;
+                productType?: string;
+                /** @description Part of the chart name */
+                q?: string;
+                includeRetired?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Size charts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChartPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createSizeChart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SizeChartInput"];
+            };
+        };
+        responses: {
+            /** @description The chart */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChart"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSizeChartSuggestions: {
+        parameters: {
+            query?: {
+                productTypeId?: string;
+                productType?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Suggestions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChartSuggestions"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    downloadSizeChartTemplate: {
+        parameters: {
+            query?: {
+                productType?: string;
+                productTypeId?: string;
+                format?: components["schemas"]["SpreadsheetFormat"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Template file (Content-Disposition attachment) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    importSizeCharts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description A .xlsx or .csv file, at most 10 MB
+                     */
+                    file: string;
+                    /** @description The product type the charts are made for (the template's) */
+                    productType?: string;
+                    /** Format: uuid */
+                    productTypeId?: string;
+                    /** @default false */
+                    dryRun?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description What was saved (or would be) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChartImportReport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSizeChart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chartId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The chart */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChart"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateSizeChart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chartId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SizeChartInput"];
+            };
+        };
+        responses: {
+            /** @description The chart */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChart"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    retireSizeChart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chartId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The retired chart */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChart"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    duplicateSizeChart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chartId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Default: "<name> (copy)" */
+                    name?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The copy */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChart"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];

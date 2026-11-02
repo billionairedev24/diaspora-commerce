@@ -1,7 +1,7 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
 import { type BrandScope, type Cadence, type ImageLibraryQuery } from '../schemas/seller';
-import { type ImportRowsQuery, type ListingsQuery, type SellerApiClient, type SellerOrdersQuery } from '../seller-client';
+import { type ImportRowsQuery, type ListingsQuery, type SellerApiClient, type SellerOrdersQuery, type SizeChartsQuery } from '../seller-client';
 
 /* TanStack Query key factories for the Seller Center & Provider Hub. Everything hangs off ['seller', orgId] so
    switching organisation (org switcher) or signing out invalidates a whole family at once. */
@@ -37,6 +37,11 @@ export const sellerKeys = {
   importPage: (orgId: string, page: number, size: number) => [...sellerKeys.imports(orgId), 'page', page, size] as const,
   importJob: (orgId: string, id: string) => [...sellerKeys.imports(orgId), 'detail', id] as const,
   importRows: (orgId: string, id: string, q: ImportRowsQuery) => [...sellerKeys.importJob(orgId, id), 'rows', q] as const,
+  sizeCharts: (orgId: string) => [...sellerKeys.org(orgId), 'size-charts'] as const,
+  sizeChartPage: (orgId: string, q: SizeChartsQuery) => [...sellerKeys.sizeCharts(orgId), 'page', q] as const,
+  sizeChart: (orgId: string, id: string) => [...sellerKeys.sizeCharts(orgId), 'detail', id] as const,
+  sizeChartSuggestions: (scope: { productTypeId?: string; productType?: string }) =>
+    [...sellerKeys.all, 'catalog', 'size-chart-suggestions', scope.productTypeId ?? '', scope.productType ?? ''] as const,
   imageLibrary: (orgId: string) => [...sellerKeys.org(orgId), 'image-library'] as const,
   imageLibraryPage: (orgId: string, q: ImageLibraryQuery) => [...sellerKeys.imageLibrary(orgId), q] as const,
   brands: (orgId: string, scope: BrandScope, q: string) => [...sellerKeys.org(orgId), 'brands', scope.category ?? '', scope.productType ?? '', q] as const,
@@ -126,6 +131,18 @@ export const sellerQueries = {
     queryOptions({ queryKey: sellerKeys.importJob(orgId, id), queryFn: ({ signal }) => api.getImport(id, signal), staleTime: 0 }),
   importRows: (api: SellerApiClient, orgId: string, id: string, q: ImportRowsQuery) =>
     queryOptions({ queryKey: sellerKeys.importRows(orgId, id, q), queryFn: ({ signal }) => api.listImportRows(id, q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
+  sizeCharts: (api: SellerApiClient, orgId: string, q: SizeChartsQuery) =>
+    queryOptions({ queryKey: sellerKeys.sizeChartPage(orgId, q), queryFn: ({ signal }) => api.listSizeCharts(q, signal), placeholderData: keepPreviousData, staleTime: 15_000 }),
+  sizeChart: (api: SellerApiClient, orgId: string, id: string) =>
+    queryOptions({ queryKey: sellerKeys.sizeChart(orgId, id), queryFn: ({ signal }) => api.getSizeChart(id, signal), staleTime: 0, enabled: id !== '' }),
+  /** What a category suggests (sizes, measurement columns); `enabled` only once a category or product type is chosen. */
+  sizeChartSuggestions: (api: SellerApiClient, scope: { productTypeId?: string; productType?: string }) =>
+    queryOptions({
+      queryKey: sellerKeys.sizeChartSuggestions(scope),
+      queryFn: ({ signal }) => api.getSizeChartSuggestions(scope, signal),
+      enabled: Boolean(scope.productTypeId || scope.productType),
+      staleTime: 30 * MINUTE
+    }),
   imageLibrary: (api: SellerApiClient, orgId: string, q: ImageLibraryQuery) =>
     queryOptions({ queryKey: sellerKeys.imageLibraryPage(orgId, q), queryFn: ({ signal }) => api.listImageLibrary(q, signal), placeholderData: keepPreviousData, staleTime: 5_000 }),
   /** The brands of a category; `enabled` only once a category is chosen. */

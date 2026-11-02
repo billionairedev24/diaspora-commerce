@@ -47,12 +47,15 @@ import {
   ServiceInputSchema,
   type ShipFromAddress,
   type ShipmentStatus,
+  type SizeChart,
+  SizeChartInputSchema,
   StockAdjustmentRequestSchema,
   TEAM_ERROR_MESSAGES,
   type TeamMember,
   UploadRequestSchema,
   validatePickupHours
 } from '../../schemas/seller';
+import { cleanValue, sizesMissingFromChart, valueKey } from '../../size-charts';
 import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
 import { exportFileOf } from '../export-file';
 import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
@@ -91,6 +94,7 @@ import {
   verifyStripe
 } from './onboarding';
 import { sellerSettingsHandlers } from './settings';
+import { chartProblems, type MockSizeChart, readSizeChartCsv, sizeChartTemplateCsv, sizeProblems, suggestionsFor } from './size-charts';
 
 export const MOCK_ROLE_COOKIE = 'at_mock_role';
 
@@ -810,6 +814,204 @@ function plain(fn: (db: MockSellerDb, request: Request) => unknown | Promise<unk
   };
 }
 
+/* ── Size charts (catalog /v1/size-charts through the BFF): the seller writes them, the category only suggests ── */
+
+const SizeChartDuplicateBody = z.object({ name: z.string().trim().max(80).optional() }).optional();
+
+function sizeChartHandlers() {
+  const mine = (ctx: Ctx) => ctx.db.sizeCharts.filter((c) => c.orgId === ctx.org.id);
+  /** Products of the organisation that link the chart: the stored form details plus the seeded count. */
+  const productsOf = (ctx: Ctx, chart: MockSizeChart) => Object.values(ctx.db.productDetails).filter((d) => d.listing.sizeChartId === chart.id);
+  const view = (ctx: Ctx, chart: MockSizeChart): SizeChart => {
+    const { orgId: _org, ...rest } = chart;
+    return { ...rest, productCount: chart.productCount + productsOf(ctx, chart).length };
+  };
+  const find = (ctx: Ctx, id: string) => {
+    const c = mine(ctx).find((x) => x.id === id);
+    if (!c) throw notFound('No such size chart.');
+    return c;
+  };
+  const typeOf = (b: { productTypeCode?: string | null; categoryId?: string | null }): { code: string | null; categoryId: string | null } => {
+    const leaf = b.categoryId ? categoryLeaves().find((l) => l.id === b.categoryId) : undefined;
+    if (b.categoryId && !leaf) throw invalid({ categoryId: 'Choose a product type category' });
+    const code = leaf?.productType ?? b.productTypeCode ?? null;
+    if (code && !PRODUCT_TYPES[code]) throw invalid({ productTypeCode: 'Unknown product type' });
+    return { code, categoryId: leaf?.id ?? null };
+  };
+  const scopeType = (q: URLSearchParams) => {
+    const leaf = categoryLeaves().find((l) => l.id === q.get('productTypeId'));
+    const code = leaf?.productType ?? q.get('productType') ?? undefined;
+    return code ? PRODUCT_TYPES[code] : undefined;
+  };
+  /** A size that products still sell must keep its row. */
+  const keepsSoldSizes = (ctx: Ctx, chart: MockSizeChart, rows: SizeChart['rows']): Record<string, string> => {
+    const errs: Record<string, string> = {};
+    const sold = productsOf(ctx, chart).flatMap((d) => d.variants);
+    sizesMissingFromChart({ name: chart.name, rows }, { sizeDimension: 'Size' }, sold).forEach((p) => {
+      errs.rows = `Products still sell size ${p.size}; keep its row or change those products first`;
+    });
+    return errs;
+  };
+
+  return [
+    http.get(
+      `${W}/size-charts/suggestions`,
+      route((ctx) => {
+        require(ctx, 'listings', 'VIEW', 'SELLER');
+        const type = scopeType(query(ctx));
+        if (!type) throw invalid({ productTypeId: 'Choose a category or product type' });
+        return suggestionsFor(type);
+      })
+    ),
+    http.get(`${W}/size-charts/import-template`, async ({ request }) => {
+      try {
+        const ctx = context(request);
+        require(ctx, 'listings', 'EDIT', 'SELLER');
+        const q = query(ctx);
+        const format = q.get('format') ?? 'xlsx';
+        if (format !== 'xlsx' && format !== 'csv') throw invalid({ format: 'xlsx or csv' });
+        return fileResponse(sizeChartTemplateCsv(scopeType(q)), `afrotransact-size-charts.${format}`, format);
+      } catch (e) {
+        if (e instanceof SellerProblem) return problemResponse(e);
+        throw e;
+      }
+    }),
+    http.post(
+      `${W}/size-charts/import`,
+      route(async (ctx) => {
+        let form: FormData;
+        try {
+          form = await ctx.request.formData();
+        } catch {
+          throw invalid({ file: 'Choose an Excel (.xlsx) or CSV (.csv) file' });
+        }
+        const file = form.get('file');
+        if (typeof file === 'string' || file === null || file.size === 0) throw invalid({ file: 'Choose an Excel (.xlsx) or CSV (.csv) file' });
+        const ext = (file.name || 'charts.csv').toLowerCase().split('.').pop();
+        if (ext !== 'csv') throw invalid({ file: 'The mock reads CSV size chart files; save the workbook as .csv' });
+        require(ctx, 'listings', 'EDIT', 'SELLER');
+        const dryRun = String(form.get('dryRun') ?? 'false') === 'true';
+        const type = String(form.get('productType') ?? '') || categoryLeaves().find((l) => l.id === form.get('productTypeId'))?.productType;
+        let result: ReturnType<typeof readSizeChartCsv>;
+        try {
+          result = readSizeChartCsv(await file.text(), file.name, mine(ctx), type, dryRun);
+        } catch (e) {
+          throw invalid({ file: e instanceof Error ? e.message : 'The file cannot be read' });
+        }
+        if (!dryRun) {
+          result.save.forEach((s, i) => {
+            const outcome = result.report.charts.find((c) => c.name === s.name && c.action === s.action);
+            if (s.action === 'UNCHANGED') return;
+            const { errors, built } = chartProblems(s.input, mine(ctx), s.existing?.id);
+            if (Object.keys(errors).length) return;
+            const at = ctx.now.toISOString();
+            const type2 = typeOf(s.input);
+            if (s.existing) {
+              Object.assign(s.existing, { name: cleanValue(s.input.name), unitSystem: s.input.unitSystem, alternateUnit: s.input.unitSystem === 'CM' ? 'IN' : 'CM', columns: built.columns,
+                rows: built.rows, fitNote: s.input.fitNote ?? null, howToMeasure: s.input.howToMeasure ?? null, updatedAt: at, version: s.existing.version + 1 });
+              if (outcome) outcome.chartId = s.existing.id;
+            } else {
+              const id = `5c1e0000-0000-4000-8000-${String(1000 + ++ctx.db.seq + i).padStart(12, '0')}`;
+              ctx.db.sizeCharts.unshift({ orgId: ctx.org.id, id, ownerOrgId: ctx.org.id, name: cleanValue(s.input.name), unitSystem: s.input.unitSystem, alternateUnit: s.input.unitSystem === 'CM' ? 'IN' : 'CM',
+                productTypeCode: type2.code, categoryId: type2.categoryId, columns: built.columns, rows: built.rows, fitNote: s.input.fitNote ?? null,
+                howToMeasure: s.input.howToMeasure ?? null, retired: false, retiredAt: null, productCount: 0, createdAt: at, updatedAt: at, version: 0 });
+              if (outcome) outcome.chartId = id;
+            }
+          });
+        }
+        return result.report;
+      })
+    ),
+    http.get(
+      `${W}/size-charts`,
+      route((ctx) => {
+        require(ctx, 'listings', 'VIEW', 'SELLER');
+        const q = query(ctx);
+        const page = Number(q.get('page') ?? '0');
+        const size = Number(q.get('size') ?? '25');
+        if (size < 1 || size > 100 || page < 0) throw invalid({ size: 'Between 1 and 100' });
+        const leaf = categoryLeaves().find((l) => l.id === q.get('productTypeId'));
+        const code = leaf?.productType ?? q.get('productType');
+        const text = valueKey(q.get('q') ?? '');
+        const rows = mine(ctx).filter(
+          (c) => (q.get('includeRetired') === 'true' || !c.retired) && (!code || c.productTypeCode === code || c.productTypeCode === null) && (text === '' || valueKey(c.name).includes(text))
+        );
+        rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+        return { items: rows.slice(page * size, page * size + size).map((c) => view(ctx, c)), total: rows.length, page, size };
+      })
+    ),
+    http.post(
+      `${W}/size-charts`,
+      route(async (ctx) => {
+        const b = await body(ctx.request, SizeChartInputSchema);
+        require(ctx, 'listings', 'EDIT', 'SELLER');
+        const type = typeOf(b);
+        const { errors, built } = chartProblems(b, mine(ctx));
+        if (Object.keys(errors).length) throw invalid(errors);
+        const at = ctx.now.toISOString();
+        const chart: MockSizeChart = {
+          orgId: ctx.org.id, id: `5c1e0000-0000-4000-8000-${String(1000 + ++ctx.db.seq).padStart(12, '0')}`, ownerOrgId: ctx.org.id, name: cleanValue(b.name), unitSystem: b.unitSystem,
+          alternateUnit: b.unitSystem === 'CM' ? 'IN' : 'CM', productTypeCode: type.code, categoryId: type.categoryId, columns: built.columns, rows: built.rows,
+          fitNote: b.fitNote ?? null, howToMeasure: b.howToMeasure?.trim() || null, retired: false, retiredAt: null, productCount: 0, createdAt: at, updatedAt: at, version: 0
+        };
+        ctx.db.sizeCharts.unshift(chart);
+        return view(ctx, chart);
+      }, 201)
+    ),
+    http.get(
+      `${W}/size-charts/:id`,
+      route((ctx, p) => {
+        require(ctx, 'listings', 'VIEW', 'SELLER');
+        return view(ctx, find(ctx, p.id ?? ''));
+      })
+    ),
+    http.put(
+      `${W}/size-charts/:id`,
+      route(async (ctx, p) => {
+        const b = await body(ctx.request, SizeChartInputSchema);
+        require(ctx, 'listings', 'EDIT', 'SELLER');
+        const chart = find(ctx, p.id ?? '');
+        if (chart.retired) throw conflict('This size chart was retired; duplicate it to make changes.');
+        if (b.version !== undefined && b.version !== null && b.version !== chart.version) throw conflict('This size chart changed since you opened it. Reload to see the latest version.');
+        const type = typeOf(b);
+        const { errors, built } = chartProblems(b, mine(ctx), chart.id);
+        Object.assign(errors, keepsSoldSizes(ctx, chart, built.rows));
+        if (Object.keys(errors).length) throw invalid(errors);
+        Object.assign(chart, {
+          name: cleanValue(b.name), unitSystem: b.unitSystem, alternateUnit: b.unitSystem === 'CM' ? 'IN' : 'CM', productTypeCode: type.code, categoryId: type.categoryId,
+          columns: built.columns, rows: built.rows, fitNote: b.fitNote ?? null, howToMeasure: b.howToMeasure?.trim() || null, updatedAt: ctx.now.toISOString(), version: chart.version + 1
+        });
+        return view(ctx, chart);
+      })
+    ),
+    http.delete(
+      `${W}/size-charts/:id`,
+      route((ctx, p) => {
+        require(ctx, 'listings', 'EDIT', 'SELLER');
+        const chart = find(ctx, p.id ?? '');
+        if (!chart.retired) Object.assign(chart, { retired: true, retiredAt: ctx.now.toISOString(), updatedAt: ctx.now.toISOString(), version: chart.version + 1 });
+        return view(ctx, chart);
+      })
+    ),
+    http.post(
+      `${W}/size-charts/:id/duplicate`,
+      route(async (ctx, p) => {
+        const b = await body(ctx.request, SizeChartDuplicateBody);
+        require(ctx, 'listings', 'EDIT', 'SELLER');
+        const chart = find(ctx, p.id ?? '');
+        const taken = (n: string) => mine(ctx).some((c) => !c.retired && valueKey(c.name) === valueKey(n));
+        let name = b?.name ? cleanValue(b.name) : `${chart.name} (copy)`;
+        for (let n = 2; !b?.name && taken(name); n += 1) name = `${chart.name} (copy ${n})`;
+        if (taken(name)) throw invalid({ name: `You already have a size chart called ${name}` });
+        const at = ctx.now.toISOString();
+        const copy: MockSizeChart = { ...chart, id: `5c1e0000-0000-4000-8000-${String(1000 + ++ctx.db.seq).padStart(12, '0')}`, name, retired: false, retiredAt: null, productCount: 0, createdAt: at, updatedAt: at, version: 0 };
+        ctx.db.sizeCharts.unshift(copy);
+        return view(ctx, copy);
+      }, 201)
+    )
+  ];
+}
+
 export const sellerHandlers = [
   /* ── Shell ── */
   http.get(
@@ -1204,7 +1406,8 @@ export const sellerHandlers = [
       if (!d.categoryId === !d.categoryRequestId) throw invalid({ categoryId: 'Choose a category, or request a new one.' });
       const skus = d.variants.map((v) => v.sellerSku.toUpperCase());
       if (new Set(skus).size !== skus.length) throw invalid({ variants: 'SKUs must be unique.' });
-      const problems = listingProblems(d);
+      const leafOf = categoryLeaves().find((c) => c.id === d.categoryId);
+      const problems = { ...listingProblems(d), ...sizeProblems(d, leafOf ? PRODUCT_TYPES[leafOf.productType] : undefined, ctx.db.sizeCharts, ctx.org.id) };
       if (Object.keys(problems).length) throw invalid(problems);
       require(ctx, 'listings', 'EDIT', 'SELLER');
       const taken = skus.find((s) => ctx.db.listings.some((l) => l.variants.some((v) => v.sku.toUpperCase() === s)));
@@ -1230,10 +1433,14 @@ export const sellerHandlers = [
       const d = await body(ctx.request, ProductDraftSchema.extend({ version: z.number().int().optional() }));
       const skus = d.variants.map((v) => v.sellerSku.toUpperCase());
       if (new Set(skus).size !== skus.length) throw invalid({ variants: 'SKUs must be unique.' });
-      const problems = listingProblems(d);
+      const l = ctx.db.listings.find((x) => x.productId === p.productId);
+      const stored = l ? productDetail(ctx.db, l) : undefined;
+      const problems = {
+        ...listingProblems(d),
+        ...sizeProblems(d, stored ? PRODUCT_TYPES[stored.productType] : undefined, ctx.db.sizeCharts, ctx.org.id, stored?.listing.sizeChartId)
+      };
       if (Object.keys(problems).length) throw invalid(problems);
       require(ctx, 'listings', 'EDIT', 'SELLER');
-      const l = ctx.db.listings.find((x) => x.productId === p.productId);
       if (!l) throw notFound('No such listing.');
       if (l.status === 'TAKEN_DOWN') throw conflict('This listing was taken down and can’t be edited.');
       const current = productDetail(ctx.db, l);
@@ -1256,6 +1463,7 @@ export const sellerHandlers = [
       return row;
     })
   ),
+  ...sizeChartHandlers(),
   http.get(
     `${W}/product-drafts`,
     route((ctx) => {

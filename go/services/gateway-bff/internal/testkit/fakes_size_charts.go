@@ -2,6 +2,7 @@ package testkit
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -115,7 +116,7 @@ func (u *Upstreams) sizeChartRoutes(mux *http.ServeMux) {
 		defer u.mu.Unlock()
 		if id == "" {
 			seq++
-			id = "5c1e0000-0000-4000-8000-00000000010" + string(rune('0'+seq))
+			id = fmt.Sprintf("5c1e0000-0000-4000-8000-%012d", 100+seq)
 			c := &fakeChart{body: b}
 			ids[c] = id
 			charts = append(charts, c)
@@ -176,7 +177,7 @@ func (u *Upstreams) sizeChartRoutes(mux *http.ServeMux) {
 		report := map[string]any{"applied": !dry, "fileName": "charts.csv", "fileWarnings": []string{}, "chartCount": 1, "created": 1, "updated": 0,
 			"unchanged": 0, "failed": 0, "errorRows": 0, "warningRows": 0,
 			"charts": []map[string]any{{"name": "Adire dresses", "action": "CREATE", "chartId": nil, "rows": []int{2}, "message": nil}},
-			"rows": []map[string]any{{"rowNumber": 2, "chartName": "Adire dresses", "size": "S", "status": "VALID", "messages": []any{}, "cells": []string{"Adire dresses"}}}}
+			"rows":   []map[string]any{{"rowNumber": 2, "chartName": "Adire dresses", "size": "S", "status": "VALID", "messages": []any{}, "cells": []string{"Adire dresses"}}}}
 		if bad {
 			report["created"], report["failed"], report["errorRows"] = 0, 1, 1
 			report["charts"] = []map[string]any{{"name": "Adire dresses", "action": "FAILED", "chartId": nil, "rows": []int{2}, "message": "Fix the rows"}}
@@ -235,7 +236,7 @@ func (u *Upstreams) sizeChartRoutes(mux *http.ServeMux) {
 			b["name"] = n
 		}
 		seq++
-		id := "5c1e0000-0000-4000-8000-00000000010" + string(rune('0'+seq))
+		id := fmt.Sprintf("5c1e0000-0000-4000-8000-%012d", 100+seq)
 		cp := &fakeChart{body: b}
 		ids[cp] = id
 		charts = append(charts, cp)

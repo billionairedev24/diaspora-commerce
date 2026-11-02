@@ -168,6 +168,15 @@ import {
   type ShipFromInput,
   ShipFromListSchema,
   type ShipmentStatus,
+  type SizeChart,
+  type SizeChartImportReport,
+  SizeChartImportReportSchema,
+  type SizeChartInput,
+  type SizeChartPage,
+  SizeChartPageSchema,
+  SizeChartSchema,
+  type SizeChartSuggestions,
+  SizeChartSuggestionsSchema,
   type SpreadsheetFormat,
   type StockAdjustment,
   type StockAdjustmentRequest,
@@ -210,6 +219,15 @@ const enc = encodeURIComponent;
 const num = (n: number | undefined): string | undefined => (n === undefined ? undefined : String(n));
 
 /** Bulk upload preview query (server-driven rows table). */
+export interface SizeChartsQuery {
+  productTypeId?: string;
+  productType?: string;
+  q?: string;
+  includeRetired?: boolean;
+  page?: number;
+  size?: number;
+}
+
 export interface ImportRowsQuery {
   status?: ImportRowStatus;
   outcome?: ImportRowOutcome;
@@ -401,6 +419,48 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request(`/v1/seller/image-library/${enc(assetId)}`, ImageLibraryItemSchema, { method: 'PATCH', body: { fileName } }),
     attachLibraryImages: (skus?: string[]): Promise<AttachLibraryImagesResult> =>
       request('/v1/seller/image-library/attach', AttachLibraryImagesResultSchema, { method: 'POST', body: { skus: skus ?? [] } }),
+    /* Size charts: the seller writes them (sizes and measurements are only suggested by the category) */
+    /** The organisation's charts, newest change first; `productTypeId`/`productType` also keep the charts made for any type. */
+    listSizeCharts: (q: SizeChartsQuery = {}, signal?: AbortSignal): Promise<SizeChartPage> =>
+      request('/v1/seller/size-charts', SizeChartPageSchema, {
+        query: {
+          productTypeId: q.productTypeId || undefined,
+          productType: q.productType || undefined,
+          q: q.q || undefined,
+          includeRetired: q.includeRetired ? 'true' : undefined,
+          page: String(q.page ?? 0),
+          size: String(q.size ?? 25)
+        },
+        signal
+      }),
+    getSizeChart: (id: string, signal?: AbortSignal): Promise<SizeChart> => request(`/v1/seller/size-charts/${enc(id)}`, SizeChartSchema, { signal }),
+    /** 422 with `errors` keyed by field: name, columns[1].label, rows[2].size, rows[2].values.bust. */
+    createSizeChart: (input: SizeChartInput): Promise<SizeChart> => request('/v1/seller/size-charts', SizeChartSchema, { method: 'POST', body: input }),
+    /** Send the `version` you loaded in `input.version`: 409 when the chart changed since. A size that products still sell must keep its row. */
+    updateSizeChart: (id: string, input: SizeChartInput): Promise<SizeChart> =>
+      request(`/v1/seller/size-charts/${enc(id)}`, SizeChartSchema, { method: 'PUT', body: input }),
+    /** Retire (never deleted): products keep showing it, it can no longer be linked to products. Answers the retired chart. */
+    retireSizeChart: (id: string): Promise<SizeChart> => request(`/v1/seller/size-charts/${enc(id)}`, SizeChartSchema, { method: 'DELETE' }),
+    duplicateSizeChart: (id: string, name?: string): Promise<SizeChart> =>
+      request(`/v1/seller/size-charts/${enc(id)}/duplicate`, SizeChartSchema, { method: 'POST', body: name ? { name } : {} }),
+    /** The sizes and measurement columns a category suggests (`productTypeId` = the product-type category node, or `productType` = its code). */
+    getSizeChartSuggestions: (scope: { productTypeId?: string; productType?: string }, signal?: AbortSignal): Promise<SizeChartSuggestions> =>
+      request('/v1/seller/size-charts/suggestions', SizeChartSuggestionsSchema, {
+        query: { productTypeId: scope.productTypeId || undefined, productType: scope.productType || undefined },
+        signal
+      }),
+    downloadSizeChartTemplate: (opts: { productType?: string; productTypeId?: string; format: SpreadsheetFormat }): Promise<DownloadedFile> =>
+      download('/v1/seller/size-charts/import-template', { productType: opts.productType, productTypeId: opts.productTypeId, format: opts.format },
+        `afrotransact-size-charts.${opts.format}`),
+    /** Saves the charts of a .xlsx/.csv file by name (same name = update; the same file again changes nothing). `dryRun` only reports. */
+    importSizeCharts: (file: File, opts: { productType?: string; productTypeId?: string; dryRun?: boolean } = {}): Promise<SizeChartImportReport> => {
+      const body = new FormData();
+      body.set('file', file, file.name);
+      if (opts.productType) body.set('productType', opts.productType);
+      if (opts.productTypeId) body.set('productTypeId', opts.productTypeId);
+      body.set('dryRun', String(opts.dryRun ?? false));
+      return request('/v1/seller/size-charts/import', SizeChartImportReportSchema, { method: 'POST', body });
+    },
     /** The brands of a category (422 without a category or product type). */
     listBrands: (scope: BrandScope, q: string, signal?: AbortSignal): Promise<BrandList> =>
       request('/v1/seller/catalog/brands', BrandListSchema, { query: { category: scope.category || undefined, productType: scope.productType || undefined, q: q || undefined }, signal }),

@@ -1,4 +1,4 @@
-import { type TaxonomyAttribute, type TaxonomyLevel, type TaxonomyNode, type TaxonomyProductType, type TaxonomyTraits } from '@afrotransact/api-client';
+import { type TaxonomyAttribute, type TaxonomyFlag, type TaxonomyLevel, type TaxonomyNode, type TaxonomyProductType, type TaxonomyTraits } from '@afrotransact/api-client';
 
 /* Pure rules of the Categories screen: which parents a node can move to, why a node cannot be retired, what a product
    type edit changed. The server applies the same rules again; these let the screen say so before anyone clicks. */
@@ -23,7 +23,7 @@ export const productsInUse = (node: TaxonomyNode): number => node.subtreeProduct
 export const canHaveChildren = (node: TaxonomyNode): boolean => node.active && CHILD_LEVEL[node.level] !== null;
 
 /** The same traits with one switched; perishable needs food, so switching food off clears it. */
-export function withTrait(traits: TaxonomyTraits, key: keyof TaxonomyTraits, on: boolean): TaxonomyTraits {
+export function withTrait(traits: TaxonomyTraits, key: TaxonomyFlag, on: boolean): TaxonomyTraits {
   const next = { ...traits, [key]: on };
   if (key === 'food' && !on) next.perishable = false;
   if (key === 'perishable' && on) next.food = true;

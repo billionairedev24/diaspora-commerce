@@ -8,8 +8,8 @@ import {
   isApiError,
   staffTaxonomyKeys,
   type TaxonomyAttribute,
-  type TaxonomyProductType,
-  type TaxonomyTraits
+  type TaxonomyFlag,
+  type TaxonomyProductType
 } from '@afrotransact/api-client';
 import { Button, Checkbox, cx, Select, TextField, useToast } from '@afrotransact/ui';
 import { ArrowDown, ArrowUp, CaretDown, CaretRight, Lock, Plus, Trash } from '@phosphor-icons/react/ssr';
@@ -41,7 +41,7 @@ const SECTIONS: { value: TaxonomyAttribute['section']; label: MessageKey }[] = [
   { value: 'FOOD', label: 'st.catalog.section.food' },
   { value: 'REGULATED', label: 'st.catalog.section.regulated' }
 ];
-const TRAITS: { key: keyof TaxonomyTraits; label: MessageKey; help: MessageKey }[] = [
+const TRAITS: { key: TaxonomyFlag; label: MessageKey; help: MessageKey }[] = [
   { key: 'food', label: 'st.catalog.trait.food', help: 'st.catalog.trait.foodHelp' },
   { key: 'perishable', label: 'st.catalog.trait.perishable', help: 'st.catalog.trait.perishableHelp' },
   { key: 'regulated', label: 'st.catalog.trait.regulated', help: 'st.catalog.trait.regulatedHelp' },

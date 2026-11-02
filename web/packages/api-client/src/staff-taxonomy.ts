@@ -47,13 +47,51 @@ export type TaxonomyTree = z.infer<typeof TaxonomyTreeSchema>;
 export const TaxonomyNodesSchema = z.object({ items: z.array(TaxonomyNodeSchema) });
 export type TaxonomyNodes = z.infer<typeof TaxonomyNodesSchema>;
 
+/** A measurement a sized product type suggests for sellers' size charts (bust, waist, foot length ...). */
+export const TaxonomySuggestedMeasurementSchema = z.object({
+  key: z.string().optional(),
+  label: z.string(),
+  unit: z.enum(['CM', 'IN']).nullish(),
+  help: z.string().nullish()
+});
+export type TaxonomySuggestedMeasurement = z.infer<typeof TaxonomySuggestedMeasurementSchema>;
+
+/**
+ * Marks a product type as sized (fashion). Staff only configure it here: sellers write their size charts and their own
+ * size labels (the size variation allows custom values). `enabled: false` in a PATCH switches sizing off; other fields
+ * sent change, the rest keep their value.
+ */
+export const TaxonomySizingSchema = z.object({
+  enabled: z.boolean().optional(),
+  sizeChartRequired: z.boolean().default(false),
+  sizeDimension: z.string().default('Size'),
+  suggestedMeasurements: z.array(TaxonomySuggestedMeasurementSchema).default([])
+});
+export type TaxonomySizing = z.infer<typeof TaxonomySizingSchema>;
+
 export const TaxonomyTraitsSchema = z.object({
   food: z.boolean().default(false),
   perishable: z.boolean().default(false),
   regulated: z.boolean().default(false),
-  preorder: z.boolean().default(false)
+  preorder: z.boolean().default(false),
+  /** Set for sized product types; null or absent for the others. */
+  sizing: TaxonomySizingSchema.nullish()
 });
 export type TaxonomyTraits = z.infer<typeof TaxonomyTraitsSchema>;
+/** The on/off traits (everything but sizing, which carries its own settings). */
+export type TaxonomyFlag = Exclude<keyof TaxonomyTraits, 'sizing'>;
+
+/** What a create or PATCH sends for traits; `sizing` may carry only the fields to change (`enabled: false` switches it off). */
+export type TaxonomyTraitsChange = Partial<Omit<TaxonomyTraits, 'sizing'>> & { sizing?: Partial<TaxonomySizing> | null };
+
+/** One axis of a variation (Size, Color). `allowCustomValues`: sellers may write values of their own; `options` are then suggestions. */
+export const TaxonomyThemeDimensionSchema = z.object({
+  name: z.string(),
+  options: z.array(z.string()),
+  allowCustomValues: z.boolean().default(false)
+});
+export const TaxonomyThemeSchema = z.object({ name: z.string(), dimensions: z.array(TaxonomyThemeDimensionSchema) });
+export type TaxonomyTheme = z.infer<typeof TaxonomyThemeSchema>;
 
 export const TaxonomyAttributeSchema = z.object({
   key: z.string(),
@@ -79,7 +117,7 @@ export const TaxonomyProductTypeSchema = z.object({
   identifierRule: IdentifierRuleSchema,
   traits: TaxonomyTraitsSchema,
   attributes: z.array(TaxonomyAttributeSchema),
-  themes: z.array(z.record(z.string(), z.unknown())).default([]),
+  themes: z.array(TaxonomyThemeSchema).default([]),
   version: z.number().int(),
   updatedAt: z.string().nullable().optional(),
   productCount: z.number().int(),
@@ -196,7 +234,7 @@ export interface TaxonomyNewProductType {
   code?: string;
   label?: string;
   identifierRule: IdentifierRule;
-  traits?: Partial<TaxonomyTraits>;
+  traits?: TaxonomyTraitsChange;
   attributes?: TaxonomyAttribute[];
   basedOn?: string;
 }
@@ -215,8 +253,10 @@ export interface TaxonomyCreateNode {
 export interface TaxonomyProductTypeChange {
   label?: string;
   identifierRule?: IdentifierRule;
-  traits?: Partial<TaxonomyTraits>;
+  traits?: TaxonomyTraitsChange;
   attributes?: TaxonomyAttribute[];
+  /** The whole new list of variations (their order is the order of the seller's form). */
+  themes?: TaxonomyTheme[];
   reason: string;
 }
 

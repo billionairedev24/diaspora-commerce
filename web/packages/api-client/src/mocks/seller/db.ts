@@ -1,5 +1,7 @@
 /* In-memory state of the mock Seller Center BFF (stored on globalThis so route handlers, server components and tests
    share it). Seeded from the design prototype (backoffice-data.js, at-bookings.js, at-plans.js) relative to today. */
+import { type z } from 'zod';
+
 import { type ExportJob } from '../../schemas/exports';
 import { type SellerReview } from '../../schemas/reviews';
 import {
@@ -22,6 +24,7 @@ import {
   type PlanFeeCollectionMode,
   type PlanFeeDeduction,
   type ProductTypeSchema,
+  ProductTypeSchemaSchema,
   type SellerCoupon,
   type SellerDispute,
   type SellerOffer,
@@ -41,6 +44,7 @@ import { type MockDraft, type MockImport } from './listing-form';
 import { allowedBookingActions, BOOKING_LABELS, SHIPMENT_LABELS, takeHome } from './model';
 import { type MockApplication } from './onboarding';
 import { seedRunPickups } from './run-pickups';
+import { type MockSizeChart, seedSizeCharts } from './size-charts';
 
 export interface MockOrg {
   id: string;
@@ -104,6 +108,8 @@ export interface MockSellerDb {
   exports: (ExportJob & { owner: string; orgId: string; body: string })[];
   /** What the one-step form stored per product (S307); seeded listings derive theirs from the row. */
   productDetails: Record<string, SellerProductDetail>;
+  /** The organisations' size charts (catalog /v1/size-charts; every chart has its owner in `orgId`). */
+  sizeCharts: MockSizeChart[];
   /** Autosaved drafts of the product form (S307). */
   drafts: MockDraft[];
   /** Bulk uploads with their validated rows (S308). */
@@ -374,6 +380,12 @@ export const CATEGORY_TREE: CategoryNode[] = [
   { id: 'dep-fashion', name: 'Fashion', level: 'DEPARTMENT', productType: null, path: 'Fashion', children: [
     { id: 'cat-women', name: 'Women', level: 'CATEGORY', productType: null, path: 'Fashion › Women', children: [
       { id: 'pt-dresses', name: 'Dresses', level: 'PRODUCT_TYPE', productType: 'dress', path: 'Fashion › Women › Dresses', children: [] }
+    ] },
+    { id: 'cat-men', name: 'Men', level: 'CATEGORY', productType: null, path: 'Fashion › Men', children: [
+      { id: 'pt-mens-tops', name: 'Kaftans & shirts', level: 'PRODUCT_TYPE', productType: 'menwear', path: 'Fashion › Men › Kaftans & shirts', children: [] }
+    ] },
+    { id: 'cat-footwear', name: 'Footwear', level: 'CATEGORY', productType: null, path: 'Fashion › Footwear', children: [
+      { id: 'pt-shoes', name: 'Sandals & shoes', level: 'PRODUCT_TYPE', productType: 'shoes', path: 'Fashion › Footwear › Sandals & shoes', children: [] }
     ] }
   ] },
   { id: 'dep-beauty', name: 'Beauty', level: 'DEPARTMENT', productType: null, path: 'Beauty', children: [
@@ -398,9 +410,18 @@ const attr = (key: string, label: string, options: string[] = [], extra: Partial
 /** The brand attribute of a type (catalog V13): label, required, help and the no-brand choices all come from the type. */
 const brandAttr = (label: string, required: boolean, reasons: string[], help: string): Attr =>
   attr('brand', label, reasons, { required, kind: 'BRAND', help });
-const NO_TRAITS = { food: false, perishable: false, regulated: false, preorder: false };
+const NO_TRAITS = { food: false, perishable: false, regulated: false, preorder: false, sizing: null };
+/** What staff switch on for a sized (fashion) type: the category suggests measurements, sellers write the charts. */
+const sized = (sizeChartRequired: boolean, measurements: Array<[string, string, string]>) => ({
+  ...NO_TRAITS,
+  sizing: {
+    sizeChartRequired,
+    sizeDimension: 'Size',
+    suggestedMeasurements: measurements.map(([key, label, help]) => ({ key, label, unit: 'CM' as const, help }))
+  }
+});
 
-export const PRODUCT_TYPES: Record<string, ProductTypeSchema> = {
+const PRODUCT_TYPE_SOURCES: Record<string, z.input<typeof ProductTypeSchemaSchema>> = {
   grocery: { code: 'grocery', label: 'packaged food', identifierRule: 'gtin', traits: { food: true, perishable: false, regulated: false, preorder: true }, attributes: [
     brandAttr('Brand', false, ['UNBRANDED'], 'The brand on the package. Leave it empty or choose “No brand” for loose or unlabelled produce.'),
     attr('ingredients', 'Ingredients', [], { multiline: true, kind: 'MULTILINE', section: 'FOOD' }),
@@ -416,13 +437,30 @@ export const PRODUCT_TYPES: Record<string, ProductTypeSchema> = {
     attr('shelf', 'Shelf life', [], { required: false, kind: 'NUMBER', units: ['days', 'months'], section: 'FOOD', help: 'Frozen: from the date of freezing' }),
     attr('permit', 'Food facility / permit no.', [], { section: 'REGULATED', help: 'FDA food facility registration or state permit number' })
   ], themes: [{ name: 'Net weight', dimensions: [{ name: 'Net weight', options: ['1 lb', '2 lb', '5 lb'] }] }] },
-  dress: { code: 'dress', label: 'women’s dresses', identifierRule: 'gtin', traits: NO_TRAITS, attributes: [
+  dress: { code: 'dress', label: 'women’s dresses', identifierRule: 'gtin', traits: sized(false, [
+    ['bust', 'Bust', 'Around the fullest part of the chest'],
+    ['waist', 'Waist', 'Around the narrowest part of the waist'],
+    ['hip', 'Hip', 'Around the fullest part of the hips']
+  ]), attributes: [
     brandAttr('Brand or label', true, ['UNBRANDED', 'HANDMADE'], 'The label on the garment. Choose “No brand” or “Handmade” if it has none.'),
     attr('material', 'Material', ['Cotton wax print', 'Cotton', 'Lace', 'Silk', 'Polyester blend']),
     attr('fit', 'Fit', ['Regular', 'Fitted', 'Relaxed', 'Plus size']),
     attr('length', 'Length', ['Mini', 'Knee', 'Midi', 'Maxi']),
     attr('care', 'Care', [], { required: false, help: 'e.g. Cold wash, line dry' })
-  ], themes: [{ name: 'Size × Color', dimensions: [{ name: 'Size', options: ['XS', 'S', 'M', 'L', 'XL', '2XL'] }, { name: 'Color', options: COLORS }] }, { name: 'Size', dimensions: [{ name: 'Size', options: ['XS', 'S', 'M', 'L', 'XL', '2XL'] }] }] },
+  ], themes: [{ name: 'Size × Color', dimensions: [{ name: 'Size', options: ['XS', 'S', 'M', 'L', 'XL', '2XL'], allowCustomValues: true }, { name: 'Color', options: COLORS, allowCustomValues: true }] }, { name: 'Size', dimensions: [{ name: 'Size', options: ['XS', 'S', 'M', 'L', 'XL', '2XL'], allowCustomValues: true }] }] },
+  menwear: { code: 'menwear', label: 'men’s kaftans & shirts', identifierRule: 'gtin', traits: sized(true, [
+    ['chest', 'Chest', 'Around the fullest part of the chest'],
+    ['waist', 'Waist', 'Around the natural waist'],
+    ['sleeve_length', 'Sleeve length', 'From the shoulder seam to the wrist']
+  ]), attributes: [
+    brandAttr('Brand or label', true, ['UNBRANDED', 'HANDMADE'], 'The label on the garment. Choose “No brand” or “Handmade” if it has none.'),
+    attr('material', 'Material', ['Cotton', 'Linen', 'Cotton wax print', 'Silk', 'Polyester blend']),
+    attr('fit', 'Fit', ['Regular', 'Slim', 'Relaxed'])
+  ], themes: [{ name: 'Size × Color', dimensions: [{ name: 'Size', options: ['S', 'M', 'L', 'XL', '2XL', '3XL'], allowCustomValues: true }, { name: 'Color', options: COLORS, allowCustomValues: true }] }] },
+  shoes: { code: 'shoes', label: 'sandals & shoes', identifierRule: 'gtin', traits: sized(true, [['foot_length', 'Foot length', 'Heel to the longest toe, standing']]), attributes: [
+    brandAttr('Brand or label', true, ['UNBRANDED', 'HANDMADE'], 'The label on the shoe. Choose “No brand” or “Handmade” if it has none.'),
+    attr('material', 'Material', ['Leather', 'Canvas', 'Rubber', 'Synthetic'])
+  ], themes: [{ name: 'Size', dimensions: [{ name: 'Size', options: ['EU 36', 'EU 37', 'EU 38', 'EU 39', 'EU 40', 'EU 41', 'EU 42'], allowCustomValues: true }] }] },
   beauty: { code: 'beauty', label: 'beauty & personal care', identifierRule: 'gtin', traits: { ...NO_TRAITS, regulated: true }, attributes: [
     brandAttr('Brand', true, [], 'The brand printed on the product. Regulated products must show their brand or responsible business.'),
     attr('inci', 'Ingredients (INCI)', [], { multiline: true, kind: 'MULTILINE' }),
@@ -447,6 +485,11 @@ export const PRODUCT_TYPES: Record<string, ProductTypeSchema> = {
     attr('details', 'Key details shoppers need', [], { multiline: true, kind: 'MULTILINE' })
   ], themes: [{ name: 'Option', dimensions: [{ name: 'Option', options: ['Standard', 'Small', 'Medium', 'Large'] }] }, { name: 'Size × Color', dimensions: [{ name: 'Size', options: ['S', 'M', 'L', 'XL'] }, { name: 'Color', options: ['Black', 'White', 'Gold', 'Multicolour'] }] }] }
 };
+
+/** The mock product types as the BFF serves them (defaults filled: custom values off, no sizing). */
+export const PRODUCT_TYPES: Record<string, ProductTypeSchema> = Object.fromEntries(
+  Object.entries(PRODUCT_TYPE_SOURCES).map(([code, source]) => [code, ProductTypeSchemaSchema.parse(source)])
+);
 
 /** One offer per listing variant (offers-service creates the seller's offers from catalog.product.created). */
 function seedOffers(listings: MockSellerDb['listings']): SellerOffer[] {
@@ -484,6 +527,7 @@ function freshDb(now: Date): MockSellerDb {
     labels: {},
     exports: [],
     productDetails: {},
+    sizeCharts: seedSizeCharts(SELLER_ORG, now),
     drafts: [],
     imports: [],
     listings: seedListings(now),

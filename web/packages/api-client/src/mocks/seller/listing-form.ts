@@ -52,6 +52,8 @@ function guessLeaf(title: string): Leaf {
   const leaves = categoryLeaves();
   const pick = (id: string) => leaves.find((l) => l.id === id) ?? (leaves[0] as Leaf);
   if (/dress|stole|scarf/i.test(title)) return pick('pt-dresses');
+  if (/kaftan|shirt/i.test(title)) return pick('pt-mens-tops');
+  if (/sandal|shoe/i.test(title)) return pick('pt-shoes');
   if (/butter|soap/i.test(title)) return pick('pt-butters');
   if (/frozen|leaves/i.test(title)) return pick('pt-frozen');
   if (/seeds|crayfish|leaf|beans/i.test(title)) return pick('pt-spices');
@@ -98,7 +100,7 @@ export function productDetail(db: MockSellerDb, l: MockListing): SellerProductDe
     })),
     preorderEligible: type?.traits.preorder ?? false,
     listing: { description: null, condition: 'NEW', keywords: [], fulfilment: l.fulfilment === 'AFROTRANSACT' ? 'AFROTRANSACT' : 'SELLER',
-      packaging: l.fulfilment === 'AFROTRANSACT' ? { lengthIn: 8, widthIn: 6, heightIn: 3, weightLb: 1.2 } : null, handlingDays: 2, shipFromId: null },
+      packaging: l.fulfilment === 'AFROTRANSACT' ? { lengthIn: 8, widthIn: 6, heightIn: 3, weightLb: 1.2 } : null, handlingDays: 2, shipFromId: null, sizeChartId: null, fitNote: null },
     currency: 'USD',
     version: 1,
     updatedAt: l.updatedAt
@@ -140,7 +142,9 @@ export function detailOf(productId: string, d: ProductDraft, row: ListingRow, ve
       fulfilment: d.listing?.fulfilment ?? 'SELLER',
       packaging: d.listing?.packaging ?? null,
       handlingDays: d.listing?.handlingDays ?? 2,
-      shipFromId: d.listing?.shipFromId ?? null
+      shipFromId: d.listing?.shipFromId ?? null,
+      sizeChartId: d.listing?.sizeChartId ?? null,
+      fitNote: d.listing?.fitNote ?? null
     },
     currency: 'USD',
     version,
