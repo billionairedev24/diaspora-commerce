@@ -24,7 +24,7 @@ import (
 const WebOrigin = "http://localhost:3000"
 
 // SellerCenterOrigin is the Seller Center origin the test BFF allows.
-const SellerCenterOrigin = "http://localhost:3001"
+const SellerCenterOrigin = "http://localhost:3010"
 
 // StaffConsoleOrigin is the staff console origin the test BFF allows.
 const StaffConsoleOrigin = "http://localhost:3002"

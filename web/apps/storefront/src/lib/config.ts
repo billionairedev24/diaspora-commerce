@@ -21,7 +21,7 @@ export function bffOrigin(): string {
 /** Seller Center & Provider Hub origin (Sell on AfroTransact / Offer your services): the shared SELLER_CENTER_URL of the
     environment (NEXT_PUBLIC_SELLER_CENTER_URL is still read), resolved per request on the server. */
 export function sellerCenterUrl(): string {
-  return (env('SELLER_CENTER_URL') ?? env('NEXT_PUBLIC_SELLER_CENTER_URL') ?? 'http://localhost:3001').replace(/\/+$/, '');
+  return (env('SELLER_CENTER_URL') ?? env('NEXT_PUBLIC_SELLER_CENTER_URL') ?? 'http://localhost:3010').replace(/\/+$/, '');
 }
 
 /** Staff console origin (account menu link for staff): the shared STAFF_CONSOLE_URL of the environment, resolved per

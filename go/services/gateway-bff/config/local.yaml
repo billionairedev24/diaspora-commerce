@@ -10,7 +10,7 @@ market: us
 # WEB_PUBLIC_ORIGIN, OIDC_ISSUER and OIDC_REDIRECT_URI override the derived values.
 platform:
   publicWebUrl: http://localhost:3000
-  sellerCenterUrl: http://localhost:3001
+  sellerCenterUrl: http://localhost:3010
   staffConsoleUrl: http://localhost:3002
   authIssuerUrl: http://localhost:8100
 web:

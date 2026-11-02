@@ -48,7 +48,7 @@ func TestEveryEnvironmentLoads(t *testing.T) {
 // Each environment's YAML derives the web origins, storefront origin, issuer and callback from its own hosts.
 func TestPlatformURLsPerEnvironment(t *testing.T) {
 	cases := map[string]struct{ web, seller, staff, issuer, redirect string }{
-		"local": {"http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:8100",
+		"local": {"http://localhost:3000", "http://localhost:3010", "http://localhost:3002", "http://localhost:8100",
 			"http://localhost:3000/api/bff/v1/auth/oidc/callback"},
 		"dev": {"https://www.dev.afrotransact.com", "https://seller.dev.afrotransact.com", "https://admin.dev.afrotransact.com",
 			"https://auth.dev.afrotransact.com", "https://www.dev.afrotransact.com/api/bff/v1/auth/oidc/callback"},

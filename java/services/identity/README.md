@@ -620,7 +620,7 @@ Module access matrix: 27 platform modules × 15 platform roles, 10 Seller Center
 | `IDENTITY_STAFF_EMAIL_DOMAINS` | comma-separated email domains reserved for staff (default `afrotransact.com`) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (+ `APPLE_*`, `FACEBOOK_*`) | social sign-in; unset → provider not registered |
 | `GATEWAY_BFF_CLIENT_SECRET` (or `BFF_CLIENT_SECRET`), `SELLER_SERVICE_CLIENT_SECRET`, `NOTIFICATIONS_CLIENT_SECRET`, `TRUSTOPS_CLIENT_SECRET`, `TAX_RETURNS_CLIENT_SECRET`, … | confidential client secrets (hashed with BCrypt before storage) |
-| `INVITATION_ACCEPT_URL` | Seller Center invitation page (default `${SELLER_CENTER_URL}/invitations/accept`; locally `http://localhost:3001/invitations/accept`) |
+| `INVITATION_ACCEPT_URL` | Seller Center invitation page (default `${SELLER_CENTER_URL}/invitations/accept`; locally `http://localhost:3010/invitations/accept`) |
 | `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_PHONE` | first super administrator (skipped when unset) |
 
 Other settings (`at.identity.*`): `staff-email-domains`, `verification.sender` (`outbox` | `log`), `mfa.*`,

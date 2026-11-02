@@ -78,8 +78,8 @@ ALL_SERVICES="identity catalog offers inventory orders payments seller retail fu
 
 # Web apps (Next.js dev servers) against the local BFF, no mocks. WEB=0 skips them.
 WEB_APPS="storefront seller-center staff-console"
-# Their ports: 3000 / 3001 / 3002, or STOREFRONT_PORT / SELLER_CENTER_PORT / STAFF_CONSOLE_PORT. When a port is taken
-# by something else (your Grafana, another dev server), `up` picks the next free one from 3010 and passes the apps'
+# Their ports: 3000 / 3010 / 3002, or STOREFRONT_PORT / SELLER_CENTER_PORT / STAFF_CONSOLE_PORT. When a port is taken
+# by something else (your Grafana, another dev server), `up` picks the next free one from 3020 and passes the apps'
 # addresses to identity (sign-in return URLs), gateway-bff and notifications. The choice is kept in .local/web-ports.
 WEB_PORTS_FILE="$STATE/web-ports"
 
@@ -159,7 +159,7 @@ web_port_var() {
 }
 
 web_default_port() {
-  case "$1" in storefront) echo 3000 ;; seller-center) echo 3001 ;; staff-console) echo 3002 ;; esac
+  case "$1" in storefront) echo 3000 ;; seller-center) echo 3010 ;; staff-console) echo 3002 ;; esac
 }
 
 # The port an app uses: your *_PORT variable, else the one chosen earlier (.local/web-ports), else the default.
@@ -209,7 +209,7 @@ port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 resolve_web_ports() {
   local app var port taken="" before="" after="" svc
   if [[ -f "$WEB_PORTS_FILE" ]]; then before=$(grep -vE '^(DOCS|STORYBOOK)_PORT=' "$WEB_PORTS_FILE" || true)
-  else before=$(printf 'STOREFRONT_PORT=3000\nSELLER_CENTER_PORT=3001\nSTAFF_CONSOLE_PORT=3002'); fi
+  else before=$(printf 'STOREFRONT_PORT=3000\nSELLER_CENTER_PORT=3010\nSTAFF_CONSOLE_PORT=3002'); fi
   for app in $WEB_APPS; do
     var=$(web_port_var "$app")
     if [[ -n "${!var:-}" ]]; then port=${!var}
@@ -219,7 +219,7 @@ resolve_web_ports() {
       if running "web-$app"; then port=$(web_port_of "$app")
       elif port_open "$port"; then
         local want=$port
-        port=3010
+        port=3020
         while port_open "$port" || [[ " $taken " == *" $port "* ]]; do port=$((port + 1)); done
         echo "  ! localhost:$want is in use by another program: $app runs on localhost:$port instead" \
           "(set $var to choose)"
@@ -1022,7 +1022,7 @@ qr() {
 
 # Ports the phone reaches over USB with `adb reverse` (localhost mode on an Android device or emulator): Metro, the
 # web apps, identity, gateway-bff, bookings, fulfilment, media and MinIO.
-ADB_PORTS="8081 8082 3000 3001 3002 8100 8200 8109 8108 8207 9000"
+ADB_PORTS="8081 8082 3000 3010 3002 8100 8200 8109 8108 8207 9000"
 
 cmd_adb_reverse() {
   local p
@@ -1227,6 +1227,10 @@ cmd_down() {
   fi
   # Leftovers this script no longer tracks (older runs): stop any of this repository's services still on their ports.
   for svc in $ALL_SERVICES; do free_port_for "$svc" >/dev/null 2>&1 || true; done
+  # An emulator that was killed rather than shut down leaves its crash handler behind, reparented to init. It then
+  # polls a crash database under /tmp that the system cleaner has since deleted, and logs the failure to whatever
+  # terminal it inherited — forever. Nothing owns it any more, so down takes it with the rest.
+  pkill -f 'Android/sdk/emulator/crashpad_handler' 2>/dev/null || true
   echo "==> stopping infrastructure (data kept; 'make reset' deletes it). Your own Postgres/Valkey keep running."
   # shellcheck disable=SC2086
   compose stop postgres valkey $INFRA_BASE $OBS_BASE postgres-exporter redis-exporter >/dev/null 2>&1 || true

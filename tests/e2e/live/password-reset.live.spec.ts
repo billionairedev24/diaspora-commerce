@@ -11,7 +11,7 @@ import { type Browser, expect, type Page, test } from '@playwright/test';
  */
 
 const IDENTITY = process.env.LIVE_IDENTITY_URL ?? 'http://localhost:8100';
-const SELLER = process.env.LIVE_SELLER_URL ?? 'http://localhost:3001';
+const SELLER = process.env.LIVE_SELLER_URL ?? 'http://localhost:3010';
 const STAFF = process.env.LIVE_STAFF_URL ?? 'http://localhost:3002';
 const MAILPIT = process.env.LIVE_MAILPIT_URL ?? 'http://localhost:8025';
 const IDENTITY_LOG = process.env.LIVE_IDENTITY_LOG ?? path.resolve(import.meta.dirname, '../../../.local/logs/identity.log');
