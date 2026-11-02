@@ -16,7 +16,7 @@ const col = (key: string, label: string, kind: 'text' | 'strong' | 'mono' | 'num
 const field = (key: string, label: string, type: FormField['type'], required: boolean, extra: Partial<FormField> = {}): FormField => ({ key, label, type, required, ...extra });
 const reasonField = (): FormField =>
   field('reason', 'Reason (10 to 500 characters, kept in the access log)', 'textarea', true, { maxLength: 500, pattern: REASON_PATTERN, help: REASON_HELP });
-const form = (title: string, submitLabel: string, fields: FormField[], intro?: string): StaffForm => ({ title, submitLabel, fields, ...(intro ? { intro } : {}) });
+const form = (title: string, submitLabel: string, fields: FormField[], intro?: string, changeKeys?: string[]): StaffForm => ({ title, submitLabel, fields, ...(intro ? { intro } : {}), ...(changeKeys ? { changeKeys } : {}) });
 const str = (v: FieldValue | Scalar | undefined): string => (v === null || v === undefined ? '' : String(v));
 const num = (v: FieldValue | Scalar | undefined): number => (typeof v === 'number' ? v : Number(v ?? 0));
 const lines = (v: FieldValue | undefined): string[] =>
@@ -57,7 +57,7 @@ const GRANTS = [
 
 /* ── seeds ── */
 
-export function seedIdentityAdmin(now: Date): Record<'oauth-clients' | 'identity-sessions' | 'signing-keys' | 'auth-settings', MockRecord[]> {
+export function seedIdentityAdmin(now: Date): Record<'oauth-clients' | 'identity-sessions' | 'signing-keys' | 'auth-settings' | 'session-policy', MockRecord[]> {
   const ago = (ms: number) => new Date(now.getTime() - ms).toISOString();
   const client = (
     clientId: string,
@@ -156,7 +156,12 @@ export function seedIdentityAdmin(now: Date): Record<'oauth-clients' | 'identity
     },
     activity: []
   };
-  return { 'oauth-clients': clients, 'identity-sessions': sessions, 'signing-keys': keys, 'auth-settings': [settings] };
+  const policies: MockRecord[] = SESSION_AUDIENCES.map((a) => ({
+    id: a.key,
+    fields: { name: a.label, idleTimeoutMinutes: a.idle, absoluteTimeoutMinutes: a.absolute, warnSeconds: a.warn },
+    activity: []
+  }));
+  return { 'oauth-clients': clients, 'identity-sessions': sessions, 'signing-keys': keys, 'auth-settings': [settings], 'session-policy': policies };
 }
 
 /* ── oauth-clients ── */
@@ -462,7 +467,68 @@ const settingsDef: MockResource = {
   }
 };
 
-export const IDENTITY_RESOURCES = { 'oauth-clients': clientDef, 'identity-sessions': sessionDef, 'signing-keys': keyDef, 'auth-settings': settingsDef } as const;
+/* ── session-policy: when each audience is signed out (mirrors staff_resources_session_policy.go and identity's SessionPolicyRules) ── */
+
+const SESSION_DAY = 24 * 60;
+/** Identity's built-in defaults per audience, in the order the table lists them. */
+const SESSION_AUDIENCES = [
+  { key: 'customer-web', label: 'Customers on the web', idle: 30 * SESSION_DAY, absolute: 90 * SESSION_DAY, warn: 0 },
+  { key: 'customer-app', label: 'Customer mobile app', idle: 30 * SESSION_DAY, absolute: 90 * SESSION_DAY, warn: 0 },
+  { key: 'seller', label: 'Seller Center (sellers and providers)', idle: 30, absolute: 12 * 60, warn: 60 },
+  { key: 'staff', label: 'Staff console', idle: 15, absolute: 8 * 60, warn: 60 },
+  { key: 'driver', label: 'Driver app', idle: 14 * 60, absolute: 14 * 60, warn: 0 }
+] as const;
+
+const POLICY_FIELDS: { key: string; label: string; help: string; min: number; max: number }[] = [
+  { key: 'idleTimeoutMinutes', label: 'Sign out after this many minutes without activity', help: '1 minute to 180 days (259200 minutes). Reading a page and background refreshes do not count as activity.', min: 1, max: 180 * SESSION_DAY },
+  { key: 'absoluteTimeoutMinutes', label: 'Sign out this many minutes after signing in, however active', help: '5 minutes to 365 days (525600 minutes). Not shorter than the idle time.', min: 5, max: 365 * SESSION_DAY },
+  { key: 'warnSeconds', label: 'Warn this many seconds before signing out', help: '0 to 300. 0 means no warning. Must be shorter than the idle time.', min: 0, max: 300 }
+];
+
+const sessionPolicyDef: MockResource = {
+  title: 'Sign-out',
+  columns: [
+    col('name', 'Who', 'strong', 30),
+    col('idleTimeoutMinutes', 'Idle timeout (min)', 'number', 18),
+    col('absoluteTimeoutMinutes', 'Session length (min)', 'number', 20),
+    col('warnSeconds', 'Warning (s)', 'number', 14)
+  ],
+  facets: [],
+  exportable: false,
+  titleOf: (r) => str(r.fields.name),
+  subtitleOf: () => 'When people are signed out for inactivity and for session length',
+  sections: [['In force', POLICY_FIELDS.map((f) => f.key)]],
+  actions: [],
+  edit: {
+    permission: IDENTITY_ADMIN,
+    form: (r) =>
+      form(
+        `Change when ${str(r.fields.name)} are signed out`,
+        'Save',
+        [
+          ...POLICY_FIELDS.map((f) => field(f.key, f.label, 'number', true, { min: f.min, max: f.max, help: f.help, value: num(r.fields[f.key]) })),
+          reasonField(),
+          stepUpField()
+        ],
+        'A value equal to the standard setting is stored as "use the standard setting". The change is recorded with your reason and what it was before.',
+        POLICY_FIELDS.map((f) => f.key)
+      ),
+    validate: (_r, v) => {
+      const idle = num(v.idleTimeoutMinutes);
+      const errors: Record<string, string> = {};
+      if (idle > num(v.absoluteTimeoutMinutes)) errors.idleTimeoutMinutes = 'The idle timeout cannot be longer than the session length';
+      else if (num(v.warnSeconds) > 0 && num(v.warnSeconds) >= idle * 60) errors.warnSeconds = 'The warning must come before the idle timeout; use 0 for no warning';
+      return errors;
+    },
+    apply: (r, v) => {
+      POLICY_FIELDS.forEach((f) => {
+        r.fields[f.key] = num(v[f.key]);
+      });
+    }
+  }
+};
+
+export const IDENTITY_RESOURCES = { 'oauth-clients': clientDef, 'identity-sessions': sessionDef, 'signing-keys': keyDef, 'auth-settings': settingsDef, 'session-policy': sessionPolicyDef } as const;
 
 /* ── token inspector and documents ── */
 

@@ -132,7 +132,8 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
     { resource: 'oauth-clients', label: 'OAuth clients' },
     { resource: 'identity-sessions', label: 'Sessions & tokens' },
     { resource: 'signing-keys', label: 'Signing keys' },
-    { resource: 'auth-settings', label: 'Settings' }
+    { resource: 'auth-settings', label: 'Settings' },
+    { resource: 'session-policy', label: 'Sign-out' }
   ]
 };
 

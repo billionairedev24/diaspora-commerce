@@ -284,7 +284,7 @@ var ResourceKeys = []string{"users", "roles", "applications", "organisations", "
 	"inventory", "purchase-orders", "routes", "support-cases", "audit", "markets", "site-settings", "legal-documents", "help-articles", "careers-jobs", "cookie-definitions", "privacy-requests", "announcements",
 	"placements", "identity-providers", "fee-schedules", "tax-rates", "tax-codes", "tax-rules", "tax-review", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events", "pickup-locations", "coupons",
 	"reconciliation", "reconciliation-runs", "ledger-adjustments", "recoveries", "credit-adjustments", "gift-cards", "credit-liabilities", "money-settings", "membership-tiers", "memberships", "membership-settings", "membership-report", "referrals", "referral-settings", "stripe-lookup", "payment-settings", "tax-settings", "maintenance", "tax-filings", "tax-nexus",
-	"oauth-clients", "identity-sessions", "signing-keys", "auth-settings", "exchange-rates"}
+	"oauth-clients", "identity-sessions", "signing-keys", "auth-settings", "session-policy", "exchange-rates"}
 
 // Column is one table column; Width is its share of the table in percent.
 type Column struct {

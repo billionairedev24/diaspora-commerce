@@ -873,6 +873,7 @@
   "st.identity.tab.keys": "مفاتيح التوقيع",
   "st.identity.tab.inspector": "فاحص الرموز",
   "st.identity.tab.settings": "الإعدادات",
+  "st.identity.tab.signOut": "تسجيل الخروج",
   "st.identity.inspector.title": "فاحص الرموز",
   "st.identity.inspector.intro": "الصق رمز JWT لعرض رأسه ومطالباته ونطاقاته وانتهاء صلاحيته، ومعرفة ما إذا كان توقيعه وجهة إصداره صحيحين. يُفحص الرمز في الذاكرة فقط ولا يُخزَّن ولا يُسجَّل أبدًا.",
   "st.identity.inspector.token": "الرمز (JWT)",

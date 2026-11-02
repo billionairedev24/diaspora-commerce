@@ -391,6 +391,11 @@ type Me struct {
 	Authenticated bool      `json:"authenticated"`
 	User          *MeUser   `json:"user"`
 	Counts        *MeCounts `json:"counts"`
+	// Session is the sign-out policy in force for this session (GET /v1/session/policy); absent for guests.
+	Session *SessionPolicyView `json:"session,omitempty"`
+	// SignedOutReason is SESSION_IDLE_TIMEOUT or SESSION_ABSOLUTE_TIMEOUT for ten minutes after the session ended by
+	// policy; absent otherwise.
+	SignedOutReason string `json:"signedOutReason,omitempty"`
 }
 
 // Address is a saved delivery address.

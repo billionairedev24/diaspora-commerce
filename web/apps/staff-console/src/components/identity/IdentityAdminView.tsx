@@ -12,7 +12,7 @@ import { TokenInspector } from './TokenInspector';
 /**
  * Developer tools › Identity & access (S291), for staff with identity:admin: the OAuth clients registered at identity (create,
  * edit, disable, rotate a secret), every active sign-in with revoke, the JWKS signing keys and their rotation, the token
- * inspector and the sign-in settings. Every change asks for a reason and lands in identity's access log. The tables are
+ * inspector, the sign-in settings and the sign-out policy per audience. Every change asks for a reason and lands in identity's access log. The tables are
  * the shared server-driven DataTable; only the inspector is its own screen.
  */
 export function IdentityAdminView() {
@@ -33,7 +33,8 @@ export function IdentityAdminView() {
           { value: 'identity-sessions', label: t('st.identity.tab.sessions'), content: <ResourceTable resource="identity-sessions" urlPrefix="identity-sessions" /> },
           { value: 'signing-keys', label: t('st.identity.tab.keys'), content: <ResourceTable resource="signing-keys" urlPrefix="signing-keys" /> },
           { value: 'inspector', label: t('st.identity.tab.inspector'), content: <TokenInspector /> },
-          { value: 'auth-settings', label: t('st.identity.tab.settings'), content: <ResourceTable resource="auth-settings" urlPrefix="auth-settings" /> }
+          { value: 'auth-settings', label: t('st.identity.tab.settings'), content: <ResourceTable resource="auth-settings" urlPrefix="auth-settings" /> },
+          { value: 'session-policy', label: t('st.identity.tab.signOut'), content: <ResourceTable resource="session-policy" urlPrefix="session-policy" /> }
         ]}
       />
     </ModulePage>

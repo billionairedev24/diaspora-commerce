@@ -866,6 +866,7 @@
   "st.identity.tab.keys": "Signing keys",
   "st.identity.tab.inspector": "Token inspector",
   "st.identity.tab.settings": "Settings",
+  "st.identity.tab.signOut": "Sign-out",
   "st.identity.inspector.title": "Token inspector",
   "st.identity.inspector.intro": "Paste a JWT to see its header, claims, scopes and expiry, and whether its signature and issuer check out. The token is checked in memory: it is never stored or logged.",
   "st.identity.inspector.token": "Token (JWT)",

@@ -873,6 +873,7 @@
   "st.identity.tab.keys": "Àwọn kọ́kọ́rọ́ ìfọwọ́sí",
   "st.identity.tab.inspector": "Olùyẹ̀wò àmì",
   "st.identity.tab.settings": "Ètò",
+  "st.identity.tab.signOut": "Jáde",
   "st.identity.inspector.title": "Olùyẹ̀wò àmì",
   "st.identity.inspector.intro": "Lẹ̀ JWT mọ́ ibí láti rí àkọlé rẹ̀, àwọn ìbéèrè, àwọn ààlà àti ìgbà tí yóò parí, àti bóyá ìfọwọ́sí àti olùtẹ̀jáde rẹ̀ tọ́. A máa yẹ àmì náà wò nínú ìrántí nìkan: a kì í tọ́jú tàbí kọ ọ́ sílẹ̀ rárá.",
   "st.identity.inspector.token": "Àmì (JWT)",

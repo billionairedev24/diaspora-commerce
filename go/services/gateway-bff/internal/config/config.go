@@ -104,6 +104,9 @@ type Config struct {
 		CookieName   string        `yaml:"cookieName"`
 		CookieSecure bool          `yaml:"cookieSecure" env:"SESSION_COOKIE_SECURE"`
 		CookieDomain string        `yaml:"cookieDomain" env:"SESSION_COOKIE_DOMAIN"`
+		// IdleTTL is the Valkey time-to-live of a session (refreshed on every write) and the cookie's Max-Age. It is
+		// only the upper bound: the per-audience sign-out policy (edited by staff at identity) ends sessions earlier,
+		// so it may not be shorter than the longest default session length (MinSessionTTL).
 		IdleTTL      time.Duration `yaml:"idleTtl"`
 		// SigningKey signs the cookie value and derives the key that encrypts tokens at rest (secret).
 		SigningKey string `env:"SESSION_SIGNING_KEY"`
@@ -272,6 +275,10 @@ func (c *Config) MediaRewrite() (string, string) {
 	return LocalMediaURL, to + "/"
 }
 
+// MinSessionTTL is the shortest session.idleTtl: the longest default session length (customers, 90 days). A shorter
+// store TTL would end those sessions before the policy does.
+const MinSessionTTL = 90 * 24 * time.Hour
+
 // Validate checks the settings the BFF cannot run without.
 func (c *Config) Validate(env string) error {
 	if env != "local" {
@@ -303,6 +310,9 @@ func (c *Config) Validate(env string) error {
 	}
 	if c.RateLimit.MaxBodyBytes <= 0 {
 		c.RateLimit.MaxBodyBytes = 64 << 10
+	}
+	if c.Session.IdleTTL < MinSessionTTL {
+		return fmt.Errorf("config: session.idleTtl (%s) must be at least %s, the longest session length of any audience", c.Session.IdleTTL, MinSessionTTL)
 	}
 	for name, u := range c.Upstreams.Named() {
 		if u.URL == "" {

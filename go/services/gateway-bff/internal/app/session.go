@@ -22,6 +22,12 @@ type ResolveInput struct {
 	AppGuestCartID string
 	ClientIP       string
 	Language       string
+	// Origin and Path are the request's Origin header and URL path: the audience of a session stored before the
+	// sign-out policy existed is worked out from the Origin, and sign-in routes (/v1/auth/) are never answered 401.
+	Origin string
+	Path   string
+	// Activity says whether the request counts as real user activity (see ActivityKind).
+	Activity ActivityKind
 }
 
 // SessionService resolves the caller (cookie session or app bearer), refreshes tokens before they expire and
@@ -38,6 +44,9 @@ type SessionService interface {
 	Cookie(c *domain.Caller) string
 	// IdleTTL is how long an untouched session lives (cookie Max-Age).
 	IdleTTL() time.Duration
+	// Policy is the sign-out policy in force for the caller (GET /v1/session/policy and the `session` member of
+	// GET /v1/me). appHint (X-App: customer or driver) names the app of a bearer caller; web sessions know theirs.
+	Policy(ctx context.Context, c *domain.Caller, appHint string) (domain.SessionPolicyView, error)
 	// RefreshNow rotates the web session's tokens now, whatever their expiry, because their claims are stale (identity
 	// just added the person to an approved organisation). The caller's bearer token becomes the new access token.
 	// False when there is nothing to refresh (an app bearer, a guest, no refresh token) or identity refused.
@@ -52,6 +61,10 @@ type SessionOptions struct {
 	VerifyBearer bool
 	Clock        Clock
 	Log          *slog.Logger
+	// Policies serves the sign-out policy per audience; nil applies the built-in defaults.
+	Policies SessionPolicies
+	// AppOrigins maps each web app key (storefront, seller-center, staff-console) to its origin.
+	AppOrigins map[string]string
 }
 
 type sessionServiceImpl struct {
@@ -66,13 +79,16 @@ var _ SessionService = (*sessionServiceImpl)(nil)
 // NewSessionService returns the SessionService.
 func NewSessionService(store port.SessionStore, identity port.IdentityClient, verifier port.TokenVerifier, o SessionOptions) SessionService {
 	if o.IdleTTL <= 0 {
-		o.IdleTTL = 30 * 24 * time.Hour
+		o.IdleTTL = 92 * 24 * time.Hour
 	}
 	if o.RefreshSkew <= 0 {
 		o.RefreshSkew = 30 * time.Second
 	}
 	if o.Log == nil {
 		o.Log = slog.Default()
+	}
+	if o.Policies == nil {
+		o.Policies = NewSessionPolicies(nil, SessionPoliciesOptions{Clock: o.Clock, Log: o.Log})
 	}
 	return &sessionServiceImpl{store: store, identity: identity, verifier: verifier, o: o}
 }
@@ -129,7 +145,13 @@ func (s *sessionServiceImpl) Resolve(ctx context.Context, in ResolveInput) (*dom
 	}
 	c.Session = sess
 	if sess.Tokens.Valid() {
-		s.refreshIfNeeded(ctx, c)
+		// The sign-out policy first: an expired session is ended, never refreshed.
+		if err := s.enforce(ctx, c, in); err != nil {
+			return nil, err
+		}
+		if c.Session.Tokens.Valid() {
+			s.refreshIfNeeded(ctx, c)
+		}
 	}
 	if c.Session.Authenticated() {
 		c.BearerToken = c.Session.Tokens.AccessToken

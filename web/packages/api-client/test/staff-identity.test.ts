@@ -43,7 +43,7 @@ describe('Identity & access mocks (every answer is parsed by the Zod client)', (
     for (const roles of ['platform.developer', 'platform.finance', 'platform.auditor', 'platform.customer_support']) {
       const session = await client(roles).getSession();
       expect(session.navGroups.flatMap((g) => g.modules.map((m) => m.key)), roles).not.toContain('identity');
-      for (const r of ['oauth-clients', 'identity-sessions', 'signing-keys', 'auth-settings'] as const) {
+      for (const r of ['oauth-clients', 'identity-sessions', 'signing-keys', 'auth-settings', 'session-policy'] as const) {
         await expect(client(roles).listResource(r, { page: 0, size: 10 })).rejects.toMatchObject({ status: 403 });
       }
       await expect(client(roles).inspectIdentityToken('a.b.c')).rejects.toMatchObject({ status: 403 });
@@ -166,6 +166,30 @@ describe('Identity & access mocks (every answer is parsed by the Zod client)', (
     await expect(api.updateRecord('auth-settings', 'settings', { ...values, passwordMinLength: 4, reason: WHY, ...SURE }, null)).rejects.toMatchObject({ status: 422 });
     const saved = await api.updateRecord('auth-settings', 'settings', { ...values, passwordMinLength: 16, mfaRequiredSeller: true, reason: WHY, ...SURE }, null);
     expect(saved.sections[0]?.fields.find((f) => f.label === 'Password min length')?.value).toBe('16');
+  });
+
+  it('lists the sign-out policy by audience name, with the form limits and the cross-field rules', async () => {
+    const api = client();
+    const page = await api.listResource('session-policy', { page: 0, size: 10 });
+    expect(page.rows.map((r) => r.cells.name)).toEqual(['Customers on the web', 'Customer mobile app', 'Seller Center (sellers and providers)', 'Staff console', 'Driver app']);
+    expect(page.rows.find((r) => r.id === 'staff')?.cells).toMatchObject({ idleTimeoutMinutes: 15, absoluteTimeoutMinutes: 480, warnSeconds: 60 });
+
+    const sheet = await api.getRecord('session-policy', 'staff');
+    expect(sheet.editForm?.changeKeys).toEqual(['idleTimeoutMinutes', 'absoluteTimeoutMinutes', 'warnSeconds']);
+    expect(sheet.editForm?.fields.map((f) => f.key)).toEqual(['idleTimeoutMinutes', 'absoluteTimeoutMinutes', 'warnSeconds', 'reason', 'stepUpPassword']);
+    const values = { idleTimeoutMinutes: 15, absoluteTimeoutMinutes: 480, warnSeconds: 60, reason: WHY, ...SURE };
+
+    await expect(api.updateRecord('session-policy', 'staff', { ...values, idleTimeoutMinutes: 0 }, null)).rejects.toSatisfy((e) => isApiError(e) && 'idleTimeoutMinutes' in e.fieldErrors);
+    await expect(api.updateRecord('session-policy', 'staff', { ...values, warnSeconds: 301 }, null)).rejects.toSatisfy((e) => isApiError(e) && 'warnSeconds' in e.fieldErrors);
+    await expect(api.updateRecord('session-policy', 'staff', { ...values, idleTimeoutMinutes: 600 }, null)).rejects.toSatisfy(
+      (e) => isApiError(e) && e.fieldErrors.idleTimeoutMinutes === 'The idle timeout cannot be longer than the session length'
+    );
+    await expect(api.updateRecord('session-policy', 'staff', { ...values, idleTimeoutMinutes: 1 }, null)).rejects.toSatisfy((e) => isApiError(e) && 'warnSeconds' in e.fieldErrors);
+    await expect(api.updateRecord('session-policy', 'staff', { ...values, stepUpPassword: 'not-it' }, null)).rejects.toSatisfy((e) => isApiError(e) && 'stepUpPassword' in e.fieldErrors);
+
+    const saved = await api.updateRecord('session-policy', 'staff', { ...values, idleTimeoutMinutes: 10 }, null);
+    expect(saved.sections[0]?.fields.find((f) => f.label === 'Idle timeout minutes')?.value).toBe('10');
+    expect((await api.listResource('session-policy', { page: 0, size: 10 })).rows.find((r) => r.id === 'staff')?.cells.idleTimeoutMinutes).toBe(10);
   });
 
   it('inspects a token without echoing it, and reports what is wrong with a bad one', async () => {

@@ -144,8 +144,12 @@ func run() error {
 		go app.NewCarrierRuleSync(upstreams.NewPublicDeliveryFees(deliveryRunsClient), setter, domain.Currency, 30*time.Second, log).Run(ctx)
 	}
 	sellers := app.SellerDirectory{RetailOrgID: cfg.Commerce.RetailOrgID, Names: cfg.Commerce.SellerNames}
+	// Sign-out policy per audience: read from identity (service token, scope sessions:policy.read), cached for 60 s,
+	// the stricter of the last value and the built-in defaults while identity cannot be read.
+	sessionPolicies := app.NewSessionPolicies(upstreams.NewSessionPolicy(identityClient, serviceTokens), app.SessionPoliciesOptions{Log: log})
 	sessions := app.NewSessionService(store, identity, verifier, app.SessionOptions{SigningKey: cfg.Session.SigningKey,
-		IdleTTL: cfg.Session.IdleTTL, VerifyBearer: cfg.OIDC.VerifyBearer, Log: log})
+		IdleTTL: cfg.Session.IdleTTL, VerifyBearer: cfg.OIDC.VerifyBearer, Log: log,
+		Policies: sessionPolicies, AppOrigins: cfg.AppOrigins()})
 	// An approval identity missed is repaired on the way (healOrg) and the session's tokens rotated.
 	sellerDeps.Sessions = sessions
 	location := app.NewLocationService(geo, content, sessions, app.LocationOptions{DefaultZIP: cfg.Commerce.DefaultZip,

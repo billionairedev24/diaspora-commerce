@@ -780,7 +780,7 @@ export const staffHandlers = [
       const current = rec.fields.version === undefined || rec.fields.version === null ? null : String(rec.fields.version);
       if (version && current && version !== current) throw conflict('Someone else changed this record. Reload and try again.');
       const editForm = def.form(rec);
-      const errors = { ...validateForm(editForm, values), ...stepUpErrors(editForm, values) };
+      const errors = { ...validateForm(editForm, values), ...stepUpErrors(editForm, values), ...(def.validate?.(rec, values) ?? {}) };
       if (Object.keys(errors).length) throw invalid(errors);
       def.apply(rec, values, ctx.action);
       if (resource !== 'exchange-rates') rec.activity.unshift({ at: ctx.now.toISOString(), actor: ctx.action.actor, text: 'Edited' });

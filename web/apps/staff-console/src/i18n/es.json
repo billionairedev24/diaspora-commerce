@@ -873,6 +873,7 @@
   "st.identity.tab.keys": "Claves de firma",
   "st.identity.tab.inspector": "Inspector de tokens",
   "st.identity.tab.settings": "Ajustes",
+  "st.identity.tab.signOut": "Cierre de sesión",
   "st.identity.inspector.title": "Inspector de tokens",
   "st.identity.inspector.intro": "Pega un JWT para ver su cabecera, sus reclamaciones, sus ámbitos y su caducidad, y si su firma y su emisor son correctos. El token se comprueba en memoria: nunca se guarda ni se registra.",
   "st.identity.inspector.token": "Token (JWT)",

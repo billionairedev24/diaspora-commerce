@@ -873,6 +873,7 @@
   "st.identity.tab.keys": "Clés de signature",
   "st.identity.tab.inspector": "Inspecteur de jetons",
   "st.identity.tab.settings": "Paramètres",
+  "st.identity.tab.signOut": "Déconnexion",
   "st.identity.inspector.title": "Inspecteur de jetons",
   "st.identity.inspector.intro": "Collez un JWT pour voir son en-tête, ses revendications, ses portées et son expiration, et si sa signature et son émetteur sont valides. Le jeton est vérifié en mémoire : il n'est jamais enregistré ni journalisé.",
   "st.identity.inspector.token": "Jeton (JWT)",

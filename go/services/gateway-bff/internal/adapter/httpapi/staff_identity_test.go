@@ -30,6 +30,8 @@ type fakeIdentityAdmin struct {
 	sessions []map[string]any
 	keys     []map[string]any
 	settings map[string]any
+	// policyOverrides are the stored sign-out overrides by audience.
+	policyOverrides map[string]map[string]any
 	// seen collects every request body, to check that tokens and secrets travel only where they must.
 	seen []string
 	// stepUps are the X-Step-Up values the dangerous calls arrived with ("" when the header was missing).
@@ -73,6 +75,31 @@ func (f *fakeIdentityAdmin) init() {
 			"retireAfter": "2026-10-01T00:07:00Z"},
 	}
 	f.settings = map[string]any{"overrides": map[string]any{}}
+	f.policyOverrides = map[string]map[string]any{}
+}
+
+var policyDefaults = map[string]map[string]any{
+	"customer-web": {"idleTimeoutMinutes": 43200, "absoluteTimeoutMinutes": 129600, "warnSeconds": 0},
+	"customer-app": {"idleTimeoutMinutes": 43200, "absoluteTimeoutMinutes": 129600, "warnSeconds": 0},
+	"seller":       {"idleTimeoutMinutes": 30, "absoluteTimeoutMinutes": 720, "warnSeconds": 60},
+	"staff":        {"idleTimeoutMinutes": 15, "absoluteTimeoutMinutes": 480, "warnSeconds": 60},
+	"driver":       {"idleTimeoutMinutes": 840, "absoluteTimeoutMinutes": 840, "warnSeconds": 0},
+}
+
+var policyLabels = map[string]string{"customer-web": "Customers on the web", "customer-app": "Customer mobile app",
+	"seller": "Seller Center (sellers and providers)", "staff": "Staff console", "driver": "Driver app"}
+
+// policyEntry is identity's SessionPolicyEntry for one audience with the stored overrides applied.
+func (f *fakeIdentityAdmin) policyEntry(audience string) map[string]any {
+	effective := map[string]any{}
+	for k, v := range policyDefaults[audience] {
+		effective[k] = v
+	}
+	overrides := map[string]any{"idleTimeoutMinutes": nil, "absoluteTimeoutMinutes": nil, "warnSeconds": nil}
+	for k, v := range f.policyOverrides[audience] {
+		overrides[k], effective[k] = v, v
+	}
+	return map[string]any{"audience": audience, "label": policyLabels[audience], "effective": effective, "overrides": overrides, "defaults": policyDefaults[audience]}
 }
 
 func defaultsOf() map[string]any {
@@ -131,7 +158,7 @@ func (f *fakeIdentityAdmin) serve(w http.ResponseWriter, r *http.Request, p stri
 		return
 	}
 	// The dangerous actions need the proof (or a sign-in from the last five minutes, which this fake never has).
-	if dangerous := strings.HasSuffix(rest, "/disable") || strings.HasSuffix(rest, "/sessions/revoke") || rest == "signing-keys/rotate" ||
+	if dangerous := strings.HasSuffix(rest, "/disable") || strings.HasPrefix(rest, "session-policy/") || strings.HasSuffix(rest, "/sessions/revoke") || rest == "signing-keys/rotate" ||
 		(rest == "settings" && r.Method == http.MethodPut); dangerous {
 		f.stepUps = append(f.stepUps, r.Header.Get("X-Step-Up"))
 		if r.Header.Get("X-Step-Up") != stepUpProof {
@@ -231,6 +258,40 @@ func (f *fakeIdentityAdmin) serve(w http.ResponseWriter, r *http.Request, p stri
 	case rest == "discovery":
 		writeJ(w, 200, map[string]any{"discovery": map[string]any{"issuer": "https://id.test", "jwks_uri": "https://id.test/oauth2/jwks"},
 			"jwks": map[string]any{"keys": []any{map[string]any{"kty": "RSA", "kid": "k1", "n": "abc", "e": "AQAB"}}}})
+	case rest == "session-policy" && r.Method == http.MethodGet:
+		out := make([]any, 0, len(policyDefaults))
+		for _, a := range []string{"customer-web", "customer-app", "seller", "staff", "driver"} {
+			out = append(out, f.policyEntry(a))
+		}
+		writeJ(w, 200, out)
+	case len(parts) == 2 && parts[0] == "session-policy" && r.Method == http.MethodPut:
+		if _, known := policyDefaults[parts[1]]; !known {
+			problemJ(w, 404, "identity.unknown-audience")
+			return
+		}
+		overrides, _ := body["overrides"].(map[string]any)
+		idle, absolute := policyDefaults[parts[1]]["idleTimeoutMinutes"], policyDefaults[parts[1]]["absoluteTimeoutMinutes"]
+		if v, ok := overrides["idleTimeoutMinutes"]; ok {
+			idle = v
+		}
+		if v, ok := overrides["absoluteTimeoutMinutes"]; ok {
+			absolute = v
+		}
+		if idle.(float64) > absolute.(float64) {
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(422)
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": 422, "code": "identity.invalid-session-policy",
+				"fieldErrors": map[string]string{"idleTimeoutMinutes": "The idle timeout cannot be longer than the session length"}})
+			return
+		}
+		stored := map[string]any{}
+		for k, v := range overrides {
+			if v != nil && fmt.Sprint(v) != fmt.Sprint(policyDefaults[parts[1]][k]) {
+				stored[k] = v
+			}
+		}
+		f.policyOverrides[parts[1]] = stored
+		writeJ(w, 200, f.policyEntry(parts[1]))
 	case rest == "settings" && r.Method == http.MethodGet:
 		writeJ(w, 200, f.settingsView())
 	case rest == "settings" && r.Method == http.MethodPut:
@@ -317,7 +378,7 @@ func TestStaffIdentityAdminConformance(t *testing.T) {
 		t.Fatalf("identity module visibility: admin=%s support=%s auditor=%s", nav("admin"), nav("support"), nav("auditor"))
 	}
 	for _, token := range []string{"support", "auditor"} {
-		for _, r := range []string{"oauth-clients", "identity-sessions", "signing-keys", "auth-settings"} {
+		for _, r := range []string{"oauth-clients", "identity-sessions", "signing-keys", "auth-settings", "session-policy"} {
 			do(token, "GET", res(r), nil, 403)
 		}
 		do(token, "POST", "/v1/staff/identity/token-inspector", map[string]any{"token": inspectedJWT}, 403)
@@ -483,6 +544,41 @@ func TestStaffIdentityAdminConformance(t *testing.T) {
 		t.Fatalf("saved settings = %v", saved["sections"])
 	}
 
+	// Sign-out policy: one row per audience with names, not ids; a change is validated by identity, needs the
+	// step-up and stores only what differs from the standard setting.
+	policy := do("admin", "GET", res("session-policy"), nil, 200)
+	rows := policy["rows"].([]any)
+	if len(rows) != 5 || rows[3].(map[string]any)["id"] != "staff" {
+		t.Fatalf("session policy rows = %v", rows)
+	}
+	if cells := rows[3].(map[string]any)["cells"].(map[string]any); cells["name"] != "Staff console" || cells["idle"] != "15 minutes" ||
+		cells["absolute"] != "8 hours" || cells["warn"] != "60 seconds" {
+		t.Fatalf("staff console row = %v", cells)
+	}
+	if cells := rows[0].(map[string]any)["cells"].(map[string]any); cells["idle"] != "30 days" || cells["absolute"] != "90 days" || cells["warn"] != "None" {
+		t.Fatalf("customer row = %v", cells)
+	}
+	row := do("admin", "GET", res("session-policy")+"/staff", nil, 200)
+	editForm, _ := row["editForm"].(map[string]any)
+	if editForm == nil || len(editForm["changeKeys"].([]any)) != 3 || !strings.Contains(asJSON(editForm["fields"]), "stepUpPassword") {
+		t.Fatalf("sign-out sheet = %v", row)
+	}
+	do("admin", "GET", res("session-policy")+"/nobody", nil, 404)
+	do("admin", "PATCH", res("session-policy")+"/staff", map[string]any{"values": map[string]any{"idleTimeoutMinutes": 600, "absoluteTimeoutMinutes": 480, "warnSeconds": 60, "reason": why}}, 422)
+	invalid := do("admin", "PATCH", res("session-policy")+"/staff", map[string]any{"values": map[string]any{"idleTimeoutMinutes": 600, "absoluteTimeoutMinutes": 480, "warnSeconds": 60, "reason": why, "stepUpPassword": staffPassword}}, 422)
+	if !strings.Contains(asJSON(invalid), "cannot be longer than the session length") {
+		t.Fatalf("identity's message must reach the field: %v", invalid)
+	}
+	changed := do("admin", "PATCH", res("session-policy")+"/staff", map[string]any{"values": map[string]any{"idleTimeoutMinutes": 10, "absoluteTimeoutMinutes": 480, "warnSeconds": 60, "reason": why, "stepUpPassword": staffPassword}}, 200)
+	if !strings.Contains(asJSON(changed["sections"]), "10 (set here; default 15)") || !strings.Contains(asJSON(changed["sections"]), "480 (default)") {
+		t.Fatalf("saved sign-out policy = %v", changed["sections"])
+	}
+	sent := f.bodies["PUT /v1/admin/identity/session-policy/staff"]["overrides"].(map[string]any)
+	if sent["idleTimeoutMinutes"] != float64(10) || sent["absoluteTimeoutMinutes"] != float64(480) {
+		t.Fatalf("identity receives the form's numbers: %v", sent)
+	}
+	do("support", "PATCH", res("session-policy")+"/staff", map[string]any{"values": map[string]any{"idleTimeoutMinutes": 10, "reason": why}}, 403)
+
 	// Token inspector and documents.
 	good := do("admin", "POST", "/v1/staff/identity/token-inspector", map[string]any{"token": inspectedJWT}, 200)
 	if good["valid"] != true || good["signatureValid"] != true || good["keyId"] != "k1" {
@@ -518,7 +614,7 @@ func TestStaffIdentityAdminConformance(t *testing.T) {
 	}
 
 	// Secrets and tokens reach identity only in the requests that need them and are never in a sheet or table.
-	for _, r := range []string{"oauth-clients", "identity-sessions", "signing-keys", "auth-settings"} {
+	for _, r := range []string{"oauth-clients", "identity-sessions", "signing-keys", "auth-settings", "session-policy"} {
 		page := asJSON(do("admin", "GET", res(r), nil, 200))
 		if strings.Contains(page, createdSecret) || strings.Contains(page, rotatedSecret) || strings.Contains(page, inspectedJWT) || strings.Contains(page, staffPassword) || strings.Contains(page, stepUpProof) {
 			t.Fatalf("%s leaks a secret: %s", r, page)
@@ -531,7 +627,7 @@ func TestStaffIdentityAdminConformance(t *testing.T) {
 		}
 	}
 	// Resource keys of the module are known to the console contract.
-	for _, k := range []string{"oauth-clients", "identity-sessions", "signing-keys", "auth-settings"} {
+	for _, k := range []string{"oauth-clients", "identity-sessions", "signing-keys", "auth-settings", "session-policy"} {
 		found := false
 		for _, rk := range domain.ResourceKeys {
 			found = found || rk == k

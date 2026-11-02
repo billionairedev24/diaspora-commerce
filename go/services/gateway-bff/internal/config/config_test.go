@@ -30,7 +30,7 @@ func TestEveryEnvironmentLoads(t *testing.T) {
 		if c.Upstreams.Catalog.URL != "http://catalog.override" || c.Upstreams.Search.Timeout != 2*time.Second || c.Upstreams.Promise.Timeout != 800*time.Millisecond {
 			t.Fatalf("%s: upstreams = %+v", env, c.Upstreams)
 		}
-		if len(c.Web.Origins) == 0 || c.OIDC.ClientID != "gateway-bff" || c.Session.IdleTTL != 720*time.Hour || c.Cache.ReferenceTTL != 10*time.Minute {
+		if len(c.Web.Origins) == 0 || c.OIDC.ClientID != "gateway-bff" || c.Session.IdleTTL != 2208*time.Hour || c.Cache.ReferenceTTL != 10*time.Minute {
 			t.Fatalf("%s: %+v", env, c)
 		}
 		if env != "local" && (!c.Session.CookieSecure || c.DocsEnabled && env == "prod") {

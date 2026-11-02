@@ -23,6 +23,9 @@ public final class IdentityPermissions {
     /** Identity admin console: OAuth clients, sessions and tokens, signing keys, token inspector, auth settings. */
     public static final String IDENTITY_ADMIN = "identity:admin";
 
+    /** The effective sign-out policy per audience, for the gateway-bff (service client). */
+    public static final String SESSIONS_POLICY_READ = "sessions:policy.read";
+
     private IdentityPermissions() {
     }
 }

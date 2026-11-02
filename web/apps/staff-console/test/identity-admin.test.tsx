@@ -75,6 +75,34 @@ describe('Developer tools › Identity & access (S291)', () => {
     expect(document.body.textContent).not.toContain(secret);
   });
 
+  it('shows when each audience is signed out, by name, and saves only a changed policy', async () => {
+    const user = userEvent.setup();
+    nav.set('/identity?tab=session-policy');
+    await renderScreen(<IdentityAdminView />);
+    expect(await screen.findByRole('tab', { name: 'Sign-out' })).toBeInTheDocument();
+    const table = await screen.findByRole('table', { name: 'Sign-out' });
+    for (const who of ['Customers on the web', 'Customer mobile app', 'Seller Center (sellers and providers)', 'Staff console', 'Driver app']) {
+      expect(within(table).getByText(who)).toBeInTheDocument();
+    }
+    expect(within(table).queryByText('staff')).not.toBeInTheDocument();
+    await user.click(within(table).getByText('Staff console'));
+    await user.click(await screen.findByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Change when Staff console are signed out' });
+    const save = within(dialog).getByRole('button', { name: 'Save' });
+    expect(save).toBeDisabled();
+    const idle = within(dialog).getByLabelText(/without activity/);
+    await user.clear(idle);
+    await user.type(idle, '600');
+    await user.type(within(dialog).getByLabelText(/^Reason/), REASON);
+    await user.type(within(dialog).getByLabelText(/Your password/), 'Mock-Password-1');
+    await user.click(save);
+    expect((await within(dialog).findAllByText('The idle timeout cannot be longer than the session length')).length).toBeGreaterThan(0);
+    await user.clear(idle);
+    await user.type(idle, '10');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Change when Staff console are signed out' })).not.toBeInTheDocument());
+  });
+
   it('rotates a secret after a reason and shows the new one once', async () => {
     const user = userEvent.setup();
     nav.set('/identity?tab=oauth-clients&open=inventory-service');
