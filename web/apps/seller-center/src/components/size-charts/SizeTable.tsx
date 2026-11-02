@@ -1,15 +1,13 @@
 'use client';
 
-import { type SizeChartUnit, sizeTable, unitLabel } from '@afrotransact/api-client';
+import { type SizeChartUnit, sizeTable, type SizeTableChart, unitLabel } from '@afrotransact/api-client';
 import { ChipGroup } from '@afrotransact/ui';
 
 import { useT } from '@/i18n/t';
 
-type Chart = Parameters<typeof sizeTable>[0];
-
 /** The size table as the shopper reads it (one row per size, ranges written "86–90"), in the unit chosen. The same
     function builds the storefront's size guide, so the seller sees what the shopper will. */
-export function SizeTable({ chart, name, unit }: { chart: Chart; name: string; unit: SizeChartUnit }) {
+export function SizeTable({ chart, name, unit }: { chart: SizeTableChart; name: string; unit: SizeChartUnit }) {
   const t = useT();
   const table = sizeTable(chart, unit);
   return (

@@ -3,7 +3,7 @@
 import { type ListingRow, sellerKeys, sellerQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Badge, Button, buttonClassName, useToast } from '@afrotransact/ui';
-import { FileArrowUp, ImagesSquare, PencilSimple, Plus, Trash } from '@phosphor-icons/react/ssr';
+import { FileArrowUp, ImagesSquare, PencilSimple, Plus, Ruler, Trash } from '@phosphor-icons/react/ssr';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
@@ -129,6 +129,9 @@ export function ListingsView() {
               <ImagesSquare size={18} aria-hidden /> {t('sc.listings.images')}
             </Link>
           ) : null}
+          <Link href="/listings/size-charts" className={buttonClassName({ variant: 'neutral' })}>
+            <Ruler size={18} aria-hidden /> {t('sc.listings.sizeCharts')}
+          </Link>
           {has('bulkUpload') ? (
             <Link href="/listings/bulk" className={buttonClassName({ variant: 'neutral' })}>
               <FileArrowUp size={18} aria-hidden /> {t('sc.listings.bulk')}

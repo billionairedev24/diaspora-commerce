@@ -18,13 +18,13 @@ interface TableRow {
   alternateValues?: Partial<Record<string, SizeChartValue>>;
 }
 
-interface TableChart {
+export interface SizeTableChart {
   unitSystem: SizeChartUnit;
   columns: ReadonlyArray<Pick<SizeChart['columns'][number], 'key' | 'label'>>;
   rows: readonly TableRow[];
 }
 
-function valueIn(chart: TableChart, row: TableRow, key: string, unit: SizeChartUnit): SizeChartValue | undefined {
+function valueIn(chart: SizeTableChart, row: TableRow, key: string, unit: SizeChartUnit): SizeChartValue | undefined {
   const own = row.values[key];
   if (!own || unit === chart.unitSystem) return own;
   const alt = row.alternateValues?.[key];
@@ -33,7 +33,7 @@ function valueIn(chart: TableChart, row: TableRow, key: string, unit: SizeChartU
 }
 
 /** The table of a chart in `unit` (the chart's own unit by default); a missing value shows as "–". */
-export function sizeTable(chart: TableChart, unit: SizeChartUnit = chart.unitSystem): SizeTableModel {
+export function sizeTable(chart: SizeTableChart, unit: SizeChartUnit = chart.unitSystem): SizeTableModel {
   return {
     unit,
     headers: chart.columns.map((c) => ({ key: c.key, label: c.label, unit })),

@@ -429,6 +429,25 @@ describe('size guide section', () => {
     await waitFor(() => expect(within(panel).queryByRole('link', { name: /Size chart/ })).not.toBeInTheDocument());
   });
 
+  it('writes a new chart without leaving the form and links it to the product', async () => {
+    await kaftan();
+    fireEvent.click(await screen.findByRole('button', { name: 'Write a new size chart' }));
+    const ed = within(await screen.findByTestId('size-chart-editor'));
+    expect(ed.getByText('men’s kaftans & shirts')).toBeInTheDocument();
+    await waitFor(() => expect(ed.getByLabelText('Measurement 1')).toHaveValue('Chest'));
+    ['M', 'L', 'XL', '2XL', '3XL'].forEach((size) => fireEvent.click(ed.getByRole('button', { name: `Remove size ${size}` })));
+    fireEvent.change(ed.getByLabelText('Chart name'), { target: { value: 'My kaftans' } });
+    fireEvent.change(ed.getByLabelText('Chest of size S'), { target: { value: '36-38' } });
+    fireEvent.change(ed.getByLabelText('Waist of size S'), { target: { value: '30-32' } });
+    fireEvent.change(ed.getByLabelText('Sleeve length of size S'), { target: { value: '25' } });
+    fireEvent.click(ed.getByRole('button', { name: 'Create chart' }));
+    await waitFor(() => expect(screen.queryByTestId('size-chart-editor')).not.toBeInTheDocument());
+    const select = screen.getByLabelText('Size chart') as HTMLSelectElement;
+    await waitFor(() => expect(select.selectedOptions[0]?.textContent).toBe('My kaftans'));
+    expect(await screen.findByRole('table', { name: 'Size chart My kaftans' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit this chart' })).toBeInTheDocument();
+  });
+
   it('names the sizes the chart has no row for before saving', async () => {
     const panel = await kaftan();
     fireEvent.click(await screen.findByRole('button', { name: 'Yes, several' }));

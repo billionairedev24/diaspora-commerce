@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { type FocusEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { SizeChartEditor } from '@/components/size-charts/SizeChartEditor';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
@@ -52,6 +53,7 @@ import {
   sectionStatus,
   serverFieldId,
   SIZE_UNITS,
+  soldSizes,
   toDraftPayload,
   toProductDraft,
   validateForm,
@@ -73,7 +75,8 @@ export function ProductForm({ productId }: { productId?: string }) {
   const toast = useToast();
   const router = useRouter();
   const params = useSearchParams();
-  const { orgId, has } = useSeller();
+  const { orgId, has, can } = useSeller();
+  const editableCharts = can('listings');
   const editing = Boolean(productId);
   const draftParam = params.get('draft') ?? '';
 
@@ -94,6 +97,7 @@ export function ProductForm({ productId }: { productId?: string }) {
   const chartsQ = useQuery({ ...sellerQueries.sizeCharts(api, orgId, { productType: typeCode, size: 100 }), enabled: sized });
   const chartQ = useQuery({ ...sellerQueries.sizeChart(api, orgId, s.sizeChartId), enabled: sized && s.sizeChartId !== '' });
   const chart = sized && s.sizeChartId && chartQ.data?.id === s.sizeChartId ? chartQ.data : undefined;
+  const [chartSheet, setChartSheet] = useState<'new' | 'edit' | null>(null);
   const chartState = !sized || !s.sizeChartId ? 'none' : chart ? 'ready' : chartQ.isError ? 'error' : 'loading';
 
   // Load the listing (edit) or the draft once, when what it needs has arrived.
@@ -410,7 +414,13 @@ export function ProductForm({ productId }: { productId?: string }) {
 
           {type && sections.includes('sizeGuide') ? (
             <FormSection {...section('sizeGuide')} hint={t('sc.pf.s.sizeGuideHint')}>
-              <SizeGuideSection s={s} type={type} patch={patch} charts={(chartsQ.data?.items ?? []).filter((c) => !c.retired)} chart={chart} chartState={chartState} error={err(fieldId.sizeChart)} />
+              <SizeGuideSection s={s} type={type} patch={patch} charts={(chartsQ.data?.items ?? []).filter((c) => !c.retired)} chart={chart} chartState={chartState} error={err(fieldId.sizeChart)}
+                actions={editableCharts ? (
+                  <>
+                    <Button size="sm" variant="neutral" onClick={() => setChartSheet('new')}>{t('sc.pf.sizeChart.create')}</Button>
+                    {chart && !chart.retired ? <Button size="sm" variant="neutral" onClick={() => setChartSheet('edit')}>{t('sc.pf.sizeChart.edit')}</Button> : null}
+                  </>
+                ) : null} />
             </FormSection>
           ) : null}
 
@@ -476,6 +486,15 @@ export function ProductForm({ productId }: { productId?: string }) {
           ) : null}
           <button type="submit" className="at-visually-hidden" tabIndex={-1}>{primaryLabel}</button>
         </form>
+        {type?.traits.sizing ? (
+          <SizeChartEditor open={chartSheet !== null} chart={chartSheet === 'edit' ? (chart ?? null) : null} scope={{ productType: type.code, label: type.label }} selling={soldSizes(s, type)}
+            onClose={() => setChartSheet(null)}
+            onSaved={(saved) => {
+              setChartSheet(null);
+              void qc.invalidateQueries({ queryKey: sellerKeys.sizeCharts(orgId) });
+              update((prev) => ({ ...prev, sizeChartId: saved.id }));
+            }} />
+        ) : null}
         <ReadinessPanel problems={ordered} tips={tips} percent={percent} preview={preview} onGo={jump} />
       </div>
       <ActionBar

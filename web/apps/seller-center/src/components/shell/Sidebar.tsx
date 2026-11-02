@@ -4,6 +4,7 @@ import { type ModuleKey, type NavGroup, type OrgSummary, type SellerSession } fr
 import { cx, Menu, MenuGroup, MenuItem } from '@afrotransact/ui';
 import { CaretDown, CaretUp, CaretUpDown, Check } from '@phosphor-icons/react/ssr';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
 import { useT } from '@/i18n/t';
@@ -63,6 +64,8 @@ export function OrgSwitcher({ session, onSwitch, busy }: { session: SellerSessio
   );
 }
 
+const SIZE_CHARTS_HREF = '/listings/size-charts';
+
 function NavGroupSection({ group, active, single }: { group: NavGroup; active: ModuleKey | null; single: boolean }) {
   const t = useT();
   const holdsActive = group.modules.some((m) => m.key === active);
@@ -71,6 +74,8 @@ function NavGroupSection({ group, active, single }: { group: NavGroup; active: M
   const open = single || (openState ?? holdsActive);
   const hasBadge = group.modules.some((m) => (m.badge ?? 0) > 0);
   const listId = `nav-${group.key}`;
+  const pathname = usePathname();
+  const onSizeCharts = pathname.startsWith(SIZE_CHARTS_HREF);
   return (
     <div className="flex flex-col gap-0.5 pb-2">
       {single ? null : (
@@ -89,7 +94,8 @@ function NavGroupSection({ group, active, single }: { group: NavGroup; active: M
       <ul id={listId} hidden={!open} className="m-0 flex list-none flex-col gap-0.5 p-0">
         {group.modules.map((m) => {
           const Icon = MODULE_ICONS[m.key];
-          const current = m.key === active;
+          // Size charts is a page of Listings: its entry sits under Listings, and Listings is not marked while it is open.
+          const current = m.key === active && !(m.key === 'listings' && onSizeCharts);
           return (
             <li key={m.key}>
               <Link
@@ -104,6 +110,18 @@ function NavGroupSection({ group, active, single }: { group: NavGroup; active: M
                 <span className="flex-1 truncate">{m.label}</span>
                 {m.badge ? <span className="min-w-5 rounded-pill bg-gold-500 px-1.5 text-center text-2xs font-bold text-ink-1000">{m.badge}</span> : null}
               </Link>
+              {m.key === 'listings' ? (
+                <Link
+                  href={SIZE_CHARTS_HREF}
+                  aria-current={onSizeCharts ? 'page' : undefined}
+                  className={cx(
+                    'flex h-8 items-center rounded-sm pr-3 pl-11 text-sm text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline pointer-coarse:h-11',
+                    onSizeCharts ? 'bg-gold-100 font-bold hover:bg-gold-100' : 'font-normal'
+                  )}
+                >
+                  <span className="flex-1 truncate">{t('sc.sidebar.sizeCharts')}</span>
+                </Link>
+              ) : null}
             </li>
           );
         })}
