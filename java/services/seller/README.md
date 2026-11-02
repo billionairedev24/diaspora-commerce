@@ -178,7 +178,7 @@ plan (`trial_period_days`, no proration during a trial); dunning follows Stripe 
 → `PAST_DUE` / `RETRYING` → `FINAL_ATTEMPT_FAILED`; `invoice.paid` clears it; Stripe's own retry / cancel settings end
 it with `customer.subscription.updated|deleted`); cancellation and resume at period end; invoices listed with PDF
 download; metered usage below (S206). Plan Products and Prices are created by the seller service from its own catalogue (see
-below); only the three metered prices / meters must exist in each Stripe account (S245; the platform team's setup).
+below); usage is metered into our own invoice lines, so no Stripe meters or metered prices are needed.
 
 ## Plan catalogue, trials, credits and rewards (S292–S297)
 
@@ -205,8 +205,9 @@ earn with progress, and what they received).
 
 ## Metered usage (S206)
 
-FBA storage, sponsored-products spend and AI credits are billed on **Stripe Billing meters** next to the plan
-subscription. A metering run pulls usage per organisation and UTC day for a period from three ports (HTTP adapters
+FBA storage, sponsored-products spend and AI credits are metered into lines on our own invoices next to the plan fee
+(Stripe Billing is removed; collection runs credit, then earnings opt-in, then card, with retry and dunning). The Stripe
+meter and metered-price names in the table below are obsolete. A metering run pulls usage per organisation and UTC day for a period from three ports (HTTP adapters
 with the `seller-service` client-credentials token, scopes `inventory:storage.read ads:spend.read ai:usage.read`):
 
 | Meter | Source | Unit (meter event value) | Stripe meter / metered price |
