@@ -56,6 +56,10 @@ tags:
     scope, add and retire (catalog:taxonomy)'
 - name: Brands
   description: The brands the product form offers for a category, and typing in a brand that is not listed (S326)
+- name: Size charts
+  description: Size charts sellers write and reuse on their sized products (fashion). Sellers create, edit, duplicate and
+    retire their own charts; staff can read but not change them. Staff only mark which product types are sized (the sizing
+    trait of /v1/taxonomy/product-types).
 paths:
   /v1/brands:
     get:
@@ -1748,10 +1752,10 @@ paths:
       tags:
       - Search export
       summary: Products as catalog.product.* event payloads, keyset-paged by id, for the search index rebuild
-      description: Service clients with catalog:read (the indexer-service client) and staff. Each item is the payload the indexer
-        would have received for the product's current state (sellerHidden while the owner's listings are hidden), the time
-        that state last changed (version) and the stored rating. Page with after = nextAfter until nextAfter is null. Read-only;
-        publishes nothing.
+      description: Service clients with catalog:read (the indexer-service client) and staff. Each item is the payload the
+        indexer would have received for the product's current state (sellerHidden while the owner's listings are hidden),
+        the time that state last changed (version) and the stored rating. Page with after = nextAfter until nextAfter is null.
+        Read-only; publishes nothing.
       operationId: searchExportProducts
       parameters:
       - name: status
@@ -1798,6 +1802,290 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/SearchExportPage'
+  /v1/size-charts:
+    get:
+      tags:
+      - Size charts
+      summary: The organisation's size charts, newest change first
+      description: Sellers see their own organisation's charts. productTypeId (a product-type category node) or productType
+        (its code) keeps the charts made for that type and the ones made for any. Staff may pass ownerOrgId to read one organisation's
+        charts; without it they read every organisation's (platform-wide staff only). Retired charts are left out unless includeRetired.
+      operationId: listSizeCharts
+      parameters:
+      - name: ownerOrgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: productTypeId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: productType
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: includeRetired
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SizeChartPage'
+    post:
+      tags:
+      - Size charts
+      summary: Write a new size chart
+      description: 422 with fieldErrors such as rows[2].values.bust, columns[0].label or name when the chart breaks a rule;
+        the name must differ (ignoring case) from the organisation's other active charts.
+      operationId: createSizeChart
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SizeChartRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SizeChart'
+  /v1/size-charts/import:
+    post:
+      tags:
+      - Size charts
+      summary: Upload size charts from a .xlsx or .csv file
+      description: Rows with the same chart name make one chart. A chart whose name matches one of the organisation's active
+        charts is updated (re-uploading the file changes nothing), others are created. Each chart is saved whole or not at
+        all. dryRun=true validates and reports without saving (applied=false). 200 with per-row messages (unknown or duplicate
+        size, a measurement that is not a number, min above max, a missing value ...); 422 catalog.upload-rejected when the
+        file cannot be read at all (format, 10 MB, 5,000 rows, missing Size chart name / Size column, no measurement column).
+        Pass productType / productTypeId to say which type the charts are made for (the template's).
+      operationId: importSizeCharts
+      parameters:
+      - name: productTypeId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: productType
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: dryRun
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SizeChartImportReport'
+  /v1/size-charts/import-template:
+    get:
+      tags:
+      - Size charts
+      summary: Download the size chart upload template
+      description: One row per size and one column per measurement. With productType (or productTypeId, a product-type category
+        node) the columns are that type's suggested measurements (bust, waist, hip ...); without, a generic template. Any
+        extra column a seller adds is a measurement. xlsx has a Size charts sheet, an Instructions and an Example sheet; csv
+        has "#" comment lines and the header row.
+      operationId: sizeChartImportTemplate
+      parameters:
+      - name: productTypeId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: productType
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+          default: xlsx
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: byte
+  /v1/size-charts/suggestions:
+    get:
+      tags:
+      - Size charts
+      summary: What a product type suggests for a size chart
+      description: The sizes (XS to 3XL ...) and the measurement columns (bust, waist, hip ...) staff configured in the product
+        type's sizing trait, to pre-fill the chart editor and offer as size chips. Sellers may use, rename or extend them.
+        sized=false for a product type without sizes. Pass productTypeId (a product-type category node) or productType (its
+        code).
+      operationId: getSizeChartSuggestions
+      parameters:
+      - name: productTypeId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: productType
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SizeChartSuggestions'
+  /v1/size-charts/{id}:
+    get:
+      tags:
+      - Size charts
+      summary: One size chart
+      operationId: getSizeChart
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SizeChart'
+    put:
+      tags:
+      - Size charts
+      summary: Replace a size chart's content
+      description: Send the version you loaded; 409 catalog.size-chart-changed when it changed since. The products that use
+        the chart keep it, so every size they still sell must keep a row (422 on rows). A retired chart cannot be edited.
+      operationId: updateSizeChart
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SizeChartRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SizeChart'
+    delete:
+      tags:
+      - Size charts
+      summary: Retire a size chart
+      description: 'A chart is never deleted: the products that use it keep showing it, but it can no longer be linked to
+        products and its name is free again. Returns the retired chart.'
+      operationId: retireSizeChart
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SizeChart'
+  /v1/size-charts/{id}/duplicate:
+    post:
+      tags:
+      - Size charts
+      summary: Copy a size chart under a new name
+      operationId: duplicateSizeChart
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DuplicateSizeChartRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SizeChart'
   /v1/taxonomy/audit:
     get:
       tags:
@@ -2306,7 +2594,7 @@ paths:
     patch:
       tags:
       - Taxonomy (back office)
-      summary: 'Edit a product type: label, identifier rule, traits and attributes'
+      summary: 'Edit a product type: label, identifier rule, traits (including sizing), attributes and variations'
       description: 'Only the fields sent change. Sales-tax question (tax_class) wording and choices are owned by tax-returns
         and cannot be edited. If-Match: the version read with the record (412 catalog.version-mismatch when it changed since,
         428 when missing). Every change carries a reason.'
@@ -2432,6 +2720,18 @@ components:
           description: Business days from order to dispatch, 1–30 (default 2)
         shipFrom:
           $ref: '#/components/schemas/ShipFrom'
+        sizeChartId:
+          type: string
+          format: uuid
+          description: The seller's size chart for this product (POST /v1/size-charts). Required when the product type's sizing
+            trait says sizeChartRequired; every size the variants sell needs a row in it. Must be a chart of the same organisation.
+        fitNote:
+          type: string
+          description: How the sizes fit; shown beside the size chart (defaults to the chart's own fit note)
+          enum:
+          - RUNS_SMALL
+          - TRUE_TO_SIZE
+          - RUNS_LARGE
     PackageDimensions:
       type: object
       description: Packed size (inches) and weight (pounds)
@@ -3340,6 +3640,12 @@ components:
           type: boolean
         rating:
           $ref: '#/components/schemas/ProductRating'
+          description: Average stars, review count and star breakdown over the product's published reviews (S324); zeros without
+            reviews
+        sizeChart:
+          $ref: '#/components/schemas/PublicSizeChart'
+          description: The seller's size chart (columns, rows in the chart's unit and converted, fit note, how to measure)
+            when the product has one
     ReviewPhoto:
       type: object
       description: 'A review photo: the public https URL media-service gave the uploaded, moderated image'
@@ -4035,6 +4341,8 @@ components:
           type: boolean
         preorder:
           type: boolean
+        sizing:
+          $ref: '#/components/schemas/SizingTrait'
     VariationDimension:
       type: object
       properties:
@@ -4044,6 +4352,8 @@ components:
           type: array
           items:
             type: string
+        allowCustomValues:
+          type: boolean
     VariationTheme:
       type: object
       properties:
@@ -4560,6 +4870,9 @@ components:
       - label
     TaxonomyTraits:
       type: object
+      description: 'The flags replace the stored flags. sizing: absent leaves the sizing trait as it is, {enabled: false}
+        switches it off; otherwise the fields sent change and the others keep their value (suggestedMeasurements, when sent,
+        is the whole new list)'
       properties:
         food:
           type: boolean
@@ -4569,6 +4882,8 @@ components:
           type: boolean
         preorder:
           type: boolean
+        sizing:
+          $ref: '#/components/schemas/TaxonomySizing'
     TaxonomyProductType:
       type: object
       description: 'A product-type schema as staff edit it: every attribute including the ones that do not apply, the version
@@ -4753,6 +5068,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TaxonomyAttribute'
+        themes:
+          type: array
+          description: The whole new list of variation themes, when changing them
+          items:
+            $ref: '#/components/schemas/TaxonomyVariationTheme'
+          maxItems: 8
+          minItems: 0
         reason:
           type: string
           maxLength: 1000
@@ -5078,6 +5400,495 @@ components:
           additionalProperties:
             type: integer
             format: int64
+    SizeChartColumn:
+      type: object
+      description: One measurement of a chart (Bust, Foot length ...)
+      properties:
+        key:
+          type: string
+          description: Stable key rows refer to; derived from the label when absent
+          maxLength: 40
+          minLength: 0
+        label:
+          type: string
+          maxLength: 40
+          minLength: 0
+        unit:
+          type: string
+          description: Always the chart's unit; may be omitted
+          enum:
+          - CM
+          - IN
+      required:
+      - label
+    SizeChartRequest:
+      type: object
+      description: A size chart as the seller writes it. productTypeCode and categoryId say what it was made for (both optional;
+        a category implies its product type). The chart's unit is the unit of every value; the other unit is shown by conversion
+        in responses.
+      properties:
+        name:
+          type: string
+          maxLength: 80
+          minLength: 0
+        unitSystem:
+          type: string
+          enum:
+          - CM
+          - IN
+        productTypeCode:
+          type: string
+          maxLength: 40
+          minLength: 0
+        categoryId:
+          type: string
+          format: uuid
+          description: A product-type (third level) category node
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/SizeChartColumn'
+          maxItems: 12
+          minItems: 0
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/SizeChartRowInput'
+          maxItems: 60
+          minItems: 0
+        fitNote:
+          type: string
+          enum:
+          - RUNS_SMALL
+          - TRUE_TO_SIZE
+          - RUNS_LARGE
+        howToMeasure:
+          type: string
+          maxLength: 1000
+          minLength: 0
+        version:
+          type: integer
+          format: int64
+          description: 'PUT only: the version the editor loaded (409 when the chart changed since)'
+          minimum: 0
+      required:
+      - columns
+      - name
+      - rows
+      - unitSystem
+    SizeChartRowInput:
+      type: object
+      description: 'One size: its label and a value per column key'
+      properties:
+        size:
+          type: string
+          maxLength: 40
+          minLength: 0
+        values:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SizeChartValue'
+      required:
+      - size
+      - values
+    SizeChartValue:
+      type: object
+      description: A single value (max omitted or equal to min) or a range, in the chart's unit
+      properties:
+        min:
+          type: number
+        max:
+          type: number
+      required:
+      - min
+    SizeChart:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ownerOrgId:
+          type: string
+        name:
+          type: string
+        unitSystem:
+          type: string
+          enum:
+          - CM
+          - IN
+        alternateUnit:
+          type: string
+          enum:
+          - CM
+          - IN
+        productTypeCode:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/SizeChartColumn'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/SizeChartRow'
+        fitNote:
+          type: string
+          enum:
+          - RUNS_SMALL
+          - TRUE_TO_SIZE
+          - RUNS_LARGE
+        howToMeasure:
+          type: string
+        retired:
+          type: boolean
+        retiredAt:
+          type: string
+          format: date-time
+        productCount:
+          type: integer
+          format: int64
+          description: Products that use this chart
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          description: Send back as version when saving (PUT)
+    SizeChartRow:
+      type: object
+      properties:
+        size:
+          type: string
+        values:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SizeChartValue'
+          description: Value per column key, in the chart's unit
+        alternateValues:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/SizeChartValue'
+          description: The same values converted to alternateUnit, one decimal
+    TaxonomySizing:
+      type: object
+      description: 'Marks the product type as sized: sellers attach size charts they write themselves and write their own
+        size labels (the size variation then allows custom values). suggestedMeasurements pre-fill the seller''s chart editor
+        and the bulk template.'
+      properties:
+        enabled:
+          type: boolean
+          description: false switches sizing off; default true
+        sizeChartRequired:
+          type: boolean
+          description: A listing needs a size chart whose rows cover every size it sells
+        sizeDimension:
+          type: string
+          description: The variation dimension that holds the size; default Size
+          maxLength: 40
+          minLength: 0
+        suggestedMeasurements:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxonomySuggestedMeasurement'
+          maxItems: 12
+          minItems: 0
+    TaxonomySuggestedMeasurement:
+      type: object
+      properties:
+        key:
+          type: string
+          maxLength: 40
+          minLength: 0
+        label:
+          type: string
+          maxLength: 40
+          minLength: 0
+        unit:
+          type: string
+          enum:
+          - CM
+          - IN
+        help:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - label
+    SizingTrait:
+      type: object
+      properties:
+        sizeChartRequired:
+          type: boolean
+        sizeDimension:
+          type: string
+        suggestedMeasurements:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuggestedMeasurement'
+    SuggestedMeasurement:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        unit:
+          type: string
+          enum:
+          - CM
+          - IN
+        help:
+          type: string
+    DuplicateSizeChartRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 'Default: "<name> (copy)"'
+          maxLength: 80
+          minLength: 0
+    SizeChartImportChart:
+      type: object
+      properties:
+        name:
+          type: string
+        action:
+          type: string
+          description: CREATE or UPDATE (what was done, or with dryRun what would be done), UNCHANGED (the same chart was
+            already saved) or FAILED
+        chartId:
+          type: string
+          format: uuid
+          description: The saved chart; null for a dry run's new charts and failed ones
+        rows:
+          type: array
+          items:
+            type: integer
+            format: int32
+        message:
+          type: string
+          description: Why the chart failed; null otherwise
+    SizeChartImportMessage:
+      type: object
+      properties:
+        column:
+          type: string
+          description: 'The column key: chart_name, unit, size, fit_note, how_to_measure or m:<measurement key>; null for
+            the row'
+        columnIndex:
+          type: integer
+          format: int32
+          description: Position of the column in the uploaded header; -1 when none
+        severity:
+          type: string
+          description: ERROR blocks the chart, WARNING is informational
+        message:
+          type: string
+    SizeChartImportReport:
+      type: object
+      description: Row-level result of a size chart upload
+      properties:
+        applied:
+          type: boolean
+          description: 'false for a dry run: nothing was saved'
+        fileName:
+          type: string
+        fileWarnings:
+          type: array
+          items:
+            type: string
+        chartCount:
+          type: integer
+          format: int32
+        created:
+          type: integer
+          format: int32
+        updated:
+          type: integer
+          format: int32
+        unchanged:
+          type: integer
+          format: int32
+        failed:
+          type: integer
+          format: int32
+        errorRows:
+          type: integer
+          format: int32
+        warningRows:
+          type: integer
+          format: int32
+        charts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SizeChartImportChart'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/SizeChartImportRow'
+    SizeChartImportRow:
+      type: object
+      properties:
+        rowNumber:
+          type: integer
+          format: int32
+          description: The row number in the spreadsheet (header = 1)
+        chartName:
+          type: string
+        size:
+          type: string
+        status:
+          type: string
+          description: VALID, WARNING or ERROR
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/SizeChartImportMessage'
+        cells:
+          type: array
+          items:
+            type: string
+    TaxonomyVariationDimension:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 40
+          minLength: 0
+        options:
+          type: array
+          items:
+            type: string
+            maxLength: 40
+            minLength: 0
+        allowCustomValues:
+          type: boolean
+          description: Sellers may write values of their own; options are then suggestions
+      required:
+      - name
+    TaxonomyVariationTheme:
+      type: object
+      description: 'One way a product varies: one or two dimensions'
+      properties:
+        name:
+          type: string
+          maxLength: 60
+          minLength: 0
+        dimensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxonomyVariationDimension'
+          maxItems: 2
+          minItems: 0
+      required:
+      - dimensions
+      - name
+    SizeChartPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SizeChart'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    SizeChartSuggestedMeasurement:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        unit:
+          type: string
+          enum:
+          - CM
+          - IN
+        help:
+          type: string
+    SizeChartSuggestions:
+      type: object
+      description: 'What the category suggests for the chart editor and the size input of the product form: size labels and
+        measurement columns. All of it can be used, renamed or extended by the seller.'
+      properties:
+        productTypeCode:
+          type: string
+        productTypeLabel:
+          type: string
+        sized:
+          type: boolean
+          description: 'false: this product type has no sizes and no size chart'
+        sizeChartRequired:
+          type: boolean
+          description: A listing needs a size chart whose rows cover every size it sells
+        sizeDimension:
+          type: string
+          description: The variation dimension that holds the size, e.g. Size
+        sizes:
+          type: array
+          description: Suggested size labels, in order (XS ... 3XL)
+          items:
+            type: string
+        sizesAllowCustomValues:
+          type: boolean
+          description: The seller may add size labels of their own
+        unitSystem:
+          type: string
+          description: The unit to start a new chart in
+          enum:
+          - CM
+          - IN
+        measurements:
+          type: array
+          items:
+            $ref: '#/components/schemas/SizeChartSuggestedMeasurement'
+    PublicSizeChart:
+      type: object
+      description: The size chart shown on the product page
+      properties:
+        name:
+          type: string
+        unitSystem:
+          type: string
+          enum:
+          - CM
+          - IN
+        alternateUnit:
+          type: string
+          enum:
+          - CM
+          - IN
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/SizeChartColumn'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/SizeChartRow'
+        fitNote:
+          type: string
+          description: The product's own fit note, else the chart's
+          enum:
+          - RUNS_SMALL
+          - TRUE_TO_SIZE
+          - RUNS_LARGE
+        howToMeasure:
+          type: string
   securitySchemes:
     bearer:
       type: http
