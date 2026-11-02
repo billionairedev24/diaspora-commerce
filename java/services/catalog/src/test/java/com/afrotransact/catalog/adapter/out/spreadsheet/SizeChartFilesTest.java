@@ -6,6 +6,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -26,6 +28,7 @@ import org.apache.poi.ss.usermodel.DataValidation;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.assertj.core.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 /** The size chart template and upload as files, and the product template's Size and Color dropdowns. */
@@ -106,6 +109,22 @@ class SizeChartFilesTest {
             List<String> lines = new ArrayList<>();
             wb.getSheet("Instructions").forEach(r -> lines.add(r.getCell(0).getStringCellValue()));
             assertThat(lines).anyMatch(l -> l.contains("Sizes and colours")).anyMatch(l -> l.contains("Size charts"));
+        }
+    }
+
+    @Test
+    void theSampleChartFilesInTheDocsAreValid() throws IOException {
+        Path samples = Path.of("..", "..", "..", "docs", "engineering", "samples");
+        Assumptions.assumeThat(samples).isDirectory();
+        for (String name : List.of("size-charts-womens-dresses.csv", "size-charts-mens-tops.csv")) {
+            ParsedSheet sheet = reader.read(Files.readAllBytes(samples.resolve(name)), SpreadsheetFormat.CSV);
+
+            ChartImportResult result = ChartImportValidator.validate(sheet, new ChartImportContext(null,
+                    MeasurementUnit.CM));
+
+            assertThat(result.rows()).as(name).isNotEmpty()
+                    .allSatisfy(r -> assertThat(r.status()).isNotEqualTo(RowStatus.ERROR));
+            assertThat(result.charts()).as(name).isNotEmpty();
         }
     }
 

@@ -106,6 +106,13 @@ fashion, grocery, beauty and home schemas ask for; the Books schema has author a
   cards; `GET /v1/brands` suggests the brands a seller already used on their own products for the form's combobox.
 - *Other details* (material, fit, ingredients, allergens, shelf life, MoCRA number…) work the same way: define them on
   the schema, and sellers fill them in. The **food** and **regulated** sections show only for types with those traits.
+- *Sizes and size charts:* the **sizing** trait marks a product type as sized (staff set whether a size chart is
+  required and the measurements to suggest: name, unit, how to measure). Sellers then write their own charts and size
+  labels; staff never write charts. A variation dimension with `allowCustomValues` (Size, and Color on fashion types)
+  takes the seller's own values, the listed options being suggestions. Switching sizing on makes the size dimension
+  seller-extensible. The staff API `PATCH /v1/taxonomy/product-types/{code}` takes `traits.sizing` (`{enabled:false}`
+  switches it off, omitted fields keep their value) and `themes` (the whole list). See
+  [size-charts.md](size-charts.md).
 - *Public API:* `GET /v1/product-types[/{code}]` returns the attributes that apply (backward compatible; each attribute
   also carries `applies`); the staff API `GET /v1/taxonomy/product-types[/{code}]` returns all of them with the
   version and where the schema is used.

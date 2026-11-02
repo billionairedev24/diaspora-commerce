@@ -85,3 +85,11 @@ code: it is a text message, which identity delivers to Mailpit locally (http://l
 `[SMS to +1713555…] AfroTransact code …`). The list lives in `seedlib/dataset.py` (`TEST_USERS`); `make seed-test`
 checks it names the same accounts as identity, `tools/dev/local.sh` and the guide. None of this exists on uat or prod:
 identity refuses to start there if it is configured.
+
+## Sized product types
+
+`python3 tools/seed/catalog_taxonomy.py --sizing` prints the SQL that marks the fashion product types as sized (the
+`sizing` trait with suggested measurements) and lets sellers write their own Size and Color values
+(`allowCustomValues`). It is the source of the taxonomy part of catalog migration `V15__size_charts.sql`; the data lives
+in `CUSTOM_DIMENSIONS` and `SIZING` in `catalog_taxonomy.py`. The default output (the V2 seed) is unchanged. See
+`docs/engineering/size-charts.md`.

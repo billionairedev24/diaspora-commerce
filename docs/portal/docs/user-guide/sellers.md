@@ -34,6 +34,16 @@ anything from you, the status changes to **Needs your attention** and you will g
 categories need a permit or licence uploaded in your application. Services (**Services** menu) need duration,
 price, hours and a calendar.
 
+### Clothes and shoes: sizes and size charts
+
+For fashion categories you can write your own sizes ("UK 12", "Free size", "EU 38") and colours ("Indigo adire") when
+ours do not fit; "XL" and "xl" count as one. Write a **size chart** once (**Listings → Size charts**): pick cm or
+inches, enter each size's measurements as a number (`88`) or a range (`86-90`), say how to measure and whether your
+sizes run small, true to size or large. Then choose the chart on each product. Every size you sell needs a row in the
+chart, and some categories require a chart. Shoppers see the chart beside the size picker with a cm / in switch.
+Charts can also be uploaded from a spreadsheet; use the size chart template and **Preview** first. A chart you retire
+keeps showing on products that already use it.
+
 ## 3. Fulfil orders
 
 New orders appear in **Orders**. Ship with USPS, UPS or FedEx, add tracking, and mark as shipped. Customers are
