@@ -1,5 +1,5 @@
-# Meilisearch in the cluster (SEARCH_PROVIDER=meilisearch): ~500 MB, 5 GiB disk. The index is rebuildable (run the indexer
-# backfill), so losing the disk costs time, not data. Used for the TRIAL and for option B of docs/engineering/cloud-cost.md.
+# Meilisearch in the cluster (SEARCH_PROVIDER=meilisearch): ~500 MB, 5 GiB disk. The index is rebuildable (`indexer reindex`: deploy.sh reindex-search; docs/runbooks/kafka-replay.md section 5.1),
+# so losing the disk costs time, not data. Used for the TRIAL and for option B of docs/engineering/cloud-cost.md.
 # Services reach it at http://meilisearch.data.svc.cluster.local:7700 (MEILISEARCH_URL); the master key is ExternalSecret
 # key afrotransact/meilisearch, property master-key (= MEILISEARCH_API_KEY for search and indexer).
 apiVersion: external-secrets.io/v1

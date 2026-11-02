@@ -63,7 +63,8 @@ integration, except **gateway-bff, which refuses to start without `STRIPE_PUBLIS
 ## Known gaps
 
 - Valkey, Kafka and Temporal data are not backed up.
-- Search uses Meilisearch and starts with an empty index: run the indexer backfill.
+- Search uses Meilisearch and starts with an empty index: run `deploy.sh reindex-search` (workflow action `reindex-search`); it starts a Job from the
+  suspended CronJob `indexer-reindex` that `overrides/indexer.yaml` enables, and accepts the flags of `indexer reindex` (`--dry-run`, `--since 48h`).
 - Image names: charts default to `tax-returns-service`, CI publishes `tax-returns`; `deploy.sh` overrides it.
 - Nothing has been run against a real OVHcloud/GitHub account; Helm templates were not rendered here.
 

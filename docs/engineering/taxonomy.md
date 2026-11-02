@@ -121,5 +121,5 @@ gets the initial tree from V2; V11 only added codes, versions and the audit tabl
 
 - Paths of everything below the node and the text paths saved in product-form drafts follow immediately.
 - The search indexer re-reads the tree within five minutes; products already in the index keep the old path text until
-  they are reindexed (run the indexer backfill after a bulk rename). The indexer does not consume
+  they are reindexed (run `make reindex-search` after a bulk rename, without `--since`: a rename changes no product). The indexer does not consume
   `catalog.taxonomy.changed` yet; delivery-runs caches the tree for its own TTL.

@@ -153,7 +153,8 @@ pointing at the server). Do not create a manual A/CNAME record for `www.<domain>
 - Sign in as the staff admin (`ADMIN_EMAIL` and the password step 4 showed).
 - Stripe: add the webhook `https://api.<domain>/payments/v1/webhooks/stripe`, put its `whsec_...` in `STRIPE_WEBHOOK_SECRET` (re-run
   `make ovh-gh-setup`, then the `services` action).
-- Search starts empty: run the indexer backfill.
+- Search starts empty: run the `reindex-search` action of the `ovh-vps` workflow (or `deploy.sh reindex-search` on the server). It rebuilds the
+  index from catalog, offers and inventory, takes minutes for a test catalog, and is safe to repeat.
 - Look inside: `ssh -i .ovh/ovh-vps-deploy-key ubuntu@<ip>` then `sudo k3s kubectl -n afrotransact-dev get pods` and
   `sudo k3s kubectl -n afrotransact-dev logs deploy/<service> --tail=80`.
 
@@ -200,5 +201,5 @@ the only thing that bills.
 ## Known gaps
 
 Valkey, Kafka and Temporal data are not backed up (Postgres and the secrets are); one server is a single point of failure; the
-search index starts empty (run the indexer backfill); nothing here has been run against a real OVHcloud account yet, so expect
+search index starts empty (run the `reindex-search` action); nothing here has been run against a real OVHcloud account yet, so expect
 fixes on the first run. A fuller list is in `infra/ovh-vps/README.md`.

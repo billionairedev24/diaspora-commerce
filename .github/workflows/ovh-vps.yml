@@ -11,6 +11,8 @@
 #   provision-and-deploy  apply, then deploy: the usual first run
 #   services              only the service charts (a new image-tag, changed secrets)
 #   edge | status         Traefik/cert-manager/routes | pods, certificates, URLs
+#   reindex-search        rebuild the search index from catalog, offers and inventory (a Job of the indexer chart; run it
+#                         once after `deploy` on a new server and after changing the search engine). Idempotent.
 #   down | up             scale every service to 0 / 1 (the server keeps billing)
 #   destroy               delete the server (and a Postgres running on it), the state bucket and the state user.
 #                         Type ovh-vps in confirm-destroy.
@@ -23,7 +25,7 @@ on:
         description: What to do
         type: choice
         default: plan
-        options: [plan, apply, deploy, provision-and-deploy, services, edge, observability, backup, status, down, up, destroy]
+        options: [plan, apply, deploy, provision-and-deploy, services, edge, observability, backup, reindex-search, status, down, up, destroy]
       image-tag:
         description: "Full git sha of the images in GHCR (empty = this run's commit; every service must have been built at it)"
         type: string
@@ -222,7 +224,7 @@ jobs:
         run: ssh server 'sudo bash /opt/afrotransact/infra/ovh-vps/deploy.sh all'
 
       - name: Run ${{ inputs.action }}
-        if: inputs.action == 'services' || inputs.action == 'edge' || inputs.action == 'observability' || inputs.action == 'backup' || inputs.action == 'status' || inputs.action == 'down' || inputs.action == 'up'
+        if: inputs.action == 'services' || inputs.action == 'edge' || inputs.action == 'observability' || inputs.action == 'backup' || inputs.action == 'reindex-search' || inputs.action == 'status' || inputs.action == 'down' || inputs.action == 'up'
         run: ssh server "sudo bash /opt/afrotransact/infra/ovh-vps/deploy.sh $ACTION"
 
       - name: Summary

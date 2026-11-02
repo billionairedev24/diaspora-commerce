@@ -42,6 +42,39 @@ Kafka → Elasticsearch projection of the product read model used by [search](..
   `at.indexer.dlq.events` so a single bad event never blocks a partition. `indexer_events_total{type,outcome}` counts
   every event.
 
+## Rebuilding the index: `indexer reindex`
+
+The index is filled from Kafka, so a new engine (`SEARCH_PROVIDER`), a lost index or expired topics (7 days) leave it
+empty. `indexer reindex` rebuilds it from the sources of truth instead of Kafka history, using this service's own
+configuration and environment (`SEARCH_PROVIDER`, `MEILISEARCH_URL`/`MEILISEARCH_API_KEY` or `ES_*`, `CATALOG_URL`,
+`OFFERS_URL`, `INVENTORY_URL`, `SELLER_URL`, `AUTH_TOKEN_URL`, `INDEXER_CLIENT_SECRET`, `REINDEX_SCOPES` (`catalog:read`),
+`REINDEX_BATCH`, `REINDEX_CONCURRENCY`):
+
+```bash
+make reindex-search                      # local stack (builds the command, uses .local/secrets.env); ARGS="--dry-run" counts only
+indexer reindex --dry-run                # the same binary and image as the consumer; no arguments = the Kafka consumer
+kubectl -n <ns> create job indexer-reindex-$(date +%s) --from=cronjob/indexer-reindex   # chart value reindex.enabled=true
+infra/ovh-vps/deploy.sh reindex-search [flags]                                           # OVH server / workflow action
+```
+
+Flags: `--market` (default the configured `MARKET`; comma separated), `--batch` (100), `--concurrency` (4), `--dry-run`,
+`--since` (`36h`, a date or RFC 3339), `--after` (resume), `--status` (`LIVE`; add `PAUSED,TAKEN_DOWN` to refresh documents
+that left LIVE), `--backfill-embeddings`.
+
+How: catalog's `GET /v1/search-export/products` (keyset by id; client `indexer-service`, scope `catalog:read`) gives each
+product as the `catalog.product.*` payload plus its rating; offers' public `GET /v1/public/buy-boxes` and inventory's
+public `GET /v1/availability` give the buy box and per-node stock of its variants. `app.Reindexer` turns them into the
+events the live path would have received and feeds them to the same `Projector` (so there is one projection, not two),
+then the engine adapter's version guard applies: a product is dated with the time its state last changed, buy box and
+stock with the read time minus 30 s, so a live indexer running at the same time always wins with anything newer, and a
+re-run re-applies the same state. Seller names come from the seller directory warmed first, like at start.
+
+Ensures the index and its settings exist first (not in a dry run), prints progress per page and a final per-market
+summary (`read`, `written`, `planned`, `skipped`, `failed`), and exits non-zero if anything failed or the run stopped early
+(then it prints the `--after` cursor to continue from). It writes documents without vectors; the embedding backfill below
+fills them (within `EMBEDDINGS_BACKFILL_INTERVAL`, or at once with `--backfill-embeddings`). It does not delete documents
+of products that no longer exist. Full runbook: [docs/runbooks/kafka-replay.md](../../../docs/runbooks/kafka-replay.md) section 5.1.
+
 ## Configuration
 
 `config/<APP_ENV>.yaml` + env: `KAFKA_BOOTSTRAP`, `KAFKA_GROUP`, `KAFKA_TOPICS`, `ES_URLS`, `ES_API_KEY` /
@@ -60,4 +93,8 @@ cd go/services/indexer
 GOTOOLCHAIN=go1.27.2 go test ./...      # unit (fake embedder) + Elasticsearch Testcontainers integration (version
                                         # guards, stock sums, embeddings kept across upserts, backfill guard)
 APP_ENV=local go run ./cmd/indexer
+APP_ENV=local go run ./cmd/indexer reindex --dry-run
+
+# Meilisearch tests (adapter, and the reindex against the event path), skipped unless set:
+MEILISEARCH_TEST_URL=http://127.0.0.1:7700 MEILISEARCH_TEST_KEY=testkey GOTOOLCHAIN=go1.27.2 go test ./...
 ```

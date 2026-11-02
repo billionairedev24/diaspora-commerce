@@ -13,9 +13,20 @@ starts Elasticsearch and its exporter instead; `tools/dev/local.sh restart searc
 local key is `local-meili-master-key` (`config/local.yaml`). Outside local, set `MEILISEARCH_URL` and
 `MEILISEARCH_API_KEY` on both services.
 
-**Switching engines starts with an empty index.** Rebuild it from events (no catalog backfill exists; see
-`docs/runbooks/kafka-replay.md`, "Rebuild the search index") and let the embedding backfill run after
-switching; nothing is copied between engines.
+**Switching engines starts with an empty index.** Nothing is copied between engines, and the indexer only fills the
+index from Kafka events, so after changing `SEARCH_PROVIDER` (on search *and* indexer, then restart both) run:
+
+```bash
+make reindex-search                     # local stack; add ARGS="--dry-run" to only count
+# OVH server: GitHub Actions "ovh-vps" with action reindex-search (or deploy.sh reindex-search on the server)
+# any Kubernetes: kubectl -n <ns> create job indexer-reindex-$(date +%s) --from=cronjob/indexer-reindex
+```
+
+It creates the index and its settings in the new engine, then rebuilds every product document from catalog, offers and
+inventory (the same documents the event path writes), so it works even when the Kafka topics have expired. It can be
+repeated safely and next to a running indexer. The embedding backfill then fills the vectors within
+`EMBEDDINGS_BACKFILL_INTERVAL` (15 min). Flags, output, exit status and limits: `docs/runbooks/kafka-replay.md`
+section 5.1 and `go/services/indexer/README.md`.
 
 ## How the two compare
 

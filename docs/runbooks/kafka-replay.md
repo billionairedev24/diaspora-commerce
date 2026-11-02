@@ -81,7 +81,7 @@ Alert or ticket about a DLQ / lag
 |    '- topic no longer holds them -> re-publish from the producer's outbox (4.8). Go-published events (carrier-gateway,
 |         search) have no outbox: ask the owning team.
 |
-'- Read model / search index wrong or empty -> section 5.
+'- Read model / search index wrong or empty -> section 5 (search: `make reindex-search`, 5.1; no Kafka history needed).
 ```
 
 Rules that hold on every branch: **fix the cause first** (replaying into a still-broken consumer only re-fills the DLQ);
@@ -103,7 +103,7 @@ around both). An event whose `(consumer, event_id)` row exists is ignored. So:
 **Retention.** `platform-events` purges both tables by itself (`EventRetentionJob`, auto-configured in every service with
 a database, daily at 03:30 server time). Duplicates are only harmless while the inbox row exists, and the oldest duplicate
 you can create is: offset reset (<= 7 days of topic), DLQ replay (<= 14 days in the DLQ after a failure that happens at most
-~7 days after publish), outbox re-publish (any age). So the inbox keeps rows at least
+~7 days after publish), outbox re-publish (only rows still in the outbox: published rows are purged after 14 days, `outbox-retention`). So the inbox keeps rows at least
 **7 (topic) + 14 (DLQ) + 14 (margin) = 35 days; default 90 days**, and you must not replay or re-publish an event older
 than the retention you run.
 
@@ -264,6 +264,9 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" "$NOTIFICATIONS_URL/v1/dead-le
 ### 4.8 Re-publish outbox rows
 
 Use when the event is gone from Kafka (see the decision tree). Run against the **producing** service's database.
+Only rows still in the outbox can be re-published: published rows are deleted after `outbox-retention` (14 days by
+default, section 3), so an event older than that is gone for good. To rebuild the **search index** do not use this:
+`indexer reindex` (5.1) reads the current state instead of history.
 
 ```bash
 # preview: nothing changes
@@ -281,22 +284,110 @@ up updates 0 rows. Mind ordering (section 3). Verified against PostgreSQL 16.
 
 ## 5. Rebuild the search index / read models from scratch
 
-* **Search (indexer, `products-<market>`).** There is **no** command that re-reads catalog and rebuilds the index. The
-  "indexer backfill" in `docs/engineering/search-providers.md` is only the *embedding* backfill (`EmbeddingBackfill`,
-  fills missing vectors every 15 min). That is a documented gap. Two ways to rebuild, both rebuild from events:
+### 5.1 Search index: `indexer reindex` (use this first)
+
+The index (`products-<market>` in Meilisearch, or the Elasticsearch alias) is filled by the indexer from Kafka events, so a
+new engine, a wiped or lost index (`make reset`, a lost Meilisearch disk) or expired topics (7 days) leave it **empty**:
+storefront search and autocomplete return nothing. `indexer reindex` rebuilds it from the sources of truth, not from
+Kafka history, so it works whatever the topics and outboxes still hold. It is idempotent: run it as often as you like.
+
+| Where | Command |
+|---|---|
+| local stack | `make reindex-search` (flags: `make reindex-search ARGS="--dry-run"`) |
+| OVH server | GitHub Actions `ovh-vps` with action `reindex-search`, or on the server `sudo bash /opt/afrotransact/infra/ovh-vps/deploy.sh reindex-search [flags]` (log streamed, exit status = the Job's) |
+| any Kubernetes | `kubectl -n <ns> create job indexer-reindex-$(date +%s) --from=cronjob/indexer-reindex`, then `kubectl -n <ns> logs -f job/indexer-reindex-<ts>`. The CronJob is suspended and exists when the indexer chart has `reindex.enabled: true` (off by default; on for the OVH server). Flags: set `reindex.args` or patch the Job's `args`, as `deploy.sh reindex-search` does |
+| a container | `docker run --env-file <the indexer's env> <indexer image> reindex --dry-run` (the image's only binary has both roles) |
+
+**What to run after switching the search engine** (`SEARCH_PROVIDER`): switch it on search *and* indexer, restart both,
+then `make reindex-search` (or the OVH action). The command creates the index and its settings first, then writes.
+`--dry-run` first if you like: it reads the catalog, prints how many products it would write and touches nothing.
+
+**Prerequisites.** catalog, offers, inventory and (for seller names) seller are up; `indexer-service` holds the scope
+`catalog:read` at identity (every identity profile grants it since this command; redeploy identity once on an existing
+environment); `INDEXER_CLIENT_SECRET` is set outside local. It uses the indexer's own configuration and environment
+(`SEARCH_PROVIDER`, `MEILISEARCH_URL`/`MEILISEARCH_API_KEY` or `ES_*`, `CATALOG_URL`, `OFFERS_URL`, `INVENTORY_URL`,
+`SELLER_URL`, `AUTH_TOKEN_URL`): the same values the running indexer has.
+
+**Flags.**
+
+| Flag | Default | |
+|---|---|---|
+| `--market` | the configured `MARKET` (`us`) | markets to rebuild, comma separated. The sources are not partitioned by market (every market's indexer projects every event), so each listed market's index receives the whole catalog from one read |
+| `--batch` | 100 | products per catalog page, 1-200 |
+| `--concurrency` | 4 | products projected at once, 1-16 |
+| `--dry-run` | off | count only; writes nothing, not even the index settings |
+| `--since` | everything | only products changed since then: `36h`, `2026-10-01` or an RFC 3339 time. "Changed" means the product, its rating or its owner's hidden/restored state; a taxonomy rename changes no product, so after a bulk rename run without `--since` |
+| `--after` | start | resume after a catalog cursor (printed when a run stops) |
+| `--status` | `LIVE` | catalog statuses to index. Add `PAUSED,TAKEN_DOWN` to also refresh documents of products that have left LIVE since they were indexed (they drop out of search) |
+| `--backfill-embeddings` | off | afterwards embed the documents that have no vector (one pass of the indexer's own embedding backfill) |
+
+**How it works.** For each page of catalog's `GET /v1/search-export/products` (keyset by id, scope `catalog:read`) it builds
+the events the live path would have received and hands them to the indexer's own `Projector`, so a reindexed document is
+exactly the one the event path writes (category path, seller name and fulfilment, lowest variant price, rating,
+`rank_boost`, preserved fields). The events: the product (the payload of `catalog.product.*`, `sellerHidden` included),
+its rating (`catalog.product.rating_changed`), the buy box of each variant from offers (`GET /v1/public/buy-boxes`,
+`offers.buybox.changed`, authoritative for a variant's stock as in the event path) and the per-node quantities from
+inventory (`GET /v1/availability`, `inventory.availability.changed`). Every write goes through the engine adapter's
+version guard. The product is dated with the time its state last changed, buy box and stock with the moment of the read
+minus 30 s; a live event about anything that changed after that carries a later time and wins. So running the command
+next to a live indexer is safe, and so is running it twice.
+
+One caveat on Meilisearch: it has no conditional update, so the adapter reads, merges and writes a document (the same as
+for events). A live event and the reindex touching the *same product within the same few milliseconds* can lose one of
+the two writes; the next event, or the next run, repairs it. Run it in a quiet moment if that matters.
+
+**Output and exit status.** Progress lines per page (`read`, `written`, `failed`, `resume_after`), then a table:
+
+```
+Reindex summary (meilisearch)
+MARKET  READ  WRITTEN  PLANNED  SKIPPED  FAILED
+us      1240  1237     0        1        2
+batches: 13, failed batches: 0
+```
+
+`written` is the products the index accepted (the version guard may still have kept a newer live document), `planned` is
+the dry-run count, `skipped` the exported products without an ATIN, `failed` the products that could not be written
+(including every product of a page whose buy boxes or stock could not be read after three attempts; the run goes on,
+and stops after three such pages in a row, because a source is down). The exit status is **non-zero if anything failed**
+or the run stopped early; a stopped run prints `--after <cursor>` to continue from. Re-running everything is just as good.
+
+**Afterwards.** Documents come out without a vector. With embeddings on, the running indexer's `EmbeddingBackfill`
+embeds every LIVE document that has none at its start and every `EMBEDDINGS_BACKFILL_INTERVAL` (15 min), so semantic
+search is complete a few minutes later (restart the indexer to start a pass now, or pass `--backfill-embeddings`). Check:
+search for a product title in the storefront; Meilisearch `GET /indexes/products-<market>/stats` shows `numberOfDocuments`
+close to the catalog's LIVE count.
+
+**Limits.** It does not delete: documents of products that no longer exist stay (to drop them, delete `products-<market>`
+in Meilisearch; the command recreates it. For Elasticsearch use a new mapping version behind the alias, `search/README.md`).
+Synonyms and analytics belong to search-service and are not touched. Speed is bounded by the engine: Meilisearch applies
+about four write tasks per product. On a local Meilisearch 1.12, 25 products took 12 s at `--concurrency 1` and 3 s at 8
+(about 8 products/s), so budget roughly two hours for 50 000 products at 8, and use `--since` for later top-ups.
+
+Why not the Kafka routes: the history is gone after 7 days (topics) or 14 days (outbox purge), they replay *events*, and the
+outbox route touches four producers' databases and re-sends to every consumer. Why not a snapshot API per service: the
+indexer would re-implement its projection. The command reuses it; only catalog needed a new read, because offers,
+inventory and seller already had the reads.
+
+### 5.2 Search index from Kafka (alternatives)
+
+Still valid when you want events to flow through the live path:
+
   1. Events still on the topics (< 7 days): stop the indexer, create the empty index (it does so at start), reset group
      `indexer` to earliest on `at.product.events`, `at.inventory.events`, `at.offers.events`, `at.seller-org.events` (4.6
      with `--to-earliest`, once per topic), start it.
-  2. Older history: re-publish from the producers' outboxes, which keep every row: catalog (`aggregate=product`), inventory
-     (`inventory`), offers (`offers`), seller (`seller-org`) with 4.8, in `occurred_at` order and in slices of at most
-     `max_rows`. Version guards make the result order-independent. Product events carry the whole product, so one event
-     per product rebuilds its document.
-  Zero-downtime alternative: build into a new index behind the alias (`search/README.md`, "zero-downtime reindexing"),
-  switch the alias after the indexer has caught up.
-* **Java read models** (offers stock, inventory links, trust-ops projections, delivery-runs preorders): same two ways, per
-  consumer group; the inbox rows of that consumer will block a re-run, so rebuilding a *Java* projection needs its
-  inbox rows for the consumer deleted first (section 3, last bullet) and its tables truncated by the owner. There is no
-  generic tool for that.
+  2. Older history: re-publish from the producers' outboxes with 4.8, in `occurred_at` order and in slices of at most
+     `max_rows`. **Only rows still in the outbox exist: published rows are purged after 14 days** (`outbox-retention`,
+     section 3), so this cannot rebuild an index from older events; use 5.1. Version guards make the result
+     order-independent. Product events carry the whole product, so one event per product rebuilds its document.
+
+Zero-downtime alternative: build into a new index behind the alias (`search/README.md`, "zero-downtime reindexing"),
+switch the alias after the indexer has caught up.
+
+### 5.3 Java read models
+
+Offers stock, inventory links, trust-ops projections, delivery-runs preorders: the two Kafka ways, per consumer group;
+the inbox rows of that consumer will block a re-run, so rebuilding a *Java* projection needs its inbox rows for the
+consumer deleted first (section 3, last bullet) and its tables truncated by the owner. There is no generic tool for that.
 
 ## 6. Who consumes and produces what
 

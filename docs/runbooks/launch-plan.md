@@ -30,6 +30,7 @@ build machine (no Docker, no live Stripe, Kafka, Elasticsearch, browsers or devi
 2. Run the same stack as production: real PostgreSQL per service, Kafka, Elasticsearch, OpenFGA + authz-sync, Temporal, media storage.
 3. Demo data must stay out: seeding refuses prod/uat and non-local URLs unless `SEED_ALLOW_REMOTE=1`; use that deliberately here only.
 4. Stripe test mode, Twilio test credentials, carrier sandboxes (you own the accounts: [carrier-sandboxes.md](carrier-sandboxes.md), S204).
+5. Fill the search index once the services are up: the `reindex-search` action of the `ovh-vps` workflow (`make reindex-search` locally). Search is empty until then, and again after any change of `SEARCH_PROVIDER` ([kafka-replay.md](kafka-replay.md) section 5.1).
 
 ## Phase 2: your browser pass and the live checks (on the OVH environment)
 
