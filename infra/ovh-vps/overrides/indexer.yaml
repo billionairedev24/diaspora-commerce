@@ -1,0 +1,3 @@
+# Renders the suspended CronJob indexer-reindex (never runs by itself): `deploy.sh reindex-search` starts a run from it.
+reindex:
+  enabled: true

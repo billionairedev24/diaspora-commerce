@@ -40,6 +40,18 @@ workloadIdentity:
   aws: {roleArn: ""}
   gcp: {serviceAccount: ""}
   azure: {clientId: ""}
+# One-off rebuild of the search index from catalog, offers and inventory (`indexer reindex`; docs/runbooks/kafka-replay.md
+# section 5). Off by default. When on, a SUSPENDED CronJob indexer-reindex is rendered: it never runs by itself, an
+# operator starts a run with `kubectl -n <ns> create job indexer-reindex-$(date +%s) --from=cronjob/indexer-reindex`.
+# It uses this chart's image, configuration and secrets (MEILISEARCH_URL / MEILISEARCH_API_KEY or ES_*,
+# INDEXER_CLIENT_SECRET) and the in-cluster http://catalog, http://offers and http://inventory.
+reindex:
+  enabled: false
+  args: []                    # extra flags for `indexer reindex`, for example ["--since", "48h"]
+  activeDeadlineSeconds: 21600  # a run is killed after 6 h; a re-run continues idempotently
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {memory: 256Mi}
 extraEnv: {}
 nodeSelector: {}
 tolerations: []

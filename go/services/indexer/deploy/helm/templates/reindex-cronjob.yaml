@@ -1,0 +1,75 @@
+{{- if .Values.reindex.enabled }}
+{{- /*
+  Rebuilds the search index from catalog, offers and inventory (`indexer reindex`, docs/runbooks/kafka-replay.md section 5).
+  A suspended CronJob never runs by itself: it only holds the pod template (this chart's image, configuration and
+  secrets) so an operator can start one run with
+    kubectl -n <namespace> create job indexer-reindex-$(date +%s) --from=cronjob/indexer-reindex
+  and read it with `kubectl -n <namespace> logs -f job/<name>`. Flags and examples: docs/runbooks/kafka-replay.md.
+*/ -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "at-service.name" . }}-reindex
+  labels: {{- include "at-service.labels" . | nindent 4 }}
+spec:
+  suspend: true
+  schedule: "0 0 1 1 *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: {{ .Values.reindex.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: 604800
+      template:
+        metadata:
+          # Not the Service's selector label: a reindex pod must never receive traffic.
+          labels:
+            app.kubernetes.io/name: {{ include "at-service.name" . }}-reindex
+            app.kubernetes.io/part-of: afrotransact
+            app.kubernetes.io/component: {{ .Values.service.runtime }}
+            afrotransact.com/env: {{ .Values.env }}
+            {{- if eq .Values.cloud "azure" }}
+            azure.workload.identity/use: "true"
+            {{- end }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "at-service.name" . }}
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            fsGroup: 1000
+            seccompProfile: {type: RuntimeDefault}
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations: {{- toYaml . | nindent 12 }}
+          {{- end }}
+          containers:
+            - name: reindex
+              image: {{ include "at-service.image" . }}
+              imagePullPolicy: IfNotPresent
+              args: ["reindex"{{ range .Values.reindex.args }}, {{ . | quote }}{{ end }}]
+              env: {{- include "at-service.envVars" . | nindent 16 }}
+              {{- if .Values.secrets.enabled }}
+              envFrom:
+                - secretRef:
+                    name: {{ include "at-service.name" . }}-secrets
+              {{- end }}
+              resources: {{- toYaml .Values.reindex.resources | nindent 16 }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}
+              volumeMounts:
+                - {name: tmp, mountPath: /tmp}
+          volumes:
+            - name: tmp
+              emptyDir: {}
+{{- end }}

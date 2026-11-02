@@ -16,6 +16,7 @@
 #   tools/dev/local.sh docs                    # only the developer portal (:3100) and Storybook (:6006)
 #   tools/dev/local.sh seed                    # demo data (tools/seed): sellers, products with photos, home content
 #   tools/dev/local.sh repair-orgs             # identity re-syncs every approved seller/provider org from seller now
+#   tools/dev/local.sh reindex [flags]         # rebuild the search index from catalog, offers and inventory (--dry-run, --since 48h …)
 #   tools/dev/local.sh down                    # stop everything (keeps data; `make reset` wipes the Docker volumes)
 #
 # Make targets: make up (= dev-up), make down, make dev-status, make dev-links, make dev-logs SERVICE=x, make repair-orgs,
@@ -1187,6 +1188,24 @@ cmd_repair_orgs() {
   echo "$res" | python3 -c 'import json,sys; print("  ✓ organisations checked: %(scanned)s, repaired: %(repaired)s, failed: %(failed)s" % json.load(sys.stdin))'
 }
 
+# `reindex`: rebuilds the product search index from the sources of truth (catalog, offers, inventory, seller), not from
+# Kafka: after switching the search engine, wiping the index (make reset) or when the topics expired. It is the
+# indexer's own `reindex` command, built next to the stack's binaries and run with the local configuration and the
+# values of .local/secrets.env (SEARCH_PROVIDER, MEILISEARCH_URL, ES_*), so it writes to the engine search reads from.
+# Arguments are the command's flags: tools/dev/local.sh reindex --dry-run
+cmd_reindex() {
+  local svc
+  mkdir -p "$STATE" "$BIN"
+  load_secrets
+  for svc in catalog offers inventory seller; do
+    healthy "$svc" || { echo "  ✗ $svc must be running (make up, or tools/dev/local.sh up $svc)" >&2; exit 1; }
+  done
+  echo "==> building the indexer's reindex command"
+  (cd "$ROOT/go/services/indexer" && go build -o "$BIN/indexer-reindex" ./cmd/indexer)
+  echo "==> reindex (search engine: ${SEARCH_PROVIDER:-meilisearch})"
+  (cd "$ROOT/go/services/indexer" && APP_ENV=local "$BIN/indexer-reindex" reindex "$@")
+}
+
 cmd_status() {
   local svc app state
   printf '%-18s %-6s %-9s %s\n' SERVICE PORT STATE URL
@@ -1252,6 +1271,7 @@ case "${1:-}" in
   logs) [[ -n "${2:-}" ]] || { echo "usage: $0 logs <service>" >&2; exit 2; }; tail -n 200 -f "$LOGS/$2.log" ;;
   seed) shift; python3 "$ROOT/tools/seed/seed.py" "$@" ;;
   repair-orgs) cmd_repair_orgs ;;
+  reindex) shift; cmd_reindex "$@" ;;
   restart) [[ -n "${2:-}" ]] || { echo "usage: $0 restart <service>" >&2; exit 2; }
     load_secrets
     # Keep the address the stack runs on: a service restarted without MOBILE_HOST while the rest runs in LAN mode would

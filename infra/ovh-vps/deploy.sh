@@ -7,6 +7,8 @@
 #   deploy.sh observability  Prometheus + Grafana (metrics, dashboards) and Loki + Alloy (logs) at https://grafana.$DOMAIN
 #   deploy.sh backup      install the nightly encrypted backup (databases + generated secrets) and run one now
 #   deploy.sh status      pods, certificates and URLs
+#   deploy.sh reindex-search [flags]   rebuild the search index from catalog, offers and inventory (one Job, logs streamed;
+#                         flags are those of `indexer reindex`, e.g. --dry-run, --since 48h; docs/runbooks/kafka-replay.md)
 #   deploy.sh down|up     scale every service to 0 / back to 1 (the server keeps costing the same)
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -314,6 +316,26 @@ deploy_backup() {
   "$HERE/backup.sh" run
 }
 
+# One run of the indexer chart's suspended CronJob (enabled by overrides/indexer.yaml) with the given `indexer reindex`
+# flags; the log is streamed and the exit status is the Job's.
+reindex_search() { # reindex_search [indexer reindex flags]
+  kubectl -n "$NS" get cronjob/indexer-reindex >/dev/null 2>&1 || die "no cronjob/indexer-reindex: run deploy.sh services first"
+  local job="indexer-reindex-$(date +%s)" flags='[]'
+  (($# == 0)) || flags="$(printf '%s\n' "$@" | jq -R . | jq -sc .)"
+  kubectl -n "$NS" create job "$job" --from=cronjob/indexer-reindex --dry-run=client -o json \
+    | jq --argjson f "$flags" '.spec.template.spec.containers[0].args += $f' | kubectl apply -f - >/dev/null
+  log "job/$job: indexer reindex $*"
+  local i phase
+  for i in $(seq 60); do # wait for the pod to start, then follow it to the end
+    phase="$(kubectl -n "$NS" get pods -l "job-name=$job" -o jsonpath='{.items[0].status.phase}' 2>/dev/null || true)"
+    [[ -n "$phase" && "$phase" != Pending ]] && break; sleep 2
+  done
+  kubectl -n "$NS" logs -f "job/$job" || true
+  kubectl -n "$NS" wait --for=condition=complete "job/$job" --timeout=30s >/dev/null 2>&1 \
+    || die "reindex failed or did not finish: kubectl -n $NS logs job/$job (re-running is safe)"
+  echo "reindex done"
+}
+
 scale() { services | while read -r svc _; do kubectl -n "$NS" scale "deploy/$svc" --replicas="$1" >/dev/null; done; }
 
 case "${1:-all}" in
@@ -326,5 +348,6 @@ case "${1:-all}" in
   status) status ;;
   down) scale 0 ;;
   up) scale 1 ;;
-  *) die "usage: deploy.sh [all|data|edge|services|observability|backup|status|down|up]" ;;
+  reindex-search) shift; reindex_search "$@" ;;
+  *) die "usage: deploy.sh [all|data|edge|services|observability|backup|status|reindex-search [flags]|down|up]" ;;
 esac

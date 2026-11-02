@@ -19,7 +19,7 @@ TOFU         ?= $(shell command -v tofu 2>/dev/null || echo $(HOME)/go/bin/tofu)
 CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/conftest)
 
 .PHONY: help ovh-gh-setup up up-infra down logs ps reset apps-up apps-down mobile docs-up secrets-check stripe-setup \
-        java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links repair-orgs \
+        java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links repair-orgs reindex-search \
         helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers perf-k6 perf-k6-smoke perf-ab perf-hey perf-wrk \
         web-dev web-build backlog seed seed-test mobile-lan lan-env mobile-adb-reverse mobile-android-device \
@@ -198,6 +198,9 @@ dev-restart: ## Rebuild and restart one service: make dev-restart SERVICE=delive
 
 repair-orgs: ## Identity re-syncs every approved seller/provider organisation (status, owners) from the seller service now
 	tools/dev/local.sh repair-orgs
+
+reindex-search: ## Rebuild the product search index from catalog, offers and inventory (after switching SEARCH_PROVIDER, make reset, or expired topics; idempotent): make reindex-search [ARGS="--dry-run"]
+	tools/dev/local.sh reindex $(ARGS)
 
 mobile: ## Only the Expo apps against the running stack: customer :8081, driver :8082 (MOBILE_MOCKS=1 for in-app mocks; a phone needs the stack in LAN mode: make mobile-lan)
 	tools/dev/local.sh mobile
