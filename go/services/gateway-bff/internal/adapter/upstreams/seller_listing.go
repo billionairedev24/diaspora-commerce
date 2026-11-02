@@ -85,6 +85,12 @@ func productBody(d domain.ProductDraft, shipFrom *port.CatalogShipFrom) map[stri
 		if shipFrom != nil {
 			listing["shipFrom"] = shipFrom
 		}
+		if l.SizeChartID != "" {
+			listing["sizeChartId"] = l.SizeChartID
+		}
+		if l.FitNote != "" {
+			listing["fitNote"] = l.FitNote
+		}
 		body["listing"] = listing
 	}
 	return body
@@ -166,7 +172,12 @@ func (k *sellerListingImpl) DeleteDraft(ctx context.Context, bearer, id string) 
 
 // download reads a generated file (template, report) with its name from Content-Disposition.
 func (k *sellerListingImpl) download(ctx context.Context, bearer, path string, q url.Values, fallback string) (domain.FileDownload, error) {
-	res, err := call(ctx, k.c, httpclient.Request{Path: path, Query: q, Bearer: bearer,
+	return downloadFile(ctx, k.c, bearer, path, q, fallback)
+}
+
+// downloadFile is the generated file an upstream answers with, named by its Content-Disposition.
+func downloadFile(ctx context.Context, c httpclient.Client, bearer, path string, q url.Values, fallback string) (domain.FileDownload, error) {
+	res, err := call(ctx, c, httpclient.Request{Path: path, Query: q, Bearer: bearer,
 		Header: http.Header{"Accept": {"*/*"}}}, nil)
 	if err != nil {
 		return domain.FileDownload{}, err

@@ -3691,13 +3691,56 @@ components:
         adStatus: {type: string, enum: [BILLABLE, DUPLICATE, EXPIRED]}
     VariantOption:
       type: object
-      required: [atin, label, selected, available, priceMinor]
+      required: [atin, label, selected, available, priceMinor, options]
       properties:
         atin: {$ref: '#/components/schemas/Atin'}
         label: {type: string}
         selected: {type: boolean}
         available: {type: boolean}
         priceMinor: {type: integer}
+        options: {type: object, additionalProperties: {type: string}, description: 'The variant''s value per dimension as the seller wrote it ({"Size": "UK 12", "Color": "Indigo adire"}); match Size to a size chart row'}
+    SizeChartUnit: {type: string, enum: [CM, IN]}
+    ProductSizeChart:
+      type: object
+      description: |
+        The seller's size chart of a sized product (fashion). Values are in `unitSystem`; `alternateValues` of every row are
+        the same values converted to `alternateUnit` (one decimal), so the page can offer a cm / in switch. A value is a single
+        number (min equals max) or a range. Match a row to the shopper's variant by `size` ignoring case.
+      required: [name, unitSystem, alternateUnit, columns, rows, fitNote, howToMeasure]
+      properties:
+        name: {type: string}
+        unitSystem: {$ref: '#/components/schemas/SizeChartUnit'}
+        alternateUnit: {$ref: '#/components/schemas/SizeChartUnit'}
+        columns:
+          type: array
+          items:
+            type: object
+            required: [key, label, unit]
+            properties:
+              key: {type: string}
+              label: {type: string}
+              unit: {$ref: '#/components/schemas/SizeChartUnit'}
+        rows:
+          type: array
+          items:
+            type: object
+            required: [size, values, alternateValues]
+            properties:
+              size: {type: string}
+              values: {type: object, additionalProperties: {$ref: '#/components/schemas/SizeChartValue'}}
+              alternateValues: {type: object, additionalProperties: {$ref: '#/components/schemas/SizeChartValue'}}
+        fitNote:
+          description: The product's own fit note, else the chart's; null when neither says
+          oneOf:
+            - {type: string, enum: [RUNS_SMALL, TRUE_TO_SIZE, RUNS_LARGE]}
+            - {type: 'null'}
+        howToMeasure: {type: [string, 'null']}
+    SizeChartValue:
+      type: object
+      required: [min, max]
+      properties:
+        min: {type: number}
+        max: {type: number}
     ReviewRating:
       type: object
       description: Average stars over a product's published reviews, how many there are and how many gave 1, 2, 3, 4 and 5 stars
@@ -3815,8 +3858,13 @@ components:
         status: {type: string, description: READY when media published the photo}
     ProductDetail:
       type: object
-      required: [product, buyBox, otherOffers, shipsFrom, soldBy, returnsPolicy, unitPriceLabel]
+      required: [product, buyBox, otherOffers, shipsFrom, soldBy, returnsPolicy, unitPriceLabel, sizeChart]
       properties:
+        sizeChart:
+          description: The seller's size chart of a sized product (fashion); null for the others
+          oneOf:
+            - {$ref: '#/components/schemas/ProductSizeChart'}
+            - {type: 'null'}
         product:
           type: object
           required: [atin, title, brand, community, department, unit, origin, bullets, rating, reviewCount, images, variants]

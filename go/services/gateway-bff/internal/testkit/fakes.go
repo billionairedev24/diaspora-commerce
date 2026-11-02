@@ -40,6 +40,8 @@ type Product struct {
 	CategoryID  string
 	Attributes  map[string]string
 	Variants    []Variant
+	// SizeChart is the chart the public page shows (fashion).
+	SizeChart map[string]any
 }
 
 // Fixture products: low stock (platform), a seller product with an in-stock and a sold-out variant, and a sold-out
@@ -57,6 +59,13 @@ func defaultProducts() []Product {
 		{ATIN: "ATGARI0001", Title: "Ijebu Garri", OwnerKind: "PLATFORM", SellerOrgID: "org_afrotransact_retail",
 			SellerName: "AfroTransact Retail", CategoryID: "cat-grains", Attributes: map[string]string{"unit": "2 lb bag"},
 			Variants: []Variant{{ATIN: "ATGARIV001", PriceMinor: 899, Stock: 0}}},
+		{ATIN: SizedProductATIN, Title: "Adire Wrap Dress, Puff Sleeve", OwnerKind: "SELLER", SellerOrgID: "org_adire",
+			SellerName: "Adire Lagos", CategoryID: "cat-dresses", Attributes: map[string]string{"brand": "Adire Lagos", "origin": "Nigeria"},
+			Variants: []Variant{
+				{ATIN: "ATADIREV01", Options: map[string]string{"Size": "S", "Color": "Indigo adire"}, PriceMinor: 8900, Stock: 6},
+				{ATIN: "ATADIREV02", Options: map[string]string{"Size": "UK 12", "Color": "Indigo adire"}, PriceMinor: 8900, Stock: 4},
+				{ATIN: "ATADIREV03", Options: map[string]string{"Size": "Free size", "Color": "Ankara blue print"}, PriceMinor: 9400, Stock: 0}},
+			SizeChart: sizedProductChart()},
 	}
 }
 
@@ -119,6 +128,10 @@ type Upstreams struct {
 	actingAs map[string]string
 	// AssistantCalls records the seller assistant's model calls.
 	AssistantCalls []AssistantCall
+	// LastSizeChartBody is the body of the last size chart create or edit catalog received; LastSizeChartQuery the query of
+	// the last list or upload.
+	LastSizeChartBody  map[string]any
+	LastSizeChartQuery url.Values
 	// FailInventory makes inventory answer 503.
 	FailInventory bool
 	opts          Options
@@ -332,8 +345,12 @@ func publicProduct(p Product) map[string]any {
 	for _, v := range p.Variants {
 		vs = append(vs, map[string]any{"atin": v.ATIN, "options": v.Options, "priceMinor": v.PriceMinor, "currency": "usd"})
 	}
-	return map[string]any{"atin": p.ATIN, "ownerKind": p.OwnerKind, "sellerOrgId": p.SellerOrgID, "categoryId": p.CategoryID,
+	out := map[string]any{"atin": p.ATIN, "ownerKind": p.OwnerKind, "sellerOrgId": p.SellerOrgID, "categoryId": p.CategoryID,
 		"title": p.Title, "attributes": p.Attributes, "images": []map[string]any{{"url": "https://img.example/" + p.ATIN + ".jpg"}}, "variants": vs}
+	if p.SizeChart != nil {
+		out["sizeChart"] = p.SizeChart
+	}
+	return out
 }
 
 func (u *Upstreams) routes(mux *http.ServeMux) {

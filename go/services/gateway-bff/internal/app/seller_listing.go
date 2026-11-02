@@ -244,6 +244,8 @@ func (s *sellerListingImpl) detailOf(ctx context.Context, c *domain.Caller, p po
 		if l.ShipFrom != nil {
 			out.Listing.ShipFromID = strPtr(l.ShipFrom.LocationID)
 		}
+		out.Listing.SizeChartID = strPtr(l.SizeChartID)
+		out.Listing.FitNote = strPtr(l.FitNote)
 	}
 	// The category's path for the picker (catalog stores the id); a requested category shows its request's path.
 	if p.CategoryID != "" {

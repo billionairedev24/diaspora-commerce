@@ -432,6 +432,36 @@ func TestStaffTaxonomy(t *testing.T) {
 	}
 	do("mgr", "PATCH", "/v1/staff/taxonomy/product-types/dress", map[string]any{"attributes": []any{map[string]any{"key": "brand", "label": "Brand", "kind": "BOGUS"}},
 		"reason": "Bad kind"}, 422, "If-Match", `"2"`)
+	// Sizing: staff mark the type as sized (the seller then writes charts and sizes) and may let sellers add their own
+	// values to a variation; the BFF cleans both and catalog merges the fields it is sent.
+	do("mgr", "PATCH", "/v1/staff/taxonomy/product-types/dress", map[string]any{"reason": "Dresses are sized", "traits": map[string]any{"sizing": map[string]any{
+		"sizeChartRequired": true, "suggestedMeasurements": []any{
+			map[string]any{"label": " Bust ", "unit": "cm", "help": "Fullest part", "ignored": 1}, map[string]any{"label": "Waist", "key": "waist"}}}},
+		"themes": []any{map[string]any{"name": "Size", "dimensions": []any{map[string]any{"name": "Size", "options": []string{"S", "M"}, "allowCustomValues": true}}}}},
+		200, "If-Match", `"2"`)
+	sent := f.bodies["PATCH /v1/taxonomy/product-types/dress"]
+	sizing := sent["traits"].(map[string]any)["sizing"].(map[string]any)
+	ms := sizing["suggestedMeasurements"].([]any)
+	if sizing["sizeChartRequired"] != true || sizing["enabled"] != nil || len(ms) != 2 || ms[0].(map[string]any)["label"] != "Bust" ||
+		ms[0].(map[string]any)["unit"] != "CM" || ms[0].(map[string]any)["ignored"] != nil || ms[1].(map[string]any)["key"] != "waist" {
+		t.Fatalf("sizing sent to catalog = %s", mustJSON(t, sent))
+	}
+	if dim := sent["themes"].([]any)[0].(map[string]any)["dimensions"].([]any)[0].(map[string]any); dim["allowCustomValues"] != true || len(dim["options"].([]any)) != 2 {
+		t.Fatalf("themes sent to catalog = %s", mustJSON(t, sent))
+	}
+	do("mgr", "PATCH", "/v1/staff/taxonomy/product-types/dress", map[string]any{"reason": "Sizing off", "traits": map[string]any{"sizing": map[string]any{"enabled": false}}},
+		200, "If-Match", `"2"`)
+	if off := f.bodies["PATCH /v1/taxonomy/product-types/dress"]["traits"].(map[string]any)["sizing"].(map[string]any); off["enabled"] != false {
+		t.Fatalf("sizing off = %v", off)
+	}
+	bad := do("mgr", "PATCH", "/v1/staff/taxonomy/product-types/dress", map[string]any{"reason": "Too much", "traits": map[string]any{"sizing": map[string]any{
+		"suggestedMeasurements": []any{map[string]any{"label": "", "unit": "yd"}}}}, "themes": []any{map[string]any{"name": "", "dimensions": []any{}}}},
+		422, "If-Match", `"2"`)["errors"].(map[string]any)
+	for _, k := range []string{"traits.sizing.suggestedMeasurements[0].label", "traits.sizing.suggestedMeasurements[0].unit", "themes[0].name", "themes[0].dimensions"} {
+		if bad[k] == nil {
+			t.Fatalf("missing error %s in %v", k, bad)
+		}
+	}
 	do("mgr", "PATCH", "/v1/staff/taxonomy/product-types/dress", map[string]any{"label": "Dresses", "reason": "Late"}, 412, "If-Match", `"9"`)
 	do("mgr", "PATCH", "/v1/staff/taxonomy/product-types/dress", map[string]any{"label": "Dresses", "reason": "No version"}, 422)
 

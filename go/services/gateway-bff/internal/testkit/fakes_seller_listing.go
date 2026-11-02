@@ -25,7 +25,8 @@ func (u *Upstreams) catalogListingRoutes(mux *http.ServeMux) {
 				"options": map[string]string{"Net weight": "5 lb"}, "priceMinor": 2499, "compareAtMinor": 2999, "currency": "USD", "quantity": 40, "images": []any{}}},
 			"status": "REJECTED", "moderationNote": "Main image has a watermark", "version": 3, "preorderEligible": true,
 			"listing": map[string]any{"description": "Stone-free ofada.", "condition": "NEW", "keywords": []string{"ofada"}, "fulfilment": "SELLER",
-				"handlingDays": 2, "shipFrom": map[string]any{"locationId": "addr-1", "city": "Houston", "region": "TX", "country": "US"}},
+				"handlingDays": 2, "shipFrom": map[string]any{"locationId": "addr-1", "city": "Houston", "region": "TX", "country": "US"},
+				"sizeChartId": "5c1e0000-0000-4000-8000-000000000009", "fitNote": "TRUE_TO_SIZE"},
 			"updatedAt": "2026-10-09T10:00:00Z"}
 	}
 	mux.HandleFunc("GET /v1/products/{id}", func(w http.ResponseWriter, r *http.Request) {

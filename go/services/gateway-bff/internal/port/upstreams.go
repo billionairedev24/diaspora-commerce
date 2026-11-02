@@ -115,6 +115,8 @@ type CatalogProduct struct {
 	Variants       []CatalogVariant `json:"variants"`
 	// Rating is the average over the product's published, verified-purchase reviews (S324); zeros without any.
 	Rating UpRating `json:"rating"`
+	// SizeChart is the seller's size chart when the product has one.
+	SizeChart *domain.ProductSizeChart `json:"sizeChart"`
 }
 
 // CatalogVariantView is a variant with its product (GET /v1/public/variants/{atin}).

@@ -30,6 +30,8 @@ type ListingDetails struct {
 	Packaging    *PackageDimensions `json:"packaging"`
 	HandlingDays int                `json:"handlingDays"`
 	ShipFromID   *string            `json:"shipFromId"`
+	SizeChartID  *string            `json:"sizeChartId"`
+	FitNote      *string            `json:"fitNote"`
 }
 
 // SellerProductDetail is GET /v1/seller/listings/{productId}: everything the one-step form edits.

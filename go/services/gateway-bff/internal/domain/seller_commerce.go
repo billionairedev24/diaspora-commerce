@@ -364,12 +364,18 @@ type ProductTypeTraits struct {
 	Perishable bool `json:"perishable"`
 	Regulated  bool `json:"regulated"`
 	Preorder   bool `json:"preorder"`
+	// Sizing is set for sized product types (fashion): sellers attach size charts they write and write their own
+	// sizes. Nil for the others.
+	Sizing *SizingTrait `json:"sizing"`
 }
 
 // VariationDimension is one variation axis.
 type VariationDimension struct {
-	Name    string   `json:"name"`
+	Name string `json:"name"`
+	// Options are the values the category offers: the only allowed ones, or only suggestions when AllowCustomValues.
 	Options []string `json:"options"`
+	// AllowCustomValues lets the seller write values of their own ("UK 12", "Indigo adire") besides Options.
+	AllowCustomValues bool `json:"allowCustomValues"`
 }
 
 // VariationTheme is a set of axes (Size × Color).
@@ -461,6 +467,10 @@ type ListingDetailsInput struct {
 	Packaging    *PackageDimensions `json:"packaging,omitempty"`
 	HandlingDays int                `json:"handlingDays,omitempty"`
 	ShipFromID   *string            `json:"shipFromId,omitempty"`
+	// SizeChartID is one of the organisation's size charts (POST /v1/seller/size-charts); required when the product
+	// type's sizing trait says so. FitNote (RUNS_SMALL, TRUE_TO_SIZE, RUNS_LARGE) shows beside the chart.
+	SizeChartID string `json:"sizeChartId,omitempty"`
+	FitNote     string `json:"fitNote,omitempty"`
 }
 
 // ProductDraft is the one-step product form's submission (POST /v1/seller/products, PUT /v1/seller/products/{id}).

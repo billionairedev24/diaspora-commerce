@@ -117,6 +117,17 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("GET /v1/seller/catalog/brands", h.brands)
 		route("POST /v1/seller/catalog/brands", h.createBrand)
 	}
+	if h.s.SellerSizeCharts != nil {
+		route("GET /v1/seller/size-charts", h.sizeCharts)
+		route("POST /v1/seller/size-charts", h.createSizeChart)
+		route("GET /v1/seller/size-charts/suggestions", h.sizeChartSuggestions)
+		route("GET /v1/seller/size-charts/import-template", h.sizeChartTemplate)
+		route("POST /v1/seller/size-charts/import", h.importSizeCharts)
+		route("GET /v1/seller/size-charts/{chartId}", h.sizeChart)
+		route("PUT /v1/seller/size-charts/{chartId}", h.updateSizeChart)
+		route("DELETE /v1/seller/size-charts/{chartId}", h.retireSizeChart)
+		route("POST /v1/seller/size-charts/{chartId}/duplicate", h.duplicateSizeChart)
+	}
 	route("GET /v1/seller/catalog/categories", h.categoryTree)
 	route("GET /v1/seller/catalog/product-types/{code}", h.productType)
 	route("GET /v1/seller/catalog/gtin/{code}", h.checkGTIN)

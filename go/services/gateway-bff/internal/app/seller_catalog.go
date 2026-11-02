@@ -336,6 +336,13 @@ func (s *sellerCatalogImpl) ProductType(ctx context.Context, c *domain.Caller, c
 	}
 	out := domain.ProductTypeSchema{Code: t.Code, Label: t.Label, IdentifierRule: rule, Attributes: []domain.AttributeDef{},
 		Themes: []domain.VariationTheme{}, Traits: t.Traits}
+	if sz := out.Traits.Sizing; sz != nil {
+		sizing := *sz
+		if sizing.SuggestedMeasurements == nil {
+			sizing.SuggestedMeasurements = []domain.SuggestedMeasurement{}
+		}
+		out.Traits.Sizing = &sizing
+	}
 	for _, a := range t.Attributes {
 		opts := a.Options
 		if opts == nil {

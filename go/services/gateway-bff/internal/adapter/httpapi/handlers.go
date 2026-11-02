@@ -52,6 +52,8 @@ type Services struct {
 	// SellerListing is the one-step product form (S307) and SellerImports the bulk upload (S308); registered when set.
 	SellerListing app.SellerListingService
 	SellerImports app.SellerImportService
+	// SellerSizeCharts is the seller's size charts for sized categories (fashion); its routes are registered when set.
+	SellerSizeCharts app.SellerSizeChartService
 	// SellerOffers is the fulfilment choice of offers (S255); its routes are registered when set.
 	SellerOffers app.SellerOffersService
 	// SellerAssistant is Lola in Seller Center, with the plan's tier; its routes are registered when set.

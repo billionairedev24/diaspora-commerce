@@ -703,6 +703,8 @@ type CatalogListing struct {
 	Packaging    *domain.PackageDimensions `json:"packaging"`
 	HandlingDays int                       `json:"handlingDays"`
 	ShipFrom     *CatalogShipFrom          `json:"shipFrom"`
+	SizeChartID  string                    `json:"sizeChartId"`
+	FitNote      string                    `json:"fitNote"`
 }
 
 // CatalogShipFrom is catalog's ShipFrom snapshot of a seller ship-from address.

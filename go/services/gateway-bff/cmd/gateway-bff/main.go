@@ -124,7 +124,7 @@ func run() error {
 		Cache:    cache, MatrixTTL: cfg.Cache.DefaultTTL, Log: log, PublishableKey: cfg.Stripe.PublishableKey,
 
 		// S307/S308: product edits, form drafts and bulk uploads at catalog; the AI listing writer at ai-gateway.
-		Listing: upstreams.NewSellerListing(catalogClient), Writer: upstreams.NewListingWriter(client("ai-gateway", up.AIGateway)),
+		Listing: upstreams.NewSellerListing(catalogClient), SizeCharts: upstreams.NewSizeCharts(catalogClient), Writer: upstreams.NewListingWriter(client("ai-gateway", up.AIGateway)),
 		ListingCache: app.NewListingCache(time.Now),
 	}
 	verifier := upstreams.NewTokenVerifier(cfg.OIDC.Issuer, cfg.OIDC.Audience, cfg.OIDC.ClientID,
@@ -187,6 +187,7 @@ func run() error {
 		SellerOrders:       app.NewSellerOrdersService(sellerDeps),
 		SellerCatalog:      app.NewSellerCatalogService(sellerDeps),
 		SellerListing:      app.NewSellerListingService(sellerDeps),
+		SellerSizeCharts:   app.NewSellerSizeChartService(sellerDeps),
 		SellerMoney:        app.NewSellerMoneyService(sellerDeps),
 		SellerFees:         app.NewSellerFeesService(sellerDeps),
 		SellerTeam:         app.NewSellerTeamService(sellerDeps),

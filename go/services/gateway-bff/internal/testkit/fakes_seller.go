@@ -85,6 +85,7 @@ func (u *Upstreams) sellerRoutes(mux *http.ServeMux) {
 	u.sellerServiceRoutes(mux)
 	u.catalogSellerRoutes(mux)
 	u.catalogListingRoutes(mux)
+	u.sizeChartRoutes(mux)
 	u.moneyRoutes(mux)
 	u.libraryRoutes(mux)
 	if u.opts.SellerPending {
@@ -640,6 +641,17 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		})
 	}
 	mux.HandleFunc("GET /v1/product-types/{code}", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("code") == "dress" {
+			writeJSON(w, 200, map[string]any{"code": "dress", "label": "Women's dresses", "identifierRule": "GTIN",
+				"attributes": []map[string]any{{"key": "brand", "label": "Brand", "required": true}},
+				"themes": []map[string]any{{"name": "Size × Color", "dimensions": []map[string]any{
+					{"name": "Size", "options": []string{"XS", "S", "M", "L", "XL"}, "allowCustomValues": true},
+					{"name": "Color", "options": []string{"Black", "Gold", "Indigo"}, "allowCustomValues": true}}}},
+				"traits": map[string]any{"food": false, "perishable": false, "regulated": false, "preorder": false, "sizing": map[string]any{
+					"sizeChartRequired": true, "sizeDimension": "Size", "suggestedMeasurements": []map[string]any{
+						{"key": "bust", "label": "Bust", "unit": "CM", "help": "Around the fullest part of the bust"}, {"key": "waist", "label": "Waist", "unit": "CM"}}}}})
+			return
+		}
 		if r.PathValue("code") != "grocery" {
 			problem(w, 404, "catalog.product-type-not-found", "Unknown product type", nil)
 			return

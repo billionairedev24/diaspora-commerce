@@ -38,6 +38,8 @@ type SellerDeps struct {
 
 	// Listing edits products, keeps form drafts and runs bulk uploads at catalog (S307/S308); nil answers 503.
 	Listing port.SellerListingClient
+	// SizeCharts is catalog's size chart API: the organisation's charts and the size chart upload; nil answers 503.
+	SizeCharts port.SizeChartClient
 	// Writer is ai-gateway's AI listing writer (nil: never offered).
 	Writer port.ListingWriterClient
 	// Fees reads payments' fee schedules with the BFF's service token (nil: the Fees page answers 503).

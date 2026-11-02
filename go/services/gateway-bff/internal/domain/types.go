@@ -93,6 +93,8 @@ type VariantOption struct {
 	Selected   bool   `json:"selected"`
 	Available  bool   `json:"available"`
 	PriceMinor int64  `json:"priceMinor"`
+	// Options are the variant's values per dimension (Size, Color), as the seller wrote them.
+	Options map[string]string `json:"options"`
 }
 
 // ProductImage is a gallery image.
@@ -126,6 +128,8 @@ type ProductDetail struct {
 	SoldBy         string      `json:"soldBy"`
 	ReturnsPolicy  string      `json:"returnsPolicy"`
 	UnitPriceLabel string      `json:"unitPriceLabel"`
+	// SizeChart is the seller's size chart of a sized product (fashion); null for the others.
+	SizeChart *ProductSizeChart `json:"sizeChart"`
 }
 
 // FacetBucket is one filter value with its count.

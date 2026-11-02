@@ -215,7 +215,7 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 	if len(p.Variants) > 1 {
 		for _, v := range p.Variants {
 			variants = append(variants, domain.VariantOption{ATIN: v.ATIN, Label: firstNonEmpty(optionsLabel(v.Options), "Standard"),
-				Selected: v.ATIN == sel.ATIN, Available: avail[v.ATIN] > 0, PriceMinor: v.PriceMinor})
+				Selected: v.ATIN == sel.ATIN, Available: avail[v.ATIN] > 0, PriceMinor: v.PriceMinor, Options: optionsOrEmpty(v.Options)})
 		}
 	}
 	images := make([]domain.ProductImage, 0, max(1, len(p.Images)))
@@ -241,7 +241,30 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 		SoldBy:         soldBy,
 		ReturnsPolicy:  returnsPolicy(fulfilment, department),
 		UnitPriceLabel: domain.Money(sel.PriceMinor) + " / " + unit,
+		SizeChart:      sizeChartOf(p.SizeChart),
 	}, nil
+}
+
+func optionsOrEmpty(o map[string]string) map[string]string {
+	if o == nil {
+		return map[string]string{}
+	}
+	return o
+}
+
+// sizeChartOf is the chart the product page shows, with its lists never null.
+func sizeChartOf(c *domain.ProductSizeChart) *domain.ProductSizeChart {
+	if c == nil {
+		return nil
+	}
+	out := *c
+	if out.Columns == nil {
+		out.Columns = []domain.SizeChartColumn{}
+	}
+	if out.Rows == nil {
+		out.Rows = []domain.SizeChartRow{}
+	}
+	return &out
 }
 
 // offerAvailability raises each variant's availability to its buy box quantity (seller-fulfilled stock lives on the

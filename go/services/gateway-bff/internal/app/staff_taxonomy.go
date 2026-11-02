@@ -549,9 +549,123 @@ func attributesOf(raw any, errs map[string]string) []jobj {
 	return out
 }
 
-func traitsBody(raw any) jobj {
+// traitsBody is catalog's traits: the four flags and, when staff sent one, the sizing trait (absent leaves a type's
+// sizing as it is; {enabled: false} switches it off; other fields are merged by catalog).
+func traitsBody(raw any, errs map[string]string) jobj {
 	m, _ := raw.(map[string]any)
-	return jobj{"food": vb(m, "food"), "perishable": vb(m, "perishable"), "regulated": vb(m, "regulated"), "preorder": vb(m, "preorder")}
+	out := jobj{"food": vb(m, "food"), "perishable": vb(m, "perishable"), "regulated": vb(m, "regulated"), "preorder": vb(m, "preorder")}
+	if sz, ok := m["sizing"].(map[string]any); ok {
+		out["sizing"] = sizingBody(sz, errs)
+	}
+	return out
+}
+
+// sizingBody checks the sizing trait of a product type: whether a chart is required, the size dimension and the
+// suggested measurements that pre-fill sellers' chart editor and bulk template.
+func sizingBody(sz map[string]any, errs map[string]string) jobj {
+	out := jobj{}
+	if _, ok := sz["enabled"]; ok {
+		out["enabled"] = vb(sz, "enabled")
+	}
+	if _, ok := sz["sizeChartRequired"]; ok {
+		out["sizeChartRequired"] = vb(sz, "sizeChartRequired")
+	}
+	if d := tidy(sz["sizeDimension"]); d != "" {
+		if utf8.RuneCountInString(d) > 40 {
+			errs["traits.sizing.sizeDimension"] = "At most 40 characters"
+		}
+		out["sizeDimension"] = d
+	}
+	raw, ok := sz["suggestedMeasurements"]
+	if !ok {
+		return out
+	}
+	list, _ := raw.([]any)
+	if len(list) > 12 {
+		errs["traits.sizing.suggestedMeasurements"] = "At most 12 measurements"
+		list = list[:12]
+	}
+	ms := []jobj{}
+	for i, item := range list {
+		m, _ := item.(map[string]any)
+		at := "traits.sizing.suggestedMeasurements[" + strconv.Itoa(i) + "]."
+		label := tidy(m["label"])
+		if n := utf8.RuneCountInString(label); n < 1 || n > 40 {
+			errs[at+"label"] = "1 to 40 characters"
+		}
+		b := jobj{"label": label}
+		if k := strings.TrimSpace(vs(m, "key")); k != "" {
+			b["key"] = k
+		}
+		if u := strings.ToUpper(strings.TrimSpace(vs(m, "unit"))); u != "" {
+			if u != "CM" && u != "IN" {
+				errs[at+"unit"] = "cm or in"
+			}
+			b["unit"] = u
+		}
+		if h := tidy(m["help"]); h != "" {
+			if utf8.RuneCountInString(h) > 200 {
+				errs[at+"help"] = "At most 200 characters"
+			}
+			b["help"] = h
+		}
+		ms = append(ms, b)
+	}
+	out["suggestedMeasurements"] = ms
+	return out
+}
+
+// themesBody checks the variation themes staff edit: up to eight themes of one or two dimensions, each with the values
+// the category offers (suggestions when sellers may write their own: allowCustomValues).
+func themesBody(raw any, errs map[string]string) []jobj {
+	list, _ := raw.([]any)
+	if len(list) > 8 {
+		errs["themes"] = "At most 8 variations"
+		list = list[:8]
+	}
+	out := []jobj{}
+	for i, item := range list {
+		t, _ := item.(map[string]any)
+		at := "themes[" + strconv.Itoa(i) + "]."
+		name := tidy(t["name"])
+		if n := utf8.RuneCountInString(name); n < 1 || n > 60 {
+			errs[at+"name"] = "1 to 60 characters"
+		}
+		dims := []jobj{}
+		ds, _ := t["dimensions"].([]any)
+		if len(ds) < 1 || len(ds) > 2 {
+			errs[at+"dimensions"] = "One or two dimensions"
+		}
+		for j, dv := range ds {
+			d, _ := dv.(map[string]any)
+			dat := at + "dimensions[" + strconv.Itoa(j) + "]."
+			dn := tidy(d["name"])
+			if n := utf8.RuneCountInString(dn); n < 1 || n > 40 {
+				errs[dat+"name"] = "1 to 40 characters"
+			}
+			opts := []string{}
+			for _, o := range anyStrings(d["options"]) {
+				opts = append(opts, tidy(o))
+			}
+			if len(opts) > 60 {
+				errs[dat+"options"] = "At most 60 values"
+			}
+			dims = append(dims, jobj{"name": dn, "options": opts, "allowCustomValues": vb(d, "allowCustomValues")})
+		}
+		out = append(out, jobj{"name": name, "dimensions": dims})
+	}
+	return out
+}
+
+func anyStrings(v any) []string {
+	list, _ := v.([]any)
+	out := make([]string, 0, len(list))
+	for _, x := range list {
+		if s, ok := x.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // newTypeBody validates the definition of a new product type (also used inside a new product-type node).
@@ -567,7 +681,7 @@ func newTypeBody(body map[string]any) (jobj, map[string]string) {
 			errs["label"] = "2 to 80 characters"
 		}
 	}
-	b := jobj{"identifierRule": rule, "traits": traitsBody(body["traits"])}
+	b := jobj{"identifierRule": rule, "traits": traitsBody(body["traits"], errs)}
 	if label != "" {
 		b["label"] = label
 	}
@@ -604,7 +718,8 @@ func (s *staffTaxonomyImpl) CreateProductType(ctx context.Context, c *domain.Cal
 	return s.catalog(ctx, sc, http.MethodPost, "/v1/taxonomy/product-types", "", nil, b)
 }
 
-// UpdateProductType sends only what the form changed (label, identifierRule, traits, attributes); catalog refuses a
+// UpdateProductType sends only what the form changed (label, identifierRule, traits including sizing, attributes,
+// variation themes with allowCustomValues); catalog refuses a
 // save in which nothing differs.
 func (s *staffTaxonomyImpl) UpdateProductType(ctx context.Context, c *domain.Caller, code, ifMatch string, body map[string]any) (any, error) {
 	if !productTypeRe.MatchString(code) {
@@ -627,7 +742,10 @@ func (s *staffTaxonomyImpl) UpdateProductType(ctx context.Context, c *domain.Cal
 		b["identifierRule"] = rule
 	}
 	if t, ok := body["traits"]; ok {
-		b["traits"] = traitsBody(t)
+		b["traits"] = traitsBody(t, errs)
+	}
+	if raw, ok := body["themes"]; ok {
+		b["themes"] = themesBody(raw, errs)
 	}
 	if raw, ok := body["attributes"]; ok {
 		b["attributes"] = attributesOf(raw, errs)
@@ -690,7 +808,7 @@ func approvalBody(ctx context.Context, sc staffCtx, v jobj) (jobj, error) {
 		for _, a := range objs(tpl, "attributes") {
 			attrs = append(attrs, attributeBody(a))
 		}
-		b["newProductType"] = jobj{"identifierRule": firstNonEmpty(jstr(tpl, "identifierRule"), "GTIN"), "traits": traitsBody(tpl["traits"]),
+		b["newProductType"] = jobj{"identifierRule": firstNonEmpty(jstr(tpl, "identifierRule"), "GTIN"), "traits": traitsBody(tpl["traits"], map[string]string{}),
 			"attributes": attrs, "basedOn": basedOn}
 	}
 	if note := strings.TrimSpace(vs(v, "note")); note != "" {
