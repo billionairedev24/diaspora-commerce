@@ -135,7 +135,7 @@ export function Sidebar({ session, active, onSwitch, switching }: { session: Sel
   const t = useT();
   const single = session.navGroups.length === 1;
   return (
-    <nav aria-label={t('sc.sidebar.backOffice')} className="flex h-full flex-col gap-0.5 px-3 py-4">
+    <nav aria-label={t('sc.sidebar.backOffice')} className="flex h-full flex-col gap-0.5 px-3 pt-4 pb-[calc(1rem+var(--at-chat-fab-clear,0px))]">
       <div className="pb-3">
         <OrgSwitcher session={session} onSwitch={onSwitch} busy={switching} />
       </div>
@@ -155,7 +155,7 @@ export function Sidebar({ session, active, onSwitch, switching }: { session: Sel
 export function SidebarRail({ session, active }: { session: SellerSession; active: ModuleKey | null }) {
   const t = useT();
   return (
-    <nav aria-label={t('sc.sidebar.backOffice')} className="flex flex-col gap-2 px-2 py-3">
+    <nav aria-label={t('sc.sidebar.backOffice')} className="flex flex-col gap-2 px-2 pt-3 pb-[calc(0.75rem+var(--at-chat-fab-clear,0px))]">
       {session.navGroups.map((g, gi) => (
         <ul key={`${session.activeOrg?.id}-${g.key}`} aria-label={g.label} className={cx('m-0 flex list-none flex-col items-center gap-1 p-0', gi > 0 && 'border-t border-border pt-2')}>
           {g.modules.map((m) => {

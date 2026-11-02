@@ -54,7 +54,7 @@ export function ActionBar({ problems, tips, sections, titleOf, percent, preview,
   const heading = ready ? t('sc.pf.ready.ready') : t('sc.pf.ready.missing', { count: problems.length });
   return (
     <div ref={bar} role="region" aria-label={t('sc.pf.bar.label')}
-      className="sticky bottom-0 z-30 -mx-4 border-t border-border bg-surface px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] shadow-lg sm:-mx-8 sm:px-8">
+      className="sticky bottom-0 z-30 -mx-4 -mb-20 border-t border-border bg-surface px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] shadow-lg sm:-mx-8 sm:px-8">
       {open ? (
         <div id="pf-quality-sheet" className="mb-2 flex max-h-[55vh] flex-col gap-3 overflow-y-auto xl:hidden">
           <QualityBar percent={percent} />
