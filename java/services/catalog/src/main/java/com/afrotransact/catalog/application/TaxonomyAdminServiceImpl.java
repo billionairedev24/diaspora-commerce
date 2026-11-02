@@ -326,8 +326,8 @@ class TaxonomyAdminServiceImpl implements TaxonomyAdminService {
                 : change.traits().withSizing(before.traits().sizing());
         List<VariationTheme> requestedThemes = change.themes() == null ? before.themes()
                 : TaxonomyRules.themes(change.themes());
-        SizingTrait sizing = TaxonomyRules.sizing(change.sizing() == null ? flags.sizing() : change.sizing().trait(),
-                requestedThemes);
+        SizingTrait sizing = TaxonomyRules.sizing(change.sizing() == null ? flags.sizing()
+                : change.sizing().applyTo(flags.sizing()), requestedThemes);
         List<VariationTheme> themes = TaxonomyRules.withCustomSizes(requestedThemes, sizing);
         ProductTypeTraits traits = TaxonomyRules.traits(flags.withSizing(sizing));
         List<AttributeDefinition> attributes = change.attributes() == null ? before.attributes()

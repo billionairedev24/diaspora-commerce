@@ -10,6 +10,7 @@ import com.afrotransact.catalog.domain.IdentifierRule;
 import com.afrotransact.catalog.domain.ProductTypeTraits;
 import com.afrotransact.catalog.domain.VariationTheme;
 import com.afrotransact.catalog.domain.sizing.SizingTrait;
+import com.afrotransact.catalog.domain.sizing.SuggestedMeasurement;
 import com.afrotransact.catalog.domain.taxonomy.StoredProductType;
 import com.afrotransact.catalog.domain.taxonomy.TaxonomyAuditEntry;
 
@@ -107,7 +108,26 @@ public interface TaxonomyAdminService {
                              List<AttributeDefinition> attributes, List<VariationTheme> themes, String reason) {
     }
 
-    /** A change of the sizing trait: set it to {@code trait}, or switch sizing off when {@code trait} is null. */
-    record SizingEdit(SizingTrait trait) {
+    /**
+     * A change of the sizing trait. Fields left null keep what the trait has (or its defaults when the type was not
+     * sized yet); {@code remove} switches sizing off.
+     *
+     * @param suggestedMeasurements the whole new list of suggested measurements
+     */
+    record SizingEdit(boolean remove, Boolean sizeChartRequired, String sizeDimension,
+                      List<SuggestedMeasurement> suggestedMeasurements) {
+
+        /** The trait after this edit, or null when sizing is switched off. */
+        public SizingTrait applyTo(SizingTrait current) {
+            if (remove) {
+                return null;
+            }
+            return new SizingTrait(
+                    sizeChartRequired != null ? sizeChartRequired : current != null && current.sizeChartRequired(),
+                    sizeDimension != null && !sizeDimension.isBlank() ? sizeDimension
+                            : current == null ? null : current.sizeDimension(),
+                    suggestedMeasurements != null ? suggestedMeasurements
+                            : current == null ? List.of() : current.suggestedMeasurements());
+        }
     }
 }

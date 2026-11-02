@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.afrotransact.catalog.application.TaxonomyAdminService;
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
 import com.afrotransact.catalog.domain.VariationDimension;
 import com.afrotransact.catalog.domain.VariationTheme;
@@ -107,5 +108,21 @@ class TaxonomySizingRulesTest {
                         e -> assertThat(e.fields()).contains("themes[0].dimensions[0].options"));
         assertThat(TaxonomyRules.themes(List.of(new VariationTheme("Size", List.of(
                 new VariationDimension("Size", List.of(), true)))))).hasSize(1);
+    }
+
+    @Test
+    void aSizingEditChangesOnlyTheFieldsItSends() {
+        SizingTrait current = new SizingTrait(false, "Size", List.of(bust()));
+
+        SizingTrait required = new TaxonomyAdminService.SizingEdit(false, true, null, null).applyTo(current);
+        SizingTrait renamed = new TaxonomyAdminService.SizingEdit(false, null, null, List.of()).applyTo(current);
+        SizingTrait fresh = new TaxonomyAdminService.SizingEdit(false, true, null, null).applyTo(null);
+
+        assertThat(required.sizeChartRequired()).isTrue();
+        assertThat(required.suggestedMeasurements()).containsExactly(bust());
+        assertThat(renamed.sizeChartRequired()).isFalse();
+        assertThat(renamed.suggestedMeasurements()).isEmpty();
+        assertThat(fresh.sizeDimension()).isEqualTo("Size");
+        assertThat(new TaxonomyAdminService.SizingEdit(true, null, null, null).applyTo(current)).isNull();
     }
 }

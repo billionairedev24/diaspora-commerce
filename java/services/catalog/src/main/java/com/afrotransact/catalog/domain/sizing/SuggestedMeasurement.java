@@ -14,7 +14,7 @@ import java.util.Objects;
 public record SuggestedMeasurement(String key, String label, MeasurementUnit unit, String help) {
 
     public SuggestedMeasurement {
-        Objects.requireNonNull(key, "key");
+        key = key == null ? "" : key.strip();
         Objects.requireNonNull(label, "label");
         help = help == null || help.isBlank() ? null : help.strip();
     }

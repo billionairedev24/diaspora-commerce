@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 class ChartImportValidatorTest {
 
     private static final List<String> HEADER = List.of("Size chart name *", "Unit", "Size *", "Bust *", "Waist *",
-            "Hip *", "Fit", "How to measure");
+            "Hip *", "Size fit", "How to measure");
 
     private static final ChartImportContext DRESSES = new ChartImportContext("dress", MeasurementUnit.CM);
 
@@ -194,7 +194,7 @@ class ChartImportValidatorTest {
 
         assertThat(spec.sheetName()).isEqualTo("Size charts");
         assertThat(spec.columns()).extracting(ImportColumn::label).containsExactly("Size chart name", "Unit", "Size",
-                "Bust", "Waist", "Hip", "Fit", "How to measure");
+                "Bust", "Waist", "Hip", "Size fit", "How to measure");
         assertThat(spec.examples()).hasSize(3);
         assertThat(spec.examples().getFirst().get(2)).isEqualTo("XS");
         assertThat(spec.fileStem()).isEqualTo("afrotransact-size-charts-dress");
@@ -211,7 +211,7 @@ class ChartImportValidatorTest {
         TemplateSpec spec = ChartImportColumns.template(null);
 
         assertThat(spec.columns()).extracting(ImportColumn::label).containsExactly("Size chart name", "Unit", "Size",
-                "Chest", "Waist", "Fit", "How to measure");
+                "Chest", "Waist", "Size fit", "How to measure");
         assertThat(spec.fileStem()).isEqualTo("afrotransact-size-charts");
     }
 }

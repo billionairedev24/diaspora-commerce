@@ -156,7 +156,7 @@ public final class ImportColumns {
                         + "for this category.") + " Create charts first on the Size charts page or with the size "
                         + "chart upload.", sizing.sizeChartRequired(), ColumnKind.TEXT, List.of(),
                         type.label() + " chart", true),
-                new ImportColumn(FIT_NOTE, "Fit", "How the sizes fit: Runs small, True to size or Runs large. "
+                new ImportColumn(FIT_NOTE, "Size fit", "How the sizes fit: Runs small, True to size or Runs large. "
                         + "Blank uses the size chart's own fit note.", false, ColumnKind.ENUM, FIT_LABELS,
                         "True to size", true));
     }
@@ -188,7 +188,7 @@ public final class ImportColumns {
                 "material: Cotton wax print; fit: Regular", true));
         cols.add(new ImportColumn(SIZE_CHART, "Size chart", "Sized categories (fashion): the name of one of your size "
                 + "charts.", false, ColumnKind.TEXT, List.of(), "", true));
-        cols.add(new ImportColumn(FIT_NOTE, "Fit", "How the sizes fit: Runs small, True to size or Runs large.", false,
+        cols.add(new ImportColumn(FIT_NOTE, "Size fit", "How the sizes fit: Runs small, True to size or Runs large.", false,
                 ColumnKind.ENUM, FIT_LABELS, "", true));
         cols.addAll(fulfilmentColumns());
         cols.add(new ImportColumn(PREORDER, "Pre-order eligible", "Food only: Yes to let community pre-order "

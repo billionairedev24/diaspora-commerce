@@ -41,7 +41,7 @@ public final class ImportTemplates {
                     + "one row per size, one column per measurement). Then put the chart's name in Size chart. Every "
                     + "size in a product's rows needs a row in that chart; charts are matched by name and belong to "
                     + "your account only.",
-            "Fit says how the sizes fit (Runs small, True to size, Runs large); leave it blank to use the chart's own.");
+            "Size fit says how the sizes fit (Runs small, True to size, Runs large); leave it blank to use the chart's own.");
 
     private ImportTemplates() {
     }

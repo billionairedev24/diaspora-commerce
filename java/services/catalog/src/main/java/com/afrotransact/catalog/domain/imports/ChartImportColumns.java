@@ -65,7 +65,7 @@ public final class ChartImportColumns {
         for (SuggestedMeasurement m : suggested) {
             cols.add(measurement(m.key(), m.label(), m.help()));
         }
-        cols.add(new ImportColumn(FIT_NOTE, "Fit", "How the sizes fit: Runs small, True to size or Runs large.", false,
+        cols.add(new ImportColumn(FIT_NOTE, "Size fit", "How the sizes fit: Runs small, True to size or Runs large.", false,
                 ColumnKind.ENUM, ImportColumns.FIT_LABELS, "True to size", true));
         cols.add(new ImportColumn(HOW_TO_MEASURE, "How to measure", "Tell shoppers how to take their measurements "
                 + "(up to 1,000 characters).", false, ColumnKind.LONG_TEXT, List.of(),

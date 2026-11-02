@@ -46,7 +46,7 @@ class SizeChartFilesTest {
             Sheet sheet = wb.getSheet("Size charts");
             List<String> header = new ArrayList<>();
             sheet.getRow(0).forEach(c -> header.add(c.getStringCellValue()));
-            assertThat(header).containsExactly("Size chart name *", "Unit", "Size *", "Bust *", "Waist *", "Hip *", "Fit",
+            assertThat(header).containsExactly("Size chart name *", "Unit", "Size *", "Bust *", "Waist *", "Hip *", "Size fit",
                     "How to measure");
             for (int r = 0; r < spec.examples().size(); r++) {
                 Row row = sheet.createRow(r + 1);
@@ -99,7 +99,7 @@ class SizeChartFilesTest {
             DataValidation sizeList = validationOn(products, size);
             assertThat(sizeList.getShowErrorBox()).isFalse();
             assertThat(validationOn(products, color).getShowErrorBox()).isFalse();
-            DataValidation fit = validationOn(products, header.indexOf("Fit"));
+            DataValidation fit = validationOn(products, header.indexOf("Size fit"));
             assertThat(fit.getShowErrorBox()).isTrue();
             assertThat(wb.getSheet("Instructions").getRow(0).getCell(0).getStringCellValue())
                     .isEqualTo("AfroTransact bulk upload: Women's dresses");

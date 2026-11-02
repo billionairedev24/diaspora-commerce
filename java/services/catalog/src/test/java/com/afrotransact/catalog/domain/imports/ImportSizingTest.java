@@ -24,7 +24,7 @@ class ImportSizingTest {
             "00000000-0000-0000-0000-0000000000d1"), "Fashion › Women › Dresses", "dress");
 
     private static final List<String> HEADER = List.of("Parent SKU", "SKU *", "Title *", "Brand *", "Image URLs *",
-            "Price (USD) *", "Quantity *", "No barcode", "Variation", "Size", "Color", "Size chart", "Fit");
+            "Price (USD) *", "Quantity *", "No barcode", "Variation", "Size", "Color", "Size chart", "Size fit");
 
     private static ImportContext ctx(ProductType type, SizeChart... charts) {
         Map<String, SizeChart> byName = new HashMap<>();
@@ -205,7 +205,7 @@ class ImportSizingTest {
     void theChartNameMatchesIgnoringCaseAndTheFitNoteIsRead() {
         SizeChart chart = SizingFixtures.dressChart(SizingFixtures.OWNER, "Adire Dresses");
         Map<String, String> r = row("", "AWD-1", "M", "Gold", "adire dresses");
-        r.put("Fit", "Runs small");
+        r.put("Size fit", "Runs small");
 
         ValidationResult res = validate(ctx(SizingFixtures.DRESS, chart), r);
 
@@ -217,7 +217,7 @@ class ImportSizingTest {
     @Test
     void anUnknownFitNoteIsAnError() {
         Map<String, String> r = row("", "AWD-1", "M", "Gold", "");
-        r.put("Fit", "Snug");
+        r.put("Size fit", "Snug");
 
         assertThat(errors(validate(ctx(SizingFixtures.DRESS), r).rows().getFirst()))
                 .containsExactly("fit_note: Choose one of Runs small, True to size, Runs large");
@@ -226,7 +226,7 @@ class ImportSizingTest {
     @Test
     void aTypeWithoutSizingIgnoresTheChartColumns() {
         List<String> header = List.of("SKU *", "Title *", "Brand *", "Image URLs *", "Price (USD) *", "Quantity *",
-                "No barcode", "Size chart", "Fit");
+                "No barcode", "Size chart", "Size fit");
         ImportContext c = new ImportContext(ImportMode.CREATE, SizingFixtures.SPICES, Map.of("grocery", SizingFixtures.SPICES),
                 List.of(new ImportCategory(UUID.randomUUID(), "Groceries › Pantry › Spices", "grocery")), Set.of(),
                 Set.of(), Map.of());
@@ -237,7 +237,7 @@ class ImportSizingTest {
 
         assertThat(errors(res.rows().getFirst())).isEmpty();
         assertThat(res.products().getFirst().sizeChartId()).isNull();
-        assertThat(res.fileWarnings()).singleElement().asString().contains("Ignored columns not in the template: Size chart, Fit");
+        assertThat(res.fileWarnings()).singleElement().asString().contains("Ignored columns not in the template: Size chart, Size fit");
     }
 
     @Test

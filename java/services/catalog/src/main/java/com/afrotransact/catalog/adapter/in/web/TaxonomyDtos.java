@@ -94,7 +94,8 @@ final class TaxonomyDtos {
     }
 
     @Schema(name = "TaxonomyTraits", description = "The flags replace the stored flags. sizing: absent leaves the "
-            + "sizing trait as it is, {enabled: false} switches it off, anything else sets it")
+            + "sizing trait as it is, {enabled: false} switches it off; otherwise the fields sent change and the "
+            + "others keep their value (suggestedMeasurements, when sent, is the whole new list)")
     record TraitsBody(Boolean food, Boolean perishable, Boolean regulated, Boolean preorder,
                       @Valid SizingBody sizing) {
 
@@ -107,7 +108,7 @@ final class TaxonomyDtos {
 
         /** The sizing edit of an update: null when the body does not mention sizing. */
         SizingEdit sizingEdit() {
-            return sizing == null ? null : new SizingEdit(sizing.toDomain());
+            return sizing == null ? null : sizing.toEdit();
         }
     }
 
@@ -121,6 +122,14 @@ final class TaxonomyDtos {
                       @Size(max = 40) String sizeDimension,
                       @Size(max = 12) List<@Valid MeasurementBody> suggestedMeasurements) {
 
+        /** The edit of an update: fields not sent keep what the product type has. */
+        SizingEdit toEdit() {
+            return new SizingEdit(Boolean.FALSE.equals(enabled), sizeChartRequired, sizeDimension,
+                    suggestedMeasurements == null ? null
+                            : suggestedMeasurements.stream().map(MeasurementBody::toDomain).toList());
+        }
+
+        /** The trait of a new product type; null when disabled. */
         SizingTrait toDomain() {
             if (Boolean.FALSE.equals(enabled)) {
                 return null;
