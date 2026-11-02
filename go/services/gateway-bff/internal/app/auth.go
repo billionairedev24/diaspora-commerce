@@ -323,7 +323,10 @@ func (a *authServiceImpl) complete(ctx context.Context, c *domain.Caller, code s
 	if old == nil && req.SessionID != "" {
 		old, _ = a.store.Load(ctx, "web:"+req.SessionID)
 	}
-	next := &domain.Session{ID: randomID(24), CreatedAt: a.o.Clock.now(), Tokens: &tokens, Profile: &profile}
+	now := a.o.Clock.now()
+	// The audience (and so the sign-out policy) is the web app the person signed in at.
+	next := &domain.Session{ID: randomID(24), CreatedAt: now, LastActivityAt: now, Tokens: &tokens, Profile: &profile,
+		Audience: domain.AudienceForApp(a.appOf(req.Origin))}
 	if old != nil {
 		next.ZIP, next.GuestCartID = old.ZIP, old.GuestCartID
 	}
@@ -433,7 +436,7 @@ func (a *authServiceImpl) SignedOut(ctx context.Context, c *domain.Caller, app, 
 
 func (a *authServiceImpl) Me(ctx context.Context, c *domain.Caller) (domain.Me, error) {
 	if !c.Authenticated() {
-		return domain.Me{Authenticated: false}, nil
+		return a.signedOutMe(c), nil
 	}
 	user := domain.MeUser{ID: c.Subject, Roles: []string{}}
 	if c.Session != nil && c.Session.Profile != nil {
@@ -448,7 +451,7 @@ func (a *authServiceImpl) Me(ctx context.Context, c *domain.Caller) (domain.Me, 
 			BackOffices: confirmApproved(ctx, a.o.Applications, orgHealer{orgs: a.o.OrgSync, sessions: a.sessions, log: a.o.Log}, c,
 				backOffices(me))}
 	case isUnauthorized(err):
-		return domain.Me{Authenticated: false}, nil
+		return a.signedOutMe(c), nil
 	default:
 		a.o.Log.InfoContext(ctx, "identity /v1/me unavailable; using the ID token profile", "error", err)
 	}
@@ -466,7 +469,23 @@ func (a *authServiceImpl) Me(ctx context.Context, c *domain.Caller) (domain.Me, 
 	if wallet, err := a.payments.PaymentMethods(ctx, c.BearerToken); err == nil {
 		counts.PaymentMethods = len(wallet.Items)
 	}
-	return domain.Me{Authenticated: true, User: &user, Counts: &counts}, nil
+	result := domain.Me{Authenticated: true, User: &user, Counts: &counts}
+	if !c.App {
+		// Web apps learn their sign-out policy with the account; bearer apps ask GET /v1/session/policy with X-App.
+		if v, err := a.sessions.Policy(ctx, c, ""); err == nil {
+			result.Session = &v
+		}
+	}
+	return result, nil
+}
+
+// signedOutMe is the answer for a guest; for ten minutes after the sign-out policy ended the session it says why.
+func (a *authServiceImpl) signedOutMe(c *domain.Caller) domain.Me {
+	me := domain.Me{Authenticated: false}
+	if s := c.Session; s != nil && s.EndedReason != "" && a.o.Clock.now().Sub(s.EndedAt) < endedMemory {
+		me.SignedOutReason = s.EndedReason
+	}
+	return me
 }
 
 func isUnauthorized(err error) bool {

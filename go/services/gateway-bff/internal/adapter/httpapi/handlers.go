@@ -160,6 +160,8 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	h.registerRunAlerts(route, lookup)
 	// Auth
 	route("GET /v1/me", h.me)
+	route("GET "+sessionPolicyPath, h.sessionPolicy)
+	route("POST "+sessionActivityPath, h.sessionActivity)
 	route("GET /v1/auth/login", auth(h.login))
 	route("GET /v1/auth/oidc/{provider}/authorize", auth(h.socialLogin))
 	route("GET /v1/auth/oidc/callback", auth(h.callback))

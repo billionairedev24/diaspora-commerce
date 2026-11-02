@@ -19,7 +19,9 @@ session:
   cookieName: at_session
   cookieSecure: false
   cookieDomain: ""
-  idleTtl: 720h
+  # Upper bound for the session store and cookie; the per-audience sign-out policy (identity) ends sessions earlier.
+  # Keep it at least 2160h (90 days): the longest default session length.
+  idleTtl: 2208h
 oidc:
   clientId: gateway-bff
   scopes: [openid, email, profile, phone, offline_access]

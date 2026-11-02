@@ -111,7 +111,7 @@ func cors(o SecurityOptions) func(http.Handler) http.Handler {
 			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
 				if allowed {
 					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-					w.Header().Set("Access-Control-Allow-Headers", "Accept, Accept-Language, Authorization, Content-Type, Idempotency-Key, If-None-Match, Sec-GPC, X-Guest-Cart, X-Correlation-Id")
+					w.Header().Set("Access-Control-Allow-Headers", "Accept, Accept-Language, Authorization, Content-Type, Idempotency-Key, If-None-Match, Sec-GPC, X-App, X-Background, X-Guest-Cart, X-Correlation-Id")
 					w.Header().Set("Access-Control-Max-Age", "600")
 				}
 				w.WriteHeader(http.StatusNoContent)
@@ -190,12 +190,39 @@ func actingContext(next http.Handler) http.Handler {
 	})
 }
 
+// Session activity routes (contract tag Auth): the policy read never counts as activity; the activity ping always does.
+const (
+	sessionPolicyPath   = "/v1/session/policy"
+	sessionActivityPath = "/v1/session/activity"
+	backgroundHeader    = "X-Background"
+)
+
+// activityOf says whether the request is the person using the app. Background polling (X-Background: 1, which every
+// web app sends on timers, refetch intervals and notification counts) and the policy read do not count, so a page left
+// open does not keep a session alive; POST /v1/session/activity is the web app's report of real input.
+func activityOf(r *http.Request) app.ActivityKind {
+	switch {
+	case r.Method == http.MethodPost && r.URL.Path == sessionActivityPath:
+		return app.ActivityExplicit
+	case r.Method == http.MethodGet && r.URL.Path == sessionPolicyPath, isBackground(r):
+		return app.ActivityBackground
+	default:
+		return app.ActivityCounts
+	}
+}
+
+func isBackground(r *http.Request) bool {
+	v := strings.TrimSpace(r.Header.Get(backgroundHeader))
+	return v == "1" || strings.EqualFold(v, "true")
+}
+
 // identify resolves the caller (cookie session with token refresh, or app bearer) for every /v1 request.
 func identify(sessions app.SessionService, o SecurityOptions, log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			in := app.ResolveInput{BearerToken: bearerOf(r), AppGuestCartID: r.Header.Get("X-Guest-Cart"),
-				ClientIP: clientIP(r, o.TrustForwarded), Language: r.Header.Get("Accept-Language")}
+				ClientIP: clientIP(r, o.TrustForwarded), Language: r.Header.Get("Accept-Language"),
+				Origin: r.Header.Get("Origin"), Path: r.URL.Path, Activity: activityOf(r)}
 			if ck, err := r.Cookie(o.CookieName); err == nil {
 				in.CookieValue = ck.Value
 			}

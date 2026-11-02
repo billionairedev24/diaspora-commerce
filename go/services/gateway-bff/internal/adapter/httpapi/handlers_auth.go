@@ -16,6 +16,22 @@ func (h *handlersImpl) me(w http.ResponseWriter, r *http.Request) {
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
+// sessionPolicy is GET /v1/session/policy: when this caller is signed out. It never counts as activity.
+func (h *handlersImpl) sessionPolicy(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Sessions.Policy(r.Context(), callerFrom(r.Context()), r.Header.Get("X-App"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// sessionActivity is POST /v1/session/activity: the web app reports real user input. The identify middleware already
+// moved LastActivityAt (ActivityExplicit); an expired session never gets here (401 SESSION_*_TIMEOUT).
+func (h *handlersImpl) sessionActivity(w http.ResponseWriter, r *http.Request) {
+	if !callerFrom(r.Context()).Authenticated() {
+		h.reply(w, r, 0, nil, domain.Unauthenticated())
+		return
+	}
+	h.reply(w, r, http.StatusNoContent, nil, nil)
+}
+
 func (h *handlersImpl) startLogin(w http.ResponseWriter, r *http.Request, provider string) {
 	q := r.URL.Query()
 	returnTo := q.Get("returnTo")
