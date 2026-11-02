@@ -1,15 +1,15 @@
-# Search providers: Elasticsearch or Meilisearch
+# Search providers: Meilisearch or Elasticsearch
 
-Search-service (queries) and the indexer (writes) run on **Elasticsearch 9** (the default) or **Meilisearch**. One variable
+Search-service (queries) and the indexer (writes) run on **Meilisearch** (the default) or **Elasticsearch 9**. One variable
 picks the engine for both, so they always agree:
 
 ```bash
-SEARCH_PROVIDER=elasticsearch   # default
-SEARCH_PROVIDER=meilisearch     # + MEILISEARCH_URL, MEILISEARCH_API_KEY (the key is a secret: env only)
+SEARCH_PROVIDER=meilisearch     # default; needs MEILISEARCH_URL, MEILISEARCH_API_KEY (the key is a secret: env only)
+SEARCH_PROVIDER=elasticsearch   # + ES_URLS (and ES_API_KEY or ES_USERNAME/ES_PASSWORD)
 ```
 
-Locally put it in `.local/secrets.env`. `make up` then starts Meilisearch (`http://localhost:7700`, one container, ~1 GB)
-**instead of** Elasticsearch and its exporter; `tools/dev/local.sh restart search indexer` applies a change. The
+Locally put it in `.local/secrets.env`. `make up` starts Meilisearch (`http://localhost:7700`, one container, ~1 GB) by default; `SEARCH_PROVIDER=elasticsearch`
+starts Elasticsearch and its exporter instead; `tools/dev/local.sh restart search indexer` applies a change. The
 local key is `local-meili-master-key` (`config/local.yaml`). Outside local, set `MEILISEARCH_URL` and
 `MEILISEARCH_API_KEY` on both services.
 

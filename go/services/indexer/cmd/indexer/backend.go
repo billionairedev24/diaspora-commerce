@@ -32,7 +32,7 @@ type backend struct {
 
 func newBackend(cfg config.Config) (backend, error) {
 	switch p := strings.ToLower(strings.TrimSpace(cfg.SearchProvider)); p {
-	case "", providerElasticsearch:
+	case providerElasticsearch:
 		opts := []elasticsearch.Option{elasticsearch.WithAddresses(cfg.Elasticsearch.URLs...), elasticsearch.WithRetry(3)}
 		switch {
 		case cfg.Elasticsearch.APIKey != "":
@@ -46,7 +46,7 @@ func newBackend(cfg config.Config) (backend, error) {
 		}
 		admin := elastic.NewIndexAdmin(es, cfg.SynonymsSet)
 		return backend{name: providerElasticsearch, index: elastic.NewIndex(es, cfg.Elasticsearch.Refresh), ensureIndex: admin.EnsureIndex}, nil
-	case providerMeilisearch:
+	case "", providerMeilisearch:
 		if cfg.Meilisearch.URL == "" {
 			return backend{}, fmt.Errorf("SEARCH_PROVIDER=meilisearch needs MEILISEARCH_URL")
 		}

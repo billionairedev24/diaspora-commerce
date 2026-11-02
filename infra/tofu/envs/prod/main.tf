@@ -748,7 +748,7 @@ locals {
         # Lean profile: single-node Kafka in the cluster (infra/k8s/platform/lean/kafka), plaintext inside the namespace network.
         KAFKA_BOOTSTRAP = "kafka.kafka.svc.cluster.local:9092"
       },
-      var.enable_elastic && contains(["search", "indexer"], k) ? { ES_URLS = module.elastic["ec"].elasticsearch_url } : {},
+      var.enable_elastic && contains(["search", "indexer"], k) ? { SEARCH_PROVIDER = "elasticsearch", ES_URLS = module.elastic["ec"].elasticsearch_url } : {},
       var.enable_temporal && k == "orders" ? {
         TEMPORAL_TARGET    = module.temporal["temporal"].target
         TEMPORAL_NAMESPACE = module.temporal["temporal"].namespace
