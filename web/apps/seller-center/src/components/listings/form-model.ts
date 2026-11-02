@@ -1,11 +1,17 @@
 import {
+  addValues,
+  type AddValuesResult,
   type AttributeDef,
   type CategoryNode,
+  type FitNote,
   type ItemCondition,
   type ListingFulfilment,
   type ProductDraft,
   type ProductTypeSchema,
   type SellerProductDetail,
+  type SizeChart,
+  sizesMissingFromChart,
+  valueKey,
   type VariantInput
 } from '@afrotransact/api-client';
 
@@ -81,14 +87,20 @@ export interface FormState {
   shipFromId: string;
   handlingDays: string;
   preorder: boolean;
+  /** The size chart of a sized product type ('' = none yet). */
+  sizeChartId: string;
+  /** How the sizes fit; '' = the chart's own note. */
+  fitNote: FitNote | '';
 }
+
+export const FIT_NOTES: FitNote[] = ['RUNS_SMALL', 'TRUE_TO_SIZE', 'RUNS_LARGE'];
 
 export const emptyRow = (): VariantRow => ({ sku: '', gtin: '', price: '', compareAt: '', qty: '', image: '' });
 
 export const emptyForm = (): FormState => ({
   categoryId: null, categoryPath: '', productType: null, request: null, title: '', attrs: {}, units: {}, description: '', condition: 'NEW', keywords: '',
   images: [], noGtin: false, hasVariants: false, theme: '', selected: {}, rows: {}, single: emptyRow(), fulfilment: 'SELLER',
-  pkg: { length: '', width: '', height: '', weight: '' }, pkgUnits: { size: 'in', weight: 'lb' }, shipFromId: '', handlingDays: '2', preorder: false
+  pkg: { length: '', width: '', height: '', weight: '' }, pkgUnits: { size: 'in', weight: 'lb' }, shipFromId: '', handlingDays: '2', preorder: false, sizeChartId: '', fitNote: ''
 });
 
 export const MIN_IMAGE_PX = 1000;
@@ -136,21 +148,24 @@ const pickBrand = (attrs: Record<string, string>): Record<string, string> =>
 /** Choosing another category resets what depends on the product type. */
 export function withCategory(s: FormState, leaf: { id: string; path: string; productType: string } | null, request: FormState['request'] = null): FormState {
   return { ...s, categoryId: leaf?.id ?? null, categoryPath: request?.path ?? leaf?.path ?? '', productType: request ? 'custom' : (leaf?.productType ?? null), request,
-    attrs: pickBrand(s.attrs), units: {}, theme: '', selected: {}, rows: {}, hasVariants: false };
+    attrs: pickBrand(s.attrs), units: {}, theme: '', selected: {}, rows: {}, hasVariants: false,
+    // A size chart belongs to a product type (shoes, dresses): another type starts without one.
+    ...(s.productType === (request ? 'custom' : (leaf?.productType ?? null)) ? {} : { sizeChartId: '', fitNote: '' as const }) };
 }
 
 /* ── Sections ── */
 
-export type SectionKey = 'basics' | 'images' | 'offer' | 'details' | 'variants' | 'fulfilment' | 'compliance';
+export type SectionKey = 'basics' | 'images' | 'offer' | 'details' | 'variants' | 'sizeGuide' | 'fulfilment' | 'compliance';
 
 /** The sections the form shows for a product type, in page order: Basics, Photos, Price & stock, Details, Variants,
-    Shipping & fulfilment, Compliance (the last three only when the product type has them). */
+    Size guide (sized product types only), Shipping & fulfilment, Compliance (Variants, Size guide and Compliance only when the product type has them). */
 export function sectionsFor(type: ProductTypeSchema | undefined): SectionKey[] {
   if (!type) return ['basics', 'images'];
   const attrs = (section: AttributeDef['section']) => type.attributes.some((a) => a.section === section && a.key !== 'brand');
   const out: SectionKey[] = ['basics', 'images', 'offer'];
   if (attrs('DETAILS')) out.push('details');
   if (type.themes.length) out.push('variants');
+  if (type.traits.sizing) out.push('sizeGuide');
   out.push('fulfilment');
   if (type.traits.food || attrs('FOOD') || type.traits.regulated || attrs('REGULATED')) out.push('compliance');
   return out;
@@ -188,6 +203,13 @@ export function combos(type: ProductTypeSchema | undefined, s: FormState): strin
 
 export const comboKey = (c: string[]) => c.join(' / ');
 
+/** Short stable hash of a variant key: sizes the seller writes can differ only by punctuation ("A/B", "A B"), which `slug` flattens. */
+function hash36(v: string): string {
+  let h = 5381;
+  for (const ch of v) h = (Math.imul(h, 33) ^ (ch.codePointAt(0) ?? 0)) >>> 0;
+  return h.toString(36);
+}
+
 const slug = (v: string) => v.normalize('NFD').replace(/\p{Diacritic}/gu, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 /** A SKU from the title and a variant's options ("ANKARA-WRAP-M-GOLD"), at most 40 characters. */
@@ -216,6 +238,12 @@ export function applyToAll(type: ProductTypeSchema | undefined, s: FormState, fi
     rows[k] = { ...(rows[k] ?? emptyRow()), [field]: value };
   });
   return { ...s, rows };
+}
+
+/** Adds sizes or colours the seller typed or pasted to a dimension. Spaces around a slash are closed up ("S / M" becomes
+    "S/M"), because the matrix names a variant "Size / Colour" and the two must stay apart. */
+export function addOwnValues(selected: readonly string[], suggestions: readonly string[], text: string): AddValuesResult {
+  return addValues(selected, suggestions, text.replace(/\s*\/\s*/g, '/'));
 }
 
 /* ── Validation ── */
@@ -279,14 +307,34 @@ export const fieldId = {
   compareAt: 'pf-compare-at',
   qty: 'pf-qty',
   theme: 'pf-theme',
-  variant: (k: string, field: keyof VariantRow) => `pf-var-${slug(k).toLowerCase()}-${field}`,
+  variant: (k: string, field: keyof VariantRow) => `pf-var-${slug(k).toLowerCase()}-${hash36(k)}-${field}`,
+  sizeChart: 'pf-size-chart',
+  fitNote: 'pf-fit-note',
   pkg: 'pf-pkg',
   shipFrom: 'pf-ship-from',
   handling: 'pf-handling'
 } as const;
 
 /** Every problem of the form (empty = ready to publish). */
-export function validateForm(s: FormState, type: ProductTypeSchema | undefined, opts: { requireShipFrom?: boolean; lockedSkus?: string[] } = {}): Problems {
+export interface ValidateOptions {
+  requireShipFrom?: boolean;
+  lockedSkus?: string[];
+  /** The chosen size chart once loaded: its rows must cover the sizes the variants sell. Skipped while it loads. */
+  sizeChart?: Pick<SizeChart, 'id' | 'name' | 'rows' | 'retired'> | null;
+  /** The chart the live listing already uses: retiring it later does not block saving other changes. */
+  linkedSizeChartId?: string | null;
+}
+
+/** The size values the variants sell, in matrix order (empty when the product has no size axis). */
+export function soldSizes(s: FormState, type: ProductTypeSchema | undefined): string[] {
+  const sizing = type?.traits.sizing;
+  const theme = type?.themes.find((t) => t.name === s.theme);
+  const at = theme?.dimensions.findIndex((d) => d.name === sizing?.sizeDimension) ?? -1;
+  if (!sizing || !s.hasVariants || at < 0) return [];
+  return combos(type, s).map((c) => c[at] ?? '').filter(Boolean);
+}
+
+export function validateForm(s: FormState, type: ProductTypeSchema | undefined, opts: ValidateOptions = {}): Problems {
   const p: Problems = {};
   const add = (id: string, section: SectionKey, label: Problem['label'], key: MessageKey, vars?: Problem['vars']) => {
     if (!p[id]) p[id] = { key, vars, section, label };
@@ -355,6 +403,20 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
   } else {
     checkRow(s.single, { sku: fieldId.sku, gtin: fieldId.gtin, price: fieldId.price, compareAt: fieldId.compareAt, qty: fieldId.qty }, 'offer', null, skus);
     if ((opts.lockedSkus ?? []).length > 1) add(fieldId.theme, 'offer', 'sc.pf.field.theme', 'sc.pf.err.liveVariants');
+  }
+
+  const sizing = type.traits.sizing;
+  if (sizing) {
+    const chart = opts.sizeChart;
+    if (!s.sizeChartId) {
+      if (sizing.sizeChartRequired) add(fieldId.sizeChart, 'sizeGuide', 'sc.pf.field.sizeChart', 'sc.pf.err.sizeChartRequired');
+    } else if (chart && chart.id === s.sizeChartId) {
+      if (chart.retired && opts.linkedSizeChartId !== chart.id) add(fieldId.sizeChart, 'sizeGuide', 'sc.pf.field.sizeChart', 'sc.pf.err.sizeChartRetired', { name: chart.name });
+      else {
+        const missing = sizesMissingFromChart(chart, sizing, soldSizes(s, type).map((size) => ({ options: { [sizing.sizeDimension]: size } }))).map((m) => m.size);
+        if (missing.length) add(fieldId.sizeChart, 'sizeGuide', 'sc.pf.field.sizeChart', 'sc.pf.err.sizeRows', { sizes: missing.join(', '), name: chart.name, count: missing.length });
+      }
+    }
   }
 
   const dims = [s.pkg.length, s.pkg.width, s.pkg.height, s.pkg.weight];
@@ -433,12 +495,33 @@ export function qualityItems(s: FormState, type: ProductTypeSchema | undefined, 
       req(fieldId.price, 'offer', 'sc.pf.field.price');
       req(fieldId.qty, 'offer', 'sc.pf.field.qty');
     }
+    if (type.traits.sizing?.sizeChartRequired) req(fieldId.sizeChart, 'sizeGuide', 'sc.pf.field.sizeChart');
     if (s.fulfilment === 'AFROTRANSACT') req(fieldId.pkg, 'fulfilment', 'sc.pf.field.package');
     else req(fieldId.handling, 'fulfilment', 'sc.pf.field.handling');
   }
   items.push({ id: fieldId.description, section: 'basics', label: 'sc.pf.field.description', required: false, done: s.description.trim().length >= 40, tip: 'sc.pf.tip.description' });
   items.push({ id: fieldId.images, section: 'images', label: 'sc.pf.field.images', required: false, done: s.images.filter((i) => i.url).length >= 3, tip: 'sc.pf.tip.images' });
+  if (type?.traits.sizing && !type.traits.sizing.sizeChartRequired) {
+    items.push({ id: fieldId.sizeChart, section: 'sizeGuide', label: 'sc.pf.field.sizeChart', required: false, done: Boolean(s.sizeChartId), tip: 'sc.pf.tip.sizeChart' });
+  }
   return items;
+}
+
+export interface QualityGroup {
+  section: SectionKey;
+  /** What blocks submitting in this section. */
+  problems: [string, Problem][];
+  /** Recommended items of this section that are not done yet. */
+  tips: QualityItem[];
+}
+
+/** The quality panel's content grouped by form section, in page order; a section with nothing to do is left out.
+    Problems and tips of a section the page does not show (a server message) come last. */
+export function groupQuality(problems: [string, Problem][], tips: QualityItem[], sections: SectionKey[]): QualityGroup[] {
+  const keys = [...sections, ...[...problems.map(([, p]) => p.section), ...tips.map((i) => i.section)].filter((k) => !sections.includes(k))];
+  return [...new Set(keys)]
+    .map((section) => ({ section, problems: problems.filter(([, p]) => p.section === section), tips: tips.filter((i) => i.section === section) }))
+    .filter((g) => g.problems.length > 0 || g.tips.length > 0);
 }
 
 /** 0–100: the share of checklist items that are done. */
@@ -447,10 +530,12 @@ export const qualityScore = (items: QualityItem[]) => (items.length ? Math.round
 /** Server field errors ("title", "listing.packaging", "attributes.shelf", "variants") → form field ids. */
 export function serverFieldId(field: string): string {
   if (field.startsWith('attributes.')) return fieldId.attr(field.slice('attributes.'.length));
+  // Catalog reports a size the chart has no row for as variants[i].options.Size: it is fixed in the size guide section.
+  if (/^variants\[\d+\]\.options\.Size$/i.test(field)) return fieldId.sizeChart;
   const map: Record<string, string> = {
     title: fieldId.title, images: fieldId.images, categoryId: fieldId.category, category: fieldId.category, variationTheme: fieldId.theme, variants: fieldId.theme,
     'listing.packaging': fieldId.pkg, 'listing.description': fieldId.description, 'listing.keywords': fieldId.keywords, 'listing.handlingDays': fieldId.handling,
-    'listing.shipFromId': fieldId.shipFrom, description: fieldId.description, keywords: fieldId.keywords, handlingDays: fieldId.handling, packaging: fieldId.pkg
+    'listing.shipFromId': fieldId.shipFrom, 'listing.sizeChartId': fieldId.sizeChart, 'listing.fitNote': fieldId.fitNote, sizeChartId: fieldId.sizeChart, description: fieldId.description, keywords: fieldId.keywords, handlingDays: fieldId.handling, packaging: fieldId.pkg
   };
   return map[field] ?? fieldId.title;
 }
@@ -503,7 +588,9 @@ export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined
       keywords: keywordsOf(s.keywords),
       fulfilment: s.fulfilment,
       packaging,
-      ...(s.fulfilment === 'SELLER' ? { handlingDays: Number(s.handlingDays) || 2, shipFromId: s.shipFromId || null } : {})
+      ...(s.fulfilment === 'SELLER' ? { handlingDays: Number(s.handlingDays) || 2, shipFromId: s.shipFromId || null } : {}),
+      // Only sized product types carry a chart: catalog refuses one on any other type.
+      ...(type?.traits.sizing ? { sizeChartId: s.sizeChartId || null, fitNote: s.fitNote || null } : {})
     },
     ...(draftId ? { draftId } : {})
   };
@@ -544,7 +631,11 @@ export function fromDetail(d: SellerProductDetail, type: ProductTypeSchema | und
   const rows: Record<string, VariantRow> = {};
   if (hasVariants && theme) {
     theme.dimensions.forEach((dim) => {
-      selected[dim.name] = dim.options.filter((o) => d.variants.some((v) => v.options[dim.name] === o));
+      const sold = d.variants.map((v) => v.options[dim.name] ?? '').filter(Boolean);
+      const listed = dim.options.filter((o) => sold.includes(o));
+      // The seller's own sizes and colours are kept (once each, in the order they were sold) where the dimension allows them.
+      const own = dim.allowCustomValues ? sold.filter((v, i) => !dim.options.some((o) => valueKey(o) === valueKey(v)) && sold.findIndex((x) => valueKey(x) === valueKey(v)) === i) : [];
+      selected[dim.name] = [...listed, ...own];
     });
     d.variants.forEach((v) => {
       rows[comboKey(theme.dimensions.map((dim) => v.options[dim.name] ?? ''))] = rowOf(v);
@@ -560,7 +651,8 @@ export function fromDetail(d: SellerProductDetail, type: ProductTypeSchema | und
     single: !hasVariants && first ? rowOf(first) : emptyRow(), fulfilment: d.listing.fulfilment,
     pkg: pkg ? { length: String(pkg.lengthIn), width: String(pkg.widthIn), height: String(pkg.heightIn), weight: String(pkg.weightLb) } : { length: '', width: '', height: '', weight: '' },
     pkgUnits: { size: 'in', weight: 'lb' },
-    shipFromId: d.listing.shipFromId ?? '', handlingDays: String(d.listing.handlingDays || 2), preorder: d.preorderEligible
+    shipFromId: d.listing.shipFromId ?? '', handlingDays: String(d.listing.handlingDays || 2), preorder: d.preorderEligible,
+    sizeChartId: d.listing.sizeChartId ?? '', fitNote: d.listing.fitNote ?? ''
   };
 }
 
@@ -621,7 +713,9 @@ export function fromDraftPayload(payload: Record<string, unknown>): FormState {
     pkgUnits: { size: units.size === 'cm' ? 'cm' : 'in', weight: units.weight === 'kg' ? 'kg' : 'lb' },
     shipFromId: str(p.shipFromId),
     handlingDays: str(p.handlingDays, '2'),
-    preorder: p.preorder === true
+    preorder: p.preorder === true,
+    sizeChartId: str(p.sizeChartId),
+    fitNote: FIT_NOTES.find((f) => f === p.fitNote) ?? ''
   };
 }
 

@@ -28,7 +28,7 @@ MAIN_MIN_EDGE = 1000  # catalog: the main product image must be at least 1000 x 
 FOOD_TYPES = {"grocery", "perishable"}
 FC_NODES = ("HOU-FC", "ATL-FC", "EWR-FC", "LAX-FC")
 PREORDER_TIME_ZONE = "America/Chicago"
-STEPS = ("sellers", "products", "content", "ads", "preorders", "pickups", "bookings", "ops", "users")
+STEPS = ("sellers", "size-charts", "products", "content", "ads", "preorders", "pickups", "bookings", "ops", "users")
 OPS_REQUIRED = ("identity", "catalog", "offers", "inventory", "retail", "orders", "payments", "fulfilment", "cart")
 
 SERVICES = {  # env var, default local URL (infra/local/PORTS.md), health path
@@ -104,9 +104,10 @@ def theme_for(ptype: dict[str, Any], variants: tuple[tuple[Any, int], ...]) -> t
                 return th["name"], [dict(v) for v, _ in variants]
         raise ValueError(f"no {ptype['code']} theme with dimensions {sorted(dims)}")
     for th in themes:
-        if len(th["dimensions"]) == 1 and all(v in th["dimensions"][0]["options"] for v, _ in variants):
-            dim = th["dimensions"][0]["name"]
-            return th["name"], [{dim: v} for v, _ in variants]
+        d = th["dimensions"][0] if len(th["dimensions"]) == 1 else None
+        # A dimension the category lets sellers extend (Size, Color of fashion types) also takes a size or colour of their own.
+        if d and all(v in d["options"] or d.get("allowCustomValues") for v, _ in variants):
+            return th["name"], [{d["name"]: v} for v, _ in variants]
     raise ValueError(f"no single-dimension {ptype['code']} theme accepts {[v for v, _ in variants]}")
 
 
@@ -166,6 +167,7 @@ class Seeder:
         self.uploader = MediaUploader(self.svc["media"], self.state, log)
         self.up: dict[str, bool] = {}
         self.products: dict[str, dict[str, Any]] = {}  # dataset key -> catalog product
+        self.charts: dict[str, dict[str, Any]] = {}  # dataset size chart key -> catalog size chart
 
     # ------------------------------------------------------------------------------------------------ run
     def run(self, steps: tuple[str, ...] = STEPS) -> int:
@@ -267,6 +269,47 @@ class Seeder:
         self.log(f"  ✓ {len(orgs)} organisations (Stripe Connect is not set up for them: payouts need a Stripe test "
                  "key and onboarding in Seller Center)")
 
+    # ------------------------------------------------------------------------------------------------ size charts
+    def step_size_charts(self) -> None:
+        self.log(f"== size charts ({len(D.SIZE_CHARTS)}): catalog /v1/size-charts, written once and linked by the sized fashion products")
+        cats = self._categories()
+        for spec in D.SIZE_CHARTS:
+            try:
+                self._ensure_chart(spec, cats)
+            except (ApiError, ValueError, KeyError) as e:
+                self._problem(f"size chart {spec.name}: {e}")
+
+    @staticmethod
+    def chart_body(spec: D.SizeChartSpec, category_id: str) -> dict[str, Any]:
+        """The POST /v1/size-charts body: a single value is sent without `max`, a range with both."""
+        def value(lo: float, hi: float) -> dict[str, float]:
+            return {"min": lo} if lo == hi else {"min": lo, "max": hi}
+
+        return {"name": spec.name, "unitSystem": spec.unit, "categoryId": category_id,
+                "columns": [{"key": key, "label": label} for key, label in spec.columns],
+                "rows": [{"size": size, "values": {key: value(*pair) for (key, _), pair in zip(spec.columns, pairs)}}
+                         for size, pairs in spec.rows],
+                "fitNote": spec.fit or None, "howToMeasure": spec.how or None}
+
+    def _ensure_chart(self, spec: D.SizeChartSpec, cats: dict[str, Any]) -> dict[str, Any]:
+        """The chart of the organisation the seeder writes as: found by name (so a re-run, or `--only products`, links the same one) or created."""
+        if spec.key in self.charts:
+            return self.charts[spec.key]
+        cat = cats.get(spec.path)
+        if not cat:
+            raise ValueError(f"category {spec.path!r} not in the catalog tree")
+        page = self.svc["catalog"].get("/v1/size-charts", params={"q": spec.name, "size": 100})
+        found = next((c for c in (page or {}).get("items", []) if str(c.get("name", "")).strip().lower() == spec.name.lower()), None)
+        if found:
+            self.report.add("size charts", "existing")
+            self.log(f"  · {spec.name} (exists)")
+        else:
+            found = self.svc["catalog"].post("/v1/size-charts", self.chart_body(spec, cat["id"]))
+            self.report.add("size charts", "created")
+            self.log(f"  ✓ {spec.name}: {len(spec.rows)} sizes × {len(spec.columns)} measurements ({spec.unit.lower()})")
+        self.charts[spec.key] = found
+        return found
+
     # ------------------------------------------------------------------------------------------------ products
     def _categories(self) -> dict[str, dict[str, Any]]:
         return {c["path"]: c for c in self.svc["catalog"].get("/v1/categories")}
@@ -327,6 +370,9 @@ class Seeder:
                     "attributes": attributes_for(p, ptype, [i.credit() for i in imgs if i.source != "local"]),
                     "images": [{k: a[k] for k in ("url", "width", "height", "bytes", "contentType")} for a in assets],
                     "variationTheme": theme, "variants": variants, "currency": "USD"}
+            chart = self._chart_for(p, cats)
+            if chart:
+                body["listing"] = {"sizeChartId": chart["id"], **({"fitNote": p.fit} if p.fit else {})}
             product = self.svc["catalog"].post("/v1/products", body)
             self.report.add("products", "created")
             line = f"  ✓ {p.title} ({product['atin']}) images: {self._describe(imgs)}"
@@ -339,6 +385,16 @@ class Seeder:
         offers = self._offers(p, product)
         self._stock(p, product, offers)
         self.log(line)
+
+    def _chart_for(self, p: D.Product, cats: dict[str, Any]) -> dict[str, Any] | None:
+        """The size chart a sized product links (it is written first if it is not there); the product is still listed without it if that fails."""
+        if not p.chart:
+            return None
+        try:
+            return self._ensure_chart(D.SIZE_CHART_BY_KEY[p.chart], cats)
+        except (ApiError, ValueError, KeyError) as e:
+            self._problem(f"{p.title}: its size chart {p.chart!r} could not be written ({e}); listed without it")
+            return None
 
     # ------------------------------------------------------------------------------------------------ offers
     def _list_offers(self, org: str, atin: str, withdrawn: bool = False) -> list[dict[str, Any]]:

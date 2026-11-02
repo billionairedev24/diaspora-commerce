@@ -14,10 +14,22 @@ python3 tools/seed/seed.py --skip products      # everything else
 make seed-test                                  # the seeder's unit tests
 ```
 
-Steps: `sellers`, `products`, `content`, `ads`, `preorders`, `pickups` (AfroTransact's customer pickup points in
+Steps: `sellers`, `size-charts`, `products`, `content`, `ads`, `preorders`, `pickups` (AfroTransact's customer pickup points in
 carrier-gateway, CARRIER_GATEWAY_URL), `bookings`, `ops`, `users`. The datasets are
 `seedlib/dataset.py` and `seedlib/ops_dataset.py`; photo sources, attribution and service URLs are described in
 `seed.py` and the guide.
+
+### Size charts and sizes of their own
+
+The `size-charts` step writes the demo size charts (`SIZE_CHARTS` in `seedlib/dataset.py`: women's dresses, women's tops,
+men's shirts and kaftans, kids' party dresses) through catalog's `POST /v1/size-charts`, as the seeder's own organisation
+(the same one that owns the demo products). It finds a chart by name first, so re-running writes nothing, and the
+`products` step does the same when it runs alone. Fashion products name their chart (`chart=`, and optionally their own
+`fit=`); the listing is created with `listing.sizeChartId` and `fitNote`. Two products show sizes and colours the category
+does not list (`adire-shift-dress`: "UK 12", "Free size", "Indigo adire"; `sequin-gele`: "Champagne", "Teal & gold"), which
+needs the sizing configuration of the catalog (see *Sized product types* below). A product that already exists is not
+changed: to get the link on products seeded earlier, remove them or seed a fresh catalog. `tests/test_dataset.py` checks
+the charts against catalog's rules and that every size a product sells has a row in its chart.
 
 ## The category tree is not seeded here
 

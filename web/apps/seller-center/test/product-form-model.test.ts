@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { cellProblems, fileProblem, importable, phaseOf, previewColumns, progress } from '@/components/listings/bulk/bulk-model';
 import {
+  addOwnValues,
   applyToAll,
   brandOf,
   comboKey,
@@ -14,8 +15,10 @@ import {
   type FormState,
   fromDetail,
   fromDraftPayload,
+  groupQuality,
   gtinOk,
   leavesOf,
+  orderedProblems,
   packagingOf,
   previewAttributes,
   priceMinor,
@@ -24,6 +27,7 @@ import {
   searchLeaves,
   sectionsFor,
   sectionStatus,
+  serverFieldId,
   suggestSku,
   toDraftPayload,
   toProductDraft,
@@ -54,9 +58,9 @@ function suya(): FormState {
 describe('one-step product form: sections follow the product type', () => {
   it('shows food details for food, permits for regulated items, shipping only when the seller ships, pre-order when eligible', () => {
     expect(sectionsFor(undefined)).toEqual(['basics', 'images']);
-    // Page order: Basics, Photos, Price & stock, Details, Variants, Shipping & fulfilment, Compliance.
+    // Page order: Basics, Photos, Price & stock, Details, Variants, Size guide (sized types), Shipping & fulfilment, Compliance.
     expect(sectionsFor(grocery)).toEqual(['basics', 'images', 'offer', 'details', 'variants', 'fulfilment', 'compliance']);
-    expect(sectionsFor(dress)).toEqual(['basics', 'images', 'offer', 'details', 'variants', 'fulfilment']);
+    expect(sectionsFor(dress)).toEqual(['basics', 'images', 'offer', 'details', 'variants', 'sizeGuide', 'fulfilment']);
     expect(sectionsFor(perishable)).toContain('compliance');
     expect(sectionsFor(book)).not.toContain('compliance');
   });
@@ -243,5 +247,102 @@ describe('bulk upload rules', () => {
     expect(phaseOf({ ...base, status: 'COMPLETED' })).toBe('done');
     expect(importable({ ...base, status: 'RUNNING' })).toBe(8);
     expect(progress({ ...base, status: 'RUNNING' })).toBe(50);
+  });
+});
+
+describe('size guide: sized product types link a size chart', () => {
+  const menwear = PRODUCT_TYPES.menwear as ProductTypeSchema;
+  const chart = (rows: string[], retired = false) => ({ id: 'c1', name: 'Kaftans', retired, rows: rows.map((size) => ({ size, values: {}, alternateValues: {} })) });
+  const kaftan = (extra: Partial<FormState> = {}): FormState => ({
+    ...withCategory(emptyForm(), { id: 'pt-men', path: 'Fashion › Men › Kaftans', productType: 'menwear' }), title: 'Agbada Kaftan Set in Cotton', images: [image], noGtin: true,
+    attrs: { brand: 'Adire', material: 'Cotton', fit: 'Regular' }, hasVariants: true, theme: 'Size × Color', selected: { Size: ['M', '4XL'], Color: ['Gold'] },
+    rows: { 'M / Gold': { sku: 'K-M', gtin: '', price: '90', compareAt: '', qty: '2', image: '' }, '4XL / Gold': { sku: 'K-4', gtin: '', price: '95', compareAt: '', qty: '1', image: '' } }, ...extra
+  });
+
+  it('adds the Size guide section after the variants, for sized types only', () => {
+    expect(sectionsFor(menwear)).toEqual(['basics', 'images', 'offer', 'details', 'variants', 'sizeGuide', 'fulfilment']);
+    expect(sectionsFor(grocery)).not.toContain('sizeGuide');
+    expect(sectionsFor(book)).not.toContain('sizeGuide');
+  });
+
+  it('requires a chart where the category says so, and none where it does not', () => {
+    expect(validateForm(kaftan(), menwear)[fieldId.sizeChart]).toMatchObject({ key: 'sc.pf.err.sizeChartRequired', section: 'sizeGuide' });
+    expect(validateForm(kaftan({ sizeChartId: 'c1' }), menwear)).toEqual({});
+    const optional = { ...kaftan(), ...withCategory(emptyForm(), { id: 'pt-dresses', path: 'x', productType: 'dress' }) };
+    expect(validateForm({ ...optional, title: 'Ankara Wrap Dress', images: [image], noGtin: true, attrs: { brand: 'A', material: 'Cotton', fit: 'Regular', length: 'Midi' }, single: { sku: 'D-1', gtin: '', price: '40', compareAt: '', qty: '1', image: '' } }, dress)[fieldId.sizeChart]).toBeUndefined();
+  });
+
+  it('checks the chart has a row for every size sold, ignoring case and spacing', () => {
+    const s = kaftan({ sizeChartId: 'c1' });
+    const bad = validateForm(s, menwear, { sizeChart: chart(['S', 'm']) })[fieldId.sizeChart];
+    expect(bad).toMatchObject({ key: 'sc.pf.err.sizeRows', vars: { sizes: '4XL', name: 'Kaftans' } });
+    expect(validateForm(s, menwear, { sizeChart: chart(['S', 'm', ' 4xl ']) })).toEqual({});
+    // A chart that is still loading, or another chart than the chosen one, is not judged.
+    expect(validateForm(s, menwear, { sizeChart: { ...chart([]), id: 'other' } })).toEqual({});
+  });
+
+  it('refuses a retired chart unless the live listing already uses it', () => {
+    const s = kaftan({ sizeChartId: 'c1' });
+    expect(validateForm(s, menwear, { sizeChart: chart(['M', '4XL'], true) })[fieldId.sizeChart]?.key).toBe('sc.pf.err.sizeChartRetired');
+    expect(validateForm(s, menwear, { sizeChart: chart(['M', '4XL'], true), linkedSizeChartId: 'c1' })).toEqual({});
+  });
+
+  it('submits the chart and fit note of sized types only, and a new category drops the chart', () => {
+    const s = kaftan({ sizeChartId: 'c1', fitNote: 'RUNS_LARGE' });
+    expect(toProductDraft(s, menwear).listing).toMatchObject({ sizeChartId: 'c1', fitNote: 'RUNS_LARGE' });
+    expect(toProductDraft(kaftan(), menwear).listing).toMatchObject({ sizeChartId: null, fitNote: null });
+    expect(toProductDraft(suya(), grocery).listing).not.toHaveProperty('sizeChartId');
+    expect(withCategory(s, { id: 'pt-shoes', path: 'x', productType: 'shoes' })).toMatchObject({ sizeChartId: '', fitNote: '' });
+    expect(withCategory(s, { id: 'pt-men-2', path: 'y', productType: 'menwear' })).toMatchObject({ sizeChartId: 'c1', fitNote: 'RUNS_LARGE' });
+  });
+
+  it('sends a size the chart lacks to the Size guide section', () => {
+    expect(serverFieldId('variants[1].options.Size')).toBe(fieldId.sizeChart);
+    expect(serverFieldId('listing.sizeChartId')).toBe(fieldId.sizeChart);
+  });
+
+  it('keeps chart, fit note and own sizes through a draft and through edit', () => {
+    const s = kaftan({ sizeChartId: 'c1', fitNote: 'TRUE_TO_SIZE' });
+    expect(fromDraftPayload(JSON.parse(JSON.stringify(toDraftPayload(s))) as Record<string, unknown>)).toMatchObject({ sizeChartId: 'c1', fitNote: 'TRUE_TO_SIZE', selected: { Size: ['M', '4XL'] } });
+    expect(fromDraftPayload({ sizeChartId: 4, fitNote: 'TIGHT' })).toMatchObject({ sizeChartId: '', fitNote: '' });
+    const detail = {
+      productId: 'p9', atin: 'AT9', status: 'LIVE', statusLabel: 'Live', moderationNote: null, categoryId: 'pt-men', categoryRequestId: null, categoryPath: 'Fashion › Men › Kaftans', productType: 'menwear',
+      title: 'Agbada Kaftan Set in Cotton', attributes: { brand: 'Adire' }, images: [{ url: 'https://img/a.webp', width: 1600, height: 1600, contentType: 'image/webp' }], variationTheme: 'Size × Color',
+      variants: [['M', 'Gold'], ['4XL', 'Gold'], ['4xl', 'Indigo'], ['Free size', 'Indigo'], ['L', 'Midnight teal']].map(([size, color], i) => ({ atin: `AT9-${i}`, sellerSku: `K-${i}`, gtin: null, gtinExempt: true,
+        options: { Size: size ?? '', Color: color ?? '' }, priceMinor: 9000, compareAtMinor: null, quantity: 1, images: [] })),
+      preorderEligible: false, listing: { description: null, condition: 'NEW', keywords: [], fulfilment: 'SELLER', packaging: null, handlingDays: 2, shipFromId: null, sizeChartId: 'c1', fitNote: 'RUNS_SMALL' },
+      currency: 'USD', version: 1, updatedAt: '2026-10-10T10:00:00Z'
+    } as unknown as SellerProductDetail;
+    const back = fromDetail(detail, menwear);
+    expect(back).toMatchObject({ sizeChartId: 'c1', fitNote: 'RUNS_SMALL' });
+    // Listed sizes keep the category order; the seller own ones follow, once each ("4xl" and "4XL" are one size).
+    expect(back.selected.Size).toEqual(['M', 'L', '4XL', 'Free size']);
+    expect(back.selected.Color).toEqual(expect.arrayContaining(['Gold', 'Midnight teal']));
+    expect(combos(menwear, back).length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('groups what is missing by form section, in page order, with the suggestions of the same section', () => {
+    const s = kaftan();
+    const sections = sectionsFor(menwear);
+    const problems = validateForm(s, menwear);
+    const tips = qualityItems(s, menwear, problems).filter((i) => !i.required && !i.done);
+    const groups = groupQuality(orderedProblems(problems, sections), tips, sections);
+    expect(groups.map((g) => g.section)).toEqual(['basics', 'images', 'sizeGuide']);
+    expect(groups[0]).toMatchObject({ problems: [], tips: [{ id: fieldId.description }] });
+    expect(groups[2]?.problems.map(([id]) => id)).toEqual([fieldId.sizeChart]);
+    // A message about a section the page does not show comes last.
+    const stray = groupQuality([['x', { key: 'sc.pf.err.server', section: 'compliance', label: 'sc.pf.field.form' }]], [], ['basics']);
+    expect(stray.map((g) => g.section)).toEqual(['compliance']);
+    expect(groupQuality([], [], sections)).toEqual([]);
+  });
+
+  it('gives variants whose names differ only by punctuation different field ids', () => {
+    const ids = ['A/B / Gold', 'A B / Gold', 'A-B / Gold'].map((k) => fieldId.variant(k, 'sku'));
+    expect(new Set(ids).size).toBe(3);
+    expect(fieldId.variant('M / Gold', 'sku')).toBe(fieldId.variant('M / Gold', 'sku'));
+  });
+
+  it('closes up spaces around a slash in a seller-written value so it cannot read as the variant separator', () => {
+    expect(addOwnValues([], ['S', 'M'], 'S / M, 2XL/3XL ,  m ').selected).toEqual(['S/M', '2XL/3XL', 'M']);
   });
 });

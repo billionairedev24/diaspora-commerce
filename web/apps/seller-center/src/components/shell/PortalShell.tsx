@@ -270,7 +270,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
         expandLabel={t('sc.portalShell.expandMenu')}
         collapseLabel={t('sc.portalShell.collapseMenu')}
       >
-        <main id="main" tabIndex={-1} className="flex min-w-0 flex-col gap-5 px-4 pt-6 pb-12 outline-none sm:px-8">
+        <main id="main" tabIndex={-1} className="flex min-w-0 flex-col gap-5 px-4 pt-6 pb-20 outline-none sm:px-8">
           {session.approved ? <PayoutsPausedBanner /> : null}
           {session.approved ? <ComplianceBanner onAccountHealth={active === 'account-health'} /> : null}
           {needsOnboarding || leaveTo ? (

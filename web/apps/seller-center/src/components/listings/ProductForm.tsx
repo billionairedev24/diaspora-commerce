@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { type FocusEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { SizeChartEditor } from '@/components/size-charts/SizeChartEditor';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
@@ -26,6 +27,7 @@ import { ImagesField } from './form/ImagesField';
 import { ListingPreview } from './form/ListingPreview';
 import { goToField, ReadinessPanel } from './form/ReadinessPanel';
 import { SectionNav } from './form/SectionNav';
+import { SizeGuideSection } from './form/SizeGuideSection';
 import { VariantsSection } from './form/VariantsSection';
 import {
   attributesIn,
@@ -51,6 +53,7 @@ import {
   sectionStatus,
   serverFieldId,
   SIZE_UNITS,
+  soldSizes,
   toDraftPayload,
   toProductDraft,
   validateForm,
@@ -72,7 +75,8 @@ export function ProductForm({ productId }: { productId?: string }) {
   const toast = useToast();
   const router = useRouter();
   const params = useSearchParams();
-  const { orgId, has } = useSeller();
+  const { orgId, has, can } = useSeller();
+  const editableCharts = can('listings');
   const editing = Boolean(productId);
   const draftParam = params.get('draft') ?? '';
 
@@ -88,6 +92,13 @@ export function ProductForm({ productId }: { productId?: string }) {
   const typeCode = s.productType ?? detail.data?.productType ?? '';
   const typeQ = useQuery(sellerQueries.productType(api, typeCode));
   const type: ProductTypeSchema | undefined = typeQ.data;
+  // Sized product types (fashion) link one of the seller's size charts; the chosen chart is read to check its rows against the sizes sold.
+  const sized = Boolean(type?.traits.sizing);
+  const chartsQ = useQuery({ ...sellerQueries.sizeCharts(api, orgId, { productType: typeCode, size: 100 }), enabled: sized });
+  const chartQ = useQuery({ ...sellerQueries.sizeChart(api, orgId, s.sizeChartId), enabled: sized && s.sizeChartId !== '' });
+  const chart = sized && s.sizeChartId && chartQ.data?.id === s.sizeChartId ? chartQ.data : undefined;
+  const [chartSheet, setChartSheet] = useState<'new' | 'edit' | null>(null);
+  const chartState = !sized || !s.sizeChartId ? 'none' : chart ? 'ready' : chartQ.isError ? 'error' : 'loading';
 
   // Load the listing (edit) or the draft once, when what it needs has arrived.
   const loaded = useRef(false);
@@ -137,7 +148,7 @@ export function ProductForm({ productId }: { productId?: string }) {
   }, [live, detail.data, type]);
   const lockedSkus = live ? (detail.data?.variants.map((v) => v.sellerSku) ?? []) : [];
   const sections = sectionsFor(type);
-  const problems: Problems = { ...validateForm(s, type, { lockedSkus }), ...serverProblems };
+  const problems: Problems = { ...validateForm(s, type, { lockedSkus, sizeChart: chart, linkedSizeChartId: detail.data?.listing.sizeChartId }), ...serverProblems };
   const ordered = orderedProblems(problems, sections);
   const err = (id: string) => (shown(id) && problems[id] ? t(problems[id].key, problems[id].vars) : undefined);
   /** Jump to a field from the quality panel: its message shows (so the field is announced with it) and the field takes focus. */
@@ -280,6 +291,7 @@ export function ProductForm({ productId }: { productId?: string }) {
       case 'offer': return t('sc.pf.s.offer');
       case 'details': return t('sc.pf.s.details', { type: type?.label ?? '' });
       case 'variants': return t('sc.pf.s.variants');
+      case 'sizeGuide': return t('sc.pf.s.sizeGuide');
       case 'fulfilment': return t('sc.pf.s.fulfilment');
       case 'compliance': return t('sc.pf.s.compliance');
     }
@@ -400,6 +412,18 @@ export function ProductForm({ productId }: { productId?: string }) {
             </FormSection>
           ) : null}
 
+          {type && sections.includes('sizeGuide') ? (
+            <FormSection {...section('sizeGuide')} hint={t('sc.pf.s.sizeGuideHint')}>
+              <SizeGuideSection s={s} type={type} patch={patch} charts={(chartsQ.data?.items ?? []).filter((c) => !c.retired)} chart={chart} chartState={chartState} error={err(fieldId.sizeChart)}
+                actions={editableCharts ? (
+                  <>
+                    <Button size="sm" variant="neutral" onClick={() => setChartSheet('new')}>{t('sc.pf.sizeChart.create')}</Button>
+                    {chart && !chart.retired ? <Button size="sm" variant="neutral" onClick={() => setChartSheet('edit')}>{t('sc.pf.sizeChart.edit')}</Button> : null}
+                  </>
+                ) : null} />
+            </FormSection>
+          ) : null}
+
           {type ? (
             <FormSection {...section('fulfilment')}>
               <div className="flex flex-col gap-1.5">
@@ -462,11 +486,22 @@ export function ProductForm({ productId }: { productId?: string }) {
           ) : null}
           <button type="submit" className="at-visually-hidden" tabIndex={-1}>{primaryLabel}</button>
         </form>
-        <ReadinessPanel problems={ordered} tips={tips} percent={percent} preview={preview} onGo={jump} />
+        {type?.traits.sizing ? (
+          <SizeChartEditor open={chartSheet !== null} chart={chartSheet === 'edit' ? (chart ?? null) : null} scope={{ productType: type.code, label: type.label }} selling={soldSizes(s, type)}
+            onClose={() => setChartSheet(null)}
+            onSaved={(saved) => {
+              setChartSheet(null);
+              void qc.invalidateQueries({ queryKey: sellerKeys.sizeCharts(orgId) });
+              update((prev) => ({ ...prev, sizeChartId: saved.id }));
+            }} />
+        ) : null}
+        <ReadinessPanel problems={ordered} tips={tips} sections={sections} titleOf={sectionTitle} percent={percent} preview={preview} onGo={jump} />
       </div>
       <ActionBar
         problems={ordered}
         tips={tips}
+        sections={sections}
+        titleOf={sectionTitle}
         percent={percent}
         preview={preview}
         saveState={saveLine}

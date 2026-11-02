@@ -105,7 +105,7 @@ test.describe('seller center · products', () => {
     const nav = page.getByRole('navigation', { name: 'Sections' });
     await expect(nav.getByRole('link', { name: /Details/ })).toContainText('4 to do');
     const panel = page.getByRole('complementary', { name: 'Listing readiness' });
-    await panel.getByTestId('missing-list').getByRole('link', { name: /Publisher/ }).click();
+    await panel.getByTestId('quality-details').getByRole('link', { name: /Publisher/ }).click();
     await expect(page.getByLabel('Publisher', { exact: true })).toBeFocused();
     await expect(page.getByTestId('listing-preview')).toBeVisible();
   });

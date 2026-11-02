@@ -1,7 +1,7 @@
 import { File as NodeFile } from 'node:buffer';
 
 import { type AttributeDef } from '@afrotransact/api-client';
-import { getSellerDb, resetSellerDb } from '@afrotransact/api-client/mocks/seller';
+import { getSellerDb, resetSellerDb, SIZE_CHART_IDS } from '@afrotransact/api-client/mocks/seller';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -272,7 +272,8 @@ describe('section navigator, listing quality and the sticky actions', () => {
     await waitFor(() => expect(Number(within(panel).getByRole('progressbar').getAttribute('aria-valuenow'))).toBeGreaterThan(before));
     expect(within(panel).getByTestId('quality-percent')).toHaveTextContent(/\d+% complete/);
 
-    const missing = within(panel).getByTestId('missing-list');
+    // What is missing is grouped by form section, in page order, each group naming its section.
+    const missing = within(panel).getByTestId('quality-details');
     expect(within(missing).getByRole('link', { name: /Author/ })).toBeInTheDocument();
     fireEvent.click(within(missing).getByRole('link', { name: /Publisher/ }));
     expect(screen.getByLabelText('Publisher')).toHaveFocus();
@@ -280,7 +281,7 @@ describe('section navigator, listing quality and the sticky actions', () => {
     expect(screen.getByLabelText('Publisher')).toHaveAccessibleDescription('Required');
 
     // Recommended items are listed apart and also jump to their field.
-    const tips = within(panel).getByTestId('tips-list');
+    const tips = within(within(panel).getByTestId('quality-basics')).getByTestId('tips-list');
     fireEvent.click(within(tips).getByRole('link', { name: /Description/ }));
     expect(screen.getByLabelText('Description')).toHaveFocus();
   });
@@ -340,6 +341,139 @@ describe('long choice lists', () => {
     first.unmount();
     renderWithProviders(<AttributeField def={def(['Red', 'Blue'])} value="" unit="" onChange={() => undefined} onUnit={() => undefined} />);
     expect(screen.getByRole('combobox', { name: 'Colour' }).tagName).toBe('SELECT');
+  });
+});
+
+describe('seller-written sizes and colours', () => {
+  async function dressMatrix() {
+    await renderScreen(<ProductForm />);
+    await chooseCategory('dresses', /Dresses/);
+    fireEvent.change(screen.getByLabelText('Product title'), { target: { value: 'Ankara Wrap Dress' } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Yes, several' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Size × Color' }));
+    return screen.getByTestId('own-Size');
+  }
+
+  it('adds typed values, switches a matching suggestion on, says why one is refused and keeps the others', async () => {
+    const own = await dressMatrix();
+    const input = within(own).getByLabelText('Add your own size');
+    fireEvent.change(input, { target: { value: '4XL, 52, xl, bad$name' } });
+    fireEvent.click(within(own).getByRole('button', { name: 'Add' }));
+    expect(within(own).getByRole('button', { name: 'Remove 4XL' })).toBeInTheDocument();
+    expect(within(own).getByRole('button', { name: 'Remove 52' })).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Size' })).getByRole('button', { name: 'XL' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(own).getByRole('alert')).toHaveTextContent('“bad$name” has characters that cannot be used');
+    // What was refused stays in the box to be corrected.
+    expect(input).toHaveValue('bad$name');
+    fireEvent.change(input, { target: { value: '4xl' } });
+    fireEvent.click(within(own).getByRole('button', { name: 'Add' }));
+    expect(within(own).getByRole('alert')).toHaveTextContent('“4xl” is already added.');
+
+    fireEvent.click(within(screen.getByRole('group', { name: 'Color' })).getByRole('button', { name: 'Gold' }));
+    const table = screen.getByRole('table', { name: 'Variations' });
+    expect(within(table).getAllByTestId('variant-row').map((r) => within(r).getAllByRole('rowheader')[0]?.textContent)).toEqual(['4XL / Gold', '52 / Gold', 'XL / Gold']);
+    fireEvent.click(within(own).getByRole('button', { name: 'Remove 52' }));
+    expect(within(table).getAllByTestId('variant-row')).toHaveLength(2);
+  });
+
+  it('adds a pasted list at once, and a colour the same way', async () => {
+    const user = userEvent.setup();
+    const own = await dressMatrix();
+    await user.click(within(own).getByLabelText('Add your own size'));
+    await user.paste('3XL\n5XL\tFree size');
+    expect(within(own).getAllByRole('button', { name: /^Remove / }).map((b) => b.textContent)).toEqual(['3XL', '5XL', 'Free size']);
+    expect(within(own).getByText('Added 3: 3XL, 5XL, Free size')).toBeInTheDocument();
+    const colours = screen.getByTestId('own-Color');
+    fireEvent.change(within(colours).getByLabelText('Add your own color'), { target: { value: 'Midnight teal' } });
+    fireEvent.click(within(colours).getByRole('button', { name: 'Add' }));
+    expect(within(colours).getByRole('button', { name: 'Remove Midnight teal' })).toBeInTheDocument();
+  });
+
+  it('offers no own values for a dimension the category fixes', async () => {
+    await renderScreen(<ProductForm />);
+    await chooseCategory('spices', /Spices & seasonings/);
+    fireEvent.click(await screen.findByRole('button', { name: 'Yes, several' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Net weight' }));
+    expect(screen.queryByTestId('own-Net weight')).not.toBeInTheDocument();
+  });
+});
+
+describe('size guide section', () => {
+  async function kaftan() {
+    await renderScreen(<ProductForm />);
+    await chooseCategory('kaftans', /Kaftans & shirts/);
+    await screen.findByRole('heading', { level: 2, name: 'Size guide' });
+    return screen.getByRole('complementary', { name: 'Listing readiness' });
+  }
+
+  it('appears for sized categories after the variants, and asks for a chart where the category requires one', async () => {
+    const panel = await kaftan();
+    expect(sectionTitles()).toEqual(['Basics', 'Photos', 'Price & stock', 'Details', 'Variants', 'Size guide', 'Shipping & fulfilment']);
+    expect(await within(panel).findByRole('link', { name: /Size chart/ })).toHaveTextContent('Choose a size chart');
+    const select = screen.getByLabelText('Size chart');
+    expect(within(select).getByRole('option', { name: 'Kaftans and shirts' })).toBeInTheDocument();
+    // Only this category's charts (and the ones for any category) are offered.
+    expect(within(select).queryByRole('option', { name: 'Leather sandals' })).not.toBeInTheDocument();
+  });
+
+  it('shows the table the shopper reads, in cm or in, and the fit note', async () => {
+    const panel = await kaftan();
+    const select = await screen.findByLabelText('Size chart');
+    await waitFor(() => expect(within(select).getByRole('option', { name: 'Kaftans and shirts' })).toBeInTheDocument());
+    fireEvent.change(select, { target: { value: SIZE_CHART_IDS.mensTops } });
+    const table = await screen.findByRole('table', { name: 'Size chart Kaftans and shirts' });
+    expect(within(table).getByRole('row', { name: /^S 35–37/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'cm' }));
+    expect(within(table).getByRole('row', { name: /^S 88.9–94/ })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('How it fits'), { target: { value: 'RUNS_SMALL' } });
+    expect(screen.getByLabelText('How it fits')).toHaveValue('RUNS_SMALL');
+    await waitFor(() => expect(within(panel).queryByRole('link', { name: /Size chart/ })).not.toBeInTheDocument());
+  });
+
+  it('groups what is left to do by section in the quality panel, and the group heading goes to its section', async () => {
+    const panel = await kaftan();
+    const group = within(panel).getByTestId('quality-sizeGuide');
+    expect(within(group).getByText('1 to fix')).toBeInTheDocument();
+    expect(within(group).getByRole('link', { name: /Size chart/ })).toHaveTextContent('Choose a size chart');
+    expect(within(panel).getByTestId('quality-basics')).toHaveTextContent('Product title');
+    // Page order: Basics comes before Size guide.
+    const order = within(panel).getAllByRole('heading', { level: 3 }).map((h) => h.textContent ?? '');
+    expect(order.findIndex((x) => x.startsWith('Basics'))).toBeLessThan(order.findIndex((x) => x.startsWith('Size guide')));
+    fireEvent.click(within(group).getByRole('link', { name: 'Go to Size guide' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Size guide' })).toHaveFocus();
+  });
+
+  it('writes a new chart without leaving the form and links it to the product', async () => {
+    await kaftan();
+    fireEvent.click(await screen.findByRole('button', { name: 'Write a new size chart' }));
+    const ed = within(await screen.findByTestId('size-chart-editor'));
+    expect(ed.getByText('men’s kaftans & shirts')).toBeInTheDocument();
+    await waitFor(() => expect(ed.getByLabelText('Measurement 1')).toHaveValue('Chest'));
+    ['M', 'L', 'XL', '2XL', '3XL'].forEach((size) => fireEvent.click(ed.getByRole('button', { name: `Remove size ${size}` })));
+    fireEvent.change(ed.getByLabelText('Chart name'), { target: { value: 'My kaftans' } });
+    fireEvent.change(ed.getByLabelText('Chest of size S'), { target: { value: '36-38' } });
+    fireEvent.change(ed.getByLabelText('Waist of size S'), { target: { value: '30-32' } });
+    fireEvent.change(ed.getByLabelText('Sleeve length of size S'), { target: { value: '25' } });
+    fireEvent.click(ed.getByRole('button', { name: 'Create chart' }));
+    await waitFor(() => expect(screen.queryByTestId('size-chart-editor')).not.toBeInTheDocument());
+    const select = screen.getByLabelText('Size chart') as HTMLSelectElement;
+    await waitFor(() => expect(select.selectedOptions[0]?.textContent).toBe('My kaftans'));
+    expect(await screen.findByRole('table', { name: 'Size chart My kaftans' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit this chart' })).toBeInTheDocument();
+  });
+
+  it('names the sizes the chart has no row for before saving', async () => {
+    const panel = await kaftan();
+    fireEvent.click(await screen.findByRole('button', { name: 'Yes, several' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Size × Color' }));
+    const own = screen.getByTestId('own-Size');
+    fireEvent.change(within(own).getByLabelText('Add your own size'), { target: { value: '4XL' } });
+    fireEvent.click(within(own).getByRole('button', { name: 'Add' }));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Color' })).getByRole('button', { name: 'Gold' }));
+    const select = await screen.findByLabelText('Size chart');
+    await waitFor(() => expect(within(select).getByRole('option', { name: 'Kaftans and shirts' })).toBeInTheDocument());
+    fireEvent.change(select, { target: { value: SIZE_CHART_IDS.mensTops } });
+    expect(await within(panel).findByText(/“Kaftans and shirts” has no row for 4XL/)).toBeInTheDocument();
   });
 });
 
