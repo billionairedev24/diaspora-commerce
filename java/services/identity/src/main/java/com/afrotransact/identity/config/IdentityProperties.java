@@ -133,7 +133,7 @@ public record IdentityProperties(
 
         public Pages {
             storefrontUrl = trim(storefrontUrl, "http://localhost:3000");
-            sellerCenterUrl = trim(sellerCenterUrl, "http://localhost:3001");
+            sellerCenterUrl = trim(sellerCenterUrl, "http://localhost:3010");
             staffConsoleUrl = trim(staffConsoleUrl, "http://localhost:3002");
             supportUrl = supportUrl == null || supportUrl.isBlank() ? storefrontUrl + "/help" : supportUrl;
             termsUrl = termsUrl == null || termsUrl.isBlank() ? storefrontUrl + "/legal/conditions-of-use" : termsUrl;

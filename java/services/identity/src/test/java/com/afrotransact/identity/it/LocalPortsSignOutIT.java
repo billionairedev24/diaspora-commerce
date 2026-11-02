@@ -23,7 +23,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
- * The local stack when :3001 is taken: tools/dev/local.sh runs Seller Center on :3010 and passes SELLER_CENTER_URL to
+ * The local stack when :3010 is taken: tools/dev/local.sh runs Seller Center on :3020 and passes SELLER_CENTER_URL to
  * identity, so its callback, its post-logout landing and its branding all follow the variable (LAN mode works the same
  * way with the Wi-Fi address).
  */
@@ -32,7 +32,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
     "at.consumers.enabled=false",
     "spring.kafka.bootstrap-servers=localhost:1",
     "at.identity.verification.sender=outbox",
-    "SELLER_CENTER_URL=http://localhost:3010"})
+    "SELLER_CENTER_URL=http://localhost:3020"})
 @ActiveProfiles("local")
 @Testcontainers
 class LocalPortsSignOutIT {
@@ -42,7 +42,7 @@ class LocalPortsSignOutIT {
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
 
     private static final String BFF = "gateway-bff";
-    private static final String SELLER = "http://localhost:3010";
+    private static final String SELLER = "http://localhost:3020";
     private static final String CALLBACK = SELLER + "/api/bff/v1/auth/oidc/callback";
     private static final String SIGNED_OUT = SELLER + "/api/bff/v1/auth/signed-out/seller-center";
     private static final String PASSWORD = "Plantain-Jollof-2026";
@@ -85,7 +85,7 @@ class LocalPortsSignOutIT {
                 "&prompt=login&notice=signed_out")));
         assertThat(next.get(absolute(again)).body()).contains("Sign in to Seller Center", "You’ve been signed out.");
         // The default port is not registered any more for this stack.
-        assertThat(new BrowserSession(base()).get(authorizeUrl("http://localhost:3001/api/bff/v1/auth/oidc/callback",
+        assertThat(new BrowserSession(base()).get(authorizeUrl("http://localhost:3010/api/bff/v1/auth/oidc/callback",
                 BrowserSession.randomVerifier(), "")).statusCode()).isEqualTo(400);
     }
 

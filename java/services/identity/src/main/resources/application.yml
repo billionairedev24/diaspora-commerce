@@ -103,7 +103,7 @@ at:
       initial-delay: ${SELLER_SYNC_INITIAL_DELAY:30s}
     invitations:
       # Seller Center page that accepts organisation invitations; ?token=… is appended (identity.invitation.created)
-      accept-url: ${INVITATION_ACCEPT_URL:${SELLER_CENTER_URL:http://localhost:3001}/invitations/accept}
+      accept-url: ${INVITATION_ACCEPT_URL:${SELLER_CENTER_URL:http://localhost:3010}/invitations/accept}
     # Email domains reserved for staff (comma-separated; cannot self-register).
     staff-email-domains: ${IDENTITY_STAFF_EMAIL_DOMAINS:afrotransact.com}
     signing:

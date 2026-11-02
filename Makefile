@@ -232,7 +232,7 @@ seed: ## Demo data via the services' APIs: sellers, products with real photos, o
 seed-test: ## Unit tests of the demo-data seeder (tools/seed/tests, Python stdlib unittest)
 	python3 -m unittest discover -s tools/seed/tests -t tools/seed
 
-web-dev: ## Web apps on mock data (no back end needed): storefront :3000, seller center :3001, staff console :3002
+web-dev: ## Web apps on mock data (no back end needed): storefront :3000, seller center :3010, staff console :3002
 	@command -v pnpm >/dev/null || { echo "pnpm not installed (corepack enable)"; exit 1; }
 	pnpm --parallel --filter storefront --filter seller-center --filter staff-console run dev:mocks
 

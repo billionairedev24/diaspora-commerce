@@ -45,11 +45,11 @@ class HostedPagesIT {
     private static final String BFF = "gateway-bff";
     private static final String BFF_SECRET = "local-bff-secret";
     private static final String STOREFRONT_CALLBACK = "http://localhost:3000/api/bff/v1/auth/oidc/callback";
-    private static final String SELLER_CALLBACK = "http://localhost:3001/api/bff/v1/auth/oidc/callback";
+    private static final String SELLER_CALLBACK = "http://localhost:3010/api/bff/v1/auth/oidc/callback";
     private static final String STAFF_CALLBACK = "http://localhost:3002/api/bff/v1/auth/oidc/callback";
     private static final String PASSWORD = "Plantain-Jollof-2026";
     private static final String STOREFRONT_SIGNED_OUT = "http://localhost:3000/api/bff/v1/auth/signed-out/storefront";
-    private static final String SELLER_SIGNED_OUT = "http://localhost:3001/api/bff/v1/auth/signed-out/seller-center";
+    private static final String SELLER_SIGNED_OUT = "http://localhost:3010/api/bff/v1/auth/signed-out/seller-center";
     private static final String STAFF_SIGNED_OUT = "http://localhost:3002/api/bff/v1/auth/signed-out/staff-console";
 
     @LocalServerPort
@@ -300,7 +300,7 @@ class HostedPagesIT {
         BrowserSession other = new BrowserSession(base());
         Tokens t = signInTo(other, email, SELLER_CALLBACK);
         HttpResponse<String> foreign = other.get(base() + "/connect/logout?id_token_hint=" + enc(t.idToken())
-                + "&client_id=" + BFF + "&post_logout_redirect_uri=" + enc("http://localhost:3001/"));
+                + "&client_id=" + BFF + "&post_logout_redirect_uri=" + enc("http://localhost:3010/"));
         assertThat(BrowserSession.location(foreign)).endsWith("/login?logout");
         assertThat(other.get(base() + "/login?logout").body()).contains("You’ve been signed out.",
                 "data-app=\"neutral\"").doesNotContain("Staff console");

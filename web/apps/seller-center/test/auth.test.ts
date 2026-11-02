@@ -4,9 +4,9 @@ import { loginHref, signedOutHref, signOutEverywhere } from '@/lib/auth';
 
 describe('hosted sign-in (single sign-on through identity)', () => {
   it('starts sign-in on this app’s own BFF proxy and returns to the absolute URL', () => {
-    expect(loginHref('http://localhost:3001/orders')).toBe('/api/bff/v1/auth/login?returnTo=http%3A%2F%2Flocalhost%3A3001%2Forders');
-    expect(loginHref('http://localhost:3001/', { prompt: 'create', loginHint: 'kemi@example.com', invitation: 'tok' })).toBe(
-      '/api/bff/v1/auth/login?returnTo=http%3A%2F%2Flocalhost%3A3001%2F&prompt=create&login_hint=kemi%40example.com&invitation=tok'
+    expect(loginHref('http://localhost:3010/orders')).toBe('/api/bff/v1/auth/login?returnTo=http%3A%2F%2Flocalhost%3A3010%2Forders');
+    expect(loginHref('http://localhost:3010/', { prompt: 'create', loginHint: 'kemi@example.com', invitation: 'tok' })).toBe(
+      '/api/bff/v1/auth/login?returnTo=http%3A%2F%2Flocalhost%3A3010%2F&prompt=create&login_hint=kemi%40example.com&invitation=tok'
     );
   });
 });

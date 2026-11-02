@@ -27,7 +27,7 @@ function appUrl(envVar: string, portVar: string, fallback: number): string {
 }
 
 const STOREFRONT = appUrl('LIVE_STOREFRONT_URL', 'STOREFRONT_PORT', 3000);
-const SELLER = appUrl('LIVE_SELLER_URL', 'SELLER_CENTER_PORT', 3001);
+const SELLER = appUrl('LIVE_SELLER_URL', 'SELLER_CENTER_PORT', 3010);
 const STAFF = appUrl('LIVE_STAFF_URL', 'STAFF_CONSOLE_PORT', 3002);
 const IDENTITY = process.env.LIVE_IDENTITY_URL ?? 'http://localhost:8100';
 const MAILPIT = process.env.LIVE_MAILPIT_URL ?? 'http://localhost:8025';

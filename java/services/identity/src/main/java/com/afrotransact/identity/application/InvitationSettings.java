@@ -7,7 +7,7 @@ package com.afrotransact.identity.application;
 public record InvitationSettings(String acceptUrl) {
 
     public InvitationSettings {
-        acceptUrl = acceptUrl == null || acceptUrl.isBlank() ? "http://localhost:3001/invitations/accept" : acceptUrl;
+        acceptUrl = acceptUrl == null || acceptUrl.isBlank() ? "http://localhost:3010/invitations/accept" : acceptUrl;
     }
 
     /** The link sent to the invitee. Tokens are base64url, so they need no escaping. */
