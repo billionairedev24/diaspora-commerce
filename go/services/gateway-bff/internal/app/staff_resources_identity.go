@@ -15,7 +15,7 @@ import (
 // again, requires a reason for every change and writes the access change log. Secrets are shown once (staffCtx.showOnce).
 
 func identityAdminResources() []*staffResource {
-	return []*staffResource{oauthClientsResource(), identitySessionsResource(), signingKeysResource(), authSettingsResource()}
+	return []*staffResource{oauthClientsResource(), identitySessionsResource(), signingKeysResource(), authSettingsResource(), sessionPolicyResource()}
 }
 
 const identityAdmin = domain.PermIdentityAdmin

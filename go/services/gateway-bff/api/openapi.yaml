@@ -833,6 +833,62 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Me'}
+  /v1/session/policy:
+    get:
+      tags: [Auth]
+      operationId: getSessionPolicy
+      security: [{sessionCookie: []}, {bearer: []}]
+      summary: When this session is signed out (idle timeout, session length, warning) and when it expires now
+      description: |
+        The sign-out policy of the caller's audience (`customer-web`, `customer-app`, `seller`, `staff`, `driver`), edited
+        by staff in the staff console (Developer tools, Identity & access, Sign-out). Web apps use it to show "You'll be
+        signed out in N seconds" and to know when the session ends; mobile apps use it to run their own idle timer.
+
+        **Web (cookie) sessions** get `lastActivityAt` and `expiresAt` = the earlier of `lastActivityAt + idleTimeoutSeconds`
+        and sign-in + `absoluteTimeoutSeconds`. `lastActivityAt` can lag the person's real last input by up to 30 seconds
+        (activity is written at most that often), so the session can end up to 30 s earlier than a client's own timer, never
+        later; call `POST /v1/session/activity` on real input and re-read this after it.
+
+        **Bearer (app) callers** get `expiresAt` and `lastActivityAt` = null: the idle timeout is enforced on the device (the
+        app signs out after `idleTimeoutSeconds` without input) and the session length by the lifetime of the refresh
+        token, which identity sets per client, not from this policy. Send `X-App: driver` from the driver app; anything else
+        is the customer app.
+
+        Reading the policy never counts as activity, with or without `X-Background`. An expired web session gets 401
+        `SESSION_IDLE_TIMEOUT` or `SESSION_ABSOLUTE_TIMEOUT`, like every other route.
+      parameters:
+        - name: X-App
+          in: header
+          description: Bearer callers only. `driver` for the driver app; omitted or anything else is the customer app.
+          schema: {type: string, enum: [customer, driver]}
+      responses:
+        '200':
+          description: The policy in force
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SessionPolicy'}
+        '401': {$ref: '#/components/responses/Problem'}
+  /v1/session/activity:
+    post:
+      tags: [Auth]
+      operationId: reportSessionActivity
+      security: [{sessionCookie: []}]
+      summary: Tell the server the person is using the app (keeps a reading user signed in)
+      description: |
+        Web apps send this on real user input (pointer, key, touch, scroll, visibility regained, the "Stay signed in"
+        button), throttled client-side to about once a minute, so a person who is only reading a page is not signed out
+        by the idle timeout. It moves `lastActivityAt` forward (server-side at most once per 5 seconds) and answers 204.
+        Do not send it from timers or polling.
+
+        **Background polling must not keep a session alive.** Every request the app makes without the person doing
+        anything (TanStack Query `refetchInterval`, notification counts, "still there?" checks, token or health pings) must
+        carry `X-Background: 1`. Such a request is checked against the policy like any other (an expired session is
+        refused with 401 `SESSION_IDLE_TIMEOUT` or `SESSION_ABSOLUTE_TIMEOUT`) but does not count as activity and extends
+        nothing. Every other `/v1` request counts as activity, so an ordinary click that calls the API needs nothing extra.
+        Cookie sessions only: apps with a bearer token enforce their own idle timer.
+      responses:
+        '204': {description: Recorded}
+        '401': {$ref: '#/components/responses/Problem'}
   /v1/auth/login:
     get:
       tags: [Auth]
@@ -3487,7 +3543,10 @@ components:
             STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, PHONE_MISSING; product reviews (S324): REVIEW_NOT_VERIFIED_PURCHASE,
             REVIEW_ALREADY_EXISTS, REVIEW_EDIT_WINDOW_CLOSED; AfroTransact Delivery from the seller's store
             (S255, 422 on place order, `errors.deliverySelections` explains it): DELIVERY_OUT_OF_RANGE, DELIVERY_UNAVAILABLE,
-            DELIVERY_PICKUP_UNAVAILABLE, DELIVERY_ADDRESS_NOT_LOCATED.
+            DELIVERY_PICKUP_UNAVAILABLE, DELIVERY_ADDRESS_NOT_LOCATED; the sign-out policy (401 on any `/v1` route except
+            `/v1/auth/*`, the session is already ended and the person must sign in again): SESSION_IDLE_TIMEOUT (no real user
+            activity for longer than the audience's idle timeout), SESSION_ABSOLUTE_TIMEOUT (the session reached its maximum
+            length).
         errors:
           type: object
           additionalProperties: {type: string}
@@ -4623,6 +4682,46 @@ components:
             orders: {type: integer}
             addresses: {type: integer}
             paymentMethods: {type: integer}
+        session:
+          description: >-
+            The sign-out policy of this web session (the same as `GET /v1/session/policy`); absent for guests and for bearer
+            (app) callers, which ask `GET /v1/session/policy` with `X-App`.
+          $ref: '#/components/schemas/SessionPolicy'
+        signedOutReason:
+          type: string
+          enum: [SESSION_IDLE_TIMEOUT, SESSION_ABSOLUTE_TIMEOUT]
+          description: >-
+            Present on a guest answer for ten minutes after the sign-out policy ended the session, so the app can say why
+            even when a parallel request received the 401.
+    SessionPolicy:
+      type: object
+      description: When the caller is signed out. Times are RFC 3339 instants; seconds are whole seconds.
+      required: [audience, idleTimeoutSeconds, absoluteTimeoutSeconds, warnSeconds, lastActivityAt, expiresAt]
+      properties:
+        audience:
+          type: string
+          enum: [customer-web, customer-app, seller, staff, driver]
+          description: >-
+            Whose policy applies: the web app the person signed in at (storefront `customer-web`, Seller Center and Provider
+            Hub `seller`, staff console `staff`), or the mobile app (`customer-app`, `driver`).
+        idleTimeoutSeconds: {type: integer, format: int64, description: Seconds without real user activity before sign-out}
+        absoluteTimeoutSeconds: {type: integer, format: int64, description: Seconds after sign-in before sign-out, however active}
+        warnSeconds:
+          type: integer
+          format: int64
+          description: >-
+            Show "You'll be signed out in N seconds" this long before the idle timeout. 0 means no warning (audiences whose
+            idle timeout is a day or more).
+        lastActivityAt:
+          type: [string, 'null']
+          format: date-time
+          description: Last real user activity as the server knows it (may lag by up to 30 s); null for bearer callers.
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+          description: >-
+            min(lastActivityAt + idleTimeoutSeconds, sign-in + absoluteTimeoutSeconds) for cookie sessions; null for bearer
+            callers (idle is enforced on the device, the session length by the refresh token lifetime).
     SignOutRequest:
       type: object
       properties:
