@@ -145,6 +145,28 @@ Stored in `auth_settings` (one row; a null column means "use the configured defa
 
 The idle timeout cannot exceed the absolute timeout. Saving a value equal to the default stores "use the default".
 
+### Sign-out policy per audience (idle, session length, warning)
+
+The two session settings above govern only identity's hosted sign-in (single sign-on) session. When people are signed out
+of the **web apps, the mobile apps and the staff console** is a separate policy, one row per audience, enforced by the
+gateway-bff (cookie sessions) and by the apps (idle timer). It is edited under Developer tools, Identity & access,
+"Sign-out" and is read by the BFF from `GET /v1/internal/session-policy` (a SERVICE token with `sessions:policy.read`).
+How it is enforced: [session-timeouts.md](session-timeouts.md).
+
+| Audience (what staff see) | Idle timeout | Session length | Warning |
+|---|---|---|---|
+| Staff console (`staff`) | 15 min | 8 h | 60 s |
+| Seller Center, sellers and providers (`seller`) | 30 min | 12 h | 60 s |
+| Customers on the web (`customer-web`) | 30 days | 90 days | none |
+| Customer mobile app (`customer-app`) | 30 days | 90 days | none |
+| Driver app (`driver`) | 14 h | 14 h | none |
+
+Bounds: idle 1 minute to 180 days; session length 5 minutes to 365 days; idle not longer than the session length;
+warning 0 to 300 s and shorter than idle (0 = no warning). Only changed values are stored (`session_policy_override`, one
+row per audience that differs); a value equal to the built-in default stores "use the default". A change needs a reason and
+a step-up like the other identity settings, and is written to the access change log (`session-policy.updated`, with the
+audience and before/after).
+
 ## Verification
 
 - Unit: `OAuthClientAdminServiceImplTest`, `SigningKeyAdminServiceImplTest`, `AuthSettingsServiceImplTest`,
