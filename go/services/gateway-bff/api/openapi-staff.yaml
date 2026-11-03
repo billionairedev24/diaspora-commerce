@@ -83,6 +83,13 @@ tags:
       open pre-orders, from delivery-runs); removing a city an open pre-order sells to is refused (409, switch it off
       instead). Module `markets`: VIEW to read; EDIT and `content:markets.edit` to change. `GET /v1/staff/places`
       browses geo's gazetteer for the pickers of Markets and Pre-order areas.
+  - name: Search analytics
+    description: |
+      What shoppers search for, which searches find nothing and which results get clicked (search service, daily
+      aggregates per normalised query and market, kept 400 days), plus the synonym rules that fix zero-result queries.
+      Module `search` is derived from search's permissions: VIEW with `search:analytics.view`, EDIT with
+      `search:synonyms.edit` (reports need `search:analytics.view`). The search service reports whole windows (at most
+      500 queries); the BFF filters, sorts and pages them. Counts are buffered, aggregated events: not exact accounting.
   - name: Inventory hub
     description: |
       Inventory hub (S281): mirrors inventory-service 1:1 with the staff member's token — inbound shipments (ASNs with
@@ -3502,6 +3509,137 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── search analytics and synonyms (S039)
+  /v1/staff/search/markets:
+    get:
+      tags: [Search analytics]
+      operationId: listStaffSearchMarkets
+      security: [{sessionCookie: []}]
+      summary: Markets whose searches can be reported, with their names
+      description: The BFF's configured search markets (`MARKET`); names are for display. Needs VIEW on the search module (`search:analytics.view` or `search:synonyms.edit`).
+      responses:
+        '200': {description: Markets, content: {application/json: {schema: {$ref: '#/components/schemas/StaffSearchMarkets'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+  /v1/staff/search/analytics/top-queries:
+    get:
+      tags: [Search analytics]
+      operationId: listStaffSearchTopQueries
+      security: [{sessionCookie: []}]
+      summary: Most searched queries in a window, one server-driven page
+      description: |
+        search `GET /v1/search/analytics/top-queries` (`search:analytics.view`) with `limit=500`; the BFF filters (`q`), sorts
+        and pages the answer. Defaults: the last 7 days, sorted by searches, page 1 of 25. `truncated` says the service's
+        500-query cap cut the report. Counts come from buffered, aggregated events: treat them as a good indication, not
+        as accounting.
+      parameters:
+        - $ref: '#/components/parameters/SearchMarket'
+        - $ref: '#/components/parameters/SearchFrom'
+        - $ref: '#/components/parameters/SearchTo'
+        - $ref: '#/components/parameters/SearchFilter'
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/SearchPage'
+        - $ref: '#/components/parameters/SearchSize'
+      responses:
+        '200': {description: Queries, content: {application/json: {schema: {$ref: '#/components/schemas/StaffSearchQueryReport'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/search/analytics/zero-results:
+    get:
+      tags: [Search analytics]
+      operationId: listStaffSearchZeroResults
+      security: [{sessionCookie: []}]
+      summary: Queries that returned nothing at least once, one server-driven page
+      description: |
+        search `GET /v1/search/analytics/zero-results` (`search:analytics.view`) with `limit=500`; the BFF drops queries
+        without a zero-result search, then filters (`q`), sorts and pages. Default sort: zero-result searches, descending.
+      parameters:
+        - $ref: '#/components/parameters/SearchMarket'
+        - $ref: '#/components/parameters/SearchFrom'
+        - $ref: '#/components/parameters/SearchTo'
+        - $ref: '#/components/parameters/SearchFilter'
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/SearchPage'
+        - $ref: '#/components/parameters/SearchSize'
+      responses:
+        '200': {description: Queries, content: {application/json: {schema: {$ref: '#/components/schemas/StaffSearchQueryReport'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/search/analytics/ctr:
+    get:
+      tags: [Search analytics]
+      operationId: listStaffSearchClickThrough
+      security: [{sessionCookie: []}]
+      summary: Searches, clicks, click-through and zero-result rates by day
+      description: |
+        search `GET /v1/search/analytics/ctr` (`search:analytics.view`). `items` is one page of days (default newest
+        first), `trend` every day of the window oldest first (for a sparkline), `totals` the window. Days without searches
+        are included. At most 366 days.
+      parameters:
+        - $ref: '#/components/parameters/SearchMarket'
+        - $ref: '#/components/parameters/SearchFrom'
+        - $ref: '#/components/parameters/SearchTo'
+        - $ref: '#/components/parameters/Sort'
+        - $ref: '#/components/parameters/SearchPage'
+        - $ref: '#/components/parameters/SearchSize'
+      responses:
+        '200': {description: Days, content: {application/json: {schema: {$ref: '#/components/schemas/StaffSearchClickThrough'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/search/synonyms:
+    get:
+      tags: [Search analytics]
+      operationId: listStaffSearchSynonyms
+      security: [{sessionCookie: []}]
+      summary: Synonym rules (the words search treats as the same thing)
+      description: search `GET /v1/search/synonyms` (`search:analytics.view` or `search:synonyms.edit`). `canEdit` says whether the staff member holds `search:synonyms.edit`.
+      responses:
+        '200': {description: Rules, content: {application/json: {schema: {$ref: '#/components/schemas/StaffSynonymList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Search analytics]
+      operationId: createStaffSearchSynonym
+      security: [{sessionCookie: []}]
+      summary: Add a rule that makes 2 to 20 words or phrases mean the same to search
+      description: |
+        search `PUT /v1/search/synonyms/{ruleId}` (`search:synonyms.edit`, EDIT on the search module). The BFF derives the
+        rule's id from the first term and keeps it unique; search reloads its analyzers at once (no reindex). Search's
+        own validation (terms at most 60 characters, 2 to 20 distinct terms) comes back as a 422 on `terms`. The change
+        is logged with the staff member's id by the BFF; search keeps no audit trail of synonym edits.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffSynonymCreate'}
+      responses:
+        '201': {description: The rule as stored, content: {application/json: {schema: {$ref: '#/components/schemas/StaffSynonymRule'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/search/synonyms/{ruleId}:
+    parameters:
+      - {name: ruleId, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,62}$'}}
+    delete:
+      tags: [Search analytics]
+      operationId: deleteStaffSearchSynonym
+      security: [{sessionCookie: []}]
+      summary: Delete a synonym rule
+      description: search `DELETE /v1/search/synonyms/{ruleId}` (`search:synonyms.edit`, EDIT on the search module). Logged with the staff member's id.
+      responses:
+        '204': {description: Deleted}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     sessionCookie:
@@ -3538,6 +3676,12 @@ components:
     MarketCountryCode: {name: code, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z]{2}$'}}
     MarketRegionCode: {name: region, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9]{1,10}$'}}
     IfMatch: {name: If-Match, in: header, required: false, schema: {type: string, maxLength: 40}, description: The version from the ETag (optimistic locking).}
+    SearchMarket: {name: market, in: query, schema: {type: string, pattern: '^[a-z]{2}$', default: us}, description: Search market code (see /v1/staff/search/markets)}
+    SearchFrom: {name: from, in: query, schema: {type: string, format: date}, description: 'First day (UTC), YYYY-MM-DD; default 6 days before `to`'}
+    SearchTo: {name: to, in: query, schema: {type: string, format: date}, description: 'Last day (UTC), YYYY-MM-DD; default today'}
+    SearchFilter: {name: q, in: query, schema: {type: string, maxLength: 120}, description: Keeps queries containing this text}
+    SearchPage: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+    SearchSize: {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 25}}
   responses:
     Problem:
       description: RFC 9457 problem
@@ -3671,8 +3815,8 @@ components:
     AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
     StaffModuleKey:
       type: string
-      description: Sidebar modules; keys follow identity's platform module matrix (support, exports and notifications are derived; preorders follows the Pre-orders matrix column).
-      enum: [dash, exports, orders, catalog, inventory, retail, dispatch, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, notifications, preorders]
+      description: Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications and search are derived; preorders follows the Pre-orders matrix column).
+      enum: [dash, exports, orders, catalog, search, inventory, retail, dispatch, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, notifications, preorders]
     StaffUser:
       type: object
       required: [id, firstName, lastName, email, initials]
@@ -5123,3 +5267,105 @@ components:
         storefrontPath: {type: string}
         badges: {type: array, items: {type: string}}
         deliveryDays: {type: [integer, 'null'], format: int64}
+    StaffSearchMarkets:
+      type: object
+      required: [items, default, canEditSynonyms]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [code, name]
+            properties:
+              code: {type: string, examples: [us]}
+              name: {type: string, examples: [United States]}
+        default: {type: string}
+        canEditSynonyms: {type: boolean}
+    StaffSearchQueryStat:
+      type: object
+      required: [query, searches, zeroResults, clicks, ctr, zeroResultRate]
+      properties:
+        query: {type: string, description: Normalised query (lower case)}
+        searches: {type: integer, format: int64}
+        zeroResults: {type: integer, format: int64}
+        clicks: {type: integer, format: int64}
+        ctr: {type: number, description: Clicks ÷ searches (0 to 1; a search can be clicked more than once)}
+        zeroResultRate: {type: number, description: Zero-result searches ÷ searches (0 to 1)}
+    StaffSearchTotals:
+      type: object
+      required: [searches, zeroResults, clicks, ctr, zeroResultRate]
+      properties:
+        searches: {type: integer, format: int64}
+        zeroResults: {type: integer, format: int64}
+        clicks: {type: integer, format: int64}
+        ctr: {type: number}
+        zeroResultRate: {type: number}
+    StaffSearchQueryReport:
+      type: object
+      required: [market, marketName, from, to, items, total, page, size, truncated, totals]
+      properties:
+        market: {type: string}
+        marketName: {type: string}
+        from: {type: string, format: date}
+        to: {type: string, format: date}
+        items: {type: array, items: {$ref: '#/components/schemas/StaffSearchQueryStat'}}
+        total: {type: integer, description: Queries after the filter}
+        page: {type: integer, minimum: 1}
+        size: {type: integer}
+        truncated: {type: boolean, description: The service lists at most 500 queries; rarer ones are not here}
+        totals: {$ref: '#/components/schemas/StaffSearchTotals', description: Sums over every listed query}
+    StaffSearchDay:
+      type: object
+      required: [day, searches, clicks, zeroResults, ctr, zeroResultRate]
+      properties:
+        day: {type: string, format: date}
+        searches: {type: integer, format: int64}
+        clicks: {type: integer, format: int64}
+        zeroResults: {type: integer, format: int64}
+        ctr: {type: number}
+        zeroResultRate: {type: number}
+    StaffSearchClickThrough:
+      type: object
+      required: [market, marketName, from, to, items, total, page, size, trend, totals]
+      properties:
+        market: {type: string}
+        marketName: {type: string}
+        from: {type: string, format: date}
+        to: {type: string, format: date}
+        items: {type: array, items: {$ref: '#/components/schemas/StaffSearchDay'}}
+        total: {type: integer, description: Days in the window}
+        page: {type: integer, minimum: 1}
+        size: {type: integer}
+        trend: {type: array, items: {$ref: '#/components/schemas/StaffSearchDay'}, description: 'Every day of the window, oldest first'}
+        totals:
+          type: object
+          required: [day, searches, clicks, zeroResults, ctr, zeroResultRate]
+          properties:
+            day: {type: string, description: '"total"'}
+            searches: {type: integer, format: int64}
+            clicks: {type: integer, format: int64}
+            zeroResults: {type: integer, format: int64}
+            ctr: {type: number}
+            zeroResultRate: {type: number}
+    StaffSynonymRule:
+      type: object
+      required: [id, terms]
+      properties:
+        id: {type: string, description: Used to delete the rule; not shown to staff}
+        terms: {type: array, items: {type: string}, description: The words and phrases search treats as the same thing}
+    StaffSynonymList:
+      type: object
+      required: [items, canEdit]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffSynonymRule'}}
+        canEdit: {type: boolean}
+    StaffSynonymCreate:
+      type: object
+      required: [terms]
+      properties:
+        terms:
+          type: array
+          minItems: 2
+          maxItems: 20
+          items: {type: string, maxLength: 60}
+          description: 'Words or phrases that should find the same products, e.g. ["agbada", "grand boubou"]'

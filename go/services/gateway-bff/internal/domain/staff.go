@@ -10,8 +10,8 @@ import (
 )
 
 // Staff console (contracts/openapi/gateway-bff-staff.yaml): shell, RBAC, server-driven tables and sheets, exports and
-// the support console. Module keys follow identity's PLATFORM module matrix; "support", "exports" and "notifications"
-// are derived.
+// the support console. Module keys follow identity's PLATFORM module matrix; "support", "exports", "notifications" and
+// "search" are derived.
 
 // Staff problem codes.
 const (
@@ -49,6 +49,7 @@ var StaffNav = []StaffNavGroupDef{
 	{"commerce", "Commerce", []StaffModule{
 		{"orders", "orders", "Orders & shipments", "All marketplace and AfroTransact Retail orders."},
 		{"catalog", "catalog", "Listing moderation", "AI-flagged listings awaiting a human decision."},
+		{"search", "", "Search analytics", "What shoppers search for, which searches find nothing, which results get clicked, and the synonyms that fix them."},
 		{"inventory", "inventory", "Inventory", "AfroTransact-owned and FBA stock by fulfilment centre, lot by lot."},
 		{"retail", "retail", "AfroTransact Retail (1P)", "Purchase orders for AfroTransact-owned and AfroTransact Brand inventory."},
 		{"dispatch", "dispatch", "Delivery dispatch", "AfroTransact Delivery routes, drivers and internal delivery."},
@@ -111,6 +112,16 @@ func (a StaffAccess) Level(module string) string {
 		case a.Can(PermNotificationsTemplatesWrite):
 			return LevelEdit
 		case a.Can(PermNotificationsRead):
+			return LevelView
+		default:
+			return LevelNone
+		}
+	case "search":
+		// Derived from search's own permissions (identity's matrix has no search column).
+		switch {
+		case a.Can(PermSearchSynonymsEdit):
+			return LevelEdit
+		case a.Can(PermSearchAnalyticsView):
 			return LevelView
 		default:
 			return LevelNone

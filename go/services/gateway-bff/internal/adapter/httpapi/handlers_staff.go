@@ -35,6 +35,8 @@ type StaffServices struct {
 	// Markets serves Settings → Markets & locations as a location tree and the shared place pickers; routes are
 	// registered when it is set.
 	Markets app.StaffMarketsService
+	// Search serves Search analytics and the synonym rules (S039); routes are registered when it is set.
+	Search app.StaffSearchService
 	// Inventory serves the Inventory hub and AfroTransact Retail (1P) workspace (S281); routes are registered when it is set.
 	Inventory app.StaffInventoryService
 	// Files serves exports kept by the BFF itself (nil when exports live in media).
@@ -93,6 +95,9 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	}
 	if s.Markets != nil {
 		h.registerStaffMarkets(route)
+	}
+	if s.Search != nil {
+		h.registerStaffSearch(route)
 	}
 }
 
