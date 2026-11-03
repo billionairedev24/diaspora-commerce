@@ -137,11 +137,11 @@ func TestOnboardingOwnersPlanAndCompliance(t *testing.T) {
 		t.Fatalf("first charge = %v", fc)
 	}
 
-	comp := b.do("PUT", "/v1/seller/onboarding/catalog-compliance", map[string]any{"categories": []string{"Groceries", "prepared_food", "groceries"},
+	comp := b.do("PUT", "/v1/seller/onboarding/catalog-compliance", map[string]any{"departments": []string{"Groceries", "beauty", "groceries"},
 		"foodPermit":         map[string]any{"permitType": "cottage_food", "permitNumber": "CF-1", "expiresOn": "2027-06-30", "documentAssetId": "asset-1"},
 		"agreementsAccepted": true, "w9Certified": true, "w9SignerName": "Kofi Mensah"})
 	s := up.StepBodies["catalog-compliance"]
-	if comp.status != 200 || fmt.Sprint(s["categories"]) != "[groceries prepared_food]" || s["foodPermit"].(map[string]any)["permitType"] != "COTTAGE_FOOD" {
+	if comp.status != 200 || fmt.Sprint(s["departments"]) != "[groceries beauty]" || s["foodPermit"].(map[string]any)["permitType"] != "COTTAGE_FOOD" {
 		t.Fatalf("compliance = %d %v", comp.status, s)
 	}
 	// The accepted documents are recorded with the version in force, not with whatever the client claims.
@@ -166,7 +166,7 @@ func agreementKeys(t *testing.T, step map[string]any) string {
 func TestOnboardingAgreementsFollowTheOffering(t *testing.T) {
 	up, b := startedApplicant(t, "pk_test_x")
 	save := func(extra map[string]any) resp {
-		in := map[string]any{"categories": []string{"groceries"}, "w9Certified": true, "w9SignerName": "Kofi Mensah"}
+		in := map[string]any{"departments": []string{"groceries"}, "w9Certified": true, "w9SignerName": "Kofi Mensah"}
 		for k, v := range extra {
 			in[k] = v
 		}
@@ -239,7 +239,7 @@ func TestOnboardingSubmitPlansAndDocuments(t *testing.T) {
 	if r := b.do("POST", "/v1/seller/onboarding/submit", nil); r.status != 422 || r.json(t)["errors"].(map[string]any)["compliance.agreementsAccepted"] == nil {
 		t.Fatalf("incomplete submit = %d %s", r.status, r.body)
 	}
-	up.Application["compliance"] = map[string]any{"categories": []string{"groceries"}}
+	up.Application["compliance"] = map[string]any{"departments": []string{"groceries"}}
 	r := b.do("POST", "/v1/seller/onboarding/submit", nil).json(t)
 	all := steps(t, r)
 	if r["status"] != "PENDING_REVIEW" || r["canResume"] != false || all[len(all)-1] != "review:Review & submit=WAITING" || r["submittedAt"] != "2026-10-10T12:00:00Z" ||

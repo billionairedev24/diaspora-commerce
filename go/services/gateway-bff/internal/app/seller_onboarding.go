@@ -184,7 +184,7 @@ func (s *sellerShellImpl) SaveOnboardingPlan(ctx context.Context, c *domain.Call
 
 // SaveOnboardingCompliance autosaves "Catalog, permits & licences" (sellers) or "Services & licences" (providers).
 func (s *sellerShellImpl) SaveOnboardingCompliance(ctx context.Context, c *domain.Caller, in domain.OnboardingComplianceInput) (domain.OnboardingStatus, error) {
-	body := port.SellerApplicationCompliance{Categories: []string{}, Services: []port.SellerServiceLicence{},
+	body := port.SellerApplicationCompliance{Departments: []string{}, Services: []port.SellerServiceLicence{},
 		BeautyLabellingConfirmed: in.BeautyLabellingConfirmed, InsuranceDocumentAssetID: strings.TrimSpace(in.InsuranceDocumentAssetID),
 		AgreementsAccepted: &in.AgreementsAccepted, W9Certified: &in.W9Certified, W9SignerName: strings.TrimSpace(in.W9SignerName)}
 	if in.AgreementsAccepted {
@@ -194,9 +194,9 @@ func (s *sellerShellImpl) SaveOnboardingCompliance(ctx context.Context, c *domai
 		}
 		body.Agreements = refs
 	}
-	for _, cat := range in.Categories {
-		if k := strings.ToLower(strings.TrimSpace(cat)); k != "" && !slices.Contains(body.Categories, k) {
-			body.Categories = append(body.Categories, k)
+	for _, cat := range in.Departments {
+		if k := strings.ToLower(strings.TrimSpace(cat)); k != "" && !slices.Contains(body.Departments, k) {
+			body.Departments = append(body.Departments, k)
 		}
 	}
 	if p := in.FoodPermit; p != nil {
@@ -451,7 +451,7 @@ func firstChargeOf(f *port.SellerFirstCharge) *domain.OnboardingFirstCharge {
 // onboardingForm maps every section of the application onto the wizard's form.
 func onboardingForm(a port.SellerApplication, status string) domain.OnboardingForm {
 	f := domain.OnboardingForm{Prefilled: []string{}, Owners: []domain.OnboardingOwner{}, Documents: []domain.OnboardingDocument{},
-		Compliance: domain.OnboardingCompliance{Categories: []string{}, Services: []domain.OnboardingServiceLicence{}, Agreements: []domain.OnboardingAgreement{}},
+		Compliance: domain.OnboardingCompliance{Departments: []string{}, Services: []domain.OnboardingServiceLicence{}, Agreements: []domain.OnboardingAgreement{}},
 		Editable:   status == "DRAFT" || status == "INFO_REQUESTED"}
 	if b := a.Business; b != nil {
 		f.Business = domain.OnboardingBusiness{Offering: strPtr(strings.ToUpper(b.Offering)), EntityType: strPtr(strings.ToUpper(b.EntityType)),
@@ -487,7 +487,7 @@ func onboardingForm(a port.SellerApplication, status string) domain.OnboardingFo
 		}
 	}
 	if c := a.Compliance; c != nil {
-		f.Compliance.Categories = append(f.Compliance.Categories, c.Categories...)
+		f.Compliance.Departments = append(f.Compliance.Departments, c.Departments...)
 		f.Compliance.BeautyLabellingConfirmed, f.Compliance.AgreementsAccepted, f.Compliance.W9Certified = c.BeautyLabellingConfirmed, c.AgreementsAccepted, c.W9Certified
 		f.Compliance.InsuranceDocumentAssetID, f.Compliance.W9SignerName = strPtr(c.InsuranceDocumentAssetID), strPtr(c.W9SignerName)
 		for _, g := range c.Agreements {

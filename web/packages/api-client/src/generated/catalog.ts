@@ -36,7 +36,7 @@ export interface paths {
         };
         /**
          * Full active category tree (department › category › product type)
-         * @description includeRetired=true also lists retired nodes, for consumers that resolve the category of an existing product.
+         * @description includeRetired=true also lists retired nodes, for consumers that resolve the category of an existing product. forSeller=true (signed in, catalog:write) limits the tree to the departments the caller's organisation may sell in; 503 catalog.scope-unavailable when seller-service cannot say.
          */
         get: operations["tree"];
         put?: never;
@@ -73,7 +73,7 @@ export interface paths {
             cookie?: never;
         };
         /** My organisation's category requests */
-        get: operations["mine"];
+        get: operations["sellerCatalogScope"];
         put?: never;
         post?: never;
         delete?: never;
@@ -582,6 +582,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/catalog-scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Departments my organisation may list in, whether any sells sized goods, and my department requests
+         * @description Recorded by seller-service from the departments chosen at onboarding (and later approved requests). exempt is true for AfroTransact Retail and staff. hasSizing is true when an allowed department has a product type with the sizing trait. 503 catalog.scope-unavailable when seller-service cannot say.
+         */
+        get: operations["mine"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/product-types": {
         parameters: {
             query?: never;
@@ -589,7 +609,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** All product-type schemas */
+        /**
+         * All product-type schemas
+         * @description forSeller=true limits them to the product types used in the caller's departments.
+         */
         get: operations["productTypes"];
         put?: never;
         post?: never;
@@ -2370,10 +2393,38 @@ export interface components {
             id?: string;
             /** Format: uuid */
             parentId?: string;
+            /** @description Stable machine code of the node (a department's code is what seller-service stores) */
+            code?: string;
             name?: string;
             level?: string;
             productType?: string;
             path?: string;
+            /** @description On a department, the evidence sellers must have on file to sell in it (FOOD_PERMIT, BEAUTY_LABELLING) */
+            compliance?: string[];
+        };
+        SellerCatalogScope: {
+            /** @description AfroTransact Retail and staff; every department is allowed */
+            exempt?: boolean;
+            departments?: components["schemas"]["SellerScopeDepartment"][];
+            /** @description True when an allowed department has a product type with the sizing trait */
+            hasSizing?: boolean;
+            requests?: components["schemas"]["SellerScopeRequest"][];
+        };
+        SellerScopeDepartment: {
+            /** Format: uuid */
+            id?: string;
+            code?: string;
+            name?: string;
+            hasSizing?: boolean;
+        };
+        SellerScopeRequest: {
+            departmentCode?: string;
+            departmentName?: string;
+            /** @enum {string} */
+            status?: "PENDING" | "APPROVED" | "REJECTED";
+            needs?: string[];
+            /** Format: date-time */
+            createdAt?: string;
         };
         AttachLibraryImagesRequest: {
             /** @description Only listings with one of these SKUs (any variant); empty = every listing of the organisation */
@@ -3019,6 +3070,7 @@ export interface operations {
         parameters: {
             query?: {
                 includeRetired?: boolean;
+                forSeller?: boolean;
             };
             header?: never;
             path?: never;
@@ -3083,7 +3135,7 @@ export interface operations {
             };
         };
     };
-    mine: {
+    sellerCatalogScope: {
         parameters: {
             query?: never;
             header?: never;
@@ -3854,9 +3906,31 @@ export interface operations {
             };
         };
     };
-    productTypes: {
+    mine: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SellerCatalogScope"];
+                };
+            };
+        };
+    };
+    productTypes: {
+        parameters: {
+            query?: {
+                forSeller?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;

@@ -1252,11 +1252,78 @@ export interface paths {
         };
         /**
          * Category tree (department › category › product type) for the product form's category picker
-         * @description catalog `GET /v1/categories`, nested.
+         * @description catalog `GET /v1/categories?forSeller=true`, nested. Only the departments the organisation may sell in.
          */
         get: operations["getCategoryTree"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/catalog-scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The departments the organisation may sell in, whether any sells sized goods, and its department requests
+         * @description catalog `GET /v1/seller/catalog-scope`. `hasSizing` is true when an allowed department has a product type with
+         *     the sizing trait: Seller Center shows Size charts only then. `exempt` (AfroTransact Retail) means every
+         *     department. One cached query (`useSellerScope`) feeds the pickers, the sidebar and the page guards.
+         */
+        get: operations["getSellerCatalogScope"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/departments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The catalog's departments with the evidence each asks for (what onboarding offers)
+         * @description seller-service `GET /v1/departments`: the active departments of the catalog tree. `requires` comes from the
+         *     department's compliance data (FOOD_PERMIT, BEAUTY_LABELLING), so the wizard asks for the food permit exactly
+         *     when a chosen department says so.
+         */
+        get: operations["listSellerDepartments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/department-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask to sell in another department
+         * @description seller-service `POST /v1/orgs/{orgId}/department-requests` for the active organisation (Listings: EDIT).
+         *     Staff approve or reject; approving adds the department at once. `needs` lists what the seller still has to
+         *     provide for it (a food permit, beauty labelling). Asking again while one is pending returns it. 409 when the
+         *     department is already allowed.
+         */
+        post: operations["requestSellerDepartment"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3810,6 +3877,51 @@ export interface components {
         };
         ListingStatusRequest: {
             active: boolean;
+        };
+        SellerDepartment: {
+            /** @description The catalog department node code */
+            code: string;
+            name: string;
+            requires: ("FOOD_PERMIT" | "BEAUTY_LABELLING")[];
+        };
+        SellerScopeDepartment: {
+            id: string;
+            code: string;
+            name: string;
+            hasSizing: boolean;
+        };
+        SellerDepartmentRequest: {
+            id?: string;
+            orgId?: string;
+            departmentCode: string;
+            departmentName?: string;
+            note?: string | null;
+            /** @enum {string} */
+            status: "PENDING" | "APPROVED" | "REJECTED";
+            needs: ("FOOD_PERMIT" | "BEAUTY_LABELLING")[];
+            /** Format: date-time */
+            createdAt?: string;
+            decisionNote?: string | null;
+        };
+        SellerDepartmentRequestInput: {
+            departmentCode: string;
+            note?: string;
+        };
+        SellerCatalogScope: {
+            /** @description AfroTransact Retail: every department */
+            exempt: boolean;
+            departments: components["schemas"]["SellerScopeDepartment"][];
+            hasSizing: boolean;
+            requests: components["schemas"]["SellerScopeRequest"][];
+        };
+        SellerScopeRequest: {
+            departmentCode: string;
+            departmentName: string;
+            /** @enum {string} */
+            status: "PENDING" | "APPROVED" | "REJECTED";
+            needs: string[];
+            /** Format: date-time */
+            createdAt?: string;
         };
         CategoryNode: {
             id: string;
@@ -7564,6 +7676,83 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellerCatalogScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scope */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerCatalogScope"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSellerDepartments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Departments */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerDepartment"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    requestSellerDepartment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerDepartmentRequestInput"];
+            };
+        };
+        responses: {
+            /** @description Requested */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerDepartmentRequest"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

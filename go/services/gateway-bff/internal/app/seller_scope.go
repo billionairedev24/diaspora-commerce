@@ -32,7 +32,9 @@ var _ SellerScopeService = (*sellerScopeImpl)(nil)
 
 // NewSellerScopeService returns the SellerScopeService; d.ScopeCatalog and d.ScopeSeller are the catalog and seller
 // upstreams (nil answers 503).
-func NewSellerScopeService(d SellerDeps) SellerScopeService { return &sellerScopeImpl{r: newResolver(d)} }
+func NewSellerScopeService(d SellerDeps) SellerScopeService {
+	return &sellerScopeImpl{r: newResolver(d)}
+}
 
 // MaxScopeBodyBytes bounds the small JSON bodies of the scope routes.
 const MaxScopeBodyBytes = 8 << 10

@@ -246,7 +246,7 @@ type SellerServiceLicence struct {
 
 // SellerApplicationCompliance is seller's ComplianceSection (CatalogComplianceStep when saving).
 type SellerApplicationCompliance struct {
-	Categories               []string               `json:"categories"`
+	Departments              []string               `json:"departments"`
 	FoodPermit               *SellerFoodPermit      `json:"foodPermit,omitempty"`
 	BeautyLabellingConfirmed *bool                  `json:"beautyLabellingConfirmed,omitempty"`
 	Services                 []SellerServiceLicence `json:"services"`

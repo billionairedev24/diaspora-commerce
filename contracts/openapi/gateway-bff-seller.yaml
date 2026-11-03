@@ -256,7 +256,7 @@ paths:
       operationId: saveOnboardingCompliance
       security: [{sessionCookie: []}]
       summary: Save "Catalog, permits & licences" / "Services & licences"
-      description: 'seller `PUT /v1/applications/me/steps/catalog-compliance`: categories (lower-cased keys), the food permit for groceries / prepared food, beauty labelling, service licences, insurance, agreements and the W-9 certification.'
+      description: 'seller `PUT /v1/applications/me/steps/catalog-compliance`: departments (catalog department codes from `GET /v1/seller/departments`), the food permit and beauty labelling when a chosen department asks for them, service licences, insurance, agreements and the W-9 certification.'
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingComplianceInput'}}}
@@ -3172,9 +3172,9 @@ components:
             planFeeCollectionDefault: {$ref: '#/components/schemas/PlanFeeCollectionMode'}
         compliance:
           type: object
-          required: [categories, foodPermit, beautyLabellingConfirmed, services, insuranceDocumentAssetId, agreementsAccepted, w9Certified, w9SignerName, agreements]
+          required: [departments, foodPermit, beautyLabellingConfirmed, services, insuranceDocumentAssetId, agreementsAccepted, w9Certified, w9SignerName, agreements]
           properties:
-            categories: {type: array, items: {type: string}}
+            departments: {type: array, items: {type: string}, description: 'Catalog department codes; they become the departments the organisation may sell in once approved'}
             foodPermit:
               oneOf:
                 - {$ref: '#/components/schemas/OnboardingFoodPermit'}
@@ -3287,7 +3287,7 @@ components:
     OnboardingComplianceInput:
       type: object
       properties:
-        categories: {type: array, items: {type: string}}
+        departments: {type: array, items: {type: string}, description: Catalog department codes}
         foodPermit: {$ref: '#/components/schemas/OnboardingFoodPermitInput'}
         beautyLabellingConfirmed: {type: boolean}
         services: {type: array, items: {$ref: '#/components/schemas/OnboardingServiceLicenceInput'}}

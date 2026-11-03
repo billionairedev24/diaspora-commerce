@@ -184,7 +184,7 @@ type OnboardingServiceLicence struct {
 
 // OnboardingCompliance is the "Catalog, permits & licences" / "Services & licences" step.
 type OnboardingCompliance struct {
-	Categories               []string                   `json:"categories"`
+	Departments              []string                   `json:"departments"`
 	FoodPermit               *OnboardingFoodPermit      `json:"foodPermit"`
 	BeautyLabellingConfirmed *bool                      `json:"beautyLabellingConfirmed"`
 	Services                 []OnboardingServiceLicence `json:"services"`
@@ -319,7 +319,7 @@ type OnboardingPlanInput struct {
 
 // OnboardingComplianceInput is PUT /v1/seller/onboarding/catalog-compliance.
 type OnboardingComplianceInput struct {
-	Categories               []string                   `json:"categories"`
+	Departments              []string                   `json:"departments"`
 	FoodPermit               *OnboardingFoodPermit      `json:"foodPermit"`
 	BeautyLabellingConfirmed *bool                      `json:"beautyLabellingConfirmed"`
 	Services                 []OnboardingServiceLicence `json:"services"`
