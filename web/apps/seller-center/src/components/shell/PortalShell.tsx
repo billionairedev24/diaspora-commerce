@@ -1,7 +1,7 @@
 'use client';
 
-import { AccountFormatPreferences, accountSectionOf } from '@afrotransact/account';
-import { isApiError, type ModuleKey, type OnboardingStatus, sellerKeys, sellerQueries, type SellerSession } from '@afrotransact/api-client';
+import { AccountFormatPreferences, accountSectionOf, SessionSignedOutLanding } from '@afrotransact/account';
+import { isApiError, type ModuleKey, type OnboardingStatus, sellerKeys, sellerQueries, type SellerSession, sessionEndReasonOf } from '@afrotransact/api-client';
 import { BackofficeFrame, Button, useNavLoop, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
@@ -11,6 +11,7 @@ import { LolaLauncher } from '@/components/assistant/LolaLauncher';
 import { NoAccess } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
+import { signedOutHref } from '@/lib/auth';
 import { setFormatPreferences } from '@/lib/format';
 import { navGuard, useShellRedirect } from '@/lib/nav-guard';
 import { type ApplyRole, applyRoleOf, entryDecision, kindOf } from '@/lib/onboarding-entry';
@@ -18,9 +19,13 @@ import { redirectFor } from '@/lib/onboarding-wizard';
 import { hrefOf, moduleOf } from '@/lib/routes';
 import { useStorefrontUrl } from '@/lib/runtime-config';
 import { SellerSessionProvider } from '@/lib/session';
+import { sessionApi } from '@/lib/session-api';
+import { sessionLabels } from '@/lib/session-labels';
+import { sessionReturnTo } from '@/lib/session-return';
 
 import { ComplianceBanner, PayoutsPausedBanner } from './ComplianceBanner';
 import { Header } from './Header';
+import { SellerSessionTimeout } from './SellerSessionTimeout';
 import { AutoSignIn, clearSignInAttempt, ShellFailed, ShellLoading, ShellLooped } from './ShellStates';
 import { Sidebar, SidebarRail } from './Sidebar';
 import { SupportChat } from './SupportChat';
@@ -132,6 +137,14 @@ function allowed(session: SellerSession, key: ModuleKey | null): boolean {
  * open show an access notice.
  */
 export function PortalShell({ children }: { children: ReactNode }) {
+  return (
+    <SellerSessionTimeout>
+      <PortalShellContent>{children}</PortalShellContent>
+    </SellerSessionTimeout>
+  );
+}
+
+function PortalShellContent({ children }: { children: ReactNode }) {
   const t = useT();
   const api = sellerApi();
   const qc = useQueryClient();
@@ -212,7 +225,14 @@ export function PortalShell({ children }: { children: ReactNode }) {
       return (
         <>
           <Header session={null} />
-          <AutoSignIn role={applyRole} label={t('sc.portalShell.takingYouToSignIn')} />
+          {/* The policy may have ended the session a moment ago (this tab, or another): say so before the sign-in. */}
+          <SessionSignedOutLanding
+            api={sessionApi()}
+            labels={sessionLabels(t)}
+            reason={sessionEndReasonOf(q.error.code)}
+            onSignIn={() => window.location.assign(signedOutHref(sessionReturnTo(window.location.pathname, window.location.search) ?? '/'))}
+            fallback={<AutoSignIn role={applyRole} label={t('sc.portalShell.takingYouToSignIn')} />}
+          />
         </>
       );
     }

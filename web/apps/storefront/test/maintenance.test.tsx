@@ -90,7 +90,16 @@ describe('maintenance (503 MAINTENANCE from the BFF)', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(20_000);
     });
-    expect(fetchMock).toHaveBeenCalledWith('/api/bff/v1/maintenance', { cache: 'no-store' });
+    // The timed re-check is not the person's doing: it must not count as activity (X-Background).
+    expect(fetchMock).toHaveBeenCalledWith('/api/bff/v1/maintenance', { cache: 'no-store', headers: { 'X-Background': '1' } });
     expect(reload).toHaveBeenCalled();
+  });
+
+  it('the "Check again" button is the person asking, so it is not marked as background', async () => {
+    const fetchMock = vi.fn(async () => json({ active: true, scope: 'ALL' }));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MaintenanceScreen {...maintenanceProps({ active: true, scope: 'ALL', title: 't', message: 'm' }, 'en', tEn)} />);
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Check again' })));
+    expect(fetchMock).toHaveBeenCalledWith('/api/bff/v1/maintenance', { cache: 'no-store', headers: undefined });
   });
 });

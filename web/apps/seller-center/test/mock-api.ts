@@ -1,4 +1,4 @@
-import { createSellerApiClient, createSettingsApiClient, type SellerApiClient, type SettingsApiClient } from '@afrotransact/api-client';
+import { createSellerApiClient, createSessionApi, createSettingsApiClient, type SellerApiClient, type SessionApi, type SettingsApiClient } from '@afrotransact/api-client';
 import { MOCK_ROLE_COOKIE } from '@afrotransact/api-client/mocks/seller';
 import { handleSellerMockRequest } from '@afrotransact/api-client/mocks/seller-runtime';
 
@@ -15,6 +15,11 @@ export function mockApi(): SellerApiClient {
     headers: role ? { cookie: `${MOCK_ROLE_COOKIE}=${role}` } : {},
     fetch: (req) => handleSellerMockRequest(req)
   });
+}
+
+/** The sign-out timer's calls (policy, activity, /v1/me) against the same in-process mocks. */
+export function mockSessionApi(): SessionApi {
+  return createSessionApi({ baseUrl: 'http://seller.test/api/bff', fetch: (req) => handleSellerMockRequest(req) });
 }
 
 /** My account (/v1/account/…) against the same in-process mocks. */
