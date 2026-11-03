@@ -78,6 +78,72 @@ activity, a tab left open would never time out. So:
   `GET /v1/me` (web callers). Send `X-App: driver` from the driver app; anything else is the customer app.
 - Bearer (mobile) callers get `lastActivityAt` and `expiresAt` = `null`.
 
+### Web apps (client behaviour)
+
+The storefront, Seller Center and staff console run one session timer for signed-in people. Guests have no session, so
+nothing runs for them. Code: the timer and dialogs in `web/packages/ui/src/session/` (`timeout.ts` is the framework-free
+timer), the wiring in `web/packages/account/src/session-timeout.tsx` (`SessionTimeout`, `SessionSignedOutLanding`), the
+request layer in `web/packages/api-client/src/{http,session-api,session-end}.ts`, and one thin wrapper per app
+(`StorefrontSessionTimeout`, `SellerSessionTimeout`, `StaffSessionTimeout`) that supplies the app's strings, sign-out and
+return-to rule. Strings are in each app's catalogue under `session.*` (storefront), `sc.session.*` and `st.session.*`.
+
+**Clock.** The timer works from `expiresAt` of `GET /v1/session/policy` and corrects for a wrong device clock with the
+response's `Date` header (whole seconds, so it assumes the later second: the screen can end up to a second early, never
+late). The `/api/bff` proxy forwards `Date` and `X-Background`; dropping either breaks the timer.
+
+**Reporting activity.** Real input only: `pointerdown`, `keydown`, `wheel`, `touchstart`, `scroll`, and the tab becoming
+visible again. Mouse movement does not count. Input reaches the timer at most once a second and goes to
+`POST /v1/session/activity` at most once a minute (every quarter of the idle timeout when that is shorter, every 10 minutes
+for day-long timeouts). After a report the expiry moves locally; the policy is read again only when the last read is
+older than 5 minutes, before a warning, at the deadline and after "Stay signed in". Reading the policy sends
+`X-Background`. Nothing is reported from timers, and nothing is reported while the warning shows (only its button counts)
+or when the absolute limit is what ends the session (it cannot be extended).
+
+**Warning.** `warnSeconds` before the end the timer asks the server once more (another tab or window may have kept the
+session alive; unreported input is sent first), then opens a dialog (the shared `Dialog`: focus trap, Esc, focus returns):
+"You'll be signed out in 0:45 because you've been inactive", a live m:ss countdown, **Stay signed in** (focused first;
+reports activity, reads the policy, closes) and **Sign out now**. Esc or the close button keeps the person signed in. The
+visible countdown is not a live region; a hidden polite status says it at the start and every 15 seconds, and an
+assertive alert says it every second for the last 10. When the session ends at the **absolute limit** the warning says
+"For your security you need to sign in again at 4:15 pm" and that staying active cannot extend it; the buttons are
+**Got it** (hides it, and it returns for the last 10 seconds) and **Sign out now**. Audiences with `warnSeconds` 0
+(customers by default) get no dialog; the 401 handling below still applies.
+
+**The end.** At the deadline the timer asks the server a last time (it may know of activity the tab does not); if the
+session is over, or the server cannot be reached, it ends. A 401 with `SESSION_IDLE_TIMEOUT` or `SESSION_ABSOLUTE_TIMEOUT`
+on any request, or another tab saying so, ends it at once. Ending does this, in order: cancel every request and clear the
+whole query cache; drop the signed-in page (it is unmounted, not hidden) for a full-screen, modal signed-out message that
+says why (idle, maximum length, or "signed out in another window"); finish the sign-out on the server
+(`POST /v1/auth/sign-out` with the page to return to, which also ends the single-sign-on session) and enable **Sign in again**,
+which goes to identity's sign-in. The storefront has no sign-in wall: it goes straight back to the page as a guest and shows
+the reason in its "You're signed out" notice. Nothing but the reason code and a time is ever written to storage or sent to
+other tabs.
+
+**Why on landing too.** For ten minutes `GET /v1/me` says why (`signedOutReason`). A back office that opens with no session
+asks it before redirecting to identity, and the storefront's notice reads it, so a tab that never saw the 401 (or a person
+who comes back to the address later) still gets the reason.
+
+**Return to.** The page the person was on is kept (`path?query` of this app), except the landing page and pages that a
+sign-in alone must not reopen: staff console `/settings/*` and `/account/*`, Seller Center `/account/*`, storefront
+`/account*`, `/orders*`, `/checkout*` (the existing sign-out rule).
+
+**Several tabs.** `BroadcastChannel` (`localStorage` `storage` events where there is none) carries two messages: *activity
+reported* (the other tabs move their expiry and close a warning) and *ended* (timeout, 401 or a manual sign-out; the other
+tabs end too and do not repeat the server sign-out). Manual sign-outs call `announceSignOut()`.
+
+**Polling must be flagged.** Every request nobody asked for sends `X-Background: 1`. In code: the API methods take a
+trailing `background` argument (`BACKGROUND`), polling lives only in the query factories (`pollWhile`, `pollingOf` in
+`query/polling.ts`; components never set `refetchInterval`), and the maintenance screens' timed re-check sends the header.
+`web/packages/api-client/test/background-polling.test.ts` lists every known poll and fails when a poll is added without
+the flag, when a component sets its own `refetchInterval`, when a timer calls `fetch` without the header, or when a query
+refetches on window focus. A poll whose first load is also flagged is fine: the click that opened the page already
+reported activity.
+
+**Mock BFF and tests.** The MSW handlers (`mocks/session.ts`) serve the policy, the activity endpoint and the `session` /
+`signedOutReason` members of `/v1/me` for all three apps. Shorten the timeouts with `setMockSessionPolicy({ idle, warn,
+absolute, signInAgeSeconds })` in tests or with the cookie `at_mock_session=idle:warn:absolute` (seconds, e.g. `30:10:600`)
+when running an app on the mocks; `endMockSession('SESSION_ABSOLUTE_TIMEOUT')` ends the session at once.
+
 ### Mobile apps
 
 The BFF cannot see taps in a native app, so the **idle timeout is enforced on the device**: the app reads
@@ -115,3 +181,10 @@ leaving the session unstamped.
   sessions, failing store), `session_policy_test.go` (cache, fail-safe), `internal/adapter/httpapi/session_timeout_test.go`
   (end to end per app), `staff_identity_test.go` (the staff table against `gateway-bff-staff.yaml`).
 - staff console: `test/identity-admin.test.tsx`, `packages/api-client/test/staff-identity.test.ts`.
+- web timer: `packages/ui/test/session-timeout.test.ts` (warn threshold, extend, absolute limit, clock offset, throttling,
+  tabs, long timeouts), `session-dialog.test.tsx` (focus trap, buttons, live regions, signed-out screen),
+  `session-guard.test.tsx` (input events, guests, channels); `packages/api-client/test/session.test.ts` (policy,
+  activity, 401 de-duplication) and `background-polling.test.ts` (polling audit); per app `test/session-timeout.test.tsx`
+  (storefront, Seller Center, staff console: mounted for signed-in people only, warning, end, cache cleared, return-to).
+- Not covered by automated tests: the look of the dialog and signed-out screen in a real browser, real BroadcastChannel
+  between two real tabs, a sleeping laptop. Check those by hand with the mock BFF and `at_mock_session=30:20:600`.

@@ -1,15 +1,18 @@
 /* Mock BFF for the sign-out policy (GET /v1/session/policy, POST /v1/session/activity, the `session` and
-   `signedOutReason` members of GET /v1/me). One clock per mock server process, like the real session: activity moves
-   `lastActivityAt`; the policy and /v1/me never do. Tests (and a developer running an app on the mocks) can shorten the
-   timeouts with setMockSessionPolicy() or the cookie MOCK_SESSION_COOKIE ("idle:warn:absolute" in seconds, e.g.
-   "30:10:600"), or end the session at once with endMockSession(). */
+   `signedOutReason` members of GET /v1/me). By default the mock session never ends (an app running on the mocks must not
+   sign a developer out): the policy reports the audience's standard numbers and the session is always fresh. To exercise
+   the timer, shorten it:
+   - in tests, setMockSessionPolicy() / endMockSession() on the process-wide session;
+   - in a browser, the cookie MOCK_SESSION_COOKIE = "idle:warn:absolute[:tag]" in seconds (e.g. "30:20:600"). Each distinct
+     cookie value is its own session with real clocks (activity moves `lastActivityAt`, the policy and /v1/me never do), so
+     one test cannot end another's. */
 import { http, HttpResponse } from 'msw';
 
 import { bffProblemType } from '../problem-types';
 import { type SessionAudience, type SessionEndReason, type SessionPolicy } from '../schemas/session';
 import { readCookie } from './http-kit';
 
-/** Cookie that overrides the mock policy: "idle:warn:absolute" in seconds (absolute optional). */
+/** Cookie that gives a browser its own short mock session: "idle:warn:absolute[:tag]" in seconds. */
 export const MOCK_SESSION_COOKIE = 'at_mock_session';
 
 /** The standard policy of an audience (the BFF's built-in defaults, docs/engineering/session-timeouts.md). */
@@ -27,53 +30,66 @@ interface MockSessionState {
   createdAt: number;
   lastActivityAt: number;
   ended: { reason: SessionEndReason; at: number } | null;
+  /** False: the session never ends and is always fresh (the default). */
+  enforce: boolean;
 }
 
-let state: MockSessionState | null = null;
+/** The process-wide session (tests) and the sessions of browsers that sent MOCK_SESSION_COOKIE. */
+let shared: MockSessionState | null = null;
+const byCookie = new Map<string, MockSessionState>();
 
 const ENDED_MEMORY_MS = 10 * 60_000;
 
-function fresh(audience: SessionAudience): MockSessionState {
+function fresh(audience: SessionAudience, enforce = false): MockSessionState {
   const d = MOCK_SESSION_DEFAULTS[audience === 'staff' || audience === 'seller' ? audience : 'customer-web'];
   const now = Date.now();
-  return { audience, idle: d.idle, absolute: d.absolute, warn: d.warn, createdAt: now, lastActivityAt: now, ended: null };
+  return { audience, idle: d.idle, absolute: d.absolute, warn: d.warn, createdAt: now, lastActivityAt: now, ended: null, enforce };
 }
 
 function current(audience: SessionAudience, request?: Request): MockSessionState {
-  if (!state || state.audience !== audience) state = fresh(audience);
   const raw = request ? readCookie(request, MOCK_SESSION_COOKIE) : null;
   if (raw) {
-    const [idle, warn, absolute] = raw.split(':').map((n) => Number(n));
-    if (idle && idle > 0) state.idle = idle;
-    if (warn !== undefined && warn >= 0 && !Number.isNaN(warn)) state.warn = warn;
-    if (absolute && absolute > 0) state.absolute = absolute;
+    let s = byCookie.get(raw);
+    if (!s) {
+      const [idle, warn, absolute] = raw.split(':').map((n) => Number(n));
+      s = fresh(audience, true);
+      if (idle && idle > 0) s.idle = idle;
+      if (warn !== undefined && warn >= 0 && !Number.isNaN(warn)) s.warn = warn;
+      if (absolute && absolute > 0) s.absolute = absolute;
+      byCookie.set(raw, s);
+    }
+    return s;
   }
-  return state;
+  if (!shared || shared.audience !== audience) shared = fresh(audience);
+  return shared;
 }
 
-/** Starts a fresh mock session (call between tests). */
+/** Starts a fresh mock session that never ends (call between tests). */
 export function resetMockSession(audience: SessionAudience = 'staff'): void {
-  state = fresh(audience);
+  shared = fresh(audience);
+  byCookie.clear();
 }
 
-/** Changes the mock policy (seconds): a short idle timeout for tests. Starts a session if none is running. */
+/** Changes the process-wide mock policy (seconds) and makes it end for real: a short idle timeout for tests. */
 export function setMockSessionPolicy(patch: { audience?: SessionAudience; idle?: number; warn?: number; absolute?: number; signInAgeSeconds?: number }): void {
-  const s = current(patch.audience ?? state?.audience ?? 'staff');
+  const s = current(patch.audience ?? shared?.audience ?? 'staff');
+  s.enforce = true;
   if (patch.idle !== undefined) s.idle = patch.idle;
   if (patch.warn !== undefined) s.warn = patch.warn;
   if (patch.absolute !== undefined) s.absolute = patch.absolute;
   if (patch.signInAgeSeconds !== undefined) s.createdAt = Date.now() - patch.signInAgeSeconds * 1000;
 }
 
-/** Ends the mock session as the policy would: every session call answers 401, /v1/me tells why for ten minutes. */
+/** Ends the process-wide mock session as the policy would: every session call answers 401, /v1/me tells why for ten minutes. */
 export function endMockSession(reason: SessionEndReason = 'SESSION_IDLE_TIMEOUT'): void {
-  const s = current(state?.audience ?? 'staff');
+  const s = current(shared?.audience ?? 'staff');
+  s.enforce = true;
   s.ended = { reason, at: Date.now() };
 }
 
 /** Signs in again after an end (a new session). */
 export function startMockSession(audience: SessionAudience = 'staff'): void {
-  state = fresh(audience);
+  shared = fresh(audience);
 }
 
 function endsAt(s: MockSessionState): { expiresAt: number; reason: SessionEndReason } {
@@ -84,6 +100,7 @@ function endsAt(s: MockSessionState): { expiresAt: number; reason: SessionEndRea
 
 /** Marks the session ended when its time has passed; returns the reason when it is (or was) ended. */
 function check(s: MockSessionState, now = Date.now()): SessionEndReason | null {
+  if (!s.enforce && !s.ended) return null;
   if (!s.ended) {
     const e = endsAt(s);
     if (now > e.expiresAt) s.ended = { reason: e.reason, at: now };
@@ -92,6 +109,8 @@ function check(s: MockSessionState, now = Date.now()): SessionEndReason | null {
 }
 
 function policyOf(s: MockSessionState): SessionPolicy {
+  // Never ends: always fresh.
+  if (!s.enforce) s = { ...s, createdAt: Date.now(), lastActivityAt: Date.now() };
   return {
     audience: s.audience,
     idleTimeoutSeconds: s.idle,
