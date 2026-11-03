@@ -248,5 +248,11 @@
   "cu.sizeGuide.selectShort": "Yan",
   "cu.sizeGuide.soldOut": "Ti tán",
   "cu.sizeGuide.howToMeasure": "Bí a ṣe ń wọ̀n",
-  "cu.sizeGuide.size": "Ìwọ̀n"
+  "cu.sizeGuide.size": "Ìwọ̀n",
+  "cu.session.idle": "A ti mú ọ jáde lẹ́yìn àkókò tí o kò lo ohun èlò náà. Tún wọlé.",
+  "cu.session.absolute": "Fún ààbò rẹ, ìgbà wíwọlé rẹ ti dé òpin tó pọ̀ jù. Tún wọlé.",
+  "cu.session.warnTitle": "Ṣé o ṣì wà níbẹ̀?",
+  "cu.session.warnBody": "A óò mú ọ jáde láàrín {n, plural, other {# ìṣẹ́jú àáyá}}.",
+  "cu.session.stay": "Dúró ní wíwọlé",
+  "cu.session.signOut": "Jáde"
 }

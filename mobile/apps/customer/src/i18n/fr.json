@@ -248,5 +248,11 @@
   "cu.sizeGuide.selectShort": "Choisir",
   "cu.sizeGuide.soldOut": "Épuisé",
   "cu.sizeGuide.howToMeasure": "Comment mesurer",
-  "cu.sizeGuide.size": "Taille"
+  "cu.sizeGuide.size": "Taille",
+  "cu.session.idle": "Vous avez été déconnecté après une période d’inactivité. Reconnectez-vous.",
+  "cu.session.absolute": "Pour votre sécurité, votre session a atteint sa durée maximale. Reconnectez-vous.",
+  "cu.session.warnTitle": "Vous êtes toujours là ?",
+  "cu.session.warnBody": "Vous serez déconnecté dans {n, plural, one {# seconde} other {# secondes}}.",
+  "cu.session.stay": "Rester connecté",
+  "cu.session.signOut": "Se déconnecter"
 }

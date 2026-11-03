@@ -169,5 +169,11 @@
   "dr.profile.biometricHint": "افتح التطبيق بوجهك أو بصمتك. يظل رمز المرور هو البديل دائمًا.",
   "dr.profile.biometricUnavailable": "{method} غير مُعدّ على هذا الهاتف.",
   "dr.profile.biometricFailed": "تعذّر تغيير {method}. أعد المحاولة.",
-  "dr.profile.lockNow": "قفل الآن"
+  "dr.profile.lockNow": "قفل الآن",
+  "dr.session.idle": "تم تسجيل خروجك بعد فترة من عدم النشاط. سجّل الدخول مرة أخرى. التحديثات غير المرسلة تبقى على هذا الهاتف.",
+  "dr.session.absolute": "حفاظًا على أمانك، بلغت جلستك أقصى مدة لها. سجّل الدخول مرة أخرى. التحديثات غير المرسلة تبقى على هذا الهاتف.",
+  "dr.session.warnTitle": "هل ما زلت هنا؟",
+  "dr.session.warnBody": "سيتم تسجيل خروجك خلال {n, plural, one {ثانية واحدة} two {ثانيتين} few {# ثوانٍ} other {# ثانية}}.",
+  "dr.session.stay": "ابقَ مسجّلًا للدخول",
+  "dr.session.signOut": "تسجيل الخروج"
 }

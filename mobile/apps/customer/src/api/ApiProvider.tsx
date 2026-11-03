@@ -20,8 +20,10 @@ export function createQueryClient(): QueryClient {
 }
 
 export function ApiProvider({ children }: { children: ReactNode }) {
-  const { tokenSource } = useAuth();
+  const { tokenSource, registerPolicyFetcher } = useAuth();
   const api = useMemo(() => createCustomerApi(tokenSource), [tokenSource]);
+  // The sign-out policy is read through this typed client (as a background request: never activity).
+  useEffect(() => registerPolicyFetcher(() => api.session.policy()), [api, registerPolicyFetcher]);
   const [queryClient] = useState(createQueryClient);
   // React Native has no window focus: coming back to the app is the focus, so stale data refreshes then.
   useEffect(() => {

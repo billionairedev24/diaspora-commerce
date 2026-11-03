@@ -248,5 +248,11 @@
   "cu.sizeGuide.selectShort": "اختيار",
   "cu.sizeGuide.soldOut": "نفدت الكمية",
   "cu.sizeGuide.howToMeasure": "كيفية القياس",
-  "cu.sizeGuide.size": "المقاس"
+  "cu.sizeGuide.size": "المقاس",
+  "cu.session.idle": "تم تسجيل خروجك بعد فترة من عدم النشاط. سجّل الدخول مرة أخرى.",
+  "cu.session.absolute": "حفاظًا على أمانك، بلغت جلستك أقصى مدة لها. سجّل الدخول مرة أخرى.",
+  "cu.session.warnTitle": "هل ما زلت هنا؟",
+  "cu.session.warnBody": "سيتم تسجيل خروجك خلال {n, plural, one {ثانية واحدة} two {ثانيتين} few {# ثوانٍ} other {# ثانية}}.",
+  "cu.session.stay": "ابقَ مسجّلًا للدخول",
+  "cu.session.signOut": "تسجيل الخروج"
 }

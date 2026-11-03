@@ -5,6 +5,8 @@ import { type components as Bff } from '@afrotransact/api-client/generated/gatew
 import { type components as Bookings } from './generated/bookings';
 import { type components as Identity } from './generated/identity';
 
+/** GET /v1/session/policy (bearer callers get lastActivityAt and expiresAt = null). */
+export type SessionPolicyBody = Bff['schemas']['SessionPolicy'];
 export type CheckoutSummary = Bff['schemas']['CheckoutSummary'];
 export type PlaceOrderRequest = Bff['schemas']['PlaceOrderRequest'];
 export type OrderConfirmation = Bff['schemas']['OrderConfirmation'];

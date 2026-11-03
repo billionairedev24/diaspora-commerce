@@ -12,6 +12,7 @@ import {
   IdentificationCard,
   Key,
   ListMagnifyingGlass,
+  MagnifyingGlass,
   Megaphone,
   Package,
   Path,
@@ -28,7 +29,7 @@ import { type MessageKey } from '@/i18n/t';
 
 /** Sidebar icon of each module (the Backoffice prototype's Phosphor icons). */
 export const MODULE_ICONS: Record<StaffModuleKey, Icon> = {
-  dash: SquaresFour, exports: DownloadSimple, orders: Receipt, catalog: ShieldCheck, inventory: Stack, retail: Package, dispatch: Path,
+  dash: SquaresFour, exports: DownloadSimple, orders: Receipt, catalog: ShieldCheck, search: MagnifyingGlass, inventory: Stack, retail: Package, dispatch: Path,
   orgs: UsersThree, apps: IdentificationCard, support: Headset, rbac: UsersThree, payouts: Bank, fees: Percent, marketing: Megaphone, disputes: Scales,
   audit: ListMagnifyingGlass, markets: GlobeHemisphereWest, siteCfg: Scales, dev: Code, identity: Key, notifications: BellRinging, preorders: CalendarCheck,
   plans: CreditCard
@@ -36,7 +37,7 @@ export const MODULE_ICONS: Record<StaffModuleKey, Icon> = {
 
 /** URL path of each module. */
 export const MODULE_PATHS: Record<StaffModuleKey, string> = {
-  dash: '/', exports: '/exports', orders: '/orders', catalog: '/moderation', inventory: '/inventory', retail: '/retail', dispatch: '/dispatch',
+  dash: '/', exports: '/exports', orders: '/orders', catalog: '/moderation', search: '/search/analytics', inventory: '/inventory', retail: '/retail', dispatch: '/dispatch',
   orgs: '/organisations', apps: '/applications', support: '/support', rbac: '/users', payouts: '/payouts', fees: '/fees', marketing: '/marketing', disputes: '/disputes',
   audit: '/audit', markets: '/markets', siteCfg: '/site-content', dev: '/developers', identity: '/identity', notifications: '/notifications', preorders: '/preorders',
   plans: '/plans'
@@ -63,7 +64,8 @@ export function recordHref(resource: string, id: string): string | null {
 export function moduleOf(pathname: string): StaffModuleKey | null {
   const seg = `/${pathname.split('/').filter(Boolean)[0] ?? ''}`;
   if (seg === '/') return 'dash';
-  const hit = (Object.entries(MODULE_PATHS) as [StaffModuleKey, string][]).find(([, p]) => p === seg);
+  // A module's path may go deeper than its first segment (/search/analytics): the first segment owns the pages below it.
+  const hit = (Object.entries(MODULE_PATHS) as [StaffModuleKey, string][]).find(([, p]) => `/${p.split('/').filter(Boolean)[0] ?? ''}` === seg);
   return hit ? hit[0] : null;
 }
 

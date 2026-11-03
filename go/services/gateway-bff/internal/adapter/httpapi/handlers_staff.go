@@ -36,6 +36,8 @@ type StaffServices struct {
 	// Markets serves Settings → Markets & locations as a location tree and the shared place pickers; routes are
 	// registered when it is set.
 	Markets app.StaffMarketsService
+	// Search serves Search analytics and the synonym rules (S039); routes are registered when it is set.
+	Search app.StaffSearchService
 	// Taxonomy serves Catalog → Categories: the category tree, product-type schemas and the audit trail; routes are
 	// registered when it is set.
 	Taxonomy app.StaffTaxonomyService
@@ -124,6 +126,9 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	}
 	if s.Markets != nil {
 		h.registerStaffMarkets(route)
+	}
+	if s.Search != nil {
+		h.registerStaffSearch(route)
 	}
 	if s.Taxonomy != nil {
 		h.registerStaffTaxonomy(route)

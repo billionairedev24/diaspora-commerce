@@ -5252,6 +5252,141 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/search/markets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Markets whose searches can be reported, with their names
+         * @description The BFF's configured search markets (`MARKET`); names are for display. Needs VIEW on the search module (`search:analytics.view` or `search:synonyms.edit`).
+         */
+        get: operations["listStaffSearchMarkets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/search/analytics/top-queries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Most searched queries in a window, one server-driven page
+         * @description search `GET /v1/search/analytics/top-queries` (`search:analytics.view`) with `limit=500`; the BFF filters (`q`), sorts
+         *     and pages the answer. Defaults: the last 7 days, sorted by searches, page 1 of 25. `truncated` says the service's
+         *     500-query cap cut the report. Counts come from buffered, aggregated events: treat them as a good indication, not
+         *     as accounting.
+         */
+        get: operations["listStaffSearchTopQueries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/search/analytics/zero-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Queries that returned nothing at least once, one server-driven page
+         * @description search `GET /v1/search/analytics/zero-results` (`search:analytics.view`) with `limit=500`; the BFF drops queries
+         *     without a zero-result search, then filters (`q`), sorts and pages. Default sort: zero-result searches, descending.
+         */
+        get: operations["listStaffSearchZeroResults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/search/analytics/ctr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Searches, clicks, click-through and zero-result rates by day
+         * @description search `GET /v1/search/analytics/ctr` (`search:analytics.view`). `items` is one page of days (default newest
+         *     first), `trend` every day of the window oldest first (for a sparkline), `totals` the window. Days without searches
+         *     are included. At most 366 days.
+         */
+        get: operations["listStaffSearchClickThrough"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/search/synonyms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Synonym rules (the words search treats as the same thing)
+         * @description search `GET /v1/search/synonyms` (`search:analytics.view` or `search:synonyms.edit`). `canEdit` says whether the staff member holds `search:synonyms.edit`.
+         */
+        get: operations["listStaffSearchSynonyms"];
+        put?: never;
+        /**
+         * Add a rule that makes 2 to 20 words or phrases mean the same to search
+         * @description search `PUT /v1/search/synonyms/{ruleId}` (`search:synonyms.edit`, EDIT on the search module). The BFF derives the
+         *     rule's id from the first term and keeps it unique; search reloads its analyzers at once (no reindex). Search's
+         *     own validation (terms at most 60 characters, 2 to 20 distinct terms) comes back as a 422 on `terms`. The change
+         *     is logged with the staff member's id by the BFF; search keeps no audit trail of synonym edits.
+         */
+        post: operations["createStaffSearchSynonym"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/search/synonyms/{ruleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a synonym rule
+         * @description search `DELETE /v1/search/synonyms/{ruleId}` (`search:synonyms.edit`, EDIT on the search module). Logged with the staff member's id.
+         */
+        delete: operations["deleteStaffSearchSynonym"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6680,10 +6815,10 @@ export interface components {
         /** @enum {string} */
         AccessLevel: "VIEW" | "EDIT" | "APPROVE" | "FULL";
         /**
-         * @description Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications and identity are derived; identity needs the identity:admin permission; preorders follows the Pre-orders matrix column).
+         * @description Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search and identity are derived; identity needs the identity:admin permission; preorders follows the Pre-orders matrix column).
          * @enum {string}
          */
-        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "inventory" | "retail" | "dispatch" | "orgs" | "apps" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "identity" | "notifications" | "preorders" | "plans";
+        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "search" | "inventory" | "retail" | "dispatch" | "orgs" | "apps" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "identity" | "notifications" | "preorders" | "plans";
         StaffUser: {
             id: string;
             firstName: string;
@@ -9469,6 +9604,110 @@ export interface components {
             /** Format: int64 */
             deliveryDays: number | null;
         };
+        StaffSearchMarkets: {
+            items: {
+                /** @example us */
+                code: string;
+                /** @example United States */
+                name: string;
+            }[];
+            default: string;
+            canEditSynonyms: boolean;
+        };
+        StaffSearchQueryStat: {
+            /** @description Normalised query (lower case) */
+            query: string;
+            /** Format: int64 */
+            searches: number;
+            /** Format: int64 */
+            zeroResults: number;
+            /** Format: int64 */
+            clicks: number;
+            /** @description Clicks ÷ searches (0 to 1; a search can be clicked more than once) */
+            ctr: number;
+            /** @description Zero-result searches ÷ searches (0 to 1) */
+            zeroResultRate: number;
+        };
+        StaffSearchTotals: {
+            /** Format: int64 */
+            searches: number;
+            /** Format: int64 */
+            zeroResults: number;
+            /** Format: int64 */
+            clicks: number;
+            ctr: number;
+            zeroResultRate: number;
+        };
+        StaffSearchQueryReport: {
+            market: string;
+            marketName: string;
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            items: components["schemas"]["StaffSearchQueryStat"][];
+            /** @description Queries after the filter */
+            total: number;
+            page: number;
+            size: number;
+            /** @description The service lists at most 500 queries; rarer ones are not here */
+            truncated: boolean;
+            /** @description Sums over every listed query */
+            totals: components["schemas"]["StaffSearchTotals"];
+        };
+        StaffSearchDay: {
+            /** Format: date */
+            day: string;
+            /** Format: int64 */
+            searches: number;
+            /** Format: int64 */
+            clicks: number;
+            /** Format: int64 */
+            zeroResults: number;
+            ctr: number;
+            zeroResultRate: number;
+        };
+        StaffSearchClickThrough: {
+            market: string;
+            marketName: string;
+            /** Format: date */
+            from: string;
+            /** Format: date */
+            to: string;
+            items: components["schemas"]["StaffSearchDay"][];
+            /** @description Days in the window */
+            total: number;
+            page: number;
+            size: number;
+            /** @description Every day of the window, oldest first */
+            trend: components["schemas"]["StaffSearchDay"][];
+            totals: {
+                /** @description "total" */
+                day: string;
+                /** Format: int64 */
+                searches: number;
+                /** Format: int64 */
+                clicks: number;
+                /** Format: int64 */
+                zeroResults: number;
+                ctr: number;
+                zeroResultRate: number;
+            };
+        };
+        StaffSynonymRule: {
+            /** @description Used to delete the rule; not shown to staff */
+            id: string;
+            /** @description The words and phrases search treats as the same thing */
+            terms: string[];
+        };
+        StaffSynonymList: {
+            items: components["schemas"]["StaffSynonymRule"][];
+            canEdit: boolean;
+        };
+        StaffSynonymCreate: {
+            /** @description Words or phrases that should find the same products, e.g. ["agbada", "grand boubou"] */
+            terms: string[];
+        };
     };
     responses: {
         /** @description RFC 9457 problem */
@@ -9530,6 +9769,16 @@ export interface components {
         MarketRegionCode: string;
         /** @description The version from the ETag (optimistic locking). */
         IfMatch: string;
+        /** @description Search market code (see /v1/staff/search/markets) */
+        SearchMarket: string;
+        /** @description First day (UTC), YYYY-MM-DD; default 6 days before `to` */
+        SearchFrom: string;
+        /** @description Last day (UTC), YYYY-MM-DD; default today */
+        SearchTo: string;
+        /** @description Keeps queries containing this text (click-through: days whose date contains it, e.g. 2026-10) */
+        SearchFilter: string;
+        SearchPage: number;
+        SearchSize: number;
         PlanCode: string;
         BillingId: string;
         BillingOrgId: string;
@@ -18485,6 +18734,223 @@ export interface operations {
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffSearchMarkets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Markets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffSearchMarkets"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+        };
+    };
+    listStaffSearchTopQueries: {
+        parameters: {
+            query?: {
+                /** @description Search market code (see /v1/staff/search/markets) */
+                market?: components["parameters"]["SearchMarket"];
+                /** @description First day (UTC), YYYY-MM-DD; default 6 days before `to` */
+                from?: components["parameters"]["SearchFrom"];
+                /** @description Last day (UTC), YYYY-MM-DD; default today */
+                to?: components["parameters"]["SearchTo"];
+                /** @description Keeps queries containing this text (click-through: days whose date contains it, e.g. 2026-10) */
+                q?: components["parameters"]["SearchFilter"];
+                /**
+                 * @description Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
+                 *     3). Any column of the table. Empty cells sort last in both directions.
+                 */
+                sort?: components["parameters"]["Sort"];
+                page?: components["parameters"]["SearchPage"];
+                size?: components["parameters"]["SearchSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Queries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffSearchQueryReport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffSearchZeroResults: {
+        parameters: {
+            query?: {
+                /** @description Search market code (see /v1/staff/search/markets) */
+                market?: components["parameters"]["SearchMarket"];
+                /** @description First day (UTC), YYYY-MM-DD; default 6 days before `to` */
+                from?: components["parameters"]["SearchFrom"];
+                /** @description Last day (UTC), YYYY-MM-DD; default today */
+                to?: components["parameters"]["SearchTo"];
+                /** @description Keeps queries containing this text (click-through: days whose date contains it, e.g. 2026-10) */
+                q?: components["parameters"]["SearchFilter"];
+                /**
+                 * @description Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
+                 *     3). Any column of the table. Empty cells sort last in both directions.
+                 */
+                sort?: components["parameters"]["Sort"];
+                page?: components["parameters"]["SearchPage"];
+                size?: components["parameters"]["SearchSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Queries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffSearchQueryReport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffSearchClickThrough: {
+        parameters: {
+            query?: {
+                /** @description Search market code (see /v1/staff/search/markets) */
+                market?: components["parameters"]["SearchMarket"];
+                /** @description First day (UTC), YYYY-MM-DD; default 6 days before `to` */
+                from?: components["parameters"]["SearchFrom"];
+                /** @description Last day (UTC), YYYY-MM-DD; default today */
+                to?: components["parameters"]["SearchTo"];
+                /** @description Keeps queries containing this text (click-through: days whose date contains it, e.g. 2026-10) */
+                q?: components["parameters"]["SearchFilter"];
+                /**
+                 * @description Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
+                 *     3). Any column of the table. Empty cells sort last in both directions.
+                 */
+                sort?: components["parameters"]["Sort"];
+                page?: components["parameters"]["SearchPage"];
+                size?: components["parameters"]["SearchSize"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Days */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffSearchClickThrough"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffSearchSynonyms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rules */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffSynonymList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffSearchSynonym: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffSynonymCreate"];
+            };
+        };
+        responses: {
+            /** @description The rule as stored */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffSynonymRule"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deleteStaffSearchSynonym: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ruleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

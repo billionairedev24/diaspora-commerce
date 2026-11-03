@@ -24,7 +24,8 @@
     "./staff-preorders": "./src/staff-preorders.ts",
     "./staff-delivery-fees": "./src/staff-delivery-fees.ts",
     "./staff-markets": "./src/staff-markets.ts",
-    "./correlation": "./src/correlation.ts"
+    "./correlation": "./src/correlation.ts",
+    "./staff-search": "./src/staff-search.ts"
   },
   "scripts": {
     "generate": "node scripts/generate.mjs",

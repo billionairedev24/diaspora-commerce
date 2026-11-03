@@ -112,7 +112,7 @@ const latency = () => new Promise((r) => setTimeout(r, 150));
 export async function mockFetch(req: Request): Promise<Response> {
   await latency();
   const url = new URL(req.url);
-  const path = url.pathname.replace(/^\/(fulfilment|media|identity)(?=\/)/, '');
+  const path = url.pathname.replace(/^\/(fulfilment|media|identity|bff)(?=\/)/, '');
   const claims = decodeJwt((req.headers.get('Authorization') ?? '').replace(/^Bearer /, ''));
   if (!claims?.sub) return problem(401, 'UNAUTHENTICATED', 'Sign in required');
   const text = req.method === 'GET' ? '' : await req.text();
@@ -121,6 +121,7 @@ export async function mockFetch(req: Request): Promise<Response> {
   const allowed = !!driver?.perms.includes('delivery:operate');
   const grantHint = 'A developer or super admin can grant delivery:operate in Backoffice → Access control, either by giving you the Driver role or as a direct permission.';
 
+  if (path === '/v1/session/policy' && req.method === 'GET') return json({ audience: 'driver', idleTimeoutSeconds: 14 * 3600, absoluteTimeoutSeconds: 14 * 3600, warnSeconds: 0, lastActivityAt: null, expiresAt: null });
   if (path === '/v1/driver/me' && req.method === 'GET') {
     if (server.revoked[claims.sub]) return problem(403, 'fulfilment.driver-access-revoked', 'Driver access revoked', { signOut: true, revokedAt: server.revoked[claims.sub], grantHint });
     if (!allowed) return problem(403, 'fulfilment.no-driver-access', 'No driver access', { grantHint });

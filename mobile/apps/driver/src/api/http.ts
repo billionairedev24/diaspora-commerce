@@ -1,11 +1,19 @@
-/* Bearer JSON requester for fulfilment, media and identity (problems → ApiProblemError). */
+/* Bearer JSON requester for fulfilment, media, identity and the gateway-bff (problems → ApiProblemError). */
+import { reasonFromProblemCode, type SessionEndReason } from '@/domain/sessionPolicy';
+
 export interface TokenSource {
   getAccessToken(): Promise<string | null>;
   /** null = the session is gone; rejects when identity could not be reached (the session is kept). */
   refreshAccessToken(): Promise<string | null>;
   /** The refresh token is no longer accepted: the app returns to sign-in. */
   onSessionExpired?(): void;
+  /** The server ended the session by policy (401 SESSION_IDLE_TIMEOUT / SESSION_ABSOLUTE_TIMEOUT): the app signs out with that reason.
+      A driver's actions are queued and synced in the background, so no request here counts as activity: only touches do. */
+  onSessionEnded?(reason: SessionEndReason): void;
 }
+
+/** Requests sent without the person doing anything carry this header (the BFF does not count them as activity). */
+export const BACKGROUND_HEADERS = { 'X-Background': '1' } as const;
 
 export type Fetch = (req: Request) => Promise<Response>;
 
@@ -40,6 +48,17 @@ export interface JsonOptions {
   signal?: AbortSignal;
 }
 
+/** The session-policy reason carried by a 401 problem body, if any. Reads a clone; the caller still gets the original. */
+export async function sessionEndReasonOf(res: Response): Promise<SessionEndReason | null> {
+  if (res.status !== 401) return null;
+  try {
+    const body = (await res.clone().json()) as { code?: unknown } | null;
+    return reasonFromProblemCode(body?.code);
+  } catch {
+    return null;
+  }
+}
+
 export function createJson(baseUrl: string, tokens: TokenSource, doFetch: Fetch) {
   const base = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
   const send = async (path: string, opts: JsonOptions, token: string | null) => {
@@ -66,7 +85,11 @@ export function createJson(baseUrl: string, tokens: TokenSource, doFetch: Fetch)
   };
   return async function json<T>(path: string, opts: JsonOptions = {}): Promise<T> {
     let res = await send(path, opts, await tokens.getAccessToken());
-    if (res.status === 401) {
+    const ended = res.status === 401 ? await sessionEndReasonOf(res) : null;
+    if (ended) {
+      // Ended by policy: refreshing would only start another session. Sign out with the reason.
+      tokens.onSessionEnded?.(ended);
+    } else if (res.status === 401) {
       let fresh: string | null = null;
       let reachable = true;
       try {

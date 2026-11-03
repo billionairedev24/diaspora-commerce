@@ -10,7 +10,7 @@ const TITLES: Record<string, string> = {
   exports: 'Exports', orders: 'Orders', moderation: 'Catalog', inventory: 'Inventory', retail: 'Retail purchase orders', dispatch: 'Delivery dispatch',
   applications: 'Applications', support: 'Customer support', users: 'Users & roles', payouts: 'Payouts', fees: 'Fees, commissions & tax', marketing: 'Marketing',
   disputes: 'Disputes & returns', audit: 'Audit log', markets: 'Markets', 'site-content': 'Site content & legal', developers: 'Developers', identity: 'Identity & access',
-  notifications: 'Notification templates', preorders: 'Pre-orders', plans: 'Plans & billing'
+  notifications: 'Notification templates', preorders: 'Pre-orders', plans: 'Plans & billing', search: 'Search analytics'
 };
 
 export async function generateMetadata({ params }: { params: Promise<{ module: string }> }): Promise<Metadata> {

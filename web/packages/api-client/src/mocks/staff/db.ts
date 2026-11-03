@@ -16,6 +16,7 @@ import { tierBenefitDetails } from './membership-tiers';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
 import { type MockPlansState, seedPlans } from './plans';
 import { type MockPreorderState, seedPreorders } from './preorders';
+import { type MockSearchState, seedSearch } from './search';
 import { type MockTaxonomyState, seedCategoryRequests, seedTaxonomy } from './taxonomy';
 
 export type Scalar = string | number | boolean | null;
@@ -58,6 +59,8 @@ export interface MockStaffDb {
   preorders: MockPreorderState;
   /** content's draft markets: countries → states → cities (Markets & locations). */
   markets: MockMarketsState;
+  /** search's synonym rules (Search analytics). */
+  search: MockSearchState;
   /** content's legal and help authoring: versions, revisions and working drafts (Settings → Published pages). */
   content: MockContentState;
   /** catalog's category tree, product-type details and the audit of changes (Catalog → Categories). */
@@ -686,6 +689,7 @@ function seed(now: Date): MockStaffDb {
     templates: { rows: seedTemplateRows(), samples: seedTemplateSamples() },
     preorders: seedPreorders(now),
     markets: seedMarkets(),
+    search: seedSearch(),
     content: seedContent(now, helpArticles.map((r) => ({ slug: r.id, title: String(r.fields.title), summary: String(r.fields.summary), topic: String(r.fields.topic), status: String(r.fields.status), body: String(r.fields.sections), updatedAt: String(r.fields.updatedAt) }))),
     taxonomy: seedTaxonomy(),
     plans: seedPlans(now),
@@ -700,6 +704,7 @@ export function getStaffDb(): MockStaffDb {
   // A database seeded before pre-orders existed (dev server kept across reloads) gets them on first use.
   g[KEY].preorders ??= seedPreorders(g[KEY].now);
   g[KEY].markets ??= seedMarkets();
+  g[KEY].search ??= seedSearch();
   g[KEY].content ??= seedContent(g[KEY].now, []);
   g[KEY].taxonomy ??= seedTaxonomy();
   g[KEY].plans ??= seedPlans(g[KEY].now);

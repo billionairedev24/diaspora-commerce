@@ -4,12 +4,16 @@
    outbox stays on the phone (events captured before revokedAt are still accepted later).
    S087: the SyncEngine queues every action in SQLite and syncs in order when online.
    S255: while on shift and in the foreground, location pings (throttled) feed nearest-driver pickup offers; the
-   newest fix also stamps queued events. */
+   newest fix also stamps queued events.
+   Sign-out policy (domain/sessionPolicy.ts): idle 14 h and session length 14 h by default, judged on the device from the
+   driver's own touches. Location pings, the sync engine and push registration are background work and never count as
+   activity, and this feature never stops them; when a limit passes the session ends through signOut below (a last
+   best-effort sync, outbox kept). */
 import * as Crypto from 'expo-crypto';
 import * as Device from 'expo-device';
 import * as Network from 'expo-network';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { AppState, Platform } from 'react-native';
+import { AppState, Keyboard, Platform } from 'react-native';
 
 import { createDriverApi, type DriverApi } from '@/api/client';
 import { type TokenSource } from '@/api/http';
@@ -20,13 +24,17 @@ import { env } from '@/config/env';
 import { decideAccess } from '@/domain/access';
 import { decodeJwt, isExpiring } from '@/domain/jwt';
 import { type SecondFactor, type SignInStep } from '@/domain/nativeSignIn';
+import { SessionGuard } from '@/domain/sessionGuard';
+import { type SessionEndReason, type SessionWarning } from '@/domain/sessionPolicy';
 import { onShift } from '@/domain/shift';
+import { useT } from '@/i18n';
 import { currentFix, ensureLocationPermission, watchForegroundFixes } from '@/lib/location';
 import { capabilities } from '@/platform/runtime';
 import { driverStore } from '@/storage';
 import { type EngineState, SyncEngine } from '@/sync/engine';
 import { LocationPinger } from '@/sync/locationPinger';
 
+import { endSession, type EndSessionParts, forgetSession } from './endSession';
 import { loadNotifications } from './notificationsModule';
 
 const TOKENS = 'at.driver.tokens';
@@ -62,6 +70,12 @@ interface Ctx {
   /** Ends the session (after a last sync). The outbox stays on the phone. `notice` is shown on the sign-in screen. */
   signOut(opts?: { notice?: string }): Promise<void>;
   recheckAccess(): Promise<void>;
+  /** Real foreground interaction (a touch, the keyboard opening): feeds the inactivity timer. Never call it from sync, pings or timers. */
+  noteActivity(): void;
+  /** Set while the idle limit is close and a warning is configured (warnSeconds > 0); null otherwise. */
+  sessionWarning: SessionWarning | null;
+  /** "Stay signed in" on the warning: counts as activity. */
+  staySignedIn(): void;
 }
 
 const DriverContext = createContext<Ctx | null>(null);
@@ -78,6 +92,16 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   const attempt = useRef<NativeAttempt | null>(null);
   const expire = useRef<() => void>(() => undefined);
   const goneReason = useRef('');
+  const tr = useT();
+  const trRef = useRef(tr);
+  trRef.current = tr;
+  /** A sign-out is under way: a 401 from the last sync must not overwrite its message. */
+  const ending = useRef(false);
+  const bootDone = useRef(false);
+  const bootEnd = useRef<SessionEndReason | null>(null);
+  const endBySession = useRef<(reason: SessionEndReason) => void>(() => undefined);
+  const apiRef = useRef<DriverApi | null>(null);
+  const [sessionWarning, setSessionWarning] = useState<SessionWarning | null>(null);
   const [notice, setNotice] = useState('');
   const [phase, setPhase] = useState<Phase>('booting');
   const [user, setUser] = useState<DriverUser | null>(null);
@@ -85,6 +109,15 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   const [paused, setPausedState] = useState(false);
   const [netUp, setNetUp] = useState(true);
   const [appActive, setAppActive] = useState(AppState.currentState !== 'background');
+
+  /* The sign-out clock and the cached policy (secure store). The policy is read through the typed client, as a
+     background request. */
+  const guard = useMemo(() => new SessionGuard({
+    audience: 'driver',
+    store: secureStorage,
+    fetchPolicy: () => (apiRef.current ? apiRef.current.sessionPolicy() : Promise.reject(new Error('API not ready'))),
+    onExpire: (reason) => endBySession.current(reason)
+  }), []);
 
   const tokenSource = useMemo<TokenSource>(() => {
     const refreshAccessToken = async (): Promise<string | null> => {
@@ -98,6 +131,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     return {
       refreshAccessToken,
       onSessionExpired: () => expire.current(),
+      onSessionEnded: (reason) => endBySession.current(reason),
       getAccessToken: async () => {
         const t = tokens.current;
         if (!t) return null;
@@ -112,6 +146,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const api = useMemo(() => createDriverApi(tokenSource), [tokenSource]);
+  apiRef.current = api;
   const engineRef = useRef<SyncEngine | null>(null);
   const pinger = useMemo(() => new LocationPinger({
     watch: watchForegroundFixes,
@@ -124,14 +159,23 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   engineRef.current = engine;
   const sync = useSyncExternalStore(engine.subscribe, engine.getState, engine.getState);
 
-  const clearSession = useCallback(async () => {
-    if (pushToken.current) await api.unregisterDevice(pushToken.current).catch(() => undefined);
-    pushToken.current = null;
-    if (tokens.current) await revokeTokens(tokens.current);
-    tokens.current = null;
-    await secureStorage.remove(TOKENS);
-    engine.setUser(null); // the outbox stays on the phone
-  }, [api, engine]);
+  /* Everything that ends a session goes through ./endSession: credentials and the sign-out clock are forgotten, the
+     outbox is not. */
+  const endParts = useMemo<EndSessionParts>(() => ({
+    engine,
+    unregisterPush: async () => {
+      const t = pushToken.current;
+      pushToken.current = null;
+      if (t) await api.unregisterDevice(t);
+    },
+    revokeTokens: async () => { if (tokens.current) await revokeTokens(tokens.current); },
+    removeTokens: async () => {
+      tokens.current = null;
+      await secureStorage.remove(TOKENS);
+    },
+    forgetClock: () => guard.end()
+  }), [api, engine, guard]);
+  const clearSession = useCallback(() => forgetSession(endParts), [endParts]);
 
   const registerPush = useCallback(async () => {
     // Remote push needs our own build: Expo Go (SDK 53+) has no push tokens for our app (capabilities.remotePush).
@@ -189,14 +233,24 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       const p = await driverStore.getKv<boolean>(PAUSED);
       setPausedState(!!p);
       const raw = await secureStorage.get(TOKENS);
-      if (!raw) return setPhase('signed-out');
+      if (!raw) {
+        await guard.load(false);
+        bootDone.current = true;
+        return setPhase('signed-out');
+      }
       tokens.current = JSON.parse(raw) as TokenSet;
       const u = userOf(tokens.current);
       setUser(u);
       engine.setUser(u.sub);
+      await guard.load(true); // a limit that passed while the app was closed is found here, before anything is shown
+      bootDone.current = true;
+      if (bootEnd.current) {
+        endBySession.current(bootEnd.current); // last best-effort sync, outbox kept, then the sign-in screen with the reason
+        return;
+      }
       await checkAccess(u);
     })();
-  }, [engine, checkAccess]);
+  }, [engine, checkAccess, guard]);
 
   /* Network state → engine. */
   useEffect(() => {
@@ -235,6 +289,9 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   const startSession = useCallback(async (t: TokenSet) => {
     tokens.current = t;
     await secureStorage.set(TOKENS, JSON.stringify(t));
+    ending.current = false;
+    await guard.begin(); // the session length counts from this sign-in
+    void guard.refreshPolicy(true);
     setNotice('');
     const u = userOf(t);
     setUser(u);
@@ -242,7 +299,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     void ensureLocationPermission();
     await checkAccess(u);
     if (engine.getState().route) void engine.record({ type: 'session.signed_in' }).catch(() => undefined);
-  }, [engine, checkAccess]);
+  }, [engine, checkAccess, guard]);
 
   const settle = useCallback(async (step: SignInStep): Promise<SignInStep> => {
     const t = attempt.current?.tokens();
@@ -271,16 +328,29 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   const cancelSignIn = useCallback(() => { attempt.current = null; }, []);
 
   const signOut = useCallback(async (opts?: { notice?: string }) => {
-    await engine.flush().catch(() => undefined);
-    await clearSession();
+    ending.current = true;
+    await endSession(endParts); // last best-effort sync, then credentials go; the outbox stays
     setUser(null);
     setDenied(null);
+    setSessionWarning(null);
     setNotice(opts?.notice ?? '');
     setPhase('signed-out');
-  }, [clearSession, engine]);
+  }, [endParts]);
+
+  /* The sign-out policy ended the session (the device clock, or a 401 SESSION_* from the BFF): the same sign-out as
+     every other way out, with the reason in the driver's language on the sign-in screen. Mid-route nothing is lost:
+     signOut syncs once more first and keeps whatever it could not send. */
+  endBySession.current = (reason) => {
+    if (!bootDone.current) {
+      bootEnd.current = reason;
+      return;
+    }
+    if (ending.current || !tokens.current) return;
+    void signOut({ notice: trRef.current(reason === 'idle' ? 'dr.session.idle' : 'dr.session.absolute') });
+  };
 
   expire.current = () => {
-    if (phase === 'signed-out' || !tokens.current) return; // the first failure ends the session; the rest must not repeat it
+    if (ending.current || phase === 'signed-out' || !tokens.current) return; // the first failure ends the session; the rest must not repeat it
     void (async () => {
       await clearSession();
       setUser(null);
@@ -290,12 +360,54 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     })();
   };
 
+  const noteActivity = useCallback(() => guard.touch(), [guard]);
+  const staySignedIn = useCallback(() => {
+    guard.stay();
+    setSessionWarning(null);
+  }, [guard]);
+
+  /* The soft keyboard opening is interaction a touch handler at the root does not see. */
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', noteActivity);
+    return () => sub.remove();
+  }, [noteActivity]);
+
+  /* Resume: judge the session first (time in the background is idle time), then maybe re-read the policy (hourly at
+     most). Going to the background writes the clock. Neither is activity. Pings and sync are not touched. */
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'background') void guard.flush();
+      if (s === 'active' && tokens.current) {
+        guard.check();
+        void guard.refreshPolicy();
+      }
+    });
+    return () => sub.remove();
+  }, [guard]);
+
+  /* While foregrounded, look again when the next limit (or the warning window) is due, never later than a minute. */
+  const watching = phase !== 'booting' && phase !== 'signed-out' && appActive;
+  useEffect(() => {
+    if (!watching) {
+      setSessionWarning(null);
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = () => {
+      const c = guard.check();
+      setSessionWarning((prev) => (c?.warning ? { secondsLeft: c.warning.secondsLeft } : prev === null ? prev : null));
+      if (c?.status === 'active') timer = setTimeout(tick, c.recheckInMs);
+    };
+    tick();
+    return () => clearTimeout(timer);
+  }, [watching, guard]);
+
   const value = useMemo<Ctx>(() => ({
-    phase, user, denied, engine, sync, api, paused,
+    phase, user, denied, engine, sync, api, paused, sessionWarning, noteActivity, staySignedIn,
     setPaused: (p) => { setPausedState(p); void driverStore.setKv(PAUSED, p); },
     signInWithPassword, sendSignInCode, verifySecondFactor, cancelSignIn, notice, signOut,
     recheckAccess: async () => { if (user) await checkAccess(user); }
-  }), [phase, user, denied, engine, sync, api, paused, signInWithPassword, sendSignInCode, verifySecondFactor, cancelSignIn, notice, signOut, checkAccess]);
+  }), [phase, user, denied, engine, sync, api, paused, sessionWarning, noteActivity, staySignedIn, signInWithPassword, sendSignInCode, verifySecondFactor, cancelSignIn, notice, signOut, checkAccess]);
 
   return <DriverContext.Provider value={value}>{children}</DriverContext.Provider>;
 }

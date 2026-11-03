@@ -2,6 +2,7 @@
    for the routes that @afrotransact/api-client does not wrap yet. Errors are RFC 9457 problems → ApiError. */
 import { ApiError, type FetchLike, ProblemSchema } from '@afrotransact/api-client';
 
+import { reasonFromProblemCode, type SessionEndReason } from '@/domain/sessionPolicy';
 import { parseRetryAfter } from '@/domain/signInErrors';
 
 export interface TokenSource {
@@ -12,6 +13,27 @@ export interface TokenSource {
   refreshAccessToken(): Promise<string | null>;
   /** Called when a refresh fails: the app returns to sign-in. */
   onSessionExpired(): void;
+  /** The server ended the session by policy (401 SESSION_IDLE_TIMEOUT / SESSION_ABSOLUTE_TIMEOUT): sign out with that reason. */
+  onSessionEnded?(reason: SessionEndReason): void;
+  /** A request the person started (a write that is not marked background): counts as activity for the idle timer. */
+  onUserRequest?(): void;
+}
+
+/** Requests the app sends without the person doing anything carry this header (also what the BFF reads on web). */
+export const BACKGROUND_HEADER = 'X-Background';
+export const BACKGROUND_ON = { [BACKGROUND_HEADER]: '1' } as const;
+
+const isWrite = (req: Request) => req.method !== 'GET' && req.method !== 'HEAD';
+
+/** The session-policy reason carried by a 401 problem body, if any. Reads a clone; the caller still gets the original. */
+export async function sessionEndReasonOf(res: Response): Promise<SessionEndReason | null> {
+  if (res.status !== 401) return null;
+  try {
+    const body = (await res.clone().json()) as { code?: unknown } | null;
+    return reasonFromProblemCode(body?.code);
+  } catch {
+    return null;
+  }
 }
 
 /** The customer app always shops as the signed-in person. Their token may carry a seller or provider organisation
@@ -33,8 +55,15 @@ function withBearer(req: Request, token: string | null): Request {
 export function createAuthFetch(tokens: TokenSource, base: FetchLike): FetchLike {
   return async (input: Request) => {
     const retry = input.clone();
+    if (isWrite(input) && !input.headers.has(BACKGROUND_HEADER)) tokens.onUserRequest?.();
     const res = await base(withBearer(input, await tokens.getAccessToken()));
     if (res.status !== 401) return res;
+    const ended = await sessionEndReasonOf(res);
+    if (ended) {
+      // The server ended the session by policy: refreshing would only start another one. Sign out with the reason.
+      tokens.onSessionEnded?.(ended);
+      return res;
+    }
     let fresh: string | null;
     try {
       fresh = await tokens.refreshAccessToken();

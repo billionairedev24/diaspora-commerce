@@ -13,6 +13,7 @@ import { AuthProvider, useAuth } from '@/auth/AuthProvider';
 import { BootScreen } from '@/brand/BootScreen';
 import { LockOverlay } from '@/features/lock/LockOverlay';
 import { PasscodePrompt } from '@/features/lock/PasscodePrompt';
+import { IdleWarning } from '@/features/session/IdleWarning';
 import { AppI18nProvider } from '@/i18n';
 import { PaymentsProvider } from '@/payments/PaymentsProvider';
 import { PushProvider } from '@/push/PushProvider';
@@ -22,11 +23,13 @@ import { DevBuildNote } from '@/ui/DevBuildNote';
 import { ToastProvider } from '@/ui/Toast';
 
 function Gate() {
-  const { ready, phase } = useAuth();
+  const { ready, phase, noteActivity } = useAuth();
   if (!ready) return <BootScreen />;
   const inApp = phase === 'locked' || phase === 'unlocked';
   return (
-    <View style={{ flex: 1, backgroundColor: c.canvas }}>
+    // Every touch that starts anywhere in the app is activity for the inactivity timer; the capture handler observes it
+    // and never claims the gesture (returns false), so scrolling and taps behave exactly as before.
+    <View style={{ flex: 1, backgroundColor: c.canvas }} onStartShouldSetResponderCapture={() => { noteActivity(); return false; }}>
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.canvas } }}>
         <Stack.Protected guard={phase === 'signed-out'}>
           <Stack.Screen name="sign-in" />
@@ -41,6 +44,7 @@ function Gate() {
       </Stack>
       {phase === 'locked' ? <LockOverlay /> : null}
       <PasscodePrompt />
+      <IdleWarning />
       <DevBuildNote />
     </View>
   );
