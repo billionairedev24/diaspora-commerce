@@ -113,6 +113,8 @@ var opsRoutes = []opsRoute{
 	// ---- inventory-service
 	route(areaInventory, opGet, "/overview", "/v1/overview", lvView, "nodeId", "ownerOrg"),
 	route(areaInventory, opGet, "/nodes", "/v1/nodes", lvView),
+	route(areaInventory, opGet, "/currencies", "/v1/currencies", lvView),
+	route(areaInventory, opGet, "/exchange-rates/current", "/v1/exchange-rates/current", lvView, "asOf"),
 	route(areaInventory, opGet, "/inbound", "/v1/inbound/shipments", lvView, withPage("ownerOrg", "nodeId", "status", "source", "sku")...),
 	route(areaInventory, opPost, "/inbound", "/v1/inbound/shipments", lvEdit),
 	route(areaInventory, opGet, "/inbound/{id}", "/v1/inbound/shipments/{id}", lvView),
@@ -155,6 +157,7 @@ var opsRoutes = []opsRoute{
 	route(areaRetail, opGet, "/suppliers", "/v1/suppliers", lvView, withPage("q", "status")...),
 	route(areaRetail, opPost, "/suppliers", "/v1/suppliers", lvEdit),
 	route(areaRetail, opGet, "/suppliers/{id}", "/v1/suppliers/{id}", lvView),
+	route(areaRetail, opPut, "/suppliers/{id}", "/v1/suppliers/{id}", lvEdit),
 	route(areaRetail, opPost, "/suppliers/{id}/status", "/v1/suppliers/{id}/status", lvAppr),
 	route(areaRetail, opGet, "/purchase-orders", "/v1/purchase-orders", lvView, withPage("status", "supplierId")...),
 	route(areaRetail, opPost, "/purchase-orders", "/v1/purchase-orders", lvEdit),
@@ -236,6 +239,7 @@ func (s *staffInventoryImpl) prepare(ctx context.Context, c *domain.Caller, r Op
 	if err != nil {
 		return sc, rt, port.StaffCall{}, nil, err
 	}
+	sc.nameWho = true
 	up := sc.up.Inventory
 	if r.Area == areaRetail {
 		up = sc.up.Retail

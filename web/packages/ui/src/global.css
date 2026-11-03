@@ -24,3 +24,38 @@
 }
 
 .at-skip-link:focus { top: var(--at-space-2); }
+
+/* Dense tables inside Sheets: scroll sideways instead of breaking words letter-by-letter. */
+.at-sheet-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.at-sheet-table-scroll .at-table {
+  table-layout: auto;
+  width: max-content;
+  min-width: 100%;
+}
+
+.at-sheet-table-scroll .at-table th,
+.at-sheet-table-scroll .at-table td {
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.at-sheet-table-scroll .at-table td .at-cell-stack {
+  white-space: normal;
+}
+
+.at-sheet-table-scroll.at-sheet-table-form .at-table td {
+  white-space: normal;
+}
+
+/* Forms: a row of fields and actions (a button, a checkbox) whose actions line up with the field CONTROLS, not with the
+   hint line every Field reserves under its input. Use class "at-align" on a flex/grid row instead of items-end. */
+.at-align { align-items: flex-end; }
+.at-align > :not([data-at-field], :has(> [data-at-field])) { margin-bottom: calc(var(--at-space-1) + 14px); }
+.at-align > .at-row-box { min-height: var(--at-size-control); display: inline-flex; align-items: center; }

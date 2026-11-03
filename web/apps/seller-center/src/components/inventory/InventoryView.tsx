@@ -9,6 +9,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useRef, useState } from 'react';
 
 import { ModulePage } from '@/components/ui/ModulePage';
+import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage } from '@/components/ui/States';
 import { sellerApi } from '@/lib/api';
 import { idempotencyKey } from '@/lib/format';
@@ -88,6 +89,24 @@ function StockView({ adjusting: open, setAdjusting: setOpen }: { adjusting: bool
   const t = q.data?.totals;
   return (
     <>
+      {t && t.lowStockSkus > 0 ? (
+        <Notice
+          tone="warning"
+          title={`${t.lowStockSkus} SKU${t.lowStockSkus === 1 ? ' is' : 's are'} running low on stock.`}
+          action={
+            <Button size="sm" variant="neutral" onClick={() => router.replace('/inventory?tab=send')}>
+              Create inbound plan
+            </Button>
+          }
+        >
+          Send stock to AfroTransact or adjust counted quantities to avoid stockouts on the storefront.
+        </Notice>
+      ) : null}
+      {t && t.inbound > 0 ? (
+        <Notice tone="info" title={`${t.inbound} unit${t.inbound === 1 ? ' is' : 's are'} currently inbound.`}>
+          Track arriving shipments in the “Send to AfroTransact” tab.
+        </Notice>
+      ) : null}
       {t ? (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,160px),1fr))] gap-3">
           {[['Available', t.available], ['Reserved', t.reserved], ['Inbound', t.inbound], ['Low-stock SKUs', t.lowStockSkus]].map(([k, v]) => (

@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.identity.domain.SigningKey;
 import com.afrotransact.identity.port.EncryptedSecretRepository;
 import com.afrotransact.identity.port.SecretCipher;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -79,6 +80,36 @@ class JdbcEncryptedSecretRepository implements EncryptedSecretRepository {
                 .param("ct", sealed.envelope()).param("kid", sealed.keyId()).param("u", userId)
                 .param("old", old.ciphertext() != null ? old.ciphertext() : old.plaintext())
                 .update() == 1;
+    }
+
+    @Override
+    public Map<String, Long> signingKeysByKey() {
+        Map<String, Long> out = new LinkedHashMap<>();
+        jdbc.sql("select seal_key_id as k, count(*) as n from signing_key where private_key_sealed is not null "
+                + "group by 1 order by 1")
+                .query((rs, i) -> Map.entry(String.valueOf(rs.getString("k")), rs.getLong("n"))).list()
+                .forEach(e -> out.put(e.getKey(), e.getValue()));
+        return out;
+    }
+
+    @Override
+    public boolean resealActiveSigningKey() {
+        Optional<SealedKey> row = jdbc.sql("select kid, private_key_sealed from signing_key "
+                + "where status = 'ACTIVE' and private_key_sealed is not null")
+                .query((rs, n) -> new SealedKey(rs.getString("kid"), rs.getBytes("private_key_sealed"))).optional();
+        if (row.isEmpty() || cipher.keyIdOf(row.get().envelope()).equals(cipher.currentKeyId())) {
+            return false;
+        }
+        String context = SigningKey.sealContext(row.get().kid());
+        SecretCipher.Sealed sealed = cipher.seal(cipher.open(row.get().envelope(), context), context);
+        // Compare-and-set on the value we read: a rotation that retired this key meanwhile is never overwritten.
+        return jdbc.sql("update signing_key set private_key_sealed = :new, seal_key_id = :kid "
+                + "where kid = :k and status = 'ACTIVE' and private_key_sealed = :old")
+                .param("new", sealed.envelope()).param("kid", sealed.keyId()).param("k", row.get().kid())
+                .param("old", row.get().envelope()).update() == 1;
+    }
+
+    private record SealedKey(String kid, byte[] envelope) {
     }
 
     private record StoredSecret(String plaintext, byte[] ciphertext) {

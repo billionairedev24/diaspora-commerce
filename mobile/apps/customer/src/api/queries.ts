@@ -1,9 +1,9 @@
 /* TanStack Query hooks. Keys come from the factories in ./keys (BFF keys shared with the web via api-client). */
-import { type Cart, type SearchQuery, SearchQuerySchema } from '@afrotransact/api-client';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type Cart, creditQueries, type ReviewInput, type SearchQuery, SearchQuerySchema } from '@afrotransact/api-client';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApi } from './ApiProvider';
-import { accountKeys, bookingKeys, cartKeys, checkoutKeys, identityKeys, orderKeys, productKeys, searchKeys } from './keys';
+import { accountKeys, bookingKeys, cartKeys, checkoutKeys, identityKeys, orderKeys, productKeys, reviewKeys, searchKeys } from './keys';
 
 export function searchQuery(q: string, size = 24): SearchQuery {
   return SearchQuerySchema.parse({ q, size });
@@ -49,11 +49,6 @@ export function useOrders() {
   return useQuery({ queryKey: accountKeys.orders(), queryFn: () => api.bff.getOrders() });
 }
 
-export function useReturns() {
-  const api = useApi();
-  return useQuery({ queryKey: accountKeys.returns(), queryFn: () => api.bff.getReturns() });
-}
-
 export function useTracking(orderNumber: string) {
   const api = useApi();
   return useQuery({ queryKey: orderKeys.tracking(orderNumber), queryFn: () => api.account.tracking(orderNumber), enabled: !!orderNumber, refetchInterval: 30_000 });
@@ -62,6 +57,12 @@ export function useTracking(orderNumber: string) {
 export function useAddresses() {
   const api = useApi();
   return useQuery({ queryKey: accountKeys.addresses(), queryFn: () => api.bff.getAddresses() });
+}
+
+/** AfroTransact credit balance and history, newest first (S320). Read only: credit is spent at checkout, never paid out. */
+export function useCreditAccount() {
+  const api = useApi();
+  return useInfiniteQuery(creditQueries.account(api.bff));
 }
 
 export function usePaymentMethods() {
@@ -117,6 +118,23 @@ export function useBookingHistory(id: string) {
 export function useCancellationQuote(id: string, enabled: boolean) {
   const api = useApi();
   return useQuery({ queryKey: bookingKeys.quote(id), queryFn: () => api.bookings.quote(id), enabled: !!id && enabled, staleTime: 0 });
+}
+
+/** Can the shopper review this product (a delivered order line, not yet reviewed), and their review in any state (S324). */
+export function useMyReview(atin: string, enabled: boolean) {
+  const api = useApi();
+  return useQuery({ queryKey: reviewKeys.mine(atin), queryFn: ({ signal }) => api.bff.getMyProductReview(atin, signal), enabled: enabled && !!atin, retry: 0 });
+}
+
+/** Write, edit within 30 days, or delete the shopper's own review; the product's rating is refreshed. */
+export function useReviewActions(atin: string) {
+  const api = useApi();
+  const qc = useQueryClient();
+  const done = () => Promise.all([qc.invalidateQueries({ queryKey: reviewKeys.mine(atin) }), qc.invalidateQueries({ queryKey: productKeys.detail(atin) })]);
+  const write = useMutation({ mutationFn: (body: ReviewInput) => api.bff.writeProductReview(atin, body), onSuccess: done });
+  const edit = useMutation({ mutationFn: (body: ReviewInput) => api.bff.editMyProductReview(atin, body), onSuccess: done });
+  const remove = useMutation({ mutationFn: () => api.bff.deleteMyProductReview(atin), onSuccess: done });
+  return { write, edit, remove };
 }
 
 export function useNotificationPreferences() {

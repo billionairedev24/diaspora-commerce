@@ -58,6 +58,8 @@ public final class DefaultAuditClassifier implements AuditClassifier {
                     + ")"));
             case "preorder.areas.changed" -> Optional.of(new AuditFacts(s(p, "actorId"), "STAFF", eventType,
                     "PREORDER_AREAS", s(p, "region"), null, "Pre-order coverage of " + s(p, "region") + " edited"));
+            case "delivery-runs.location.changed" -> Optional.of(new AuditFacts(s(p, "actorId"), "STAFF", eventType,
+                    "DELIVERY_RUN_LOCATION", first(s(p, "locationId"), key), null, locationSummary(p)));
             default -> Optional.of(new AuditFacts(first(s(p, "actorId"), s(p, "subject")), null, eventType, "EVENT",
                     key, s(p, "orgId"), eventType));
         };
@@ -73,6 +75,16 @@ public final class DefaultAuditClassifier implements AuditClassifier {
         return Optional.of(new AuditFacts(first(s(p, "actorId"), actorType), actorType, eventType, "SHIPMENT",
                 s(p, "shipmentId"), s(p, "sellerOrgId"), "Order " + s(p, "orderNumber") + " shipment "
                 + (from == null ? "" : from + " → ") + to + reason(p)));
+    }
+
+    private static String locationSummary(Map<String, Object> p) {
+        String verb = switch (String.valueOf(s(p, "action"))) {
+            case "CREATED" -> "Created";
+            case "ACTIVATED" -> "Switched on";
+            case "DEACTIVATED" -> "Switched off";
+            default -> "Edited";
+        };
+        return verb + " delivery location " + s(p, "name") + reason(p);
     }
 
     private static String verb(String eventType) {

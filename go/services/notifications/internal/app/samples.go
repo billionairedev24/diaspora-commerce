@@ -84,7 +84,7 @@ func NewTemplateSamples(ctx context.Context, links Links, opts ...SampleOption) 
 	discard := slog.New(slog.DiscardHandler)
 	alerts := NewStockAlerts(sampleAlertStore{}, capture, sampleIdentity{}, links, discard)
 	ingest := NewIngest(capture, IngestConfig{Resolver: sampleIdentity{}, Links: links, StockAlerts: alerts,
-		Audience: SampleAudience()}, discard)
+		Audience: SampleAudience(), Locations: SampleLocationAudience()}, discard)
 
 	handle := func(typ string, i int, payload map[string]any, src SampleSource) error {
 		payload = swapProducts(payload, products).(map[string]any)
@@ -319,17 +319,17 @@ func TemplateArea(key string) string {
 		return slices.ContainsFunc(prefixes, func(p string) bool { return key == p || strings.HasPrefix(key, p+".") })
 	}
 	switch {
-	case has("identity.verification"):
+	case has("identity.verification", "identity.password_reset", "identity.password_changed"):
 		return AreaSecurity
 	case has("account", "org", "careers", "identity"):
 		return AreaAccount
-	case has("order", "shipment", "payment", "preorder"):
+	case has("order", "shipment", "payment", "preorder", "run"):
 		return AreaOrders
 	case has("payout", "seller.payouts"):
 		return AreaPayouts
 	case has("claim", "listing", "seller.suspended", "seller.reinstated"):
 		return AreaTrust
-	case has("seller"):
+	case has("seller", "catalog"):
 		return AreaSeller
 	case has("booking"):
 		return AreaBookings
@@ -406,6 +406,25 @@ func (sampleAudienceImpl) Audience(_ context.Context, windowID string, _ domain.
 	}
 	return port.AudiencePage{Members: []port.AudienceMember{{SubscriptionID: "3e7a1c2b-0000-4000-8000-000000000002", UserID: "cust-1",
 		UnsubscribeURL: unsub}}}, nil
+}
+
+// sampleLocationAudienceImpl answers location audience pages like delivery-runs would: one signed-in subscriber
+// (cust-1) on every channel and one email-only subscriber.
+type sampleLocationAudienceImpl struct{}
+
+var _ port.LocationAudience = sampleLocationAudienceImpl{}
+
+// SampleLocationAudience returns the location audience used by the samples, the gallery and the tests.
+func SampleLocationAudience() port.LocationAudience { return sampleLocationAudienceImpl{} }
+
+func (sampleLocationAudienceImpl) LocationAudience(_ context.Context, locationID string, ch domain.Channel, _ string, _ int) (port.AudiencePage, error) {
+	unsub := "http://localhost:3000/delivery-runs/subscriptions/unsubscribe?token=sample-" + locationID
+	members := []port.AudienceMember{{SubscriptionID: "3e7a1c2b-0000-4000-8000-000000000003", UserID: "cust-1", UnsubscribeURL: unsub}}
+	if ch == domain.ChannelEmail {
+		members = append(members, port.AudienceMember{SubscriptionID: "3e7a1c2b-0000-4000-8000-000000000004",
+			Email: "neighbour@example.com", UnsubscribeURL: unsub + "-email"})
+	}
+	return port.AudiencePage{Members: members}, nil
 }
 
 const sampleAtin = "ATOGBO0500"

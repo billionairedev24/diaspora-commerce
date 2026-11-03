@@ -29,6 +29,8 @@ export interface EngineState {
   online: boolean;
   syncing: boolean;
   lastError: string | null;
+  /** Today's route download: loading, loaded, "no route assigned" (the server answered with none) or failed (why). */
+  routeLoad: { status: 'idle' | 'loading' | 'loaded' | 'none' | 'failed'; error: string | null };
   userId: string | null;
   /** Set when the server reports that driver access was revoked. */
   revokedAt: string | null;
@@ -43,7 +45,7 @@ export class SyncEngine {
   private again = false;
 
   constructor(private readonly deps: EngineDeps) {
-    this.state = { ready: false, outbox: emptyOutbox(''), route: null, online: true, syncing: false, lastError: null, userId: null, revokedAt: null };
+    this.state = { ready: false, outbox: emptyOutbox(''), route: null, online: true, syncing: false, lastError: null, routeLoad: { status: 'idle', error: null }, userId: null, revokedAt: null };
   }
 
   getState = (): EngineState => this.state;
@@ -201,10 +203,21 @@ export class SyncEngine {
   /** Server truth + the events still queued on this phone (re-applied on top). */
   async refreshRoute(): Promise<void> {
     if (!this.state.online || !this.state.userId) return;
-    const routes = await this.deps.api.routes();
-    const server = routes.find((r) => r.id === this.state.route?.id) ?? routes[0] ?? null;
-    if (!server) return;
-    await this.commit((st) => ({ route: st.outbox.events.filter((e) => e.routeId === server.id).reduce<Route>((r, e) => applyLocal(r, e, e.capturedAt), server) }));
+    this.set({ routeLoad: { status: 'loading', error: null } });
+    try {
+      const routes = await this.deps.api.routes();
+      const server = routes.find((r) => r.id === this.state.route?.id) ?? routes[0] ?? null;
+      if (!server) {
+        this.set({ routeLoad: { status: 'none', error: null } });
+        return;
+      }
+      await this.commit((st) => ({ route: st.outbox.events.filter((e) => e.routeId === server.id).reduce<Route>((r, e) => applyLocal(r, e, e.capturedAt), server) }));
+      this.set({ routeLoad: { status: 'loaded', error: null } });
+    } catch (e) {
+      // The route already on the phone keeps working; the screen only needs to say the refresh failed.
+      this.set({ routeLoad: { status: 'failed', error: e instanceof Error ? e.message : 'Could not load the route' } });
+      throw e;
+    }
   }
 
   dismissIssue(eventId: string): void {

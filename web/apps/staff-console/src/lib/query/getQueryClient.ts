@@ -8,7 +8,9 @@ function makeQueryClient() {
         staleTime: 30_000,
         retry: (count, err) => !(isApiError(err) && err.status < 500) && !(isApiError(err) && err.status === 503) && count < 2,
         refetchOnWindowFocus: false
-      }
+      },
+      // Mutations change things (decisions, refunds, payouts): never repeated by the client.
+      mutations: { retry: false }
     }
   });
 }

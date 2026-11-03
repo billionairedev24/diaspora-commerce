@@ -65,6 +65,7 @@ func (s *staffMarketsImpl) need(ctx context.Context, c *domain.Caller, edit bool
 	if err != nil {
 		return sc, false, err
 	}
+	sc.nameWho = true
 	canEdit := sc.access.Can(permMarketsEdit) && sc.access.Allows(marketsModule, domain.LevelEdit)
 	if edit && !canEdit {
 		if !sc.access.Allows(marketsModule, domain.LevelEdit) {

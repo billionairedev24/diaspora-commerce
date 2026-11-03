@@ -18,7 +18,7 @@ import org.springframework.stereotype.Repository;
 class JdbcHelpArticleRepository implements HelpArticleRepository {
 
     private static final String SELECT = """
-            select slug, topic, title, summary, sections::text as sections, status, sort_order, updated_at, version
+            select slug, topic, title, summary, sections::text as sections, status, sort_order, updated_at, version, updated_by
             from help_article
             """;
 
@@ -53,13 +53,14 @@ class JdbcHelpArticleRepository implements HelpArticleRepository {
     @Override
     public void insert(HelpArticle a) {
         jdbc.sql("""
-                insert into help_article (slug, topic, title, summary, sections, status, sort_order, updated_at, version)
-                values (:slug, :topic, :title, :summary, cast(:sections as jsonb), :status, :sort, :updated, :version)
+                insert into help_article (slug, topic, title, summary, sections, status, sort_order, updated_at, version, updated_by)
+                values (:slug, :topic, :title, :summary, cast(:sections as jsonb), :status, :sort, :updated, :version, :by)
                 """)
                 .param("slug", a.slug()).param("topic", a.topic().name()).param("title", a.title())
                 .param("summary", a.summary()).param("sections", json.write(a.sections()))
                 .param("status", a.status().name()).param("sort", a.sortOrder())
                 .param("updated", Timestamps.of(a.updatedAt())).param("version", a.version())
+                .param("by", a.updatedBy())
                 .update();
     }
 
@@ -68,14 +69,14 @@ class JdbcHelpArticleRepository implements HelpArticleRepository {
         return jdbc.sql("""
                 update help_article set topic = :topic, title = :title, summary = :summary,
                     sections = cast(:sections as jsonb), status = :status, sort_order = :sort, updated_at = :updated,
-                    version = :version
+                    version = :version, updated_by = :by
                 where slug = :slug and version = :expected
                 """)
                 .param("slug", a.slug()).param("topic", a.topic().name()).param("title", a.title())
                 .param("summary", a.summary()).param("sections", json.write(a.sections()))
                 .param("status", a.status().name()).param("sort", a.sortOrder())
                 .param("updated", Timestamps.of(a.updatedAt())).param("version", a.version())
-                .param("expected", expectedVersion)
+                .param("by", a.updatedBy()).param("expected", expectedVersion)
                 .update() == 1;
     }
 
@@ -83,6 +84,7 @@ class JdbcHelpArticleRepository implements HelpArticleRepository {
         HelpSection[] sections = json.read(rs.getString("sections"), HelpSection[].class);
         return new HelpArticle(rs.getString("slug"), HelpTopic.valueOf(rs.getString("topic")), rs.getString("title"),
                 rs.getString("summary"), Arrays.asList(sections), HelpArticleStatus.valueOf(rs.getString("status")),
-                rs.getInt("sort_order"), Timestamps.instant(rs, "updated_at"), rs.getLong("version"));
+                rs.getInt("sort_order"), Timestamps.instant(rs, "updated_at"), rs.getLong("version"),
+                rs.getString("updated_by"));
     }
 }

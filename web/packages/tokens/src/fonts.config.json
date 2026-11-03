@@ -1,0 +1,46 @@
+{
+  "_note": "THE font configuration. Edit here, then run: pnpm --filter @afrotransact/tokens generate (writes src/fonts.css, the --at-font-* lines of tokens.css and src/generated/fonts.ts). Nothing else names a font.",
+  "sans": {
+    "family": "Inter",
+    "package": "@fontsource/inter",
+    "weights": [
+      400,
+      500,
+      600,
+      700
+    ],
+    "fallback": [
+      "ui-sans-serif",
+      "system-ui",
+      "-apple-system",
+      "Segoe UI",
+      "Roboto",
+      "sans-serif"
+    ]
+  },
+  "display": {
+    "family": "Fraunces",
+    "package": "@fontsource/fraunces",
+    "weights": [
+      400,
+      500,
+      600,
+      700
+    ],
+    "fallback": [
+      "Georgia",
+      "Times New Roman",
+      "serif"
+    ]
+  },
+  "mono": {
+    "family": null,
+    "fallback": [
+      "ui-monospace",
+      "SF Mono",
+      "Menlo",
+      "Consolas",
+      "monospace"
+    ]
+  }
+}

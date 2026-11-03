@@ -20,6 +20,7 @@ func TestQuoteTariffFollowsPayments(t *testing.T) {
 		{"per trip: packages don't count", seedCustomer, 7.4, 3, 1128},
 		{"half up", &DeliveryTariff{Mode: TariffDistance, PerMileMinor: i64(85)}, 0.3, 1, 26},
 		{"flat per package", &DeliveryTariff{Mode: TariffFlat, FlatPerPackageMinor: i64(200)}, 12, 3, 600},
+		{"per weight: 399 + 50 * 4 lbs", &DeliveryTariff{Mode: TariffPerWeight, BaseMinor: i64(399), PerLbMinor: i64(50)}, 5, 1, 599},
 		{"band covers the miles (to exclusive)", &DeliveryTariff{Mode: TariffDistance, BaseMinor: i64(999), PerMileMinor: i64(100),
 			Bands: []DeliveryBand{{0, 3, 399}, {3, 6, 599}}}, 3, 1, 599},
 		{"beyond the bands: base + per mile", &DeliveryTariff{Mode: TariffDistance, BaseMinor: i64(999), PerMileMinor: i64(100),
@@ -27,7 +28,13 @@ func TestQuoteTariffFollowsPayments(t *testing.T) {
 		{"no tariff is free", nil, 9, 1, 0},
 	}
 	for _, c := range cases {
-		if got := QuoteTariff(c.t, c.miles, c.packages); got != c.want {
+		var got int64
+		if c.name == "per weight: 399 + 50 * 4 lbs" {
+			got = QuoteTariff(c.t, c.miles, c.packages, 4.0)
+		} else {
+			got = QuoteTariff(c.t, c.miles, c.packages)
+		}
+		if got != c.want {
 			t.Errorf("%s: got %d, want %d", c.name, got, c.want)
 		}
 	}
@@ -36,6 +43,9 @@ func TestQuoteTariffFollowsPayments(t *testing.T) {
 	}
 	if s := TariffSummary(&DeliveryTariff{Mode: TariffFlat, FlatPerPackageMinor: i64(200)}); s != "$2.00 per package" {
 		t.Errorf("flat summary = %q", s)
+	}
+	if s := TariffSummary(&DeliveryTariff{Mode: TariffPerWeight, BaseMinor: i64(399), PerLbMinor: i64(50), MinMinor: i64(499)}); s != "$3.99 + $0.50/lb, at least $4.99" {
+		t.Errorf("per weight summary = %q", s)
 	}
 }
 

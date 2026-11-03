@@ -17,8 +17,11 @@ import tools.jackson.databind.JsonNode;
  */
 public class ServiceTokens {
 
-    /** Scopes for the usage sources of metered billing (S206). */
-    static final String SCOPES = "inventory:storage.read ads:spend.read ai:usage.read";
+    /**
+     * Scopes for the usage sources of metered billing (S206) and for plan fees collected from earnings at payments
+     * (S298).
+     */
+    static final String SCOPES = "inventory:storage.read ads:spend.read ai:usage.read payments:plan-fees";
     private static final Duration EARLY_REFRESH = Duration.ofSeconds(60);
 
     private final RestClient client;
@@ -38,12 +41,12 @@ public class ServiceTokens {
         this.clock = clock;
     }
 
-    boolean enabled() {
+    public boolean enabled() {
         return clientSecret != null && !clientSecret.isBlank();
     }
 
     /** A valid bearer token, fetching a new one when needed. */
-    String token() {
+    public String token() {
         lock.lock();
         try {
             Instant now = clock.instant();

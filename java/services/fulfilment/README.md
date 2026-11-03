@@ -186,17 +186,41 @@ POST /v1/driver/sync
 | `shift.ended` | `odometer` | no stop pending, arrived or **retry** (reattempts resolved first); **failed packages scanned back**; odometer > start |
 | `sos.raised` | `sos: BREAKDOWN\|ACCIDENT\|UNSAFE\|MEDICAL`, `note`, position | dispatch alerted immediately |
 
+## Delivery runs (S264)
+
+A closed pre-order window becomes a delivery run in delivery-runs. On `delivery-runs.run.confirmed` (`at.delivery-runs.events`,
+consumer `RunDispatchService`) fulfilment fetches `GET /v1/service/runs/{id}/dispatch` (scope `delivery-runs:read`) and plans
+it:
+
+- **One route per capacity chunk.** Drops are ordered by road distance from the hub (geo `POST /v1/distance/batch`, straight
+  line when geo is down) and cut into balanced chunks of at most `RUN_ROUTE_CAPACITY` (40) bags (`CapacityRunRoutePlanner`).
+  Each route gets **one pickup stop per seller** (sorted by name) **before** its drops; a pickup-point run has one drop per
+  order at the pickup point. Sellers listed in `RUN_DEPOT_SELLERS` (AfroTransact Retail) are loaded at the depot and get no
+  pickup stop.
+- **Bags.** A PREORDER package mixes sellers, so a shipment has one bag per seller (`shipment_bag`); the first bag carries the
+  shipment label. PREORDER shipments never enter the generic route builder or the seller-pickup pool.
+- **Orders.** Shipments are confirmed in orders through queued `confirmed` transitions, so the driver's courier events apply.
+  Handover codes (the 4-digit per-shipment code) and proof of delivery work as for any delivery, also at a pickup point.
+- **Progress.** The driver app uses the normal sync, so the events that reach orders feed delivery-runs' run progress (see its
+  README). Dispatch reads the run through `GET /v1/dispatch/runs`, `/{runId}` and `POST /{runId}/plan` (planning again only
+  routes shipments that are not on a live route); a failed plan is kept on the run (`planError`) and shown in the console. A
+  cancelled run (`delivery-runs.run.cancelled`) cancels its routes (drivers are told). `fulfilment.run.planned` is published.
+
+Config: `FULFILMENT_RUN_DEPOT_NODE` (falls back to `FULFILMENT_DEFAULT_NODE`), `RUN_ROUTE_CAPACITY`, `RUN_DEPOT_SELLERS`,
+`DELIVERY_RUNS_URL`, topic `consumers.delivery-runs-topic`. Known gaps: the sellers' pickup stops and the pickup point have no
+coordinates (no distance check there); bag labels are not printable by sellers.
+
 ## Events (transactional outbox → `at.fulfilment.events`)
 
 `fulfilment.task.created|picked|pick_exception|packed|ready|cancelled`,
 `fulfilment.route.planned|assigned|started|completed|cancelled`, `fulfilment.stop.delivered|failed|skipped|reassigned`,
 `fulfilment.vehicle.defect_reported`, `fulfilment.driver.sos_raised` (priority HIGH),
-`fulfilment.pickup.auto_assigned|dispatch_assigned` (S255),
+`fulfilment.pickup.auto_assigned|dispatch_assigned` (S255), `fulfilment.run.planned` (S264),
 `fulfilment.driver.access_revoked`, `fulfilment.orders.forward_failed` — see
 [`contracts/asyncapi/fragments/fulfilment.yaml`](../../../contracts/asyncapi/fragments/fulfilment.yaml).
 
 Consumed (group `fulfilment-service`, inbox-deduplicated): `orders.order.placed`, `orders.shipment.cancelled`
-(`at.order.events`); `identity.role.granted|revoked`, `identity.permission.granted|revoked`,
+(`at.order.events`); `delivery-runs.run.confirmed|cancelled` (`at.delivery-runs.events`); `identity.role.granted|revoked`, `identity.permission.granted|revoked`,
 `identity.user.disabled|enabled` (`at.identity.events`).
 
 ## Permissions and upstreams
@@ -225,7 +249,7 @@ location API yet.
 `DB_PASSWORD`, `KAFKA_BOOTSTRAP`, `FULFILMENT_CLIENT_SECRET`. Other knobs: `AUTH_ISSUER_URL`, `ORDERS_URL`,
 `INVENTORY_URL`, `GEO_URL`, `UPSTREAM_TIMEOUT`, `FULFILMENT_DEFAULT_NODE`, `POD_MAX_DISTANCE_METERS` (150),
 `REATTEMPT_WAIT` (5m), `MAX_REATTEMPTS` (2), `NEAREST_DRIVER_ENABLED` (true), `DRIVER_POSITION_STALE_AFTER` (10m),
-`ROUTE_MAX_PACKAGES` (40), `NEAREST_DRIVER_CANDIDATES` (20), `DISPATCH_ZONE` (America/Chicago), `ORDERS_RELAY_INTERVAL` (5s), `ORDERS_RELAY_MAX_ATTEMPTS` (20),
+`ROUTE_MAX_PACKAGES` (40), `NEAREST_DRIVER_CANDIDATES` (20), `FULFILMENT_RUN_DEPOT_NODE`, `RUN_ROUTE_CAPACITY` (40), `RUN_DEPOT_SELLERS`, `DELIVERY_RUNS_URL`, `DISPATCH_ZONE` (America/Chicago), `ORDERS_RELAY_INTERVAL` (5s), `ORDERS_RELAY_MAX_ATTEMPTS` (20),
 `FULFILMENT_JOBS_ENABLED`, `CONSUMERS_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACE_SAMPLING`.
 Profiles: `local` (security off, local client secret), `dev`, `uat`, `prod` (API reference pages off).
 

@@ -10,14 +10,17 @@ import {
   type ShipFromForm,
   ShipFromFormSchema,
   shipFromToForm,
+  type SuggestedParcel,
   toSellerAddress
 } from '@afrotransact/api-client';
-import { Button, Select, TextField, useToast } from '@afrotransact/ui';
+import { AddressFields, Button, PhoneNumberField, Select, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
+import { sellerAddressSearch, STATE_OPTIONS } from '@/components/onboarding/WizardKit';
 import { problemMessage } from '@/components/ui/States';
 import { sellerApi } from '@/lib/api';
+import { download } from '@/lib/export/table';
 import { idempotencyKey, money } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
@@ -30,7 +33,7 @@ const CARRIER_NAMES: Record<Carrier, string> = { usps: 'USPS', ups: 'UPS', fedex
 
 /** Buy a shipping label: ship-from address (saved per organisation in the seller service), parcel, carrier rates
     (carrier-gateway), then buy with an Idempotency-Key. */
-export function LabelForm({ order, shipmentId }: { order: SellerOrderDetail; shipmentId: string }) {
+export function LabelForm({ order, shipmentId, suggested }: { order: SellerOrderDetail; shipmentId: string; suggested?: SuggestedParcel | null }) {
   const api = sellerApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -39,9 +42,11 @@ export function LabelForm({ order, shipmentId }: { order: SellerOrderDetail; shi
   const addresses = saved.data ?? [];
   const [from, setFrom] = useState<ShipFromForm>(EMPTY);
   const [selected, setSelected] = useState<string | null>(null);
-  const [weight, setWeight] = useState('');
-  const [dims, setDims] = useState({ l: '', w: '', h: '' });
+  // The package the products were listed with, when known (sellers can still change it).
+  const [weight, setWeight] = useState(suggested ? String(suggested.weightLb) : '');
+  const [dims, setDims] = useState({ l: suggested ? String(suggested.lengthIn) : '', w: suggested ? String(suggested.widthIn) : '', h: suggested ? String(suggested.heightIn) : '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [carrierFilter, setCarrierFilter] = useState<string>('all');
   const [quotes, setQuotes] = useState<RateQuote[] | null>(null);
   const [choice, setChoice] = useState<string>('');
   const key = useRef(idempotencyKey());
@@ -93,7 +98,8 @@ export function LabelForm({ order, shipmentId }: { order: SellerOrderDetail; shi
   };
 
   const rates = useMutation({
-    mutationFn: (f: ShipFromForm) => api.quoteRates(order.orderNumber, shipmentId, parcel(), toSellerAddress(f)),
+    mutationFn: (f: ShipFromForm) =>
+      api.quoteRates(order.orderNumber, shipmentId, parcel(), toSellerAddress(f), carrierFilter === 'all' ? undefined : carrierFilter),
     onSuccess: (r) => {
       setQuotes(r.quotes);
       setChoice(r.quotes[0] ? `${r.quotes[0].carrier}:${r.quotes[0].service}` : '');
@@ -111,7 +117,8 @@ export function LabelForm({ order, shipmentId }: { order: SellerOrderDetail; shi
       void qc.invalidateQueries({ queryKey: sellerKeys.orders(orgId) });
       key.current = idempotencyKey();
       toast.show(`Label bought · ${CARRIER_NAMES[res.carrier]} ${res.trackingNumber}`);
-      if (res.documentUrl) window.open(res.documentUrl, '_blank', 'noopener');
+      // Saved to the computer straight away; the order sheet keeps a Download label button.
+      api.downloadShippingLabel(order.orderNumber, shipmentId).then((f) => download(f.blob, f.fileName)).catch(() => toast.show('The label was bought; use Download label to save it.', 'error'));
     },
     onError: (e) => toast.show(problemMessage(e), 'error')
   });
@@ -145,20 +152,55 @@ export function LabelForm({ order, shipmentId }: { order: SellerOrderDetail; shi
           </div>
         ) : null}
         <div className="col-span-2">{field('name', 'Sender name', { autoComplete: 'organization' })}</div>
-        <div className="col-span-2">{field('line1', 'Street address', { autoComplete: 'address-line1' })}</div>
-        <div className="col-span-2">{field('line2', 'Apt, suite (optional)', { autoComplete: 'address-line2' })}</div>
-        {field('city', 'City', { autoComplete: 'address-level2' })}
-        {field('state', 'State', { autoComplete: 'address-level1' })}
-        {field('postalCode', 'ZIP code', { autoComplete: 'postal-code', inputMode: 'numeric' })}
-        {field('phone', 'Phone (optional)', { autoComplete: 'tel' })}
+        <div className="col-span-2">
+          <AddressFields
+            idPrefix="label-from"
+            value={{ line1: from.line1, line2: from.line2, city: from.city, state: from.state, zip: from.postalCode, country: 'US' }}
+            onChange={(a) => setFrom({ ...from, line1: a.line1, line2: a.line2, city: a.city, state: a.state, postalCode: a.zip })}
+            searchAddresses={sellerAddressSearch}
+            regions={STATE_OPTIONS}
+            errors={{ line1: errors.line1, line2: errors.line2, city: errors.city, state: errors.state, zip: errors.postalCode }}
+            labels={{ line2: 'Apt, suite (optional)' }}
+          />
+        </div>
+        <div className="col-span-2">
+          <PhoneNumberField label="Phone (optional)" value={from.phone} error={errors.phone} onChange={(phone) => setFrom({ ...from, phone })} />
+        </div>
       </fieldset>
       <fieldset className="m-0 grid grid-cols-4 gap-x-3 border-0 p-0">
         <legend className="mb-1 text-sm font-semibold">Package</legend>
+        {suggested ? <p className="col-span-4 m-0 mb-1 text-xs text-muted">Filled in from the product listing. Change it if you pack differently.</p> : null}
         <TextField label="Weight (lb)" inputMode="decimal" value={weight} error={errors.weight} onChange={(e) => setWeight(e.target.value)} />
         <TextField label="Length (in)" inputMode="decimal" value={dims.l} onChange={(e) => setDims({ ...dims, l: e.target.value })} />
         <TextField label="Width (in)" inputMode="decimal" value={dims.w} onChange={(e) => setDims({ ...dims, w: e.target.value })} />
         <TextField label="Height (in)" inputMode="decimal" value={dims.h} onChange={(e) => setDims({ ...dims, h: e.target.value })} />
       </fieldset>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Select
+          label="Carrier"
+          value={carrierFilter}
+          onChange={(e) => {
+            const next = e.target.value;
+            setCarrierFilter(next);
+            const f = validate();
+            if (f) {
+              api.quoteRates(order.orderNumber, shipmentId, parcel(), toSellerAddress(f), next === 'all' ? undefined : next)
+                .then((r) => {
+                  setQuotes(r.quotes);
+                  setChoice(r.quotes[0] ? `${r.quotes[0].carrier}:${r.quotes[0].service}` : '');
+                })
+                .catch((e) => toast.show(problemMessage(e), 'error'));
+            }
+          }}
+          options={[
+            { value: 'all', label: 'All carriers (compare rates)' },
+            { value: 'usps', label: 'USPS' },
+            { value: 'ups', label: 'UPS' },
+            { value: 'fedex', label: 'FedEx' },
+            { value: 'dhl', label: 'DHL' }
+          ]}
+        />
+      </div>
       <div>
         <Button variant="neutral" size="sm" loading={rates.isPending} onClick={getRates}>
           Get rates

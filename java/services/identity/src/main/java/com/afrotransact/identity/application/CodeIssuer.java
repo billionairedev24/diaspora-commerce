@@ -48,14 +48,42 @@ class CodeIssuer {
         return expires;
     }
 
+    /**
+     * Sends one new code to several channels at once (password reset: email, plus SMS to a verified phone), with the
+     * same limits as {@link #issue}. {@code destinations} maps the channel (EMAIL, SMS) to its address; the first
+     * entry is recorded as the code's destination. Returns its expiry.
+     */
+    Instant issueToAll(UserAccount user, VerificationPurpose purpose, Map<String, String> destinations) {
+        Instant now = Instant.now(clock);
+        policy.checkCanIssue(codes.issuedSince(user.id(), purpose, now.minus(Duration.ofHours(1))), now);
+        String code = policy.newCode();
+        UUID id = UUID.randomUUID();
+        Instant expires = now.plus(VerificationPolicy.TIME_TO_LIVE);
+        codes.insert(new VerificationCode(id, user.id(), purpose, destinations.values().iterator().next(),
+                policy.hash(id, code), now, expires, null, 0));
+        destinations.forEach((channel, destination) -> sender.send(new VerificationMessage(user.id(), purpose,
+                channel, destination, user.firstName(), code, expires)));
+        return expires;
+    }
+
     /** Checks and consumes the latest code; throws {@link IdentityRuleViolation} with a field error otherwise. */
     VerificationCode consume(UUID userId, VerificationPurpose purpose, String submitted) {
+        return consume(userId, purpose, submitted, () -> { });
+    }
+
+    /**
+     * Like {@link #consume(UUID, VerificationPurpose, String)}, but runs {@code beforeUse} once the code is known to
+     * be right and before it is used up: when that throws, the code stays valid (password reset: a new password that
+     * contains the person's name must not burn the code).
+     */
+    VerificationCode consume(UUID userId, VerificationPurpose purpose, String submitted, Runnable beforeUse) {
         VerificationCode stored = codes.latest(userId, purpose).orElseThrow(() -> invalid(
                 "identity.code-not-found", "Ask for a new code"));
         Instant now = Instant.now(clock);
         VerificationOutcome outcome = policy.check(stored, submitted, now);
         switch (outcome) {
             case VALID -> {
+                beforeUse.run();
                 VerificationCode used = stored.consume(now);
                 codes.update(used);
                 return used;

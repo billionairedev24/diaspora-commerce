@@ -3,13 +3,15 @@
 import { staffPreorderKeys, staffPreorderQueries } from '@afrotransact/api-client';
 import { type PreorderListTab, PreorderListTabSchema } from '@afrotransact/api-client/staff-preorders';
 import { useToast } from '@afrotransact/ui';
-import { ArrowLeft, GearSix, Plus } from '@phosphor-icons/react/ssr';
+import { ArrowLeft, GearSix, Plus, Truck } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { ModulePage } from '@/components/module/ModulePage';
+import { RunsView } from '@/components/runs/RunsView';
 import { problemMessage } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
 
 import { href, NO_EDIT_TITLE, NO_SETTINGS_TITLE } from './model';
 import { PreorderDetail } from './PreorderDetail';
@@ -18,7 +20,7 @@ import { PreorderSettingsPanel } from './PreorderSettings';
 import { PreorderWizard } from './PreorderWizard';
 import { usePreorderAccess, usePreordersApi } from './primitives';
 
-export type PreorderScreen = { kind: 'list' } | { kind: 'detail'; id: string } | { kind: 'new' } | { kind: 'edit'; id: string } | { kind: 'settings' };
+export type PreorderScreen = { kind: 'list' } | { kind: 'detail'; id: string } | { kind: 'new' } | { kind: 'edit'; id: string } | { kind: 'settings' } | { kind: 'runs' };
 
 /** The master switch as the design's toolbar button ("Pre-order on / off"); Full level only. */
 function MasterSwitchButton() {
@@ -61,8 +63,16 @@ function MasterSwitchButton() {
 
 function ListTabs({ tab }: { tab: PreorderListTab }) {
   const api = usePreordersApi();
+  const t = useT();
   const counts = useQuery(staffPreorderQueries.list(api, { status: 'all', page: 0 })).data?.counts;
-  const tabs: [PreorderListTab, string][] = [['all', 'All'], ['open', 'Open'], ['upcoming', 'Scheduled'], ['closed', 'Closed'], ['draft', 'Drafts']];
+  const tabs: [PreorderListTab, string][] = [
+    ['all', 'All'],
+    ['open', 'Open'],
+    ['upcoming', 'Scheduled'],
+    ['decision', t('st.preorders.tab.decision')],
+    ['closed', 'Closed'],
+    ['draft', 'Drafts']
+  ];
   return (
     <div role="tablist" aria-label="Pre-order status" className="flex max-w-full gap-0.5 overflow-x-auto overscroll-x-contain rounded-md border border-border bg-surface-muted p-0.5">
       {tabs.map(([k, label]) => (
@@ -85,8 +95,25 @@ function ListTabs({ tab }: { tab: PreorderListTab }) {
   );
 }
 
+/** Pre-orders that closed below their minimum wait for a staff decision: say so on every list tab, and link to them. */
+function DecisionNotice() {
+  const api = usePreordersApi();
+  const t = useT();
+  const n = useQuery(staffPreorderQueries.list(api, { status: 'all', page: 0 })).data?.counts.decision ?? 0;
+  if (!n) return null;
+  return (
+    <div role="status" data-testid="decision-notice" className="flex flex-wrap items-center gap-3 rounded-md border border-gold-500 bg-gold-50 px-4 py-3 text-sm">
+      <strong>{t('st.preorders.banner.decision', { n })}</strong>
+      <Link href={href.list('decision')} className="font-bold text-link">
+        {t('st.preorders.banner.review')}
+      </Link>
+    </div>
+  );
+}
+
 /** Back office › Pre-orders: list, detail, wizard and settings (the "Back office" tab of the Pre-Order v2 design). */
 export function PreordersView({ screen }: { screen: PreorderScreen }) {
+  const t = useT();
   const access = usePreorderAccess();
   const router = useRouter();
   const params = useSearchParams();
@@ -111,6 +138,14 @@ export function PreordersView({ screen }: { screen: PreorderScreen }) {
           <span className="flex-1" />
           <MasterSwitchButton />
           <Link
+            href={href.runs()}
+            aria-current={screen.kind === 'runs' ? 'page' : undefined}
+            className="flex h-10 items-center gap-2 rounded-md border border-border-strong bg-surface px-3 text-sm font-semibold text-text no-underline hover:text-text hover:no-underline"
+          >
+            <Truck size={16} aria-hidden />
+            {t('st.runs.nav.runs')}
+          </Link>
+          <Link
             href={href.settings()}
             aria-current={screen.kind === 'settings' ? 'page' : undefined}
             className="flex h-10 items-center gap-2 rounded-md border border-border-strong bg-surface px-3 text-sm font-semibold text-text no-underline hover:text-text hover:no-underline"
@@ -129,6 +164,7 @@ export function PreordersView({ screen }: { screen: PreorderScreen }) {
             Open a pre-order
           </button>
         </div>
+        {inList && tab !== 'decision' ? <DecisionNotice /> : null}
         {screen.kind === 'list' ? <PreorderList tab={tab} /> : null}
         {screen.kind !== 'list' ? (
           <section className="min-w-0 rounded-md border border-border bg-surface">
@@ -136,6 +172,7 @@ export function PreordersView({ screen }: { screen: PreorderScreen }) {
             {screen.kind === 'new' ? <PreorderWizard /> : null}
             {screen.kind === 'edit' ? <PreorderWizard id={screen.id} /> : null}
             {screen.kind === 'settings' ? <PreorderSettingsPanel /> : null}
+            {screen.kind === 'runs' ? <RunsView /> : null}
           </section>
         ) : null}
       </div>

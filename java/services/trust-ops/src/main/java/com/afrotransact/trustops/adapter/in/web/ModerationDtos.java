@@ -47,19 +47,32 @@ final class ModerationDtos {
         }
     }
 
-    @Schema(description = "The customer review a SERVICE_REVIEW item is about (bookings-service)")
+    @Schema(description = "The customer review a SERVICE_REVIEW (bookings-service) or PRODUCT_REVIEW (catalog) item is "
+            + "about. For a product review bookingId is the review id, serviceId the product id and serviceName the "
+            + "product title")
     record ReviewResponse(UUID bookingId, UUID serviceId, String serviceName,
                           @Schema(description = "Author (token subject); never public") String customerId,
-                          String reviewerName, int rating, String text, Instant submittedAt) {
+                          String reviewerName, int rating, String text, Instant submittedAt,
+                          @Schema(description = "Product reviews: the product ATIN") String atin,
+                          @Schema(description = "Product reviews: the review title") String title,
+                          @Schema(description = "Product reviews: photo URLs") List<String> photoUrls,
+                          @Schema(description = "Product reviews: what the automatic checks found "
+                                  + "(PROFANITY, LINK, EMAIL, PHONE)") List<String> flags,
+                          @Schema(description = "Product reviews: reports on a published review (0 for a "
+                                  + "submission waiting for its first decision)") int reports,
+                          @Schema(description = "Product reviews: reason code of the first report")
+                          String reportReason) {
 
         static ReviewResponse of(ReviewSubmission r) {
             return r == null ? null : new ReviewResponse(r.bookingId(), r.serviceId(), r.serviceName(),
-                    r.customerId(), r.reviewerName(), r.rating(), r.text(), r.submittedAt());
+                    r.customerId(), r.reviewerName(), r.rating(), r.text(), r.submittedAt(), r.atin(), r.title(),
+                    r.photoUrls(), r.flags(), r.reports(), r.reportReason());
         }
     }
 
-    @Schema(description = "An item in the moderation queue: a listing (productId set) or a customer review of a "
-            + "booking (review set, sellerOrgId = the provider, title = a one-line summary)")
+    @Schema(description = "An item in the moderation queue: a listing (productId set), a customer review of a "
+            + "booking or a verified-purchase review of a product (review set, sellerOrgId = the provider or the "
+            + "product's owner, title = a one-line summary)")
     record ModerationItemResponse(UUID id, UUID productId, String atin, String sellerOrgId, String ownerKind,
                                   String title, String productTypeCode, ModerationItemType type,
                                   ReportResponse report, ReviewResponse review, ModerationStatus status,
@@ -72,7 +85,8 @@ final class ModerationDtos {
         static ModerationItemResponse of(ModerationItemView v) {
             ModerationItem i = v.item();
             ProductSubmission p = i.product();
-            return new ModerationItemResponse(i.id(), p == null ? null : p.productId(), p == null ? null : p.atin(),
+            return new ModerationItemResponse(i.id(), p == null ? null : p.productId(),
+                    p != null ? p.atin() : i.review() == null ? null : i.review().atin(),
                     i.orgId(), p == null ? null : p.ownerKind(), i.title(), p == null ? null : p.productTypeCode(),
                     i.type(), ReportResponse.of(i.report()), ReviewResponse.of(i.review()), i.status(), i.priority(),
                     i.triageStatus(), TriageResponse.of(i.triage()), i.enqueuedAt(),
@@ -94,13 +108,13 @@ final class ModerationDtos {
     record EscalateRequest(@NotBlank @Size(max = 1000) String reason) {
     }
 
-    @Schema(description = "Allow the item (optional note): approves a submission, keeps a live listing (dismissing "
-            + "the reports) or publishes a review")
+    @Schema(description = "Allow the item (optional note): approves a submission, keeps a live listing or a reported "
+            + "review (dismissing the reports) or publishes a review")
     record ApproveRequest(@Size(max = 1000) String note) {
     }
 
-    @Schema(description = "Remove the item (reject a submission, take a live listing down, reject a review): reason "
-            + "code for the item's kind required, note required for OTHER")
+    @Schema(description = "Remove the item (reject a submission, take a live listing down, reject a review or take a "
+            + "reported one down): reason code for the item's kind required, note required for OTHER")
     record RejectRequest(@NotNull ModerationReasonCode reasonCode, @Size(max = 1000) String note) {
     }
 }

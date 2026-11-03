@@ -42,13 +42,13 @@ class JdbcRunRepository implements RunRepository {
         bind(jdbc.sql("""
                 insert into run (id, location_id, status, window_start, window_end, cutoff_at, original_cutoff_at,
                     opens_at, seller_pickup_at, fee_minor, currency, min_orders, capacity_orders, capacity_packages,
-                    drop_mode, pickup_point, cutoff_policy, extend_days, extensions, reserved_orders,
+                    drop_mode, pickup_point, cutoff_policy, extend_days, notes, extensions, reserved_orders,
                     reserved_packages, cancel_reason, reminder_sent_for, est_road_miles, est_drive_minutes,
                     est_method, announced_at, opened_at, cut_off_at, confirmed_at, collecting_at,
                     out_for_delivery_at, completed_at, cancelled_at, created_at, updated_at, version)
                 values (:id, :locationId, :status, :windowStart, :windowEnd, :cutoffAt, :originalCutoffAt,
                     :opensAt, :sellerPickupAt, :fee, :currency, :minOrders, :capOrders, :capPackages,
-                    :dropMode, cast(:pickup as jsonb), :policy, :extendDays, :extensions, :reservedOrders,
+                    :dropMode, cast(:pickup as jsonb), :policy, :extendDays, :notes, :extensions, :reservedOrders,
                     :reservedPackages, :cancelReason, :reminderSentFor, :estMiles, :estMinutes,
                     :estMethod, :announcedAt, :openedAt, :cutOffAt, :confirmedAt, :collectingAt,
                     :outForDeliveryAt, :completedAt, :cancelledAt, :createdAt, :updatedAt, 0)
@@ -64,7 +64,8 @@ class JdbcRunRepository implements RunRepository {
                     seller_pickup_at = :sellerPickupAt, fee_minor = :fee, currency = :currency,
                     min_orders = :minOrders, capacity_orders = :capOrders, capacity_packages = :capPackages,
                     drop_mode = :dropMode, pickup_point = cast(:pickup as jsonb), cutoff_policy = :policy,
-                    extend_days = :extendDays, extensions = :extensions, reserved_orders = :reservedOrders,
+                    extend_days = :extendDays, notes = :notes, extensions = :extensions,
+                    reserved_orders = :reservedOrders,
                     reserved_packages = :reservedPackages, cancel_reason = :cancelReason,
                     reminder_sent_for = :reminderSentFor, est_road_miles = :estMiles,
                     est_drive_minutes = :estMinutes, est_method = :estMethod, announced_at = :announcedAt,
@@ -124,6 +125,17 @@ class JdbcRunRepository implements RunRepository {
         return jdbc.sql("select * from run where location_id in (:ids) and " + ACCEPTING
                         + " and cutoff_at > :now order by cutoff_at")
                 .param("ids", List.copyOf(locationIds)).param("now", Sql.ts(now)).query(this::map).list();
+    }
+
+    @Override
+    public List<Run> findAnnouncedOpeningBy(Collection<UUID> locationIds, Instant now, Instant opensBy) {
+        if (locationIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("select * from run where location_id in (:ids) and status = 'ANNOUNCED' and opens_at is not "
+                        + "null and opens_at <= :opensBy and cutoff_at > :now order by cutoff_at")
+                .param("ids", List.copyOf(locationIds)).param("opensBy", Sql.ts(opensBy)).param("now", Sql.ts(now))
+                .query(this::map).list();
     }
 
     @Override
@@ -193,6 +205,7 @@ class JdbcRunRepository implements RunRepository {
                 .param("pickup", json.write(t.pickupPoint()))
                 .param("policy", t.cutoffPolicy().name())
                 .param("extendDays", t.extendDays())
+                .param("notes", t.notes())
                 .param("extensions", r.extensions())
                 .param("reservedOrders", r.reservedOrders())
                 .param("reservedPackages", r.reservedPackages())
@@ -219,7 +232,8 @@ class JdbcRunRepository implements RunRepository {
                 rs.getLong("fee_minor"), rs.getString("currency"), rs.getInt("min_orders"),
                 new Capacity(Sql.integer(rs, "capacity_orders"), Sql.integer(rs, "capacity_packages")),
                 DropMode.valueOf(rs.getString("drop_mode")), json.pickupPoint(rs.getString("pickup_point")),
-                CutoffPolicy.valueOf(rs.getString("cutoff_policy")), rs.getInt("extend_days"));
+                CutoffPolicy.valueOf(rs.getString("cutoff_policy")), rs.getInt("extend_days"),
+                rs.getString("notes"));
         Double miles = Sql.dbl(rs, "est_road_miles");
         Double minutes = Sql.dbl(rs, "est_drive_minutes");
         RouteEstimate estimate = miles == null || minutes == null ? null

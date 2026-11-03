@@ -1,6 +1,14 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 # Edge for prod: the shared base plus this environment's public routes and tunnel token.
+# Lean (one node): one cloudflared and one Envoy proxy replica. Two of each only matter with more than one node.
 resources:
   - ../../base
   - routes.yaml
+patches:
+  - target: {kind: Deployment, name: cloudflared}
+    patch: |-
+      - {op: replace, path: /spec/replicas, value: 1}
+  - target: {kind: EnvoyProxy, name: edge}
+    patch: |-
+      - {op: replace, path: /spec/provider/kubernetes/envoyDeployment/replicas, value: 1}

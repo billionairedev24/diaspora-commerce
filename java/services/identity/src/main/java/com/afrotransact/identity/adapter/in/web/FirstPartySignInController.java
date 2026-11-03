@@ -54,7 +54,8 @@ class FirstPartySignInController {
                     + "the second factor for 30 days") String trustedDeviceToken,
             @NotBlank @Pattern(regexp = IP_PATTERN) @Schema(description = "End user's IP address (throttling, audit)",
                     examples = "203.0.113.7") String clientIp,
-            @Size(max = 512) @Schema(description = "End user's User-Agent") String userAgent) {
+            @Size(max = 512) @Schema(description = "End user's User-Agent") String userAgent,
+            @Size(max = 64) @Schema(description = "Native app the login ticket is for (customer-app, driver-app); omit for web sessions") String appClientId) {
     }
 
     @Schema(name = "MfaSmsRequest")
@@ -71,7 +72,8 @@ class FirstPartySignInController {
             @Schema(description = "Return a trustedDeviceToken (30 days) to skip the second factor next time")
             boolean trustDevice,
             @NotBlank @Pattern(regexp = IP_PATTERN) String clientIp,
-            @Size(max = 512) String userAgent) {
+            @Size(max = 512) String userAgent,
+            @Size(max = 64) String appClientId) {
     }
 
     @Schema(name = "PasskeyOptionsRequest")
@@ -130,7 +132,7 @@ class FirstPartySignInController {
     @PostMapping("/v1/auth/password")
     SignInStepResponse password(@Valid @RequestBody PasswordSignInRequest body) {
         return SignInStepResponse.of(signIn.password(new PasswordSignIn(body.email(), body.password(),
-                body.trustedDeviceToken(), new ClientContext(body.clientIp(), body.userAgent()))));
+                body.trustedDeviceToken(), new ClientContext(body.clientIp(), body.userAgent(), body.appClientId()))));
     }
 
     @Operation(summary = "Text a sign-in code for an MFA challenge")
@@ -147,7 +149,8 @@ class FirstPartySignInController {
     SignInStepResponse verify(@Valid @RequestBody MfaVerifyRequest body) {
         MfaFactor factor = MfaFactor.valueOf(body.factor().trim().toUpperCase(Locale.ROOT));
         return SignInStepResponse.of(signIn.verifySecondFactor(new SecondFactorSubmission(body.challengeId(), factor,
-                body.code(), body.trustDevice(), new ClientContext(body.clientIp(), body.userAgent()))));
+                body.code(), body.trustDevice(),
+                new ClientContext(body.clientIp(), body.userAgent(), body.appClientId()))));
     }
 
     @Operation(summary = "Start a passkey sign-in (WebAuthn assertion options)")

@@ -12,10 +12,12 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.afrotransact.payments.domain.ReconciliationDrift;
+import com.afrotransact.payments.domain.ReconciliationItem;
 import com.afrotransact.payments.domain.ReconciliationReport;
 import com.afrotransact.payments.domain.Reconciler;
 import com.afrotransact.payments.port.LedgerRepository;
 import com.afrotransact.payments.port.PaymentsMetrics;
+import com.afrotransact.payments.port.ReconciliationItemRepository;
 import com.afrotransact.payments.port.ReconciliationRepository;
 import com.afrotransact.payments.port.StripeGateway;
 import com.afrotransact.payments.port.StripeGateway.BalanceTxn;
@@ -36,6 +38,7 @@ class ReconciliationServiceImpl implements ReconciliationService {
     private final StripeGateway stripe;
     private final LedgerRepository ledger;
     private final ReconciliationRepository runs;
+    private final ReconciliationItemRepository items;
     private final Reconciler reconciler;
     private final PaymentsMetrics metrics;
     private final PaymentsAccess access;
@@ -43,11 +46,12 @@ class ReconciliationServiceImpl implements ReconciliationService {
     private final Clock clock;
 
     ReconciliationServiceImpl(StripeGateway stripe, LedgerRepository ledger, ReconciliationRepository runs,
-                              Reconciler reconciler, PaymentsMetrics metrics, PaymentsAccess access,
+                              ReconciliationItemRepository items, Reconciler reconciler, PaymentsMetrics metrics, PaymentsAccess access,
                               PaymentsSettings settings, Clock clock) {
         this.stripe = stripe;
         this.ledger = ledger;
         this.runs = runs;
+        this.items = items;
         this.reconciler = reconciler;
         this.metrics = metrics;
         this.access = access;
@@ -93,11 +97,29 @@ class ReconciliationServiceImpl implements ReconciliationService {
                 ledgerByRef.values().stream().mapToLong(Long::longValue).sum(),
                 stripeByRef.values().stream().mapToLong(Long::longValue).sum(), drift, drifts, Instant.now(clock));
         runs.insert(report);
+        openItems(report, drifts, from);
         metrics.reconciliationDrift(drift);
         if (drift != 0) {
             LOG.warn("Reconciliation {} found {} minor units of drift across {} Stripe objects", day, drift,
                     drifts.size());
         }
         return report;
+    }
+
+    /**
+     * Each difference becomes an item Finance works through. A run of the same day replaces the earlier run's open
+     * and explained items; an explanation carries over when the same difference is found again.
+     */
+    private void openItems(ReconciliationReport report, List<ReconciliationDrift> drifts, Instant windowStart) {
+        List<ReconciliationItem> earlier = items.unresolvedOfWindow(windowStart);
+        Map<String, ReconciliationItem> earlierByRef = earlier.stream()
+                .collect(Collectors.toMap(ReconciliationItem::stripeRef, e -> e, (a, b) -> a));
+        earlier.forEach(e -> items.update(e.superseded()));
+        for (ReconciliationDrift d : drifts) {
+            ReconciliationItem item = ReconciliationItem.open(UUID.randomUUID(), report.id(), windowStart, d,
+                    report.currency(), report.createdAt());
+            ReconciliationItem before = earlierByRef.get(d.stripeRef());
+            items.insert(before == null ? item : item.carryOver(before));
+        }
     }
 }

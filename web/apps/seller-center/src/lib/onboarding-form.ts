@@ -9,7 +9,6 @@ import {
   type OnboardingForm,
   type OnboardingOffering,
   type OnboardingOwnersInput,
-  type OnboardingPayoutsInput,
   type OrgKind,
   US_STATES
 } from '@afrotransact/api-client';
@@ -108,7 +107,12 @@ export interface BusinessValues {
   contactEmail: string;
   /** National number as displayed, e.g. "(713) 249-0142" (US). */
   phone: string;
-  website: string;
+  /** What the business sells or does: shown on its public page and given to Stripe. */
+  description: string;
+  /** #rrggbb, or empty for the default. */
+  brandColor: string;
+  /** https URL of the uploaded logo, or empty. */
+  logoUrl: string;
 }
 
 /** National display of a US number (+17132490142 → (713) 249-0142); other numbers are shown as stored. */
@@ -125,7 +129,9 @@ export function businessValues(form: OnboardingForm, kind: OrgKind): BusinessVal
     storeName: text(b.storeName),
     contactEmail: text(b.contactEmail),
     phone: displayPhone(b.phone),
-    website: text(b.website)
+    description: text(b.description),
+    brandColor: text(b.brandColor),
+    logoUrl: text(b.logoUrl)
   };
 }
 
@@ -136,11 +142,12 @@ export function validateBusiness(v: BusinessValues, kind: OrgKind): Errors {
   else if (kind === 'PROVIDER' && v.offering === 'PRODUCTS') e.offering = 'Provider accounts offer services (choose services or both)';
   if (!v.entityType) e.entityType = 'Choose your business type';
   const name = v.storeName.trim();
-  if (!name) e.storeName = kind === 'PROVIDER' ? 'Enter your business name' : 'Enter your store name';
+  if (!name) e.storeName = kind === 'PROVIDER' ? 'Enter your business name' : 'Enter your business name';
   else if (name.length < 2 || name.length > 80) e.storeName = '2 to 80 characters';
   if (!EMAIL.test(v.contactEmail.trim())) e.contactEmail = 'Enter a valid email address';
   if (digitsOf(v.phone).length !== 10) e.phone = 'Enter a 10-digit US mobile number';
-  if (v.website.trim() && !/^https?:\/\/\S+\.\S+$/.test(v.website.trim())) e.website = 'Enter a full URL starting with https://';
+  if (v.description.length > 500) e.description = 'At most 500 characters';
+  if (v.brandColor.trim() && !/^#[0-9a-fA-F]{6}$/.test(v.brandColor.trim())) e.brandColor = 'Use a colour like #rrggbb';
   return e;
 }
 
@@ -152,7 +159,9 @@ export function toBusinessInput(v: BusinessValues): OnboardingBusinessInput {
     storeName: opt(v.storeName),
     contactEmail: opt(v.contactEmail),
     phone: opt(v.phone),
-    website: opt(v.website)
+    description: opt(v.description),
+    brandColor: opt(v.brandColor),
+    logoUrl: opt(v.logoUrl)
   };
 }
 
@@ -380,55 +389,13 @@ export function toOwnersInput(owners: OwnerValues[]): OnboardingOwnersInput {
   };
 }
 
-/* ── Step 5: Payouts ───────────────────────────────────── */
+/* ── Step 5: Payouts ─────────────────────────────────────
+   Nothing to type: seller accounts are Stripe-collected, so Stripe's embedded onboarding collects the payout bank
+   account and its account management changes it. The step shows what Stripe holds (form.payouts, read-only). */
 
-export interface PayoutValues {
-  accountHolderName: string;
-  accountType: 'checking' | 'savings' | '';
-  routingNumber: string;
-  accountNumber: string;
-  accountNumberConfirmation: string;
-}
-
-export function payoutValues(form: OnboardingForm): PayoutValues {
-  const t = form.payouts.accountType;
-  const legal = form.details.legalName ?? '';
-  return {
-    accountHolderName: text(form.payouts.accountHolderName) || legal,
-    accountType: t === 'checking' || t === 'savings' ? t : '',
-    routingNumber: '',
-    accountNumber: '',
-    accountNumberConfirmation: ''
-  };
-}
-
-/** ABA routing number checksum (3-7-1 weights). */
-export function validRouting(raw: string): boolean {
-  const r = digitsOf(raw);
-  if (r.length !== 9) return false;
-  const d = r.split('').map(Number);
-  return (3 * ((d[0] ?? 0) + (d[3] ?? 0) + (d[6] ?? 0)) + 7 * ((d[1] ?? 0) + (d[4] ?? 0) + (d[7] ?? 0)) + ((d[2] ?? 0) + (d[5] ?? 0) + (d[8] ?? 0))) % 10 === 0;
-}
-
-export function validatePayouts(v: PayoutValues): Errors {
-  const e: Errors = {};
-  if (!v.accountHolderName.trim()) e.accountHolderName = 'Enter the account holder’s name';
-  if (!validRouting(v.routingNumber)) e.routingNumber = 'Not a valid ABA routing number';
-  if (!v.accountType) e.accountType = 'Choose checking or savings';
-  const a = digitsOf(v.accountNumber);
-  if (a.length < 4 || a.length > 17) e.accountNumber = '4 to 17 digits';
-  if (digitsOf(v.accountNumberConfirmation) !== a || !a) e.accountNumberConfirmation = 'Account numbers don’t match';
-  return e;
-}
-
-export function toPayoutsInput(v: PayoutValues): OnboardingPayoutsInput {
-  return {
-    accountHolderName: v.accountHolderName.trim(),
-    accountType: v.accountType || 'checking',
-    routingNumber: digitsOf(v.routingNumber),
-    accountNumber: digitsOf(v.accountNumber),
-    accountNumberConfirmation: digitsOf(v.accountNumberConfirmation)
-  };
+/** The payout account as one line: "Chase ••6789". */
+export function payoutAccountLabel(p: OnboardingForm['payouts']): string {
+  return p.accountLast4 ? `${p.bankName ?? 'Bank account'} ••${p.accountLast4}` : 'Not added yet';
 }
 
 /* ── Step 7: Catalog, permits & licences / Services & licences ── */

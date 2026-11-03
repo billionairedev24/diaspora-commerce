@@ -38,12 +38,29 @@ import java.util.stream.Collectors;
  * @param doorFeeOverride   door fee for this window (null = platform setting)
  * @param pickupFeeOverride pickup fee for this window (null = platform setting)
  * @param locationId        delivery-runs location the closing run is planned for (null = matched by city)
+ * @param minOrders         fewest orders the window needs (staff-set, 0 = no minimum); below it at the close date
+ *                          the window waits for a staff decision (ADR 0005 §4)
  */
 public record WindowDetails(String name, List<AreaKey> targets, Instant opensAt, Instant closesAt,
                             LocalDate deliversOn, ZoneId timeZone, String ribbon, String headline, String smsCopy,
                             Set<String> categories, boolean door, boolean pickup, String pickupPointId,
                             String pickupAddress, boolean showCount, Money socialBudget, Set<CommKind> comms,
-                            Money doorFeeOverride, Money pickupFeeOverride, UUID locationId) {
+                            Money doorFeeOverride, Money pickupFeeOverride, UUID locationId,
+                            int minOrders) {
+
+    /** Most orders a minimum can ask for. */
+    public static final int MAX_MIN_ORDERS = 100_000;
+
+    /** Details without a minimum (0). */
+    public WindowDetails(String name, List<AreaKey> targets, Instant opensAt, Instant closesAt,
+                         LocalDate deliversOn, ZoneId timeZone, String ribbon, String headline, String smsCopy,
+                         Set<String> categories, boolean door, boolean pickup, String pickupPointId,
+                         String pickupAddress, boolean showCount, Money socialBudget, Set<CommKind> comms,
+                         Money doorFeeOverride, Money pickupFeeOverride, UUID locationId) {
+        this(name, targets, opensAt, closesAt, deliversOn, timeZone, ribbon, headline, smsCopy, categories, door,
+                pickup, pickupPointId, pickupAddress, showCount, socialBudget, comms, doorFeeOverride,
+                pickupFeeOverride, locationId, 0);
+    }
 
     /** Delivery-day reference time: dates without a time are read as local noon (the design's {@code T()}). */
     public static final LocalTime DELIVERY_REFERENCE = LocalTime.NOON;
@@ -96,6 +113,10 @@ public record WindowDetails(String name, List<AreaKey> targets, Instant opensAt,
         comms = comms == null || comms.isEmpty() ? Set.of() : Set.copyOf(EnumSet.copyOf(comms));
         String currency = Markets.currencyOf(targets.isEmpty() ? null : targets.get(0).country());
         socialBudget = socialBudget == null ? Money.zero(currency) : socialBudget;
+        if (minOrders < 0 || minOrders > MAX_MIN_ORDERS) {
+            throw new RuleViolation("delivery-runs.invalid-minimum",
+                    "The minimum order count is between 0 and " + MAX_MIN_ORDERS);
+        }
         PaymentSettings.requireFee(doorFeeOverride);
         PaymentSettings.requireFee(pickupFeeOverride);
         if (!targets.isEmpty() && ((doorFeeOverride != null && !doorFeeOverride.currency().equals(currency))
@@ -107,6 +128,13 @@ public record WindowDetails(String name, List<AreaKey> targets, Instant opensAt,
     /** Currency of the window (its first target's country; USD without targets). */
     public String currency() {
         return Markets.currencyOf(targets.isEmpty() ? null : targets.get(0).country());
+    }
+
+    /** The same details closing at {@code closes} (closing early). */
+    public WindowDetails withClosesAt(Instant closes) {
+        return new WindowDetails(name, targets, opensAt, closes, deliversOn, timeZone, ribbon, headline, smsCopy,
+                categories, door, pickup, pickupPointId, pickupAddress, showCount, socialBudget, comms,
+                doorFeeOverride, pickupFeeOverride, locationId, minOrders);
     }
 
     /** The delivery day at local noon. */

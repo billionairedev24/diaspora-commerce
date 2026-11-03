@@ -1,6 +1,6 @@
 'use client';
 
-import { BellSimple, IdentificationCard, ShieldCheck, SlidersHorizontal } from '@phosphor-icons/react';
+import { BellSimpleIcon, IdentificationCardIcon, ShieldCheckIcon, SlidersHorizontalIcon } from '@phosphor-icons/react';
 import { type ReactNode } from 'react';
 
 import { useAccountEnv } from './context';
@@ -31,10 +31,10 @@ export function AccountShell({ active, children }: { active: AccountSection; chi
   const t = useAccountT();
   const { Link } = useAccountEnv();
   const items: Array<{ key: AccountSection; label: string; icon: ReactNode }> = [
-    { key: 'profile', label: t('nav.profile'), icon: <IdentificationCard aria-hidden /> },
-    { key: 'security', label: t('nav.security'), icon: <ShieldCheck aria-hidden /> },
-    { key: 'notifications', label: t('nav.notifications'), icon: <BellSimple aria-hidden /> },
-    { key: 'preferences', label: t('nav.preferences'), icon: <SlidersHorizontal aria-hidden /> }
+    { key: 'profile', label: t('nav.profile'), icon: <IdentificationCardIcon aria-hidden /> },
+    { key: 'security', label: t('nav.security'), icon: <ShieldCheckIcon aria-hidden /> },
+    { key: 'notifications', label: t('nav.notifications'), icon: <BellSimpleIcon aria-hidden /> },
+    { key: 'preferences', label: t('nav.preferences'), icon: <SlidersHorizontalIcon aria-hidden /> }
   ];
   return (
     <div className={styles.shell}>

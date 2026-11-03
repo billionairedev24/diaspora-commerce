@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
@@ -17,9 +19,12 @@ type SellerOrdersService interface {
 	// List is the shipment queue: one search over every column, any sort, status (links), cursor and size (limit).
 	List(ctx context.Context, c *domain.Caller, q SellerTableQuery) (domain.SellerOrderPage, error)
 	Get(ctx context.Context, c *domain.Caller, orderNumber string) (domain.SellerOrderDetail, error)
-	UpdateStatus(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, status string) (domain.SellerOrderDetail, error)
-	Rates(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress) (domain.RateQuotes, error)
+	// UpdateStatus moves a seller's shipment one step; handoverCode is the buyer's 4-digit code for handing a pickup order over.
+	UpdateStatus(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, status, handoverCode string) (domain.SellerOrderDetail, error)
+	Rates(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress, carrier string) (domain.RateQuotes, error)
 	BuyLabel(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, carrier, service string, parcel domain.Parcel, from domain.SellerAddress) (domain.LabelPurchase, error)
+	// Label downloads the shipping label bought for the shipment.
+	Label(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string) (domain.FileDownload, error)
 }
 
 type sellerOrdersImpl struct {
@@ -59,6 +64,7 @@ func shipmentOf(s port.OrderShipmentView) domain.SellerShipment {
 		Fulfilment: ff, Perishable: s.Perishable, Lines: []domain.SellerShipmentLine{}, ItemsMinor: s.ItemsMinor,
 		ShippingMinor: s.ShippingMinor, TotalMinor: s.TotalMinor, Carrier: strPtr(s.Carrier), TrackingNumber: strPtr(s.TrackingNumber),
 		NextActions: domain.SellerNextActions(s.NextActions), CanBuyLabel: domain.CanBuyLabel(ff, s.DeliveryMethod, status, s.TrackingNumber),
+		HasLabel: ff == domain.ShipsFromSeller && s.TrackingNumber != "" && s.Carrier != "" && !strings.EqualFold(s.DeliveryMethod, "PICKUP"),
 		Timeline: []domain.TimelineEntry{}}
 	if ff == domain.FulfilledByAfroTransact {
 		out.NextActions = []string{} // AfroTransact owns every step of FBA and 1P shipments; sellers pack AfroTransact Delivery ones
@@ -75,9 +81,12 @@ func shipmentOf(s port.OrderShipmentView) domain.SellerShipment {
 		out.Lines = append(out.Lines, domain.SellerShipmentLine{Title: l.Title, Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor,
 			ItemsMinor: l.ItemsMinor, VariantATIN: l.VariantATIN, ImageURL: strPtr(l.ImageURL)})
 	}
+	entries := make([]proofEntry, 0, len(s.Timeline))
 	for _, t := range s.Timeline {
 		out.Timeline = append(out.Timeline, domain.TimelineEntry{Status: strings.ToUpper(t.To), At: t.At, Actor: strings.ToLower(t.ActorType)})
+		entries = append(entries, proofEntry{to: t.To, at: t.At.UTC().Format(time.RFC3339), proof: t.Proof})
 	}
+	out.Proof = deliveredProof(entries)
 	return out
 }
 
@@ -207,8 +216,67 @@ func (s *sellerOrdersImpl) Get(ctx context.Context, c *domain.Caller, orderNumbe
 		return domain.SellerOrderDetail{}, mapErr("orders", err)
 	}
 	out := orderOf(o)
+	s.withProofLinks(ctx, &out)
 	out.Earnings = s.earnings(ctx, c, sc.org.ID, out)
+	s.suggestParcels(ctx, c, &out)
 	return out, nil
+}
+
+// suggestParcels fills the package of every shipment that still needs a label from what the products were listed
+// with: the weight of every unit, the footprint of the largest item and the heights stacked. Best effort: products
+// without a listed package leave the form empty.
+func (s *sellerOrdersImpl) suggestParcels(ctx context.Context, c *domain.Caller, o *domain.SellerOrderDetail) {
+	if s.r.d.Listing == nil {
+		return
+	}
+	for i := range o.Shipments {
+		sh := &o.Shipments[i]
+		if !sh.CanBuyLabel {
+			continue
+		}
+		var p domain.SuggestedParcel
+		known := true
+		for _, l := range sh.Lines {
+			prod, err := s.r.d.Listing.ProductByATIN(ctx, c.BearerToken, l.VariantATIN)
+			if err != nil || prod.Listing == nil || prod.Listing.Packaging == nil || prod.Listing.Packaging.WeightLb <= 0 {
+				known = false
+				break
+			}
+			pk := prod.Listing.Packaging
+			q := float64(max(1, l.Quantity))
+			p.WeightLb += pk.WeightLb * q
+			p.LengthIn = max(p.LengthIn, pk.LengthIn)
+			p.WidthIn = max(p.WidthIn, pk.WidthIn)
+			p.HeightIn += pk.HeightIn * q
+		}
+		if known && p.WeightLb > 0 {
+			p.WeightLb = math.Round(p.WeightLb*100) / 100
+			p.HeightIn = math.Min(108, math.Round(p.HeightIn*10)/10)
+			sh.SuggestedParcel = &p
+		}
+	}
+}
+
+func (s *sellerOrdersImpl) Label(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string) (domain.FileDownload, error) {
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelView); err != nil {
+		return domain.FileDownload{}, err
+	}
+	o, err := s.r.d.Orders.Order(ctx, c.BearerToken, orderNumber)
+	if err != nil {
+		return domain.FileDownload{}, mapErr("orders", err)
+	}
+	sh, ok := orderOf(o).Shipment(shipmentID)
+	if !ok {
+		return domain.FileDownload{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "That shipment isn't part of this order.")
+	}
+	if !sh.HasLabel || sh.Carrier == nil || sh.TrackingNumber == nil {
+		return domain.FileDownload{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "No label", "No shipping label was bought for this shipment.")
+	}
+	f, err := s.r.d.Carrier.LabelDocument(ctx, c.BearerToken, strings.ToLower(*sh.Carrier), *sh.TrackingNumber)
+	if err != nil {
+		return domain.FileDownload{}, mapErr("carrier-gateway", err)
+	}
+	return f, nil
 }
 
 // earnings is the organisation's row of the order's payment split (best effort: nil before the payment is split or
@@ -240,14 +308,25 @@ func (s *sellerOrdersImpl) earnings(ctx context.Context, c *domain.Caller, orgID
 	return nil
 }
 
-func (s *sellerOrdersImpl) UpdateStatus(ctx context.Context, c *domain.Caller, key, orderNumber, shipmentID, status string) (domain.SellerOrderDetail, error) {
+func (s *sellerOrdersImpl) UpdateStatus(ctx context.Context, c *domain.Caller, key, orderNumber, shipmentID, status, handoverCode string) (domain.SellerOrderDetail, error) {
 	if !domain.IsSellerStatus(status) {
-		return domain.SellerOrderDetail{}, domain.ValidationProblem(map[string]string{"status": "Sellers can confirm, pack and mark ready only"})
+		return domain.SellerOrderDetail{}, domain.ValidationProblem(map[string]string{"status": "Sellers can confirm, pack, mark ready, mark shipped and hand a pickup order over"})
+	}
+	handoverCode = strings.TrimSpace(handoverCode)
+	if status != "DELIVERED" {
+		handoverCode = ""
 	}
 	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelEdit); err != nil {
 		return domain.SellerOrderDetail{}, err
 	}
-	o, err := s.r.d.Orders.Transition(ctx, c.BearerToken, key, shipmentID, strings.ToLower(status))
+	if status == "DELIVERED" && !domain.IsHandoverCode(handoverCode) {
+		// A pickup order is handed over against the buyer's code; a parcel the seller shipped is confirmed delivered
+		// without one (orders refuses any other case).
+		if handoverCode != "" || s.waitingForHandover(ctx, c, orderNumber, shipmentID) {
+			return domain.SellerOrderDetail{}, domain.ValidationProblem(map[string]string{"handoverCode": "Ask the buyer for their 4-digit code"})
+		}
+	}
+	o, err := s.r.d.Orders.Transition(ctx, c.BearerToken, key, shipmentID, strings.ToLower(status), handoverCode)
 	if err != nil {
 		return domain.SellerOrderDetail{}, mapErr("orders", err)
 	}
@@ -256,7 +335,29 @@ func (s *sellerOrdersImpl) UpdateStatus(ctx context.Context, c *domain.Caller, k
 			return domain.SellerOrderDetail{}, mapErr("orders", err)
 		}
 	}
-	return orderOf(o), nil
+	out := orderOf(o)
+	s.withProofLinks(ctx, &out)
+	return out, nil
+}
+
+// waitingForHandover: the shipment is ready at the seller's shop (a pickup order), which only the buyer's code releases.
+// When it cannot be read, the code is asked for, the safe side.
+func (s *sellerOrdersImpl) waitingForHandover(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string) bool {
+	o, err := s.r.d.Orders.Order(ctx, c.BearerToken, orderNumber)
+	if err != nil {
+		return true
+	}
+	sh, ok := orderOf(o).Shipment(shipmentID)
+	return !ok || sh.Status == "READY"
+}
+
+// withProofLinks gives the shipments' delivery proofs their short-lived photo and signature links.
+func (s *sellerOrdersImpl) withProofLinks(ctx context.Context, o *domain.SellerOrderDetail) {
+	proofs := make([]*domain.DeliveryProof, 0, len(o.Shipments))
+	for _, sh := range o.Shipments {
+		proofs = append(proofs, sh.Proof)
+	}
+	attachProofLinks(ctx, s.r.d.ProofLinks, proofs)
 }
 
 func validateParcel(p domain.Parcel, from domain.SellerAddress) map[string]string {
@@ -310,7 +411,7 @@ func (s *sellerOrdersImpl) labelShipment(ctx context.Context, c *domain.Caller, 
 		Parcels: []domain.Parcel{parcel}}, nil
 }
 
-func (s *sellerOrdersImpl) Rates(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress) (domain.RateQuotes, error) {
+func (s *sellerOrdersImpl) Rates(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress, carrier string) (domain.RateQuotes, error) {
 	if errs := validateParcel(parcel, from); len(errs) > 0 {
 		return domain.RateQuotes{}, domain.ValidationProblem(errs)
 	}
@@ -322,7 +423,7 @@ func (s *sellerOrdersImpl) Rates(ctx context.Context, c *domain.Caller, orderNum
 	if err != nil {
 		return domain.RateQuotes{}, err
 	}
-	res, err := s.r.d.Carrier.Rates(ctx, c.BearerToken, shipment)
+	res, err := s.r.d.Carrier.Rates(ctx, c.BearerToken, shipment, carrier)
 	if err != nil {
 		return domain.RateQuotes{}, mapErr("carrier-gateway", err)
 	}

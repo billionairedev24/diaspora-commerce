@@ -3,6 +3,10 @@
 port: 8201
 docsEnabled: true
 markets: [us]
+# Meilisearch is the default engine (tools/dev/local.sh starts it; the key is the local compose default). SEARCH_PROVIDER=elasticsearch switches.
+meilisearch:
+  url: http://localhost:7700
+  apiKey: local-meili-master-key
 elasticsearch:
   urls: [http://localhost:9200]
 auth:

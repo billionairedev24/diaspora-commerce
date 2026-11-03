@@ -26,6 +26,19 @@ type StaffFeesService interface {
 	Cancel(ctx context.Context, c *domain.Caller, id, reason string) (domain.FeeScheduleView, error)
 	// Quote prices one AfroTransact Delivery trip under the live schedule (payments POST /v1/delivery-pricing/quote).
 	Quote(ctx context.Context, c *domain.Caller, q domain.DeliveryQuoteRequest) (domain.DeliveryQuote, error)
+	// NegotiatedRates lists negotiated commission / connection-fee rates (server-driven table; orgId for one seller).
+	NegotiatedRates(ctx context.Context, c *domain.Caller, q NegotiatedRateQuery) (domain.NegotiatedRatePage, error)
+	// CreateNegotiatedRate negotiates a rate with an organisation (payments:configure, a reason is required; audited).
+	CreateNegotiatedRate(ctx context.Context, c *domain.Caller, d domain.NegotiatedRateDraft) (domain.NegotiatedRateView, error)
+	// EndNegotiatedRate ends a scheduled or active rate now, with a reason (audited).
+	EndNegotiatedRate(ctx context.Context, c *domain.Caller, id, reason string) (domain.NegotiatedRateView, error)
+	// Calculate is the rate calculator: what one organisation pays on one kind and category now, and why.
+	Calculate(ctx context.Context, c *domain.Caller, orgID, category, kind string) (domain.FeeRateQuote, error)
+	// NegotiatePlan creates a private (invite-only) version of a catalogue plan at a negotiated price for one
+	// organisation and invites it (seller service's plan catalogue; plans:manage).
+	NegotiatePlan(ctx context.Context, c *domain.Caller, orgID string, d domain.NegotiatedPlanDraft) (domain.NegotiatedPlan, error)
+	// ImportTaxRates upserts state and local rows from CSV (tax-returns POST /v1/tax/rates/import; tax:configure).
+	ImportTaxRates(ctx context.Context, c *domain.Caller, csv string) (domain.TaxRatesImportResult, error)
 }
 
 type staffFeesImpl struct {
@@ -43,6 +56,7 @@ func NewStaffFeesService(d StaffDeps) StaffFeesService {
 const (
 	feesModule          = "fees"
 	paymentsConfigure   = "payments:configure"
+	taxConfigure        = "tax:configure"
 	feeExampleSaleMinor = 10_000
 	// orgDirectoryPages caps how much of seller's organisation directory one search or name lookup reads (200 per page).
 	orgDirectoryPages = 5
@@ -61,17 +75,24 @@ type paymentsSchedule struct {
 		Category      string `json:"category"`
 		CommissionBps int    `json:"commissionBps"`
 	} `json:"overrides"`
-	CardPctBps                int                     `json:"cardPctBps"`
-	CardFixedMinor            int64                   `json:"cardFixedMinor"`
-	FbaPerUnitMinor           int64                   `json:"fbaPerUnitMinor"`
-	ReverseCommissionOnRefund bool                    `json:"reverseCommissionOnRefund"`
-	DeliveryPricing           *domain.DeliveryPricing `json:"deliveryPricing"`
-	Note                      string                  `json:"note"`
-	CreatedBy                 string                  `json:"createdBy"`
-	CreatedAt                 *time.Time              `json:"createdAt"`
-	CancelledAt               *time.Time              `json:"cancelledAt"`
-	CancelledBy               string                  `json:"cancelledBy"`
-	CancelReason              string                  `json:"cancelReason"`
+	CardPctBps                int                       `json:"cardPctBps"`
+	CardFixedMinor            int64                     `json:"cardFixedMinor"`
+	FbaPerUnitMinor           int64                     `json:"fbaPerUnitMinor"`
+	ReverseCommissionOnRefund bool                      `json:"reverseCommissionOnRefund"`
+	DeliveryPricing           *domain.DeliveryPricing   `json:"deliveryPricing"`
+	PlanBps                   map[string]map[string]int `json:"planBps"`
+	PlanFbaMinor              map[string]int64          `json:"planFbaMinor"`
+	ConnectionFee             *struct {
+		DefaultBps  int                       `json:"defaultBps"`
+		CategoryBps map[string]int            `json:"categoryBps"`
+		PlanBps     map[string]map[string]int `json:"planBps"`
+	} `json:"connectionFee"`
+	Note         string     `json:"note"`
+	CreatedBy    string     `json:"createdBy"`
+	CreatedAt    *time.Time `json:"createdAt"`
+	CancelledAt  *time.Time `json:"cancelledAt"`
+	CancelledBy  string     `json:"cancelledBy"`
+	CancelReason string     `json:"cancelReason"`
 }
 
 func (p paymentsSchedule) cancelled() bool { return p.CancelledAt != nil }
@@ -125,6 +146,17 @@ func (s *staffFeesImpl) requireConfigure(ctx context.Context, c *domain.Caller) 
 	return sc, nil
 }
 
+func (s *staffFeesImpl) requireTaxConfigure(ctx context.Context, c *domain.Caller) (staffCtx, error) {
+	sc, err := s.r.require(ctx, c, feesModule, domain.LevelEdit)
+	if err != nil {
+		return sc, err
+	}
+	if !sc.access.Can(taxConfigure) {
+		return sc, needsPermission(taxConfigure)
+	}
+	return sc, nil
+}
+
 // ---------------------------------------------------------------- overview
 
 func (s *staffFeesImpl) Overview(ctx context.Context, c *domain.Caller) (domain.FeesOverview, error) {
@@ -153,6 +185,7 @@ func (s *staffFeesImpl) Overview(ctx context.Context, c *domain.Caller) (domain.
 		labels[c.Key] = c.Label
 	}
 	canConfigure := canConfigureFees(sc.access)
+	plans, plansErr := s.catalogue(ctx, sc)
 	out := domain.FeesOverview{GeneratedAt: sc.now, Currency: domain.Currency, CanConfigure: canConfigure, Schedules: []domain.FeeScheduleView{},
 		Categories: cats, TaxonomyAvailable: taxErr == nil, OrgNamesAvailable: namesOK, Limits: domain.DefaultFeeLimits, ExampleSaleMinor: feeExampleSaleMinor,
 		Retail:              domain.FeeRetail{OrgID: s.retail, Name: PlatformSellerName, Note: domain.RetailFeesNote},
@@ -165,6 +198,9 @@ func (s *staffFeesImpl) Overview(ctx context.Context, c *domain.Caller) (domain.
 			out.Current = &cur
 		}
 	}
+	out.Plans, out.PlanWarnings = planChecks(plans, out.Current)
+	out.PlansAvailable = plansErr == nil
+	out.ServiceCategories = serviceCategories(t.all)
 	out.MinEffectiveFrom, out.ImmediateAllowed = sc.now, true
 	if t.latest != nil {
 		base := s.view(*t.latest, t, sc.now, labels, names, canConfigure)
@@ -188,8 +224,20 @@ func (s *staffFeesImpl) view(p paymentsSchedule, t feeTimeline, now time.Time, l
 	v := domain.FeeScheduleView{ID: p.ID, Version: p.Version, Status: status, EffectiveFrom: p.EffectiveFrom, Currency: firstNonEmpty(p.Currency, domain.Currency),
 		DefaultCommissionBps: p.DefaultCommissionBps, CategoryRates: []domain.FeeCategoryRate{}, Overrides: []domain.FeeOverride{}, CardPctBps: p.CardPctBps,
 		CardFixedMinor: p.CardFixedMinor, FbaPerUnitMinor: p.FbaPerUnitMinor, ReverseCommissionOnRefund: p.ReverseCommissionOnRefund, Note: strPtr(p.Note),
-		CreatedBy: p.CreatedBy, CreatedAt: p.CreatedAt, CancelledAt: p.CancelledAt, CancelledBy: strPtr(p.CancelledBy), CancelReason: strPtr(p.CancelReason),
-		Cancellable: canConfigure && status == domain.FeeStatusScheduled}
+		CreatedBy: firstNonEmpty(person(names, p.CreatedBy), p.CreatedBy), CreatedAt: p.CreatedAt, CancelledAt: p.CancelledAt, CancelledBy: strPtr(person(names, p.CancelledBy)), CancelReason: strPtr(p.CancelReason),
+		Cancellable: canConfigure && status == domain.FeeStatusScheduled, PlanRates: domain.PlanRatesOf(p.PlanBps, label), PlanFba: domain.PlanFbaOf(p.PlanFbaMinor)}
+	if cf := p.ConnectionFee; cf != nil {
+		section := &domain.FeeConnectionFee{DefaultBps: cf.DefaultBps, CategoryRates: []domain.FeeRate{}, PlanRates: domain.PlanRatesOf(cf.PlanBps, label)}
+		keys := make([]string, 0, len(cf.CategoryBps))
+		for k := range cf.CategoryBps {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			section.CategoryRates = append(section.CategoryRates, domain.FeeRate{Category: k, Label: label(k), Bps: cf.CategoryBps[k]})
+		}
+		v.ConnectionFee = section
+	}
 	keys := make([]string, 0, len(p.CategoryBps))
 	for k := range p.CategoryBps {
 		keys = append(keys, k)
@@ -316,39 +364,43 @@ func (s *staffFeesImpl) directory(ctx context.Context, sc staffCtx, stop func([]
 	return out, nil
 }
 
-// orgNames names the organisations that have overrides (best effort: ids stay visible when seller is unavailable).
+// orgNames names the organisations that have overrides, and (under "user:<id>") the people who created or cancelled
+// the versions. An organisation nobody can name reads "Unknown seller", never its id; the bool says every one was named.
 func (s *staffFeesImpl) orgNames(ctx context.Context, sc staffCtx, all []paymentsSchedule) (map[string]string, bool) {
-	want := map[string]bool{}
+	var orgs, people []string
 	for _, p := range all {
 		for _, o := range p.Overrides {
-			want[o.OrgID] = true
+			orgs = append(orgs, o.OrgID)
 		}
 		if p.DeliveryPricing != nil {
 			for _, o := range p.DeliveryPricing.SellerOverrides {
-				want[o.OrgID] = true
+				orgs = append(orgs, o.OrgID)
 			}
 		}
+		people = append(people, p.CreatedBy, p.CancelledBy)
 	}
-	names := map[string]string{}
-	if len(want) == 0 {
-		return names, true
-	}
-	found := func(items []jobj) bool {
-		n := 0
-		for _, it := range items {
-			if want[jstr(it, "id")] {
-				n++
-			}
-		}
-		return n >= len(want)
-	}
-	items, err := s.directory(ctx, sc, found)
-	for _, it := range items {
-		if id := jstr(it, "id"); want[id] {
-			names[id] = firstNonEmpty(jstr(it, "displayName"), id)
+	names := sc.names.labels(ctx, sc, sellerRef("orgId"), orgs...)
+	ok := true
+	for _, n := range names {
+		if n == sellerRef("orgId").unknown {
+			ok = false
 		}
 	}
-	return names, err == nil
+	for id, n := range sc.names.labels(ctx, sc, personRef("createdBy", "Created by"), people...) {
+		names["user:"+id] = n
+	}
+	return names, ok
+}
+
+// person is the display name of a user id the names map holds ("" for none).
+func person(names map[string]string, id string) string { return names["user:"+id] }
+
+// personPtr is person for an optional id.
+func personPtr(names map[string]string, id *string) *string {
+	if id == nil {
+		return nil
+	}
+	return strPtr(firstNonEmpty(person(names, *id), *id))
 }
 
 func (s *staffFeesImpl) SearchOrgs(ctx context.Context, c *domain.Caller, q string) (domain.FeeOrgSearch, error) {
@@ -423,6 +475,19 @@ func (s *staffFeesImpl) Create(ctx context.Context, c *domain.Caller, d domain.F
 		"reverseCommissionOnRefund": d.ReverseCommissionOnRefund, "note": strings.TrimSpace(d.Note)}
 	if !d.Immediate {
 		body["effectiveFrom"] = d.EffectiveFrom.UTC().Format(time.RFC3339)
+	}
+	if d.PlanRates != nil { // omitted = payments carries the latest live version's plan rates over
+		body["planBps"] = domain.PlanBpsBody(d.PlanRates)
+	}
+	if d.PlanFba != nil { // omitted = payments carries the latest live version's plan FBA fees over
+		body["planFbaMinor"] = domain.PlanFbaBody(d.PlanFba)
+	}
+	if cf := d.ConnectionFee; cf != nil {
+		cats := map[string]int{}
+		for _, r := range cf.CategoryRates {
+			cats[domain.NormalizeFeeCategory(r.Category)] = *r.Bps
+		}
+		body["connectionFee"] = jobj{"defaultBps": *cf.DefaultBps, "categoryBps": cats, "planBps": domain.PlanBpsBody(cf.PlanRates)}
 	}
 	if dp := d.DeliveryPricing; dp != nil { // omitted = payments carries the latest live version's section over
 		section := jobj{"enabled": dp.Enabled, "maxRadiusMiles": *dp.MaxRadiusMiles, "sellerOverrides": []jobj{}}
@@ -574,4 +639,20 @@ func (s *staffFeesImpl) Quote(ctx context.Context, c *domain.Caller, q domain.De
 	return domain.DeliveryQuote{Available: up.Available, UnavailableReason: strPtr(strings.ToUpper(up.UnavailableReason)),
 		CustomerChargeMinor: up.CustomerChargeMinor, SellerFeeMinor: up.SellerFeeMinor, SellerFeeSource: strPtr(strings.ToUpper(up.SellerFeeSource)),
 		ScheduleVersion: up.ScheduleVersion, MaxRadiusMiles: up.MaxRadiusMiles, Currency: firstNonEmpty(up.Currency, domain.Currency)}, nil
+}
+
+func (s *staffFeesImpl) ImportTaxRates(ctx context.Context, c *domain.Caller, csv string) (domain.TaxRatesImportResult, error) {
+	sc, err := s.requireTaxConfigure(ctx, c)
+	if err != nil {
+		return domain.TaxRatesImportResult{}, err
+	}
+	csv = strings.TrimSpace(csv)
+	if csv == "" {
+		return domain.TaxRatesImportResult{}, domain.ValidationProblem(map[string]string{"csv": "Paste or upload a CSV file"})
+	}
+	var out domain.TaxRatesImportResult
+	if err := sc.post(ctx, sc.up.TaxReturns, "/v1/tax/rates/import", jobj{"csv": csv}, &out); err != nil {
+		return domain.TaxRatesImportResult{}, err
+	}
+	return out, nil
 }

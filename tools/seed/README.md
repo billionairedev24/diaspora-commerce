@@ -14,10 +14,31 @@ python3 tools/seed/seed.py --skip products      # everything else
 make seed-test                                  # the seeder's unit tests
 ```
 
-Steps: `sellers`, `products`, `content`, `ads`, `preorders`, `pickups` (AfroTransact's customer pickup points in
+Steps: `sellers`, `size-charts`, `products`, `content`, `ads`, `preorders`, `pickups` (AfroTransact's customer pickup points in
 carrier-gateway, CARRIER_GATEWAY_URL), `bookings`, `ops`, `users`. The datasets are
 `seedlib/dataset.py` and `seedlib/ops_dataset.py`; photo sources, attribution and service URLs are described in
 `seed.py` and the guide.
+
+### Size charts and sizes of their own
+
+The `size-charts` step writes the demo size charts (`SIZE_CHARTS` in `seedlib/dataset.py`: women's dresses, women's tops,
+men's shirts and kaftans, kids' party dresses) through catalog's `POST /v1/size-charts`, as the seeder's own organisation
+(the same one that owns the demo products). It finds a chart by name first, so re-running writes nothing, and the
+`products` step does the same when it runs alone. Fashion products name their chart (`chart=`, and optionally their own
+`fit=`); the listing is created with `listing.sizeChartId` and `fitNote`. Two products show sizes and colours the category
+does not list (`adire-shift-dress`: "UK 12", "Free size", "Indigo adire"; `sequin-gele`: "Champagne", "Teal & gold"), which
+needs the sizing configuration of the catalog (see *Sized product types* below). A product that already exists keeps
+its content, but a re-run links its chart and fit note through catalog's edit (the report line "product size charts"
+shows `linked` or `existing`); if catalog refuses the edit (for example a size the chart has no row for) it is reported
+as a problem and the run goes on. `tests/test_dataset.py` checks
+the charts against catalog's rules and that every size a product sells has a row in its chart.
+
+## The category tree is not seeded here
+
+The department > category > product type tree and each product type's details are the catalog service's initial
+data (`V2__seed_taxonomy.sql`, generated once by `catalog_taxonomy.py`). They are managed by staff in the console
+(Catalog > Categories) from then on, so this seeder only reads the tree to place its demo products and never edits it.
+See [docs/engineering/taxonomy.md](../../docs/engineering/taxonomy.md).
 
 ## Operations data (`ops`)
 
@@ -78,3 +99,11 @@ code: it is a text message, which identity delivers to Mailpit locally (http://l
 `[SMS to +1713555…] AfroTransact code …`). The list lives in `seedlib/dataset.py` (`TEST_USERS`); `make seed-test`
 checks it names the same accounts as identity, `tools/dev/local.sh` and the guide. None of this exists on uat or prod:
 identity refuses to start there if it is configured.
+
+## Sized product types
+
+`python3 tools/seed/catalog_taxonomy.py --sizing` prints the SQL that marks the fashion product types as sized (the
+`sizing` trait with suggested measurements) and lets sellers write their own Size and Color values
+(`allowCustomValues`). It is the source of the taxonomy part of catalog migration `V15__size_charts.sql`; the data lives
+in `CUSTOM_DIMENSIONS` and `SIZING` in `catalog_taxonomy.py`. The default output (the V2 seed) is unchanged. See
+`docs/engineering/size-charts.md`.

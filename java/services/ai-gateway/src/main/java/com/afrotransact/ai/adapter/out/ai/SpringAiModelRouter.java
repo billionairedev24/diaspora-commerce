@@ -2,8 +2,10 @@ package com.afrotransact.ai.adapter.out.ai;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
@@ -52,21 +54,42 @@ class SpringAiModelRouter implements ModelRouter {
     private final AiMetrics metrics;
     private final int embeddingDimensions;
     private final Sleeper sleeper;
+    /** OpenRouter request-body extension: {@code {"provider": {...}}}, empty when no preference is set. */
+    private final Map<String, Object> extraBody;
 
     @Autowired
     SpringAiModelRouter(ChatModel chatModel, EmbeddingModel embeddingModel, ModelRoutingPolicy routing,
                         AiMetrics metrics, AiSettings settings) {
-        this(chatModel, embeddingModel, routing, metrics, settings.embeddingDimensions(), Sleeper.threadSleep());
+        this(chatModel, embeddingModel, routing, metrics, settings.embeddingDimensions(), settings.denyDataCollection(),
+                settings.zeroDataRetention(), Sleeper.threadSleep());
     }
 
     SpringAiModelRouter(ChatModel chatModel, EmbeddingModel embeddingModel, ModelRoutingPolicy routing,
-                        AiMetrics metrics, int embeddingDimensions, Sleeper sleeper) {
+                        AiMetrics metrics, int embeddingDimensions, boolean denyDataCollection,
+                        boolean zeroDataRetention, Sleeper sleeper) {
         this.chatModel = chatModel;
         this.embeddingModel = embeddingModel;
         this.routing = routing;
         this.metrics = metrics;
         this.embeddingDimensions = embeddingDimensions;
         this.sleeper = sleeper;
+        this.extraBody = providerPreferences(denyDataCollection, zeroDataRetention);
+    }
+
+    /**
+     * OpenRouter provider routing preferences: {@code provider.data_collection = "deny"} limits routing to providers
+     * that do not store or train on prompts, {@code provider.zdr = true} to zero-data-retention endpoints. Nothing is
+     * sent when neither is wanted (OpenRouter's defaults apply).
+     */
+    static Map<String, Object> providerPreferences(boolean denyDataCollection, boolean zeroDataRetention) {
+        Map<String, Object> provider = new LinkedHashMap<>();
+        if (denyDataCollection) {
+            provider.put("data_collection", "deny");
+        }
+        if (zeroDataRetention) {
+            provider.put("zdr", Boolean.TRUE);
+        }
+        return provider.isEmpty() ? Map.of() : Map.of("provider", Map.copyOf(provider));
     }
 
     @Override
@@ -114,6 +137,9 @@ class SpringAiModelRouter implements ModelRouter {
             options.model(model);
             options.timeout(route.timeout());
             options.encodingFormat(OpenAiEmbeddingOptions.EncodingFormat.FLOAT);
+            if (!extraBody.isEmpty()) {
+                options.extraBody(extraBody);
+            }
             if (embeddingDimensions > 0) {
                 options.dimensions(embeddingDimensions);
             }
@@ -166,6 +192,10 @@ class SpringAiModelRouter implements ModelRouter {
                 }
             }
             failed.add(model);
+            if (kind == FailureKind.PRIVACY_POLICY) {
+                LOG.warn("Model {} for {} skipped: no provider endpoint satisfies the privacy preferences "
+                        + "(data_collection/zdr)", model, task);
+            }
             if (i + 1 < candidates.size()) {
                 LOG.warn("Model {} for {} failed ({}); falling back to {}", model, task, kind, candidates.get(i + 1));
                 metrics.fallback(task.name(), model, kind.name().toLowerCase(Locale.ROOT));
@@ -174,10 +204,13 @@ class SpringAiModelRouter implements ModelRouter {
         throw new ModelUnavailableException("No model could serve " + task + " (tried " + failed + ")", failed, last);
     }
 
-    private static OpenAiChatOptions options(String model, ModelRoute route, ModelRequest request) {
+    private OpenAiChatOptions options(String model, ModelRoute route, ModelRequest request) {
         OpenAiChatOptions.Builder b = OpenAiChatOptions.builder();
         b.model(model);
         b.timeout(route.timeout());
+        if (!extraBody.isEmpty()) {
+            b.extraBody(extraBody);
+        }
         if (request.maxTokens() != null) {
             b.maxTokens(request.maxTokens());
         }

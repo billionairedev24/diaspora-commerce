@@ -56,22 +56,118 @@ Spring Boot 4.1 · Java 25 · PostgreSQL · local port **8101**.
     owner organisation and variant ATIN in `unit_label` (V5), so units of different sellers never mix and platform
     stock without a GTIN is labelled at receiving.
 
+- **One-step product form (S307)**:
+  - *Product types* carry `traits` (food, perishable, regulated, preorder) and attribute metadata: kind
+    `TEXT|MULTILINE|ENUM|NUMBER`, `units` (e.g. shelf life in days or months; "12" is stored as "12 days"),
+    `section` `DETAILS|FOOD|REGULATED` and `help`. Seller Center builds its conditional sections from them.
+  - *Listings* carry `listing` details: description (≤ 5,000), condition, keywords (≤ 20), fulfilment
+    `SELLER|AFROTRANSACT` (AfroTransact needs package dimensions and weight), handling days (1–30) and ship-from.
+  - *Variants* carry a compare-at price (it must be above the price) and their own images.
+  - A product without variations is one variant with an empty theme.
+  - `PUT /v1/products/{id}` edits a listing:
+    - a rejected listing goes back to review (`catalog.product.resubmitted`, which trust-ops queues again);
+    - a live listing keeps its variants (set stock to 0 instead) and its category;
+    - changed price, condition, fulfilment or ship-from publishes `catalog.product.terms_changed`, so offers-service
+      revises the seller's offers.
+  - *Drafts* (`/v1/product-drafts`, table `product_draft`) store the form's input as JSON (≤ 256 KB). They are
+    versioned for autosave (409 on a stale version) and there is one per product for edits. Submitting with
+    `draftId` deletes the draft in the same transaction.
+- **Taxonomy administration (S325)** (`/v1/taxonomy/**`, guide: [docs/engineering/taxonomy.md](../../../docs/engineering/taxonomy.md)):
+  - Staff create, rename, move, reorder, retire and restore departments, categories and product types, and edit a
+    product type's schema (label, identifier rule, traits, attributes with kind, units, choices, section, required and
+    `applies`). `V11` adds `category.code|version|retired_*`, `product_type.version` and the append-only
+    `taxonomy_audit`; `V2` stays the initial data only.
+  - Every change needs a reason (3 to 1,000 characters), writes an audit row and publishes `catalog.taxonomy.changed`.
+    Nodes and schemas carry a `version`: edits send `If-Match` (412 `catalog.version-mismatch`, 428
+    `catalog.if-match-required`); a reorder sends the whole sibling list.
+  - Retire is soft and refused (409 `catalog.taxonomy-in-use`) while any non-rejected product is on the node or under
+    it. Retired nodes leave `/v1/categories` (the sellers' tree) and are refused for new products, but stay on existing
+    ones (`?includeRetired=true`). Names are unique among siblings, codes are unique, the tree has three levels.
+  - Attributes with `applies: false` are kept but dropped from the public schema, the validators and the upload
+    template. The sales-tax question (`tax_class`) cannot be reworded or removed here (tax-returns owns its choices).
+  - Approving a category request goes through the same service: it creates the category (under a department) and the
+    leaf with an existing or a new schema, in one transaction, and `approval-preview` returns the plan without writing.
+  - `TaxonomyAdminIT` (HTTP, PostgreSQL; `AT_IT_POSTGRES_URL` runs it without Docker) covers permissions, reasons, audit,
+    events, versions, retire with products, reorder, attribute rules and the request approval.
+- **Bulk upload (S308)** (`/v1/imports`; the design is in [ADR 0003](../../../docs/adr/0003-bulk-product-upload-in-catalog.md)):
+  - **Templates.** `GET /v1/imports/template?productType=|categoryId=&format=xlsx|csv` returns a generic or
+    per-product-type template, generated with Apache POI.
+    - The `Products` sheet's header row marks required columns with `*` and carries a note on each header.
+    - Columns:
+      - `Parent SKU`, `SKU`, `Category`, `Title` and `Brand`;
+      - `Description`, `Condition`, `Image URLs` and `Search keywords`;
+      - `Price (USD)`, `Compare-at price (USD)`, `Quantity`, the barcode (or `ISBN-13`) and `No barcode`;
+      - the type's `Variation` and one column per dimension;
+      - one column per attribute, plus a `… unit` column for numbers with units. The generic template has
+        `Options` and `Attributes` as `key: value; …` instead;
+      - `Fulfilment`, `Handling time (days)`, the package length, width, height and weight, and
+        `Pre-order eligible`.
+    - Dropdowns come from a hidden `Lists` sheet. Whole and decimal numbers are validated.
+    - The workbook also has an `Instructions` sheet and an `Example` sheet.
+    - The CSV version writes the instructions as `#` lines above the header.
+    - Headers are matched by label or key, so columns can be reordered.
+  - **Limits.** 10 MB, 5,000 rows, 200 columns, 5,000 characters per cell, 10 images and 200 variants per product.
+    The streaming reader enforces zip-bomb limits. `.xls` is refused.
+  - **Upload.** `POST /v1/imports` (multipart `file`, `mode=CREATE|UPDATE`, optional `productType`) validates
+    every row:
+    - required fields, enums, numbers and units, GTIN check digits;
+    - duplicate SKUs in the file and against the seller's listings (Create), unknown SKUs (Update);
+    - https image links and compare-at prices.
+
+    It answers with the counts. `GET /v1/imports/{id}/rows?status=&outcome=` returns the preview: cells and
+    per-column messages. `GET /v1/imports/{id}/report?format=` returns the uploaded columns plus `Row`,
+    `Row status`, `Result` and `Errors`, with formula-like cells prefixed `'`.
+  - **Import.** `POST /v1/imports/{id}/start {validOnly}` returns 409 `catalog.import-has-errors` unless
+    `validOnly` is set. It runs the background job:
+    - one product group per step, images copied through media (`POST /v1/assets/import` with the
+      `catalog-service` client token), each product in a savepoint;
+    - idempotent per `(import, SKU)` and resumed by `ImportResumeJob` when stalled (2 min);
+    - `catalog.import.completed` is published on `at.product-import.events`, and notifications emails and pushes
+      the uploader for imports of 100 rows or more.
+
+    `GET /v1/imports` lists the upload history.
+  - **Sized categories (fashion).** For a product type with the `sizing` trait the template gains `Size chart` (the
+    *name* of one of the organisation's charts; required when the type says `sizeChartRequired`) and `Size fit`
+    (Runs small, True to size, Runs large; blank uses the chart's). The `Size` and `Color` columns of dimensions with
+    `allowCustomValues` are `SUGGESTED` columns: a dropdown without an error box, so the seller may type their own
+    value. Rows report `size_chart`, `fit_note` and the per-option messages (length, characters, more than 40 own values,
+    "XL"/"xl" counted as one). Charts are loaded by name for the uploading organisation only.
+  - **Size chart upload** (`/v1/size-charts/import-template`, `/v1/size-charts/import`): one row per size, rows with the
+    same chart name make one chart, one column per measurement; row-level messages, `dryRun`, chart saved whole or not at
+    all, idempotent by chart name. See [docs/engineering/size-charts.md](../../../docs/engineering/size-charts.md) and the
+    sample files in `docs/engineering/samples/`.
+
 Validation of a submission (`DefaultProductDraftPolicy`) returns every failing field at once
 (`fieldErrors` in the RFC 9457 problem): title 10–200 chars, required details, 1–10 JPG/PNG/WebP images ≤ 8 MB
 with a main image ≥ 1000×1000, variation values from the theme, unique SKUs, valid GTIN check digit (with a
 suggested correction) or exemption, ISBN-13 for books, price > 0.
 
+- **Verified-purchase product reviews (S324).** A customer with a delivered order line for the ATIN (asked from
+  orders-service through the `PurchaseVerifier` port, `HttpPurchaseVerifier`) rates it 1–5 stars with a title, text and up
+  to 5 photos: one review per customer and product, editable for 30 days, deletable. `DefaultReviewContentPolicy`
+  (profanity, links, e-mail, phone) publishes a clean review or holds it `PENDING` for trust-ops; staff approve, reject
+  with a reason or remove (`/v1/product-reviews/{id}/approve|reject|remove`); customers and sellers report; the seller
+  replies once (`/v1/seller/reviews`). `product_rating` (average, count, 1–5 breakdown) is rewritten in the transaction of
+  every status change and published as `catalog.product.rating_changed`. Public: `/v1/public/products/{atin}/rating|reviews`.
+  See [docs/engineering/product-reviews.md](../../../docs/engineering/product-reviews.md).
+
 ## API
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | `/v1/categories`, `/v1/product-types`, `/v1/product-types/{code}` | public |
+| GET | `/v1/categories` (`?includeRetired=true` also lists retired nodes), `/v1/product-types`, `/v1/product-types/{code}` | public |
 | POST | `/v1/products` | `catalog:write` |
+| PUT | `/v1/products/{id}` (S307) | `catalog:write` (owner) |
+| GET/POST/GET/PUT/DELETE | `/v1/product-drafts`, `/v1/product-drafts/{id}` (S307) | `catalog:write` (own org) |
+| GET/POST | `/v1/size-charts`, `/v1/size-charts/{id}` (GET/PUT/DELETE = retire), `/{id}/duplicate`, `/suggestions`, `/import-template`, `/import` | `catalog:write` (own org; staff read all) |
+| GET | `/v1/imports/template?productType=&categoryId=&format=` (S308) | `catalog:write` |
+| POST/GET | `/v1/imports` (multipart upload / history), `/v1/imports/{id}`, `/{id}/rows`, `/{id}/report`, POST `/{id}/start` (S308) | `catalog:write` (own org) |
 | GET | `/v1/products`, `/v1/products/{id}`, `/v1/products/atin/{atin}` | `catalog:write` (own org; staff all) |
 | POST | `/v1/products/{id}/approve`, `/reject` | `catalog:moderate` |
 | POST | `/v1/products/{id}/pause`, `/resume` | `catalog:write` (owner) |
 | POST/GET | `/v1/category-requests`, `/v1/category-requests/mine` | `catalog:write` |
-| GET/POST | `/v1/category-requests?status=`, `/{id}/approve`, `/{id}/reject` | `catalog:taxonomy` |
+| GET/POST | `/v1/category-requests?status=` (with the products waiting), `/{id}` (detail and suggested parent), `/{id}/approval-preview`, `/{id}/approve` (creates the category and the product type), `/{id}/reject` | `catalog:taxonomy` |
+| GET/POST/PATCH | `/v1/taxonomy/tree`, `/v1/taxonomy/nodes` (create), `PATCH /nodes/{id}` (rename), `POST /nodes/{id}/move\|retire\|restore`, `POST /v1/taxonomy/reorder`, `/v1/taxonomy/product-types[/{code}]` (create, edit), `/v1/taxonomy/audit` (S325) | `catalog:taxonomy` (every change: reason, audit row, `If-Match`) |
 | POST | `/v1/products/{id}/flags {reasonCode, details, riskLevel}` | `catalog:moderate` (staff = `STAFF`, principal type `SERVICE` = `AUTOMATED`) |
 | POST | `/v1/products/{id}/takedown {reasonCode, note}`, `/v1/products/{id}/restore {note}` | `catalog:moderate` |
 | POST | `/v1/public/products/{atin}/reports {reasonCode, details}` | any signed-in user (201 new, 200 repeated report) |
@@ -80,6 +176,7 @@ suggested correction) or exemption, ISBN-13 for books, price > 0.
 | POST | `/v1/labels?format=svg\|png\|zpl\|pdf&layout=&paper=` (one label) | `catalog:write` or `catalog:read` |
 | POST | `/v1/labels/batch?format=pdf\|zpl {labels[≤500], layout: LABEL\|SHEET, paper: LETTER\|A4}` | `catalog:write` or `catalog:read` |
 | GET | `/v1/labels/units/{atin}?format=&copies=&orgId=` | `catalog:write` (sellers: own org, own or live pages; staff/services: any `orgId`); service clients and staff also with `catalog:read` (inventory-service). The AT-FN code is returned as data in `X-Unit-Label-Code` (absent for a manufacturer barcode) |
+| GET | `/v1/search-export/products?status=LIVE&after=&since=&size=100` | `catalog:read` (the `indexer-service` client, staff): read-only keyset page (by id, ≤ 200) of products as the `catalog.product.*` payload (`sellerHidden` set while the owner's listings are hidden) with `version` (when the state last changed: the later of the product's update and the owner's hide/restore decision) and the stored rating `{average, count, updatedAt}`; `nextAfter` is the next page's `after` (null on the last). `since` keeps products whose data, rating or owner visibility changed at or after it. Used by `indexer reindex` to rebuild the search index without Kafka history; publishes nothing |
 | GET | `/v1/variants/{atin}` (S226) | `catalog:read` (service clients such as retail-service, staff) or `catalog:write` (members of the owning org): the variant and its product in **any** status (draft, in review, paused, rejected, taken down, hidden), `{product, variant}`; 404 `catalog.variant-not-found`. `GET /v1/public/variants/{atin}` stays live-only |
 
 ### Relationship checks (S248, OpenFGA)
@@ -109,8 +206,10 @@ Interactive docs when running: `/swagger-ui.html`, `/docs` (Scalar), `/redoc`.
 
 ## Events (transactional outbox → `at.product.events`, `at.category-request.events`)
 
-`catalog.product.created|approved|rejected|paused|resumed|hidden|restored|flagged|taken_down|reinstated`,
-`catalog.category-request.created|approved|rejected` —
+`catalog.product.created|updated|terms_changed|resubmitted|approved|rejected|paused|resumed|hidden|restored|flagged|taken_down|reinstated`,
+`catalog.import.completed` (on `at.product-import.events`),
+`catalog.product.rating_changed` and `catalog.review.submitted|published|updated|rejected|removed|deleted|reported|replied` (S324; the review events are on `at.product-review.events`),
+`catalog.category-request.created|approved|rejected`, `catalog.taxonomy.changed` (S325, on `at.taxonomy.events`) —
 see [`contracts/asyncapi/fragments/catalog.yaml`](../../../contracts/asyncapi/fragments/catalog.yaml). Product payloads
 carry `sellerHidden` (true while the owner's listings are hidden).
 
@@ -159,6 +258,9 @@ Known gaps:
 | `PRODUCT_DATA_ORDER`, `PRODUCT_DATA_CACHE_TTL`, `PRODUCT_DATA_MISS_TTL` | GTIN prefill provider order (`GS1,OPEN_FOOD_FACTS`) and cache (7d / 1d) |
 | `GS1_ENABLED`, `GS1_API_KEY` (secret), `GS1_BASE_URL`, `GS1_TIMEOUT` | Verified by GS1 (off by default; needs a key) |
 | `OFF_ENABLED`, `OFF_BASE_URL`, `OFF_USER_AGENT`, `OFF_TIMEOUT` | Open Food Facts (on by default, 3 s) |
+| `MEDIA_URL`, `MEDIA_TIMEOUT` | media-service for bulk-upload images (S308) |
+| `CATALOG_CLIENT_ID`, `CATALOG_CLIENT_SECRET` (secret) | catalog's client-credentials token (`media:import`) |
+| `IMPORT_NOTIFY_MIN_ROWS` | rows from which a finished import notifies the uploader (100) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACE_SAMPLING` | tracing |
 
 Profiles: `local` (security off, debug logs), `dev`, `uat`, `prod` (API reference pages off).
@@ -174,7 +276,12 @@ cd java && ./mvnw -B -f services/catalog/pom.xml verify     # checkstyle, unit, 
 Libraries added for S031/S032: `spring-boot-starter-restclient` (provider calls), Apache PDFBox 3.0.8 (PDF labels);
 test-only ZXing core 3.5.4 (every barcode test decodes the generated symbol, so it is known to scan) and WireMock
 3.13.2 (providers). The ZPL output is pinned by snapshots in `src/test/resources/labels`.
-Migrations: `V5__barcode_prefill_and_unit_labels.sql` (`product_data_lookup`, `unit_label`, `unit_label_seq`).
+Apache POI 5.4.1 (`poi-ooxml`) for bulk upload templates and parsing (S308, see ADR 0003).
+Migrations: `V8__one_step_form_and_bulk_upload.sql` (product-type traits and attribute metadata, listing details,
+variant compare-at and images, `product_draft`, `product_import`, `product_import_row`);
+`V5__barcode_prefill_and_unit_labels.sql` (`product_data_lookup`, `unit_label`, `unit_label_seq`);
+`V15__size_charts.sql` (`size_chart`, the chart index on `product`, the `sizing` trait and `allowCustomValues` of the
+fashion product types; generated by `python3 tools/seed/catalog_taxonomy.py --sizing`).
 
 ### Test notes
 

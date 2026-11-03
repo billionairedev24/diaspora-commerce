@@ -2,6 +2,7 @@ package com.afrotransact.identity.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Optional;
@@ -71,7 +72,7 @@ class SellerOrgSyncServiceImpl implements SellerOrgSyncService {
         }
         members.addAll(change.ownerUserIds());
         for (String member : members) {
-            grantOwner(org.get(), member, ownerRole);
+            grantOwner(org.get(), member, ownerRole, "seller.org.approved");
         }
         return true;
     }
@@ -83,6 +84,56 @@ class SellerOrgSyncServiceImpl implements SellerOrgSyncService {
             return false;
         }
         return mirror(change, OrgStatus.fromSeller(change.status())).isPresent();
+    }
+
+    @Override
+    @Transactional
+    public boolean reconcile(SellerOrgChange truth) {
+        if (!OrgIds.valid(truth.orgId())) {
+            return false;
+        }
+        OrgStatus status = OrgStatus.fromSeller(truth.status());
+        Optional<Organization> before = orgs.findById(truth.orgId());
+        boolean repaired = false;
+        Optional<Organization> org = before;
+        if (before.isEmpty() || differs(before.get(), truth, status)) {
+            org = mirror(truth, status);
+            repaired = org.isPresent() && !org.equals(before);
+        }
+        if (org.isEmpty() || (status != OrgStatus.APPROVED && status != OrgStatus.SUSPENDED)) {
+            return repaired;
+        }
+        String ownerRole = org.get().kind().ownerRole(primaryKind(truth.primaryKind()));
+        Set<UUID> members = new LinkedHashSet<>();
+        orgs.members(org.get().id()).forEach(m -> members.add(m.userId()));
+        Set<String> owners = new LinkedHashSet<>(truth.ownerUserIds());
+        // The approved applicant joins as owner when identity never added them; a member whose role the team changed
+        // since keeps it (the seller service's owner list is the truth for owners).
+        if (truth.applicantUserId() != null && !members.contains(uuidOrNull(truth.applicantUserId()))) {
+            owners.add(truth.applicantUserId());
+        }
+        for (String owner : owners) {
+            repaired |= grantOwner(org.get(), owner, ownerRole, "seller.org.reconciled");
+        }
+        if (repaired) {
+            LOG.info("Organisation {} repaired from the seller service ({} {})", truth.orgId(), org.get().kind(),
+                    org.get().status());
+        }
+        return repaired;
+    }
+
+    private static boolean differs(Organization org, SellerOrgChange truth, OrgStatus status) {
+        String kind = String.valueOf(truth.kind()).trim().toUpperCase(Locale.ROOT);
+        String name = firstNonBlank(truth.displayName(), truth.legalName(), org.name());
+        return org.status() != status || !org.kind().name().equals(kind) || !org.name().equals(name);
+    }
+
+    private static UUID uuidOrNull(String raw) {
+        try {
+            return UUID.fromString(raw);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     private Optional<Organization> mirror(SellerOrgChange change, OrgStatus status) {
@@ -97,8 +148,18 @@ class SellerOrgSyncServiceImpl implements SellerOrgSyncService {
             LOG.warn("Ignoring seller org event {}: unknown kind {}", change.eventId(), change.kind());
             return Optional.empty();
         }
+        Optional<Organization> existing = orgs.findById(change.orgId());
+        if (existing.isPresent() && change.occurredAt() != null && existing.get().updatedAt() != null
+                && existing.get().updatedAt().isAfter(change.occurredAt().plus(1, ChronoUnit.MILLIS))) {
+            // Out of order (a redelivered or late event, or a reconcile racing a newer event): never roll back. One
+            // millisecond of tolerance: stored timestamps are rounded to microseconds.
+            LOG.info("Organisation {}: {} from {} is older than the copy from {}; kept", change.orgId(),
+                    change.eventId() == null ? "seller state" : "event " + change.eventId(), change.occurredAt(),
+                    existing.get().updatedAt());
+            return existing;
+        }
         String name = firstNonBlank(change.displayName(), change.legalName(),
-                orgs.findById(change.orgId()).map(Organization::name).orElse(null), change.orgId());
+                existing.map(Organization::name).orElse(null), change.orgId());
         // S215: identity's market uses content's market codes (ISO 3166-1 alpha-2); unknown values are not stored.
         String market = MarketCodes.normalise(change.country());
         if (market == null && change.country() != null && !change.country().isBlank()) {
@@ -117,29 +178,31 @@ class SellerOrgSyncServiceImpl implements SellerOrgSyncService {
         return raw != null && "PROVIDER".equalsIgnoreCase(raw.trim()) ? OrgKind.PROVIDER : OrgKind.SELLER;
     }
 
-    private void grantOwner(Organization org, String rawUserId, String roleKey) {
-        UUID userId;
-        try {
-            userId = UUID.fromString(rawUserId);
-        } catch (IllegalArgumentException ex) {
+    /** @return true when the membership or the person's active organisation changed */
+    private boolean grantOwner(Organization org, String rawUserId, String roleKey, String reason) {
+        UUID userId = uuidOrNull(rawUserId);
+        if (userId == null) {
             LOG.warn("Organisation {}: owner {} is not an identity user id; skipped", org.id(), rawUserId);
-            return;
+            return false;
         }
         Optional<UserAccount> user = users.findById(userId);
         if (user.isEmpty()) {
             LOG.warn("Organisation {}: owner {} has no identity account; skipped", org.id(), userId);
-            return;
+            return false;
         }
         Instant now = Instant.now(clock);
+        boolean changed = false;
         if (orgs.setMember(org.id(), userId, roleKey)) {
+            changed = true;
             changeLog.append(ACTOR, "org.member.set", userId, roleKey, org.id(), org.name());
             events.publish(IdentityEvents.ROLE_GRANTED, IdentityEvents.AGGREGATE, userId.toString(),
-                    new RoleChanged(userId.toString(), roleKey, org.id(), ACTOR, "seller.org.approved", now,
-                            org.market()));
+                    new RoleChanged(userId.toString(), roleKey, org.id(), ACTOR, reason, now, org.market()));
         }
         if (user.get().activeOrgId() == null) {
             users.update(user.get().withActiveOrg(org.id(), now));
+            changed = true;
         }
+        return changed;
     }
 
     private static String firstNonBlank(String... values) {

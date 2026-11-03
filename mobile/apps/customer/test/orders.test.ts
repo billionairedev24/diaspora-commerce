@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { refundTotal, returnQrPayload, validateReturn } from '../src/domain/returns';
 import { headline, showDeliveryCode, stepIndex } from '../src/domain/tracking';
 
 describe('tracking', () => {
@@ -23,18 +22,5 @@ describe('tracking', () => {
     expect(showDeliveryCode({ ...base, perishable: true })).toBe(true);
     expect(showDeliveryCode({ ...base, perishable: true, status: 'delivered' })).toBe(false);
     expect(showDeliveryCode({ ...base, perishable: true, method: 'carrier' })).toBe(false);
-  });
-});
-
-describe('returns', () => {
-  const items = [{ atin: 'AT00000001', title: 'Rice', priceMinor: 2199 }, { atin: 'AT00000002', title: 'Gari', priceMinor: 1299 }];
-  it('validates and totals the refund', () => {
-    expect(validateReturn([], 'DAMAGED')).toBe('Choose at least one item.');
-    expect(validateReturn(['AT00000001'], null)).toBe('Choose a reason.');
-    expect(validateReturn(['AT00000001'], 'DAMAGED')).toBeNull();
-    expect(refundTotal(items, ['AT00000001', 'AT00000002'])).toBe(3498);
-  });
-  it('encodes the QR payload', () => {
-    expect(returnQrPayload(['RMA-1', 'RMA-2'], 'ups')).toBe('afrotransact:return:ups:RMA-1,RMA-2');
   });
 });

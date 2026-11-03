@@ -118,7 +118,7 @@ class PreorderPaymentsIT extends PaymentsIntegrationTest {
         assertThat(created.has("paymentLinkUrl")).isFalse();
         WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payment_intents"))
                 .withHeader("Idempotency-Key", WireMock.equalTo(order + ":create-intent"))
-                .withRequestBody(WireMock.containing("capture_method=manual")));
+                .withRequestBody(WireMock.containing("capture_method=automatic_async")).withRequestBody(WireMock.containing("payment_method_options[card][capture_method]=manual")));
         WIREMOCK.verify(0, WireMock.postRequestedFor(WireMock.urlPathMatching("/v1/checkout/.*")));
         WIREMOCK.verify(0, WireMock.postRequestedFor(WireMock.urlPathMatching("/v1/payment_links.*")));
     }

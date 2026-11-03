@@ -48,7 +48,7 @@ var StaffNav = []StaffNavGroupDef{
 	}},
 	{"commerce", "Commerce", []StaffModule{
 		{"orders", "orders", "Orders & shipments", "All marketplace and AfroTransact Retail orders."},
-		{"catalog", "catalog", "Listing moderation", "AI-flagged listings awaiting a human decision."},
+		{"catalog", "catalog", "Catalog", "Listing moderation, products, the category tree with its product-type details, and seller category requests."},
 		{"search", "", "Search analytics", "What shoppers search for, which searches find nothing, which results get clicked, and the synonyms that fix them."},
 		{"inventory", "inventory", "Inventory", "AfroTransact-owned and FBA stock by fulfilment centre, lot by lot."},
 		{"retail", "retail", "AfroTransact Retail (1P)", "Purchase orders for AfroTransact-owned and AfroTransact Brand inventory."},
@@ -56,6 +56,7 @@ var StaffNav = []StaffNavGroupDef{
 		{"preorders", "preorders", "Pre-orders", "Open pre-order windows by city with opening, closing and delivery dates. Upload advertorials, watch every pre-order live, export and add late orders."},
 	}},
 	{"partners", "Partners", []StaffModule{
+		{"orgs", "orgs", "Sellers & providers", "Every seller and service-provider organisation on the marketplace, plus Stripe Connect compliance."},
 		{"apps", "apps", "Applications", "Seller and service-provider onboarding queue. Every application goes through two people: a reviewer, then a different approver."},
 		{"support", "", "Customer support", "Lola hand-offs, customer lookup, refunds within your limit, notifications and shipments."},
 		{"rbac", "rbac", "Users & roles", "Who can do what in every back office. Role changes are audited."},
@@ -63,9 +64,10 @@ var StaffNav = []StaffNavGroupDef{
 	{"finance", "Finance", []StaffModule{
 		{"payouts", "payouts", "Payouts & ledger", "Weekly Stripe Connect payouts. Holding or releasing money needs Approve."},
 		{"fees", "fees", "Fees, commissions & tax", "Fee schedule versions and marketplace-facilitator tax rates. Changes apply to new orders only."},
+		{"plans", "", "Plans & billing", "Seller and provider plans, trials, rewards and billing adjustments. AfroTransact owns them; Stripe executes the charges."},
 	}},
 	{"growth", "Growth", []StaffModule{
-		{"marketing", "marketing", "Ads & announcements", "Announcement bar, hero carousel, display banners and sponsored placements."},
+		{"marketing", "marketing", "Marketing", "Announcements, placements & ads, and platform checkout coupons."},
 	}},
 	{"trust", "Trust & compliance", []StaffModule{
 		{"disputes", "disputes", "Disputes & returns", "A-to-z claims and returns with SLAs."},
@@ -75,6 +77,7 @@ var StaffNav = []StaffNavGroupDef{
 		{"markets", "markets", "Markets & locations", "Turn AfroTransact on or off by country and by state."},
 		{"siteCfg", "siteCfg", "Site content & legal", "Contacts, social links and legal document versions, published without a deployment."},
 		{"dev", "dev", "Developers", "Identity providers: which social sign-in buttons appear."},
+		{IdentityModule, "", "Identity & access", "Developer tools for the identity service: OAuth clients, sessions and tokens, signing keys, the token inspector and sign-in settings."},
 		{"notifications", "", "Notifications", "Email, SMS, push and WhatsApp templates: live preview with production-shaped sample data, version history and new versions."},
 	}},
 }
@@ -126,13 +129,28 @@ func (a StaffAccess) Level(module string) string {
 		default:
 			return LevelNone
 		}
+	case PlansModule:
+		// Derived from the seller service's own permissions (identity's matrix has no Plans & billing column).
+		switch {
+		case a.CanAny(PermPlansManage, PermBillingAdjust):
+			return LevelEdit
+		case a.CanAny(PermSellerBilling, "billing:usage"):
+			return LevelView
+		default:
+			return LevelNone
+		}
+	case IdentityModule:
+		// Derived from identity's own permission: Super Admin by default, not part of the module matrix (S291).
+		if a.Can(PermIdentityAdmin) {
+			return LevelEdit
+		}
+		return LevelNone
 	case "exports":
 		module = "dash"
 	}
 	matrix := a.Matrix
-	if module == PreorderModule && len(matrix[module]) == 0 {
-		// identity's matrix predates the Pre-orders column: use the seeded levels (design: Super Admin and Marketing
-		// Full, Operations Edit, Support Approve, Finance / Auditor / Product owner / Fulfilment / Retail View).
+	if (module == PreorderModule || module == "orgs") && len(matrix[module]) == 0 {
+		// identity's matrix predates the Pre-orders / Sellers & providers columns: use the seeded levels.
 		matrix = DefaultPlatformMatrix
 	}
 	best := LevelNone
@@ -273,9 +291,11 @@ func RefundLimitProblem(limit int64) *Problem {
 // ---------------------------------------------------------------- tables and sheets
 
 // ResourceKeys are the tables of the console (contract ResourceKey).
-var ResourceKeys = []string{"users", "roles", "applications", "orders", "products", "moderation", "claims", "returns", "payouts",
-	"inventory", "purchase-orders", "routes", "support-cases", "audit", "markets", "site-settings", "legal-documents", "help-articles", "privacy-requests", "announcements",
-	"placements", "identity-providers", "fee-schedules", "tax-rates", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events"}
+var ResourceKeys = []string{"users", "roles", "applications", "organisations", "connect-accounts", "orders", "products", "category-requests", "moderation", "product-reviews", "claims", "returns", "payouts",
+	"inventory", "purchase-orders", "routes", "support-cases", "audit", "markets", "site-settings", "legal-documents", "help-articles", "careers-jobs", "cookie-definitions", "privacy-requests", "announcements",
+	"placements", "identity-providers", "fee-schedules", "tax-rates", "tax-codes", "tax-rules", "tax-review", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events", "pickup-locations", "coupons",
+	"reconciliation", "reconciliation-runs", "ledger-adjustments", "recoveries", "credit-adjustments", "gift-cards", "credit-liabilities", "money-settings", "membership-tiers", "memberships", "membership-settings", "membership-report", "referrals", "referral-settings", "stripe-lookup", "payment-settings", "tax-settings", "maintenance", "tax-filings", "tax-nexus",
+	"oauth-clients", "identity-sessions", "signing-keys", "auth-settings", "session-policy", "exchange-rates"}
 
 // Column is one table column; Width is its share of the table in percent.
 type Column struct {
@@ -298,6 +318,8 @@ type Row struct {
 	ID    string         `json:"id"`
 	Cells map[string]any `json:"cells"`
 	Tone  *string        `json:"tone"`
+	// Search holds text the table does not show but its search box must still find (the ids behind the names).
+	Search []string `json:"-"`
 }
 
 // FieldOption is one choice of a select field.
@@ -320,13 +342,36 @@ type FormField struct {
 	Help        string        `json:"help,omitempty"`
 	Placeholder string        `json:"placeholder,omitempty"`
 	Value       any           `json:"value,omitempty"`
+	// Lookup makes the field a searchable picker (drivers, sellers): staff pick by name, the form sends the id.
+	Lookup string `json:"lookup,omitempty"`
+	// Section names the group the field belongs to: the form shows a heading when it changes from one field to the next
+	// (the referral program's two reward sections).
+	Section string `json:"section,omitempty"`
+}
+
+// LookupHit is one match of a picker: the id the form sends, the name staff read and a second line.
+type LookupHit struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// LookupResult is GET /v1/staff/lookups/{kind}.
+type LookupResult struct {
+	Kind  string      `json:"kind"`
+	Items []LookupHit `json:"items"`
 }
 
 // Form is a create, edit or action form.
 type Form struct {
-	Title       string      `json:"title"`
-	SubmitLabel string      `json:"submitLabel"`
-	Fields      []FormField `json:"fields"`
+	Title       string `json:"title"`
+	SubmitLabel string `json:"submitLabel"`
+	// Intro says in a sentence or two what submitting does (shown above the fields).
+	Intro  string      `json:"intro,omitempty"`
+	Fields []FormField `json:"fields"`
+	// ChangeKeys are the fields whose change makes the form worth saving: when set, Save stays disabled until one of
+	// them differs from its initial value, and the server refuses a save in which none does.
+	ChangeKeys []string `json:"changeKeys,omitempty"`
 }
 
 // ResourcePage is GET /v1/staff/resources/{resource}.
@@ -404,6 +449,11 @@ type RecordAction struct {
 type RecordLink struct {
 	Label string `json:"label"`
 	Href  string `json:"href"`
+	// External opens the link in a new tab (an uploaded document the reviewer reads).
+	External bool `json:"external,omitempty"`
+	// Storefront marks Href as a public storefront path ("/help/shipping"): the framework makes it absolute on the
+	// storefront origin and opens it in a new tab. Never serialised.
+	Storefront bool `json:"-"`
 }
 
 // RecordDetail is the detail sheet of one record.
@@ -423,6 +473,10 @@ type RecordDetail struct {
 	EditForm     *Form           `json:"editForm"`
 	Links        []RecordLink    `json:"links"`
 	Version      *string         `json:"version"`
+	// Removed is set when an action deleted the record; the console closes the sheet and refreshes the table.
+	Removed *bool `json:"removed,omitempty"`
+	// Reveal carries a secret that is shown once (a new OAuth client secret); it is in this answer only and nowhere else.
+	Reveal *OneTimeSecret `json:"reveal,omitempty"`
 }
 
 var statusTones = map[string]string{
@@ -735,7 +789,10 @@ type SupportPermissions struct {
 
 // Customer360 is GET /v1/staff/support/customers/{id}.
 type Customer360 struct {
-	Customer         SupportCustomer       `json:"customer"`
+	Customer SupportCustomer `json:"customer"`
+	// Membership is the customer's AfroTransact membership (S323): support tools show the priority-support flag and the
+	// free-returns benefit; null when the customer is not a member.
+	Membership       *SupportMembership    `json:"membership"`
 	Orders           []SupportOrder        `json:"orders"`
 	Bookings         []SupportBooking      `json:"bookings"`
 	Claims           []SupportClaim        `json:"claims"`
@@ -746,6 +803,13 @@ type Customer360 struct {
 	RefundLimitMinor *int64                `json:"refundLimitMinor"`
 	Can              SupportPermissions    `json:"can"`
 	Unavailable      []string              `json:"unavailable"`
+}
+
+// SupportMembership is what a customer's membership gives support: priority handling (names, not ids).
+type SupportMembership struct {
+	TierName        string `json:"tierName"`
+	Status          string `json:"status"`
+	PrioritySupport bool   `json:"prioritySupport"`
 }
 
 // SupportActionResult answers support actions.
@@ -762,4 +826,22 @@ type StaffDashboard struct {
 	GeneratedAt time.Time   `json:"generatedAt"`
 	Kpis        []Kpi       `json:"kpis"`
 	Charts      []ChartSpec `json:"charts"`
+}
+
+// FormChanged reports whether the submitted values differ from the form's initial values in a field the form says
+// matters (ChangeKeys); a form without ChangeKeys is always worth saving.
+func FormChanged(f Form, values map[string]any) bool {
+	if len(f.ChangeKeys) == 0 {
+		return true
+	}
+	initial := map[string]any{}
+	for _, field := range f.Fields {
+		initial[field.Key] = field.Value
+	}
+	for _, k := range f.ChangeKeys {
+		if fmt.Sprint(initial[k]) != fmt.Sprint(values[k]) {
+			return true
+		}
+	}
+	return false
 }

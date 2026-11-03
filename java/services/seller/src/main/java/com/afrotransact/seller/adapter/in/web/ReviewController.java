@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -33,6 +34,15 @@ import org.springframework.web.bind.annotation.RestController;
         + "different person): final approve → APPROVED (seller.org.approved), send back → PENDING_REVIEW, reject.")
 @RestController
 class ReviewController {
+
+    private static final String REPLAY = "Idempotent: a retry with the same Idempotency-Key, or the same person "
+            + "repeating the decision that put the application in its current state, answers 200 with the current "
+            + "application and changes nothing (no timeline entry, no events, no email). A decision that is no longer "
+            + "possible answers 409: seller.already-decided / seller.already-reviewed say what was decided, by whom "
+            + "and when (properties decision, decidedBy, decidedAt); seller.idempotency-key-reused when the key "
+            + "named a different decision.";
+    private static final String KEY = "Optional, 8–128 characters; the same key on every retry of one decision";
+    private static final int MAX_KEY = 128;
 
     private final ReviewService reviews;
 
@@ -67,16 +77,22 @@ class ReviewController {
         return reviews.viewDocument(id, assetId);
     }
 
-    @Operation(summary = "Step 1 — reviewer decision: APPROVE, FLAG (failedChecks) or REQUEST_INFO (requestedItems)")
+    @Operation(summary = "Step 1 — reviewer decision: APPROVE, FLAG (failedChecks) or REQUEST_INFO (requestedItems)",
+            description = REPLAY)
     @PostMapping("/v1/applications/{id}/review")
-    ApplicationResponse reviewApplication(@PathVariable String id, @Valid @RequestBody DecisionRequest body) {
-        return ApplicationResponse.of(reviews.review(id, body.toCommand()));
+    ApplicationResponse reviewApplication(@PathVariable String id, @Valid @RequestBody DecisionRequest body,
+                                          @Parameter(description = KEY) @RequestHeader(value = "Idempotency-Key",
+                                                  required = false) String key) {
+        return ApplicationResponse.of(reviews.review(id, body.toCommand(key)));
     }
 
-    @Operation(summary = "Step 2 — final decision: FINAL_APPROVE, SEND_BACK or REJECT (not by the reviewer)")
+    @Operation(summary = "Step 2 — final decision: FINAL_APPROVE, SEND_BACK, REJECT or REQUEST_INFO (requestedItems; returns it to the applicant), not by the reviewer",
+            description = REPLAY)
     @PostMapping("/v1/applications/{id}/decision")
-    ApplicationResponse finalDecision(@PathVariable String id, @Valid @RequestBody DecisionRequest body) {
-        return ApplicationResponse.of(reviews.decide(id, body.toCommand()));
+    ApplicationResponse finalDecision(@PathVariable String id, @Valid @RequestBody DecisionRequest body,
+                                      @Parameter(description = KEY) @RequestHeader(value = "Idempotency-Key",
+                                              required = false) String key) {
+        return ApplicationResponse.of(reviews.decide(id, body.toCommand(key)));
     }
 
     @Operation(summary = "Review reason codes")
@@ -97,16 +113,23 @@ class ReviewController {
     record DecisionRequest(@NotBlank @Schema(allowableValues = {"APPROVE", "FLAG", "REQUEST_INFO", "FINAL_APPROVE",
                                "SEND_BACK", "REJECT"}) String action,
                            @NotBlank String reasonCode, @Size(max = 2000) String note, List<String> failedChecks,
-                           List<String> requestedItems) {
+                           List<String> requestedItems,
+                           @Size(max = 200) @Schema(description = "The staff member's display name, recorded on the "
+                                   + "timeline and used in \"already approved by …\" messages (display only)")
+                           String actorName) {
 
-        ReviewCommand toCommand() {
+        ReviewCommand toCommand(String key) {
             ReviewAction a;
             try {
                 a = ReviewAction.valueOf(action.trim().toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
                 throw new SellerRuleViolation("seller.invalid-action", "Unknown action " + action);
             }
-            return new ReviewCommand(a, reasonCode, note, failedChecks, requestedItems);
+            if (key != null && !key.isBlank() && key.trim().length() > MAX_KEY) {
+                throw new SellerRuleViolation("seller.invalid-idempotency-key",
+                        "Idempotency-Key must be at most " + MAX_KEY + " characters");
+            }
+            return new ReviewCommand(a, reasonCode, note, failedChecks, requestedItems, key, actorName);
         }
     }
 

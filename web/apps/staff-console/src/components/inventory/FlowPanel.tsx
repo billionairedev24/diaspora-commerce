@@ -51,8 +51,11 @@ export function TraceCard() {
   const t = query.data;
   return (
     <Card title="Trace a product to the storefront">
+      <p className="m-0 text-sm text-muted">
+        Follows one AfroTransact-fulfilled product step by step (retail item, inbound shipment, lots, available stock, offer, search index, product page) and shows the first step that is broken or missing, with a link to fix it.
+      </p>
       <form
-        className="flex flex-wrap items-end gap-2"
+        className="flex flex-wrap at-align gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           setTrace(input.trim() || null);
@@ -113,6 +116,14 @@ export function FlowPanel() {
           Stock enters the platform only through receiving: a purchase order (AfroTransact Retail) or a seller’s inbound plan (FBA) announces what is coming and which batches are in it, the
           fulfilment centre counts it at the dock, every batch becomes a lot with its expiry, and available lots flow to the offer, the search index and the product page.
         </p>
+      </Card>
+      <Card title="Buying stock: where to start">
+        <ol className="m-0 flex list-decimal flex-col gap-1 pl-5 text-sm">
+          <li><Link className="font-semibold text-link" href="/retail?tab=suppliers">Register the supplier</Link> (AfroTransact Retail › Suppliers): name, country, currency, payment terms, lead time and contacts. Suppliers never sign in; they are records we buy from.</li>
+          <li><Link className="font-semibold text-link" href="/retail?tab=items">Add the items</Link> you buy from them (SKU, supplier SKU, case pack, unit cost), then <Link className="font-semibold text-link" href="/retail?tab=pos">raise a purchase order</Link>: supplier, ship-to fulfilment centre, Incoterm, expected date and the lines.</li>
+          <li>When the supplier confirms, book the inbound shipment on the PO (mode, carrier, tracking, dates, batch and expiry per line) and enter its costs: freight, insurance, duty and so on.</li>
+          <li>The fulfilment centre <Link className="font-semibold text-link" href="/inventory?tab=receiving">receives it here</Link>: counted units become lots, with the costs spread over them as landed cost.</li>
+        </ol>
       </Card>
       {flow.isError ? <ErrorState error={flow.error} onRetry={() => void flow.refetch()} /> : null}
       <ol className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,250px),1fr))] gap-3 p-0" aria-label="Inventory workflow">

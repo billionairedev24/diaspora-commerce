@@ -1,12 +1,37 @@
 {
-  "extends": "@docusaurus/tsconfig",
   "compilerOptions": {
-    "baseUrl": ".",
+    "allowJs": true,
+    "esModuleInterop": true,
+    "jsx": "preserve",
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "moduleResolution": "bundler",
+    "module": "esnext",
+    "noEmit": true,
+    "paths": {
+      "@site/*": [
+        "./*"
+      ]
+    },
+    "skipLibCheck": true,
     "strict": true,
     "noImplicitAny": true,
     "resolveJsonModule": true,
-    "types": ["@docusaurus/module-type-aliases"]
+    "types": [
+      "@docusaurus/module-type-aliases"
+    ]
   },
-  "include": ["src", "docusaurus.config.ts", "sidebars.ts"],
-  "exclude": [".docusaurus", "build", "node_modules"]
+  "include": [
+    "src",
+    "docusaurus.config.ts",
+    "sidebars.ts"
+  ],
+  "exclude": [
+    ".docusaurus",
+    "build",
+    "node_modules"
+  ]
 }

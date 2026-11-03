@@ -5,6 +5,10 @@ const redirect = vi.fn((url: string) => {
 });
 vi.mock('next/navigation', () => ({ redirect: (url: string) => redirect(url) }));
 vi.mock('server-only', () => ({}));
+vi.mock('@/i18n/server', async () => {
+  const { tEn: t } = await import('@/i18n/t');
+  return { getLocale: async () => 'en', getT: async () => t };
+});
 
 const { hostedLoginTarget } = await import('@/components/auth/hostedLogin');
 const { signInHref, signUpHref } = await import('@/lib/links');
@@ -22,7 +26,11 @@ describe('sign-in links go to identity’s hosted pages through the BFF (single 
   });
 
   it('maps legacy /signin and /signup query strings, including invite links and other apps’ returnTo', () => {
-    expect(hostedLoginTarget({ returnTo: '/orders' }, 'signin')).toEqual({ href: '/api/bff/v1/auth/login?returnTo=%2Forders', error: null });
+    expect(hostedLoginTarget({ returnTo: '/orders' }, 'signin')).toEqual({
+      href: '/api/bff/v1/auth/login?returnTo=%2Forders',
+      error: null,
+      returnTo: '/orders'
+    });
     expect(hostedLoginTarget({ invitation: 'tok', email: 'kemi@example.com' }, 'signup').href).toBe(
       '/api/bff/v1/auth/login?prompt=create&login_hint=kemi%40example.com&invitation=tok'
     );
@@ -42,6 +50,17 @@ describe('/signin and /signup routes stay for old links and redirect', () => {
   it('/signin redirects to the hosted sign-in start', async () => {
     await expect(SignInPage({ searchParams: Promise.resolve({ returnTo: '/account' }) })).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith('/api/bff/v1/auth/login?returnTo=%2Faccount');
+  });
+
+  it('/signin directly redirects to the foreign app login start without showing an error page when returnTo is external', async () => {
+    await expect(SignInPage({ searchParams: Promise.resolve({ error: 'state_mismatch', returnTo: 'http://localhost:3010/' }) })).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith('/api/bff/v1/auth/login?returnTo=http%3A%2F%2Flocalhost%3A3010%2F');
+  });
+
+  it('/signin shows the error page instead of redirecting when error is set for local storefront returnTo', async () => {
+    const page = await SignInPage({ searchParams: Promise.resolve({ error: 'exchange_failed', returnTo: '/cart' }) });
+    expect(redirect).not.toHaveBeenCalled();
+    expect(page).toBeDefined();
   });
 
   it('/signup redirects to the hosted sign-up page (prompt=create)', async () => {

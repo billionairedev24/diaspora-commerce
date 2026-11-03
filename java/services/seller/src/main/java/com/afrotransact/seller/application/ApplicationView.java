@@ -12,12 +12,14 @@ import com.afrotransact.seller.domain.TimelineEntry;
  * An application as one viewer may see it. The tax ID is never present in clear unless {@code pii == FULL}.
  *
  * @param taxIdMasked e.g. {@code •••-••-6789}
- * @param taxIdFull   formatted tax ID, only for {@link PiiLevel#FULL}
+ * @param taxIdFull      formatted tax ID, only for {@link PiiLevel#FULL}
+ * @param planFeeOptions whether the Plan step offers paying the plan from sales, and the platform default (S298)
  */
 public record ApplicationView(Application application, PiiLevel pii, String taxIdMasked, String taxIdFull,
                               List<OnboardingStep> steps, List<OnboardingStep> completedSteps,
                               FirstCharge firstCharge, String planName, List<DocumentRef> documents,
-                              List<TimelineEntry> timeline, List<DocumentAccess> accessLog) {
+                              List<TimelineEntry> timeline, List<DocumentAccess> accessLog,
+                              PlanFeeCollectionService.Options planFeeOptions) {
 
     public ApplicationView {
         steps = List.copyOf(steps);

@@ -1,0 +1,57 @@
+.page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: var(--at-space-6) var(--at-space-4);
+  background-color: var(--at-color-surface-muted);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--at-space-4);
+  width: 100%;
+  max-width: 34rem;
+  padding: var(--at-space-10) var(--at-space-6);
+  text-align: center;
+  background-color: var(--at-color-surface);
+  border: 1px solid var(--at-color-border);
+  border-radius: var(--at-radius-lg);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--at-font-display);
+  font-size: var(--at-text-3xl);
+  line-height: 1.2;
+  color: var(--at-color-text);
+  text-wrap: balance;
+}
+
+.message {
+  margin: 0;
+  font-size: var(--at-text-md);
+  line-height: 1.6;
+  color: var(--at-color-text-muted);
+  white-space: pre-line;
+}
+
+.expected {
+  margin: 0;
+  padding: var(--at-space-2) var(--at-space-4);
+  font-size: var(--at-text-sm);
+  font-weight: 600;
+  color: var(--at-color-text);
+  background-color: var(--at-color-surface-sunken);
+  border-radius: var(--at-radius-pill);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--at-space-3);
+  margin-top: var(--at-space-2);
+}

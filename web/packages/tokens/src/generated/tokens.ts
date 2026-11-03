@@ -120,7 +120,8 @@ export const cssVariables = {
   "--at-color-cart-badge-text": "var(--at-ink-0)",
   "--at-color-placeholder-a": "var(--at-ink-100)",
   "--at-color-placeholder-b": "var(--at-ink-50)",
-  "--at-font-sans": "\"Figtree\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+  "--at-font-sans": "\"Inter\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+  "--at-font-display": "\"Fraunces\", Georgia, \"Times New Roman\", serif",
   "--at-font-mono": "ui-monospace, \"SF Mono\", Menlo, Consolas, monospace",
   "--at-text-2xs": "11px",
   "--at-text-xs": "12px",
@@ -307,7 +308,8 @@ export const resolvedVariables = {
   "--at-color-cart-badge-text": "#FFFFFF",
   "--at-color-placeholder-a": "#EEEBE4",
   "--at-color-placeholder-b": "#F6F4EF",
-  "--at-font-sans": "\"Figtree\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+  "--at-font-sans": "\"Inter\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+  "--at-font-display": "\"Fraunces\", Georgia, \"Times New Roman\", serif",
   "--at-font-mono": "ui-monospace, \"SF Mono\", Menlo, Consolas, monospace",
   "--at-text-2xs": "11px",
   "--at-text-xs": "12px",
@@ -509,7 +511,8 @@ export const tokens = {
     "placeholderB": "#F6F4EF"
   },
   "font": {
-    "sans": "\"Figtree\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+    "sans": "\"Inter\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+    "display": "\"Fraunces\", Georgia, \"Times New Roman\", serif",
     "mono": "ui-monospace, \"SF Mono\", Menlo, Consolas, monospace"
   },
   "text": {

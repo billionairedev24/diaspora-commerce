@@ -1,7 +1,7 @@
 # Cost: budgets, alerts and the monthly review
 
-**Backlog:** S182 · **Budgets:** `infra/terraform/modules/<cloud>/budget` · **Sizing:** `infra/terraform/envs/<env>/sizing.tf` ·
-**Cost table:** `infra/terraform/README.md` sections 4 and 5
+**Backlog:** S182 · **Budgets:** `infra/tofu/modules/<cloud>/budget` · **Sizing:** `infra/tofu/envs/<env>/sizing.tf` ·
+**Cost table:** `infra/tofu/README.md` sections 4 and 5
 
 This page is for the platform on-call and whoever owns the cloud bill. It covers what keeps the bill down by default,
 what fires when it does not, and what to do about it.
@@ -74,7 +74,7 @@ review below.
 
 ## 4. Monthly review (first Monday of the month)
 
-- Actual vs budget per environment and per layer, compared with the planning table in `infra/terraform/README.md`
+- Actual vs budget per environment and per layer, compared with the planning table in `infra/tofu/README.md`
   section 5 (launch estimate 6k-11k USD per month across all layers; target at most 3% of GMV).
 - Commitments (prod only, after 4-6 weeks of stable usage): cover about 60% of the on-demand arm64 floor and the
   Postgres baseline with Compute Savings Plans + RDS reserved capacity (AWS), committed-use discounts (GCP) or an Azure

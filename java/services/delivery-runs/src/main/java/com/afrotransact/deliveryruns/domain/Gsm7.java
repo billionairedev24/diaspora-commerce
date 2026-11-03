@@ -29,6 +29,15 @@ public final class Gsm7 {
         return n;
     }
 
+    /** Messages needed to send {@code text}: 160 / 153 septets when GSM-7, else 70 / 67 UCS-2 characters. */
+    public static int segments(String text) {
+        int septets = septets(text);
+        int units = septets >= 0 ? septets : text.codePointCount(0, text.length());
+        int single = septets >= 0 ? 160 : 70;
+        int multi = septets >= 0 ? 153 : 67;
+        return units <= single ? 1 : (units + multi - 1) / multi;
+    }
+
     /** Whether {@code text} fits one SMS segment (160 GSM-7 septets, or 70 UCS-2 characters). */
     public static boolean fitsOneSegment(String text) {
         int septets = septets(text);

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.afrotransact.taxreturns.application.OrderIntakeService;
 import com.afrotransact.taxreturns.application.OrderPlaced;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -47,16 +48,13 @@ class OrderEventsListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", type, rec.topic(),
-                    rec.partition(), rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         JsonNode n;
         try {
             n = json.readTree(rec.value());
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         if (ORDER_PLACED.equals(type)) {
             placed(eventId.get(), n);
@@ -98,8 +96,7 @@ class OrderEventsListener {
                     Json.text(n, "shipToCountry"), shipments, Json.text(n, "shipToName"), line1, line2,
                     Json.text(n, "paymentId"));
         } catch (IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed orders.order.placed {}: {}", eventId, ex.getMessage());
-            return;
+            throw MalformedEvent.of("orders.order.placed", ex);
         }
         if (event.orderId() == null || event.orderNumber() == null || event.customerId() == null
                 || event.placedAt() == null || event.shipments().stream().anyMatch(s -> s.shipmentId() == null

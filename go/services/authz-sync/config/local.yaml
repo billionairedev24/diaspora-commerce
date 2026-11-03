@@ -12,6 +12,26 @@ openfga:
   storeId: ""
   timeout: 3s
   manageModel: true
+# First-party service clients (identity's client_credentials clients): each gets `service` on the platform (S266).
+serviceClients:
+  - gateway-bff
+  - seller-service
+  - orders-service
+  - cart-service
+  - tax-returns-service
+  - bookings-service
+  - fulfilment-service
+  - payments-service
+  - notifications-service
+  - trust-ops-service
+  - search-service
+  - delivery-runs-service
+  - media-service
+  - indexer-service
+  - offers-service
+  - catalog-service
+  - retail-service
+  - inventory-service
 retailOrgId: org_afrotransact_retail
 retry:
   backoffMs: 250

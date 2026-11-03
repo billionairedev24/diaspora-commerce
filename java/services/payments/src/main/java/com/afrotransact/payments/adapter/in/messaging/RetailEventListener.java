@@ -9,10 +9,9 @@ import java.util.UUID;
 
 import com.afrotransact.payments.application.SupplierPaymentNotice;
 import com.afrotransact.payments.application.SupplierPaymentService;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -29,7 +28,6 @@ class RetailEventListener {
 
     static final String PAYMENT_RELEASED = "retail.payment.released";
 
-    private static final Logger LOG = LoggerFactory.getLogger(RetailEventListener.class);
 
     private final SupplierPaymentService supplierPayments;
     private final JsonMapper json;
@@ -61,16 +59,13 @@ class RetailEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", type, rec.topic(),
-                    rec.partition(), rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         PaymentReleasedMessage m;
         try {
             m = json.readValue(rec.value(), PaymentReleasedMessage.class);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         if (m == null) {
             return;

@@ -15,9 +15,18 @@ type eligibility struct {
 	seen  domain.Location
 }
 
-func (e *eligibility) Eligibility(_ context.Context, loc domain.Location, _ []string) (map[string]domain.PreorderLine, error) {
+func (e *eligibility) Eligibility(_ context.Context, loc domain.Location, atins []string) (map[string]domain.PreorderLine, error) {
 	e.seen = loc
-	return e.lines, e.err
+	if e.err != nil {
+		return nil, e.err
+	}
+	out := map[string]domain.PreorderLine{}
+	for _, a := range atins {
+		if l, ok := e.lines[a]; ok {
+			out[a] = l
+		}
+	}
+	return out, nil
 }
 
 func preorderSvc(e *eligibility) app.CartService {
@@ -78,5 +87,37 @@ func TestClosedWindowLocksCheckoutAndOutagesDegradeToShipsNow(t *testing.T) {
 	v, err = s.View(ctx, u)
 	if err != nil || !v.Checkoutable || v.Packages[0].Preorder != nil {
 		t.Fatalf("outage: %+v %v", v, err)
+	}
+}
+
+func TestPreorderPackageShowsTheRuleBehindTheChosenFee(t *testing.T) {
+	miles := 32.0
+	door := &domain.FeeRule{Method: "AFROTRANSACT_DELIVERY", RuleID: "r-1", RuleVersion: 3, Currency: "USD", AmountMinor: 899,
+		Source: "RULE", Band: "10–40 mi", DistanceMiles: &miles}
+	pickup := &domain.FeeRule{Method: "PICKUP", RuleVersion: 2, Currency: "USD", AmountMinor: 100, Source: "RULE"}
+	e := &eligibility{lines: map[string]domain.PreorderLine{"ATJOL00001": {Preorder: true, WindowID: "win-1",
+		Stage: "OPEN", Door: true, Pickup: true, DoorFeeMinor: 899, PickupFeeMinor: 100, Currency: "USD",
+		DoorFeeRule: door, PickupFeeRule: pickup}}}
+	s := preorderSvc(e)
+	u := domain.Owner{Kind: domain.OwnerUser, ID: "u3"}
+	ctx := app.WithLocation(context.Background(), domain.Location{Country: "US", Region: "TX", City: "Lubbock"})
+	if _, err := s.Add(ctx, u, "ATJOL00001", "", 1); err != nil {
+		t.Fatal(err)
+	}
+	v, err := s.View(ctx, u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pre := v.Packages[0].Preorder
+	if pre.FeeRule == nil || pre.FeeRule.RuleVersion != 3 || pre.FeeRule.Band != "10–40 mi" || pre.FeeMinor != 899 ||
+		pre.Options[0].Rule != door || pre.Options[1].Rule != pickup {
+		t.Fatalf("door rule: %+v", pre)
+	}
+	v, err = s.SetPreorderFulfilment(ctx, u, "win-1", "PICKUP")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pre = v.Packages[0].Preorder; pre.FeeRule == nil || pre.FeeRule.Method != "PICKUP" || pre.FeeMinor != 100 {
+		t.Fatalf("pickup rule: %+v", pre)
 	}
 }

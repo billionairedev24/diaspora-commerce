@@ -5,6 +5,7 @@ import java.util.List;
 import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.FulfilmentType;
+import com.afrotransact.orders.domain.FeeRuleSnapshot;
 import com.afrotransact.orders.domain.LocalDelivery;
 import com.afrotransact.orders.domain.PreorderPackage;
 
@@ -34,11 +35,30 @@ public record CheckoutPlan(String currency, List<Package> packages, List<String>
      * @param preorder      the pre-order window of a PREORDER package (S272); null otherwise
      * @param preorderFeeMinor the window's delivery fee for the chosen fulfilment (door / pickup), spread over the
      *                      package's shipments
+     * @param feeRule       the staff delivery fee rule that priced the package (ADR 0005 §3: window door / pickup fee,
+     *                      carrier rate beyond coverage), kept on the shipment; null when flat rates applied
      */
     public record Package(String packageId, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
                           DeliveryMethod method, String serviceLevel, String pickupLocationId,
                           DeliveryPreferences preferences, int promiseDays, List<Line> lines,
-                          LocalDelivery localDelivery, PreorderPackage preorder, long preorderFeeMinor) {
+                          LocalDelivery localDelivery, PreorderPackage preorder, long preorderFeeMinor,
+                          FeeRuleSnapshot feeRule) {
+
+        /** A package priced without a fee rule. */
+        public Package(String packageId, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
+                       DeliveryMethod method, String serviceLevel, String pickupLocationId,
+                       DeliveryPreferences preferences, int promiseDays, List<Line> lines,
+                       LocalDelivery localDelivery, PreorderPackage preorder, long preorderFeeMinor) {
+            this(packageId, sellerOrgId, sellerName, fulfilmentType, method, serviceLevel, pickupLocationId,
+                    preferences, promiseDays, lines, localDelivery, preorder, preorderFeeMinor, null);
+        }
+
+        /** The package priced by {@code rule} (its amount is the shipping). */
+        public Package withFeeRule(FeeRuleSnapshot rule) {
+            return new Package(packageId, sellerOrgId, sellerName, fulfilmentType, method, serviceLevel,
+                    pickupLocationId, preferences, promiseDays, lines, localDelivery, preorder, preorderFeeMinor,
+                    rule);
+        }
 
         /** A package that is not a pre-order. */
         public Package(String packageId, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
@@ -66,18 +86,32 @@ public record CheckoutPlan(String currency, List<Package> packages, List<String>
      * @param productType          catalog product type
      * @param localTaxJurisdiction local jurisdiction from the tax quote (null when none / table fallback)
      * @param shippingTaxMinor     part of taxMinor on the shipment's shipping (first line of a shipment only)
+     * @param sellerOrgId          seller of the line (a pre-order package mixes sellers)
+     * @param sellerName           seller display name
      */
     public record Line(String lineId, int lineNo, String variantAtin, String productAtin, String title,
                        String imageUrl, int quantity, long unitPriceMinor, long taxMinor, String category,
                        boolean perishable, String taxJurisdiction, int promiseDays, String offerId,
-                       long discountMinor, String productType, String localTaxJurisdiction, long shippingTaxMinor) {
+                       long discountMinor, String productType, String localTaxJurisdiction, long shippingTaxMinor,
+                       String sellerOrgId, String sellerName) {
+
+        /** A line without its seller (tests, older workflow histories). */
+        public Line(String lineId, int lineNo, String variantAtin, String productAtin, String title, String imageUrl,
+                    int quantity, long unitPriceMinor, long taxMinor, String category, boolean perishable,
+                    String taxJurisdiction, int promiseDays, String offerId, long discountMinor, String productType,
+                    String localTaxJurisdiction, long shippingTaxMinor) {
+            this(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, taxMinor,
+                    category, perishable, taxJurisdiction, promiseDays, offerId, discountMinor, productType,
+                    localTaxJurisdiction, shippingTaxMinor, null, null);
+        }
 
         /** A line before product type and quote details are known (tests, older workflow histories). */
         public Line(String lineId, int lineNo, String variantAtin, String productAtin, String title, String imageUrl,
                     int quantity, long unitPriceMinor, long taxMinor, String category, boolean perishable,
                     String taxJurisdiction, int promiseDays, String offerId, long discountMinor) {
             this(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, taxMinor,
-                    category, perishable, taxJurisdiction, promiseDays, offerId, discountMinor, null, null, 0);
+                    category, perishable, taxJurisdiction, promiseDays, offerId, discountMinor, null, null, 0,
+                    null, null);
         }
 
         /** Unit price × quantity. */
@@ -93,14 +127,14 @@ public record CheckoutPlan(String currency, List<Package> packages, List<String>
             long shipTax = Math.min(shippingTaxMinor, tax);
             return new Line(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, tax,
                     category, perishable, taxJurisdiction, promiseDays, offerId, d, productType, localTaxJurisdiction,
-                    shipTax);
+                    shipTax, sellerOrgId, sellerName);
         }
 
         /** The line with the tax of a quote (items + shipping on this line). */
         public Line withTax(long tax, String jurisdiction, String localJurisdiction, long shippingTax) {
             return new Line(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, tax,
                     category, perishable, jurisdiction, promiseDays, offerId, discountMinor, productType,
-                    localJurisdiction, Math.clamp(shippingTax, 0, tax));
+                    localJurisdiction, Math.clamp(shippingTax, 0, tax), sellerOrgId, sellerName);
         }
     }
 }

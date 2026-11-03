@@ -15,6 +15,7 @@ Downstream projections (search index, notifications, analytics) are stale; event
 
 ## Mitigate
 - Restore Kafka connectivity; the relay drains automatically. Do not delete outbox rows.
+- To deliberately re-send events that already left (not this alert), see [kafka-replay.md](kafka-replay.md), "Re-publish outbox rows".
 
 ## After the incident
 - Link the incident ticket to this runbook and update the steps if they were wrong or incomplete.

@@ -24,12 +24,14 @@ type SearchQuery struct {
 	Community  string
 	Fulfilment string
 	SellerKind string
-	MinRating  *float64
-	Price      string
-	MaxDays    *int
-	Sort       string
-	Page       int
-	Size       int
+	// SellerID limits the page to one seller's products (a business's public page); not a URL filter.
+	SellerID  string
+	MinRating *float64
+	Price     string
+	MaxDays   *int
+	Sort      string
+	Page      int
+	Size      int
 	// Ads blends sponsored products into the page (results pages; default on, ads=false opts out).
 	Ads bool
 }

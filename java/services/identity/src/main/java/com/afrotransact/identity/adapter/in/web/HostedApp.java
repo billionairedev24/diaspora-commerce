@@ -7,6 +7,12 @@ import java.util.Locale;
  * {@code messages.properties} under {@code auth.<key>.*}).
  */
 enum HostedApp {
+    /**
+     * No app context: the page was opened directly, after an identity session ended without a return address, or for
+     * a client the pages are not branded for. Plain AfroTransact copy, never another app's (in particular never the
+     * staff console's).
+     */
+    NEUTRAL(true),
     /** Storefront (web via gateway-bff, or the customer app). */
     SHOP(true),
     /** Seller Center & Provider Hub. */

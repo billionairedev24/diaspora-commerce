@@ -1,0 +1,9 @@
+# cloud = azure  ->  uncomment `backend "azurerm" {}` in main.tf, copy to backend.hcl, then:
+#   tofu init -backend-config=backend.hcl
+# Storage account + container are created once by infra/tofu/bootstrap/azure. Entra ID auth (OIDC in CI).
+# resource_group_name  = "afrotransact-tfstate"
+# storage_account_name = "attfstate<suffix>"
+# container_name       = "tfstate"
+# key                  = "envs/uat.tfstate"
+# use_azuread_auth     = true
+# use_oidc             = true

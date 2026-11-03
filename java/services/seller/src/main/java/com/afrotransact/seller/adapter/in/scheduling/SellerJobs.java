@@ -1,7 +1,13 @@
 package com.afrotransact.seller.adapter.in.scheduling;
 
+import com.afrotransact.seller.application.BillingAdjustmentService;
 import com.afrotransact.seller.application.BillingService;
 import com.afrotransact.seller.application.ComplianceService;
+import com.afrotransact.seller.application.ConnectedAccountSyncService;
+import com.afrotransact.seller.application.ChargeGateEvaluator;
+import com.afrotransact.seller.application.EarningsCollectionService;
+import com.afrotransact.seller.application.InvoiceCollectionService;
+import com.afrotransact.seller.application.RewardService;
 import com.afrotransact.seller.application.UsageMeteringService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,11 +28,85 @@ class SellerJobs {
     private final ComplianceService compliance;
     private final BillingService billing;
     private final UsageMeteringService metering;
+    private final RewardService rewards;
+    private final BillingAdjustmentService adjustments;
+    private final EarningsCollectionService earnings;
+    private final InvoiceCollectionService collection;
+    private final ChargeGateEvaluator gates;
+    private final ConnectedAccountSyncService accountSync;
 
-    SellerJobs(ComplianceService compliance, BillingService billing, UsageMeteringService metering) {
+    SellerJobs(ComplianceService compliance, BillingService billing, UsageMeteringService metering,
+               RewardService rewards, BillingAdjustmentService adjustments, EarningsCollectionService earnings,
+               InvoiceCollectionService collection, ChargeGateEvaluator gates,
+               ConnectedAccountSyncService accountSync) {
         this.compliance = compliance;
         this.billing = billing;
         this.metering = metering;
+        this.rewards = rewards;
+        this.adjustments = adjustments;
+        this.earnings = earnings;
+        this.collection = collection;
+        this.gates = gates;
+        this.accountSync = accountSync;
+    }
+
+    /**
+     * S296: every live reward rule for every organisation, daily (days since approval and windows have no events);
+     * grants are unique per (rule, organisation), so replicas running at once grant once.
+     */
+    @Scheduled(cron = "${at.seller.jobs.rewards-cron:0 40 2 * * *}", zone = "UTC")
+    void rewards() {
+        run("rewards", () -> LOG.info("Daily reward evaluation granted {} reward(s)", rewards.evaluateAll()));
+    }
+
+    /**
+     * S299: rules checked at window end ("less than $1,000 in the first 30 days"), decided once per (rule,
+     * organisation, window) when the check is due: the rule's lead (default 24 h) before the window or the trial ends,
+     * so a free period moves the first charge out before the invoice is issued. Unique checks make replicas decide once.
+     */
+    @Scheduled(fixedDelayString = "${at.seller.jobs.reward-window-interval:15m}",
+            initialDelayString = "${at.seller.jobs.reward-window-interval:15m}")
+    void rewardWindowEnds() {
+        run("reward-window-ends", () -> {
+            int made = rewards.evaluateWindowEnds();
+            if (made > 0) {
+                LOG.info("Window-end reward checks granted {} reward(s)", made);
+            }
+        });
+    }
+
+    /** Grants recorded but not applied yet: retried. */
+    @Scheduled(fixedDelayString = "${at.seller.jobs.grant-retry-interval:15m}",
+            initialDelayString = "${at.seller.jobs.grant-retry-interval:15m}")
+    void retryGrants() {
+        run("grant-retry", adjustments::retryPending);
+    }
+
+    /** Open plan invoices whose next attempt is due: platform credit, earnings if chosen, then the saved card. */
+    @Scheduled(fixedDelayString = "${at.seller.jobs.collection-interval:10m}",
+            initialDelayString = "${at.seller.jobs.collection-interval:10m}")
+    void invoiceCollection() {
+        run("invoice-collection", () -> LOG.info("Collected {} due plan invoice(s)", collection.collectDue()));
+    }
+
+    /** Releases of earnings withheld for plan fees whose invoice was voided (no-op while the flag is off). */
+    @Scheduled(fixedDelayString = "${at.seller.jobs.earnings-interval:5m}",
+            initialDelayString = "${at.seller.jobs.earnings-interval:5m}")
+    void earningsReleases() {
+        run("earnings-releases", earnings::processReleases);
+    }
+
+    /** Rolls subscriptions whose period ended into the next one, issuing and collecting its invoice. */
+    @Scheduled(fixedDelayString = "${at.seller.jobs.renewal-interval:5m}",
+            initialDelayString = "${at.seller.jobs.renewal-interval:5m}")
+    void renewals() {
+        run("renewals", () -> LOG.info("Renewed {} subscription(s)", billing.renewDueSubscriptions()));
+    }
+
+    /** Marks charge gates ("start charging after X sales or X listings") the seller has reached. */
+    @Scheduled(cron = "${at.seller.jobs.gates-cron:0 50 2 * * *}", zone = "UTC")
+    void chargeGates() {
+        run("charge-gates", () -> LOG.info("{} charge gate(s) reached", gates.markMetGates()));
     }
 
     /** S206: meters the two previous UTC days; a replica that finds the lease taken skips (seller.usage-run-…). */
@@ -49,6 +129,16 @@ class SellerJobs {
             initialDelayString = "${at.seller.jobs.activation-retry-interval:10m}")
     void retryActivations() {
         run("subscription-activation", billing::retryPendingActivations);
+    }
+
+    /**
+     * Tells payments about every connected account: without it a seller's earnings stay on hold. Upsert, so repeatable.
+     * Nightly by default; the local profile runs it every minute, and staff can start it from the console.
+     */
+    @Scheduled(cron = "${at.seller.jobs.account-sync-cron:0 30 2 * * *}", zone = "UTC")
+    void connectedAccountSync() {
+        run("connected-account-sync", () -> LOG.debug("Registered {} Connect account(s) with payments",
+                accountSync.registerAll()));
     }
 
     private static void run(String job, Runnable body) {

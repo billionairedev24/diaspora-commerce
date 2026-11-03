@@ -1,0 +1,11 @@
+appId: com.afrotransact.customer.local
+---
+- runFlow: _sign-in.yaml
+- assertVisible: "Popular right now|Buy again"
+- tapOn: "Browse"
+- tapOn:
+    id: "Search AfroTransact"
+- inputText: "shito"
+- assertVisible: ".*Shito.*"
+- tapOn: ".*Shito.*"
+- assertVisible: "Add to cart.*"

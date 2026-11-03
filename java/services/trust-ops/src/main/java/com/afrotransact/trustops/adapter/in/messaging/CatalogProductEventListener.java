@@ -4,6 +4,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.afrotransact.trustops.application.ModerationService;
 import com.afrotransact.trustops.domain.ListingFlagSource;
 import com.afrotransact.trustops.domain.ListingReport;
@@ -20,7 +21,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Consumes catalog's product events ({@code at.product.events}, key = product id): {@code catalog.product.created}
- * with status IN_REVIEW is queued for moderation; {@code catalog.product.flagged} (a reported or flagged live listing)
+ * (and {@code catalog.product.resubmitted}, a rejected listing edited back into review) with status IN_REVIEW is
+ * queued for moderation; {@code catalog.product.flagged} (a reported or flagged live listing)
  * is queued as a LIVE_LISTING item; {@code catalog.product.approved|rejected|taken_down} close an open item that was
  * decided directly in catalog. Malformed messages are logged and skipped; use-case failures propagate (retry).
  */
@@ -28,11 +30,14 @@ import tools.jackson.databind.json.JsonMapper;
 class CatalogProductEventListener {
 
     static final String CREATED = "catalog.product.created";
+    /** A rejected listing was edited and is back in review (S307): queued again like a new listing. */
+    static final String RESUBMITTED = "catalog.product.resubmitted";
     static final String APPROVED = "catalog.product.approved";
     static final String REJECTED = "catalog.product.rejected";
     static final String FLAGGED = "catalog.product.flagged";
     static final String TAKEN_DOWN = "catalog.product.taken_down";
-    private static final Set<String> HANDLED = Set.of(CREATED, APPROVED, REJECTED, FLAGGED, TAKEN_DOWN);
+    private static final Set<String> HANDLED = Set.of(CREATED, RESUBMITTED, APPROVED, REJECTED, FLAGGED,
+            TAKEN_DOWN);
 
     private static final Logger LOG = LoggerFactory.getLogger(CatalogProductEventListener.class);
 
@@ -67,16 +72,13 @@ class CatalogProductEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id", type, rec.topic(), rec.partition(),
-                    rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         ProductMessage m;
         try {
             m = json.readValue(rec.value(), ProductMessage.class);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         if (m == null || m.productId() == null || m.ownerOrgId() == null || m.ownerOrgId().isBlank()) {
             LOG.warn("Skipping {} event {} without productId / ownerOrgId", type, eventId.get());
@@ -84,7 +86,7 @@ class CatalogProductEventListener {
         }
         ProductSubmission listing = new ProductSubmission(m.productId(), m.atin(), m.ownerOrgId(), m.ownerKind(),
                 m.title(), m.productTypeCode());
-        if (CREATED.equals(type)) {
+        if (CREATED.equals(type) || RESUBMITTED.equals(type)) {
             if ("IN_REVIEW".equals(m.status())) {
                 moderation.enqueue(eventId.get(), listing);
             }

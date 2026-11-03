@@ -8,7 +8,7 @@ const org = (id: string, kind: 'SELLER' | 'PROVIDER', status: OrgSummary['status
 });
 const session = (orgs: OrgSummary[], active: OrgSummary | null = orgs[0] ?? null): SellerSession => ({
   user: { id: 'u', firstName: 'A', lastName: 'B', email: 'a@b.c', initials: 'AB' },
-  orgs, activeOrg: active, portal: null, approved: !!active?.approved, navGroups: [], landing: 'home', accessNote: ''
+  orgs, activeOrg: active, portal: null, approved: !!active?.approved, navGroups: [], landing: 'home', accessNote: '', capabilities: []
 });
 
 describe('Start selling arrival (/onboarding?role=…)', () => {

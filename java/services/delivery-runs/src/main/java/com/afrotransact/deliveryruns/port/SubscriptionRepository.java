@@ -35,6 +35,14 @@ public interface SubscriptionRepository {
     /** Active subscribers of a location with consent on {@code channel}, keyset-paged by subscription id. */
     List<Subscription> audience(UUID locationId, Channel channel, UUID after, int limit);
 
-    /** New subscriptions per month since {@code since} (subscriber growth). */
+    /** New subscriptions per month since {@code since} (gross subscriber growth). */
     List<MonthlyCount> growth(UUID locationId, Instant since);
+
+    /**
+     * Sign-ups and unsubscribes per month since {@code since}, so growth is net of the people who left. A
+     * subscription ended in the month of the last consent withdrawn in the consent log (its last update when the log
+     * has none) while it is CANCELLED; one that signed up again counts as a subscriber again, not as having left.
+     * Months with neither are absent.
+     */
+    List<NetGrowth> netGrowth(UUID locationId, Instant since);
 }

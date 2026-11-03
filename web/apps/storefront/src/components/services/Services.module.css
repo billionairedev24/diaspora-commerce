@@ -48,8 +48,9 @@
 .serviceRow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--at-space-3); align-items: center; padding: var(--at-space-3) 0; border-top: 1px solid var(--at-color-border); color: var(--at-color-text); text-decoration: none; }
 .serviceRow:first-of-type { border-top: 0; }
 .square { border-radius: var(--at-radius-xs); }
+.bookingFlat { padding: var(--at-space-3) 0; border-width: 0 0 1px; border-radius: 0; background: none; }
 .booking { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--at-space-3); }
-.status { display: inline-flex; align-self: flex-start; padding: 2px var(--at-space-2); border-radius: var(--at-radius-pill); background: var(--at-color-info-bg); color: var(--at-color-info); font-size: var(--at-text-xs); font-weight: var(--at-weight-bold); }
+.status { display: inline-flex; align-self: flex-start; color: var(--at-color-info); font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); }
 .actions { display: flex; flex-wrap: wrap; gap: var(--at-space-2); align-items: center; }
 .confirm { display: flex; flex-direction: column; gap: var(--at-space-2); padding: var(--at-space-3); border-radius: var(--at-radius-sm); background: var(--at-color-warning-bg); font-size: var(--at-text-sm); }
 .stars { display: flex; gap: var(--at-space-1); }

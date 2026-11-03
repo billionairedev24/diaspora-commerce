@@ -99,10 +99,49 @@ class PaymentsAccess {
         return actor;
     }
 
+    /** Finance staff who may propose ledger adjustments and explain reconciliation differences. */
+    Actor adjuster() {
+        Actor actor = permissions.require(PaymentsPermissions.LEDGER_ADJUST);
+        if (!isStaff(actor)) {
+            throw new ForbiddenActionException("payments.staff-only", "Ledger adjustments are a Finance staff action");
+        }
+        return actor;
+    }
+
+    /** Finance staff who may approve or reject ledger adjustments. */
+    Actor adjustmentApprover() {
+        Actor actor = permissions.require(PaymentsPermissions.LEDGER_APPROVE);
+        if (!isStaff(actor)) {
+            throw new ForbiddenActionException("payments.staff-only", "Ledger adjustments are a Finance staff action");
+        }
+        return actor;
+    }
+
+    /** Plan fees from earnings (S298): only the seller service (SERVICE principal with payments:plan-fees). */
+    Actor planFeeCollector() {
+        Actor actor = actors.current();
+        if (actor.permissions().contains("*")
+                || actor.type() == PrincipalType.SERVICE && actor.can(PaymentsPermissions.PLAN_FEES)) {
+            return actor;
+        }
+        throw new ForbiddenActionException("payments.service-only", "Plan fees are withheld and released by the "
+                + "seller service (payments:plan-fees), not by " + actor.type());
+    }
+
+    /** Plan fees of one organisation: the seller service, or whoever may see the organisation's balance. */
+    Actor planFeeViewer(String orgId) {
+        Actor actor = actors.current();
+        if (actor.type() == PrincipalType.SERVICE && actor.can(PaymentsPermissions.PLAN_FEES)) {
+            return actor;
+        }
+        return balanceViewer(orgId);
+    }
+
     /** Connected accounts are registered by the seller service or by Finance. */
     Actor accountRegistrar() {
         Actor actor = actors.current();
-        if (actor.type() == PrincipalType.SERVICE && actor.can(PaymentsPermissions.SERVICE)) {
+        if (actor.type() == PrincipalType.SERVICE
+                && (actor.can(PaymentsPermissions.SERVICE) || actor.can(PaymentsPermissions.CONNECTED_ACCOUNTS))) {
             return actor;
         }
         return configure();
@@ -123,8 +162,14 @@ class PaymentsAccess {
                 FgaObject.PLATFORM);
     }
 
-    /** The payout queue: one organisation's (its market's Finance staff) or every organisation's (platform-wide). */
+    /**
+     * The payout queue: one organisation's (its market's Finance staff, or its own members, who see only their
+     * organisation's requests) or every organisation's (platform-wide, Finance staff).
+     */
     Actor queueReader(String orgId) {
+        if (orgId != null && !orgId.isBlank() && !isStaff(actors.current())) {
+            return balanceViewer(orgId.trim());
+        }
         approver();
         if (orgId == null || orgId.isBlank()) {
             return relationships.require(PaymentsPermissions.PAYOUTS_APPROVE, PaymentsRelations.PLATFORM_VIEW_ALL,
@@ -200,6 +245,27 @@ class PaymentsAccess {
             throw new ForbiddenActionException("payments.customer-only", "Saved payment methods belong to shoppers");
         }
         return actor;
+    }
+
+    /** Programs that grant credit (referral, membership): SERVICE principals with payments:credit.grant. */
+    Actor creditGranter() {
+        Actor actor = actors.current();
+        if (actor.permissions().contains("*")
+                || actor.type() == PrincipalType.SERVICE && actor.can(PaymentsPermissions.CREDIT_GRANT)) {
+            return actor;
+        }
+        throw new ForbiddenActionException("payments.service-only", "Credit is granted by the referral and "
+                + "membership programs (payments:credit.grant), not by " + actor.type());
+    }
+
+    /** A customer's credit balance: the calling services (checkout) and staff who read payments. */
+    Actor creditReader() {
+        Actor actor = actors.current();
+        if (actor.type() == PrincipalType.SERVICE && (actor.can(PaymentsPermissions.SERVICE)
+                || actor.can(PaymentsPermissions.CREDIT_GRANT))) {
+            return actor;
+        }
+        return reader();
     }
 
     Actor current() {

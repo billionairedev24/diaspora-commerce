@@ -12,15 +12,17 @@ import com.afrotransact.deliveryruns.domain.AreaKey;
  * @param retentionDays   projected orders (PII) are deleted this many days after delivery
  * @param seedDemoAreas   seed the design's demo coverage areas at start-up (local profile only)
  * @param supportPhone    "Missed it? Call …" number in events
+ * @param defaultMinOrders minimum order count a new window starts with (0 = none)
  */
 public record PreorderOptions(String pagePath, List<AreaKey> metroCities, int retentionDays, boolean seedDemoAreas,
-                              String supportPhone) {
+                              String supportPhone, int defaultMinOrders) {
 
     public PreorderOptions {
         pagePath = pagePath == null || pagePath.isBlank() ? "/pre-orders"
                 : pagePath.startsWith("/") ? pagePath : "/" + pagePath;
         metroCities = metroCities == null ? List.of() : List.copyOf(metroCities);
         retentionDays = retentionDays < 1 ? 90 : retentionDays;
+        defaultMinOrders = Math.max(0, defaultMinOrders);
     }
 
     public boolean metro(String country, String region, String city) {

@@ -1,12 +1,14 @@
 'use client';
 
-import { inventoryHubQueries, type RetailItem, type Supplier } from '@afrotransact/api-client';
+import { inventoryHubQueries, type RetailItem, type Supplier, type SupplierInput } from '@afrotransact/api-client';
 import { Button, Select, TextField } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
-import { useHub, useHubMutation } from '@/components/inventory/shared';
-import { idempotencyKey, toMinor } from '@/lib/format';
+import { toneOf, useHub, useHubMutation } from '@/components/inventory/shared';
+import { StatusPill } from '@/components/ui/StatusPill';
+import { humanize, idempotencyKey, toMinor } from '@/lib/format';
+import { countryOptions, currencyOptions } from '@/lib/iso';
 
 type Storage = 'AMBIENT' | 'CHILLED' | 'FROZEN' | 'HAZMAT';
 
@@ -109,43 +111,157 @@ export function ItemForm({ onDone }: { onDone: (i: RetailItem) => void }) {
   );
 }
 
-/** New supplier (starts Onboarding; approve it to send purchase orders). */
-export function SupplierForm({ onDone }: { onDone: (s: Supplier) => void }) {
+const PAYMENT_TERMS = ['Net 30', 'Net 45', 'Net 60', 'Prepaid', '30% deposit, balance Net 30', '50% deposit, balance on shipment'];
+
+/** The supplier's next statuses and what each is called to the person deciding: one clear action each. */
+const STATUS_ACTIONS: Record<string, { to: 'APPROVED' | 'ON_WATCH' | 'INACTIVE'; label: string; reason: boolean; tone: 'primary' | 'neutral' | 'danger' }[]> = {
+  ONBOARDING: [{ to: 'APPROVED', label: 'Approve supplier', reason: false, tone: 'primary' }],
+  APPROVED: [
+    { to: 'ON_WATCH', label: 'Put on watch', reason: true, tone: 'neutral' },
+    { to: 'INACTIVE', label: 'Stop doing business', reason: true, tone: 'danger' }
+  ],
+  ON_WATCH: [
+    { to: 'APPROVED', label: 'Back to approved', reason: false, tone: 'primary' },
+    { to: 'INACTIVE', label: 'Stop doing business', reason: true, tone: 'danger' }
+  ],
+  INACTIVE: [{ to: 'APPROVED', label: 'Resume business', reason: false, tone: 'primary' }]
+};
+
+/** Status of a supplier and the one-click changes: stopping or watching asks why; the history of orders is never touched. */
+function SupplierStatus({ supplier, canApprove, onDone }: { supplier: Supplier; canApprove: boolean; onDone: (s: Supplier) => void }) {
   const api = useHub();
-  const [f, setF] = useState({ code: 'SUP-', name: '', country: '', city: '', currency: '', paymentTerms: 'Net 30', leadTimeDays: '30' });
+  const [pending, setPending] = useState<(typeof STATUS_ACTIONS)[string][number] | null>(null);
+  const [reason, setReason] = useState('');
+  const change = useHubMutation(
+    (to: 'APPROVED' | 'ON_WATCH' | 'INACTIVE') => api.retail.setSupplierStatus(supplier.id, to, reason.trim() || (to === 'APPROVED' ? 'Vetted' : undefined)),
+    (s) => `${s.name}: ${humanize(s.status).toLowerCase()}.`,
+    (s) => {
+      setPending(null);
+      setReason('');
+      onDone(s);
+    }
+  );
+  const actions = STATUS_ACTIONS[supplier.status] ?? [];
+  return (
+    <section aria-label="Supplier status" className="flex flex-col gap-2 border-t border-border pt-3">
+      <span className="flex flex-wrap items-center gap-2 text-sm">
+        <strong>Status</strong>
+        <StatusPill tone={toneOf(supplier.status)}>{humanize(supplier.status)}</StatusPill>
+        {supplier.statusReason ? <span className="text-muted">{supplier.statusReason}</span> : null}
+      </span>
+      <p className="m-0 text-xs text-muted">
+        {supplier.status === 'INACTIVE' || supplier.status === 'ONBOARDING'
+          ? 'No new purchase orders can be raised for this supplier.'
+          : 'New purchase orders can be raised. Stopping business never changes existing orders, receipts or history.'}
+      </p>
+      {canApprove && actions.length ? (
+        pending ? (
+          <form
+            className="flex flex-col gap-2"
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!pending.reason || reason.trim()) change.mutate(pending.to);
+            }}
+          >
+            {pending.reason ? <TextField label={`Why? (${pending.label.toLowerCase()})`} value={reason} onChange={(e) => setReason(e.target.value)} /> : null}
+            <span className="flex gap-2">
+              <Button type="submit" size="sm" variant={pending.tone === 'danger' ? 'dark' : 'primary'} loading={change.isPending} disabled={pending.reason && !reason.trim()}>
+                {pending.label}
+              </Button>
+              <Button type="button" size="sm" variant="neutral" onClick={() => setPending(null)}>
+                Cancel
+              </Button>
+            </span>
+          </form>
+        ) : (
+          <span className="flex flex-wrap gap-2">
+            {actions.map((a) => (
+              <Button key={a.to + a.label} size="sm" variant={a.tone === 'primary' ? 'primary' : 'neutral'} onClick={() => (a.reason ? setPending(a) : change.mutate(a.to))}>
+                {a.label}
+              </Button>
+            ))}
+          </span>
+        )
+      ) : null}
+    </section>
+  );
+}
+
+/** Add a supplier, or edit one: a supplier is a record we buy from (it never signs in). New ones start in Onboarding until approved. */
+export function SupplierForm({ supplier, canApprove = false, onDone }: { supplier?: Supplier; canApprove?: boolean; onDone: (s: Supplier) => void }) {
+  const api = useHub();
+  const countries = useMemo(() => countryOptions(), []);
+  const currencies = useMemo(() => currencyOptions(), []);
+  const first = supplier?.contacts[0];
+  const [f, setF] = useState({
+    code: supplier?.code ?? 'SUP-', name: supplier?.name ?? '', country: supplier?.country ?? '', city: supplier?.city ?? '', currency: supplier?.currency ?? '',
+    paymentTerms: supplier?.paymentTerms ?? 'Net 30', leadTimeDays: String(supplier?.leadTimeDays ?? 30),
+    contactName: first?.name ?? '', contactEmail: first?.email ?? '', contactPhone: first?.phone ?? ''
+  });
   const [shown, setShown] = useState(false);
   const errors: Record<string, string> = {};
-  if (!/^SUP-[A-Z0-9]{2,12}$/.test(f.code.toUpperCase())) errors.code = 'SUP- and 2 to 12 letters or digits';
+  if (!supplier && !/^SUP-[A-Z0-9]{2,12}$/.test(f.code.toUpperCase())) errors.code = 'SUP- and 2 to 12 letters or digits';
   if (!f.name.trim()) errors.name = 'Required';
-  if (!/^[A-Za-z]{2}$/.test(f.country)) errors.country = 'Two-letter country code';
-  if (!/^[A-Za-z]{3}$/.test(f.currency)) errors.currency = 'Three-letter currency code';
-  if (!/^\d+$/.test(f.leadTimeDays)) errors.leadTimeDays = 'Days';
-  const create = useHubMutation(
-    () => api.retail.createSupplier({ code: f.code.toUpperCase(), name: f.name.trim(), country: f.country.toUpperCase(), city: f.city.trim() || undefined, currency: f.currency.toUpperCase(), paymentTerms: f.paymentTerms.trim() || undefined, leadTimeDays: Number(f.leadTimeDays) }),
-    (s) => `${s.name} added (onboarding).`,
+  if (!f.country) errors.country = 'Choose the country';
+  if (!f.currency) errors.currency = 'Choose the currency';
+  if (!/^\d+$/.test(f.leadTimeDays) || Number(f.leadTimeDays) > 365) errors.leadTimeDays = '0 to 365 days';
+  if (f.contactEmail.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.contactEmail.trim())) errors.contactEmail = 'An email address';
+  const body = (): SupplierInput => {
+    const primary = f.contactName.trim() ? [{ name: f.contactName.trim(), email: f.contactEmail.trim() || undefined, phone: f.contactPhone.trim() || undefined, role: first?.role ?? undefined }] : [];
+    // Other contacts already on file are kept as they are.
+    const others = (supplier?.contacts ?? []).slice(1).map((c) => ({ name: c.name, role: c.role ?? undefined, email: c.email ?? undefined, phone: c.phone ?? undefined }));
+    return {
+      code: (supplier?.code ?? f.code).toUpperCase(), name: f.name.trim(), country: f.country, city: f.city.trim() || undefined, currency: f.currency,
+      paymentTerms: f.paymentTerms.trim() || undefined, leadTimeDays: Number(f.leadTimeDays), contacts: [...primary, ...(primary.length ? others : [])]
+    };
+  };
+  const save = useHubMutation(
+    () => (supplier ? api.retail.updateSupplier(supplier.id, body(), supplier.version) : api.retail.createSupplier(body())),
+    (s) => (supplier ? `${s.name} saved.` : `${s.name} added: approve it to raise purchase orders.`),
     onDone
   );
-  const field = (k: keyof typeof f, label: string) => <TextField label={label} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} error={shown ? errors[k] : undefined} />;
+  const text = (k: keyof typeof f, label: string, extra: { list?: string; inputMode?: 'numeric' | 'email' | 'tel'; className?: string } = {}) => (
+    <TextField label={label} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} error={shown ? errors[k] : undefined} {...extra} />
+  );
   return (
-    <form
-      className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))] gap-2"
-      noValidate
-      onSubmit={(e) => {
-        e.preventDefault();
-        setShown(true);
-        if (!Object.keys(errors).length) create.mutate(undefined);
-      }}
-    >
-      {field('code', 'Code')}
-      {field('name', 'Name')}
-      {field('country', 'Country (ISO)')}
-      {field('city', 'City')}
-      {field('currency', 'Currency')}
-      {field('paymentTerms', 'Payment terms')}
-      {field('leadTimeDays', 'Lead time (days)')}
-      <Button type="submit" className="col-span-full" loading={create.isPending}>
-        Add supplier
-      </Button>
-    </form>
+    <div className="flex flex-col gap-3">
+      <form
+        className="grid grid-cols-2 gap-x-3 gap-y-1"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          setShown(true);
+          if (!Object.keys(errors).length) save.mutate(undefined);
+        }}
+      >
+        <div className="col-span-2">{text('name', 'Supplier name')}</div>
+        {supplier ? (
+          <p className="col-span-2 m-0 text-xs text-muted">
+            Code <strong className="font-mono">{supplier.code}</strong> · the country cannot be changed (add a new supplier instead).
+          </p>
+        ) : (
+          text('code', 'Code')
+        )}
+        <Select label="Country" value={f.country} placeholder="Choose…" disabled={!!supplier} onChange={(e) => setF({ ...f, country: e.target.value })} options={countries} error={shown ? errors.country : undefined} />
+        {text('city', 'City')}
+        <Select label="Currency we pay in" value={f.currency} placeholder="Choose…" onChange={(e) => setF({ ...f, currency: e.target.value })} options={currencies} error={shown ? errors.currency : undefined} />
+        <datalist id="supplier-terms">
+          {PAYMENT_TERMS.map((t) => (
+            <option key={t} value={t} />
+          ))}
+        </datalist>
+        {text('paymentTerms', 'Payment terms', { list: 'supplier-terms' })}
+        {text('leadTimeDays', 'Usual lead time (days)', { inputMode: 'numeric' })}
+        <strong className="col-span-2 mt-1 text-sm">Contact (optional)</strong>
+        <div className="col-span-2">{text('contactName', 'Name')}</div>
+        {text('contactEmail', 'Email', { inputMode: 'email' })}
+        {text('contactPhone', 'Phone', { inputMode: 'tel' })}
+        <Button type="submit" className="col-span-2 mt-2" loading={save.isPending}>
+          {supplier ? 'Save changes' : 'Add supplier'}
+        </Button>
+      </form>
+      {supplier ? <SupplierStatus supplier={supplier} canApprove={canApprove} onDone={onDone} /> : null}
+    </div>
   );
 }

@@ -8,10 +8,14 @@ import java.util.UUID;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.BulkSwitchRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.BulkSwitchResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.CreativeRequest;
+import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.DecisionLogResponse;
+import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.DecisionRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.LateOrderRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.OrderPageResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.OrderResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.ProductListResponse;
+import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.ReasonRequest;
+import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.RefundSummaryResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.SummaryResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.SwitchRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.WindowPageResponse;
@@ -20,6 +24,7 @@ import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.WindowResponse;
 import com.afrotransact.deliveryruns.application.CsvExport;
 import com.afrotransact.deliveryruns.application.ExportKind;
 import com.afrotransact.deliveryruns.application.OrderFilter;
+import com.afrotransact.deliveryruns.application.PreorderDecisionService;
 import com.afrotransact.deliveryruns.application.PreorderOrderService;
 import com.afrotransact.deliveryruns.application.PreorderWindowService;
 import com.afrotransact.deliveryruns.application.WindowView;
@@ -58,10 +63,13 @@ class PreorderController {
 
     private final PreorderWindowService windows;
     private final PreorderOrderService orders;
+    private final PreorderDecisionService decisions;
 
-    PreorderController(PreorderWindowService windows, PreorderOrderService orders) {
+    PreorderController(PreorderWindowService windows, PreorderOrderService orders,
+                       PreorderDecisionService decisions) {
         this.windows = windows;
         this.orders = orders;
+        this.decisions = decisions;
     }
 
     @Operation(summary = "List pre-orders with tab counts (delivery-runs:read)",
@@ -168,6 +176,56 @@ class PreorderController {
                                                   @RequestHeader(name = HttpHeaders.IF_MATCH, required = false)
                                                   String ifMatch) {
         return tagged(windows.removeCreative(id, slot, Versions.expected(ifMatch)));
+    }
+
+    @Operation(summary = "Decide a window that closed below its minimum (preorders:manage)",
+            description = "Only a window in AWAITING_DECISION (409 delivery-runs.invalid-transition otherwise). CANCEL "
+                    + "cancels the window: every order is refunded in full, delivery fee included, and its stock "
+                    + "released (orders-service, on preorder.window.cancelled). PROCEED goes ahead below the minimum: "
+                    + "the window closes and hands its paid orders to a run on the scheduler's next tick. The reason "
+                    + "is required (422 delivery-runs.reason-required) and logged with who and when. If-Match.")
+    @PostMapping("/v1/preorders/{id}/decision")
+    ResponseEntity<WindowResponse> decide(@PathVariable UUID id, @Valid @RequestBody DecisionRequest body,
+                                          @RequestHeader(name = HttpHeaders.IF_MATCH, required = false)
+                                          String ifMatch) {
+        return tagged(decisions.decide(id, body.decision(), body.reason(), Versions.expected(ifMatch)));
+    }
+
+    @Operation(summary = "Cancel a pre-order and refund every order (preorders:manage)",
+            description = "Any published window that is not delivered or cancelled. The window becomes CANCELLED, a "
+                    + "run it was handed to is cancelled too (409 once that run is out for delivery) and every order "
+                    + "is refunded in full, delivery fee included, with its stock released; the orders list shows "
+                    + "each order's refundStatus. The reason is required and logged. If-Match.")
+    @PostMapping("/v1/preorders/{id}/cancel")
+    ResponseEntity<WindowResponse> cancel(@PathVariable UUID id, @Valid @RequestBody ReasonRequest body,
+                                          @RequestHeader(name = HttpHeaders.IF_MATCH, required = false)
+                                          String ifMatch) {
+        return tagged(decisions.cancel(id, body.reason(), Versions.expected(ifMatch)));
+    }
+
+    @Operation(summary = "Close an open pre-order early once its minimum is met (preorders:manage)",
+            description = "422 delivery-runs.preorder-minimum-not-met while orderCount is below minOrders; 409 when the "
+                    + "window is not OPEN. The close date moves to now and the scheduler closes it on its next tick. "
+                    + "The reason is required and logged. If-Match.")
+    @PostMapping("/v1/preorders/{id}/close-early")
+    ResponseEntity<WindowResponse> closeEarly(@PathVariable UUID id, @Valid @RequestBody ReasonRequest body,
+                                              @RequestHeader(name = HttpHeaders.IF_MATCH, required = false)
+                                              String ifMatch) {
+        return tagged(decisions.closeEarly(id, body.reason(), Versions.expected(ifMatch)));
+    }
+
+    @Operation(summary = "The window's decision log: who, when and why (delivery-runs:read)")
+    @GetMapping("/v1/preorders/{id}/decisions")
+    DecisionLogResponse decisions(@PathVariable UUID id) {
+        return DecisionLogResponse.of(decisions.log(id));
+    }
+
+    @Operation(summary = "Refund progress of a cancelled pre-order (delivery-runs:read)",
+            description = "Orders per refund status: PENDING, REFUNDED, VOIDED (nothing had been captured), FAILED. "
+                    + "done when none is pending or failed. Per-order status is on the orders list.")
+    @GetMapping("/v1/preorders/{id}/refunds")
+    RefundSummaryResponse refunds(@PathVariable UUID id) {
+        return RefundSummaryResponse.of(decisions.refunds(id));
     }
 
     @Operation(summary = "Orders of a pre-order, newest first (delivery-runs:read)",

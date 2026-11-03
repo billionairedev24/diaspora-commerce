@@ -44,7 +44,13 @@ type staffAction struct {
 	form    func(ctx context.Context, sc staffCtx, o jobj) *domain.Form
 	// when returns why the action is not possible in the record's state ("" when it is).
 	when func(sc staffCtx, o jobj) string
-	run  func(ctx context.Context, sc staffCtx, o jobj, v jobj) error
+	// settled reports that the record already went past this action (e.g. the application is approved). The sheet
+	// still disables the action, but a request for it (a stale sheet, a second tab) goes to the upstream, which owns
+	// the rules and answers idempotently: 200 for the same person's repeat, 409 already-decided naming who and when.
+	settled func(o jobj) bool
+	run     func(ctx context.Context, sc staffCtx, o jobj, v jobj) error
+	// removes reports that the record no longer exists after run (Act skips reload).
+	removes bool
 }
 
 type staffEdit struct {
@@ -62,25 +68,35 @@ type staffCreate struct {
 type staffResource struct {
 	key, module, title string
 	columns            []domain.Column
-	facets             []domain.Facet
-	statusKey          string
-	searchPlaceholder  string
-	exportable         bool
-	list               func(ctx context.Context, sc staffCtx, q staffQuery) (staffList, error)
-	get                func(ctx context.Context, sc staffCtx, id string) (jobj, error)
-	idOf               func(o jobj) string
-	cells              func(o jobj) map[string]any
-	titleOf            func(o jobj) string
-	subtitleOf         func(o jobj) string
-	status             func(o jobj) string
-	sections           func(o jobj) []domain.DetailSection
-	tables             func(o jobj) []domain.DetailTable
-	activity           func(ctx context.Context, sc staffCtx, o jobj) []domain.ActivityEntry
-	links              func(o jobj) []domain.RecordLink
-	version            func(o jobj) string
-	actions            []staffAction
-	edit               *staffEdit
-	create             *staffCreate
+	// names marks the id fields of the record that people must see as names (see staff_names.go): the framework
+	// resolves them for every page it reads and puts the name under each ref's nameKey, which the columns show.
+	names []nameRef
+	// search lists fields the table does not show but its search box finds (an audit entry's entity id).
+	search            []string
+	facets            []domain.Facet
+	statusKey         string
+	searchPlaceholder string
+	exportable        bool
+	list              func(ctx context.Context, sc staffCtx, q staffQuery) (staffList, error)
+	get               func(ctx context.Context, sc staffCtx, id string) (jobj, error)
+	idOf              func(o jobj) string
+	cells             func(o jobj) map[string]any
+	titleOf           func(o jobj) string
+	subtitleOf        func(o jobj) string
+	status            func(o jobj) string
+	sections          func(o jobj) []domain.DetailSection
+	tables            func(o jobj) []domain.DetailTable
+	activity          func(ctx context.Context, sc staffCtx, o jobj) []domain.ActivityEntry
+	links             func(o jobj) []domain.RecordLink
+	// file returns the URL of one file attached to the record (an application's uploaded document); the BFF sends the
+	// reviewer there (GET /v1/staff/resources/{resource}/{id}/files/{fileId}).
+	file    func(ctx context.Context, sc staffCtx, id, fileID string) (string, error)
+	version func(o jobj) string
+	actions []staffAction
+	// actionsFor adds actions that depend on the record (one tap per shipment's next step); looked up like actions.
+	actionsFor func(o jobj) []staffAction
+	edit       *staffEdit
+	create     *staffCreate
 }
 
 func (r *staffResource) id(o jobj) string {
@@ -88,6 +104,14 @@ func (r *staffResource) id(o jobj) string {
 		return r.idOf(o)
 	}
 	return jstr(o, "id")
+}
+
+// actionList is the static actions plus the ones this record's state calls for.
+func (r *staffResource) actionList(o jobj) []staffAction {
+	if r.actionsFor == nil {
+		return r.actions
+	}
+	return append(slices.Clone(r.actions), r.actionsFor(o)...)
 }
 
 func (r *staffResource) statusOf(o jobj) string {
@@ -146,6 +170,9 @@ func boolean(o jobj, path string) bool {
 }
 
 func objs(o jobj, path string) []jobj {
+	if direct, ok := at(o, path).([]jobj); ok {
+		return direct
+	}
 	list, _ := at(o, path).([]any)
 	out := make([]jobj, 0, len(list))
 	for _, it := range list {
@@ -250,8 +277,8 @@ func autoSections(o jobj, statusKey string, skip ...string) []domain.DetailSecti
 	details := domain.DetailSection{Title: "Details", Fields: []domain.DetailField{}}
 	var nested []domain.DetailSection
 	for _, k := range keys {
-		if slices.Contains(skip, k) {
-			continue
+		if slices.Contains(skip, k) || (k == "orderId" && jstr(o, "orderNumber") != "") {
+			continue // the order number says which order; the internal id is no use to a person
 		}
 		switch v := o[k].(type) {
 		case map[string]any:
@@ -447,6 +474,12 @@ func ff(key, label, typ string, required bool) domain.FormField {
 func withMax(f domain.FormField, n int) domain.FormField { f.MaxLength = n; return f }
 
 func withValue(f domain.FormField, v any) domain.FormField { f.Value = v; return f }
+
+// withLookup makes a text field a searchable picker of drivers or sellers; the value is still the id.
+func withLookup(f domain.FormField, kind string) domain.FormField {
+	f.Lookup = kind
+	return f
+}
 
 func withOptions(f domain.FormField, o []domain.FieldOption) domain.FormField {
 	f.Options = o

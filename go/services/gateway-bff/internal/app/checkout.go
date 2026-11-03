@@ -27,7 +27,8 @@ type checkoutServiceImpl struct {
 var _ CheckoutService = (*checkoutServiceImpl)(nil)
 
 // NewCheckoutService returns the CheckoutService.
-func NewCheckoutService(carts CartService, identity port.IdentityClient, payments port.PaymentsClient, orders port.OrdersClient) CheckoutService {
+func NewCheckoutService(carts CartService, identity port.IdentityClient, payments port.PaymentsClient,
+	orders port.OrdersClient) CheckoutService {
 	return &checkoutServiceImpl{carts: carts, identity: identity, payments: payments, orders: orders}
 }
 
@@ -75,12 +76,16 @@ func (s *checkoutServiceImpl) Summary(ctx context.Context, c *domain.Caller, _ s
 	if err != nil {
 		return domain.CheckoutSummary{}, mapErr("identity", err)
 	}
-	pms, err := s.payments.PaymentMethods(ctx, c.BearerToken)
+	wallet, err := s.payments.PaymentMethods(ctx, c.BearerToken)
 	if err != nil {
 		return domain.CheckoutSummary{}, mapErr("payments", err)
 	}
-	out := domain.CheckoutSummary{Packages: pkgs, Addresses: []domain.Address{}, PaymentMethods: orEmpty(pms),
-		Currency: cart.Currency, TaxRateLabel: "Calculated when you place your order"}
+	out := domain.CheckoutSummary{Packages: pkgs, Addresses: []domain.Address{},
+		PaymentMethods: make([]domain.PaymentMethod, 0, len(wallet.Items)), StripeCustomerID: wallet.StripeCustomerID,
+		Currency: cart.Currency, TaxRateLabel: "Add your address to see an estimate"}
+	for _, m := range wallet.Items {
+		out.PaymentMethods = append(out.PaymentMethods, toPaymentMethod(m))
+	}
 	for _, a := range addrs {
 		out.Addresses = append(out.Addresses, toAddress(a))
 	}

@@ -5,6 +5,8 @@ import { type ReactNode, Suspense } from 'react';
 import { CookieBanner } from '@/components/legal/CookieBanner';
 import { Footer } from '@/components/shell/Footer';
 import { Header } from '@/components/shell/Header';
+import { SignedOutNotice } from '@/components/shell/SignedOutNotice';
+import { SupportChat } from '@/components/shell/SupportChat';
 import { accountQueries, cartQueries, siteQueries } from '@/lib/api/queries';
 import { serverApi } from '@/lib/api/server';
 import { getQueryClient } from '@/lib/query/getQueryClient';
@@ -24,13 +26,18 @@ export default async function ShopLayout({ children }: { children: ReactNode }) 
   ]);
   return (
     <HydrationBoundary state={dehydrate(qc)}>
+      {/* No Suspense boundary around the header: every shop route is dynamic (cookies), so useSearchParams needs none,
+          and a boundary this large is streamed out of line (React outlines big completed boundaries) — the page then
+          paints without its fixed header and the header pops in later, shifting the layout. */}
+      <Header />
       <Suspense>
-        <Header />
+        <SignedOutNotice />
       </Suspense>
       <main id="main" tabIndex={-1} className="page">
         {children}
       </main>
       <Footer />
+      <SupportChat />
       <CookieBanner />
     </HydrationBoundary>
   );

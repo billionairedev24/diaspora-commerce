@@ -5,7 +5,9 @@ info:
   description: |
     Kafka → Elasticsearch projection of the product read model. Consumes catalog.product.* and
     inventory.availability.changed and offers.buybox.changed (topics at.product.events, at.inventory.events,
-    at.offers.events; the buy box quantity is authoritative per variant), upserts product documents
+    at.offers.events; the buy box quantity is authoritative per variant) and catalog.product.rating_changed (S324: sets
+    the document's rating and reviewCount from the product's published reviews; product upserts never reset them),
+    upserts product documents
     with version guards so redelivered or out-of-order events never overwrite newer data, and parks poison
     events on at.indexer.dlq.events after retries. Seller display names are warmed on start from seller-service's
     organisation directory (GET /v1/orgs/directory, client indexer-service, scope sellers:directory) and kept current

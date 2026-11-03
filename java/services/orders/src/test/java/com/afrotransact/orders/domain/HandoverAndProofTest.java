@@ -27,6 +27,7 @@ class HandoverAndProofTest {
         assertThat(HANDOVER.required(true, DeliveryMethod.AFROTRANSACT_DELIVERY, DOOR)).isTrue();
         assertThat(HANDOVER.required(false, DeliveryMethod.AFROTRANSACT_DELIVERY, HAND)).isTrue();
         assertThat(HANDOVER.required(true, DeliveryMethod.PICKUP, DOOR)).isTrue();
+        assertThat(HANDOVER.required(false, DeliveryMethod.PICKUP, DOOR)).as("every pickup is handed over by code").isTrue();
         assertThat(HANDOVER.required(false, DeliveryMethod.AFROTRANSACT_DELIVERY, DOOR)).isFalse();
         assertThat(HANDOVER.required(true, DeliveryMethod.CARRIER, HAND)).isFalse();
     }

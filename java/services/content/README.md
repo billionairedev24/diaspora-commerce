@@ -32,7 +32,7 @@ Seeds (Flyway V2–V6): the slot schemas and the prototype's live placements; al
 50 states + DC (launch set TX, GA, NJ, NY, MD, DC, VA, PA, MA, IL, MN, CA, FL, NC live; food in the FC states;
 pickup in TX/GA/NJ), Canada COMING_SOON (early access, 90 days 0 % commission), UK PLANNED; site config revision 1
 (socials, contacts, address, payment chips, "AfroTransact Alerts", en/fr/es/ar with RTL); English first drafts of
-all nine legal documents with archived predecessors (including the Twilio/CTIA SMS wording: program name,
+the twenty-one legal documents (nine with archived predecessors; the written texts in docs/legal arrive through tools/legal/build_seed.py) (including the Twilio/CTIA SMS wording: program name,
 frequency, rates, STOP/HELP, carriers not liable, no sharing of mobile information); cookie categories and table;
 six launch flags; the ten open roles.
 

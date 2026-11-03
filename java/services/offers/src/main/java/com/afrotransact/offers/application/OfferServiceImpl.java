@@ -22,6 +22,7 @@ import com.afrotransact.offers.port.CatalogClient.CatalogVariant;
 import com.afrotransact.offers.port.OfferRepository;
 import com.afrotransact.offers.port.OfferRepository.OfferPage;
 import com.afrotransact.offers.port.OfferRepository.OfferQuery;
+import com.afrotransact.offers.port.ListingEntitlementsClient;
 import com.afrotransact.offers.port.PickupLocationClient;
 import com.afrotransact.offers.port.PickupLocationClient.PickupLocation;
 import com.afrotransact.platform.events.DomainEventPublisher;
@@ -29,6 +30,7 @@ import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.platform.security.relationship.FgaObject;
 import com.afrotransact.platform.security.relationship.ResourceAccessChecker;
+import com.afrotransact.platform.web.error.BusinessRuleException;
 import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
@@ -42,6 +44,7 @@ class OfferServiceImpl implements OfferService {
     private final OfferRepository offers;
     private final CatalogClient catalog;
     private final PickupLocationClient pickupLocations;
+    private final ListingEntitlementsClient entitlements;
     private final BuyBoxService buyBox;
     private final BuyBoxEvaluator evaluator;
     private final PermissionChecker permissions;
@@ -51,11 +54,12 @@ class OfferServiceImpl implements OfferService {
     private final Clock clock;
 
     OfferServiceImpl(OfferRepository offers, CatalogClient catalog, PickupLocationClient pickupLocations,
-                     BuyBoxService buyBox, BuyBoxEvaluator evaluator, PermissionChecker permissions,
+                     ListingEntitlementsClient entitlements, BuyBoxService buyBox, BuyBoxEvaluator evaluator, PermissionChecker permissions,
                      ResourceAccessChecker access, DomainEventPublisher events, OffersSettings settings, Clock clock) {
         this.offers = offers;
         this.catalog = catalog;
         this.pickupLocations = pickupLocations;
+        this.entitlements = entitlements;
         this.buyBox = buyBox;
         this.evaluator = evaluator;
         this.permissions = permissions;
@@ -72,6 +76,7 @@ class OfferServiceImpl implements OfferService {
         String org = sellerOrg(actor, cmd.sellerOrgId());
         access.requireForOrg(OffersPermissions.WRITE, OffersRelations.ORG_MANAGE_PRODUCTS, org);
         validateCreate(cmd);
+        requireListingRoom(org);
         ShipFrom shipFrom = cmd.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY
                 ? pickupShipFrom(org, cmd.shipFrom()) : cmd.shipFrom();
 
@@ -100,6 +105,20 @@ class OfferServiceImpl implements OfferService {
         publish(OffersEvents.OFFER_CREATED, offer);
         buyBox.recompute(List.of(offer.atin()), OffersEvents.OFFER_CREATED);
         return evaluator.view(offer);
+    }
+
+    /** The plan's listing cap: one more live listing must fit (there is no limit on shops or users). */
+    private void requireListingRoom(String sellerOrgId) {
+        ListingEntitlementsClient.ListingAllowance allowance = entitlements.allowance(sellerOrgId);
+        if (allowance.limit() == null) {
+            return;
+        }
+        long live = offers.countActive(sellerOrgId);
+        if (!allowance.allows(live)) {
+            throw new BusinessRuleException("offers.listing-limit-reached", "Your " + (allowance.planName() == null
+                    ? "plan" : allowance.planName() + " plan") + " allows " + allowance.limit() + " live listings and "
+                    + "you have " + live + ". Pause or withdraw a listing, or upgrade your plan to list more.");
+        }
     }
 
     @Override
@@ -183,7 +202,10 @@ class OfferServiceImpl implements OfferService {
     @Override
     @Transactional
     public OfferView resume(UUID id, Long expectedVersion) {
-        return change(id, expectedVersion, o -> o.resume(Instant.now(clock)), OffersEvents.OFFER_UPDATED);
+        return change(id, expectedVersion, o -> {
+            requireListingRoom(o.sellerOrgId());
+            return o.resume(Instant.now(clock));
+        }, OffersEvents.OFFER_UPDATED);
     }
 
     @Override

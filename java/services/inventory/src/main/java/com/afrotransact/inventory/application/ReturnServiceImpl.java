@@ -135,7 +135,7 @@ class ReturnServiceImpl implements ReturnService {
             } else {
                 target = new Lot(UUID.randomUUID(), shippedLot.sku(), shippedLot.lotNo(), node,
                         shippedLot.ownerOrg(), null, cmd.qty(), 0, shippedLot.mfgDate(), shippedLot.expDate(),
-                        changes.now(), shippedLot.unitLandedCostMinor(), shippedLot.currency(), LotStatus.SELLABLE,
+                        changes.now(), shippedLot.cost(), LotStatus.SELLABLE,
                         "Returned to " + node, shippedLot.markdownFlag(), cmd.orderId(), 0);
                 changes.newLot(target);
                 created = true;
@@ -154,7 +154,7 @@ class ReturnServiceImpl implements ReturnService {
                         + " was written off; write off the returned units directly");
             } else {
                 target = new Lot(UUID.randomUUID(), lot.sku(), dmgNo, node, lot.ownerOrg(), null, cmd.qty(), 0,
-                        lot.mfgDate(), lot.expDate(), changes.now(), lot.unitLandedCostMinor(), lot.currency(),
+                        lot.mfgDate(), lot.expDate(), changes.now(), lot.cost(),
                         LotStatus.DAMAGED, "Damaged return", MarkdownFlag.NONE, cmd.orderId(), 0);
                 changes.newLot(target);
                 created = true;

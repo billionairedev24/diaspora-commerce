@@ -6,12 +6,25 @@ import { env } from '@/config/env';
 import { type QueuedEvent } from '@/domain/types';
 
 import { type components as F } from './generated/fulfilment';
-import { createJson, type Fetch, type TokenSource } from './http';
+import { BACKGROUND_HEADERS, createJson, type Fetch, type TokenSource } from './http';
 import { mapRoute } from './mapRoute';
 import { mockFetch } from './mock/server';
 
 export type SyncResult = F['schemas']['SyncResult'];
 export type EventResult = F['schemas']['EventResult'];
+
+/** GET /v1/session/policy on the gateway-bff (go/services/gateway-bff/api/openapi.yaml, schema SessionPolicy). Written by
+    hand: this app generates types for fulfilment and identity only, and the BFF has no generator here. The values are
+    validated on arrival (domain/sessionPolicy.ts parsePolicy), so a drift in this shape fails safe to the built-in defaults. */
+export interface SessionPolicyBody {
+  audience: 'customer-web' | 'customer-app' | 'seller' | 'staff' | 'driver';
+  idleTimeoutSeconds: number;
+  absoluteTimeoutSeconds: number;
+  warnSeconds: number;
+  /** Always null for bearer callers: the idle timeout is enforced on the device. */
+  lastActivityAt: string | null;
+  expiresAt: string | null;
+}
 
 /** Strips app-only fields (local file URIs) before an event leaves the device. */
 export function toWire(e: QueuedEvent): Record<string, unknown> {
@@ -23,8 +36,11 @@ export function createDriverApi(tokens: TokenSource, network: Fetch = (r) => fet
   const fulfilment = createJson(env.fulfilmentUrl, tokens, transport);
   const media = createJson(env.mediaUrl, tokens, transport);
   const identity = createJson(env.identityApiUrl, tokens, transport);
+  const bff = createJson(env.bffUrl, tokens, transport);
 
   return {
+    /** The sign-out policy for the driver app. A background request (never activity); X-App identifies the driver app. */
+    sessionPolicy: () => bff<SessionPolicyBody>('/v1/session/policy', { headers: { ...BACKGROUND_HEADERS, 'X-App': 'driver' } }),
     /** Access check; resolves the HTTP status and body (403 problems are expected answers). */
     async me(): Promise<{ status: number; body: unknown }> {
       try {

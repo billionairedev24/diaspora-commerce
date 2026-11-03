@@ -14,6 +14,7 @@ channels:
       deliveryRunsRunCutoffReminder: {$ref: '#/components/messages/deliveryRunsRunCutoffReminder'}
       deliveryRunsRunConfirmed: {$ref: '#/components/messages/deliveryRunsRunConfirmed'}
       deliveryRunsRunExtended: {$ref: '#/components/messages/deliveryRunsRunExtended'}
+      deliveryRunsRunCollecting: {$ref: '#/components/messages/deliveryRunsRunCollecting'}
       deliveryRunsRunCancelled: {$ref: '#/components/messages/deliveryRunsRunCancelled'}
       deliveryRunsRunOutForDelivery: {$ref: '#/components/messages/deliveryRunsRunOutForDelivery'}
       deliveryRunsRunCompleted: {$ref: '#/components/messages/deliveryRunsRunCompleted'}
@@ -29,8 +30,12 @@ channels:
       preorderWindowOpened: {$ref: '#/components/messages/preorderWindowOpened'}
       preorderWindowClosed: {$ref: '#/components/messages/preorderWindowClosed'}
       preorderWindowDelivered: {$ref: '#/components/messages/preorderWindowDelivered'}
+      preorderWindowDecisionNeeded: {$ref: '#/components/messages/preorderWindowDecisionNeeded'}
+      preorderWindowDecided: {$ref: '#/components/messages/preorderWindowDecided'}
+      preorderWindowCancelled: {$ref: '#/components/messages/preorderWindowCancelled'}
       preorderSettingsChanged: {$ref: '#/components/messages/preorderSettingsChanged'}
       preorderAreasChanged: {$ref: '#/components/messages/preorderAreasChanged'}
+      deliveryRunsLocationChanged: {$ref: '#/components/messages/deliveryRunsLocationChanged'}
       preorderExportCreated: {$ref: '#/components/messages/preorderExportCreated'}
       preorderWaitlistJoined: {$ref: '#/components/messages/preorderWaitlistJoined'}
 operations:
@@ -43,7 +48,8 @@ operations:
       subscribers (audience from GET /v1/service/locations/{id}/audience) and the run's customers (orders[]), sends the
       double opt-in link of subscription.created (confirmUrl) and confirms / cancels customers' preorders on
       confirmed / cancelled. orders captures payment on run.confirmed and releases stock and payment holds on
-      run.cancelled. fulfilment plans the sweep on run.confirmed (GET /v1/service/runs/{id}/dispatch). content
+      run.cancelled. fulfilment plans the sweep on run.confirmed (GET /v1/service/runs/{id}/dispatch) and cancels the
+      routes that have not started on run.cancelled. content
       refreshes run advertorials on announced / opened / extended and expires them on cancelled / confirmed.
       Pre-orders (S270–S275): notifications sends preorder.comms.due by kind — ANNOUNCE (preorder.announce email / SMS
       / push to the window's audience from GET /v1/service/preorders/{windowId}/audience?segment=SUBSCRIBERS, and
@@ -53,8 +59,16 @@ operations:
       (payment PAYMENT_LINK, preorder.late_order.payment_link). preorder.window.* follow a window's lifecycle (keyed by
       window id; opened / closed / delivered come from the scheduler, closed after the paid orders were handed to a
       run, which publishes delivery-runs.run.confirmed; paused / resumed carry the staff actorId);
-      preorder.settings.changed and preorder.areas.changed (key preorder-settings) and
+      preorder.settings.changed and preorder.areas.changed (key preorder-settings),
+      delivery-runs.location.changed (key location id; trust-ops audits it with the staff member and reason) and
       preorder.export.created are audit records; preorder.waitlist.joined records a waitlist sign-up.
+      ADR 0005 §4: staff set a minimum order count per window. When the close date passes below it the window is not
+      cancelled: it becomes AWAITING_DECISION and preorder.window.decision_needed tells staff (decision.kind
+      AWAITING, orders and minimum counted). Staff then CANCEL or PROCEED with a required reason; every decision
+      (and an early close once the minimum is met) is published as preorder.window.decided with who, when and why.
+      A cancelled window (preorder.window.cancelled, orders[] = every order) is refunded in full by orders-service
+      (consumer orders-delivery-runs-events), which also consumes delivery-runs.run.cancelled the same way; progress per
+      order comes back as orders.preorder.refund_settled / refund_failed.
   receiveDeliveryRunsOrderEvents:
     action: receive
     channel: {$ref: '#/channels/ordersOrderEvents'}
@@ -62,15 +76,25 @@ operations:
       delivery-runs projects pre-orders (consumer delivery-runs-preorders, inbox-deduplicated on event-id):
       orders.order.placed with shipments[] of fulfilmentType PREORDER (preorder.windowId, preorder.fulfilment,
       attribution {src, cr, po} on the order or the preorder block) becomes a window order numbered <CODE>-1001…;
-      orders.shipment.cancelled cancels that package (the order once none is left); orders.order.cancelled of a placed
+      orders.shipment.cancelled cancels that package (the order once none is left, with its refund PENDING);
+      orders.preorder.refund_settled (REFUNDED or VOIDED) and orders.preorder.refund_failed record the refund progress
+      of a cancelled order; orders.order.cancelled of a placed
       order cancels it. Late adds (<CODE>-L90…) are completed by their order's placed event.
+      S264: the run follows what happens to its orders' PREORDER shipments (consumer delivery-runs-progress,
+      inbox-deduplicated on event-id, forward only, harmless when repeated or late): orders.shipment.status_changed
+      to picked_up (collected from the seller), out_for_delivery, delivery_failed or returned, and
+      orders.shipment.delivered (deliveredAt is kept on the order's slot). The first collection moves the run to
+      COLLECTING (delivery-runs.run.collecting), the last one to OUT_FOR_DELIVERY, and when every order is delivered
+      or back the run is COMPLETED. A cancelled shipment (orders.shipment.cancelled) leaves the run. The seller payout
+      hold starts in orders-service / payments from the same delivered event.
 components:
   messages:
     preorderCommsDue:
       name: preorder.comms.due
       title: >-
         A pre-order window's comms are due (scheduler: opening, closes − 48 h, closes − 6 h, closing; OUT_FOR_DELIVERY
-        from the driver events), for a kind the window has switched on. Keyed by window id.
+        once, when the run the window's orders were handed to leaves — the driver events or staff move it), for a kind
+        the window has switched on. Keyed by window id.
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/PreorderCommsDue'}
     preorderWindowPublished:
@@ -108,6 +132,23 @@ components:
       title: The day after the delivery day (projected orders are deleted after the retention period)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/PreorderWindowEvent'}
+    preorderWindowDecisionNeeded:
+      name: preorder.window.decision_needed
+      title: The window closed below its minimum order count and waits for staff to cancel or proceed (notify staff)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderWindowEvent'}
+    preorderWindowDecided:
+      name: preorder.window.decided
+      title: Staff proceeded below the minimum, cancelled the window or closed it early (audit - who, when, why)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderWindowEvent'}
+    preorderWindowCancelled:
+      name: preorder.window.cancelled
+      title: >-
+        The window was cancelled: orders-service refunds every order in orders[] in full (delivery fee included) and
+        releases stock; a run it was handed to is cancelled too (delivery-runs.run.cancelled)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderWindowEvent'}
     preorderSettingsChanged:
       name: preorder.settings.changed
       title: Platform pre-order settings, payment setup or coverage areas changed (audit; key preorder-settings)
@@ -118,6 +159,13 @@ components:
       title: Staff edited one region's coverage in place (cities added, removed or switched; audit; key preorder-settings)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/PreorderAreasChanged'}
+    deliveryRunsLocationChanged:
+      name: delivery-runs.location.changed
+      title: >-
+        Staff created, edited, switched on or switched off a delivery-run location (audit: who, when and, for a
+        switch, why; keyed by location id)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/DeliveryRunsLocationChanged'}
     preorderExportCreated:
       name: preorder.export.created
       title: Staff exported a window's orders, picking list or advertorial report (audit)
@@ -171,14 +219,25 @@ components:
         affected order and customer. Release stock and payment holds and tell the customers.
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/DeliveryRunsRunEvent'}
+    deliveryRunsRunCollecting:
+      name: delivery-runs.run.collecting
+      title: >-
+        The first order was collected from its seller (the driver's pickup, or staff): the sweep has started (S264).
+        Not sent to customers.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/DeliveryRunsRunEvent'}
     deliveryRunsRunOutForDelivery:
       name: delivery-runs.run.out_for_delivery
-      title: The run left for the town (dispatch announcement); orders[] are the orders on board
+      title: >-
+        Every order was collected from its seller and the run is on the road (S264: derived from the drivers' shipment
+        events; staff can still press it); orders[] are the orders on board
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/DeliveryRunsRunEvent'}
     deliveryRunsRunCompleted:
       name: delivery-runs.run.completed
-      title: Every drop was made; orders[] are the run's orders
+      title: >-
+        Every order was delivered or came back (S264: derived from orders-service shipment events when the last one
+        is handed over; staff can still press it); orders[] are the run's orders
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/DeliveryRunsRunEvent'}
     deliveryRunsSubscriptionCreated:
@@ -219,7 +278,16 @@ components:
         customerId: {type: string, description: Customer (token subject); notifications resolves contacts}
         packages: {type: integer}
         status: {type: string, enum: [RESERVED, CONFIRMED, RELEASED, CANCELLED]}
-        handoverCode: {type: [string, 'null'], description: Six digits; confirmed pickup-point runs only}
+        handoverCode: {type: [string, 'null'], description: 'Six digits; confirmed pickup-point runs only. Window runs hand over with the order''s own 4-digit code (orders-service), which the driver app checks.'}
+    DeliveryRunsSellerRef:
+      type: object
+      description: A seller the run collects from (confirmed pre-order runs; notifications tells each seller the pickup time)
+      required: [sellerOrgId, orders, units]
+      properties:
+        sellerOrgId: {type: string}
+        sellerName: {type: [string, 'null']}
+        orders: {type: integer, description: Run orders with lines of this seller}
+        units: {type: integer, description: Units to pick}
     DeliveryRunsRunEvent:
       type: object
       required: [runId, status, locationId, locationSlug, town, market, timeZone, windowStart, windowEnd, cutoffAt,
@@ -274,6 +342,12 @@ components:
           type: [array, 'null']
           description: confirmed, cancelled, out_for_delivery and completed only
           items: {$ref: '#/components/schemas/DeliveryRunsOrderRef'}
+        sellers:
+          type: [array, 'null']
+          description: >-
+            confirmed pre-order runs only (S264): the sellers to collect from at sellerPickupAt, largest first. Each
+            reads its own pick list in Seller Center.
+          items: {$ref: '#/components/schemas/DeliveryRunsSellerRef'}
     DeliveryRunsSubscriptionEvent:
       type: object
       required: [subscriptionId, locationId, locationSlug, town, status, channels, changedChannels, unsubscribeUrl,
@@ -322,7 +396,8 @@ components:
           type: [string, 'null']
           description: >-
             The window's SMS copy (≤ 160, GSM-7). "{link}" is replaced with the tracked link
-            <PUBLIC_WEB_URL>/pre-orders?src=sms&po=<code>&cr=<slot> (about 60 characters): count it in the 160.
+            <PUBLIC_WEB_URL>/pre-orders?src=sms&po=<code>&cr=<slot> plus the four utm_* tags (about 140 characters): the
+            announcement SMS may take two messages.
         categories: {type: array, items: {type: string}}
         door: {type: boolean}
         pickup: {type: boolean}
@@ -341,7 +416,10 @@ components:
         pageUrl: {type: string, format: uri, description: '<PUBLIC_WEB_URL>/pre-orders/<code>'}
         links:
           type: object
-          description: pageUrl with ?src=<channel>&po=<code>[&cr=<slot>] per channel
+          description: >-
+            The pre-order page per channel: ?src=<email|sms|app|ig|fb|tt|wa>&po=<code>&cr=<slot> (the order attribution)
+            plus utm_source, utm_medium (the channel or network; social = medium), utm_campaign=preorder-<code> and
+            utm_content=<slot> (announce, remind, last, closed, ofd; story or feed for social posts).
           properties:
             email: {type: string, format: uri}
             sms: {type: string, format: uri}
@@ -361,6 +439,7 @@ components:
               orderId: {type: string}
               customerId: {type: string}
               fulfilment: {type: string, enum: [DOOR, PICKUP]}
+              handoverCode: {type: [string, 'null'], description: 'OUT_FOR_DELIVERY of a pickup-only window: this customer''s pickup-point handover code'}
     PreorderLateOrderAdded:
       type: object
       required: [windowId, code, name, orderId, number, customerId, payment, totalMinor, currency, deliversOn]
@@ -392,7 +471,7 @@ components:
         windowId: {type: string, format: uuid}
         code: {type: string}
         name: {type: string}
-        status: {type: string, enum: [DRAFT, PAUSED, UPCOMING, OPEN, CLOSED, DELIVERED]}
+        status: {type: string, enum: [DRAFT, PAUSED, UPCOMING, OPEN, CLOSED, DELIVERED, AWAITING_DECISION, CANCELLED]}
         targets: {type: array, items: {type: string}}
         where: {type: string}
         opensAt: {type: string, format: date-time}
@@ -423,6 +502,40 @@ components:
         actorId:
           type: [string, 'null']
           description: Staff subject who paused, resumed or edited the window (audit); null for scheduler events
+        minOrders: {type: integer, description: 'Fewest orders the window needs (0 = none)'}
+        orders:
+          type: [array, 'null']
+          description: preorder.window.cancelled only - every order orders-service must refund
+          items:
+            type: object
+            required: [orderId]
+            properties:
+              orderId: {type: string}
+              customerId: {type: [string, 'null']}
+              fulfilment: {type: string, enum: [DOOR, PICKUP]}
+        decision:
+          type: [object, 'null']
+          description: decision_needed, decided and cancelled only
+          required: [kind, reason, actor, orders, minimum, at]
+          properties:
+            kind: {type: string, enum: [AWAITING, PROCEED, CANCEL, EARLY_CLOSE]}
+            reason: {type: string}
+            actor: {type: string, description: 'Staff subject, or system'}
+            orders: {type: integer, description: 'Orders that counted'}
+            minimum: {type: integer}
+            at: {type: string, format: date-time}
+    DeliveryRunsLocationChanged:
+      type: object
+      required: [locationId, slug, name, action, active, actorId]
+      properties:
+        locationId: {type: string, format: uuid}
+        slug: {type: string, examples: [bastrop-tx]}
+        name: {type: string, examples: [Bastrop]}
+        action: {type: string, enum: [CREATED, UPDATED, ACTIVATED, DEACTIVATED]}
+        active: {type: boolean, description: 'Whether the location takes runs after the change'}
+        actorId: {type: string, description: Staff subject}
+        reason: {type: string, description: 'Why it was switched off (required for DEACTIVATED) or on (optional)'}
+        changedAt: {type: string, format: date-time}
     PreorderAreasChanged:
       type: object
       required: [region, added, removed, switched, actorId]

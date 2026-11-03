@@ -22,6 +22,9 @@ public interface ConnectAccountRepository {
 
     Optional<ConnectAccount> findByOrg(String orgId);
 
+    /** Accounts of an organisation that are still connected, after {@code afterAccountId} in id order. */
+    List<ConnectAccount> connectedAfter(String afterAccountId, int limit);
+
     List<ConnectAccount> search(ComplianceStatus status, boolean openOnly, int limit);
 
     /** Accounts with a deadline before {@code before} and open requirements (reminder candidates). */

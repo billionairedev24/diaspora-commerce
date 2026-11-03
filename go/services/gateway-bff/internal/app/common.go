@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -30,6 +31,9 @@ func (c Clock) now() time.Time {
 
 // mapErr turns an upstream error into a contract problem. Known problems pass through; unavailability becomes
 // 503 UPSTREAM_UNAVAILABLE; generic 4xx answers keep their meaning; anything else is a 502.
+// alreadyDecided are upstream 409 codes meaning the action already happened (mapped to ALREADY_DONE).
+var alreadyDecided = map[string]bool{"seller.already-decided": true, "seller.already-reviewed": true}
+
 func mapErr(upstream string, err error) error {
 	if err == nil {
 		return nil
@@ -46,7 +50,11 @@ func mapErr(upstream string, err error) error {
 	if p, ok := port.AsUpstreamProblem(err); ok {
 		switch p.Status {
 		case http.StatusUnauthorized:
-			return domain.Unauthenticated().WithCause(err)
+			// Says which service refused the sign-in: with a valid token at the BFF this is a service started with another
+			// identity address (issuer) or an older build, and the log line names it too.
+			slog.Warn("upstream rejected the caller's token", "upstream", upstream, "error", err)
+			return domain.NewProblem(http.StatusUnauthorized, domain.CodeUnauthenticated, "Sign in required",
+				"Sign in to continue. ("+upstream+" did not accept the sign-in)").WithCause(err)
 		case http.StatusForbidden:
 			return domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Forbidden", "You can't do that.").WithCause(err)
 		case http.StatusNotFound:
@@ -69,6 +77,9 @@ func mapErr(upstream string, err error) error {
 			return domain.NewProblem(http.StatusPreconditionFailed, domain.CodeVersionConflict, "Changed by someone else",
 				firstNonEmpty(p.Detail, "Someone else changed this since you loaded it. Refresh to see the latest.")).WithCause(err)
 		case http.StatusConflict:
+			if alreadyDecided[p.Code] {
+				return domain.NewProblem(http.StatusConflict, domain.CodeAlreadyDone, "Already done", firstNonEmpty(p.Detail, "That already happened.")).WithCause(err)
+			}
 			return domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Conflict", firstNonEmpty(p.Detail, "That conflicts with the current state.")).WithCause(err)
 		}
 		return domain.UpstreamError(upstream, p.Status).WithCause(err)

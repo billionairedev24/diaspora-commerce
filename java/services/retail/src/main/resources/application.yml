@@ -77,7 +77,7 @@ at:
     # Landed cost, GL and approval thresholds are kept in this currency; POs carry the supplier currency + FX rate.
     base-currency: USD
     # UPC company prefix of AfroTransact Retail (GTIN-12 = prefix + 6-digit item reference + check digit).
-    gs1-company-prefix: ${GS1_COMPANY_PREFIX:86001}
+    gs1-company-prefix: ${GS1_COMPANY_PREFIX:04000}
     approval:
       # POs above this value (base currency minor units) also need Finance sign-off (retail:finance).
       finance-threshold-minor: ${PO_FINANCE_THRESHOLD_MINOR:1000000}

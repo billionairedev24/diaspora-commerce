@@ -1,0 +1,14 @@
+{
+  "formattedAddress": "345 Flatbush Ave, Brooklyn, NY 11238, USA",
+  "addressComponents": [
+    {"longText": "345", "shortText": "345", "types": ["street_number"], "languageCode": "en"},
+    {"longText": "Flatbush Avenue", "shortText": "Flatbush Ave", "types": ["route"], "languageCode": "en"},
+    {"longText": "Prospect Heights", "shortText": "Prospect Heights", "types": ["neighborhood", "political"], "languageCode": "en"},
+    {"longText": "Brooklyn", "shortText": "Brooklyn", "types": ["sublocality_level_1", "sublocality", "political"], "languageCode": "en"},
+    {"longText": "Kings County", "shortText": "Kings County", "types": ["administrative_area_level_2", "political"], "languageCode": "en"},
+    {"longText": "New York", "shortText": "NY", "types": ["administrative_area_level_1", "political"], "languageCode": "en"},
+    {"longText": "United States", "shortText": "US", "types": ["country", "political"], "languageCode": "en"},
+    {"longText": "11238", "shortText": "11238", "types": ["postal_code"], "languageCode": "en"}
+  ],
+  "location": {"latitude": 40.6745, "longitude": -73.9705}
+}

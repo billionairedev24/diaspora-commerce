@@ -5,7 +5,7 @@
 
 # Platform / infrastructure / delivery
 /infra/                             @billionairedev24
-/infra/terraform/                   @billionairedev24
+/infra/tofu/                   @billionairedev24
 /infra/cloudflare/                  @billionairedev24
 /infra/policy/                      @billionairedev24
 /.github/                           @billionairedev24

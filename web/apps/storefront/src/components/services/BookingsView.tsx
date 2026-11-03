@@ -2,12 +2,12 @@
 
 import { type AvailableSlot, bookingKeys, type CustomerBooking, isApiError } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, Skeleton, Star, useToast } from '@afrotransact/ui';
+import { Button, buttonClassName, EmptyState, FlatPage, Message, Section, Skeleton, Star, textLinkClassName, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 
-import { AccountCrumb } from '@/components/account/AccountCrumb';
+import { AccountHeader } from '@/components/account/AccountHeader';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
@@ -41,7 +41,7 @@ function BookingCard({ b }: { b: CustomerBooking }) {
   const sync = useMutation({ mutationFn: () => api.syncBookingPayment(b.id), onSuccess: () => refresh(), onError: fail });
 
   return (
-    <section className={styles.card} data-testid="booking" aria-label={`${b.service.name} · ${b.service.providerName}`}>
+    <section className={`${styles.card} ${styles.bookingFlat}`} data-testid="booking" aria-label={`${b.service.name} · ${b.service.providerName}`}>
       <div className={styles.booking}>
         <div className={styles.field}>
           <span className={styles.status}>{b.statusLabel}</span>
@@ -151,24 +151,27 @@ export function BookingsView() {
   const upcoming = (q.data ?? []).filter((b) => new Date(b.endAt).getTime() >= now && !b.status.startsWith('CANCELLED') && b.status !== 'DECLINED');
   const past = (q.data ?? []).filter((b) => !upcoming.includes(b));
   return (
-    <div className={styles.page}>
-      <AccountCrumb>{t('acct.bookings')}</AccountCrumb>
-      <h1 className={styles.h1}>{t('svc.yourAppointments')}</h1>
+    <FlatPage>
+      <AccountHeader title={t('svc.yourAppointments')} crumb={t('acct.bookings')} />
       {q.isPending && <Skeleton height={120} />}
-      {q.isError && <p className={styles.error} role="alert">{t('acct.loadError')}</p>}
+      {q.isError && <Message tone="error">{t('acct.loadError')}</Message>}
       {q.isSuccess && q.data.length === 0 && (
-        <p className={styles.muted}>
-          {t('bk.none')} <Link href="/services">{t('svc.findService')}</Link>
-        </p>
+        <EmptyState action={<Link href="/services" className={textLinkClassName}>{t('svc.findService')}</Link>}>{t('bk.none')}</EmptyState>
       )}
-      {upcoming.length > 0 && <h2 className={styles.h2}>{t('bk.upcoming')}</h2>}
-      {upcoming.map((b) => (
-        <BookingCard key={b.id} b={b} />
-      ))}
-      {past.length > 0 && <h2 className={styles.h2}>{t('bk.past')}</h2>}
-      {past.map((b) => (
-        <BookingCard key={b.id} b={b} />
-      ))}
-    </div>
+      {upcoming.length > 0 && (
+        <Section title={t('bk.upcoming')} id="bk-upcoming">
+          {upcoming.map((b) => (
+            <BookingCard key={b.id} b={b} />
+          ))}
+        </Section>
+      )}
+      {past.length > 0 && (
+        <Section title={t('bk.past')} id="bk-past">
+          {past.map((b) => (
+            <BookingCard key={b.id} b={b} />
+          ))}
+        </Section>
+      )}
+    </FlatPage>
   );
 }

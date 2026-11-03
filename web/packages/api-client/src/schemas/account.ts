@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { MinorSchema } from './common';
 
-/* Account resources: addresses, saved payment methods, orders and returns (summaries). Detail screens,
+/* Account resources: addresses, saved payment methods, orders (summaries). Detail screens,
    security, checkout and services live in ./shopper. */
 
 export const AddressSchema = z.object({
@@ -21,7 +21,7 @@ export type Address = z.infer<typeof AddressSchema>;
 
 export const PaymentMethodSchema = z.object({
   id: z.string(),
-  type: z.enum(['card', 'us_bank_account', 'cashapp', 'link']),
+  type: z.enum(['card', 'us_bank_account', 'cashapp', 'link', 'amazon_pay']),
   brand: z.string().nullable(),
   last4: z.string().nullable(),
   label: z.string(),
@@ -43,7 +43,10 @@ export const OrderSummarySchema = z.object({
       label: z.string(),
       status: z.string(),
       items: z.string(),
+      sellerName: z.string().optional(),
+      lines: z.array(z.object({ title: z.string(), quantity: z.number().int(), imageUrl: z.string().nullable().optional(), productAtin: z.string().optional() })).optional(),
       cancellable: z.boolean().optional(),
+      cancellableUntil: z.string().nullable().optional(),
       carrier: z.string().nullable().optional(),
       trackingNumber: z.string().nullable().optional(),
       promisedBy: z.string().nullable().optional(),
@@ -56,27 +59,5 @@ export const OrderSummarySchema = z.object({
   )
 });
 export type OrderSummary = z.infer<typeof OrderSummarySchema>;
-
-export const ReturnSummarySchema = z.object({
-  rmaId: z.string(),
-  orderNumber: z.string(),
-  title: z.string(),
-  status: z.string(),
-  refundMinor: MinorSchema,
-  number: z.string().optional(),
-  method: z.enum(['DROP_OFF', 'DRIVER_PICKUP', 'NO_RETURN']).optional(),
-  reason: z.string().optional(),
-  refundState: z.string().optional(),
-  currency: z.string().optional(),
-  cancellable: z.boolean().optional(),
-  createdAt: z.string().nullable().optional(),
-  labelUrl: z.string().nullable().optional(),
-  qrPayload: z.string().nullable().optional(),
-  handoverCode: z.string().nullable().optional(),
-  dropOffBy: z.string().nullable().optional(),
-  carrier: z.string().nullable().optional(),
-  trackingNumber: z.string().nullable().optional()
-});
-export type ReturnSummary = z.infer<typeof ReturnSummarySchema>;
 
 export const PageOfSchema = <T extends z.ZodType>(item: T) => z.object({ items: z.array(item), nextCursor: z.string().nullable() });

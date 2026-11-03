@@ -48,9 +48,10 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * One PostgreSQL container, one in-JVM WireMock standing in for identity, orders, inventory and geo, and one Spring
- * context shared by every integration test. Kafka consumers and the relay job are off; tests call the consumers'
- * services and the relay directly.
+ * One PostgreSQL container, one in-JVM WireMock standing in for identity, orders, inventory, geo and delivery-runs, and
+ * one Spring context shared by every integration test. Kafka consumers and the relay job are off; tests call the
+ * consumers' services and the relay directly. Set {@code AT_IT_POSTGRES_URL} (jdbc:postgresql://…, a PostGIS-enabled
+ * server; user and password from {@code AT_IT_POSTGRES_USER} / {@code AT_IT_POSTGRES_PASSWORD}) to run without Docker.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "at.events.relay-enabled=false",
@@ -66,6 +67,7 @@ abstract class FulfilmentIntegrationTest {
 
     static final String NODE = "HOU-FC1";
     static final GeoPoint DEPOT = new GeoPoint(29.70, -95.45);
+    static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
     static final WireMockServer WIREMOCK = new WireMockServer(WireMockConfiguration.options().dynamicPort());
     static final Upstreams UPSTREAMS = new Upstreams(WIREMOCK);
@@ -73,17 +75,21 @@ abstract class FulfilmentIntegrationTest {
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
     static {
-        POSTGRES.start();
+        if (EXTERNAL_DB == null) {
+            POSTGRES.start();
+        }
         WIREMOCK.start();
         UPSTREAMS.common();
     }
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-        for (String upstream : List.of("orders", "inventory", "geo")) {
+        registry.add("spring.datasource.url", () -> EXTERNAL_DB != null ? EXTERNAL_DB : POSTGRES.getJdbcUrl());
+        registry.add("spring.datasource.username", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_USER", "postgres") : POSTGRES.getUsername());
+        registry.add("spring.datasource.password", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_PASSWORD", "") : POSTGRES.getPassword());
+        for (String upstream : List.of("orders", "inventory", "geo", "delivery-runs")) {
             registry.add("at.fulfilment.upstreams." + upstream + "-url", WIREMOCK::baseUrl);
         }
         registry.add("at.fulfilment.oauth.issuer-url", WIREMOCK::baseUrl);

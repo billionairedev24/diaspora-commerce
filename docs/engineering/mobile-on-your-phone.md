@@ -28,7 +28,7 @@ make lan-env MOBILE_HOST=lan       # dry run: print the addresses it would use
 | What | localhost mode (default) | LAN mode |
 |---|---|---|
 | identity issuer (`AUTH_ISSUER_URL`; every service validates tokens against it, the BFF's `OIDC_ISSUER` follows it) | `http://localhost:8100` | `http://<ip>:8100` |
-| Web apps (`PUBLIC_WEB_URL`, `SELLER_CENTER_URL`, `STAFF_CONSOLE_URL`; sign-in callbacks, links) | `http://localhost:3000/3001/3002` | `http://<ip>:3000/3001/3002` |
+| Web apps (`PUBLIC_WEB_URL`, `SELLER_CENTER_URL`, `STAFF_CONSOLE_URL`; sign-in callbacks, links) | `http://localhost:3000/3010/3002` | `http://<ip>:3000/3010/3002` |
 | CORS / CSRF origins (`WEB_ORIGINS`, `AT_SECURITY_CORS_ALLOWED_ORIGINS`, identity's list via `LAN_WEB_ORIGINS`) | localhost | the LAN origins (+ the localhost Expo web previews) |
 | Mobile OIDC redirect URIs (identity `customer-app` / `driver-app`) | app scheme, `http://localhost:808x/auth/callback`, `exp://localhost:808x/--/auth/callback` | + `exp://<ip>:808x/--/auth/callback` and `http://<ip>:808x/auth/callback` (`CUSTOMER_APP_DEV_REDIRECT_URIS`, `DRIVER_APP_DEV_REDIRECT_URIS`, local profile only) |
 | Apps' API host (`EXPO_PUBLIC_DEV_HOST`, inlined by Metro) | `localhost` | `<ip>` |

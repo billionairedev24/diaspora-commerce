@@ -19,6 +19,7 @@ export const siteQueries = {
 };
 
 export const legalQueries = {
+  index: (api: ApiClient) => queryOptions({ queryKey: legalKeys.index(), queryFn: ({ signal }) => api.getLegalIndex(signal), staleTime: 5 * MINUTE }),
   document: (api: ApiClient, key: LegalDocumentKey, locale: string, version?: string) =>
     queryOptions({
       queryKey: legalKeys.document(key, locale, version),

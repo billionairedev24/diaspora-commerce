@@ -1,7 +1,7 @@
 /* Mock of notifications' templates behind the staff console's Notifications → Templates (gateway-bff-staff.yaml, tag
    Notifications; S268). Rows and sample data are copied from the real seeds (go/services/notifications migrations
    0002–0008, every version) and from notifications' GET /v1/templates/{key}/sample (the producer fixtures run through the
-   real ingest), for a representative set of keys, with links on the local hosts (storefront :3000, Seller Center :3001).
+   real ingest), for a representative set of keys, with links on the local hosts (storefront :3000, Seller Center :3010).
    Regenerate by hand when those seeds change. */
 
 export interface MockTemplateRow {
@@ -349,7 +349,7 @@ export const seedTemplateSamples = (): Record<string, MockTemplateSample> => ({
       "trustops.seller.suspended"
     ],
     "data": {
-      "actionUrl": "http://localhost:3001/account-health",
+      "actionUrl": "http://localhost:3010/account-health",
       "actorId": "staff-1",
       "buyBoxRestricted": true,
       "changedAt": "2026-10-10T10:00:00Z",

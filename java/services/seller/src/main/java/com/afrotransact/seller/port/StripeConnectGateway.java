@@ -4,30 +4,24 @@ import java.util.Set;
 
 import com.afrotransact.seller.domain.RequirementsSnapshot;
 
-/** Stripe Connect: connected accounts, embedded-component sessions, verification results and requirement answers. */
+/**
+ * Stripe Connect: connected accounts, embedded-component sessions and verification results. Seller accounts are
+ * Stripe-collected (Stripe keeps the liability and KYC), so once onboarding started the platform can't change identity,
+ * tax or bank details through the API: Stripe's embedded components collect and change them, and this port only
+ * reads what Stripe holds.
+ */
 public interface StripeConnectGateway {
 
     /** Creates the connected account (idempotent per organisation) and returns its id ({@code acct_…}). */
     String createAccount(CreateConnectedAccount request);
 
-    /** Account Session for the embedded components, e.g. account_onboarding and account_management. */
+    /**
+     * Account Session for the embedded components, e.g. account_onboarding, account_management and
+     * notification_banner. Every component keeps Stripe's defaults (Stripe collects the payout bank account), so
+     * their features agree, as Stripe requires.
+     */
     AccountSession createAccountSession(String accountId, Set<String> components);
 
-    /** Verification results only: requirements, flags and capability statuses. */
+    /** Verification results (requirements, flags, capability statuses) and the payout bank account Stripe holds. */
     RequirementsSnapshot retrieveAccount(String accountId);
-
-    /** Attaches a bank account token ({@code btok_…}) created client-side as the payout external account. */
-    void attachExternalAccount(String accountId, String bankAccountToken);
-
-    /**
-     * Sends the bank account the applicant typed on "Payouts" to Stripe as the default payout (external) account.
-     * The numbers go to Stripe only; the caller keeps the last 4 digits.
-     */
-    LinkedBankAccount attachBankAccount(String accountId, BankAccountDetails bank);
-
-    /** Uploads a document to Stripe Files with purpose {@code account_requirement}; returns {@code file_…}. */
-    String uploadRequirementFile(String accountId, MediaAsset asset);
-
-    /** Forwards an Account health answer to Accounts / Persons update. */
-    void submitRequirement(String accountId, RequirementSubmission submission);
 }

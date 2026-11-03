@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -28,6 +29,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
@@ -141,7 +143,8 @@ final class InboundDtos {
         InboundCommands.ReceivePlan toCommand() {
             return new InboundCommands.ReceivePlan(lines == null ? List.of() : lines.stream()
                     .map(l -> new InboundCommands.ReceiveLine(l.sku(), l.unitLabel(), null, l.qtyGood(),
-                            l.qtyDamaged(), l.lotNo(), l.mfgDate(), l.expDate(), l.bin(), l.holdReason())).toList(),
+                            l.qtyDamaged(), l.lotNo(), l.mfgDate(), l.expDate(), l.bin(), l.holdReason(),
+                            l.cost() == null ? null : l.cost().toDomain())).toList(),
                     boxesReceived);
         }
     }
@@ -153,7 +156,26 @@ final class InboundDtos {
                           @Schema(description = "Default: one lot per receipt") @Size(max = 59) String lotNo,
                           LocalDate mfgDate, LocalDate expDate, @Size(max = 30) String bin,
                           @Schema(description = "Receive the good units into quarantine with this reason")
-                          @Size(max = 500) String holdReason) {
+                          @Size(max = 500) String holdReason,
+                          @Schema(description = "What the units cost, in the currency actually paid, for "
+                                  + "AfroTransact-owned stock (not allowed on seller FBA shipments)")
+                          @Valid ReceiveCostDto cost) {
+    }
+
+    @Schema(name = "InboundReceiveCost", description = "The unit cost of received stock in the currency paid; "
+            + "valued in USD at the rate entered or, without one, the staff-managed table's latest rate")
+    record ReceiveCostDto(@PositiveOrZero long unitLandedCostMinor,
+                          @NotBlank @Size(min = 3, max = 3) String currency,
+                          @Schema(description = "US dollars per 1 unit of `currency`; omit to use the rates table")
+                          @Positive BigDecimal fxRateToUsd,
+                          @Schema(description = "The day `fxRateToUsd` is for; omit for the receiving date")
+                          LocalDate fxRateDate,
+                          @Valid InventoryDtos.CostComponentsDto costComponents) {
+
+        InboundCommands.ReceiveCost toDomain() {
+            return new InboundCommands.ReceiveCost(unitLandedCostMinor, currency.toUpperCase(Locale.ROOT),
+                    fxRateToUsd, fxRateDate, InventoryDtos.CostComponentsDto.toDomain(costComponents));
+        }
     }
 
     // ---- responses ----

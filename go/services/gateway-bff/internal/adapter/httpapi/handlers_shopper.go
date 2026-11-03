@@ -19,8 +19,9 @@ type ShopperServices struct {
 	Wallet   app.WalletService
 	Orders   app.CustomerOrdersService
 	Checkout app.CheckoutPaymentService
-	Returns  app.ReturnsService
-	Security app.SecurityService
+	// HelpRequests is the customer side of disputes (evidence photos, open, list, read); optional.
+	HelpRequests app.HelpRequestsService
+	Security     app.SecurityService
 	// Settings is the profile, display preferences, back-office alerts and leaving an organisation (every app).
 	Settings app.AccountSettingsService
 	Services app.ServicesService
@@ -29,6 +30,16 @@ type ShopperServices struct {
 	SearchClicks app.SearchClickService
 	// PayLinks serves the pay-now page of late pre-order adds (optional; public, the link's token is the credential).
 	PayLinks app.PayLinkService
+	// BusinessPages serves a business's plain public page (optional; public, read-only).
+	BusinessPages app.BusinessPageService
+	// Credit is AfroTransact credit and gift cards (S320, S321; optional).
+	Credit app.CreditService
+	// Membership is the shopper's membership: tiers, joining, changing plan, canceling (S323; optional).
+	Membership app.MembershipService
+	// Referral is "Refer a friend" (S322; optional).
+	Referral app.ReferralService
+	// Reviews is verified-purchase product reviews and ratings (S324; optional).
+	Reviews app.ProductReviewService
 }
 
 func (s ShopperServices) enabled() bool { return s.Wallet != nil }
@@ -47,10 +58,30 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 	// Orders & tracking
 	route("GET /v1/account/orders/{orderNumber}", h.orderDetail)
 	route("GET /v1/account/orders/{orderNumber}/tracking", h.orderTracking)
-	route("GET /v1/account/orders/{orderNumber}/returnable", h.returnable)
-	// Returns
-	route("GET /v1/account/returns/{rmaId}", h.returnDetail)
-	route("POST /v1/account/returns/{rmaId}/cancel", h.cancelReturn)
+	// Help requests: a delivered order has no self-service return; the customer reports a problem with photos
+	if h.s.Shopper.HelpRequests != nil {
+		upload := func(fn http.HandlerFunc) http.HandlerFunc { return h.rl.wrap("help-upload", h.o.LookupPerMinute, fn) }
+		route("POST /v1/me/help-requests/uploads", upload(h.helpEvidenceUpload))
+		route("POST /v1/me/help-requests/uploads/{assetId}/complete", upload(h.helpEvidenceComplete))
+		route("POST /v1/me/help-requests", h.createHelpRequest)
+		route("GET /v1/me/help-requests", h.helpRequests)
+		route("GET /v1/me/help-requests/{id}", h.helpRequest)
+	}
+	if h.s.Shopper.BusinessPages != nil {
+		route("GET /v1/business-pages/{slug}", h.businessPage)
+	}
+	if h.s.Shopper.Credit != nil {
+		h.registerCredit(route)
+	}
+	if h.s.Shopper.Membership != nil {
+		h.registerMembership(route)
+	}
+	if h.s.Shopper.Referral != nil {
+		h.registerReferral(route)
+	}
+	if h.s.Shopper.Reviews != nil {
+		h.registerReviews(route)
+	}
 	// Pay-now page of late pre-order adds (no session: the signed token is the credential; rate-limited per IP)
 	if h.s.Shopper.PayLinks != nil {
 		lookup := func(fn http.HandlerFunc) http.HandlerFunc { return h.rl.wrap("lookup", h.o.LookupPerMinute, fn) }
@@ -134,18 +165,51 @@ func (h *handlersImpl) orderTracking(w http.ResponseWriter, r *http.Request) {
 	h.ok(w, r, v, err)
 }
 
-func (h *handlersImpl) returnable(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.Shopper.Returns.Returnable(r.Context(), callerFrom(r.Context()), r.PathValue("orderNumber"))
+func (h *handlersImpl) helpEvidenceUpload(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		FileName    string `json:"fileName"`
+		ContentType string `json:"contentType"`
+		Size        int64  `json:"size"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Shopper.HelpRequests.EvidenceUpload(r.Context(), callerFrom(r.Context()), b.FileName, b.ContentType, b.Size)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) helpEvidenceComplete(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Shopper.HelpRequests.CompleteEvidence(r.Context(), callerFrom(r.Context()), r.PathValue("assetId"))
 	h.ok(w, r, v, err)
 }
 
-func (h *handlersImpl) returnDetail(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.Shopper.Returns.Detail(r.Context(), callerFrom(r.Context()), r.PathValue("rmaId"))
+func (h *handlersImpl) createHelpRequest(w http.ResponseWriter, r *http.Request) {
+	var b domain.CreateHelpRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Shopper.HelpRequests.Create(r.Context(), callerFrom(r.Context()), r.Header.Get("Idempotency-Key"), b)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) helpRequests(w http.ResponseWriter, r *http.Request) {
+	limit := 20
+	if s := r.URL.Query().Get("limit"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 1 || n > 50 {
+			h.reply(w, r, 0, nil, domain.ValidationProblem(map[string]string{"limit": "Between 1 and 50"}))
+			return
+		}
+		limit = n
+	}
+	v, err := h.s.Shopper.HelpRequests.List(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("cursor"), limit)
 	h.ok(w, r, v, err)
 }
 
-func (h *handlersImpl) cancelReturn(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.Shopper.Returns.Cancel(r.Context(), callerFrom(r.Context()), r.PathValue("rmaId"))
+func (h *handlersImpl) helpRequest(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Shopper.HelpRequests.Get(r.Context(), callerFrom(r.Context()), r.PathValue("id"))
 	h.ok(w, r, v, err)
 }
 
@@ -153,6 +217,11 @@ func (h *handlersImpl) cancelReturn(w http.ResponseWriter, r *http.Request) {
 
 type payLinkBody struct {
 	Token string `json:"token"`
+}
+
+func (h *handlersImpl) businessPage(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Shopper.BusinessPages.Page(r.Context(), r.PathValue("slug"))
+	h.ok(w, r, v, err)
 }
 
 func (h *handlersImpl) payLinkLookup(w http.ResponseWriter, r *http.Request) {
@@ -348,7 +417,7 @@ func (h *handlersImpl) searchServices(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlersImpl) providerPage(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.Shopper.Services.Provider(r.Context(), r.PathValue("orgId"), r.URL.Query().Get("slug"))
+	v, err := h.s.Shopper.Services.Provider(r.Context(), r.PathValue("orgId"))
 	h.ok(w, r, v, err)
 }
 

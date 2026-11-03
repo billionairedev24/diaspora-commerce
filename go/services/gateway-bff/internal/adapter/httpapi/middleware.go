@@ -17,7 +17,10 @@ import (
 
 // SecurityOptions configure CORS, CSRF, rate limits and body limits.
 type SecurityOptions struct {
-	AllowedOrigins  []string
+	AllowedOrigins []string
+	// LocalDev (APP_ENV=local only) also accepts any http://localhost:<port> or http://127.0.0.1:<port> origin, so a web
+	// app that moved to another port (3010 taken → 3020) is never refused as "not an AfroTransact page".
+	LocalDev        bool
 	CookieName      string
 	CookieSecure    bool
 	CookieDomain    string
@@ -73,12 +76,31 @@ func clientIP(r *http.Request, trustForwarded bool) string {
 	return host
 }
 
+// originAllowed reports whether a browser Origin may call the BFF with its cookies.
+func (o SecurityOptions) originAllowed(origin string) bool {
+	if origin == "" {
+		return false
+	}
+	if slices.Contains(o.AllowedOrigins, origin) {
+		return true
+	}
+	if !o.LocalDev {
+		return false
+	}
+	for _, p := range []string{"http://localhost:", "http://127.0.0.1:"} {
+		if port, ok := strings.CutPrefix(origin, p); ok && port != "" && strings.Trim(port, "0123456789") == "" {
+			return true
+		}
+	}
+	return false
+}
+
 // cors answers preflights and decorates responses for the configured web origins (credentials allowed).
 func cors(o SecurityOptions) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			allowed := origin != "" && slices.Contains(o.AllowedOrigins, origin)
+			allowed := o.originAllowed(origin)
 			if allowed {
 				h := w.Header()
 				h.Set("Access-Control-Allow-Origin", origin)
@@ -89,7 +111,7 @@ func cors(o SecurityOptions) func(http.Handler) http.Handler {
 			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
 				if allowed {
 					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-					w.Header().Set("Access-Control-Allow-Headers", "Accept, Accept-Language, Authorization, Content-Type, Idempotency-Key, If-None-Match, Sec-GPC, X-Guest-Cart, X-Correlation-Id")
+					w.Header().Set("Access-Control-Allow-Headers", "Accept, Accept-Language, Authorization, Content-Type, Idempotency-Key, If-None-Match, Sec-GPC, X-App, X-Background, X-Guest-Cart, X-Correlation-Id")
 					w.Header().Set("Access-Control-Max-Age", "600")
 				}
 				w.WriteHeader(http.StatusNoContent)
@@ -112,7 +134,7 @@ func csrf(o SecurityOptions, log *slog.Logger) func(http.Handler) http.Handler {
 			origin := r.Header.Get("Origin")
 			_, cookieErr := r.Cookie(o.CookieName)
 			hasCookie := cookieErr == nil
-			if (origin != "" && !slices.Contains(o.AllowedOrigins, origin)) || (origin == "" && hasCookie) {
+			if (origin != "" && !o.originAllowed(origin)) || (origin == "" && hasCookie) {
 				writeProblem(w, r, log, domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Forbidden",
 					"This request did not come from an AfroTransact page."))
 				return
@@ -122,16 +144,76 @@ func csrf(o SecurityOptions, log *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
+// largeBodies are the routes whose bodies may exceed the default limit: bulk product uploads (a 10 MB file plus
+// the multipart framing, S308) and autosaved product-form drafts (256 KB of form input, S307).
+var largeBodies = []struct {
+	method, path string
+	limit        int64
+}{
+	{http.MethodPost, "/v1/seller/imports", 11 << 20},
+	{http.MethodPost, "/v1/seller/product-drafts", 320 << 10},
+	{http.MethodPut, "/v1/seller/product-drafts/", 320 << 10},
+}
+
 // bodyLimit caps request bodies (decode reports 413).
 func bodyLimit(limit int64) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Body != nil {
-				r.Body = http.MaxBytesReader(w, r.Body, limit)
+				max := limit
+				for _, l := range largeBodies {
+					if r.Method == l.method && (r.URL.Path == l.path || strings.HasSuffix(l.path, "/") && strings.HasPrefix(r.URL.Path, l.path)) {
+						max = l.limit
+					}
+				}
+				r.Body = http.MaxBytesReader(w, r.Body, max)
 			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// backOfficePrefixes are the Seller Center / Provider Hub (/v1/seller/…) and staff console (/v1/staff/…) routes. They
+// relay the person's token as identity issued it, so a member acts for their active organisation there.
+var backOfficePrefixes = []string{"/v1/seller/", "/v1/staff/"}
+
+// actingContext marks every other route (storefront and customer app: cart, checkout, account, orders, bookings,
+// pre-orders, Lola, /v1/me, sign-in) as a shopper request (port.WithShopper): upstream calls send
+// X-Acting-As: CUSTOMER, so a person who belongs to a seller or provider organisation still shops as themselves.
+func actingContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if slices.ContainsFunc(backOfficePrefixes, func(p string) bool { return strings.HasPrefix(r.URL.Path, p) }) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(port.WithShopper(r.Context())))
+	})
+}
+
+// Session activity routes (contract tag Auth): the policy read never counts as activity; the activity ping always does.
+const (
+	sessionPolicyPath   = "/v1/session/policy"
+	sessionActivityPath = "/v1/session/activity"
+	backgroundHeader    = "X-Background"
+)
+
+// activityOf says whether the request is the person using the app. Background polling (X-Background: 1, which every
+// web app sends on timers, refetch intervals and notification counts) and the policy read do not count, so a page left
+// open does not keep a session alive; POST /v1/session/activity is the web app's report of real input.
+func activityOf(r *http.Request) app.ActivityKind {
+	switch {
+	case r.Method == http.MethodPost && r.URL.Path == sessionActivityPath:
+		return app.ActivityExplicit
+	case r.Method == http.MethodGet && r.URL.Path == sessionPolicyPath, isBackground(r):
+		return app.ActivityBackground
+	default:
+		return app.ActivityCounts
+	}
+}
+
+func isBackground(r *http.Request) bool {
+	v := strings.TrimSpace(r.Header.Get(backgroundHeader))
+	return v == "1" || strings.EqualFold(v, "true")
 }
 
 // identify resolves the caller (cookie session with token refresh, or app bearer) for every /v1 request.
@@ -139,7 +221,8 @@ func identify(sessions app.SessionService, o SecurityOptions, log *slog.Logger) 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			in := app.ResolveInput{BearerToken: bearerOf(r), AppGuestCartID: r.Header.Get("X-Guest-Cart"),
-				ClientIP: clientIP(r, o.TrustForwarded), Language: r.Header.Get("Accept-Language")}
+				ClientIP: clientIP(r, o.TrustForwarded), Language: r.Header.Get("Accept-Language"),
+				Origin: r.Header.Get("Origin"), Path: r.URL.Path, Activity: activityOf(r)}
 			if ck, err := r.Cookie(o.CookieName); err == nil {
 				in.CookieValue = ck.Value
 			}

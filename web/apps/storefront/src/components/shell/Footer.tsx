@@ -43,8 +43,9 @@ export const FOOTER_COLUMNS: Array<{ title: MessageKey; links: FooterLink[] }> =
     links: [
       { label: 'footer.account', href: '/account' },
       { label: 'footer.orders', href: '/orders' },
+      { label: 'footer.giftCards', href: '/account/credit' },
       { label: 'footer.shipping', href: '/help/shipping' },
-      { label: 'footer.returns', href: '/account/returns' },
+      { label: 'footer.orderHelp', href: '/account/help' },
       { label: 'footer.helpCenter', href: '/help' },
       { label: 'footer.accessibility', href: '/legal/accessibility' }
     ]
@@ -276,6 +277,11 @@ export function FooterView({ config, locale, year = new Date().getFullYear() }: 
                   </Link>
                 </li>
               ))}
+              <li>
+                <Link className={styles.legalLink} href="/legal">
+                  {t('legal.center')}
+                </Link>
+              </li>
             </ul>
           </nav>
           <span className={styles.flex} />

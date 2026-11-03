@@ -25,3 +25,36 @@ groups:
           summary: "Postgres {{ $labels.instance }} is unreachable"
           description: "postgres-exporter cannot connect to the database server."
           runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/PostgresDown.md
+
+      # Disk. The limit is the plan's storage, written here as a number because Prometheus cannot read it from the provider:
+      # 26843545600 = 25 GiB (Layerbase Dedicated 4 GB). Change it when the plan changes (docs/runbooks/PostgresDiskUsageHigh.md),
+      # then `make rules`. pg_database_size_bytes counts table and index files, not WAL or temp files, so keep the margins.
+      - alert: PostgresDiskUsageHigh
+        expr: sum by (env, instance) (pg_database_size_bytes) > 0.70 * 26843545600
+        for: 30m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Postgres {{ $labels.instance }} data is {{ $value | humanize1024 }}B, over 70% of the plan's storage"
+          description: "Free space before the plan's storage limit is running out; find what grows and purge or upgrade before it fills."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/PostgresDiskUsageHigh.md
+
+      - alert: PostgresDiskUsageCritical
+        expr: sum by (env, instance) (pg_database_size_bytes) > 0.90 * 26843545600
+        for: 10m
+        labels:
+          severity: page
+        annotations:
+          summary: "Postgres {{ $labels.instance }} data is {{ $value | humanize1024 }}B, over 90% of the plan's storage"
+          description: "Writes will fail when the limit is reached (or overage is billed, depending on the provider): every service stops taking orders."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/PostgresDiskUsageHigh.md
+
+      - alert: PostgresDiskFillingFast
+        expr: predict_linear(sum by (env, instance) (pg_database_size_bytes)[6h:15m], 7 * 86400) > 26843545600
+        for: 1h
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Postgres {{ $labels.instance }} will pass the plan's storage within 7 days at the current growth"
+          description: "Linear projection of the last 6 hours. A bulk import or a runaway table makes it fire; check which table grew."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/PostgresDiskUsageHigh.md

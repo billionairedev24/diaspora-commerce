@@ -16,10 +16,22 @@ import java.util.Objects;
  * @param deliveryFee     the seller's AfroTransact Delivery pickup-delivery fee allocated to this line (S255),
  *                        quoted at checkout and snapshotted by orders; only on {@link Fulfilment#AFROTRANSACT_DELIVERY}
  *                        lines, 0 otherwise
+ * @param kind            PRODUCT (commission) or SERVICE (connection fee of a service booking)
+ * @param rate            the commission / connection-fee rate snapshotted when the payment was created (source, plan,
+ *                        negotiated rate); null on lines created before rates were snapshotted, which keep the rate
+ *                        of their fee-schedule version
  */
 public record OrderLine(String lineId, String sellerOrg, String category, Fulfilment fulfilment, int quantity,
                         Money items, Money shipping, Money tax, String taxJurisdiction, Money shippingTax,
-                        Money deliveryFee) {
+                        Money deliveryFee, FeeKind kind, AppliedRate rate) {
+
+    /** A product line without a snapshotted rate. */
+    public OrderLine(String lineId, String sellerOrg, String category, Fulfilment fulfilment, int quantity,
+                     Money items, Money shipping, Money tax, String taxJurisdiction, Money shippingTax,
+                     Money deliveryFee) {
+        this(lineId, sellerOrg, category, fulfilment, quantity, items, shipping, tax, taxJurisdiction, shippingTax,
+                deliveryFee, FeeKind.PRODUCT, null);
+    }
 
     /** A line without a seller delivery fee. */
     public OrderLine(String lineId, String sellerOrg, String category, Fulfilment fulfilment, int quantity,
@@ -67,6 +79,27 @@ public record OrderLine(String lineId, String sellerOrg, String category, Fulfil
             throw new PaymentsRuleViolation("payments.invalid-line", "Line " + lineId
                     + " has a delivery fee but is not AFROTRANSACT_DELIVERY");
         }
+        kind = kind == null ? FeeKind.PRODUCT : kind;
+        if (rate != null && rate.kind() != kind) {
+            throw new PaymentsRuleViolation("payments.invalid-line", "Line " + lineId + " is " + kind
+                    + " but its rate is a " + rate.kind() + " rate");
+        }
+    }
+
+    /** The line with its rate snapshotted. */
+    public OrderLine withRate(AppliedRate applied) {
+        return new OrderLine(lineId, sellerOrg, category, fulfilment, quantity, items, shipping, tax, taxJurisdiction,
+                shippingTax, deliveryFee, kind, applied);
+    }
+
+    /** The line as the caller sent it (no snapshot), to compare a replayed request. */
+    public OrderLine withoutRate() {
+        return rate == null ? this : withRate(null);
+    }
+
+    /** A service booking: AfroTransact charges a connection fee instead of a commission. */
+    public boolean isService() {
+        return kind == FeeKind.SERVICE;
     }
 
     /** Tax on the items: tax − shipping tax. */

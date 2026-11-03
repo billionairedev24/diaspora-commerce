@@ -141,6 +141,21 @@ public record Run(UUID id, UUID locationId, RunStatus status, RunTerms terms, In
         return status.takesOrders() && now.isBefore(terms.cutoffAt());
     }
 
+    /**
+     * An announced run opening within {@code earlyHours}: members with early access (S323) can order from then on,
+     * everyone else when it opens.
+     */
+    public boolean acceptsOrdersEarly(Instant now, int earlyHours) {
+        return earlyHours > 0 && status == RunStatus.ANNOUNCED && terms.opensAt() != null
+                && !now.isBefore(terms.opensAt().minus(Duration.ofHours(earlyHours))) && now.isBefore(terms.cutoffAt());
+    }
+
+    /** Whether a member with early access can take a slot now (open, or opening soon, and not full). */
+    public boolean canTakeEarly(int packages, Instant now, int earlyHours) {
+        return (acceptsOrders(now) || acceptsOrdersEarly(now, earlyHours))
+                && terms.capacity().fits(reservedOrders, reservedPackages, packages);
+    }
+
     /** Whether an order of {@code packages} can take a slot now (open and not full). */
     public boolean canTake(int packages, Instant now) {
         return acceptsOrders(now) && terms.capacity().fits(reservedOrders, reservedPackages, packages);
@@ -152,10 +167,15 @@ public record Run(UUID id, UUID locationId, RunStatus status, RunTerms terms, In
 
     /** Takes a slot; callers check {@link #canTake(int, Instant)} first (and hold the row lock). */
     public Run reserve(int packages, Instant now) {
+        return reserve(packages, now, 0);
+    }
+
+    /** Takes a slot for a member with early access to runs that open within {@code earlyHours}. */
+    public Run reserve(int packages, Instant now, int earlyHours) {
         if (packages < 1) {
             throw new RuleViolation("delivery-runs.invalid-packages", "An order has at least one package");
         }
-        if (!acceptsOrders(now)) {
+        if (!acceptsOrders(now) && !acceptsOrdersEarly(now, earlyHours)) {
             throw new RuleViolation("delivery-runs.run-closed", "This run no longer takes orders");
         }
         if (isFull(packages)) {

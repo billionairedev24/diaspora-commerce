@@ -1,7 +1,7 @@
 # CI/CD: build once, sign, deploy each service on its own to any cloud
 
 Every Java and Go service is built, tested, signed and deployed **independently**; the target cloud
-(`aws | gcp | azure`) is configuration of a GitHub environment, never code.
+(`aws | gcp | azure | ovh`) is configuration of a GitHub environment, never code.
 
 ```
 PR / push touching go/services/search/**          (path filter: only go-search.yml runs)
@@ -9,11 +9,11 @@ PR / push touching go/services/search/**          (path filter: only go-search.y
                      ├ verify    golangci-lint, go vet, go test -race (unit + Testcontainers ITs), coverage gate
                      ├ contract  api/openapi.yaml == contracts/openapi/search.yaml, oasdiff breaking vs base
                      ├ security  gitleaks, Trivy fs (HIGH/CRITICAL), govulncheck, Semgrep, [CodeQL]
-                     ├ helm      lint + template dev/uat/prod x none/aws/gcp/azure | kubeconform
+                     ├ helm      lint + template dev/uat/prod x none/aws/gcp/azure/ovh | kubeconform
                      └ image     buildx linux/amd64+arm64, reproducible (SOURCE_DATE_EPOCH = commit time,
                                  rewrite-timestamp) -> ghcr.io/<repo>/search:<sha>
                                  image policy: non-root USER, EXPOSE 8080, APP_ENV=prod / SPRING_PROFILES_ACTIVE=prod,
-                                 size budget (Go 60 MB, Java 450 MB; linux/amd64 uncompressed) - also on PRs
+                                 size budget (Go 48 MB, Java 220 MB; linux/amd64 uncompressed) - also on PRs
                                  Trivy image (CRITICAL fails) -> Syft SPDX SBOM -> cosign sign + attest (keyless)
   main only ──► _deploy.yml (environment dev)
                      ├ cosign verify (identity = this repo's _go-service.yml@refs/heads/main)
@@ -39,7 +39,7 @@ Testcontainers ITs + JaCoCo + `tools/quality/coverage_report.sh` gate; Semgrep i
 | `promote.yml` (generated) | manual | promote a signed image (default: the tag running in the previous env) to uat or prod |
 | `_java-service.yml`, `_go-service.yml`, `_web-app.yml`, `_deploy.yml` | `workflow_call` | reusable pipelines |
 | `contracts.yml` | `contracts/**` | Redocly + Spectral lint, oasdiff breaking changes for every spec, AsyncAPI validate |
-| `terraform.yml` | `infra/terraform/**`, `infra/cloudflare/**`, `infra/policy/**` | fmt, interface drift, validate (all modules, all env x cloud), tflint, conftest tests; plan per env on its cloud with conftest on the plan JSON + PR comment; apply dev on main, uat/prod on dispatch |
+| `tofu.yml` | `infra/tofu/**`, `infra/cloudflare/**`, `infra/policy/**` | fmt, interface drift, validate (all modules, all env x cloud), tflint, conftest tests; plan per env on its cloud with conftest on the plan JSON + PR comment; apply dev on main, uat/prod on dispatch |
 | `security.yml` | main, weekly, manual (+ PRs touching scanner config) | CodeQL (java-kotlin, go, js/ts, actions); Trivy repo SARIF (CRITICAL vulns/secrets fail) and Trivy IaC on `infra/` (CRITICAL/HIGH fail); Semgrep self-test + repo scan (ERROR fails); govulncheck every Go module; osv-scanner every lockfile (SARIF, CVSS >= 9 fails); gitleaks full history; OWASP Dependency-Check (weekly, `NVD_API_KEY`); ZAP baseline vs dev |
 | `carrier-sandboxes.yml` | manual | carrier sandbox smoke (`tools/smoke/carriers.sh`): ephemeral carrier-gateway on the runner with the `carrier-sandbox` environment secrets, or the deployed dev service (docs/runbooks/carrier-sandboxes.md) |
 | `backlog.yml` | `docs/backlog/**` | CSV parses, header, unique ids, valid status/type/priority, parents are epics |
@@ -94,11 +94,25 @@ identifier that only looks like a host, in the documented `EXCEPTIONS` list of t
 | | Go services | Java services |
 |---|---|---|
 | Dockerfile | `go/services/<svc>/Dockerfile` (context `go/`) | `java/Dockerfile` (`SERVICE=<svc>`, context `java/`) |
-| Runtime base | `gcr.io/distroless/static-debian12:nonroot` (static, CGO off, `-trimpath -ldflags "-s -w"`) | `eclipse-temurin:25-jre`, layered jar (`dependencies`, `spring-boot-loader`, `snapshot-dependencies`, `application`) |
+| Runtime base | `gcr.io/distroless/static-debian12:nonroot` (static, CGO off, `-trimpath -buildvcs=false -ldflags "-s -w"`) | `gcr.io/distroless/cc-debian12:nonroot` + a **jlinked JRE** (only the JDK modules the jars use, ~60 MB) + two layers (`lib/` dependencies, then the application jar) |
 | User | `nonroot` (65532) | `1000:1000` |
 | Defaults | `APP_ENV=prod`, `PORT=8080`, `EXPOSE 8080` | `SPRING_PROFILES_ACTIVE=prod`, `--server.port=8080`, `EXPOSE 8080` |
-| Size budget (CI, linux/amd64 uncompressed) | 60 MB (measured 2026-10-10: binaries 21-40 MB + 6 MB base; cart image 10.7 MB compressed) | 450 MB guard rail (JRE ~280 MB + fat jar up to ~80 MB) |
+| Size budget (CI, linux/amd64 uncompressed) | 48 MB (binaries 21-37 MB + 2 MB base) | 220 MB (JRE ~60 MB + base ~25 MB + libraries 69-93 MB; orders 270, ai-gateway 310) |
 | Platforms | linux/amd64 + linux/arm64 (Arm node pools) | same |
+
+### Speed and memory (measured 2026-10-21 on seller-service, the largest default Java service)
+
+| | Before | Now |
+|---|---|---|
+| Java image | ~340-460 MB (full JRE) | ~155-185 MB (jlinked JRE + distroless) |
+| Java resident memory after start | ~620 MB (ZGC, full JIT) | ~275 MB (serial GC, C1-only JIT, 512 KB stacks, no perf-data file) |
+| Java start | 9.4 s | 3-6 s |
+
+The flags live in `java/Dockerfile` (`JAVA_TOOL_OPTIONS`; the same flags are in Jib, docker-compose and each `values-prod.yaml`).
+C1-only JIT (`-XX:TieredStopAtLevel=1`) suits the low-traffic services we run; a service that becomes CPU-bound should drop it
+in its values file. An AppCDS archive would start faster still but adds ~90 MB per image, so it is deliberately not used.
+Go services get `GOMEMLIMIT` = 90% of `resources.limits.memory` from the Helm library chart (set `extraEnv.GOMEMLIMIT` to
+override). Go 1.27 sizes `GOMAXPROCS` from the container's CPU limit by itself.
 
 `.github/actions/publish-image` enforces user, port, environment defaults and the size budget on every build (pull
 requests included) before anything is pushed; see change request 5 for the remaining reproducibility items.
@@ -106,7 +120,7 @@ requests included) before anything is pushed; see change request 5 for the remai
 ## Security of the pipeline
 
 - **No long-lived cloud keys**: `id-token: write` + OIDC federation created by
-  `infra/terraform/modules/<cloud>/github-oidc` - three identities per environment:
+  `infra/tofu/modules/<cloud>/github-oidc` - three identities per environment:
   `deploy` (registry push only; `sub = repo:<repo>:environment:<env>`), `plan` (read-only;
   `sub = repo:<repo>:pull_request`), `apply` (admin; `sub = repo:<repo>:environment:<env>-infra`).
 - Images are signed keylessly (Fulcio/Rekor) and carry an SPDX SBOM attestation; deploy refuses unsigned
@@ -132,11 +146,12 @@ requests included) before anything is pushed; see change request 5 for the remai
 
 | Variable | Example |
 |---|---|
-| `CLOUD` | `aws` \| `gcp` \| `azure` |
+| `CLOUD` | `aws` \| `gcp` \| `azure` \| `ovh` |
 | `REGISTRY_URL` | `123456789012.dkr.ecr.us-east-1.amazonaws.com/afrotransact` \| `us-east4-docker.pkg.dev/<project>/afrotransact` \| `<acr>.azurecr.io/afrotransact` |
 | `AWS_DEPLOY_ROLE_ARN`, `AWS_REGION` | aws: `github_oidc.deploy.role_arn`, region |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, `GCP_REGISTRY_HOST` | gcp: `github_oidc.deploy.*`, `us-east4-docker.pkg.dev` |
 | `AZURE_DEPLOY_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | azure: `github_oidc.deploy.*` |
+| `OVH_REGISTRY_USERNAME` (+ secret `OVH_REGISTRY_PASSWORD`) | ovh: Harbor robot account, e.g. `robot$afrotransact-deploy` |
 
 **Repository variables**: `TF_TARGETS` (below), `GITOPS_BRANCH` (default `main`), `VERCEL_FALLBACK`
 (`true` to always deploy web to Vercel too), `DEV_BASE_DOMAIN` (ZAP and carrier smoke target), `DOCS_PAGES_PROJECT`.
@@ -144,7 +159,7 @@ The whole first-time setup in order (state, OIDC, variables, every secret, apply
 [docs/runbooks/first-environment.md](../runbooks/first-environment.md).
 
 **Secrets**: `CLOUDFLARE_API_TOKEN` (Workers, Pages: docs + Storybook), `CLOUDFLARE_ACCOUNT_ID`, `EC_API_KEY`, `CONFLUENT_CLOUD_API_KEY`,
-`CONFLUENT_CLOUD_API_SECRET`, `TEMPORAL_CLOUD_API_KEY` (Terraform: Temporal Cloud namespaces), `EXPO_TOKEN`,
+`CONFLUENT_CLOUD_API_SECRET`, `TEMPORAL_CLOUD_API_KEY` (OpenTofu: Temporal Cloud namespaces), `EXPO_TOKEN`,
 optional `NVD_API_KEY` (weekly OWASP Dependency-Check), `SMOKE_CLIENT_ID`/`SMOKE_CLIENT_SECRET` on `dev` and the carrier
 sandbox keys on the `carrier-sandbox` environment (`carrier-sandboxes.yml`), optional `VERCEL_TOKEN`/`VERCEL_ORG_ID`/`VERCEL_PROJECT_ID`,
 optional `GITOPS_APP_ID`/`GITOPS_APP_PRIVATE_KEY` (a GitHub App allowed to push the GitOps bump through
@@ -171,6 +186,44 @@ dedicated `gitops` branch that Argo CD tracks).
             "apply": { "azure-client-id": "…", "azure-tenant-id": "…", "azure-subscription-id": "…" } }
 }
 ```
+
+## OVHcloud
+
+OVHcloud is a fourth target next to AWS, GCP and Azure. The pipelines treat it like the others (`CLOUD=ovh`, GitOps bump,
+Argo CD sync) with three honest differences:
+
+1. **No OIDC federation.** OVHcloud cannot trust GitHub's OIDC token, so there are no keyless identities. CI uses scoped
+   credentials held as GitHub secrets, one set per privilege, and the `cloud-login` action masks them and exports them to the job only:
+   - `deploy` (service pipelines): a **Harbor robot account** limited to the registry project, push and pull only.
+     `OVH_REGISTRY_USERNAME` is an environment variable, `OVH_REGISTRY_PASSWORD` an environment secret of `dev`/`uat`/`prod`.
+     The deploy job gets no OVH API access at all.
+   - `plan` (pull requests): repository secrets `OVH_PLAN_APPLICATION_KEY`, `OVH_PLAN_APPLICATION_SECRET`,
+     `OVH_PLAN_CONSUMER_KEY` (create the consumer key with read-only access rules: `GET` on `/cloud/project/*` and `/me`),
+     plus `OVH_PLAN_S3_ACCESS_KEY` / `OVH_PLAN_S3_SECRET_KEY` (an Object Storage user that can read the state bucket).
+   - `apply`: the same five secrets named `OVH_APPLY_*`, stored as secrets of the `<env>-infra` environment so only
+     jobs that pass its protection rules (required reviewers on `prod-infra`) can read them. The consumer key carries
+     write rules on `/cloud/project/{serviceName}/*` only.
+   Rotate all of them on the schedule in the runbook; a leaked key is the main risk of this target, which is why the
+   plan and apply sets are never shared.
+2. **State** lives in an OVH Object Storage bucket through OpenTofu's `s3` backend (custom endpoint, path-style, no AWS
+   probes). OVH offers no state lock, so `tofu.yml`'s concurrency group is the lock: never run `tofu` against that state
+   by hand while a workflow runs. `TF_TARGETS.<env>.state` is `{"bucket": "...", "region": "gra"}`; add `"endpoint"` only
+   for a non-default endpoint (default `https://s3.<region>.io.cloud.ovh.net`).
+3. **Registry** is OVHcloud Managed Private Registry (Harbor). `REGISTRY_URL` is `<id>.<region>.container-registry.ovh.net/<project>`.
+   `cosign copy` carries signatures and the SBOM attestation, so Kyverno verification works unchanged. Make tags
+   immutable with a Harbor tag-immutability rule on the project (the Azure step that locks tags does not apply).
+
+`TF_TARGETS` entry (only non-secret values; keys are the `cloud-login` inputs):
+
+```json
+"prod": { "cloud": "ovh", "region": "gra",
+          "state": { "bucket": "afrotransact-tfstate", "region": "gra" },
+          "plan":  { "ovh-endpoint": "ovh-eu", "ovh-service-name": "<public cloud project id>" },
+          "apply": { "ovh-endpoint": "ovh-eu", "ovh-service-name": "<public cloud project id>" } }
+```
+
+`tofu.yml` validates `modules/ovh/*`, runs their mocked-provider tests (`tofu test`: cost guards) and validates the env roots for
+`cloud=ovh`. State for OVH is created once by `infra/tofu/bootstrap/ovh`, which also prints the `state` value for `TF_TARGETS`.
 
 ## Web apps (Cloudflare Workers, Vercel fallback)
 
@@ -211,7 +264,7 @@ One-time setup:
   Edit**) and `CLOUDFLARE_ACCOUNT_ID`. No variables are needed.
 - The Pages projects `afrotransact-storybook` and `afrotransact-docs` (production branch `main`) are created by
   `infra/cloudflare/pages.tf` in the run with `pages_projects_owner = true` (dev); every environment's run adds its
-  `developers.<base>` custom domain to the docs project. Without Terraform:
+  `developers.<base>` custom domain to the docs project. Without OpenTofu:
   `npx wrangler pages project create afrotransact-storybook --production-branch=main`.
 - Create the PR label `update-visual-baselines`. If `main` is protected, the label path pushes only to PR
   branches, never to main.
@@ -227,7 +280,7 @@ must define those three profiles with matching channels.
 
 1. **Helm library secret key** (`infra/helm/library/at-service/templates/_objects.tpl`): the ExternalSecret
    key is hard-coded as `afrotransact/<env>/<svc>`. GCP Secret Manager ids and Azure Key Vault names cannot
-   contain `/`, so Terraform names them `afrotransact-<env>-<svc>`. Proposed: a `secrets.keySeparator`
+   contain `/`, so OpenTofu names them `afrotransact-<env>-<svc>`. Proposed: a `secrets.keySeparator`
    value (default `/`; `-` in platform-values for gcp/azure) used in
    `printf "afrotransact%s%s%s%s" sep .Values.env sep name`. Done: `secrets.keySeparator` is in the library and
    the platform-values examples.

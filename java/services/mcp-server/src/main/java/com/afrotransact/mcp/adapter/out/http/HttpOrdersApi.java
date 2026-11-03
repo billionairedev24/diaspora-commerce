@@ -10,7 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
-/** orders-service (port 8104): orders, seller order lists and seller shipment status changes. */
+/** orders-service (port 8104): orders, the seller shipment queue, shipment steps and tracking. */
 @Component
 class HttpOrdersApi implements OrdersApi {
 
@@ -27,20 +27,40 @@ class HttpOrdersApi implements OrdersApi {
     }
 
     @Override
-    public Downstream sellerOrders(String orgId, String status, int page, int size, String bearerToken) {
+    public Downstream myOrders(String cursor, int limit, String bearerToken) {
         return http.call(bearerToken, c -> c.get().uri(u -> {
-            u.path("/v1/orders").queryParam("sellerOrgId", orgId).queryParam("page", page).queryParam("size", size);
-            if (status != null && !status.isBlank()) {
-                u.queryParam("status", status);
+            u.path("/v1/orders").queryParam("limit", limit);
+            if (cursor != null && !cursor.isBlank()) {
+                u.queryParam("cursor", cursor);
             }
             return u.build();
         }));
     }
 
     @Override
-    public Downstream updateShipmentStatus(String orderId, String shipmentId, Map<String, Object> change,
-                                           String bearerToken) {
-        return http.call(bearerToken, c -> c.post().uri("/v1/orders/{orderId}/shipments/{shipmentId}/status",
-                orderId, shipmentId).contentType(MediaType.APPLICATION_JSON).body(change));
+    public Downstream sellerShipments(String status, String cursor, int limit, String bearerToken) {
+        return http.call(bearerToken, c -> c.get().uri(u -> {
+            u.path("/v1/seller/shipments").queryParam("limit", limit);
+            if (status != null && !status.isBlank()) {
+                u.queryParam("status", status);
+            }
+            if (cursor != null && !cursor.isBlank()) {
+                u.queryParam("cursor", cursor);
+            }
+            return u.build();
+        }));
+    }
+
+    @Override
+    public Downstream transitionShipment(String shipmentId, Map<String, Object> body, String bearerToken) {
+        return http.call(bearerToken, c -> c.post().uri("/v1/shipments/{id}/transitions", shipmentId)
+                .contentType(MediaType.APPLICATION_JSON).body(body));
+    }
+
+    @Override
+    public Downstream attachTracking(String shipmentId, String carrier, String trackingNumber, String bearerToken) {
+        return http.call(bearerToken, c -> c.post().uri("/v1/shipments/{id}/tracking", shipmentId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("carrier", carrier, "trackingNumber", trackingNumber)));
     }
 }

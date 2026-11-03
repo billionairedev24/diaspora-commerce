@@ -1,0 +1,59 @@
+# LEAN: only what a single-node prod needs (no observability content, Elasticsearch, Kyverno policies or previews; adds the
+# in-cluster Kafka + Temporal of infra/k8s/platform/lean). Plain-manifest / kustomize platform layers for one environment. manifestPath may contain CLOUD and ENV, replaced
+# with platform-values.yaml's cloud and argocd.env (e.g. the ClusterSecretStore for the env's cloud).
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-manifests
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - git:
+              repoURL: https://github.com/billionairedev24/diaspora-commerce.git
+              revision: HEAD
+              files:
+                - path: infra/argocd/envs/ENV/platform-values.yaml     # patched per env
+          - list:
+              elements:
+                - {component: namespaces, wave: "-10", manifestPath: infra/k8s/platform/namespaces}
+                - {component: secret-store, wave: "-3", manifestPath: infra/k8s/platform/secret-stores/CLOUD}
+                - {component: edge, wave: "-1", manifestPath: infra/k8s/platform/edge/overlays/ENV}
+                - {component: lean, wave: "0", manifestPath: infra/k8s/platform/lean}
+                - {component: openfga, wave: "1", manifestPath: infra/k8s/platform/openfga/overlays/ENV}
+  template:
+    metadata:
+      name: '{{ .component }}-{{ .argocd.env }}'
+      labels:
+        app.kubernetes.io/part-of: afrotransact-platform
+        afrotransact.com/env: '{{ .argocd.env }}'
+      annotations:
+        argocd.argoproj.io/sync-wave: '{{ .wave }}'
+    spec:
+      project: 'platform-{{ .argocd.env }}'
+      source:
+        repoURL: https://github.com/billionairedev24/diaspora-commerce.git
+        targetRevision: '{{ .argocd.targetRevision }}'
+        path: '{{ .manifestPath | replace "CLOUD" .cloud | replace "ENV" .argocd.env }}'
+      destination:
+        server: '{{ .argocd.destinationServer }}'
+      syncPolicy:
+        syncOptions:
+          - ServerSideApply=true
+          - SkipDryRunOnMissingResource=true
+        retry:
+          limit: 10
+          backoff: {duration: 15s, factor: 2, maxDuration: 5m}
+  templatePatch: |
+    {{- if .argocd.autoSync }}
+    spec:
+      syncPolicy:
+        automated:
+          prune: {{ .argocd.prune }}
+          selfHeal: {{ .argocd.selfHeal }}
+    {{- end }}

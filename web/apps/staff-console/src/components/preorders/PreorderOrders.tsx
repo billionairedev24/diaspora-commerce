@@ -11,9 +11,11 @@ import { useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
 import { ErrorState, problemMessage } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { idempotencyKey } from '@/lib/format';
 
+import { RefundPill } from './Decisions';
 import { fS, fTime, money2, ORDER_PILL } from './model';
 import { Pill, usePreordersApi } from './primitives';
 
@@ -28,7 +30,14 @@ export function PreorderOrders({ w, canExport }: { w: PreorderWindow; canExport:
   const toast = useToast();
   const state = useTableState({ searchParams: useSearchParams(), prefix: 'orders', defaultPageSize: PER });
   const filters: PreorderOrdersQuery = { q: state.q || undefined, sort: state.sort, page: state.pagination.pageIndex, size: state.pagination.pageSize };
-  const query = useQuery({ ...staffPreorderQueries.orders(api, w.id, filters), placeholderData: keepPreviousData });
+  const t = useT();
+  const query = useQuery({
+    ...staffPreorderQueries.orders(api, w.id, filters),
+    placeholderData: keepPreviousData,
+    // While orders-service is still refunding a cancelled window, keep the refund column moving.
+    refetchInterval: (q) => (q.state.data?.items.some((o) => o.refundStatus === 'PENDING') ? 3000 : false)
+  });
+  const showRefund = w.outcome === 'CANCELLED' || (query.data?.items.some((o) => o.refundStatus) ?? false);
   const [busy, setBusy] = useState(false);
   const pickingList = async () => {
     setBusy(true);
@@ -99,9 +108,21 @@ export function PreorderOrders({ w, canExport }: { w: PreorderWindow; canExport:
         header: 'Status',
         size: 110,
         cell: ({ row }) => <Pill className={`px-2 py-px text-2xs ${ORDER_PILL[row.original.status]}`}>{PREORDER_ORDER_STATUS_LABEL[row.original.status]}</Pill>
-      }
+      },
+      ...(showRefund
+        ? [
+            {
+              id: 'refundStatus',
+              accessorFn: (o: PreorderOrder) => o.refundStatus ?? '',
+              meta: { kind: 'status' as const, label: t('st.preorders.orders.refund') },
+              header: t('st.preorders.orders.refund'),
+              size: 170,
+              cell: ({ row }: { row: { original: PreorderOrder } }) => <RefundPill status={row.original.refundStatus} />
+            }
+          ]
+        : [])
     ],
-    [w.currency]
+    [w.currency, showRefund, t]
   );
   const onExport = async (req: TableExportRequest) => {
     const job = await staffApi().createExport(

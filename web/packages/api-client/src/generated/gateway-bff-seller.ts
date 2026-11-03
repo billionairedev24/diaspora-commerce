@@ -142,26 +142,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/seller/onboarding/payouts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Save "Payouts" (the payout bank account, linked via Stripe)
-         * @description seller `PUT /v1/applications/me/steps/payouts`. The routing and account numbers go to Stripe once as the connected account's payout account and are never stored or returned (last 4 only). The step is complete only once Stripe accepted the account (`form.payouts.linked`); 422 `seller.stripe-account-required` before Stripe verification.
-         */
-        put: operations["saveOnboardingPayouts"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/seller/onboarding/plan": {
         parameters: {
             query?: never;
@@ -232,12 +212,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Account Session for Stripe's embedded Connect onboarding (identity and tax ID verification)
-         * @description seller `POST /v1/applications/me/stripe/account-session`: creates the platform-controlled connected account on
-         *     first use and an Account Session for Connect.js (`account-onboarding`), with the BFF's Stripe publishable key.
-         *     No Stripe-hosted page: verification runs embedded in Seller Center. `localTest` is true only for the seller
-         *     service's local stand-in (local profile without a Stripe key); Seller Center then shows its labelled local
-         *     verification. 503 `STRIPE_NOT_CONFIGURED` when a real session can't load for lack of a publishable key.
+         * Account Session for Stripe's embedded Connect components (verification and the payout bank account)
+         * @description seller `POST /v1/applications/me/stripe/account-session`: creates the connected account on first use and an
+         *     Account Session for Connect.js, with the BFF's Stripe publishable key. The account is Stripe-collected (Stripe
+         *     keeps the liability and KYC), so Stripe's components collect identity, tax ID and the payout bank account:
+         *     `account-onboarding` in "Stripe verification", `account-management` for "Change bank account" on "Payouts".
+         *     No Stripe-hosted page. `localTest` is true only for the seller service's local stand-in (local profile without
+         *     a Stripe key); Seller Center then shows its labelled local verification. 503 `STRIPE_NOT_CONFIGURED` when a real
+         *     session can't load for lack of a publishable key.
          */
         post: operations["createOnboardingStripeSession"];
         delete?: never;
@@ -346,6 +328,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/stripe/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Account Session for Stripe's embedded components in Account health (owner / finance)
+         * @description seller `POST /v1/orgs/{orgId}/stripe/account-session` for the active organisation. Seller accounts are
+         *     Stripe-collected: what Stripe needs and the payout bank account are answered in Stripe's embedded components
+         *     (`notification-banner`, `account-management`, `account-onboarding`), never through AfroTransact. 403 for
+         *     members other than the owner and finance; 404 before the organisation has a Stripe account; 503
+         *     `STRIPE_NOT_CONFIGURED` without a publishable key.
+         */
+        post: operations["createSellerStripeSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/dashboard": {
         parameters: {
             query?: never;
@@ -422,9 +428,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Confirm, pack or mark ready (the only statuses a seller may set)
-         * @description orders `POST /v1/shipments/{id}/transitions`. Anything but CONFIRMED, PACKED or READY is refused with 422
-         *     before calling orders; orders answers 409 `CONFLICT` for a transition that is not allowed from the current
+         * Confirm, pack, mark ready, mark shipped or hand a pickup order over (the only statuses a seller may set)
+         * @description orders `POST /v1/shipments/{id}/transitions`. Anything but CONFIRMED, PACKED, READY, PICKED_UP or DELIVERED is
+         *     refused with 422 before calling orders. DELIVERED (a pickup order handed to the buyer) needs `handoverCode`, the
+         *     buyer's 4-digit code from their order page; a wrong one is refused with 409 `orders.handover-code-invalid`; orders answers 409 `CONFLICT` for a transition that is not allowed from the current
          *     status and 403 for a step that belongs to AfroTransact (AfroTransact-fulfilled shipments).
          */
         post: operations["updateShipmentStatus"];
@@ -454,6 +461,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/orders/{orderNumber}/shipments/{shipmentId}/label": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the shipping label bought for a shipment
+         * @description carrier-gateway `GET /v1/labels/by-tracking/{carrier}/{trackingNumber}/document` (PDF or ZPL), for seller-shipped carrier parcels with a label.
+         */
+        get: operations["downloadShippingLabel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/orders/{orderNumber}/shipments/{shipmentId}/labels": {
         parameters: {
             query?: never;
@@ -469,6 +496,73 @@ export interface paths {
          *     `POST /v1/shipments/{id}/tracking`.
          */
         post: operations["buyShippingLabel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/business-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How the organisation's public page looks (description, logo, brand colour)
+         * @description seller `GET /v1/orgs/{orgId}/business-page` for the active organisation (Team view). `canEdit` is false for members who may only look.
+         */
+        get: operations["getBusinessPage"];
+        /**
+         * Change the description, logo and brand colour (any time, also after approval)
+         * @description seller `PUT /v1/orgs/{orgId}/business-page` (Team edit; the seller service limits it to the owner and admins). Blank values clear them. 422 with `fieldErrors` for `description`, `brandColor` and `logoUrl`.
+         */
+        put: operations["updateBusinessPage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/run-pickups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Delivery runs that collect from the organisation, with the pickup time and a pick list (S264)
+         * @description delivery-runs `GET /v1/seller/run-pickups` for the active organisation (Orders view): the pre-order runs that are
+         *     confirmed, being collected or out for delivery, and those completed in the last two weeks, earliest pickup first.
+         *     Each carries when the driver comes (`pickupAt`), the units to pack per product and, per order, what goes into its
+         *     bag (the order number is written on it). Only the organisation's own lines; no customer details.
+         */
+        get: operations["listSellerRunPickups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/run-pickups/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organisation's pick list for one delivery run (S264)
+         * @description delivery-runs `GET /v1/seller/run-pickups/{runId}` for the active organisation (Orders view). 404 when the run collects nothing from it.
+         */
+        get: operations["getSellerRunPickup"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -588,6 +682,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lola's tier for the active organisation, today's messages and what she can do
+         * @description The tier comes from the organisation's plan (Essentials, Growth, Pro) and sets the daily messages (UTC), the tools she
+         *     can use and whether she can prepare changes for the seller to confirm. `upgrade` is the next plan up (null on Pro).
+         */
+        get: operations["sellerAssistantStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/assistant/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Lola one question (the browser keeps the conversation and sends the earlier turns)
+         * @description Lola looks things up through the same Seller Center services as the pages, as the signed-in seller, then answers. She
+         *     never sees buyers' names or addresses. A change she prepares comes back as a proposal the seller confirms with a tap;
+         *     the app then calls the normal Seller Center API (stock adjustment, order status). Earlier turns are plain user and
+         *     assistant text only (anything else is dropped). The usage is billed to the organisation as AI credits.
+         *     429 `ASSISTANT_LIMIT` when today's messages on the plan are used (the detail names the plan that gives more);
+         *     429 `RATE_LIMITED` when ai-gateway's budget is spent; 503 when ai-gateway is not reachable.
+         */
+        post: operations["sellerAssistantChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/offers": {
         parameters: {
             query?: never;
@@ -625,6 +765,154 @@ export interface paths {
         put: operations["setOfferFulfilment"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns customers started on the organisation's orders */
+        get: operations["listSellerReturns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/disputes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Disputes and A-to-z claims against the organisation (the buyer is never identified) */
+        get: operations["listSellerDisputes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Published reviews of the organisation's products, newest first
+         * @description catalog `GET /v1/seller/reviews` with the member's token (module Reviews). Only published reviews are listed; the
+         *     customer is never identified. `unanswered=true` lists the reviews that still wait for a reply.
+         */
+        get: operations["listSellerReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/reviews/{reviewId}/reply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reply to a published review, once
+         * @description The reply is public next to the review and cannot be edited or deleted. 409 `ALREADY_DONE` when the review already
+         *     has a reply, 409 `CONFLICT` while it is not published.
+         */
+        post: operations["replyToSellerReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/reviews/{reviewId}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a review to Trust & Safety
+         * @description One report per member and review (a repeat answers 200 with `created: false`). The review stays public until Trust & Safety decide.
+         */
+        post: operations["reportSellerReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/coupons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Seller-funded coupons for the active organisation */
+        get: operations["listSellerCoupons"];
+        put?: never;
+        /** Create a seller-funded coupon (applies only to this organisation's offers) */
+        post: operations["createSellerCoupon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/coupons/{couponId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause or activate a seller coupon */
+        post: operations["setSellerCouponStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/coupons/{couponId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a seller-funded coupon */
+        delete: operations["deleteSellerCoupon"];
         options?: never;
         head?: never;
         patch?: never;
@@ -682,12 +970,273 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Submit the product builder (step 4) for review, or save it pending category approval
+         * Submit the one-step product form for review, or save it pending category approval
          * @description catalog `POST /v1/products`. With `categoryId` the product goes to listing review (IN_REVIEW); with
          *     `categoryRequestId` it waits for the requested category (PENDING_CATEGORY_APPROVAL) and moves to review when
-         *     the catalog team approves the category.
+         *     the catalog team approves the category. `listing.shipFromId` is resolved to the seller's ship-from address;
+         *     `draftId` deletes the saved draft with the submission.
          */
         post: operations["submitProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/listings/{productId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One listing with everything the one-step form edits
+         * @description catalog `GET /v1/products/{id}` (own organisation), with the category path and the ship-from address id.
+         */
+        get: operations["getProduct"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/products/{productId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save an edited listing (one-step form in edit mode)
+         * @description catalog `PUT /v1/products/{id}`. The whole product is validated again; variants are matched by SKU (new SKUs
+         *     get ATINs). A rejected listing goes back to review; a published listing keeps its category and variants (set
+         *     a variant's quantity to 0 instead of removing it). 409 `CONFLICT` when `version` is stale.
+         */
+        put: operations["updateProduct"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/product-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organisation's saved product drafts, most recently saved first
+         * @description catalog `GET /v1/product-drafts`.
+         */
+        get: operations["listProductDrafts"];
+        put?: never;
+        /**
+         * Save draft (the first autosave of a new product, or of an edit when productId is set)
+         * @description catalog `POST /v1/product-drafts`. A product has at most one unsaved-edit draft.
+         */
+        post: operations["createProductDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/product-drafts/{draftId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draftId: components["parameters"]["DraftId"];
+            };
+            cookie?: never;
+        };
+        /** A saved draft with the form's input */
+        get: operations["getProductDraft"];
+        /**
+         * Autosave a draft
+         * @description catalog `PUT /v1/product-drafts/{id}`; 409 `CONFLICT` when it was saved from another tab since `version`.
+         */
+        put: operations["saveProductDraft"];
+        post?: never;
+        /** Discard a draft */
+        delete: operations["deleteProductDraft"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/catalog/listing-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What the product form offers this member (AI listing writer, moderation, bulk upload limits)
+         * @description The AI listing writer needs a plan that includes it (Seller Growth, Seller Pro) and the ai:use permission (organisation owners).
+         */
+        get: operations["getListingContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/catalog/listing-writer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft a title, description and bullets with the AI listing writer
+         * @description ai-gateway `POST /v1/ai/listing-writer` with the member's token. A draft for the seller to edit: nothing is
+         *     saved or published. 403 `PLAN_FEATURE_REQUIRED` when the plan doesn't include the writer.
+         */
+        post: operations["writeListing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/imports/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a bulk upload template (Excel or CSV)
+         * @description catalog `GET /v1/imports/template`, generated from the product type definitions: a product type's template
+         *     (`productType`, or the type of `categoryId`) with a column per attribute (dropdowns for allowed values, unit
+         *     columns, required columns marked `*`) and per variation option, or the generic template (`Category`,
+         *     `Attributes` and `Options` as "name: value" pairs) when both are omitted. xlsx: Products sheet (header notes,
+         *     dropdowns, number checks), Instructions, Example and a hidden Lists sheet. csv: `#` comment lines and the header.
+         */
+        get: operations["downloadImportTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Upload history (newest first) */
+        get: operations["listImports"];
+        put?: never;
+        /**
+         * Upload a .xlsx or .csv file and validate every row
+         * @description catalog `POST /v1/imports` (multipart). Rows are checked for required fields, allowed values, numbers and
+         *     units, GTIN check digits, duplicate SKUs in the file and against the organisation's listings, and image URL
+         *     format; images are fetched when the import runs. Nothing is imported yet: review the preview, then start it.
+         *     422 `VALIDATION_FAILED` (`errors.file`) when the file can't be read: wrong type, over 10 MB or 5,000 rows,
+         *     missing required columns. `mode` CREATE adds products; UPDATE changes listings by SKU (blank cells unchanged).
+         */
+        post: operations["uploadImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/imports/{importId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An upload with its validation counts and import progress (poll while QUEUED or RUNNING) */
+        get: operations["getImport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/imports/{importId}/rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rows of an upload for the preview (server-driven table; status ERROR = errors only) */
+        get: operations["listImportRows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/imports/{importId}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the error report
+         * @description The uploaded rows as they were, plus Row, Row status, Result and Errors columns. Cells that start with
+         *     = + - @ (or a tab / carriage return) are prefixed with ' so spreadsheet apps never run them as formulas.
+         *     Fix the rows in this file and upload it again (the extra columns are ignored).
+         */
+        get: operations["downloadImportReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/imports/{importId}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start the import (background, resumable, idempotent per row)
+         * @description catalog `POST /v1/imports/{id}/start`. Runs in the background: poll `GET /v1/seller/imports/{importId}`.
+         *     Images are copied from their URLs by media (quarantine and moderation like uploads). Each row is imported at
+         *     most once (key = upload id + row SKU), so retries and restarts never duplicate products. With rows in error
+         *     send `validOnly: true` to import the others; otherwise 409 `CONFLICT`. Large uploads notify the uploader when
+         *     they finish.
+         */
+        post: operations["startImport"];
         delete?: never;
         options?: never;
         head?: never;
@@ -702,7 +1251,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Category tree (department › category › product type) for step 1
+         * Category tree (department › category › product type) for the product form's category picker
          * @description catalog `GET /v1/categories`, nested.
          */
         get: operations["getCategoryTree"];
@@ -722,8 +1271,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Required details, variation themes and identifier rule of a product type (steps 3 and 4)
-         * @description catalog `GET /v1/product-types/{code}`.
+         * Attributes, variation themes, identifier rule and traits of a product type
+         * @description catalog `GET /v1/product-types/{code}`. Each attribute has a kind (TEXT, MULTILINE, ENUM, NUMBER with units),
+         *     the form section it belongs to (DETAILS, FOOD, REGULATED) and a help line; traits (food, perishable, regulated,
+         *     preorder) decide which conditional sections the one-step form shows.
          */
         get: operations["getProductType"];
         put?: never;
@@ -789,7 +1340,7 @@ export interface paths {
         put?: never;
         /**
          * Direct upload ticket for a product or storefront image
-         * @description media `POST /v1/uploads` (JPG, PNG or WebP, ≤ 8 MB).
+         * @description media `POST /v1/uploads` (JPG, PNG or WebP, ≤ 8 MB). `library` adds a product image to the image library.
          */
         post: operations["requestUpload"];
         delete?: never;
@@ -812,6 +1363,251 @@ export interface paths {
          * @description media `POST /v1/assets/{id}/complete`.
          */
         post: operations["completeUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/image-library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organisation's image library with the SKUs that use each image (server-driven table)
+         * @description media `GET /v1/library` (the member's token) plus catalog `POST /v1/image-library/usage` for "used by" and for
+         *     whether the SKU in the file name belongs to a listing. File names `SKU.MAIN`, `SKU.PT01`…`SKU.PT08` and
+         *     `SKU.SWCH` (any image extension, case-insensitive, `.`, `_`, `-` or a space before the slot) are matched to the
+         *     listing with that SKU (variant SKUs too). Images are uploaded with `POST /v1/seller/uploads` and `library: true`.
+         */
+        get: operations["listImageLibrary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/image-library/{assetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove an image from the library (listings that use it keep it)
+         * @description media `DELETE /v1/library/{id}`.
+         */
+        delete: operations["removeLibraryImage"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename an image in the library
+         * @description media `PATCH /v1/library/{id}`. Updates the file name and re-matches SKU/slot.
+         */
+        patch: operations["renameLibraryImage"];
+        trace?: never;
+    };
+    "/v1/seller/image-library/attach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach matching library images to existing listings by SKU
+         * @description catalog `POST /v1/image-library/attach`. `SKU.MAIN` and `SKU.PT01`–`PT08` replace the product images in that
+         *     order; on products with several variants a variant SKU's `MAIN` sets the variant image. Listings without
+         *     matching images are left as they are; skipped listings come back with a reason.
+         */
+        post: operations["attachLibraryImages"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/size-charts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organisation's size charts, newest change first
+         * @description catalog `GET /v1/size-charts`. Only the organisation's own charts. `productTypeId` (a product-type category
+         *     node) or `productType` (its code) keeps the charts made for that type and the ones made for any type, to offer
+         *     in the product form. Retired charts are left out unless `includeRetired`. Needs the Listings module at View.
+         */
+        get: operations["listSizeCharts"];
+        put?: never;
+        /**
+         * Write a new size chart
+         * @description catalog `POST /v1/size-charts`. The seller writes the chart: a name, a unit (the other unit is shown by
+         *     conversion), measurement columns and one row per size label, with a value or a min-max range for every column.
+         *     `422` with `errors` keyed by field (`name`, `columns[1].label`, `rows[2].size`, `rows[2].values.bust`). The name must
+         *     differ, ignoring case, from the organisation's other active charts. Needs the Listings module at Edit.
+         */
+        post: operations["createSizeChart"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/size-charts/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a category suggests for a size chart and for the size input
+         * @description catalog `GET /v1/size-charts/suggestions`. The sizes (XS to 3XL ...) and the measurement columns (bust, waist,
+         *     hip ...) that staff configured for the product type: pre-fill the chart editor and offer the sizes as chips. The
+         *     seller can use, rename or extend all of it. `sized: false` for a product type without sizes. Send `productTypeId`
+         *     (the product-type category node the form picked) or `productType` (its code).
+         */
+        get: operations["getSizeChartSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/size-charts/import-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the size chart upload template (Excel or CSV)
+         * @description catalog `GET /v1/size-charts/import-template`. One row per size and one column per measurement: with
+         *     `productType` (or `productTypeId`) the columns are that product type's suggested measurements, otherwise a
+         *     generic template. Any column the seller adds is a measurement; rows with the same *Size chart name* make one
+         *     chart. xlsx: *Size charts*, *Instructions* and *Example* sheets. csv: `#` comment lines and the header.
+         *     Needs the bulk upload feature of the plan.
+         */
+        get: operations["downloadSizeChartTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/size-charts/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload size charts from an Excel or CSV file
+         * @description catalog `POST /v1/size-charts/import`. Each chart is saved whole or not at all. A chart whose name matches one of
+         *     the organisation's active charts is updated (uploading the same file again changes nothing, `UNCHANGED`); other
+         *     names create charts. `dryRun=true` validates and reports without saving (`applied: false`): use it for the
+         *     preview, then upload again with `dryRun=false`. Row problems (unknown or duplicate size, a measurement that is
+         *     not a number, min above max, a missing value, a size that products still sell removed from a chart) come back
+         *     per row in the report with status 200; a file that cannot be read at all (format, 10 MB, 5,000 rows, missing
+         *     *Size chart name* or *Size* column, no measurement column) is 422. Needs the bulk upload feature of the plan and
+         *     the Listings module at Edit.
+         */
+        post: operations["importSizeCharts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/size-charts/{chartId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chartId: string;
+            };
+            cookie?: never;
+        };
+        /** One size chart */
+        get: operations["getSizeChart"];
+        /**
+         * Replace a size chart's content
+         * @description catalog `PUT /v1/size-charts/{id}`. Send the `version` you loaded; `409` when the chart changed since. The
+         *     products that use the chart keep it, so every size they still sell must keep a row (`422` on `rows`). A retired
+         *     chart cannot be edited (`409`).
+         */
+        put: operations["updateSizeChart"];
+        post?: never;
+        /**
+         * Retire a size chart
+         * @description A chart is never deleted: the products that use it keep showing it, but it can no longer be linked to products
+         *     and its name is free again. Answers the retired chart. Retiring twice is harmless.
+         */
+        delete: operations["retireSizeChart"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/size-charts/{chartId}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chartId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Copy a size chart under a new name (for a similar product) */
+        post: operations["duplicateSizeChart"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/catalog/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Brands for the product form's brand combobox, scoped to the chosen category
+         * @description catalog `GET /v1/brands`. Approved brands whose scope covers the category (or product type) or one of its ancestors, plus the organisation's own pending brands there; the organisation's most used first, then the most popular. Never brands of unrelated departments. 422 when neither `category` nor `productType` is sent.
+         */
+        get: operations["listBrands"];
+        put?: never;
+        /**
+         * Add a brand the seller typed (reviewed by AfroTransact, usable at once)
+         * @description catalog `POST /v1/brands`. Returns the existing brand with `created` false when the registry already has this name in the category (case, accents and punctuation ignored); otherwise creates a PENDING brand scoped to the category's department, visible only to this organisation until staff approve it.
+         */
+        post: operations["createBrand"];
         delete?: never;
         options?: never;
         head?: never;
@@ -938,6 +1734,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/tax/statement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sales tax collected on the organisation's behalf in a month, by state
+         * @description tax-returns `GET /v1/tax/sellers/{orgId}/statement` (same access as Payouts). AfroTransact collects and remits this tax as marketplace facilitator; the statement is for the seller's books, not tax advice. `month` defaults to the current month.
+         */
+        get: operations["getTaxStatement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/tax/statement/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The same statement as CSV */
+        get: operations["exportTaxStatement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/payouts": {
         parameters: {
             query?: never;
@@ -947,7 +1780,7 @@ export interface paths {
         };
         /**
          * Balance (available, on hold per order, on the way) and payout history
-         * @description payments `GET /v1/payouts/balance` (incl. payoutsPaused, payoutsPausedReason, providerFeesMinor) + `GET /v1/payouts/requests?orgId=` (history is omitted with `historyAvailable=false` when the member may not read it).
+         * @description payments `GET /v1/payouts/balance` (incl. payoutsPaused, payoutsPausedReason, providerFeesMinor, planFeesMinor) + `GET /v1/payouts/requests?orgId=` (history is omitted with `historyAvailable=false` when the member may not read it) + `GET /v1/orgs/{orgId}/plan-fee-withholdings` (plan fees paid from sales and the transfers they were deducted from, S298; empty when it can't be read).
          */
         get: operations["getPayouts"];
         put?: never;
@@ -977,6 +1810,9 @@ export interface paths {
          *     BFF reads them with its own client-credentials token (scope `payments:service`) and always passes the active
          *     organisation: members never see other sellers' overrides. Shares the payouts module level (VIEW). Rates are basis
          *     points (1250 = 12.50 %). AfroTransact Retail reads `retail: true` (no commission, no fees).
+         *     Each rate says where it comes from: OVERRIDE (a negotiated rate, with `negotiatedUntil`), PLAN (the
+         *     organisation's plan, `planName`), CATEGORY or DEFAULT. `connectionFees` (payments `GET /v1/orgs/{orgId}/rate-card?kind=SERVICE`)
+         *     is what service bookings pay, apart from product commission; `negotiated` lists negotiated commission rates.
          */
         get: operations["getSellerFees"];
         put?: never;
@@ -995,11 +1831,75 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Plan, cadence, next charge, payment methods, invoices and the plan catalogue
-         * @description seller `GET /v1/orgs/{orgId}/billing`, `GET /v1/orgs/{orgId}/billing/invoices` and `GET /v1/plans?kind=`.
+         * Plan, cadence, next charge, credit balance, payment methods, invoices and the plans this organisation may choose
+         * @description seller `GET /v1/orgs/{orgId}/billing`, `GET /v1/orgs/{orgId}/billing/invoices`, `GET /v1/orgs/{orgId}/billing/plans` (public plans, invite-only plans it was invited to and its current plan; AfroTransact's own catalogue, S292) and `GET /v1/orgs/{orgId}/billing/plan-fee-collection` (how the plan is paid, S298; null when it can't be read).
          */
         get: operations["getBilling"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/billing/invoices/{invoiceId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Collect an unpaid invoice again after fixing the payment method — owner and finance only
+         * @description seller `POST /v1/orgs/{orgId}/billing/invoices/{invoiceId}/retry`. Reopens an invoice that failed every attempt
+         *     (or is waiting for the next one) and collects it now: platform credit first, then the seller's sales if they
+         *     chose that, then the default card or bank account. Answers with the invoice as it stands afterwards.
+         */
+        post: operations["retryInvoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/billing/invoices/{invoiceId}/document": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A printable invoice (HTML; the browser's Print › Save as PDF makes the PDF)
+         * @description seller `GET /v1/orgs/{orgId}/billing/invoices/{invoiceId}/document`. Sent as a download, like shipping labels.
+         */
+        get: operations["getInvoiceDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/billing/plan-fee-collection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Pay the plan from your sales after credit (EARNINGS_FIRST) or always by card (CARD) — owner and finance only (S298)
+         * @description seller `PUT /v1/orgs/{orgId}/billing/plan-fee-collection`. Applies from the next invoice (`appliesFromInvoiceAt`);
+         *     an invoice being collected now keeps the choice it was created with. 403 for other roles, 409
+         *     `seller.earnings-collection-off` while the platform's kill switch is off.
+         */
+        put: operations["setPlanFeeCollection"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1062,6 +1962,86 @@ export interface paths {
          * @description seller `DELETE /v1/orgs/{orgId}/billing/payment-methods/{id}`.
          */
         delete: operations["removePaymentMethod"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/billing/rewards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rewards the organisation can earn (with progress) and the rewards and credits it received
+         * @description seller `GET /v1/orgs/{orgId}/billing/rewards` (S296). Same access as the billing page.
+         */
+        get: operations["getBillingRewards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/billing/plan/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a plan or cadence change would do (upgrades show Stripe's proration now); nothing changes
+         * @description seller `GET /v1/orgs/{orgId}/billing/plan/preview`.
+         */
+        get: operations["previewPlanChange"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/billing/setup-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start adding a card or bank account with the Payment Element (owner only)
+         * @description seller `POST /v1/orgs/{orgId}/billing/setup-intents` (a SetupIntent on the organisation's Stripe customer, usage off_session).
+         */
+        post: operations["createBillingSetupIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/billing/payment-methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register the payment method the SetupIntent confirmed (owner only)
+         * @description seller `POST /v1/orgs/{orgId}/billing/payment-methods`; only display fields are stored.
+         */
+        post: operations["addBillingPaymentMethod"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1363,50 +2343,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/seller/storefront": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Draft of the seller storefront or provider public page (layout, colours, gallery, featured work, social links)
-         * @description storefront `GET /v1/storefronts/me/draft`.
-         */
-        get: operations["getPublicPage"];
-        /**
-         * Save the draft (edited social links go back to pending approval)
-         * @description storefront `GET /v1/storefronts/me/draft` merged with the changes, then `PUT /v1/storefronts/me/draft`.
-         */
-        put: operations["savePublicPage"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/seller/storefront/publish": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Publish the draft (blocked with the failing contrast checks)
-         * @description storefront `POST /v1/storefronts/me/publish` then the draft is read back.
-         */
-        post: operations["publishPublicPage"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/seller/fba/nodes": {
         parameters: {
             query?: never;
@@ -1639,6 +2575,65 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SellerRunPickupList: {
+            items: components["schemas"]["SellerRunPickup"][];
+        };
+        /** @description One delivery run's pick list for the organisation (S264) */
+        SellerRunPickup: {
+            /** Format: uuid */
+            runId: string;
+            /** @example Bastrop */
+            town: string;
+            /** @example TX */
+            state: string;
+            /** @example America/Chicago */
+            timeZone: string;
+            /**
+             * @description CONFIRMED: pack for the pickup; COLLECTING: the driver is collecting; OUT_FOR_DELIVERY and COMPLETED: everything left the sellers
+             * @enum {string}
+             */
+            runStatus: "CONFIRMED" | "COLLECTING" | "OUT_FOR_DELIVERY" | "COMPLETED";
+            /**
+             * Format: date-time
+             * @description The delivery window opens
+             */
+            windowStart: string;
+            /** Format: date-time */
+            windowEnd: string;
+            /**
+             * Format: date-time
+             * @description When the driver collects from the sellers
+             */
+            pickupAt: string | null;
+            /** @enum {string} */
+            dropMode: "DOORSTEP" | "PICKUP_POINT";
+            /** @description Run orders with lines of the organisation */
+            orders: number;
+            /** @description Units to pick in total */
+            units: number;
+            /** @description Orders the driver has already collected */
+            collectedOrders: number;
+            /** @description Units per product across all orders, most units first */
+            items: components["schemas"]["RunPickItem"][];
+            /** @description One per order, by order number */
+            bags: components["schemas"]["RunOrderBag"][];
+        };
+        RunPickItem: {
+            atin: string;
+            name: string;
+            units: number;
+        };
+        RunOrderBag: {
+            /**
+             * @description Write it on the bag
+             * @example LBK-7-1001
+             */
+            orderNumber: string;
+            /** @description The driver has collected the bag */
+            collected: boolean;
+            units: number;
+            lines: components["schemas"]["RunPickItem"][];
+        };
         Problem: {
             /** Format: uri */
             type: string;
@@ -1671,7 +2666,7 @@ export interface components {
         /** @enum {string} */
         AccessLevel: "VIEW" | "EDIT" | "APPROVE" | "FULL";
         /** @enum {string} */
-        ModuleKey: "onboarding" | "home" | "orders" | "listings" | "inventory" | "storefront" | "calendar" | "requests" | "hours" | "services" | "policy" | "public-page" | "earnings" | "payouts" | "fees" | "billing" | "account-health" | "team";
+        ModuleKey: "onboarding" | "home" | "orders" | "returns" | "disputes" | "listings" | "reviews" | "inventory" | "coupons" | "calendar" | "requests" | "hours" | "services" | "policy" | "earnings" | "payouts" | "fees" | "billing" | "account-health" | "team";
         SellerUser: {
             id: string;
             firstName: string;
@@ -1711,6 +2706,8 @@ export interface components {
             navGroups: components["schemas"]["NavGroup"][];
             landing: components["schemas"]["ModuleKey"];
             accessNote: string;
+            /** @description What the active organisation's plan includes. Anything not listed is not shown (Seller Center hides it, the BFF refuses it with 403 PLAN_FEATURE_REQUIRED). */
+            capabilities: ("bulkUpload" | "imageLibrary" | "coupons" | "aiListingWriter" | "lola")[];
         };
         ActiveOrgRequest: {
             orgId: string;
@@ -1835,7 +2832,12 @@ export interface components {
                 contactEmail: string | null;
                 /** @description E.164 */
                 phone: string | null;
-                website: string | null;
+                /** @description What the business sells or does; shown on its public page and given to Stripe */
+                description: string | null;
+                /** @description #rrggbb, the one colour of its public page */
+                brandColor: string | null;
+                /** @description https URL of its logo */
+                logoUrl: string | null;
             };
             details: {
                 legalFirstName: string | null;
@@ -1857,13 +2859,23 @@ export interface components {
                 irsDeterminationLetterAssetId: string | null;
             };
             owners: components["schemas"]["OnboardingOwner"][];
+            /**
+             * @description The payout bank account Stripe holds, read-only: Stripe collects it in its embedded onboarding ("Stripe
+             *     verification") and changes it in account management ("Change bank account"). Never the numbers.
+             */
             payouts: {
-                accountHolderName: string | null;
-                accountType: string | null;
+                /**
+                 * @description NOT_STARTED (no Stripe account yet), NEEDS_BANK (Stripe holds no bank yet: finish Stripe verification),
+                 *     FAILED (Stripe rejected the bank: change it), VERIFYING (bank on file, payouts not on yet), READY (the
+                 *     step is complete).
+                 * @enum {string}
+                 */
+                status: "NOT_STARTED" | "NEEDS_BANK" | "FAILED" | "VERIFYING" | "READY";
                 bankName: string | null;
-                routingLast4: string | null;
                 accountLast4: string | null;
-                /** @description Stripe accepted the account as the payout account (the step's completion) */
+                /** @description Stripe's status: new, validated, verified, verification_failed, errored */
+                bankStatus: string | null;
+                /** @description Stripe holds a usable payout account */
                 linked: boolean;
             };
             plan: {
@@ -1878,6 +2890,11 @@ export interface components {
                 cardExpMonth: number | null;
                 cardExpYear: number | null;
                 firstCharge: components["schemas"]["OnboardingFirstCharge"] | null;
+                /** @description How the applicant chose to pay the plan (S298); null keeps the platform default */
+                planFeeCollection: components["schemas"]["PlanFeeCollectionMode"] | null;
+                /** @description The platform offers paying the plan from sales (kill switch on); false hides the choice */
+                planFeeCollectionAvailable: boolean;
+                planFeeCollectionDefault: components["schemas"]["PlanFeeCollectionMode"];
             };
             compliance: {
                 categories: string[];
@@ -1888,6 +2905,8 @@ export interface components {
                 agreementsAccepted: boolean | null;
                 w9Certified: boolean | null;
                 w9SignerName: string | null;
+                /** @description The legal documents accepted, each with the version in force when accepted and the date (sellers - seller-terms, payments-terms, data-processing; providers - provider-terms in place of seller-terms) */
+                agreements: components["schemas"]["OnboardingAgreement"][];
             };
             documents: {
                 assetId: string;
@@ -1907,7 +2926,11 @@ export interface components {
             storeName?: string;
             contactEmail?: string;
             phone?: string;
-            website?: string;
+            /** @description What the business sells or does; shown on its public page and given to Stripe */
+            description?: string;
+            /** @description #rrggbb */
+            brandColor?: string;
+            logoUrl?: string;
         };
         OnboardingAddressInput: {
             line1: string;
@@ -1947,14 +2970,6 @@ export interface components {
         OnboardingOwnersInput: {
             owners: components["schemas"]["OnboardingOwnerInput"][];
         };
-        OnboardingPayoutsInput: {
-            accountHolderName: string;
-            /** @enum {string} */
-            accountType: "checking" | "savings";
-            routingNumber: string;
-            accountNumber: string;
-            accountNumberConfirmation: string;
-        };
         OnboardingPlanInput: {
             planCode: string;
             /** @enum {string} */
@@ -1967,6 +2982,9 @@ export interface components {
             cardLast4?: string;
             cardExpMonth?: number;
             cardExpYear?: number;
+            /** @description A trial campaign's promo code (S295); 422 promoCode when it isn't valid for this plan */
+            promoCode?: string;
+            planFeeCollection?: components["schemas"]["PlanFeeCollectionMode"];
         };
         OnboardingFoodPermitInput: {
             permitType?: components["schemas"]["OnboardingFoodPermitType"];
@@ -1994,6 +3012,22 @@ export interface components {
             agreementsAccepted?: boolean;
             w9Certified?: boolean;
             w9SignerName?: string;
+            /** @description The documents and versions the applicant was shown. The BFF records the current version of every document the application requires and answers 422 LEGAL_DOCUMENT_CHANGED when one differs from what was shown. */
+            agreements?: components["schemas"]["OnboardingAgreementInput"][];
+        };
+        OnboardingAgreement: {
+            /** @example seller-terms */
+            key: string;
+            /** @example 2.4 */
+            version: string;
+            /** Format: date */
+            acceptedOn: string | null;
+        };
+        OnboardingAgreementInput: {
+            /** @example seller-terms */
+            key: string;
+            /** @example 2.4 */
+            version: string;
         };
         OnboardingStripeSession: {
             accountId: string;
@@ -2056,10 +3090,21 @@ export interface components {
             chargesEnabled: boolean;
             payoutsEnabled: boolean;
             listingsHidden: boolean;
+            /** @description The payout bank account Stripe holds (changed in Stripe's account management component) */
+            payoutBank: {
+                bankName: string | null;
+                last4: string | null;
+                status: string | null;
+            } | null;
             items: {
                 requirement: string;
                 label: string;
                 bucket: string;
+                /**
+                 * @description The Stripe embedded component that collects it (nothing is answered through AfroTransact)
+                 * @enum {string}
+                 */
+                component: "account_onboarding" | "account_management";
             }[];
         };
         /** @enum {string} */
@@ -2116,11 +3161,17 @@ export interface components {
         Fulfilment: "SELLER" | "AFROTRANSACT" | "AFROTRANSACT_DELIVERY";
         /** @enum {string} */
         ShipmentStatus: "PENDING_PAYMENT" | "PLACED" | "CONFIRMED" | "PACKED" | "READY" | "PICKED_UP" | "IN_TRANSIT" | "OUT_FOR_DELIVERY" | "DELIVERY_FAILED" | "DELIVERED" | "RETURNED" | "CANCELLED";
+        SuggestedParcel: {
+            weightLb: number;
+            lengthIn: number;
+            widthIn: number;
+            heightIn: number;
+        };
         /**
-         * @description The only statuses a seller may set.
+         * @description The only statuses a seller may set. PICKED_UP ("Shipped": handed to the carrier) needs a label and applies to carrier parcels. DELIVERED is the handover of a pickup order at the seller's own shop and needs the buyer's 4-digit code (handoverCode).
          * @enum {string}
          */
-        SellerStatusAction: "CONFIRMED" | "PACKED" | "READY";
+        SellerStatusAction: "CONFIRMED" | "PACKED" | "READY" | "PICKED_UP" | "DELIVERED";
         SellerOrderRow: {
             orderNumber: string;
             shipmentId: string;
@@ -2149,6 +3200,25 @@ export interface components {
             sort: string[];
             /** @description The search or sort covered the first 5,000 shipments only */
             partial: boolean;
+        };
+        BusinessPageSettings: {
+            name: string;
+            /** @description The address of the page (/b/{slug}); null until the page is first made */
+            slug: string | null;
+            description: string | null;
+            /** @description #rrggbb */
+            brandColor: string | null;
+            /** @description https URL of the uploaded logo */
+            logoUrl: string | null;
+            contactEmail: string | null;
+            canEdit: boolean;
+        };
+        BusinessPageSettingsInput: {
+            description?: string;
+            /** @description #rrggbb or empty */
+            brandColor?: string;
+            /** @description https URL from POST /v1/seller/uploads (purpose storefront), or empty */
+            logoUrl?: string;
         };
         ShipFromAddress: {
             id: string;
@@ -2221,6 +3291,71 @@ export interface components {
              */
             version?: number | null;
         };
+        AssistantStatus: {
+            /** @enum {string} */
+            tier: "ESSENTIALS" | "GROWTH" | "PRO";
+            limits: {
+                /** @example Lola Growth */
+                label: string;
+                /** @description Messages a day (UTC); Lola starts again at midnight UTC */
+                dailyMessages: number;
+                maxToolRounds: number;
+                /** @description Earlier messages she remembers in a conversation */
+                history: number;
+                /** @description my_orders, order_detail, my_listings, stock_levels, fees_and_plan, payouts, sales_summary, propose_set_stock, propose_next_step */
+                tools: string[];
+                /** @description She can prepare a change for the seller to confirm */
+                canPropose: boolean;
+            };
+            used: number;
+            remaining: number;
+            upgrade: null | {
+                planCode: string;
+                label: string;
+                gains: string;
+            };
+        };
+        AssistantChatRequest: {
+            message: string;
+            /** @description The earlier turns the browser kept (the last few are used, by tier) */
+            history?: {
+                /** @enum {string} */
+                role: "user" | "assistant";
+                content: string;
+            }[];
+            /** @description Reply language (BCP 47) */
+            language?: string;
+        };
+        AssistantReply: {
+            answer: string;
+            /** @description What she looked up, for the seller to see ("Checking your orders") */
+            steps: {
+                tool: string;
+                label: string;
+            }[];
+            /** @description Changes she prepared. Nothing happens until the seller taps one. */
+            proposals: components["schemas"]["AssistantProposal"][];
+            status: components["schemas"]["AssistantStatus"];
+        };
+        AssistantProposal: {
+            /** @enum {string} */
+            kind: "SET_STOCK" | "NEXT_STEP";
+            /** @example Set JOLLOF-1 to 40 */
+            label: string;
+            /** @description SET_STOCK */
+            sku?: string;
+            /** @description SET_STOCK */
+            quantity?: number;
+            /** @description NEXT_STEP */
+            orderNumber?: string;
+            /** @description NEXT_STEP */
+            shipmentId?: string;
+            /**
+             * @description NEXT_STEP
+             * @enum {string}
+             */
+            step?: "CONFIRMED" | "PACKED" | "READY";
+        };
         SellerOffer: {
             offerId: string;
             /** @description Variant ATIN */
@@ -2245,6 +3380,156 @@ export interface components {
         };
         SellerOfferList: {
             items: components["schemas"]["SellerOffer"][];
+        };
+        SellerCoupon: {
+            /** Format: uuid */
+            id: string;
+            code: string;
+            description?: string;
+            /** @enum {string} */
+            type: "PERCENT" | "FIXED" | "FREE_SHIPPING";
+            /** Format: int64 */
+            value: number;
+            currency: string;
+            scope: string;
+            scopeRef?: string;
+            /** Format: int64 */
+            minSpendMinor: number;
+            /** @enum {string} */
+            status: "ACTIVE" | "PAUSED" | "EXPIRED";
+            /** @enum {string} */
+            funding: "PLATFORM" | "SELLER";
+            editable: boolean;
+            /** Format: int64 */
+            version: number;
+        };
+        SellerReturnLine: {
+            title: string;
+            quantity: number;
+            reason: string;
+            outcome?: string;
+        };
+        SellerReturn: {
+            /** @example RMA-5E11E5 */
+            number: string;
+            orderNumber: string;
+            /** @description First item, with "and N more items" */
+            title: string;
+            /** @enum {string} */
+            status: "REQUESTED" | "APPROVED" | "AUTO_APPROVED" | "LABEL_ISSUED" | "IN_TRANSIT" | "RECEIVED" | "INSPECTED" | "REFUNDED" | "REJECTED" | "CANCELLED";
+            statusLabel: string;
+            /** @description DROP_OFF, DRIVER_PICKUP or NO_RETURN */
+            method: string;
+            /** Format: int64 */
+            refundMinor: number;
+            currency: string;
+            refundState: string;
+            items: components["schemas"]["SellerReturnLine"][];
+            carrier?: string | null;
+            trackingNumber?: string | null;
+            dropOffBy?: string | null;
+            createdAt?: string | null;
+        };
+        SellerReturnList: {
+            items: components["schemas"]["SellerReturn"][];
+            total: number;
+        };
+        SellerDispute: {
+            reference: string;
+            type: string;
+            typeLabel: string;
+            /** @enum {string} */
+            status: "AWAITING_SELLER" | "UNDER_REVIEW" | "ESCALATED" | "RESOLVED_REFUND" | "RESOLVED_DENIED" | "WITHDRAWN";
+            statusLabel: string;
+            orderNumber: string;
+            /** Format: int64 */
+            amountMinor: number;
+            currency: string;
+            /** @description What the customer wrote (untrusted text) */
+            description: string;
+            responded: boolean;
+            sellerResponse?: string | null;
+            /** @description Deadline to respond (only while waiting for the seller) */
+            respondBy?: string | null;
+            /** @enum {string|null} */
+            deadlineState?: "ON_TRACK" | "AT_RISK" | "BREACHED" | null;
+            escalated: boolean;
+            outcome?: string | null;
+            /** Format: int64 */
+            refundMinor: number;
+            openedAt?: string | null;
+        };
+        SellerDisputeList: {
+            items: components["schemas"]["SellerDispute"][];
+            total: number;
+        };
+        SellerReviewPhoto: {
+            /** Format: uri */
+            url: string;
+        };
+        SellerReviewReply: {
+            text: string;
+            /** Format: date-time */
+            at: string;
+        };
+        /** @description A published, verified-purchase review of one of the organisation's products. The customer is never identified. */
+        SellerReview: {
+            /** Format: uuid */
+            id: string;
+            atin: string;
+            productTitle: string;
+            /** @example Adaeze N. */
+            reviewerName: string;
+            rating: number;
+            title: string | null;
+            text: string | null;
+            photos: components["schemas"]["SellerReviewPhoto"][];
+            verifiedPurchase: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            reportCount: number;
+            reply: components["schemas"]["SellerReviewReply"] | null;
+        };
+        SellerReviewPage: {
+            items: components["schemas"]["SellerReview"][];
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+        };
+        SellerReviewReportRequest: {
+            /** @enum {string} */
+            reasonCode: "ABUSIVE" | "PERSONAL_INFORMATION" | "SPAM" | "OFF_TOPIC" | "CONFLICT_OF_INTEREST" | "OTHER";
+            /** @description Required for OTHER */
+            details?: string;
+        };
+        SellerReviewReportResult: {
+            created: boolean;
+        };
+        SellerCouponList: {
+            items: components["schemas"]["SellerCoupon"][];
+        };
+        CreateSellerCouponRequest: {
+            code: string;
+            description?: string;
+            /** @enum {string} */
+            type: "PERCENT" | "FIXED" | "FREE_SHIPPING";
+            /** Format: int64 */
+            value: number;
+            /** @default USD */
+            currency: string;
+            /** @enum {string} */
+            scope: "CART" | "CATEGORY" | "PRODUCT" | "SELLER";
+            scopeRef?: string;
+            /**
+             * Format: int64
+             * @default 0
+             */
+            minSpendMinor: number;
+            /** @default 0 */
+            totalLimit: number;
+            /** @default 0 */
+            perCustomerLimit: number;
         };
         OfferFulfilmentRequest: {
             fulfilment: components["schemas"]["Fulfilment"];
@@ -2301,6 +3586,36 @@ export interface components {
             postalCode: string;
             country: string;
         };
+        /**
+         * @description How our driver handed the parcel over, shown on a delivered shipment. Null for carrier deliveries (the carrier's
+         *     tracking is the record), pickups and deliveries staff confirmed by hand. The photo and signature links are
+         *     short-lived (about 5 minutes): read the order again for fresh ones. The driver's GPS position is for staff only.
+         */
+        DeliveryProof: {
+            /**
+             * @description To the customer (who gave their code), to someone else (name, relationship, signature), or left in a safe place
+             * @enum {string}
+             */
+            method: "CUSTOMER" | "SOMEONE_ELSE" | "SAFE_PLACE";
+            recipientName: string | null;
+            relationship: string | null;
+            safePlace: string | null;
+            /**
+             * Format: uri
+             * @description Proof photo; null when none or it cannot be shown right now
+             */
+            photoUrl: string | null;
+            /**
+             * Format: uri
+             * @description Recipient's signature (someone-else handovers)
+             */
+            signatureUrl: string | null;
+            /**
+             * Format: date-time
+             * @description When it was delivered
+             */
+            at: string;
+        } | null;
         SellerShipment: {
             shipmentId: string;
             label: string;
@@ -2323,6 +3638,11 @@ export interface components {
             trackingNumber: string | null;
             nextActions: components["schemas"]["SellerStatusAction"][];
             canBuyLabel: boolean;
+            /** @description A shipping label was bought for this shipment and can be downloaded again */
+            hasLabel: boolean;
+            proof?: components["schemas"]["DeliveryProof"];
+            /** @description The package of the products as listed (weight of every unit, largest footprint, heights stacked); null when not listed */
+            suggestedParcel: components["schemas"]["SuggestedParcel"] | null;
             /** @description AfroTransact Delivery from the seller's store (S255); null for other shipments */
             localDelivery: components["schemas"]["LocalDelivery"] | null;
             timeline: {
@@ -2347,6 +3667,8 @@ export interface components {
         };
         StatusUpdateRequest: {
             status: components["schemas"]["SellerStatusAction"];
+            /** @description The buyer's 4-digit code; required when status is DELIVERED (handing a pickup order over), ignored otherwise */
+            handoverCode?: string;
         };
         Parcel: {
             weightLb: number;
@@ -2355,6 +3677,8 @@ export interface components {
             heightIn?: number;
         };
         RatesRequest: {
+            /** @description Optional carrier filter */
+            carrier?: components["schemas"]["Carrier"];
             parcel: components["schemas"]["Parcel"];
             shipFrom: components["schemas"]["PostalAddress"];
         };
@@ -2496,6 +3820,199 @@ export interface components {
             path: string;
             children: components["schemas"]["CategoryNode"][];
         };
+        /**
+         * @description BRAND: chosen from the brand registry of the category; options are the no-brand choices (UNBRANDED, HANDMADE)
+         * @enum {string}
+         */
+        AttributeKind: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER" | "BRAND";
+        /**
+         * @description Where the form shows it: product details, the food section or the regulated-items section
+         * @enum {string}
+         */
+        AttributeSection: "DETAILS" | "FOOD" | "REGULATED";
+        /**
+         * @description The unit of a chart's values; the other unit is shown by conversion
+         * @enum {string}
+         */
+        SizeChartUnit: "CM" | "IN";
+        /**
+         * @description How the sizes fit; shown beside the size chart
+         * @enum {string}
+         */
+        FitNote: "RUNS_SMALL" | "TRUE_TO_SIZE" | "RUNS_LARGE";
+        SizeChartColumnInput: {
+            /** @description Stable key rows refer to; derived from the label when absent (Foot length becomes foot_length) */
+            key?: string;
+            /** @description What the shopper reads: Bust, Foot length ... */
+            label: string;
+            unit?: components["schemas"]["SizeChartUnit"];
+        };
+        SizeChartColumn: {
+            key: string;
+            label: string;
+            unit: components["schemas"]["SizeChartUnit"];
+        };
+        /** @description A single value (omit max, or max equal to min) or a range, in the chart's unit */
+        SizeChartValueInput: {
+            min: number;
+            max?: number | null;
+        };
+        SizeChartValue: {
+            min: number;
+            max: number;
+        };
+        SizeChartRowInput: {
+            /** @description The size label as the seller writes it on the variants: M, UK 12, Free size, Age 6-7 */
+            size: string;
+            /** @description A value for every column key */
+            values: {
+                [key: string]: components["schemas"]["SizeChartValueInput"];
+            };
+        };
+        SizeChartRow: {
+            size: string;
+            /** @description By column key, in the chart's unit */
+            values: {
+                [key: string]: components["schemas"]["SizeChartValue"];
+            };
+            /** @description The same values converted to alternateUnit, one decimal */
+            alternateValues: {
+                [key: string]: components["schemas"]["SizeChartValue"];
+            };
+        };
+        /**
+         * @description A size chart as the seller writes it. `productTypeCode` / `categoryId` say what it was made for (both optional;
+         *     a category implies its product type). `version` (PUT only) is the version the editor loaded.
+         */
+        SizeChartInput: {
+            name: string;
+            unitSystem: components["schemas"]["SizeChartUnit"];
+            productTypeCode?: string | null;
+            /**
+             * Format: uuid
+             * @description A product-type (third level) category node
+             */
+            categoryId?: string | null;
+            columns: components["schemas"]["SizeChartColumnInput"][];
+            rows: components["schemas"]["SizeChartRowInput"][];
+            fitNote?: components["schemas"]["FitNote"] | null;
+            /** @description Free text telling shoppers how to take their measurements */
+            howToMeasure?: string | null;
+            version?: number | null;
+        };
+        SizeChart: {
+            /** Format: uuid */
+            id: string;
+            ownerOrgId: string;
+            name: string;
+            unitSystem: components["schemas"]["SizeChartUnit"];
+            alternateUnit: components["schemas"]["SizeChartUnit"];
+            productTypeCode: string | null;
+            /** Format: uuid */
+            categoryId: string | null;
+            columns: components["schemas"]["SizeChartColumn"][];
+            rows: components["schemas"]["SizeChartRow"][];
+            fitNote: components["schemas"]["FitNote"] | null;
+            howToMeasure: string | null;
+            retired: boolean;
+            /** Format: date-time */
+            retiredAt: string | null;
+            /** @description Products that use this chart */
+            productCount: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** @description Send back as `version` when saving */
+            version: number;
+        };
+        SizeChartPage: {
+            items: components["schemas"]["SizeChart"][];
+            total: number;
+            page: number;
+            size: number;
+        };
+        SuggestedMeasurement: {
+            key: string;
+            label: string;
+            unit?: components["schemas"]["SizeChartUnit"] | null;
+            /** @description One line telling the seller how to measure it */
+            help?: string | null;
+        };
+        SizeChartSuggestions: {
+            productTypeCode: string;
+            productTypeLabel: string;
+            /** @description false: this product type has no sizes and no size chart */
+            sized: boolean;
+            /** @description A listing needs a size chart whose rows cover every size it sells */
+            sizeChartRequired: boolean;
+            /** @description The variation dimension that holds the size, e.g. Size */
+            sizeDimension: string;
+            /** @description Suggested size labels, in order (XS ... 3XL) */
+            sizes: string[];
+            /** @description The seller may add size labels of their own (always true for a sized type) */
+            sizesAllowCustomValues: boolean;
+            unitSystem: components["schemas"]["SizeChartUnit"];
+            measurements: components["schemas"]["SuggestedMeasurement"][];
+        };
+        SizeChartImportMessage: {
+            /** @description chart_name, unit, size, fit_note, how_to_measure or m:<measurement key>; null for the row */
+            column: string | null;
+            /** @description Position of the column in the uploaded header; -1 when none */
+            columnIndex: number;
+            /** @enum {string} */
+            severity: "ERROR" | "WARNING";
+            message: string;
+        };
+        SizeChartImportRow: {
+            /** @description The row in the spreadsheet (header = 1) */
+            rowNumber: number;
+            chartName: string;
+            size: string;
+            /** @enum {string} */
+            status: "VALID" | "WARNING" | "ERROR";
+            messages: components["schemas"]["SizeChartImportMessage"][];
+            cells: string[];
+        };
+        SizeChartImportChart: {
+            name: string;
+            /**
+             * @description What was done, or with dryRun what would be done
+             * @enum {string}
+             */
+            action: "CREATE" | "UPDATE" | "UNCHANGED" | "FAILED";
+            /** Format: uuid */
+            chartId: string | null;
+            rows: number[];
+            /** @description Why the chart failed */
+            message: string | null;
+        };
+        SizeChartImportReport: {
+            /** @description false for a dry run: nothing was saved */
+            applied: boolean;
+            fileName: string;
+            fileWarnings: string[];
+            chartCount: number;
+            created: number;
+            updated: number;
+            unchanged: number;
+            failed: number;
+            errorRows: number;
+            warningRows: number;
+            charts: components["schemas"]["SizeChartImportChart"][];
+            rows: components["schemas"]["SizeChartImportRow"][];
+        };
+        /**
+         * @description Staff mark a product type as sized. Sellers then write size charts and their own size labels (the size
+         *     dimension allows custom values; its options are suggestions).
+         */
+        SizingTrait: {
+            /** @description A listing needs a size chart whose rows cover every size it sells */
+            sizeChartRequired: boolean;
+            /** @description The variation dimension that holds the size, e.g. Size */
+            sizeDimension: string;
+            suggestedMeasurements: components["schemas"]["SuggestedMeasurement"][];
+        };
         ProductTypeSchema: {
             code: string;
             label: string;
@@ -2507,14 +4024,35 @@ export interface components {
                 options: string[];
                 required: boolean;
                 multiline: boolean;
+                kind: components["schemas"]["AttributeKind"];
+                /** @description NUMBER only: allowed units, the first is the default (value stored as "12 months") */
+                units: string[];
+                section: components["schemas"]["AttributeSection"];
+                help: string | null;
             }[];
             themes: {
                 name: string;
                 dimensions: {
                     name: string;
+                    /** @description The category's values: suggestions where allowCustomValues, else the only allowed ones */
                     options: string[];
+                    /** @description The seller may use values of their own (sizes such as UK 12, colours such as Indigo adire) besides options; show options as suggestion chips plus an "Add" input */
+                    allowCustomValues: boolean;
                 }[];
             }[];
+            /** @description Decide the form's conditional sections and the template's columns */
+            traits: {
+                /** @description Food section: shelf life, storage, ingredients, allergens */
+                food: boolean;
+                /** @description Frozen or chilled food (storage temperature) */
+                perishable: boolean;
+                /** @description Regulated items section: permit, licence or certificate references */
+                regulated: boolean;
+                /** @description May be sold in community pre-order windows */
+                preorder: boolean;
+                /** @description Set for sized product types (fashion): a size chart section and seller-written sizes */
+                sizing: components["schemas"]["SizingTrait"] | null;
+            };
         };
         GtinCheck: {
             digits: string;
@@ -2545,8 +4083,11 @@ export interface components {
             height?: number;
             bytes?: number;
             contentType: string;
+            /** @description Optional alternative text (what the picture shows), stored with the image */
+            alt?: string | null;
         };
         VariantInput: {
+            /** @description Empty for a product without variations */
             options: {
                 [key: string]: string;
             };
@@ -2554,9 +4095,44 @@ export interface components {
             gtin?: string;
             gtinExempt?: boolean;
             priceMinor: number;
+            /** @description "Was" price shown struck through; above priceMinor */
+            compareAtMinor?: number | null;
             quantity: number;
+            /** @description Images of this variant only */
+            images?: components["schemas"]["ProductImageInput"][];
         };
-        /** @description Exactly one of categoryId or categoryRequestId. */
+        /** @enum {string} */
+        ItemCondition: "NEW" | "RENEWED" | "USED_LIKE_NEW" | "USED_VERY_GOOD" | "USED_GOOD" | "USED_ACCEPTABLE";
+        /**
+         * @description Ships from the seller, or Fulfilled by AfroTransact
+         * @enum {string}
+         */
+        ListingFulfilment: "SELLER" | "AFROTRANSACT";
+        PackageDimensions: {
+            lengthIn: number;
+            widthIn: number;
+            heightIn: number;
+            weightLb: number;
+        };
+        /** @description Description, condition, search keywords, fulfilment, package, handling time and ship-from */
+        ListingDetailsInput: {
+            description?: string;
+            condition?: components["schemas"]["ItemCondition"];
+            keywords?: string[];
+            fulfilment?: components["schemas"]["ListingFulfilment"];
+            packaging?: components["schemas"]["PackageDimensions"] | null;
+            handlingDays?: number;
+            /** @description A ship-from address id (GET /v1/seller/ship-from-addresses); null = the default */
+            shipFromId?: string | null;
+            /**
+             * Format: uuid
+             * @description One of the organisation's size charts (POST /v1/seller/size-charts). Required when the product type's sizing trait says sizeChartRequired; every size the variants sell needs a row in it (422 on sizeChartId or variants[i].options.Size). Another organisation's chart is never accepted.
+             */
+            sizeChartId?: string | null;
+            /** @description How the sizes fit; shown beside the chart (defaults to the chart's own) */
+            fitNote?: components["schemas"]["FitNote"] | null;
+        };
+        /** @description Exactly one of categoryId or categoryRequestId. variationTheme "" = a product without variations (one variant without options). */
         ProductDraft: {
             categoryId?: string;
             categoryRequestId?: string;
@@ -2567,6 +4143,311 @@ export interface components {
             images: components["schemas"]["ProductImageInput"][];
             variationTheme: string;
             variants: components["schemas"]["VariantInput"][];
+            /** @description Food only: may be sold in community pre-order windows */
+            preorderEligible?: boolean;
+            listing?: components["schemas"]["ListingDetailsInput"];
+            /** @description The saved draft this submission comes from; deleted with the submission */
+            draftId?: string;
+        };
+        /** @description The whole edited product (categoryId may change only before it is published) and the version it was based on. */
+        ProductUpdate: components["schemas"]["ProductDraft"] & {
+            version?: number;
+        };
+        ProductVariant: {
+            atin: string;
+            sellerSku: string;
+            gtin: string | null;
+            gtinExempt: boolean;
+            options: {
+                [key: string]: string;
+            };
+            priceMinor: number;
+            compareAtMinor: number | null;
+            quantity: number;
+            images: components["schemas"]["ProductImageInput"][];
+        };
+        ListingDetails: {
+            description: string | null;
+            condition: components["schemas"]["ItemCondition"];
+            keywords: string[];
+            fulfilment: components["schemas"]["ListingFulfilment"];
+            packaging: components["schemas"]["PackageDimensions"] | null;
+            handlingDays: number;
+            shipFromId: string | null;
+            /** Format: uuid */
+            sizeChartId?: string | null;
+            fitNote?: components["schemas"]["FitNote"] | null;
+        };
+        ProductDetail: {
+            productId: string;
+            atin: string;
+            status: components["schemas"]["ListingStatus"];
+            statusLabel: string;
+            moderationNote: string | null;
+            categoryId: string | null;
+            categoryRequestId: string | null;
+            categoryPath: string;
+            productType: string;
+            title: string;
+            attributes: {
+                [key: string]: string;
+            };
+            images: components["schemas"]["ProductImageInput"][];
+            variationTheme: string;
+            variants: components["schemas"]["ProductVariant"][];
+            preorderEligible: boolean;
+            listing: components["schemas"]["ListingDetails"];
+            currency: string;
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ProductDraftSummary: {
+            id: string;
+            /** @description The listing being edited; null for a new product */
+            productId: string | null;
+            title: string;
+            categoryPath: string | null;
+            /** Format: date-time */
+            updatedAt: string;
+            version: number;
+        };
+        ProductDraftList: {
+            items: components["schemas"]["ProductDraftSummary"][];
+        };
+        SavedProductDraft: components["schemas"]["ProductDraftSummary"] & {
+            /** @description The form's input as saved (need not be valid) */
+            payload: {
+                [key: string]: unknown;
+            };
+        };
+        SaveProductDraftRequest: {
+            /** @description Create only: the listing this draft edits */
+            productId?: string;
+            title?: string;
+            categoryPath?: string;
+            payload: {
+                [key: string]: unknown;
+            };
+            /** @description Save only: the version being replaced */
+            version?: number;
+        };
+        ListingContext: {
+            aiListingWriter: {
+                available: boolean;
+                /**
+                 * @description Why not: the plan lacks it, or the member may not use AI tools
+                 * @enum {string|null}
+                 */
+                reason: "PLAN" | "ROLE" | null;
+            };
+            /** @description New listings go to review before they are live ("Submit for review") */
+            moderated: boolean;
+            importLimits: {
+                maxFileBytes: number;
+                maxRows: number;
+                maxImagesPerProduct: number;
+                maxVariantsPerProduct: number;
+            };
+        };
+        ListingWriterRequest: {
+            productType: string;
+            title: string;
+            attributes?: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            tone?: "warm" | "concise" | "premium";
+        };
+        ListingWriterDraft: {
+            title: string;
+            description: string;
+            bullets: string[];
+        };
+        /**
+         * @default xlsx
+         * @enum {string}
+         */
+        SpreadsheetFormat: "xlsx" | "csv";
+        /**
+         * @default CREATE
+         * @enum {string}
+         */
+        ImportMode: "CREATE" | "UPDATE";
+        /** @enum {string} */
+        ImportStatus: "VALIDATED" | "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED";
+        /** @enum {string} */
+        ImportRowStatus: "VALID" | "WARNING" | "ERROR";
+        /** @enum {string} */
+        ImportRowOutcome: "PENDING" | "CREATED" | "UPDATED" | "FAILED" | "SKIPPED";
+        ProductImport: {
+            id: string;
+            /** @description e.g. BU-000123 */
+            reference: string;
+            fileName: string;
+            /** @enum {string} */
+            format: "XLSX" | "CSV";
+            mode: components["schemas"]["ImportMode"];
+            /** @description The template's product type; null for the generic template */
+            productType: string | null;
+            status: components["schemas"]["ImportStatus"];
+            validOnly: boolean;
+            totalRows: number;
+            validRows: number;
+            warningRows: number;
+            errorRows: number;
+            /** @description Products in the file (rows sharing a Parent SKU count once) */
+            productCount: number;
+            processedRows: number;
+            createdProducts: number;
+            updatedProducts: number;
+            failedRows: number;
+            /** @description The uploaded header cells (the preview's columns) */
+            header: string[];
+            fileWarnings: string[];
+            uploadedByName: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            startedAt: string | null;
+            /** Format: date-time */
+            finishedAt: string | null;
+            /** @description App-relative download of the error report (xlsx) */
+            reportUrl: string;
+        };
+        ProductImportPage: {
+            items: components["schemas"]["ProductImport"][];
+            total: number;
+            page: number;
+            size: number;
+        };
+        ImportRowMessage: {
+            /** @description Column key (sku, price, attr:material, option:Size); null for the whole row */
+            column: string | null;
+            /** @description Position in the uploaded header; -1 when the column is missing */
+            columnIndex: number;
+            /** @enum {string} */
+            severity: "ERROR" | "WARNING";
+            message: string;
+        };
+        ProductImportRow: {
+            /** @description The row number in the spreadsheet */
+            rowNumber: number;
+            /** @description Parent SKU (rows of one product share it) */
+            groupKey: string;
+            sku: string;
+            status: components["schemas"]["ImportRowStatus"];
+            outcome: components["schemas"]["ImportRowOutcome"];
+            outcomeNote: string | null;
+            productId: string | null;
+            messages: components["schemas"]["ImportRowMessage"][];
+            /** @description Cell text in header order */
+            cells: string[];
+            /** @description The row's images: found in the library (thumbnail), links, missing or bad links */
+            images: components["schemas"]["ImportRowImage"][];
+        };
+        /** @enum {string} */
+        ImageSlot: "MAIN" | "PT01" | "PT02" | "PT03" | "PT04" | "PT05" | "PT06" | "PT07" | "PT08" | "SWCH";
+        ImportRowImage: {
+            slot: components["schemas"]["ImageSlot"];
+            /**
+             * @description An https URL cell, a library file name in an image cell, or a library file named after the SKU
+             * @enum {string}
+             */
+            source: "LINK" | "FILE" | "SKU";
+            /** @description The link or file name */
+            ref: string;
+            /**
+             * @description FOUND in the library, a LINK copied when the import runs, HELD by moderation, MISSING from the library, or a BAD_LINK
+             * @enum {string}
+             */
+            state: "FOUND" | "LINK" | "HELD" | "MISSING" | "BAD_LINK";
+            /** @description Thumbnail of a FOUND library image */
+            url: string | null;
+            message: string | null;
+        };
+        ImageLibraryItem: {
+            assetId: string;
+            fileName: string;
+            /** @description SKU parsed from the file name (upper case); null when the name has no slot */
+            sku: string | null;
+            slot: components["schemas"]["ImageSlot"] | null;
+            /**
+             * @description READY, held for review (FLAGGED) or REJECTED (reasons in flags)
+             * @enum {string}
+             */
+            status: "READY" | "FLAGGED" | "REJECTED";
+            /** @description Public URL (thumbnail) when READY */
+            url: string | null;
+            width: number;
+            height: number;
+            bytes: number;
+            flags: string[];
+            /** Format: date-time */
+            createdAt: string;
+            /** @description SKUs of listings that use this image */
+            usedBy: string[];
+            /** @description The SKU in the file name belongs to one of the organisation's listings */
+            skuKnown: boolean;
+        };
+        ImageLibraryPage: {
+            items: components["schemas"]["ImageLibraryItem"][];
+            total: number;
+            page: number;
+            size: number;
+        };
+        AttachLibraryImagesRequest: {
+            /** @description Only listings with one of these SKUs; omit for every listing */
+            skus?: string[];
+        };
+        AttachLibraryImagesResult: {
+            productsUpdated: number;
+            imagesAttached: number;
+            skipped: {
+                sku: string;
+                reason: string;
+            }[];
+        };
+        BrandList: {
+            /** @description The department of the category; null when a product type is used in several */
+            departmentId: string | null;
+            /** @description Heads the group "Brands in <department>" */
+            departmentName: string | null;
+            brands: components["schemas"]["Brand"][];
+        };
+        Brand: {
+            id: string;
+            name: string;
+            /**
+             * @description OWN: typed in or used by this organisation
+             * @enum {string}
+             */
+            source: "OWN" | "CATALOG";
+            /**
+             * @description PENDING brands await AfroTransact review and are visible to their author only
+             * @enum {string}
+             */
+            status: "APPROVED" | "PENDING";
+            ownProducts: number;
+            products: number;
+        };
+        CreatedBrand: {
+            brand: components["schemas"]["Brand"];
+            /** @description False when the brand already existed and is returned as the match */
+            created: boolean;
+        };
+        ProductImportRowPage: {
+            items: components["schemas"]["ProductImportRow"][];
+            total: number;
+            page: number;
+            size: number;
+        };
+        StartImportRequest: {
+            /**
+             * @description Import the valid and warning rows; rows with errors are skipped
+             * @default false
+             */
+            validOnly: boolean;
         };
         UploadRequest: {
             /** @enum {string} */
@@ -2575,6 +4456,11 @@ export interface components {
             /** @enum {string} */
             contentType: "image/jpeg" | "image/png" | "image/webp";
             size: number;
+            /**
+             * @description product-image only: add it to the image library (matched to SKUs by file name)
+             * @default false
+             */
+            library: boolean;
         };
         UploadTicket: {
             assetId: string;
@@ -2633,15 +4519,21 @@ export interface components {
             paidMinor: number;
             /** @description Provider fees (late cancellations) debited from or reserved in the balance */
             providerFeesMinor: number;
+            /** @description Plan fees paid from sales (S298) not yet deducted from a transfer: they come out of the amounts on hold. Negative when a released fee is paid back with the next transfer */
+            planFeesMinor: number;
             /** @description Compliance hold: payout requests fail until it is lifted; the balance keeps accruing */
             payoutsPaused: boolean;
             payoutsPausedReason: ("AUTO_PAST_DUE" | "MANUAL" | "DEAUTHORIZED" | "CHARGES_DISABLED") | null;
             /** @description What the hold means for the member and how it lifts */
             payoutsPausedMessage: string | null;
+            /** @description Payments has no Stripe Connect account for the organisation: earnings stay on hold until it is registered (connect Stripe in Account health, or staff re-sync) */
+            payoutAccountMissing: boolean;
             minimumPayoutMinor: number;
             canRequestToday: boolean;
             holds: {
                 orderId: string;
+                /** @description What the screen shows. Payments reports ids only; the BFF names the order from the seller's own shipments, null when it is not among the recent ones */
+                orderNumber: string | null;
                 amountMinor: number;
                 releaseAt: string | null;
             }[];
@@ -2656,10 +4548,91 @@ export interface components {
             holdReason: string | null;
             failureMessage: string | null;
         };
+        SellerTaxStatement: {
+            /** @example 2026-09 */
+            month: string;
+            /** @example USD */
+            currency: string;
+            rows: components["schemas"]["SellerTaxStateRow"][];
+            totals: components["schemas"]["SellerTaxStateTotals"];
+            /** @description The months the picker offers, newest first. */
+            months: string[];
+        };
+        SellerTaxStateRow: {
+            /** @example US-TX */
+            jurisdiction: string;
+            /** @example TX */
+            state: string;
+            /** Format: int64 */
+            orders: number;
+            /**
+             * Format: int64
+             * @description All sales shipped to the state, net of refunds
+             */
+            grossSalesMinor: number;
+            /** Format: int64 */
+            taxableSalesMinor: number;
+            /** Format: int64 */
+            taxCollectedMinor: number;
+            /**
+             * Format: int64
+             * @description Tax given back by refunds
+             */
+            taxRefundedMinor: number;
+            /**
+             * Format: int64
+             * @description Collected minus refunded
+             */
+            netTaxMinor: number;
+        };
+        SellerTaxStateTotals: {
+            /** Format: int64 */
+            orders: number;
+            /** Format: int64 */
+            grossSalesMinor: number;
+            /** Format: int64 */
+            taxableSalesMinor: number;
+            /** Format: int64 */
+            taxCollectedMinor: number;
+            /** Format: int64 */
+            taxRefundedMinor: number;
+            /** Format: int64 */
+            netTaxMinor: number;
+        };
         PayoutsView: {
             balance: components["schemas"]["PayoutBalance"];
             payouts: components["schemas"]["Payout"][];
             historyAvailable: boolean;
+            /** @description Plan invoices paid from sales, newest first (S298) */
+            planFeeDeductions: components["schemas"]["PlanFeeDeduction"][];
+        };
+        /** @description A plan invoice paid from sales: "Plan fee (invoice …)", deducted from the next transfers (S298) */
+        PlanFeeDeduction: {
+            invoiceId: string;
+            invoiceNumber: string | null;
+            /** @description Plan fee (invoice …) */
+            label: string;
+            /** @enum {string} */
+            status: "WITHHELD" | "DECLINED" | "RELEASED";
+            requestedMinor: number;
+            /** @description Paid from sales; the card paid requested − withheld */
+            withheldMinor: number;
+            /** @description Given back (voided or refunded invoice) */
+            releasedMinor: number;
+            /** @description Still to deduct from the next transfers (negative while owed back) */
+            outstandingMinor: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description The settlements it was deducted from (negative amounts were paid back with them) */
+            transfers: {
+                orderId: string;
+                /** @description What the screen shows (null when the order is not among the seller's recent shipments) */
+                orderNumber: string | null;
+                amountMinor: number;
+                /** Format: date-time */
+                at: string;
+                label: string;
+            }[];
         };
         PayoutRequest: {
             amountMinor?: number;
@@ -2686,6 +4659,32 @@ export interface components {
             features: string[];
             prices: components["schemas"]["PlanPrice"][];
             current: boolean;
+            /** @description What the plan charges, in words (free months, conditions), e.g. First 3 months free, then $39/mo; empty when not known */
+            chargeTerms?: string;
+            /** @description What the plan allows; null when the seller service did not say */
+            entitlements?: components["schemas"]["PlanEntitlements"] | null;
+        };
+        /** @description What a plan lets an organisation do; staff set it per plan. A capability that is off is not offered to the plan's members at all. Null when the seller service did not say. */
+        PlanEntitlements: {
+            /**
+             * Format: int64
+             * @description The most live listings; null = unlimited
+             */
+            listings: number | null;
+            listingsUnlimited: boolean;
+            /** @description The AI listing writer is included */
+            aiListingWriter: boolean;
+            /**
+             * @description What Lola, the seller assistant, can do; NONE = not included
+             * @enum {string}
+             */
+            lolaTier: "NONE" | "ESSENTIALS" | "GROWTH" | "PRO";
+            /** @description Listings can be uploaded in bulk */
+            bulkUpload: boolean;
+            /** @description The bulk image library is included */
+            imageLibrary: boolean;
+            /** @description Coupon codes for the seller's listings are included */
+            coupons: boolean;
         };
         BillingPaymentMethod: {
             id: string;
@@ -2702,6 +4701,17 @@ export interface components {
             isDefault: boolean;
             label: string;
         };
+        InvoiceLine: {
+            /**
+             * @description USAGE is a metered add-on; COUPON and WAIVER are negative (a coupon, or the plan fee a charge condition waived)
+             * @enum {string}
+             */
+            kind: "PLAN" | "USAGE" | "COUPON" | "PRORATION" | "WAIVER";
+            description: string;
+            /** Format: int64 */
+            amountMinor: number;
+        };
+        /** @description A plan invoice AfroTransact issued itself for one billing period. It is settled in this order: platform credit (coupons are already off the invoice), the seller's sales — only if they chose to pay from sales — then the saved card or bank account; a failed charge is retried 1, 3, 5 and 7 days later. */
         Invoice: {
             id: string;
             number: string;
@@ -2709,14 +4719,93 @@ export interface components {
             periodStart: string | null;
             /** Format: date-time */
             periodEnd: string | null;
+            /**
+             * Format: int64
+             * @description The plan fee and usage before coupons and waivers
+             */
+            subtotalMinor: number;
+            /**
+             * Format: int64
+             * @description Coupons and what a charge condition waived
+             */
+            discountMinor: number;
+            /**
+             * Format: int64
+             * @description What is owed after discounts
+             */
             amountDueMinor: number;
+            /** Format: int64 */
             amountPaidMinor: number;
             currency: string;
-            status: string;
-            pdfUrl: string | null;
-            hostedUrl: string | null;
+            /**
+             * @description A fully waived or covered invoice is PAID
+             * @enum {string}
+             */
+            status: "OPEN" | "PAID" | "VOID" | "UNCOLLECTIBLE";
             /** Format: date-time */
             createdAt: string;
+            /** Format: date-time */
+            paidAt: string | null;
+            /**
+             * Format: date-time
+             * @description When an unpaid invoice is tried again
+             */
+            nextAttemptAt: string | null;
+            /** @description Why the last attempt failed ("Your card was declined.") */
+            lastError: string | null;
+            lines: components["schemas"]["InvoiceLine"][];
+            /**
+             * Format: int64
+             * @description Paid from platform credit
+             */
+            paidFromCreditMinor: number;
+            /**
+             * Format: int64
+             * @description Paid from the organisation's sales (S298): withheld from its earnings, only if it chose that
+             */
+            paidFromSalesMinor: number;
+            /**
+             * Format: int64
+             * @description Paid (or, while open, due) by card or bank: the rest
+             */
+            paidByCardMinor: number;
+            /**
+             * Format: int64
+             * @description Forgiven by staff
+             */
+            waivedMinor: number;
+            /** @description The seller can fix the payment method and retry */
+            canRetry: boolean;
+        };
+        /**
+         * @description EARNINGS_FIRST: "Pay your plan from your sales" — each invoice is taken from pending earnings and the card pays only what they don't cover. CARD: "Charge my card" — plan fees stay a separate card expense.
+         * @enum {string}
+         */
+        PlanFeeCollectionMode: "EARNINGS_FIRST" | "CARD";
+        PlanFeeCollectionInput: {
+            mode: components["schemas"]["PlanFeeCollectionMode"];
+        };
+        /** @description How the organisation pays its plan (S298) */
+        PlanFeeCollectionView: {
+            /** @description The platform offers the choice; false hides it and every invoice is charged to the card */
+            available: boolean;
+            mode: components["schemas"]["PlanFeeCollectionMode"];
+            effective: components["schemas"]["PlanFeeCollectionMode"];
+            /** @enum {string} */
+            source: "DEFAULT" | "ONBOARDING" | "SELLER" | "STAFF";
+            platformDefault: components["schemas"]["PlanFeeCollectionMode"];
+            /**
+             * Format: date-time
+             * @description A change applies from the invoice of this date (the next renewal)
+             */
+            appliesFromInvoiceAt: string | null;
+            appliesFromLabel: string;
+            /** @description An invoice being paid from sales right now keeps the earlier choice */
+            inProgressInvoiceId: string | null;
+            /** Format: date-time */
+            changedAt: string | null;
+            /** @description Owner and finance roles may change it */
+            canChange: boolean;
         };
         Subscription: {
             planCode: string;
@@ -2742,8 +4831,159 @@ export interface components {
                 effectiveAt: string;
             } | null;
             dunning: string | null;
+            /** @description Plan version (prices) the organisation pays; changes only by a plan change or a staff migration (S292) */
+            planVersion?: number;
+            /**
+             * Format: int64
+             * @description Platform credit the next invoices use first (rewards, staff credits)
+             */
+            creditBalanceMinor?: number;
+            /** @enum {string|null} */
+            trialSource?: "PLAN" | "CAMPAIGN" | "OVERRIDE" | "NONE" | null;
+            /** @description A condition staff put on the plan charges, with the seller's progress; null when charges apply as normal */
+            chargeGate?: components["schemas"]["ChargeGate"] | null;
+            /** @description What the plan allows */
+            entitlements?: components["schemas"]["PlanEntitlements"] | null;
+        };
+        /** @description START_AFTER: no plan charge until the seller reaches the threshold (sales, orders, bookings or live listings); WAIVE_WHILE: free while they keep it; WAIVE_UNTIL: free until a date. Staff set it with a reason. */
+        ChargeGate: {
+            /** @enum {string} */
+            mode: "START_AFTER" | "WAIVE_WHILE" | "WAIVE_UNTIL";
+            /** @enum {string|null} */
+            metric: "GROSS_SALES" | "COMPLETED_ORDERS" | "COMPLETED_BOOKINGS" | "ACTIVE_LISTINGS" | null;
+            /**
+             * Format: int64
+             * @description Minor units for GROSS_SALES, else a count
+             */
+            threshold: number | null;
+            /**
+             * Format: int64
+             * @description Where the seller is now
+             */
+            progress: number;
+            /** Format: date-time */
+            until: string | null;
+            /**
+             * Format: date-time
+             * @description A START_AFTER condition was reached; charging has started
+             */
+            metAt: string | null;
+            /** @description One sentence for the seller: "Charging starts after $1,000 in sales — you're at $420" */
+            label: string;
+        };
+        /** @description A reward the organisation can still earn: "$640 of $1,000 in sales → 1 month free" (S296). A LESS_THAN rule (low-sales relief, S299) has no progress to show: it is pending until checkAt, when it is decided once. */
+        RewardProgress: {
+            ruleId: string;
+            name: string;
+            description?: string | null;
+            /** @enum {string} */
+            metric: "GROSS_SALES" | "ACTIVE_LISTINGS" | "COMPLETED_ORDERS" | "COMPLETED_BOOKINGS" | "DAYS_SINCE_APPROVAL";
+            /**
+             * Format: int64
+             * @description Cents for GROSS_SALES, a count otherwise
+             */
+            value: number;
+            /** Format: int64 */
+            threshold: number;
+            percent: number;
+            qualifies: boolean;
+            label: string;
+            rewardLabel: string;
+            conditionLabel: string;
+            /** Format: date-time */
+            endsAt?: string | null;
+            /** @enum {string} */
+            comparison: "AT_LEAST" | "LESS_THAN";
+            /** @enum {string} */
+            windowAnchor: "APPROVAL" | "SUBSCRIPTION_START";
+            /** @description The window's length (the first N days) */
+            windowDays?: number | null;
+            /** @description Decided once at window end and the check is still to come */
+            pending: boolean;
+            /**
+             * Format: date-time
+             * @description When the check runs (rules checked at window end)
+             */
+            checkAt?: string | null;
+            /** Format: date-time */
+            windowClosesAt?: string | null;
+        };
+        /** @description A reward or credit the organisation received (reward rules and staff adjustments). */
+        EarnedReward: {
+            id: string;
+            /** @enum {string} */
+            source: "RULE" | "MANUAL";
+            /** @enum {string} */
+            type: "FREE_DAYS" | "FREE_MONTHS" | "CREDIT" | "PERCENT_OFF" | "WAIVE_INVOICE" | "TRIAL_END" | "CHARGE_GATE";
+            summary: string;
+            /** @description The reward rule's name */
+            reason?: string | null;
+            /** @enum {string} */
+            status: "PENDING" | "APPLIED" | "FAILED";
+            /** Format: int64 */
+            creditMinor?: number | null;
+            freeDays?: number | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            appliedAt?: string | null;
+            /**
+             * @description The reward rule's comparison: LESS_THAN is low-sales relief
+             * @enum {string|null}
+             */
+            comparison?: "AT_LEAST" | "LESS_THAN" | null;
+            /**
+             * Format: date-time
+             * @description Free days: the new trial end, when Stripe charges next
+             */
+            nextChargeAt?: string | null;
+        };
+        SellerRewardsView: {
+            available: components["schemas"]["RewardProgress"][];
+            earned: components["schemas"]["EarnedReward"][];
+        };
+        BillingPlanChangePreview: {
+            /** @enum {string} */
+            change: "IMMEDIATE_UPGRADE" | "AT_RENEWAL" | "NO_CHANGE";
+            planCode: string;
+            planName: string;
+            cadence: components["schemas"]["Cadence"];
+            /** Format: date-time */
+            effectiveAt?: string | null;
+            /**
+             * Format: int64
+             * @description Invoiced now: Stripe's proration of an upgrade (0 in a trial or for a change at renewal)
+             */
+            amountDueNowMinor: number;
+            /** Format: int64 */
+            nextChargeMinor: number;
+            /** Format: date-time */
+            nextChargeAt?: string | null;
+            trialing: boolean;
+        };
+        BillingSetupIntent: {
+            setupIntentId: string;
+            /** @description Confirm with the Payment Element (stripe.confirmSetup) */
+            clientSecret: string;
+            publishableKey: string;
+            /** @description No Stripe key on this machine; the local stand-in accepted it */
+            localTest: boolean;
+        };
+        AddBillingPaymentMethod: {
+            stripePaymentMethodId: string;
+            /** @enum {string} */
+            kind: "CARD" | "US_BANK_ACCOUNT";
+            brand?: string;
+            last4: string;
+            expMonth?: number;
+            expYear?: number;
+            bankName?: string;
+            accountType?: string;
+            makeDefault?: boolean;
         };
         BillingView: {
+            /** @description How the plan is paid (S298); null when it can't be read */
+            planFeeCollection: components["schemas"]["PlanFeeCollectionView"] | null;
             subscription: components["schemas"]["Subscription"];
             plans: components["schemas"]["Plan"][];
             paymentMethods: components["schemas"]["BillingPaymentMethod"][];
@@ -2865,6 +5105,79 @@ export interface components {
             /** Format: date-time */
             proposedStartAt: string | null;
             allowedActions: components["schemas"]["BookingAction"][];
+            /** @description The service's category (selects the connection fee) */
+            serviceCategory?: string | null;
+            /** @description Booking requests: what the provider keeps at the booking's price, after the connection fee and card fees ("You keep $X after the 8% connection fee"); null when payments cannot say */
+            takeHome?: components["schemas"]["BookingTakeHome"] | null;
+        };
+        BookingTakeHome: {
+            /** @description AfroTransact's connection fee for the service category (800 = 8 %) */
+            connectionFeeBps: number;
+            /** Format: int64 */
+            connectionFeeMinor: number;
+            /**
+             * Format: int64
+             * @description Card fee estimate on the deposit charge and on the balance charge
+             */
+            cardFeesMinor: number;
+            /**
+             * Format: int64
+             * @description Price − connection fee − card fees
+             */
+            keepMinor: number;
+            /** @enum {string} */
+            source: "OVERRIDE" | "PLAN" | "CATEGORY" | "DEFAULT" | "RETAIL";
+            currency: string;
+        };
+        SellerAppliedRate: {
+            /** @description '' for categories nobody lists */
+            category: string;
+            label: string;
+            bps: number;
+            /**
+             * @description OVERRIDE: negotiated for this organisation
+             * @enum {string}
+             */
+            source: "OVERRIDE" | "PLAN" | "CATEGORY" | "DEFAULT" | "RETAIL";
+            planCode: string | null;
+            planName: string | null;
+            /**
+             * Format: date-time
+             * @description Source OVERRIDE: when the negotiated rate ends (null = open-ended)
+             */
+            negotiatedUntil: string | null;
+        };
+        SellerNegotiatedRate: {
+            /** @enum {string} */
+            type: "COMMISSION" | "CONNECTION_FEE" | "FBA_FEE";
+            /** @description '*' = every category */
+            category: string;
+            label: string;
+            rateBps: number;
+            /**
+             * Format: int64
+             * @description FBA_FEE: the fee per unit in minor units; null for rates in basis points
+             */
+            amountMinor: number | null;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string | null;
+            /** @enum {string} */
+            status: "SCHEDULED" | "ACTIVE" | "ENDED" | "EXPIRED";
+        };
+        /** @description What the organisation pays on one kind of line now (PRODUCT commission, SERVICE connection fee), with sources */
+        SellerRateCard: {
+            /** @enum {string} */
+            kind: "PRODUCT" | "SERVICE";
+            version: number;
+            /** Format: date-time */
+            effectiveFrom: string;
+            planCode: string | null;
+            planName: string | null;
+            other: components["schemas"]["SellerAppliedRate"];
+            categories: components["schemas"]["SellerAppliedRate"][];
+            negotiated: components["schemas"]["SellerNegotiatedRate"][];
         };
         DaySummary: {
             /** Format: date */
@@ -3029,73 +5342,8 @@ export interface components {
             };
             rows: components["schemas"]["EarningsRow"][];
             providerFees: components["schemas"]["ProviderFees"];
-        };
-        SocialLink: {
-            /** @enum {string} */
-            network: "instagram" | "tiktok" | "facebook" | "youtube" | "whatsapp" | "x" | "linkedin" | "website";
-            url: string;
-            /** @enum {string} */
-            status: "PENDING" | "APPROVED" | "REJECTED";
-        };
-        PublicPage: {
-            kind: components["schemas"]["OrgKind"];
-            slug: string;
-            name: string;
-            tagline: string;
-            /** @enum {string} */
-            status: "DRAFT" | "PUBLISHED";
-            /** Format: date-time */
-            publishedAt: string | null;
-            primaryColor: string;
-            accentColor: string;
-            /** @enum {string} */
-            layout: "CLASSIC" | "GALLERY_FIRST" | "STORY";
-            /** @enum {string} */
-            header: "COVER" | "BAND";
-            /** @enum {string} */
-            buttonShape: "ROUNDED" | "SQUARE";
-            gallerySize: number;
-            gallery: {
-                assetId: string;
-                url: string;
-                caption: string;
-            }[];
-            featured: {
-                id: string;
-                headline: string;
-                body: string;
-                serviceId: string | null;
-                published: boolean;
-            }[];
-            social: components["schemas"]["SocialLink"][];
-            /** @description Path of the page in the shop */
-            publicPath: string;
-        };
-        PublicPageInput: {
-            name?: string;
-            tagline?: string;
-            primaryColor?: string;
-            accentColor?: string;
-            /** @enum {string} */
-            layout?: "CLASSIC" | "GALLERY_FIRST" | "STORY";
-            /** @enum {string} */
-            header?: "COVER" | "BAND";
-            /** @enum {string} */
-            buttonShape?: "ROUNDED" | "SQUARE";
-            gallerySize?: number;
-            featured?: {
-                id: string;
-                headline: string;
-                body: string;
-                serviceId?: string | null;
-                published: boolean;
-            }[];
-            social?: {
-                /** @enum {string} */
-                network: "instagram" | "tiktok" | "facebook" | "youtube" | "whatsapp" | "x" | "linkedin" | "website";
-                /** Format: uri */
-                url: string;
-            }[];
+            /** @description The provider's connection fee now, per service category, with where it comes from; null when payments cannot say */
+            connectionFee: components["schemas"]["SellerRateCard"] | null;
         };
         SellerFeeCategory: {
             /** @description payments category key (lower-case) */
@@ -3104,10 +5352,17 @@ export interface components {
             /** @description 1250 = 12.50 % */
             commissionBps: number;
             /**
-             * @description OVERRIDE: negotiated for this organisation
+             * @description OVERRIDE: negotiated for this organisation; PLAN: the rate of its plan
              * @enum {string}
              */
-            source: "OVERRIDE" | "CATEGORY" | "DEFAULT" | "RETAIL";
+            source: "OVERRIDE" | "PLAN" | "CATEGORY" | "DEFAULT" | "RETAIL";
+            planCode: string | null;
+            planName: string | null;
+            /**
+             * Format: date-time
+             * @description Source OVERRIDE: when the negotiated rate ends
+             */
+            negotiatedUntil: string | null;
         };
         SellerFeeVersion: {
             version: number;
@@ -3177,6 +5432,13 @@ export interface components {
             upcoming: components["schemas"]["SellerFeeVersion"] | null;
             /** @description What changes for this organisation with the upcoming version */
             changes: components["schemas"]["SellerFeeChange"][];
+            /** @description The plan whose rates apply (null when none or unknown) */
+            planCode: string | null;
+            planName: string | null;
+            /** @description Negotiated commission rates (active or scheduled) */
+            negotiated: components["schemas"]["SellerNegotiatedRate"][];
+            /** @description Connection fees on service bookings (Provider Hub); null when payments cannot say */
+            connectionFees: components["schemas"]["SellerRateCard"] | null;
         };
         /** @description An upstream list answer wrapped as {items}. */
         MirroredList: {
@@ -3326,6 +5588,8 @@ export interface components {
         OrderNumber: string;
         ShipmentId: string;
         ProductId: string;
+        DraftId: string;
+        ImportId: string;
         PaymentMethodId: string;
         /** @description Makes retries safe (same key = same result). */
         IdempotencyKey: string;
@@ -3525,36 +5789,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["OnboardingOwnersInput"];
-            };
-        };
-        responses: {
-            /** @description Saved */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OnboardingStatus"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-            422: components["responses"]["ValidationProblem"];
-            502: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    saveOnboardingPayouts: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OnboardingPayoutsInput"];
             };
         };
         responses: {
@@ -3815,6 +6049,32 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    createSellerStripeSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account Session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingStripeSession"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     getDashboard: {
         parameters: {
             query?: {
@@ -3976,6 +6236,34 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    downloadShippingLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderNumber: string;
+                shipmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The label document */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     buyShippingLabel: {
         parameters: {
             query?: never;
@@ -4009,6 +6297,108 @@ export interface operations {
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getBusinessPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BusinessPageSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateBusinessPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BusinessPageSettingsInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BusinessPageSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSellerRunPickups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerRunPickupList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellerRunPickup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pick list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerRunPickup"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
@@ -4214,6 +6604,59 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    sellerAssistantStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    sellerAssistantChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Answer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantReply"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     listSellerOffers: {
         parameters: {
             query: {
@@ -4269,6 +6712,264 @@ export interface operations {
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSellerReturns: {
+        parameters: {
+            query?: {
+                status?: "REQUESTED" | "APPROVED" | "AUTO_APPROVED" | "LABEL_ISSUED" | "IN_TRANSIT" | "RECEIVED" | "INSPECTED" | "REFUNDED" | "REJECTED" | "CANCELLED";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Returns */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerReturnList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSellerDisputes: {
+        parameters: {
+            query?: {
+                status?: "AWAITING_SELLER" | "UNDER_REVIEW" | "ESCALATED" | "RESOLVED_REFUND" | "RESOLVED_DENIED" | "WITHDRAWN";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disputes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerDisputeList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSellerReviews: {
+        parameters: {
+            query?: {
+                unanswered?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of reviews */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerReviewPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    replyToSellerReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    text: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The review with the reply */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerReview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    reportSellerReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerReviewReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Already reported */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerReviewReportResult"];
+                };
+            };
+            /** @description Reported */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerReviewReportResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSellerCoupons: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Coupons */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerCouponList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createSellerCoupon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSellerCouponRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerCoupon"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setSellerCouponStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                couponId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    status: "ACTIVE" | "PAUSED" | "EXPIRED";
+                };
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerCoupon"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+        };
+    };
+    deleteSellerCoupon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                couponId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };
@@ -4366,6 +7067,480 @@ export interface operations {
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                productId: components["parameters"]["ProductId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Product */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                productId: components["parameters"]["ProductId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductUpdate"];
+            };
+        };
+        responses: {
+            /** @description Listing */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingRow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listProductDrafts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Drafts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductDraftList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createProductDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveProductDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Draft */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedProductDraft"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getProductDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draftId: components["parameters"]["DraftId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedProductDraft"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveProductDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draftId: components["parameters"]["DraftId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveProductDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedProductDraft"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deleteProductDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draftId: components["parameters"]["DraftId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discarded */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getListingContext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Context */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingContext"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    writeListing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListingWriterRequest"];
+            };
+        };
+        responses: {
+            /** @description Draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingWriterDraft"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    downloadImportTemplate: {
+        parameters: {
+            query?: {
+                productType?: string;
+                categoryId?: string;
+                format?: components["schemas"]["SpreadsheetFormat"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Template file (Content-Disposition attachment) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listImports: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Uploads */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductImportPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    uploadImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description .xlsx or .csv, at most 10 MB
+                     */
+                    file: string;
+                    mode?: components["schemas"]["ImportMode"];
+                    /** @description The template's product type; omit for the generic template */
+                    productType?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Validated upload */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductImport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: components["parameters"]["ImportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Upload */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductImport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listImportRows: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["ImportRowStatus"];
+                outcome?: components["schemas"]["ImportRowOutcome"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                importId: components["parameters"]["ImportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rows */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductImportRowPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    downloadImportReport: {
+        parameters: {
+            query?: {
+                format?: components["schemas"]["SpreadsheetFormat"];
+            };
+            header?: never;
+            path: {
+                importId: components["parameters"]["ImportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Report file (Content-Disposition attachment) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    startImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: components["parameters"]["ImportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StartImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductImport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
@@ -4549,6 +7724,490 @@ export interface operations {
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listImageLibrary: {
+        parameters: {
+            query?: {
+                /** @description File name or SKU contains */
+                q?: string;
+                status?: "READY" | "FLAGGED" | "REJECTED";
+                /** @description true = named after a SKU, false = other names */
+                matched?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Library page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageLibraryPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    removeLibraryImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    renameLibraryImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    fileName: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Renamed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageLibraryItem"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    attachLibraryImages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AttachLibraryImagesRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachLibraryImagesResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSizeCharts: {
+        parameters: {
+            query?: {
+                productTypeId?: string;
+                productType?: string;
+                /** @description Part of the chart name */
+                q?: string;
+                includeRetired?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Size charts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChartPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createSizeChart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SizeChartInput"];
+            };
+        };
+        responses: {
+            /** @description The chart */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChart"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSizeChartSuggestions: {
+        parameters: {
+            query?: {
+                productTypeId?: string;
+                productType?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Suggestions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChartSuggestions"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    downloadSizeChartTemplate: {
+        parameters: {
+            query?: {
+                productType?: string;
+                productTypeId?: string;
+                format?: components["schemas"]["SpreadsheetFormat"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Template file (Content-Disposition attachment) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    importSizeCharts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description A .xlsx or .csv file, at most 10 MB
+                     */
+                    file: string;
+                    /** @description The product type the charts are made for (the template's) */
+                    productType?: string;
+                    /** Format: uuid */
+                    productTypeId?: string;
+                    /** @default false */
+                    dryRun?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description What was saved (or would be) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChartImportReport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSizeChart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chartId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The chart */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChart"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateSizeChart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chartId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SizeChartInput"];
+            };
+        };
+        responses: {
+            /** @description The chart */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChart"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    retireSizeChart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chartId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The retired chart */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChart"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    duplicateSizeChart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chartId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Default: "<name> (copy)" */
+                    name?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The copy */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SizeChart"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listBrands: {
+        parameters: {
+            query?: {
+                /** @description Category node id or code (a product type, category or department) */
+                category?: string;
+                /** @description Product-type code: every category that uses it */
+                productType?: string;
+                /** @description What was typed; case, accents and punctuation are ignored */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Brands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrandList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createBrand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    category?: string;
+                    productType?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The brand already existed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedBrand"];
+                };
+            };
+            /** @description A pending brand was created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedBrand"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
@@ -4758,6 +8417,59 @@ export interface operations {
             410: components["responses"]["Problem"];
         };
     };
+    getTaxStatement: {
+        parameters: {
+            query?: {
+                month?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Statement */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerTaxStatement"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    exportTaxStatement: {
+        parameters: {
+            query?: {
+                month?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CSV file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     getPayouts: {
         parameters: {
             query?: never;
@@ -4863,6 +8575,92 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    retryInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoiceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invoice */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Invoice"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getInvoiceDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoiceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invoice */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setPlanFeeCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanFeeCollectionInput"];
+            };
+        };
+        responses: {
+            /** @description The choice */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanFeeCollectionView"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     changePlan: {
         parameters: {
             query?: never;
@@ -4944,6 +8742,114 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getBillingRewards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rewards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerRewardsView"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewPlanChange: {
+        parameters: {
+            query: {
+                planCode: string;
+                cadence?: components["schemas"]["Cadence"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPlanChangePreview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createBillingSetupIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SetupIntent */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingSetupIntent"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    addBillingPaymentMethod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddBillingPaymentMethod"];
+            };
+        };
+        responses: {
+            /** @description Payment method */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPaymentMethod"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
@@ -5444,85 +9350,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Earnings"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            422: components["responses"]["ValidationProblem"];
-            502: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    getPublicPage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Draft */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicPage"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            502: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    savePublicPage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PublicPageInput"];
-            };
-        };
-        responses: {
-            /** @description Saved */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicPage"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-            422: components["responses"]["ValidationProblem"];
-            502: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    publishPublicPage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Published page */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicPage"];
                 };
             };
             401: components["responses"]["Problem"];

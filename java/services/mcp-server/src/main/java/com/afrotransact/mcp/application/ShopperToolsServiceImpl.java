@@ -1,5 +1,7 @@
 package com.afrotransact.mcp.application;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -116,6 +118,12 @@ class ShopperToolsServiceImpl implements ShopperToolsService {
     }
 
     @Override
+    public ToolResult myOrderHistory(McpCaller caller, String cursor) {
+        guard.require(caller.profile(), ToolCatalog.MY_ORDER_HISTORY);
+        return Results.from(orders.myOrders(cursor, 20, caller.bearerToken()), "order history");
+    }
+
+    @Override
     public ToolResult trackOrder(McpCaller caller, String orderId) {
         guard.require(caller.profile(), ToolCatalog.TRACK_ORDER);
         if (orderId == null || orderId.isBlank()) {
@@ -131,9 +139,12 @@ class ShopperToolsServiceImpl implements ShopperToolsService {
         if (!RETURN_REASONS.contains(r)) {
             return ToolResult.of("REJECTED", "reason must be one of " + RETURN_REASONS);
         }
-        return Results.proposal("START_RETURN", "Start a return for order " + orderId, "POST", "/v1/account/returns",
-                Map.of("orderNumber", orderId == null ? "" : orderId.trim(), "reason", r, "items",
-                        items == null ? List.of() : items));
+        // A delivered order has no self-service return: the proposal opens the help form, where the customer describes
+        // the problem and adds photos for staff to resolve.
+        String order = orderId == null ? "" : orderId.trim();
+        return Results.proposal("START_RETURN", "Get help with order " + order, "GET",
+                "/account/help/new?order=" + URLEncoder.encode(order, StandardCharsets.UTF_8),
+                Map.of("orderNumber", order, "reason", r, "items", items == null ? List.of() : items));
     }
 
     @Override

@@ -60,6 +60,10 @@ class BookingFlowIT extends BookingsIntegrationTest {
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[0].itemsMinor", WireMock.equalTo("3000")))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[1].lineId", WireMock.equalTo("balance")))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[1].sellerOrg", WireMock.equalTo(s.org())))
+                // Service lines (kind SERVICE). payments' effective fees are not stubbed here (it cannot say it prices
+                // connection fees), so the lines keep the "services" category: the pricing before connection fees.
+                .withRequestBody(WireMock.matchingJsonPath("$.lines[0].kind", WireMock.equalTo("SERVICE")))
+                .withRequestBody(WireMock.matchingJsonPath("$.lines[0].category", WireMock.equalTo("services")))
                 .withRequestBody(WireMock.matchingJsonPath("$.shopperId", WireMock.equalTo("cust-adaeze")))
                 .withRequestBody(WireMock.matchingJsonPath("$.saveForOffSession", WireMock.equalTo("true"))));
 

@@ -46,9 +46,24 @@ export function PoweredByStripe({ height = 26, className, style }: BrandMarkProp
   );
 }
 
-export type CardBrand = 'visa' | 'mastercard' | 'amex' | 'discover';
+export type CardBrand = 'visa' | 'mastercard' | 'amex' | 'discover' | 'jcb' | 'diners' | 'unionpay';
 
-const CARD_LABEL: Record<CardBrand, string> = { visa: 'Visa', mastercard: 'Mastercard', amex: 'American Express', discover: 'Discover' };
+export const CARD_BRAND_LABEL: Record<CardBrand, string> = {
+  visa: 'Visa', mastercard: 'Mastercard', amex: 'American Express', discover: 'Discover', jcb: 'JCB', diners: 'Diners Club', unionpay: 'UnionPay'
+};
+const CARD_LABEL = CARD_BRAND_LABEL;
+
+const BRAND_ALIASES: Record<string, CardBrand> = {
+  visa: 'visa', mastercard: 'mastercard', master_card: 'mastercard', mc: 'mastercard', amex: 'amex', american_express: 'amex',
+  americanexpress: 'amex', discover: 'discover', jcb: 'jcb', diners: 'diners', diners_club: 'diners', dinersclub: 'diners',
+  unionpay: 'unionpay', union_pay: 'unionpay', cartes_bancaires: 'visa'
+};
+
+/** A card network from Stripe's brand string ("visa", "American Express", "diners_club" …), or null when unknown. */
+export function cardBrandOf(raw: string | null | undefined): CardBrand | null {
+  const key = (raw ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return BRAND_ALIASES[key] ?? BRAND_ALIASES[key.replace(/_/g, '')] ?? null;
+}
 
 /** One card network mark on a card-shaped tile (38 × 24 reference). */
 export function CardBrandMark({ brand, height = 24, className, style }: BrandMarkProps & { brand: CardBrand }) {
@@ -95,7 +110,99 @@ export function CardBrandMark({ brand, height = 24, className, style }: BrandMar
           </text>
         </svg>
       );
+    case 'jcb':
+      return (
+        <svg {...common}>
+          <rect x=".5" y=".5" width="37" height="23" rx="3.5" fill="#FFFFFF" stroke="#D9D9D9" />
+          <rect x="7" y="5" width="8" height="14" rx="2.5" fill="#0E4C96" />
+          <rect x="15" y="5" width="8" height="14" rx="2.5" fill="#E21836" />
+          <rect x="23" y="5" width="8" height="14" rx="2.5" fill="#007B40" />
+          <text x="19" y="14.6" textAnchor="middle" fill="#FFFFFF" fontFamily="Arial, Helvetica, sans-serif" fontSize="6.4" fontWeight="700" letterSpacing="1.6">
+            JCB
+          </text>
+        </svg>
+      );
+    case 'diners':
+      return (
+        <svg {...common}>
+          <rect x=".5" y=".5" width="37" height="23" rx="3.5" fill="#FFFFFF" stroke="#D9D9D9" />
+          <circle cx="19" cy="12" r="7.5" fill="#0079BE" />
+          <circle cx="19" cy="12" r="5.2" fill="#FFFFFF" />
+          <path d="M17.4 8.2v7.6a4 4 0 0 1 0-7.6zM20.6 8.2a4 4 0 0 1 0 7.6z" fill="#0079BE" />
+        </svg>
+      );
+    case 'unionpay':
+      return (
+        <svg {...common}>
+          <rect x=".5" y=".5" width="37" height="23" rx="3.5" fill="#FFFFFF" stroke="#D9D9D9" />
+          <path d="M8 5h8l-3 14H5z" fill="#E21836" />
+          <path d="M15 5h8l-3 14h-8z" fill="#00447C" />
+          <path d="M22 5h9l-3 14h-9z" fill="#007B84" />
+        </svg>
+      );
   }
+}
+
+/** A saved method that is not a card: bank account, Cash App Pay, Link, Amazon Pay, or an unknown card network. */
+export type WalletKind = 'bank' | 'cashapp' | 'link' | 'amazon_pay' | 'card';
+
+const WALLET_LABEL: Record<WalletKind, string> = { bank: 'Bank account', cashapp: 'Cash App Pay', link: 'Link', amazon_pay: 'Amazon Pay', card: 'Card' };
+
+/** The mark of a non-card method on the same card-shaped tile as the networks. */
+export function WalletMark({ kind, height = 24, className, style }: BrandMarkProps & { kind: WalletKind }) {
+  const common = { viewBox: '0 0 38 24', height, width: (height * 38) / 24, className, style, role: 'img', 'aria-label': WALLET_LABEL[kind], focusable: 'false' } as const;
+  switch (kind) {
+    case 'cashapp':
+      return (
+        <svg {...common}>
+          <rect width="38" height="24" rx="4" fill="#00D64F" />
+          <text x="19" y="17" textAnchor="middle" fill="#FFFFFF" fontFamily="Arial, Helvetica, sans-serif" fontSize="14" fontWeight="700">$</text>
+        </svg>
+      );
+    case 'link':
+      return (
+        <svg {...common}>
+          <rect width="38" height="24" rx="4" fill="#00D66F" />
+          <text x="19" y="15.6" textAnchor="middle" fill="#011E0F" fontFamily="Arial, Helvetica, sans-serif" fontSize="9" fontWeight="700">link</text>
+        </svg>
+      );
+    case 'amazon_pay':
+      return (
+        <svg {...common}>
+          <rect width="38" height="24" rx="4" fill="#232F3E" />
+          <text x="19" y="13.4" textAnchor="middle" fill="#FFFFFF" fontFamily="Arial, Helvetica, sans-serif" fontSize="6.6" fontWeight="700">amazon</text>
+          <path d="M11.5 15.6c4.6 2.6 10.4 2.6 15 0" stroke="#FF9900" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+        </svg>
+      );
+    case 'bank':
+      return (
+        <svg {...common}>
+          <rect x=".5" y=".5" width="37" height="23" rx="3.5" fill="#FFFFFF" stroke="#D9D9D9" />
+          <path d="M19 4.5l8 4H11z" fill="#3D4451" />
+          <rect x="12" y="9.5" width="2" height="7" fill="#3D4451" />
+          <rect x="18" y="9.5" width="2" height="7" fill="#3D4451" />
+          <rect x="24" y="9.5" width="2" height="7" fill="#3D4451" />
+          <rect x="10.5" y="17.5" width="17" height="2" fill="#3D4451" />
+        </svg>
+      );
+    case 'card':
+      return (
+        <svg {...common}>
+          <rect x=".5" y=".5" width="37" height="23" rx="3.5" fill="#FFFFFF" stroke="#D9D9D9" />
+          <rect x="1" y="6" width="36" height="4" fill="#3D4451" />
+          <rect x="5" y="14" width="12" height="2.5" rx="1" fill="#B8BDC7" />
+        </svg>
+      );
+  }
+}
+
+/** The right mark for any saved method: the card network's own mark, else the wallet or bank mark. */
+export function PaymentMethodMark({ type, brand, height = 24, className, style }: BrandMarkProps & { type: string; brand?: string | null }) {
+  const t = type.toLowerCase();
+  if (t === 'us_bank_account' || t === 'bank' || t === 'bank_account') return <WalletMark kind="bank" height={height} className={className} style={style} />;
+  if (t === 'cashapp' || t === 'link' || t === 'amazon_pay') return <WalletMark kind={t} height={height} className={className} style={style} />;
+  const network = cardBrandOf(brand);
+  return network ? <CardBrandMark brand={network} height={height} className={className} style={style} /> : <WalletMark kind="card" height={height} className={className} style={style} />;
 }
 
 /** The accepted card networks in a row (e.g. next to a card form). */

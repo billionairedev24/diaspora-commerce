@@ -59,8 +59,9 @@ func dispatchShipmentsResource() *staffResource {
 			return map[string]any{"place": strings.TrimSpace(jstr(o, "city") + ", " + jstr(o, "state") + " " + jstr(o, "postalCode")),
 				"perishable": yesNo(o, "perishable")}
 		},
-		list: list,
-		get:  findIn(list, "shipmentId"),
+		list:  list,
+		get:   findIn(list, "shipmentId"),
+		names: []nameRef{sellerRef("sellerOrgId").named("sellerName")},
 		titleOf: func(o jobj) string {
 			return "Shipment " + firstNonEmpty(jstr(o, "label"), jstr(o, "orderNumber"), jstr(o, "shipmentId"))
 		},
@@ -73,7 +74,7 @@ func sosAlertsResource() *staffResource {
 	list := listLimited("/v1/dispatch/sos", upFulfilment)
 	return &staffResource{
 		key: "sos-alerts", module: dispatchModule, title: "SOS alerts", exportable: true,
-		columns: []domain.Column{col("kind", "Emergency", "strong", 14), col("driverId", "Driver", "mono", 16), col("routeId", "Route", "mono", 16),
+		columns: []domain.Column{col("kind", "Emergency", "strong", 14), col("driverName", "Driver", "text", 16), col("routeName", "Route", "text", 16),
 			col("where", "Where (GPS)", "mono", 18), col("note", "Note", "text", 22), col("raisedAt", "Raised", "datetime", 14), col("status", "Status", "status", 10)},
 		idOf:   func(o jobj) string { return jstr(o, "alertId") },
 		status: func(jobj) string { return "ALERT" },
@@ -82,8 +83,9 @@ func sosAlertsResource() *staffResource {
 		},
 		list:       list,
 		get:        findIn(list, "alertId"),
+		names:      []nameRef{driverRef("driverId"), routeRef("routeId")},
 		titleOf:    func(o jobj) string { return "SOS: " + domain.Humanize(jstr(o, "kind")) },
-		subtitleOf: func(o jobj) string { return "Driver " + jstr(o, "driverId") + " · route " + jstr(o, "routeId") },
+		subtitleOf: func(o jobj) string { return "Driver " + jstr(o, "driverName") + " · route " + jstr(o, "routeName") },
 		sections:   func(o jobj) []domain.DetailSection { return autoSections(o, "") },
 		actions: []staffAction{
 			{key: "acknowledge", label: "Acknowledge", tone: "primary", permission: dispatchPermission, confirm: "Acknowledge this SOS? The driver sees that dispatch is on it.",
@@ -98,7 +100,7 @@ func vehicleDefectsResource() *staffResource {
 	list := listLimited("/v1/dispatch/defects", upFulfilment)
 	return &staffResource{
 		key: "vehicle-defects", module: dispatchModule, title: "Vehicle defects", exportable: true,
-		columns: []domain.Column{col("vehicleId", "Vehicle", "mono", 12), col("driverId", "Driver", "mono", 14), col("routeId", "Route", "mono", 14),
+		columns: []domain.Column{col("vehicleId", "Vehicle", "mono", 12), col("driverName", "Driver", "text", 14), col("routeName", "Route", "text", 14),
 			col("failed", "Failed checks", "text", 20), col("note", "Note", "text", 20), col("reportedAt", "Reported", "datetime", 12), col("status", "Status", "status", 10)},
 		status: func(o jobj) string {
 			if b, _ := o["critical"].(bool); b {
@@ -109,8 +111,9 @@ func vehicleDefectsResource() *staffResource {
 		cells:      func(o jobj) map[string]any { return map[string]any{"failed": strings.Join(strs(o, "items"), ", ")} },
 		list:       list,
 		get:        findIn(list, "id"),
+		names:      []nameRef{driverRef("driverId"), routeRef("routeId")},
 		titleOf:    func(o jobj) string { return "Defect on " + firstNonEmpty(jstr(o, "vehicleId"), jstr(o, "id")) },
-		subtitleOf: func(o jobj) string { return "Route " + jstr(o, "routeId") + " · driver " + jstr(o, "driverId") },
+		subtitleOf: func(o jobj) string { return "Route " + jstr(o, "routeName") + " · driver " + jstr(o, "driverName") },
 		sections:   func(o jobj) []domain.DetailSection { return autoSections(o, "") },
 		actions: []staffAction{
 			{key: "resolve", label: "Resolve and unblock the route", tone: "primary", permission: dispatchPermission,
@@ -127,16 +130,17 @@ func driverEventsResource() *staffResource {
 	list := listLimited("/v1/dispatch/events", upFulfilment)
 	return &staffResource{
 		key: "driver-events", module: dispatchModule, title: "Driver events", statusKey: "outcome", exportable: true,
-		columns: []domain.Column{col("capturedAt", "When", "datetime", 14), col("type", "Event", "strong", 18), col("driverId", "Driver", "mono", 14),
-			col("routeId", "Route", "mono", 14), col("stopId", "Stop", "mono", 12), col("message", "Detail", "text", 18), col("outcome", "Outcome", "status", 10)},
+		columns: []domain.Column{col("capturedAt", "When", "datetime", 14), col("type", "Event", "strong", 18), col("driverName", "Driver", "text", 14),
+			col("routeName", "Route", "text", 14), col("stopName", "Stop", "text", 14), col("message", "Detail", "text", 18), col("outcome", "Outcome", "status", 10)},
 		idOf: func(o jobj) string { return jstr(o, "eventId") },
 		cells: func(o jobj) map[string]any {
 			return map[string]any{"type": domain.Humanize(strings.ReplaceAll(jstr(o, "type"), ".", " "))}
 		},
 		list:       list,
 		get:        findIn(list, "eventId"),
+		names:      []nameRef{driverRef("driverId"), routeRef("routeId"), stopRef("stopId")},
 		titleOf:    func(o jobj) string { return domain.Humanize(strings.ReplaceAll(jstr(o, "type"), ".", " ")) },
-		subtitleOf: func(o jobj) string { return "Driver " + jstr(o, "driverId") + " · " + jstr(o, "capturedAt") },
+		subtitleOf: func(o jobj) string { return "Driver " + jstr(o, "driverName") + " · " + jstr(o, "capturedAt") },
 		sections:   func(o jobj) []domain.DetailSection { return autoSections(o, "outcome") },
 	}
 }

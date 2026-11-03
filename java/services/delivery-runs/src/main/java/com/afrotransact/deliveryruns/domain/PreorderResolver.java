@@ -51,7 +51,7 @@ public final class PreorderResolver {
         PreorderSettings settings = coverage.settings();
         if (metro) {
             return new Resolution(place, false, null, null, null, null, settings.fallback(), true, null, null,
-                    settings);
+                    false, settings);
         }
         List<PreorderWindow> covering = windows.stream()
                 .filter(w -> !w.draft() && w.covers(place.country(), place.region(), place.city())).toList();
@@ -71,17 +71,18 @@ public final class PreorderResolver {
         }
         if (win == null) {
             return new Resolution(place, false, null, null, null, null, settings.fallback(), false, null, null,
-                    settings);
+                    false, settings);
         }
-        boolean on = settings.enabled() && win.active()
+        FeeSnapshot door = win.details().door() ? win.doorFee(coverage.fees()).orElse(null) : null;
+        FeeSnapshot pickup = win.details().pickup() ? win.pickupFee(coverage.fees()) : null;
+        // Beyond how far AfroTransact delivers a door-only window sells nothing: the order ships by carrier.
+        boolean beyond = win.details().door() && door == null && pickup == null;
+        boolean on = settings.enabled() && win.active() && !beyond
                 && coverage.areaOn(place.country(), place.region(), place.city());
         Integer count = win.details().showCount() && stage != PreorderStatus.UPCOMING
                 ? counts.getOrDefault(win.id(), 0) : null;
-        PaymentSettings payment = settings.payment();
-        Money door = win.details().door() ? win.doorFee(payment).orElse(null) : null;
-        Money pickup = win.details().pickup() ? win.pickupFee(payment) : null;
         return new Resolution(place, on, stage, win, win.countdownTarget(stage), count, settings.fallback(), false,
-                door, pickup, settings);
+                door, pickup, beyond, settings);
     }
 
     /**

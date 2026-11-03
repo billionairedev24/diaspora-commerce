@@ -13,6 +13,7 @@ export const siteKeys = {
 
 export const legalKeys = {
   all: ['legal'] as const,
+  index: () => [...legalKeys.all, 'index'] as const,
   documents: () => [...legalKeys.all, 'document'] as const,
   document: (key: string, locale: string, version?: string) => [...legalKeys.documents(), key, locale, version ?? 'current'] as const,
   cookiePolicy: () => [...legalKeys.all, 'cookie-policy'] as const

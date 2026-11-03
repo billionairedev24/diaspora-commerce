@@ -3,7 +3,9 @@ package com.afrotransact.catalog.adapter.in.web;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.catalog.adapter.in.web.CategoryDtos.ApprovalPlanResponse;
 import com.afrotransact.catalog.adapter.in.web.CategoryDtos.ApproveCategoryRequest;
+import com.afrotransact.catalog.adapter.in.web.CategoryDtos.CategoryRequestDetailResponse;
 import com.afrotransact.catalog.adapter.in.web.CategoryDtos.CategoryNodeResponse;
 import com.afrotransact.catalog.adapter.in.web.CategoryDtos.CategoryRequestResponse;
 import com.afrotransact.catalog.adapter.in.web.CategoryDtos.CreateCategoryRequest;
@@ -33,10 +35,12 @@ class CategoryController {
         this.categories = categories;
     }
 
-    @Operation(summary = "Full active category tree (department › category › product type)")
+    @Operation(summary = "Full active category tree (department › category › product type)",
+            description = "includeRetired=true also lists retired nodes, for consumers that resolve the category of "
+                    + "an existing product.")
     @GetMapping("/v1/categories")
-    List<CategoryNodeResponse> tree() {
-        return categories.tree().stream().map(CategoryNodeResponse::of).toList();
+    List<CategoryNodeResponse> tree(@RequestParam(defaultValue = "false") boolean includeRetired) {
+        return categories.tree(includeRetired).stream().map(CategoryNodeResponse::of).toList();
     }
 
     @Operation(summary = "All product-type schemas")
@@ -68,14 +72,27 @@ class CategoryController {
     @Operation(summary = "Review queue of category requests (catalog:taxonomy)")
     @GetMapping("/v1/category-requests")
     List<CategoryRequestResponse> queue(@RequestParam(required = false) CategoryRequestStatus status) {
-        return categories.requests(status).stream().map(CategoryRequestResponse::of).toList();
+        return categories.requests(status).stream()
+                .map(q -> CategoryRequestResponse.of(q.request(), q.productsWaiting())).toList();
     }
 
-    @Operation(summary = "Approve a category request; waiting products move into listing review")
+    @Operation(summary = "One category request with the products waiting on it (catalog:taxonomy)")
+    @GetMapping("/v1/category-requests/{id}")
+    CategoryRequestDetailResponse requestDetail(@PathVariable UUID id) {
+        return CategoryRequestDetailResponse.of(categories.requestDetail(id));
+    }
+
+    @Operation(summary = "What approving would create, without creating it (catalog:taxonomy)")
+    @PostMapping("/v1/category-requests/{id}/approval-preview")
+    ApprovalPlanResponse previewApproval(@PathVariable UUID id, @Valid @RequestBody ApproveCategoryRequest body) {
+        return ApprovalPlanResponse.of(categories.planApproval(id, body.toChoice()));
+    }
+
+    @Operation(summary = "Approve a category request, creating its category and product type in one step; waiting "
+            + "products move into listing review")
     @PostMapping("/v1/category-requests/{id}/approve")
     CategoryRequestResponse approve(@PathVariable UUID id, @Valid @RequestBody ApproveCategoryRequest body) {
-        return CategoryRequestResponse.of(categories.approve(id, body.parentCategoryId(), body.productType(),
-                body.note()));
+        return CategoryRequestResponse.of(categories.approve(id, body.toChoice(), body.note()));
     }
 
     @Operation(summary = "Reject a category request; waiting products are rejected with the note")

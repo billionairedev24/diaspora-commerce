@@ -1,0 +1,175 @@
+# Deploys the three web apps (storefront, Seller Center, staff console) to Cloudflare Workers for the OVH TEST environment,
+# on YOUR domain, pointing at the backend that `ovh-vps` deployed. The per-app pipelines (web-*.yml) are wired to the
+# afrotransact.com hosts of dev/uat/prod; this one takes the hosts from the domain you give it. See docs/runbooks/cloudflare-setup.md.
+#
+#   storefront     -> https://www.<domain>   (storefront-host = www, the default; <domain> itself 301-redirects to it)
+#                     https://<domain>         (storefront-host = apex)
+#   Seller Center  -> https://seller.<domain>
+#   staff console  -> https://admin.<domain>
+#   backend        -> https://api.<domain>/bff (DNS records made by the ovh-vps workflow)
+#
+# The redirect is a tiny Worker (storefront-redirect-ovh) with the apex as its Custom Domain: it answers every request with a
+# 301 to https://www.<domain> + path + query, so the redirect needs no zone ruleset (those are replaced as a whole by the
+# API) and is idempotent. Alternative without the Worker: one Redirect Rule in the dashboard (docs/runbooks/cloudflare-setup.md).
+# storefront-host must equal the OVH_STOREFRONT_HOST variable the ovh-vps workflow deployed the backend with (default www):
+# identity's redirect URIs and CORS origins derive from it.
+#
+# Needs, as secrets of the GitHub Environment `ovh-vps`: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID.
+# The domain must be a zone in that Cloudflare account (Workers Custom Domains create their DNS records).
+name: ovh-web
+
+on:
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: "Which apps (space separated: storefront seller-center staff-console)"
+        type: string
+        default: "storefront seller-center staff-console"
+      domain:
+        description: "Base domain of the OVH environment (default: the OVH_DOMAIN variable of the ovh-vps environment)"
+        type: string
+        default: ""
+      storefront-host:
+        description: "Where the storefront lives: www = https://www.<domain> (the apex redirects to it) | apex = https://<domain>. Must equal OVH_STOREFRONT_HOST of the backend (default www)"
+        type: choice
+        options: ["www", "apex"]
+        default: "www"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: deploy ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    environment: ovh-vps
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [storefront, seller-center, staff-console]
+    env:
+      APP: ${{ matrix.app }}
+      APP_DIR: web/apps/${{ matrix.app }}
+      WANTED: ${{ inputs.apps }}
+      DOMAIN_INPUT: ${{ inputs.domain }}
+      DOMAIN_VAR: ${{ vars.OVH_DOMAIN }}
+      STOREFRONT_HOST: ${{ inputs.storefront-host }}
+      STOREFRONT_HOST_VAR: ${{ vars.OVH_STOREFRONT_HOST }}
+    steps:
+      - name: Decide
+        id: d
+        run: |
+          set -euo pipefail
+          domain="${DOMAIN_INPUT:-$DOMAIN_VAR}"
+          domain="${domain,,}"
+          [[ "$domain" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$ ]] || { echo "::error::set the domain input or the OVH_DOMAIN variable (got '$domain')"; exit 1; }
+          [[ "$STOREFRONT_HOST" == www || "$STOREFRONT_HOST" == apex ]] || { echo "::error::storefront-host must be www or apex (got '$STOREFRONT_HOST')"; exit 1; }
+          if [[ -n "$STOREFRONT_HOST_VAR" && "$STOREFRONT_HOST_VAR" != "$STOREFRONT_HOST" ]]; then
+            echo "::error::storefront-host '$STOREFRONT_HOST' differs from the OVH_STOREFRONT_HOST variable '$STOREFRONT_HOST_VAR' the backend was deployed with: identity would reject the sign-in redirect (redirect_uri mismatch). Make them equal and redeploy the services if you change the variable."
+            exit 1
+          fi
+          if [[ " $WANTED " != *" $APP "* ]]; then echo "run=false" >> "$GITHUB_OUTPUT"; echo "::notice::$APP skipped"; exit 0; fi
+          [[ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" && -n "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]] || { echo "::error::CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID must be secrets of the ovh-vps environment"; exit 1; }
+          echo "run=true" >> "$GITHUB_OUTPUT"
+          echo "domain=$domain" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        if: steps.d.outputs.run == 'true'
+      - uses: pnpm/action-setup@v6
+        if: steps.d.outputs.run == 'true'
+      - uses: actions/setup-node@v7
+        if: steps.d.outputs.run == 'true'
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install
+        if: steps.d.outputs.run == 'true'
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+      - name: Next.js build
+        if: steps.d.outputs.run == 'true'
+        working-directory: web
+        run: pnpm --filter "./apps/${APP}" run build
+      - name: OpenNext build (Cloudflare Workers)
+        if: steps.d.outputs.run == 'true'
+        working-directory: ${{ env.APP_DIR }}
+        run: pnpm exec opennextjs-cloudflare build
+      - name: Write the Worker config for this domain
+        if: steps.d.outputs.run == 'true'
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          DOMAIN: ${{ steps.d.outputs.domain }}
+        run: |
+          set -euo pipefail
+          # The storefront host rule: one canonical storefront URL, the other apps keep their sub-domains.
+          web="$DOMAIN"; [[ "$STOREFRONT_HOST" == www ]] && web="www.$DOMAIN"
+          case "$APP" in
+            storefront)    host="$web" ;;
+            seller-center) host="seller.$DOMAIN" ;;
+            staff-console) host="admin.$DOMAIN" ;;
+          esac
+          vars=$(jq -nc --arg d "$DOMAIN" --arg w "$web" --arg app "$APP" '
+            {API_MOCKS:"0", BFF_ORIGIN:("https://api."+$d+"/bff"), PUBLIC_WEB_URL:("https://"+$w)}
+            + (if $app=="storefront" then {SELLER_CENTER_URL:("https://seller."+$d), STAFF_CONSOLE_URL:("https://admin."+$d)} else {} end)')
+          jq -n --arg name "${APP}-ovh" --arg host "$host" --argjson vars "$vars" '
+            {name:$name, main:".open-next/worker.js", compatibility_date:"2026-09-01",
+             compatibility_flags:["nodejs_compat","global_fetch_strictly_public"],
+             assets:{directory:".open-next/assets", binding:"ASSETS"}, observability:{enabled:true},
+             vars:$vars, routes:[{pattern:$host, custom_domain:true}]}' > wrangler.ovh.json
+          cat wrangler.ovh.json
+      # A Custom Domain belongs to one Worker. Whichever Worker held the apex in an earlier run (storefront-ovh with
+      # storefront-host=apex, storefront-redirect-ovh with www) lets go of it before the other one takes it.
+      - name: Free the apex for the Worker that serves it now
+        if: steps.d.outputs.run == 'true' && matrix.app == 'storefront'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DOMAIN: ${{ steps.d.outputs.domain }}
+        run: |
+          set -euo pipefail
+          want=storefront-ovh; [[ "$STOREFRONT_HOST" == www ]] && want=storefront-redirect-ovh
+          cf() { printf 'header = "Authorization: Bearer %s"\n' "$CLOUDFLARE_API_TOKEN" | curl -fsS --max-time 30 -K - "$@"; }
+          base="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/domains"
+          ids=$(cf "$base?hostname=$DOMAIN" | jq -r --arg want "$want" '.result[]? | select(.service != $want) | .id')
+          for id in $ids; do cf -X DELETE "$base/$id" >/dev/null && echo "detached $DOMAIN from the previous Worker"; done
+
+      - name: Deploy
+        if: steps.d.outputs.run == 'true'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: ${{ env.APP_DIR }}
+          command: deploy -c wrangler.ovh.json
+
+      # ---- the apex redirects to www (storefront job only) --------------------------------------------------------------------
+      - name: Write the redirect Worker (apex -> www, 301, path and query kept)
+        if: steps.d.outputs.run == 'true' && matrix.app == 'storefront' && env.STOREFRONT_HOST == 'www'
+        env:
+          DOMAIN: ${{ steps.d.outputs.domain }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/storefront-redirect"
+          mkdir -p "$dir"
+          cat > "$dir/worker.js" <<'JS'
+          export default {
+            fetch(request, env) {
+              const url = new URL(request.url);
+              return Response.redirect(`https://www.${env.PLATFORM_DOMAIN}${url.pathname}${url.search}`, 301);
+            },
+          };
+          JS
+          jq -n --arg d "$DOMAIN" '
+            {name:"storefront-redirect-ovh", main:"worker.js", compatibility_date:"2026-09-01",
+             vars:{PLATFORM_DOMAIN:$d}, routes:[{pattern:$d, custom_domain:true}]}' > "$dir/wrangler.json"
+          cat "$dir/wrangler.json"
+
+      - name: Deploy the apex redirect
+        if: steps.d.outputs.run == 'true' && matrix.app == 'storefront' && env.STOREFRONT_HOST == 'www'
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: ${{ runner.temp }}/storefront-redirect
+          command: deploy -c wrangler.json

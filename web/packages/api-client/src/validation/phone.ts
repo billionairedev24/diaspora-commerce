@@ -68,3 +68,26 @@ export function toE164(value: string, country: CountryCode): string | null {
   const parsed = parsePhoneNumberFromString(value.replace(/[^\d+]/g, ''), country);
   return parsed && parsed.isValid() ? parsed.number : null;
 }
+
+/**
+ * Country and national digits of a stored E.164 number, e.g. "+2348031234567" → { country: "NG", national: "8031234567" }.
+ * Blank or unparseable values give the fallback country and the digits as typed.
+ */
+export function splitE164(value: string | null | undefined, fallback: CountryCode = 'US'): { country: CountryCode; national: string } {
+  const v = (value ?? '').trim();
+  if (!v) return { country: fallback, national: '' };
+  const parsed = parsePhoneNumberFromString(v.startsWith('+') ? v : v.replace(/[^\d]/g, ''), v.startsWith('+') ? undefined : fallback);
+  if (parsed) return { country: parsed.country ?? fallback, national: String(parsed.nationalNumber) };
+  return { country: fallback, national: v.replace(/[^\d]/g, '') };
+}
+
+/** A complete, valid number in E.164 form (what the APIs store), e.g. "+17132490142". */
+export function isValidPhoneE164(value: string | null | undefined): boolean {
+  const v = (value ?? '').trim();
+  if (!/^\+[1-9]\d{6,14}$/.test(v)) return false;
+  try {
+    return isValidPhoneNumber(v);
+  } catch {
+    return false;
+  }
+}

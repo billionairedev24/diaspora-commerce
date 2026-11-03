@@ -70,6 +70,8 @@ import tools.jackson.databind.json.JsonMapper;
 @Import(TestSupport.class)
 abstract class OrdersIntegrationTest {
 
+    /** {@code AT_IT_POSTGRES_URL=jdbc:postgresql://…} runs the tests on that PostgreSQL instead of a container. */
+    static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
     static final WireMockServer WIREMOCK = new WireMockServer(WireMockConfiguration.options().dynamicPort());
     static final Upstreams UPSTREAMS = new Upstreams(WIREMOCK);
@@ -77,16 +79,20 @@ abstract class OrdersIntegrationTest {
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
     static {
-        POSTGRES.start();
+        if (EXTERNAL_DB == null) {
+            POSTGRES.start();
+        }
         WIREMOCK.start();
         UPSTREAMS.common();
     }
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.datasource.url", () -> EXTERNAL_DB != null ? EXTERNAL_DB : POSTGRES.getJdbcUrl());
+        registry.add("spring.datasource.username", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_USER", "postgres") : POSTGRES.getUsername());
+        registry.add("spring.datasource.password", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_PASSWORD", "") : POSTGRES.getPassword());
         for (String upstream : List.of("cart", "identity", "inventory", "payments", "promise", "content", "catalog",
                 "offers", "tax-returns", "seller", "geo", "delivery-runs")) {
             registry.add("at.orders.upstreams." + upstream + "-url", WIREMOCK::baseUrl);

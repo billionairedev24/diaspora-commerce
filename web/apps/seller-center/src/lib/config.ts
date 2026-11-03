@@ -7,6 +7,8 @@ const env = (name: string): string | undefined => {
 
 /** True when the Seller Center should use the in-process MSW mock BFF (NEXT_PUBLIC_API_MOCKS=1 or API_MOCKS=1). */
 export function mocksEnabled(): boolean {
+  // Demo data never reaches a production or UAT deployment, whatever the flags say.
+  if (['prod', 'production', 'uat'].includes(env('APP_ENV') ?? '')) return false;
   return env('NEXT_PUBLIC_API_MOCKS') === '1' || env('API_MOCKS') === '1';
 }
 

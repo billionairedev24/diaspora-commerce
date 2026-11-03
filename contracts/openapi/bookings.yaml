@@ -620,8 +620,8 @@ paths:
     get:
       tags:
       - Provider Hub
-      summary: 'Earnings: collected − commission − card fees − late-cancellation fees (bookings:read)'
-      description: Commission is taken only on what the customer actually paid (after refunds).
+      summary: 'Earnings: collected − connection fee − card fees − late-cancellation fees (bookings:read)'
+      description: The connection fee is taken only on what the customer actually paid (after refunds).
       operationId: earnings
       parameters:
       - name: orgId
@@ -1937,7 +1937,8 @@ components:
           format: int64
     TakeHome:
       type: object
-      description: What the provider receives at the listed price
+      description: What the provider receives at the listed price, after AfroTransact's connection fee (commissionBps / commissionMinor,
+        payments' kind SERVICE rate for the service's category) and card fees
       properties:
         priceMinor:
           type: integer
@@ -1964,8 +1965,8 @@ components:
           type: string
         feeSource:
           type: string
-          description: 'Where the commission comes from: payments'' OVERRIDE, CATEGORY, DEFAULT, RETAIL, or CONFIG (configured
-            fallback while payments is unavailable)'
+          description: 'Where the connection fee comes from: payments'' OVERRIDE (negotiated), PLAN, CATEGORY, DEFAULT, RETAIL,
+            or CONFIG (configured fallback while payments is unavailable)'
         feeVersion:
           type: integer
           format: int32
@@ -2222,6 +2223,10 @@ components:
           type: string
         memberName:
           type: string
+        category:
+          type: string
+          description: The service's category (selects payments' connection fee); 'services' for bookings made before it was
+            recorded
     Booking:
       type: object
       properties:
@@ -2730,9 +2735,11 @@ components:
         commissionBps:
           type: integer
           format: int32
+          description: AfroTransact's connection fee rate (payments, kind SERVICE)
         commissionMinor:
           type: integer
           format: int64
+          description: Connection fee on what was collected
         cardFeesMinor:
           type: integer
           format: int64

@@ -89,6 +89,14 @@ class TaxController {
         tax.deleteLocal(state, zipPrefix);
     }
 
+    @Operation(summary = "Bulk upsert state rules and local ZIP rates from CSV (tax:configure)",
+            description = "Header: kind,country,state,name,zipPrefix,generalRate,groceryRate,preparedFoodRate,"
+                    + "shippingTaxable,facilitator,localRate,appliesToGrocery. kind=STATE|LOCAL.")
+    @PostMapping("/v1/tax/rates/import")
+    TaxDtos.ImportResponse importRates(@Valid @RequestBody TaxDtos.ImportRequest body) {
+        return TaxDtos.ImportResponse.of(tax.importCsv(body.csv()));
+    }
+
     @Operation(summary = "Monthly marketplace liability per jurisdiction (tax:read)")
     @GetMapping("/v1/tax/liability")
     LiabilityResponse liability(@RequestParam String month) {

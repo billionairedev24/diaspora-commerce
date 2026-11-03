@@ -13,7 +13,7 @@ import { type Browser, expect, type Page, test } from '@playwright/test';
  */
 
 const STOREFRONT = process.env.LIVE_STOREFRONT_URL ?? 'http://localhost:3000';
-const SELLER = (process.env.LIVE_SELLER_URL ?? process.env.SELLER_CENTER_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
+const SELLER = (process.env.LIVE_SELLER_URL ?? process.env.SELLER_CENTER_URL ?? 'http://localhost:3010').replace(/\/+$/, '');
 const IDENTITY = process.env.LIVE_IDENTITY_URL ?? 'http://localhost:8100';
 const MAILPIT = process.env.LIVE_MAILPIT_URL ?? 'http://localhost:8025';
 const SHOTS = process.env.LIVE_SCREENSHOTS;
@@ -318,15 +318,10 @@ test('customer.houston completes the whole application; staff approve it in the 
     }
     await next(page);
 
-    // 5 · Payouts (linked to the Stripe account)
+    // 5 · Payouts: read-only, the bank Stripe's onboarding (here the local stand-in) collected.
     await onStep(page, 'payouts', 'Payouts');
-    if (await page.getByLabel('Routing number').isVisible().catch(() => false)) {
-      await page.getByLabel('Account holder name').fill('Adaeze’s Pantry LLC');
-      await page.getByLabel('Routing number').fill('021000021');
-      await page.getByLabel('Account type').selectOption('checking');
-      await page.getByLabel('Account number', { exact: true }).fill('000123456789');
-      await page.getByLabel('Confirm account number').fill('000123456789');
-    }
+    await expect(page.getByText(/••6789/).first()).toBeVisible();
+    await expect(page.getByLabel('Routing number')).toHaveCount(0);
     await shot(page, 'wizard-5-payouts.png');
     await next(page);
 
@@ -341,7 +336,7 @@ test('customer.houston completes the whole application; staff approve it in the 
     await onStep(page, 'catalog-compliance', 'Catalog, permits & licences');
     const fashion = page.getByRole('button', { name: 'Fashion' });
     if ((await fashion.getAttribute('aria-pressed')) !== 'true') await fashion.click();
-    for (const name of [/Seller & Provider Agreement/, /Prohibited Items/, /W-9 certification/]) {
+    for (const name of [/I agree to the Seller Terms/, /I will follow the Prohibited/, /W-9 certification/]) {
       const box = page.getByRole('checkbox', { name });
       if (!(await box.isChecked())) await box.check();
     }

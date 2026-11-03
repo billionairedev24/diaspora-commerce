@@ -1,18 +1,14 @@
 'use client';
 
 import { isApiError } from '@afrotransact/api-client';
-import { Button } from '@afrotransact/ui';
+import { Button, Spinner as BaseSpinner, type SpinnerProps } from '@afrotransact/ui';
 import { CloudSlash, LockSimple, WarningCircle } from '@phosphor-icons/react/ssr';
 import { type ReactNode } from 'react';
 
 import { useT } from '@/i18n/t';
 
-export function Spinner({ label = 'Loading…' }: { label?: string }) {
-  return (
-    <div role="status" aria-live="polite" className="flex min-h-40 items-center justify-center rounded-md bg-surface-muted text-sm text-muted">
-      {label}
-    </div>
-  );
+export function Spinner({ label = 'Loading…', center = true, ...props }: SpinnerProps) {
+  return <BaseSpinner center={center} label={label} {...props} />;
 }
 
 export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {

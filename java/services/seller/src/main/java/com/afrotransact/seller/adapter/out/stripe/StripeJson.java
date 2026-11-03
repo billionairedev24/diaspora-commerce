@@ -6,11 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-import com.afrotransact.seller.domain.InvoiceLine;
 import com.afrotransact.seller.domain.RequirementError;
 import com.afrotransact.seller.domain.RequirementsSnapshot;
-import com.afrotransact.seller.port.InvoiceSnapshot;
-import com.afrotransact.seller.port.SubscriptionSnapshot;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -45,63 +42,6 @@ final class StripeJson {
                 epoch(r.path("current_deadline")), text(r, "disabled_reason"),
                 a.path("charges_enabled").asBoolean(false), a.path("payouts_enabled").asBoolean(false),
                 a.path("details_submitted").asBoolean(false), individual, caps);
-    }
-
-    SubscriptionSnapshot subscription(JsonNode s) {
-        JsonNode item = s.path("items").path("data").path(0);
-        Instant start = epoch(s.path("current_period_start"));
-        Instant end = epoch(s.path("current_period_end"));
-        if (start == null) {
-            start = epoch(item.path("current_period_start"));
-        }
-        if (end == null) {
-            end = epoch(item.path("current_period_end"));
-        }
-        return new SubscriptionSnapshot(text(s, "id"), idOf(s.path("customer")), text(s, "status"), text(item, "id"),
-                item.path("price").path("lookup_key").asString(null), epoch(s.path("trial_end")), start, end,
-                s.path("cancel_at_period_end").asBoolean(false));
-    }
-
-    InvoiceSnapshot invoice(JsonNode i) {
-        String sub = idOf(i.path("subscription"));
-        if (sub == null) {
-            sub = idOf(i.path("parent").path("subscription_details").path("subscription"));
-        }
-        return new InvoiceSnapshot(text(i, "id"), idOf(i.path("customer")), sub, text(i, "number"), text(i, "status"),
-                text(i, "billing_reason"), i.path("amount_due").asLong(0), i.path("amount_paid").asLong(0),
-                i.path("currency").asString("usd"), epoch(i.path("period_start")), epoch(i.path("period_end")),
-                text(i, "hosted_invoice_url"), text(i, "invoice_pdf"), i.path("attempt_count").asInt(0),
-                epoch(i.path("next_payment_attempt")), epoch(i.path("created")), lines(i.path("lines").path("data")));
-    }
-
-    /**
-     * Invoice lines. The price's lookup key is read from {@code price} (older API versions) or
-     * {@code pricing.price_details} when Stripe expanded it; metered usage lines are recognised by the
-     * {@code metered_*} lookup keys of the meters.
-     */
-    private static List<InvoiceLine> lines(JsonNode data) {
-        List<InvoiceLine> out = new ArrayList<>();
-        if (!data.isArray()) {
-            return out;
-        }
-        for (JsonNode l : data) {
-            String lookup = text(l.path("price"), "lookup_key");
-            if (lookup == null) {
-                lookup = text(l.path("pricing").path("price_details").path("price"), "lookup_key");
-            }
-            if (lookup == null) {
-                lookup = text(l.path("metadata"), "metered_lookup_key");
-            }
-            String item = idOf(l.path("subscription_item"));
-            if (item == null) {
-                item = idOf(l.path("parent").path("subscription_item_details").path("subscription_item"));
-            }
-            JsonNode q = l.path("quantity");
-            out.add(new InvoiceLine(text(l, "description"), l.path("amount").asLong(0),
-                    q.isNumber() ? q.asLong() : null, lookup, item, InvoiceLine.meterOf(lookup),
-                    epoch(l.path("period").path("start")), epoch(l.path("period").path("end"))));
-        }
-        return out;
     }
 
     static String text(JsonNode n, String field) {

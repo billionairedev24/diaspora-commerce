@@ -1,7 +1,7 @@
 import { resetStaffDb } from '@afrotransact/api-client/mocks/staff';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AccountEnv } from '@/components/account/AccountEnv';
 import { StaffSecurityPage } from '@/components/account/AccountPages';
@@ -32,11 +32,25 @@ describe('staff console shell', () => {
     );
     const hrefs = await navHrefs();
     expect(hrefs[0]).toBe('/');
-    expect(hrefs).toEqual(expect.arrayContaining(['/users', '/fees', '/support', '/site-content', '/developers']));
+    expect(hrefs).toEqual(expect.arrayContaining(['/users', '/support', '/payouts', '/settings']));
+    // Fees, markets, site content, developers and notifications live in Settings now, not in the sidebar.
+    for (const moved of ['/fees', '/markets', '/site-content', '/developers', '/notifications']) expect(hrefs).not.toContain(moved);
     const groups = screen.getAllByRole('button', { expanded: false }).map((b) => b.textContent);
     expect(groups.join(' ')).toMatch(/Commerce/);
     expect(screen.getByRole('button', { name: /overview/i })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('dashboard body')).toBeInTheDocument();
+  });
+
+  it('shows Settings to a role that can open a section (read only) and never the moved modules', async () => {
+    asRoles('platform.customer_support');
+    renderWithProviders(
+      <ConsoleShell>
+        <p>dashboard body</p>
+      </ConsoleShell>
+    );
+    const hrefs = await navHrefs();
+    expect(hrefs).toContain('/settings');
+    for (const moved of ['/fees', '/markets', '/site-content', '/developers', '/notifications']) expect(hrefs).not.toContain(moved);
   });
 
   it('hides menu items the role has no access to and blocks direct visits', async () => {
@@ -55,7 +69,7 @@ describe('staff console shell', () => {
     expect(screen.getByText('You don’t have access to this page')).toBeInTheDocument();
   });
 
-  it('turns customers away and asks guests to sign in', async () => {
+  it('turns customers away and sends guests straight to identity’s sign-in (no interstitial), without looping', async () => {
     asRoles('customer');
     const { unmount } = renderWithProviders(
       <ConsoleShell>
@@ -65,12 +79,32 @@ describe('staff console shell', () => {
     expect(await screen.findByRole('heading', { name: 'Staff only' })).toBeInTheDocument();
     unmount();
     asRoles('guest');
+    const assign = vi.fn();
+    vi.stubGlobal('location', { ...window.location, href: 'http://localhost:3002/orders?tab=open', assign });
+    window.sessionStorage.clear();
+    const first = renderWithProviders(
+      <ConsoleShell>
+        <p>x</p>
+      </ConsoleShell>
+    );
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith('/api/bff/v1/auth/login?returnTo=http%3A%2F%2Flocalhost%3A3002%2Forders%3Ftab%3Dopen')
+    );
+    expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument();
+    first.unmount();
+    // Back from identity still signed out within two minutes: say so instead of going round again.
+    assign.mockClear();
     renderWithProviders(
       <ConsoleShell>
         <p>x</p>
       </ConsoleShell>
     );
-    expect(await screen.findByRole('heading', { name: /sign in to the staff console/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Sign-in is temporarily unavailable' })).toBeInTheDocument();
+    expect(assign).not.toHaveBeenCalled();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }));
+    expect(assign).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+    window.sessionStorage.clear();
   });
 });
 

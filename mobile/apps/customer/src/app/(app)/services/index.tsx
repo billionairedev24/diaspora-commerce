@@ -9,6 +9,7 @@ import { useMyBookings, useServices } from '@/api/queries';
 import { formatWhen, isActive } from '@/domain/bookings';
 import { c, sp, t } from '@/theme';
 import { AppText, Loading } from '@/ui/primitives';
+import { ErrorView, refreshControl, useRefresh } from '@/ui/QueryStates';
 import { Screen, SubHeader } from '@/ui/Screen';
 
 const ICON: Record<string, typeof Scissors> = { 'Hair & beauty': Scissors, Catering: CookingPot, Tailoring: TShirt };
@@ -18,6 +19,7 @@ export default function Services() {
   const [q, setQ] = useState('');
   const services = useServices(q.trim());
   const mine = useMyBookings();
+  const refresh = useRefresh(services, mine);
   const next = (mine.data ?? []).filter((b) => isActive(b.status)).sort((a, b) => (a.startAt ?? '').localeCompare(b.startAt ?? ''))[0];
 
   return (
@@ -46,7 +48,8 @@ export default function Services() {
             ) : null}
           </View>
         }
-        ListEmptyComponent={services.isLoading ? <Loading /> : <AppText color={c.textMuted}>No pros match yet.</AppText>}
+        refreshControl={refreshControl(refresh)}
+        ListEmptyComponent={services.isPending ? <Loading /> : services.isError ? <ErrorView error={services.error} onRetry={() => void services.refetch()} retrying={services.isFetching} /> : <AppText color={c.textMuted}>No pros match yet.</AppText>}
         renderItem={({ item: s }) => {
           const I = ICON[s.category ?? ''] ?? Storefront;
           const nextLabel = s.nextAvailable ? `Next opening ${new Date(`${s.nextAvailable}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}` : 'Fully booked for 3 weeks';

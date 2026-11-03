@@ -2,7 +2,9 @@ package com.afrotransact.fulfilment.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -16,6 +18,7 @@ import com.afrotransact.fulfilment.domain.FulfilmentTask;
 import com.afrotransact.fulfilment.domain.GeoPoint;
 import com.afrotransact.fulfilment.domain.PackageOrigin;
 import com.afrotransact.fulfilment.domain.RoutePackage;
+import com.afrotransact.fulfilment.domain.RunBag;
 import com.afrotransact.fulfilment.domain.RouteStatus;
 import com.afrotransact.fulfilment.domain.TaskLine;
 import com.afrotransact.fulfilment.domain.TaskStatus;
@@ -25,6 +28,7 @@ import com.afrotransact.fulfilment.port.IdIssuer;
 import com.afrotransact.fulfilment.port.InventoryClient;
 import com.afrotransact.fulfilment.port.InventoryClient.ReservedLine;
 import com.afrotransact.fulfilment.port.RouteRepository;
+import com.afrotransact.fulfilment.port.RunDispatchRepository;
 import com.afrotransact.fulfilment.port.TaskRepository;
 import com.afrotransact.fulfilment.port.UpstreamFailure;
 import com.afrotransact.platform.events.DomainEventPublisher;
@@ -45,6 +49,7 @@ class ShipmentIntakeServiceImpl implements ShipmentIntakeService {
     private final InboxDeduplicator inbox;
     private final TaskRepository tasks;
     private final DeliveryShipmentRepository shipments;
+    private final RunDispatchRepository runs;
     private final RouteRepository routes;
     private final InventoryClient inventory;
     private final IdIssuer ids;
@@ -55,12 +60,13 @@ class ShipmentIntakeServiceImpl implements ShipmentIntakeService {
     private final String defaultNode;
 
     ShipmentIntakeServiceImpl(InboxDeduplicator inbox, TaskRepository tasks, DeliveryShipmentRepository shipments,
-                              RouteRepository routes, InventoryClient inventory, IdIssuer ids,
+                              RunDispatchRepository runs, RouteRepository routes, InventoryClient inventory, IdIssuer ids,
                               DomainEventPublisher events, DispatchFeed feed, PickupAssignmentService pickups,
                               Clock clock, @Value("${at.fulfilment.default-node:}") String defaultNode) {
         this.inbox = inbox;
         this.tasks = tasks;
         this.shipments = shipments;
+        this.runs = runs;
         this.routes = routes;
         this.inventory = inventory;
         this.ids = ids;
@@ -82,6 +88,10 @@ class ShipmentIntakeServiceImpl implements ShipmentIntakeService {
         Map<String, String> nodeBySku = anyFc ? reservedNodes(order.orderId()) : Map.of();
         int created = 0;
         for (PlacedOrder.PlacedShipment s : order.shipments()) {
+            if (s.preorder()) {
+                created += preorder(order, s, now);
+                continue;
+            }
             boolean fc = s.afrotransactFulfilled();
             if (!fc && !s.afrotransactDelivery()) {
                 continue;
@@ -123,6 +133,55 @@ class ShipmentIntakeServiceImpl implements ShipmentIntakeService {
         }
         LOG.info("Order {} placed: {} fulfilment records created", order.orderNumber(), created);
         return created;
+    }
+
+    /**
+     * A community pre-order package (S264) waits in the pool for its run: it is kept out of the zone builder and the
+     * seller-pickup screens, and its lines are split into one labelled bag per seller (the first bag carries the
+     * shipment's own label).
+     */
+    private int preorder(PlacedOrder order, PlacedOrder.PlacedShipment s, Instant now) {
+        int units = s.lines().stream().mapToInt(PlacedOrder.PlacedLine::quantity).sum();
+        boolean door = s.afrotransactDelivery();
+        String label = ids.packageLabel();
+        DeliveryShipment ds = new DeliveryShipment(s.shipmentId(), order.orderId(), order.orderNumber(),
+                order.customerId(), s.sellerOrgId(), s.sellerName(), s.fulfilmentType(), PackageOrigin.SELLER, null,
+                label, order.shipToCity(), order.shipToState(), zip5(order.shipToPostalCode()), order.shipToCountry(),
+                door ? GeoPoint.of(order.shipToLat(), order.shipToLon()) : null, Boolean.TRUE.equals(s.perishable()),
+                s.handoverRequired(), Math.max(1, units), DeliveryShipmentStatus.AWAITING_ROUTE, null, s.promisedBy(),
+                now, s.shipBy());
+        if (!shipments.insert(ds)) {
+            return 0;
+        }
+        runs.insertBags(bagsOf(s, label));
+        return 1;
+    }
+
+    /** One bag per seller named on the lines (the shipment's seller for lines that name none). */
+    private List<RunBag> bagsOf(PlacedOrder.PlacedShipment s, String firstLabel) {
+        Map<String, int[]> units = new LinkedHashMap<>();
+        Map<String, String> names = new HashMap<>();
+        for (PlacedOrder.PlacedLine l : s.lines()) {
+            String seller = l.sellerOrgId() != null && !l.sellerOrgId().isBlank() ? l.sellerOrgId()
+                    : s.sellerOrgId() == null || s.sellerOrgId().isBlank() ? "unknown" : s.sellerOrgId();
+            units.computeIfAbsent(seller, k -> new int[1])[0] += Math.max(l.quantity(), 0);
+            String name = l.sellerName() != null && !l.sellerName().isBlank() ? l.sellerName()
+                    : seller.equals(s.sellerOrgId()) ? s.sellerName() : null;
+            if (name != null) {
+                names.putIfAbsent(seller, name);
+            }
+        }
+        if (units.isEmpty()) {
+            String seller = s.sellerOrgId() == null || s.sellerOrgId().isBlank() ? "unknown" : s.sellerOrgId();
+            units.put(seller, new int[] {1});
+            names.put(seller, s.sellerName());
+        }
+        List<RunBag> bags = new ArrayList<>();
+        for (Map.Entry<String, int[]> e : units.entrySet()) {
+            String label = bags.isEmpty() ? firstLabel : ids.packageLabel();
+            bags.add(new RunBag(s.shipmentId(), e.getKey(), names.get(e.getKey()), label, Math.max(1, e.getValue()[0])));
+        }
+        return bags;
     }
 
     @Override

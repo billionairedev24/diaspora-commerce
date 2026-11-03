@@ -8,7 +8,9 @@ Design source: `design/AfroTransact Mobile App.dc.html` (+ `design/ios-frame.jsx
 | S163 Sign-in, Face ID, passcode | Opens on sign-in (no guest mode). OIDC authorization code + PKCE (S256) against identity with `expo-auth-session` (public client `customer-app`). After the first sign-in: Face ID (`expo-local-authentication`) → 6-digit passcode (create + confirm, salted SHA-256 in `expo-secure-store`) → notifications. Re-opening (cold start, or > 30 s in background) shows the unlock screen over the app, so unlocking returns you where you were. Five wrong passcodes force a full sign-in; sign-out removes tokens, Face ID and passcode from the device. Logo on sign-in, unlock and home. |
 | S164 Layout | `ui/Screen.tsx`: solid status strip, fixed header, fixed footer/tab bar; only the inner `ScrollView`/`FlatList` scrolls, vertically. Inner pages pin title + back (`SubHeader`). |
 | S165 Shopping | Home, browse/search, product, cart grouped by shipper, checkout from `GET /v1/checkout/summary` (per-package delivery option, AfroTransact Delivery preferences, pickup points). Saved card → `POST /v1/checkout/orders` (+ `handleNextAction` for 3-D Secure); Apple Pay / Google Pay / new card / US bank → Stripe **PaymentSheet in deferred-intent mode built from the summary total**, whose confirm handler places the order with the PaymentMethod and returns the PaymentIntent client secret. Add payment method = SetupIntent + PaymentSheet (card with ZIP, US bank account via Financial Connections). Orders over $100 and wallet payments ask for Face ID (or the app passcode). |
-| S166 Orders | Orders list, tracking (steps, driver, 4-digit delivery code for hand-delivery / perishables), buy again, returns (items, reason, method) → RMA + QR code. |
+| Data loading | Every request has a 20 s deadline and an unreachable server becomes a `NetworkError` (`src/api/network.ts`), so a wrong host or no signal shows “You seem to be offline · Try again” (with the host in non-prod builds) instead of an endless spinner or a misleading “No orders yet”. React Query retries connectivity and 5xx twice with back-off, never a 4xx, and refetches stale data when the app returns to the foreground. Data screens use `ui/QueryStates.tsx` (error view, pull-to-refresh). |
+| S166 Orders | Orders list, tracking (steps, driver, 4-digit delivery code for hand-delivery / perishables), buy again, "Get help" on a delivered order (opens the storefront help flow: describe the problem, add photos; staff resolve it — there is no self-service return or refund). |
+| Addresses | Native list and add/edit form (`app/(app)/addresses/`): state picker, default switch, remove, and the “couldn’t verify this address — fix it or keep mine” step. |
 | S167 Bookings | Book a pro: providers, services, days/slots from the provider calendar, deposit via PaymentSheet on the bookings-service PaymentIntent, bookings list, appointment detail (accept/decline proposed time, reschedule, cancel with the **exact refund quoted before cancelling**, history). |
 | S168 Push | Device token registered with identity on every start and token refresh (`POST /v1/me/devices`, `app: customer`, `provider: apns` on iOS / `fcm` on Android), unregistered on sign-out (`DELETE /v1/me/devices`). Taps deep-link to the right screen; foreground pushes respect per-category switches + identity's `GET/PUT /v1/me/notification-preferences`. `com.afrotransact.customer://…` and the environment's universal links `<EXPO_PUBLIC_WEB_URL>/app/…` route in-app. |
 
@@ -36,7 +38,7 @@ pnpm --filter @afrotransact/customer-app start        # uses EXPO_PUBLIC_* below
 
 The URLs come from the EAS build profile (`eas.json`: `development` = dev, `preview` = uat, `production` = prod;
 `development-mocks` = local on mocks); hosts per environment are in `docs/engineering/environments.md`. The code names
-no deployed host: `src/config/env.ts` falls back to the local stack on `EXPO_PUBLIC_DEV_HOST` (default `localhost`; the
+no deployed host: `src/config/env.ts` falls back to the local stack on `EXPO_PUBLIC_DEV_HOST` (when that is unset, a development phone uses the address Metro serves its JS from, `src/config/devHost.ts`, so `localhost` — the phone itself — is never tried by accident; otherwise `localhost`; the
 dev machine's LAN IP for a physical device, `10.0.2.2` for the Android emulator), and `app.config.ts` fails a dev, uat or
 prod build that leaves one of the URL variables unset. Universal links (iOS associated domain `applinks:<web host>`,
 Android verified `https://<web host>/app` intent filter) use the host of `EXPO_PUBLIC_WEB_URL`; local builds have none.
@@ -48,7 +50,7 @@ Android verified `https://<web host>/app` intent filter) use the host of `EXPO_P
 | `EXPO_PUBLIC_OIDC_ISSUER` | `http://localhost:8100` | `https://auth.dev.afrotransact.com` | `https://auth.uat.afrotransact.com` | `https://auth.afrotransact.com` |
 | `EXPO_PUBLIC_IDENTITY_URL` (devices, prefs) | `http://localhost:8100` | `https://api.dev.afrotransact.com/identity` | `…uat…/identity` | `https://api.afrotransact.com/identity` |
 | `EXPO_PUBLIC_BOOKINGS_URL` | `http://localhost:8109` | `https://api.dev.afrotransact.com/bookings` | `…uat…/bookings` | `https://api.afrotransact.com/bookings` |
-| `EXPO_PUBLIC_WEB_URL` (legal, help, account pages, share links, universal links) | `http://localhost:3000` | `https://dev.afrotransact.com` | `https://uat.afrotransact.com` | `https://afrotransact.com` |
+| `EXPO_PUBLIC_WEB_URL` (legal, help, account pages, share links, universal links) | `http://localhost:3000` | `https://www.dev.afrotransact.com` | `https://www.uat.afrotransact.com` | `https://www.afrotransact.com` |
 | `EXPO_PUBLIC_OIDC_CLIENT_ID` | `customer-app` | `customer-app` | `customer-app` | `customer-app` |
 | `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` | `pk_test_mock` | `pk_test_…` | `pk_test_…` | `pk_live_…` |
 | `EXPO_PUBLIC_STRIPE_MERCHANT_ID` | `merchant.com.afrotransact` | ← | ← | ← |
@@ -79,12 +81,43 @@ public client, grant types `authorization_code` + `refresh_token`, PKCE, `public
 if RP-initiated logout is wanted, and honouring `login_hint`, `idp_hint` (google|apple|facebook) and `prompt=create`
 on the hosted login page (the app sends them; today they are ignored).
 
+## Sign-out after inactivity
+
+The customer app signs the shopper out after **30 days without use** or **90 days after sign-in** (defaults; staff can change them in the staff console, Developer tools,
+Identity & access, Sign-out; see [docs/engineering/session-timeouts.md](../../../docs/engineering/session-timeouts.md)).
+
+Same rules in both apps (`src/domain/sessionPolicy.ts` and `sessionGuard.ts` are identical copies; keep them in step).
+
+- **Policy.** `GET /v1/session/policy` on the gateway-bff (`audience`, `idleTimeoutSeconds`, `absoluteTimeoutSeconds`, `warnSeconds`; `lastActivityAt` and
+  `expiresAt` are null for apps). Fetched after sign-in and on resume at most once an hour, always with `X-Background: 1` so it never counts as activity.
+  Validated on arrival (bounds, audience); a failed or invalid answer keeps the cached policy, which survives restarts in the secure store, or the built-in default
+  (30 d idle, 90 d absolute). Staff change the numbers per audience; a new value applies at the next fetch.
+- **Idle** is measured from the last real foreground interaction; time in the background counts as idle. **Absolute** is measured from sign-in, however active
+  the person is. Both are decided on the device, because the BFF cannot see taps in a native app or cap a refresh token.
+- **When it is checked:** at cold start (before the lock screen), on every resume (before the policy is re-read), and by a timer while the app is in the
+  foreground (at the next limit, at most a minute apart).
+- **Clock safety.** The sign-in time and last activity are stored as wall-clock times, with a high-water mark of the latest time ever seen. "Now" is never earlier
+  than that mark, so moving the phone clock backwards never extends a session (it makes the app ask the server, a forced policy read); moving it forwards ends the
+  session early. A tap on an already expired session does not revive it.
+- **Lock is not sign-out.** The 30-second lock is untouched. Touches on the lock screen are not activity; a successful unlock is.
+- **Activity** is a touch anywhere in the app (a non-claiming responder capture on the root view, in `src/app/_layout.tsx`), the keyboard opening, unlocking, and an API
+  *write* the shopper started (`onUserRequest` in `src/api/http.ts`). Reads do not count (screens refetch on resume by themselves) and neither do requests marked
+  background (the policy read, push-token registration). Recording is throttled to once per 30 s and written to the secure store lazily (every 2 min and when the app goes
+  to the background); a lost write can only end a session earlier.
+- **Ending the session** uses the existing `AuthProvider.signOut` (push token unregistered, refresh token revoked, passcode and Face ID removed), then the sign-in screen
+  shows "You were signed out after a period of inactivity" or "...reached its maximum length" (`cu.session.*`, five locales). A 401 `SESSION_IDLE_TIMEOUT` /
+  `SESSION_ABSOLUTE_TIMEOUT` from the BFF (`src/api/http.ts`) takes the same path with the same messages and is never "refreshed".
+- **Warning** (only if staff set `warnSeconds` above 0; the default is none): a "Still there?" bottom sheet over the unlocked app, Stay signed in / Sign out
+  (`src/features/session/IdleWarning.tsx`). It is never drawn over the lock screen.
+- Tests: `test/sessionPolicy.test.ts`, `sessionGuard.test.ts`, `sessionSignOut.test.ts`. Not verified on a device (see the PR notes): the root touch capture, the real
+  secure store, resume timing.
+
 ## Structure
 
 ```
 src/app/            expo-router routes: sign-in, setup, (app)/(tabs)/{index,search,lola,cart,account}, product, checkout,
-                    orders, returns, payments, addresses, services, book, bookings, inbox, settings, +native-intent
-src/domain/         plain TS rules (unit-tested): passcode, lock policy, checkout, tracking, returns, bookings,
+                    orders, payments, addresses, services, book, bookings, inbox, settings, +native-intent
+src/domain/         plain TS rules (unit-tested): passcode, lock policy, checkout, tracking, bookings,
                     notifications/deep links, payment form, jwt, lola
 src/api/            bearer fetch + refresh, BFF client (@afrotransact/api-client), bookings/identity requesters,
                     TanStack Query key factories + hooks, generated contract types, dev mock router
@@ -118,3 +151,48 @@ pnpm --filter @afrotransact/customer-app export:web      # build sanity check (w
 - Identity: per-category push switches (orders/restock/deals/Lola) are device-local; "sign out of all devices" has no
   API (the app signs out locally and revokes its own refresh token); see client registration above.
 - Fonts: Figtree is not bundled for native yet (system font is used).
+
+## Sign-in
+
+Email, password and the 2-step code are entered in the app. The screen is `src/app/sign-in.tsx`, built from
+`src/features/auth/`: `SignInHero` (brand picture fading to black, shrinks while the keyboard is up), `SignInForm` (email,
+password with Show/Hide inside the field, "Forgot password?", primary Sign in), `ProviderButtons` (Google / Apple / Facebook
+with their own marks from `src/ui/ProviderMarks.tsx`, then the passkey button), `SignInFooter` (create account, legal line)
+and `SecondFactorView`. `src/domain/nativeSignIn.ts` posts the credentials to gateway-bff
+`POST /v1/auth/native/{password,mfa/sms,mfa/verify}` with the app's PKCE challenge; the BFF checks them with identity's
+first-party sign-in API and redeems the one-time login ticket for `customer-app`, so the app receives an authorization code
+and exchanges it (with its verifier) at identity for its own access and refresh tokens. The first sign-in on a phone
+continues into setup (Face ID, passcode, notifications); later opens use Face ID or the passcode. Social providers,
+passkeys, "Create your account" and "Forgot password?" still open identity's secure page. In mock mode any password works;
+`mfa…@…` emails ask for the code `123456`; the password `wrong` is rejected.
+
+Errors are inline and come from the BFF's problem documents (`src/domain/signInErrors.ts`, unit-tested): a wrong password
+(401 `INVALID_CREDENTIALS`) marks both fields and says so under the password; field validation (422) marks the field the
+server names; a rate limit or lockout (429 `RATE_LIMITED`) shows how long to wait when the server sent `Retry-After`
+(`src/api/http.ts` keeps the header on the problem as `retryAfterSeconds`); a wrong code marks the code boxes; an expired
+attempt (410 `CHALLENGE_EXPIRED`) returns to the password step with the server's message. The server does not report how
+many attempts are left, so none is shown.
+
+Second step: `src/ui/OtpInput.tsx` is six boxes over one hidden text input (`textContentType=oneTimeCode`,
+`autoComplete=one-time-code`, so the SMS code is offered by the keyboard; paste and backspace work) and submits on the
+sixth digit. "Trust this device for 30 days" sends `trustDevice` (the contract: the phone then skips the second factor for
+30 days). A text message is only sent on request (or on open when a text message is the only code factor), with a 30 second
+wait before the next one ("Text again in 0:24"). Recovery codes use a normal text field.
+
+Lock and setup: first-run setup is "1 of 3" Face ID, "2 of 3" passcode (create, confirm), "3 of 3" notifications
+(`src/app/setup.tsx`, `src/brand/OnboardingScreen.tsx`); Face ID and notifications can be skipped, the passcode cannot.
+The unlock screen (`src/features/lock/LockOverlay.tsx`) tries Face ID once on appearing, then shows the passcode keypad with
+"Wrong passcode · N attempts left" (five wrong passcodes sign out; rules in `src/domain/passcode.ts`), "Forgot passcode?
+Sign in with password" and "Not {name}? Sign out". All of these strings are in the five catalogues (`cu.signIn.*`,
+`cu.mfa.*`, `cu.setup.*`, `cu.lock.*`, `cu.pin.*`, `cu.flash.*`). The reason shown after a forced sign-out is a typed
+`SignOutFlash` code that the sign-in screen words in the shopper's language.
+
+A 401 never signs you out by itself: the session ends only when identity refuses the refresh token. If identity cannot be
+reached the request fails and the session is kept. A 401 on every request in local development usually means the app
+signed in at a different identity address than the one the services were started with (`MOBILE_HOST=lan`); the BFF log
+says "token not issued by …".
+
+Sign-in hardening: "Don't ask again on this phone" is off by default; the BFF limits password attempts per email (10 per
+15 minutes, independent of source IP) on top of the per-IP limit and identity's account lockout. Production must run with
+`TRUST_FORWARDED_FOR=true` only behind a proxy that overwrites `X-Forwarded-For`. Device attestation (App Attest / Play
+Integrity) is not built: it needs Apple and Google credentials.

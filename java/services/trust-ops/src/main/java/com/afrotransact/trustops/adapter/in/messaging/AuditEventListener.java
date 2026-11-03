@@ -4,11 +4,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.afrotransact.trustops.application.AuditLogService;
 import com.afrotransact.trustops.application.IncomingEvent;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -22,7 +21,6 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 class AuditEventListener {
 
-    private static final Logger LOG = LoggerFactory.getLogger(AuditEventListener.class);
     private static final TypeReference<Map<String, Object>> OBJECT = new TypeReference<>() { };
 
     private final AuditLogService audit;
@@ -44,16 +42,13 @@ class AuditEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id", type, rec.topic(), rec.partition(),
-                    rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         Map<String, Object> payload;
         try {
             payload = rec.value() == null ? Map.of() : json.readValue(rec.value(), OBJECT);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         audit.ingest(new IncomingEvent(eventId.get(), rec.topic(), type, rec.key(),
                 rec.value() == null ? "{}" : rec.value(), payload, EventHeaders.occurredAt(rec)));

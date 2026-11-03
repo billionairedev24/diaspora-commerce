@@ -82,18 +82,14 @@ at:
   taxreturns:
     tax:
       # RULES = built-in rules engine over the tax_state_rule / tax_local_rate tables (no external calls).
-      # STRIPE_TAX | TAXJAR | AVALARA need an adapter of the TaxCalculator port (not installed).
+      # STRIPE_TAX also needs STRIPE_SECRET_KEY and Stripe Tax set up (registrations) in the Stripe dashboard.
+      # TAXJAR | AVALARA would need an adapter of the TaxCalculator port (not installed).
       provider: ${TAX_PROVIDER:RULES}
-      category-by-product-type:
-        fresh-produce: GROCERY
-        pantry: GROCERY
-        spices: GROCERY
-        grains: GROCERY
-        beverages: GROCERY
-        frozen-food: GROCERY
-        meat-seafood: GROCERY
-        prepared-meals: PREPARED_FOOD
-        hot-food: PREPARED_FOOD
+      # What an item is for tax is decided by the tax_classification_rule table (staff-maintained, see
+      # docs/engineering/tax-classification-design.md), not by configuration.
+      stripe:
+        secret-key: ${STRIPE_SECRET_KEY:}
+        # shipping-tax-code: txcd_92010001   # verify against Stripe's product tax code list
     returns:
       default-window-days: ${RETURN_WINDOW_DAYS:30}
       window-days-by-product-type:

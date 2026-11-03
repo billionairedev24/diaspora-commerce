@@ -1,5 +1,7 @@
 package com.afrotransact.deliveryruns.domain;
 
+import java.util.function.Supplier;
+
 /**
  * {@code cost(n) = (fixedMinutes / 60 × perHour + miles × perMile) + n × (perOrderMinutes / 60 × perHour)} where
  * fixed minutes are the drive (both ways when {@link EconomicsSettings#roundTrip()}) plus the seller sweep, plus one
@@ -9,14 +11,21 @@ public class DefaultRunEconomicsCalculator implements RunEconomicsCalculator {
 
     private static final int MAX_BREAK_EVEN = 100_000;
 
-    private final EconomicsSettings settings;
+    private final Supplier<EconomicsSettings> source;
 
+    /** Fixed settings (tests, tools). */
     public DefaultRunEconomicsCalculator(EconomicsSettings settings) {
-        this.settings = settings;
+        this(() -> settings);
+    }
+
+    /** Settings read at every calculation, so a staff edit applies at once. */
+    public DefaultRunEconomicsCalculator(Supplier<EconomicsSettings> source) {
+        this.source = source;
     }
 
     @Override
     public CostModel costModel(RouteEstimate route, DropMode dropMode) {
+        EconomicsSettings settings = source.get();
         double legs = settings.roundTrip() ? 2 : 1;
         double miles = route.roadMiles() * legs;
         double fixedMinutes = route.driveMinutes() * legs + settings.collectionMinutes();

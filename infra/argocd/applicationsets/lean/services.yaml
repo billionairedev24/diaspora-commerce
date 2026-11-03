@@ -1,0 +1,90 @@
+# ONE Application PER SERVICE for the environment selected by the env kustomization (envs/<env>), which patches
+# the platform-values.yaml path below and suffixes the name. Services are discovered from their Helm charts:
+#   java/services/<svc>/deploy/helm, go/services/<svc>/deploy/helm
+# Each Application is multi-source: the chart, plus a $values ref to this repo for the shared platform-values.yaml.
+# Value precedence (last wins): values.yaml < values-<env>.yaml < infra/argocd/envs/<env>/platform-values.yaml
+# Sync: automated (prune + selfHeal) where platform-values sets argocd.autoSync (dev, uat); manual in prod.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: services
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - git:
+              repoURL: https://github.com/billionairedev24/diaspora-commerce.git
+              revision: HEAD
+              files:
+                - path: infra/argocd/envs/ENV/platform-values.yaml     # patched per env
+          - git:
+              repoURL: https://github.com/billionairedev24/diaspora-commerce.git
+              revision: HEAD
+              pathParamPrefix: chart
+              directories:
+                - path: java/services/*/deploy/helm
+                - path: go/services/*/deploy/helm
+  template:
+    metadata:
+      name: '{{ index .chart.path.segments 2 }}-{{ .argocd.env }}'
+      labels:
+        app.kubernetes.io/part-of: afrotransact
+        afrotransact.com/service: '{{ index .chart.path.segments 2 }}'
+        afrotransact.com/runtime: '{{ index .chart.path.segments 0 }}'
+        afrotransact.com/env: '{{ .argocd.env }}'
+      annotations:
+        argocd.argoproj.io/sync-wave: "10"
+        notifications.argoproj.io/subscribe.on-sync-failed.slack: afrotransact-deploys
+        notifications.argoproj.io/subscribe.on-health-degraded.slack: afrotransact-deploys
+    spec:
+      project: 'afrotransact-{{ .argocd.env }}'
+      sources:
+        - repoURL: https://github.com/billionairedev24/diaspora-commerce.git
+          targetRevision: '{{ .argocd.targetRevision }}'
+          path: '{{ .chart.path.path }}'
+          helm:
+            releaseName: '{{ index .chart.path.segments 2 }}'
+            valueFiles:
+              - values.yaml
+              - 'values-{{ .argocd.env }}.yaml'
+              - '$values/infra/argocd/envs/{{ .argocd.env }}/platform-values.yaml'
+        - repoURL: https://github.com/billionairedev24/diaspora-commerce.git
+          targetRevision: '{{ .argocd.targetRevision }}'
+          ref: values
+      destination:
+        server: '{{ .argocd.destinationServer }}'
+        namespace: 'afrotransact-{{ .argocd.env }}'
+      revisionHistoryLimit: 10
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - SkipDryRunOnMissingResource=true    # ServiceMonitor / ExternalSecret / Rollout CRDs come from platform apps
+          - PruneLast=true
+        managedNamespaceMetadata:
+          labels:
+            app.kubernetes.io/part-of: afrotransact
+            afrotransact.com/env: '{{ .argocd.env }}'
+        retry:
+          limit: 5
+          backoff: {duration: 10s, factor: 2, maxDuration: 3m}
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers: [/spec/replicas]        # HPA owns replicas
+        - group: argoproj.io
+          kind: Rollout
+          jsonPointers: [/spec/replicas]
+  templatePatch: |
+    {{- if .argocd.autoSync }}
+    spec:
+      syncPolicy:
+        automated:
+          prune: {{ .argocd.prune }}
+          selfHeal: {{ .argocd.selfHeal }}
+    {{- end }}

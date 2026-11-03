@@ -44,6 +44,8 @@ export interface PaymentElementFieldProps {
   currency: string;
   /** "Save for future purchases": setupFutureUsage off_session (must match the PaymentIntent orders creates). */
   save: boolean;
+  /** The shopper's Stripe Customer (cus_...); required to show saved methods in the Payment Element. */
+  stripeCustomerId?: string;
   /** Restricted types (pre-order windows); undefined = the payment methods enabled in Stripe. */
   paymentMethodTypes?: string[];
   onChange?: (change: PaymentElementChange) => void;
@@ -52,12 +54,10 @@ export interface PaymentElementFieldProps {
 /** Confirmation status of the dev-only form when it sends the browser to the return page (the 3-D Secure test card). */
 export const REDIRECTED = 'redirected';
 
-/** Payment Element: a compact accordion (card first, then Apple Pay / Google Pay / Link, Cash App Pay, Klarna, Amazon
- *  Pay, Affirm, US bank, as enabled in Stripe). Wallets live here too: there is no separate Express Checkout row. */
+/** Single Stripe surface: wallets and BNPL tabs inside the Payment Element (no separate Express Checkout row). */
 const PAYMENT_ELEMENT_OPTIONS = {
-  layout: { type: 'accordion', defaultCollapsed: false, radios: true, spacedAccordionItems: false },
-  wallets: { applePay: 'auto', googlePay: 'auto' },
-  paymentMethodOrder: ['card', 'apple_pay', 'google_pay', 'link', 'cashapp', 'klarna', 'amazon_pay', 'affirm', 'us_bank_account']
+  layout: { type: 'accordion', defaultCollapsed: false, radios: false, spacedAccordionItems: false },
+  paymentMethodOrder: ['card', 'apple_pay', 'google_pay', 'link', 'us_bank_account', 'cashapp', 'klarna', 'amazon_pay', 'affirm']
 };
 
 /**
@@ -69,12 +69,12 @@ export function PaymentElementField(props: PaymentElementFieldProps) {
   return isMockKey(props.publishableKey) ? <MockPaymentElement {...props} /> : <StripePaymentElement {...props} />;
 }
 
-function StripePaymentElement({ ref, publishableKey, amountMinor, currency, save, paymentMethodTypes, onChange }: PaymentElementFieldProps) {
+function StripePaymentElement({ ref, publishableKey, amountMinor, currency, save, stripeCustomerId, paymentMethodTypes, onChange }: PaymentElementFieldProps) {
   const t = useT();
   const mountRef = useRef<HTMLDivElement>(null);
   const stripe = useRef<{ s: StripeInstance; e: StripeElements } | null>(null);
-  const latest = useRef({ amountMinor, save, onChange });
-  latest.current = { amountMinor, save, onChange };
+  const latest = useRef({ amountMinor, save, stripeCustomerId, onChange });
+  latest.current = { amountMinor, save, stripeCustomerId, onChange };
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const types = paymentMethodTypes?.join(',') ?? '';
@@ -87,8 +87,8 @@ function StripePaymentElement({ ref, publishableKey, amountMinor, currency, save
     getStripe(publishableKey)
       .then((s) => {
         if (disposed || !mountRef.current) return;
-        const { amountMinor: amount, save: keep } = latest.current;
-        const e = s.elements(deferredIntentOptions({ amountMinor: amount, currency, save: keep, paymentMethodTypes: types ? types.split(',') : undefined }));
+        const { amountMinor: amount, save: keep, stripeCustomerId: customer } = latest.current;
+        const e = s.elements(deferredIntentOptions({ amountMinor: amount, currency, save: keep, customer, paymentMethodTypes: types ? types.split(',') : undefined }));
         const payment = e.create('payment', PAYMENT_ELEMENT_OPTIONS);
         payment.on('ready', () => setReady(true));
         payment.on('change', (ev) => {
@@ -158,24 +158,53 @@ const EMPTY: MockCard = { number: '', exp: '', cvc: '', zip: '' };
 function MockPaymentElement({ ref, onChange }: PaymentElementFieldProps) {
   const t = useT();
   const id = useId();
+  const [tab, setTab] = useState<'card' | 'us_bank_account'>('card');
   const [card, setCard] = useState<MockCard>(EMPTY);
+  const [bank, setBank] = useState({ routing: '', account: '', name: '' });
   const [errors, setErrors] = useState<Partial<Record<keyof MockCard, MessageKey>>>({});
   const [error, setError] = useState<string | null>(null);
-  const latest = useRef({ card, onChange });
-  latest.current = { card, onChange };
+  const latest = useRef({ card, bank, tab, onChange });
+  latest.current = { card, bank, tab, onChange };
+
+  const notify = () => {
+    const { card: c, bank: b, tab: pm, onChange: cb } = latest.current;
+    if (pm === 'us_bank_account') {
+      const complete = b.routing.replace(/\D/g, '').length === 9 && b.account.replace(/\D/g, '').length >= 4 && b.name.trim().length > 1;
+      const empty = !b.routing && !b.account && !b.name.trim();
+      cb?.({ complete, empty, type: 'us_bank_account' });
+      return;
+    }
+    const complete = Object.values(c).every(Boolean) && Object.keys(checkMockCard(c)).length === 0;
+    cb?.({ complete, empty: !Object.values(c).some(Boolean), type: 'card' });
+  };
 
   const set = (k: keyof MockCard) => (e: { target: { value: string } }) => {
     const next = { ...latest.current.card, [k]: e.target.value };
     setCard(next);
+    latest.current.card = next;
     setError(null);
-    const complete = Object.values(next).every(Boolean) && Object.keys(checkMockCard(next)).length === 0;
-    latest.current.onChange?.({ complete, empty: !Object.values(next).some(Boolean), type: 'card' });
+    notify();
+  };
+
+  const patchBank = (patch: Partial<typeof bank>) => {
+    const next = { ...latest.current.bank, ...patch };
+    setBank(next);
+    latest.current.bank = next;
+    setError(null);
+    notify();
   };
 
   useImperativeHandle(
     ref,
     () => ({
       submit: async () => {
+        if (latest.current.tab === 'us_bank_account') {
+          const b = latest.current.bank;
+          if (b.routing.replace(/\D/g, '').length !== 9) return { ok: false, message: t('pay.routingInvalid') };
+          if (b.account.replace(/\D/g, '').length < 4) return { ok: false, message: t('pay.accountInvalid') };
+          if (!b.name.trim()) return { ok: false, message: t('pay.bankRequired') };
+          return { ok: true };
+        }
         const found = checkMockCard(latest.current.card);
         setErrors(found);
         const first = Object.values(found)[0];
@@ -201,17 +230,39 @@ function MockPaymentElement({ ref, onChange }: PaymentElementFieldProps) {
   );
 
   const err = (k: keyof MockCard) => (errors[k] ? t(errors[k]) : undefined);
+  const pickTab = (next: 'card' | 'us_bank_account') => {
+    setTab(next);
+    latest.current.tab = next;
+    notify();
+  };
   return (
     <div className={styles.paymentElement} data-testid="mock-payment-element">
       <StripeDevNotice />
-      <div className={styles.mockFields}>
-        <TextField id={`${id}-number`} label={t('pay.cardNumber')} value={card.number} onChange={set('number')} error={err('number')} inputMode="numeric" autoComplete="cc-number" placeholder="1234 1234 1234 1234" />
-        <div className={styles.three}>
-          <TextField id={`${id}-exp`} label={t('pay.expiry')} value={card.exp} onChange={set('exp')} error={err('exp')} placeholder={t('pay.expiryPlaceholder')} autoComplete="cc-exp" />
-          <TextField id={`${id}-cvc`} label={t('pay.cvc')} value={card.cvc} onChange={set('cvc')} error={err('cvc')} inputMode="numeric" autoComplete="cc-csc" maxLength={4} />
-          <TextField id={`${id}-zip`} label={t('pay.zip')} value={card.zip} onChange={set('zip')} error={err('zip')} inputMode="numeric" autoComplete="postal-code" maxLength={5} />
-        </div>
+      <div className={styles.mockTabs} role="tablist" aria-label={t('pay.methodType')}>
+        <button type="button" role="tab" className={styles.mockTab} aria-selected={tab === 'card'} onClick={() => pickTab('card')}>
+          {t('pay.tabCard')}
+        </button>
+        <button type="button" role="tab" className={styles.mockTab} aria-selected={tab === 'us_bank_account'} onClick={() => pickTab('us_bank_account')}>
+          {t('pay.tabBank')}
+        </button>
       </div>
+      {tab === 'card' ? (
+        <div className={styles.mockFields}>
+          <TextField id={`${id}-number`} label={t('pay.cardNumber')} value={card.number} onChange={set('number')} error={err('number')} inputMode="numeric" autoComplete="cc-number" placeholder="1234 1234 1234 1234" />
+          <div className={styles.three}>
+            <TextField id={`${id}-exp`} label={t('pay.expiry')} value={card.exp} onChange={set('exp')} error={err('exp')} placeholder={t('pay.expiryPlaceholder')} autoComplete="cc-exp" />
+            <TextField id={`${id}-cvc`} label={t('pay.cvc')} value={card.cvc} onChange={set('cvc')} error={err('cvc')} inputMode="numeric" autoComplete="cc-csc" maxLength={4} />
+            <TextField id={`${id}-zip`} label={t('pay.zip')} value={card.zip} onChange={set('zip')} error={err('zip')} inputMode="numeric" autoComplete="postal-code" maxLength={5} />
+          </div>
+        </div>
+      ) : (
+        <div className={styles.mockFields}>
+          <TextField id={`${id}-bname`} label={t('pay.bankName')} value={bank.name} onChange={(e) => patchBank({ name: e.target.value })} autoComplete="name" />
+          <TextField id={`${id}-routing`} label={t('pay.routing')} value={bank.routing} onChange={(e) => patchBank({ routing: e.target.value })} inputMode="numeric" autoComplete="off" />
+          <TextField id={`${id}-account`} label={t('pay.account')} value={bank.account} onChange={(e) => patchBank({ account: e.target.value })} inputMode="numeric" autoComplete="off" />
+          <p className={styles.fine}>{t('pay.achMandate')}</p>
+        </div>
+      )}
       {error && (
         <p className={styles.error} role="alert" data-testid="payment-element-error">
           {error}

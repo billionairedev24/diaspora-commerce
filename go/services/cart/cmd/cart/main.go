@@ -81,7 +81,8 @@ func run() error {
 	if cfg.DeliveryRuns.URL != "" {
 		opts = append(opts, app.WithPreorders(deliveryruns.New(deliveryruns.Options{BaseURL: cfg.DeliveryRuns.URL,
 			TokenURL: cfg.DeliveryRuns.TokenURL, ClientID: cfg.DeliveryRuns.ClientID,
-			ClientSecret: cfg.DeliveryRuns.ClientSecret}, httpClient)))
+			ClientSecret: cfg.DeliveryRuns.ClientSecret}, httpClient)),
+			app.WithRuns(deliveryruns.NewRuns(cfg.DeliveryRuns.URL, httpClient)))
 	}
 	svc := app.NewCartService(guests, users,
 		catalog.New(cfg.CatalogURL, httpClient, 30*time.Second, cfg.RetailOrgID, cfg.SellerNames),

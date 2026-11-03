@@ -113,7 +113,6 @@ test('storefront sign-in on identity, then the staff console signs in without a 
     if (f === page.mainFrame() && f.url().startsWith(IDENTITY) && /\/(login|signup)/.test(new URL(f.url()).pathname)) identityPages.push(f.url());
   });
   await page.goto(STAFF);
-  await page.getByRole('link', { name: 'Sign in' }).click();
   await page.waitForURL(`${STAFF}/**`);
   // Sign-out lives in the header's account menu.
   await page.getByRole('button', { name: /Account menu for Platform Administrator/ }).click();
@@ -121,15 +120,30 @@ test('storefront sign-in on identity, then the staff console signs in without a 
   await expect(staffSignOut).toBeVisible();
   expect(identityPages, 'single sign-on: no identity sign-in page on the way').toEqual([]);
 
-  // Signing out of the staff console ends the identity session too (RP-initiated logout) and returns there.
+  // Signing out of the staff console ends the identity session too (RP-initiated logout) and lands straight on the
+  // staff console's own sign-in page, saying so (S300).
   await staffSignOut.click();
-  await page.waitForURL(`${STAFF}/**`);
-  await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
+  await expectBrandedIdentityPage(page, 'Sign in to the staff console');
+  await expect(page.getByText('You’ve been signed out.')).toBeVisible();
+  await shot(page, 'identity-staff-signed-out-desktop-1440.png');
+
+  // The storefront: signed out everywhere, so its sign-in asks for credentials; signing out of the storefront stays on
+  // the storefront with a toast (no sign-in wall).
   await context.clearCookies({ name: 'at_session' });
   await page.goto(STOREFRONT);
   await page.getByRole('button', { name: /Account menu: Welcome, Guest/ }).click();
   await page.getByRole('menuitem', { name: 'Sign in' }).click();
   await expectBrandedIdentityPage(page, 'Sign in to AfroTransact');
+  await page.getByLabel('Email').fill(ADMIN.email);
+  await page.getByLabel('Password', { exact: true }).fill(ADMIN.password);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await completeMfaIfAsked(page);
+  await page.waitForURL(`${STOREFRONT}/**`);
+  await page.getByRole('button', { name: /Account menu: Platform Administrator/ }).click();
+  await page.getByRole('menuitem', { name: 'Sign out' }).click();
+  await page.waitForURL((u) => u.href.startsWith(STOREFRONT) && !u.searchParams.has('signedOut'));
+  await expect(page.getByText('You’re signed out')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Account menu: Welcome, Guest/ })).toBeVisible();
   await context.close();
 });
 

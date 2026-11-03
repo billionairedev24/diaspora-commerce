@@ -22,6 +22,9 @@ public interface LedgerRepository {
 
     List<Journal> journalsOfOrder(String orderId);
 
+    /** Journals booked against one Stripe object (charge, refund, transfer, payout …). */
+    List<Journal> journalsByStripeRef(String stripeRef);
+
     /** Balances of every (sub-)account, or of the lines attributed to {@code orgId} when present. */
     List<AccountBalance> balances(Optional<String> orgId);
 

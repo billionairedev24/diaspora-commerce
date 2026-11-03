@@ -2,8 +2,11 @@ package com.afrotransact.payments.adapter.out.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.payments.domain.Dispute;
@@ -65,6 +68,16 @@ class JdbcDisputeRepository implements DisputeRepository {
         return jdbc.sql("select *, allocations::text as allocations_json from dispute where payment_id = :p "
                         + "order by opened_at")
                 .param("p", paymentId).query(this::row).list();
+    }
+
+    @Override
+    public Set<String> openOrders(Collection<String> orderIds) {
+        if (orderIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(jdbc.sql("select distinct order_id from dispute where status = :s and order_id in (:ids)")
+                .param("s", DisputeStatus.OPEN.name()).param("ids", List.copyOf(orderIds)).query(String.class)
+                .list());
     }
 
     private Dispute row(ResultSet rs, int n) throws SQLException {

@@ -9,7 +9,7 @@ market: us
 # the storefront origin, the OIDC issuer and (outside local) the OIDC redirect URI are derived from them; WEB_ORIGINS,
 # WEB_PUBLIC_ORIGIN, OIDC_ISSUER and OIDC_REDIRECT_URI override the derived values.
 platform:
-  publicWebUrl: https://dev.afrotransact.com
+  publicWebUrl: https://www.dev.afrotransact.com
   sellerCenterUrl: https://seller.dev.afrotransact.com
   staffConsoleUrl: https://admin.dev.afrotransact.com
   authIssuerUrl: https://auth.dev.afrotransact.com
@@ -19,7 +19,9 @@ session:
   cookieName: at_session
   cookieSecure: true
   cookieDomain: ""
-  idleTtl: 720h
+  # Upper bound for the session store and cookie; the per-audience sign-out policy (identity) ends sessions earlier.
+  # Keep it at least 2160h (90 days): the longest default session length.
+  idleTtl: 2208h
 oidc:
   clientId: gateway-bff
   scopes: [openid, email, profile, phone, offline_access]
@@ -86,6 +88,8 @@ upstreams:
   seller:
     url: http://seller
     timeout: 3s
+    # a final approval activates the Stripe subscription before it answers (POST /v1/applications/{id}/decision)
+    slowTimeout: 20s
     retries: 1
     breaker: {failures: 5, cooldown: 15s}
   offers:
@@ -96,11 +100,6 @@ upstreams:
   bookings:
     url: http://bookings
     timeout: 3s
-    retries: 1
-    breaker: {failures: 5, cooldown: 15s}
-  storefront:
-    url: http://storefront
-    timeout: 2s
     retries: 1
     breaker: {failures: 5, cooldown: 15s}
   media:
@@ -167,7 +166,7 @@ commerce:
 stripe:
   publishableKey: "" # STRIPE_PUBLISHABLE_KEY (pk_test_… / pk_live_…)
 staff:
-  exportStore: local
+  exportStore: media
   exportDir: "" # STAFF_EXPORT_DIR (default: the OS temp dir)
 telemetry:
   otlpEndpoint: otel-collector.observability:4318

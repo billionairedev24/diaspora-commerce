@@ -12,5 +12,14 @@
 #                  Every container gets PLATFORM_ENV, PLATFORM_DOMAIN and the derived PUBLIC_WEB_URL,
 #                  SELLER_CENTER_URL, STAFF_CONSOLE_URL, API_BASE_URL, AUTH_ISSUER_URL and MEDIA_PUBLIC_URL
 #                  (templates/_helpers.tpl "at-service.platformEnvVars"; docs/engineering/environments.md).
+#   global.storefrontHost  www | apex (default www): the customer storefront's canonical host, www.<domain> in EVERY environment
+#                  (PUBLIC_WEB_URL = https://www.<domain>; the apex only 301-redirects to it). apex is an explicit opt-out
+#                  (PUBLIC_WEB_URL = https://<domain>). Every other app keeps its sub-domain (docs/engineering/environments.md,
+#                  "Storefront host rule"). global.urls.PUBLIC_WEB_URL still wins over it.
 #   global.urls    optional {ENV_NAME: value} overrides of a derived URL for the whole environment.
 # A service's extraEnv entry of the same name wins over both. Unset global.domain renders PLATFORM_ENV only.
+#
+# secrets.plain: true   the pod still reads envFrom Secret <service>-secrets, but no ExternalSecret is rendered: the Secret is
+#                       created by hand (single-node k3s without External Secrets: infra/ovh-vps/secrets.sh). Default false.
+#
+# imagePullSecrets: [{name: ghcr}]   private registry credentials (kubectl create secret docker-registry); default none.

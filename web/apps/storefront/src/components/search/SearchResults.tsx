@@ -1,6 +1,7 @@
 'use client';
 
 import { type FacetBucket, parseSearchUrl, PRICE_BUCKETS, type ProductSummary, type SearchQuery, type SearchSort } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, Skeleton, Stars, X } from '@afrotransact/ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -21,6 +22,7 @@ const countOf = (buckets: FacetBucket[] | undefined, value: string) => buckets?.
 /** Search results: URL-synced filters and sort, facet counts from the API; more results load as the shopper scrolls. */
 export function SearchResults() {
   const t = useT();
+  const fmt = useFormatters();
   const params = useSearchParams();
   const router = useRouter();
   const api = browserApi();
@@ -208,6 +210,21 @@ export function SearchResults() {
         <div className={styles.main}>
           <h1 className={styles.title}>{t('results.title')}</h1>
           <p className={styles.note}>{t('results.note', { location: location?.label ?? data?.deliverToLabel ?? '' })}</p>
+          {data?.services.length ? (
+            <section className={styles.services} aria-labelledby="results-services">
+              <h2 id="results-services" className={styles.servicesTitle}>{t('results.services')}</h2>
+              <ul className={styles.serviceList}>
+                {data.services.map((s) => (
+                  <li key={s.serviceId}>
+                    <Link href={`/services/${encodeURIComponent(s.serviceId)}`} className={styles.serviceHit}>
+                      <strong>{s.name}</strong>
+                      <span className={styles.serviceMeta}>{s.providerName} · {s.location} · {t('svc.minutes', { n: s.durationMinutes })} · {fmt.money(s.priceFromMinor)}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           {isPending && !data ? (
             <ul className={styles.grid} aria-busy="true" aria-label={t('results.loading')}>
               {Array.from({ length: 8 }, (_, i) => (

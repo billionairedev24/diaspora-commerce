@@ -11,7 +11,7 @@ import (
 // startedApplicant is a customer who started a seller application (S286) on a BFF whose Stripe key is key.
 func startedApplicant(t *testing.T, key string) (*testkit.Upstreams, *browser) {
 	t.Helper()
-	bff, b := sellerSetup(t, testkit.Options{SellerPending: true, SellerPublishableKey: key})
+	bff, b := sellerSetup(t, testkit.Options{SellerPending: true, SellerPublishableKey: key, Content: true})
 	up := bff.Upstreams
 	up.MemberOrgs, up.ActiveOrgID, up.NoApplication = nil, "", true
 	if r := b.do("POST", "/v1/seller/onboarding", map[string]any{"kind": "SELLER"}); r.status != 201 {
@@ -46,11 +46,20 @@ func TestOnboardingWizardResumesAtTheFirstIncompleteStep(t *testing.T) {
 	if got != want || saved["resumeStep"] != "business-details" {
 		t.Fatalf("steps = %s (resume %v)", got, saved["resumeStep"])
 	}
-	// A prefilled payout holder name (seller service) is not a completed Payouts step.
-	up.Application["payouts"] = map[string]any{"accountHolderName": "Adaeze Nwosu", "externalAccountLinked": false}
+	// Payouts is read-only: Stripe collects the bank in its embedded onboarding. Before the Stripe account there is
+	// nothing to show; with an account but no bank the applicant is sent back to Stripe verification.
+	if p := st["form"].(map[string]any)["payouts"].(map[string]any); p["status"] != "NOT_STARTED" || p["linked"] != false {
+		t.Fatalf("payouts before Stripe = %v", p)
+	}
+	up.Application["stripe"] = map[string]any{"accountId": "acct_1", "detailsSubmitted": false}
 	st = b.do("GET", "/v1/seller/onboarding", nil).json(t)
-	if p := st["form"].(map[string]any)["payouts"].(map[string]any); p["linked"] != false || p["accountHolderName"] != "Adaeze Nwosu" {
-		t.Fatalf("payouts = %v", p)
+	if p := st["form"].(map[string]any)["payouts"].(map[string]any); p["status"] != "NEEDS_BANK" || p["accountLast4"] != nil {
+		t.Fatalf("payouts without a bank = %v", p)
+	}
+	up.Application["payouts"] = map[string]any{"bankName": "STRIPE TEST BANK", "accountLast4": "6789", "externalAccountLinked": false, "bankStatus": "errored"}
+	st = b.do("GET", "/v1/seller/onboarding", nil).json(t)
+	if p := st["form"].(map[string]any)["payouts"].(map[string]any); p["status"] != "FAILED" || p["bankStatus"] != "errored" {
+		t.Fatalf("payouts with a rejected bank = %v", p)
 	}
 	for _, s := range steps(t, st) {
 		if strings.HasPrefix(s, "payouts:") && !strings.HasSuffix(s, "=TODO") {
@@ -80,8 +89,9 @@ func TestOnboardingDetailsSendTheTaxIDOnceAndShowItMasked(t *testing.T) {
 	}
 }
 
-// TestOnboardingOwnersPayoutsPlanAndCompliance: the remaining steps go to the seller service as its step bodies.
-func TestOnboardingOwnersPayoutsPlanAndCompliance(t *testing.T) {
+// TestOnboardingOwnersPlanAndCompliance: the remaining steps go to the seller service as its step bodies; the payout
+// bank account has no step body (Stripe collects it), so there is no route to save one.
+func TestOnboardingOwnersPlanAndCompliance(t *testing.T) {
 	up, b := startedApplicant(t, "pk_test_x")
 	owners := b.do("PUT", "/v1/seller/onboarding/owners", map[string]any{"owners": []map[string]any{
 		{"firstName": "Kofi", "lastName": "Mensah", "title": "CEO", "email": "kofi@example.com", "ownershipPercent": 60, "significantControl": true,
@@ -99,29 +109,29 @@ func TestOnboardingOwnersPayoutsPlanAndCompliance(t *testing.T) {
 		t.Fatalf("owners form = %v", o)
 	}
 
-	payouts := b.do("PUT", "/v1/seller/onboarding/payouts", map[string]any{"accountHolderName": "Kofi Mensah", "accountType": "Checking",
-		"routingNumber": "021 000 021", "accountNumber": "0001-2345-6789", "accountNumberConfirmation": "000123456789"})
-	if payouts.status != 200 {
-		t.Fatalf("payouts = %d %s", payouts.status, payouts.body)
+	if r := b.do("PUT", "/v1/seller/onboarding/payouts", map[string]any{"accountHolderName": "Kofi Mensah", "routingNumber": "021000021",
+		"accountNumber": "000123456789"}); r.status != 404 && r.status != 405 {
+		t.Fatalf("saving bank numbers = %d %s", r.status, r.body)
 	}
-	if s := up.StepBodies["payouts"]; s["routingNumber"] != "021000021" || s["accountNumber"] != "000123456789" || s["accountType"] != "checking" {
-		t.Fatalf("payouts sent = %v", s)
-	}
-	if strings.Contains(string(payouts.body), "000123456789") {
-		t.Fatalf("account number echoed: %s", payouts.body)
-	}
-	if p := payouts.json(t)["form"].(map[string]any)["payouts"].(map[string]any); p["linked"] != true || p["accountLast4"] != "6789" {
-		t.Fatalf("payouts form = %v", p)
-	}
-	if bad := b.do("PUT", "/v1/seller/onboarding/payouts", map[string]any{"accountHolderName": "Kofi"}); bad.status != 422 ||
-		bad.json(t)["errors"].(map[string]any)["payouts.accountNumber"] == nil {
-		t.Fatalf("invalid payouts = %d %s", bad.status, bad.body)
+	if _, sent := up.StepBodies["payouts"]; sent {
+		t.Fatalf("bank numbers reached the seller service: %v", up.StepBodies["payouts"])
 	}
 
 	plan := b.do("PUT", "/v1/seller/onboarding/plan", map[string]any{"planCode": "seller_growth", "cadence": "monthly", "paymentMethodKind": "card",
-		"stripePaymentMethodId": "pm_1", "cardBrand": "Visa", "cardLast4": "4242", "cardExpMonth": 8, "cardExpYear": 2029})
-	if s := up.StepBodies["plan"]; plan.status != 200 || s["cadence"] != "MONTHLY" || s["paymentMethodKind"] != "CARD" || s["cardBrand"] != "visa" {
+		"stripePaymentMethodId": "pm_1", "cardBrand": "Visa", "cardLast4": "4242", "cardExpMonth": 8, "cardExpYear": 2029, "promoCode": " grow60 ",
+		"planFeeCollection": "card"})
+	if s := up.StepBodies["plan"]; plan.status != 200 || s["cadence"] != "MONTHLY" || s["paymentMethodKind"] != "CARD" || s["cardBrand"] != "visa" ||
+		s["promoCode"] != "GROW60" || s["planFeeCollection"] != "CARD" {
 		t.Fatalf("plan = %d %v", plan.status, s)
+	}
+	// S298: the applicant chose the card; the step offers paying from sales with the platform default.
+	if p := plan.json(t)["form"].(map[string]any)["plan"].(map[string]any); p["planFeeCollection"] != "CARD" || p["planFeeCollectionAvailable"] != true ||
+		p["planFeeCollectionDefault"] != "EARNINGS_FIRST" {
+		t.Fatalf("plan fee collection = %v", p)
+	}
+	if r := b.do("PUT", "/v1/seller/onboarding/plan", map[string]any{"planCode": "seller_growth", "cadence": "MONTHLY",
+		"planFeeCollection": "sometimes"}); r.status != 422 {
+		t.Fatalf("invalid plan fee collection = %d %s", r.status, r.body)
 	}
 	if fc := plan.json(t)["form"].(map[string]any)["plan"].(map[string]any)["firstCharge"].(map[string]any); !strings.HasPrefix(fc["sentence"].(string), "Free for 30 days") {
 		t.Fatalf("first charge = %v", fc)
@@ -133,6 +143,56 @@ func TestOnboardingOwnersPayoutsPlanAndCompliance(t *testing.T) {
 	s := up.StepBodies["catalog-compliance"]
 	if comp.status != 200 || fmt.Sprint(s["categories"]) != "[groceries prepared_food]" || s["foodPermit"].(map[string]any)["permitType"] != "COTTAGE_FOOD" {
 		t.Fatalf("compliance = %d %v", comp.status, s)
+	}
+	// The accepted documents are recorded with the version in force, not with whatever the client claims.
+	if got := agreementKeys(t, s); got != "seller-terms=1.0 payments-terms=1.0 data-processing=1.0" {
+		t.Fatalf("seller agreements = %q (%v)", got, s["agreements"])
+	}
+}
+
+func agreementKeys(t *testing.T, step map[string]any) string {
+	t.Helper()
+	var parts []string
+	list, _ := step["agreements"].([]any)
+	for _, a := range list {
+		m := a.(map[string]any)
+		parts = append(parts, fmt.Sprintf("%v=%v", m["key"], m["version"]))
+	}
+	return strings.Join(parts, " ")
+}
+
+// Providers accept the provider terms in place of the seller terms, "both" accepts both, nothing is recorded until
+// the box is ticked, and a document that changed since the applicant read it must be read again.
+func TestOnboardingAgreementsFollowTheOffering(t *testing.T) {
+	up, b := startedApplicant(t, "pk_test_x")
+	save := func(extra map[string]any) resp {
+		in := map[string]any{"categories": []string{"groceries"}, "w9Certified": true, "w9SignerName": "Kofi Mensah"}
+		for k, v := range extra {
+			in[k] = v
+		}
+		return b.do("PUT", "/v1/seller/onboarding/catalog-compliance", in)
+	}
+	if r := save(map[string]any{"agreementsAccepted": false}); r.status != 200 || up.StepBodies["catalog-compliance"]["agreements"] != nil {
+		t.Fatalf("unaccepted = %d %v", r.status, up.StepBodies["catalog-compliance"])
+	}
+	up.Application["business"] = map[string]any{"offering": "SERVICES"}
+	mustStatus(t, save(map[string]any{"agreementsAccepted": true}), 200)
+	if got := agreementKeys(t, up.StepBodies["catalog-compliance"]); got != "provider-terms=1.0 payments-terms=1.0 data-processing=1.0" {
+		t.Fatalf("provider agreements = %q", got)
+	}
+	up.Application["business"] = map[string]any{"offering": "BOTH"}
+	mustStatus(t, save(map[string]any{"agreementsAccepted": true}), 200)
+	if got := agreementKeys(t, up.StepBodies["catalog-compliance"]); got != "seller-terms=1.0 provider-terms=1.0 payments-terms=1.0 data-processing=1.0" {
+		t.Fatalf("both agreements = %q", got)
+	}
+	// The versions the applicant saw match: accepted. One is stale: refused with a message on `agreements`.
+	shown := []map[string]any{{"key": "provider-terms", "version": "1.0"}, {"key": "seller-terms", "version": "1.0"}}
+	mustStatus(t, save(map[string]any{"agreementsAccepted": true, "agreements": shown}), 200)
+	stale := []map[string]any{{"key": "seller-terms", "version": "0.9"}}
+	r := save(map[string]any{"agreementsAccepted": true, "agreements": stale})
+	mustStatus(t, r, 422)
+	if r.json(t)["code"] != "LEGAL_DOCUMENT_CHANGED" || r.json(t)["errors"].(map[string]any)["agreements"] == nil {
+		t.Fatalf("stale agreements = %s", r.body)
 	}
 }
 
@@ -150,6 +210,15 @@ func TestOnboardingStripeSessionAndRefresh(t *testing.T) {
 	r := b.do("POST", "/v1/seller/onboarding/stripe/refresh", nil).json(t)
 	if st := r["stripe"].(map[string]any); st["status"] != "VERIFIED" || st["payoutsEnabled"] != true {
 		t.Fatalf("refreshed stripe = %v", st)
+	}
+	// The bank Stripe's onboarding collected is mirrored read-only, and completes "Payouts".
+	if p := r["form"].(map[string]any)["payouts"].(map[string]any); p["status"] != "READY" || p["accountLast4"] != "6789" || p["linked"] != true {
+		t.Fatalf("payouts after Stripe = %v", p)
+	}
+	for _, s := range steps(t, r) {
+		if strings.HasPrefix(s, "payouts:") && s != "payouts:Payouts=DONE" {
+			t.Fatalf("payouts step = %s", s)
+		}
 	}
 
 	up.StripeLocalTest = true
@@ -196,4 +265,26 @@ func TestOnboardingSubmitPlansAndDocuments(t *testing.T) {
 		t.Fatalf("upload = %d %s (purpose %q)", up2.status, up2.body, up.LastUploadPurpose)
 	}
 	mustStatus(t, b.do("POST", "/v1/seller/onboarding/uploads/asset-1/complete", nil), 200)
+}
+
+// TestAccountHealthOpensStripesComponents: Account health names the embedded component for each item and the payout
+// bank Stripe holds; owner / finance members get an Account Session (others 403, no Stripe account yet 404).
+func TestAccountHealthOpensStripesComponents(t *testing.T) {
+	bff, b := sellerSetup(t, testkit.Options{SellerPublishableKey: "pk_test_health"})
+	c := b.do("GET", "/v1/seller/compliance", nil).json(t)
+	items := c["items"].([]any)
+	if len(items) != 2 || items[0].(map[string]any)["component"] != "account_onboarding" || items[1].(map[string]any)["component"] != "account_management" {
+		t.Fatalf("items = %v", items)
+	}
+	if bank := c["payoutBank"].(map[string]any); bank["last4"] != "6789" || bank["status"] != "errored" {
+		t.Fatalf("payout bank = %v", bank)
+	}
+	se := b.do("POST", "/v1/seller/stripe/session", nil)
+	if j := se.json(t); se.status != 200 || j["clientSecret"] != "accs_secret_org" || j["publishableKey"] != "pk_test_health" {
+		t.Fatalf("session = %d %s", se.status, se.body)
+	}
+	bff.Upstreams.AccountHealthForbidden = true
+	if r := b.do("POST", "/v1/seller/stripe/session", nil); r.status != 403 {
+		t.Fatalf("catalog member = %d %s", r.status, r.body)
+	}
 }

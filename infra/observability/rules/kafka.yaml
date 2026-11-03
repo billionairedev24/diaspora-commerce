@@ -32,13 +32,27 @@ groups:
 
       - alert: KafkaDeadLetterMessages
         expr: |
-          sum by (env, topic) (increase(kafka_topic_partition_current_offset{topic=~".*\\.dlq"}[30m])) > 0
+          sum by (env, topic) (increase(kafka_topic_partition_current_offset{topic=~"at\\..*\\.dlq(\\..*)?"}[30m])) > 0
         labels:
           severity: ticket
         annotations:
           summary: "New messages on dead-letter topic {{ $labels.topic }}"
-          description: "{{ $value }} messages were dead-lettered in the last 30 minutes."
+          description: "{{ $value }} messages were dead-lettered in the last 30 minutes. Java services: <topic>.dlq; Go indexer / authz-sync: at.indexer.dlq.events, at.authz-sync.dlq.events."
           runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/KafkaDeadLetterMessages.md
+          dashboard: /d/at-kafka-consumer-lag
+
+      # Java consumers (platform-events): the DLQ write itself failed, so the partition is blocked on that record
+      # (its offset is not committed and it is retried). Metric: events_dead_letter_failures_total.
+      - alert: KafkaDeadLetterWriteFailing
+        expr: |
+          sum by (env, job, consumer, topic) (increase(events_dead_letter_failures_total[10m])) > 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.job }} cannot write {{ $labels.topic }} records to the dead-letter topic"
+          description: "{{ $value }} failed DLQ writes in 10 minutes. The consumer retries the same record, so the partition makes no progress."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/KafkaDeadLetterWriteFailing.md
           dashboard: /d/at-kafka-consumer-lag
 
       - alert: IndexerLagHigh

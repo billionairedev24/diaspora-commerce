@@ -7,19 +7,19 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.Actor;
 import com.afrotransact.seller.domain.Application;
 import com.afrotransact.seller.domain.Cadence;
+import com.afrotransact.seller.domain.ChargeGate;
 import com.afrotransact.seller.domain.DefaultApplicationRules;
-import com.afrotransact.seller.domain.DunningState;
 import com.afrotransact.seller.domain.Invoice;
-import com.afrotransact.seller.domain.InvoiceLine;
 import com.afrotransact.seller.domain.Organisation;
 import com.afrotransact.seller.domain.PaymentMethod;
 import com.afrotransact.seller.domain.PaymentMethodKind;
@@ -29,27 +29,33 @@ import com.afrotransact.seller.domain.PlanChange;
 import com.afrotransact.seller.domain.PlanPricing;
 import com.afrotransact.seller.domain.PlanQuote;
 import com.afrotransact.seller.domain.PlanSection;
+import com.afrotransact.seller.domain.PlanVisibility;
 import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.SellerStateConflict;
 import com.afrotransact.seller.domain.Subscription;
 import com.afrotransact.seller.domain.SubscriptionStatus;
+import com.afrotransact.seller.domain.TrialDecision;
+import com.afrotransact.seller.domain.TrialSource;
 import com.afrotransact.seller.port.ApplicationRepository;
+import com.afrotransact.seller.port.BillingGrantRepository;
+import com.afrotransact.seller.port.BillingCustomerRepository;
+import com.afrotransact.seller.port.BillingScheduler;
+import com.afrotransact.seller.port.EarningsCollectionRepository;
+import com.afrotransact.seller.port.GatewayException;
 import com.afrotransact.seller.port.InvoiceRepository;
-import com.afrotransact.seller.port.InvoiceSnapshot;
 import com.afrotransact.seller.port.OrganisationRepository;
 import com.afrotransact.seller.port.PaymentMethodRepository;
+import com.afrotransact.seller.port.PlanPaymentsGateway;
+import com.afrotransact.seller.domain.PlanAssignment;
+import com.afrotransact.seller.port.PlanAssignmentRepository;
 import com.afrotransact.seller.port.PlanRepository;
-import com.afrotransact.seller.port.StripeBillingGateway;
-import com.afrotransact.seller.port.StripeEvent;
 import com.afrotransact.seller.port.SubscriptionRepository;
-import com.afrotransact.seller.port.SubscriptionSnapshot;
-import com.afrotransact.seller.port.UsageRepository;
+import com.afrotransact.seller.port.SubscriptionTerms;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionOperations;
 
@@ -57,6 +63,8 @@ import org.springframework.transaction.support.TransactionOperations;
 class BillingServiceImpl implements BillingService {
 
     private static final Logger LOG = LoggerFactory.getLogger(BillingServiceImpl.class);
+    private static final int MIN_ASSIGN_REASON = 10;
+    private static final int ASSIGNMENT_HISTORY = 20;
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US);
 
     private final SubscriptionRepository subs;
@@ -65,30 +73,55 @@ class BillingServiceImpl implements BillingService {
     private final PlanRepository plans;
     private final ApplicationRepository apps;
     private final OrganisationRepository orgs;
-    private final StripeBillingGateway stripe;
-    private final UsageRepository usage;
+    private final BillingScheduler scheduler;
     private final AccessGuard access;
     private final DomainEventPublisher events;
     private final TransactionOperations tx;
     private final SellerSettings settings;
+    private final TrialService trials;
+    private final EarningsCollectionService earnings;
+    private final BillingGrantRepository grants;
+    private final EarningsCollectionRepository collections;
+    private final PlanFeeCollectionService planFees;
+    private final InvoiceIssuingService invoicing;
+    private final InvoiceCollectionService collection;
+    private final ChargeGateEvaluator gates;
+    private final PlanPaymentsGateway payments;
+    private final BillingCustomerRepository customers;
+    private final PlanAssignmentRepository assignments;
     private final Clock clock;
 
     BillingServiceImpl(SubscriptionRepository subs, PaymentMethodRepository methods, InvoiceRepository invoices,
                        PlanRepository plans, ApplicationRepository apps, OrganisationRepository orgs,
-                       StripeBillingGateway stripe, UsageRepository usage, AccessGuard access,
-                       DomainEventPublisher events, TransactionOperations tx, SellerSettings settings, Clock clock) {
+                       BillingScheduler scheduler, AccessGuard access,
+                       DomainEventPublisher events, TransactionOperations tx, SellerSettings settings,
+                       TrialService trials, EarningsCollectionService earnings,
+                       BillingGrantRepository grants, EarningsCollectionRepository collections,
+                       PlanFeeCollectionService planFees, InvoiceIssuingService invoicing,
+                       InvoiceCollectionService collection, ChargeGateEvaluator gates, PlanPaymentsGateway payments,
+                       BillingCustomerRepository customers, PlanAssignmentRepository assignments, Clock clock) {
         this.subs = subs;
         this.methods = methods;
         this.invoices = invoices;
         this.plans = plans;
         this.apps = apps;
         this.orgs = orgs;
-        this.stripe = stripe;
-        this.usage = usage;
+        this.scheduler = scheduler;
         this.access = access;
         this.events = events;
         this.tx = tx;
         this.settings = settings;
+        this.trials = trials;
+        this.earnings = earnings;
+        this.grants = grants;
+        this.collections = collections;
+        this.planFees = planFees;
+        this.invoicing = invoicing;
+        this.collection = collection;
+        this.gates = gates;
+        this.payments = payments;
+        this.customers = customers;
+        this.assignments = assignments;
         this.clock = clock;
     }
 
@@ -100,18 +133,66 @@ class BillingServiceImpl implements BillingService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
+    public BillingPanel panel(String orgId) {
+        access.staffAny(SellerPermissions.BILLING, SellerPermissions.BILLING_ADJUST, SellerPermissions.PLANS_MANAGE);
+        Organisation org = orgs.findById(orgId).orElseThrow(() -> new NotFoundException("seller.org-not-found",
+                "Organisation " + orgId + " not found"));
+        BillingOverview overview = subs.find(orgId).map(this::build).orElse(null);
+        return new BillingPanel(orgId, org.displayName() == null ? org.legalName() : org.displayName(), org.kind(),
+                org.status().name(), overview, invoices.list(orgId, 100), grants.forOrg(orgId, 100),
+                collections.forOrg(orgId, 50), earnings.enabled(), overview == null ? null : planFees.view(orgId),
+                assignments.ofOrg(orgId, ASSIGNMENT_HISTORY));
+    }
+
+    @Override
     public PlanChangeResult changePlan(String orgId, String planCode, Cadence cadence) {
-        access.orgRole(orgId, AccessGuard.OWNER, null);
+        List<String> toCollect = new ArrayList<>();
+        PlanChangeResult result = tx.execute(t -> changePlanLocked(orgId, planCode, cadence, toCollect, null));
+        collectAll(toCollect);
+        return result;
+    }
+
+    @Override
+    public PlanChangeResult assignPlan(String orgId, String planCode, Cadence cadence, String reason) {
+        Actor staff = access.staff(SellerPermissions.BILLING_ADJUST);
+        if (reason == null || reason.trim().length() < MIN_ASSIGN_REASON) {
+            throw new SellerRuleViolation("seller.reason-required", "Say why the plan is changed (at least "
+                    + MIN_ASSIGN_REASON + " characters)", Map.of("reason", "Required"));
+        }
+        List<String> toCollect = new ArrayList<>();
+        PlanChangeResult result = tx.execute(t -> {
+            Subscription before = subs.find(orgId).orElse(null);
+            PlanChangeResult r = changePlanLocked(orgId, planCode, cadence, toCollect, staff);
+            assignments.insert(new PlanAssignment(UUID.randomUUID(), orgId, before == null ? null : before.planCode(),
+                    planCode, cadence == null && before != null ? before.cadence() : cadence, r.applied().name(),
+                    reason.trim(), staff.subject(), Instant.now(clock)));
+            return r;
+        });
+        collectAll(toCollect);
+        return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PlanAssignment> assignments(String orgId) {
+        access.staffAny(SellerPermissions.BILLING, SellerPermissions.BILLING_ADJUST, SellerPermissions.PLANS_MANAGE);
+        return assignments.ofOrg(orgId, ASSIGNMENT_HISTORY);
+    }
+
+    /** {@code byStaff} null: the owner's own change; otherwise staff assigning (may pick an invite-only plan). */
+    private PlanChangeResult changePlanLocked(String orgId, String planCode, Cadence cadence, List<String> toCollect,
+                                              Actor byStaff) {
+        if (byStaff == null) {
+            access.orgRole(orgId, AccessGuard.OWNER, null);
+        }
         requireNotRetail(orgId);
         Subscription sub = subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
         requireActive(sub);
         Organisation org = orgs.findById(orgId).orElseThrow(() -> noSubscription(orgId));
-        Plan target = plans.find(planCode).filter(p -> p.kind() == org.kind()).orElseThrow(() ->
-                new SellerRuleViolation("seller.unknown-plan", "Plan " + planCode + " isn't available",
-                        Map.of("planCode", "Unknown")));
+        Plan target = byStaff == null ? selectable(org, sub, planCode) : assignable(org, planCode);
         Cadence targetCadence = cadence == null ? sub.cadence() : cadence;
-        Plan current = plan(sub.planCode());
+        Plan current = plan(sub);
         PlanChange decision = current.isFree() && !target.isFree() ? PlanChange.IMMEDIATE_UPGRADE
                 : PlanChange.decide(current, sub.cadence(), target, targetCadence);
         Instant now = Instant.now(clock);
@@ -126,23 +207,19 @@ class BillingServiceImpl implements BillingService {
                 change = "CHANGE_CANCELLED";
             }
             case IMMEDIATE_UPGRADE -> {
-                String lookup = plans.stripeLookupKey(target.code(), targetCadence);
-                SubscriptionSnapshot snap;
-                if (sub.stripeSubscriptionId() == null) {
-                    String customer = ensureCustomer(sub, org);
-                    if (methods.list(orgId).stream().noneMatch(PaymentMethod::isDefault)) {
-                        throw new SellerRuleViolation("seller.payment-method-required",
-                                "Add a card or bank account before choosing a paid plan");
-                    }
-                    snap = stripe.createSubscription(customer, lookup, target.trialDays(),
-                            "subscription-" + orgId + "-" + target.code() + "-" + targetCadence.name());
+                if (sub.anchorDate() == null || sub.status() == SubscriptionStatus.TRIALING) {
+                    // Not charged yet: just the new plan (a trial carries over).
+                    saved = subs.update(sub.withPlan(target.code(), target.version(), targetCadence, now));
+                } else if (current.isFree()) {
+                    saved = startPaidPeriod(sub, target, targetCadence, now, toCollect);
                 } else {
-                    snap = stripe.changePrice(sub.stripeSubscriptionId(), sub.stripeItemId(), lookup,
-                            sub.status() != SubscriptionStatus.TRIALING,
-                            "upgrade-" + orgId + "-" + target.code() + "-" + sub.version());
+                    saved = subs.update(sub.withPlan(target.code(), target.version(), targetCadence, now));
+                    long due = proration(sub, current, target, targetCadence, now);
+                    if (due > 0) {
+                        invoicing.issueUpgrade(saved, target, due, now).filter(Invoice::isOpen)
+                                .ifPresent(i -> toCollect.add(i.id()));
+                    }
                 }
-                Subscription base = subs.find(orgId).orElse(sub);
-                saved = subs.update(applySnapshot(base.withPlan(target.code(), targetCadence, now), snap, now));
                 change = "UPGRADED";
             }
             default -> {
@@ -175,15 +252,28 @@ class BillingServiceImpl implements BillingService {
     }
 
     @Override
+    public SetupIntentView setupIntent(String orgId) {
+        access.orgRole(orgId, AccessGuard.OWNER, null);
+        requireNotRetail(orgId);
+        tx.execute(t -> subs.find(orgId)).orElseThrow(() -> noSubscription(orgId));
+        String customer = tx.execute(t -> customers.find(orgId)).orElseGet(() -> {
+            Organisation org = tx.execute(t -> orgs.findById(orgId)).orElseThrow(() -> noSubscription(orgId));
+            String created = payments.ensureCustomer(orgId, org.displayName() == null ? org.legalName()
+                    : org.displayName(), null);
+            return tx.execute(t -> customers.save(orgId, created, Instant.now(clock)));
+        });
+        PlanPaymentsGateway.SetupIntentSecret si = payments.createSetupIntent(customer,
+                "setup-" + orgId + "-" + UUID.randomUUID());
+        return new SetupIntentView(customer, si.id(), si.clientSecret());
+    }
+
+    @Override
     @Transactional
     public PaymentMethod addPaymentMethod(String orgId, AddPaymentMethodCommand cmd) {
         access.orgRole(orgId, AccessGuard.OWNER, null);
         requireNotRetail(orgId);
         validate(cmd);
-        Subscription sub = subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
-        Organisation org = orgs.findById(orgId).orElseThrow(() -> noSubscription(orgId));
-        String customer = ensureCustomer(sub, org);
-        stripe.attachPaymentMethod(customer, cmd.stripePaymentMethodId());
+        subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
         boolean makeDefault = cmd.makeDefault() || methods.list(orgId).isEmpty();
         PaymentMethod pm = new PaymentMethod(UUID.randomUUID(), orgId, cmd.stripePaymentMethodId(), cmd.kind(),
                 cmd.brand() == null ? null : cmd.brand().toLowerCase(Locale.ROOT), cmd.last4(), cmd.expMonth(),
@@ -191,7 +281,6 @@ class BillingServiceImpl implements BillingService {
                 Instant.now(clock));
         methods.insert(pm);
         if (makeDefault) {
-            stripe.setDefaultPaymentMethod(customer, pm.stripePaymentMethodId());
             methods.makeDefault(orgId, pm.id());
         }
         return methods.find(orgId, pm.id()).orElseThrow();
@@ -202,12 +291,8 @@ class BillingServiceImpl implements BillingService {
     public List<PaymentMethod> makeDefault(String orgId, UUID paymentMethodId) {
         access.orgRole(orgId, AccessGuard.OWNER, null);
         requireNotRetail(orgId);
-        PaymentMethod pm = method(orgId, paymentMethodId);
-        Subscription sub = subscription(orgId);
-        if (sub.stripeCustomerId() != null) {
-            stripe.setDefaultPaymentMethod(sub.stripeCustomerId(), pm.stripePaymentMethodId());
-        }
-        methods.makeDefault(orgId, pm.id());
+        method(orgId, paymentMethodId);
+        methods.makeDefault(orgId, paymentMethodId);
         return methods.list(orgId);
     }
 
@@ -221,8 +306,12 @@ class BillingServiceImpl implements BillingService {
             throw new SellerStateConflict("seller.default-payment-method",
                     "Make another payment method the default before removing this one");
         }
-        stripe.detachPaymentMethod(pm.stripePaymentMethodId());
         methods.delete(orgId, pm.id());
+        try {
+            payments.detachPaymentMethod(pm.stripePaymentMethodId());
+        } catch (GatewayException e) {
+            LOG.warn("Detaching {} at Stripe failed (removed locally): {}", pm.stripePaymentMethodId(), e.getMessage());
+        }
         return methods.list(orgId);
     }
 
@@ -249,11 +338,9 @@ class BillingServiceImpl implements BillingService {
         Subscription sub = subscription(orgId);
         requireActive(sub);
         Organisation org = orgs.findById(orgId).orElseThrow(() -> noSubscription(orgId));
-        Plan target = plans.find(planCode).filter(p -> p.kind() == org.kind()).orElseThrow(() ->
-                new SellerRuleViolation("seller.unknown-plan", "Plan " + planCode + " isn't available",
-                        Map.of("planCode", "Unknown")));
+        Plan target = selectable(org, sub, planCode);
         Cadence targetCadence = cadence == null ? sub.cadence() : cadence;
-        Plan current = plan(sub.planCode());
+        Plan current = plan(sub);
         PlanChange decision = current.isFree() && !target.isFree() ? PlanChange.IMMEDIATE_UPGRADE
                 : PlanChange.decide(current, sub.cadence(), target, targetCadence);
         Instant now = Instant.now(clock);
@@ -265,7 +352,8 @@ class BillingServiceImpl implements BillingService {
             case IMMEDIATE_UPGRADE -> {
                 long dueNow;
                 Instant next;
-                if (sub.stripeSubscriptionId() == null) {
+                if (sub.anchorDate() == null) {
+                    // Not yet activated — trial applies if the new plan has one.
                     boolean trial = target.trialDays() > 0;
                     dueNow = trial ? 0 : targetCharge;
                     next = trial ? now.plus(Duration.ofDays(target.trialDays())) : null;
@@ -273,9 +361,10 @@ class BillingServiceImpl implements BillingService {
                     dueNow = 0;
                     next = sub.renewalAt();
                 } else {
-                    dueNow = stripe.previewProratedChange(sub.stripeCustomerId(), sub.stripeSubscriptionId(),
-                            sub.stripeItemId(), plans.stripeLookupKey(target.code(), targetCadence));
-                    next = sub.currentPeriodEnd();
+                    // Proration is computed locally (period remaining / period total * new price).
+                    dueNow = current.isFree() ? targetCharge : proration(sub, current, target, targetCadence, now);
+                    next = current.isFree() ? scheduler.nextPeriodEnd(now, targetCadence, now)
+                            : sub.currentPeriodEnd();
                 }
                 yield new PlanChangePreview(decision, target.code(), target.name(), targetCadence, now, dueNow,
                         targetCharge, next, trialing);
@@ -289,16 +378,26 @@ class BillingServiceImpl implements BillingService {
     }
 
     @Override
-    @Transactional
-    public SetupIntentView setupIntent(String orgId) {
-        access.orgRole(orgId, AccessGuard.OWNER, null);
-        requireNotRetail(orgId);
-        Subscription sub = subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
+    @Transactional(readOnly = true)
+    public String billedTo(String orgId) {
+        access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
         Organisation org = orgs.findById(orgId).orElseThrow(() -> noSubscription(orgId));
-        String customer = ensureCustomer(sub, org);
-        StripeBillingGateway.SetupIntentSecret si = stripe.createSetupIntent(customer,
-                "billing-setup-" + orgId + "-" + UUID.randomUUID());
-        return new SetupIntentView(customer, si.id(), si.clientSecret());
+        return org.legalName() != null ? org.legalName() : org.displayName();
+    }
+
+    @Override
+    public Invoice retryInvoice(String orgId, String invoiceId) {
+        access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
+        requireNotRetail(orgId);
+        Invoice inv = tx.execute(t -> invoices.find(orgId, invoiceId)).orElseThrow(() -> new NotFoundException(
+                "seller.invoice-not-found", "Invoice " + invoiceId + " not found"));
+        if (!Invoice.UNCOLLECTIBLE.equals(inv.status()) && !inv.isOpen()) {
+            throw new SellerStateConflict("seller.invoice-not-open", "Only an unpaid invoice can be retried (this "
+                    + "one is " + inv.status() + ")");
+        }
+        tx.executeWithoutResult(t -> invoices.reopen(invoiceId, Instant.now(clock)));
+        collection.collect(invoiceId);
+        return tx.execute(t -> invoices.find(orgId, invoiceId)).orElseThrow();
     }
 
     @Override
@@ -311,31 +410,61 @@ class BillingServiceImpl implements BillingService {
         if (sub == null || sub.status() != SubscriptionStatus.PENDING_ACTIVATION) {
             return;
         }
-        Plan plan = plan(sub.planCode());
+        Plan plan = plan(sub);
+        Instant now = Instant.now(clock);
+
         if (plan.isFree()) {
             tx.executeWithoutResult(s -> subs.lock(orgId).filter(x -> x.status() == SubscriptionStatus.PENDING_ACTIVATION)
                     .ifPresent(x -> {
-                        Instant now = Instant.now(clock);
-                        Subscription saved = subs.update(x.withStripe(null, null, null, SubscriptionStatus.ACTIVE,
-                                null, now, null, false, now));
-                        publish(saved, "ACTIVATED", null, null, now);
+                        Instant t = Instant.now(clock);
+                        Subscription saved = subs.update(x.withPeriod(t, SubscriptionStatus.ACTIVE,
+                                null, t, null, false, t));
+                        publish(saved, "ACTIVATED", null, null, t);
                     }));
             return;
         }
+
         Organisation org = orgs.findById(orgId).orElseThrow(() -> noSubscription(orgId));
-        String customer = tx.execute(s -> ensureCustomer(subs.lock(orgId).orElseThrow(), org));
-        methods.list(orgId).stream().filter(PaymentMethod::isDefault).findFirst().ifPresent(pm -> {
-            stripe.attachPaymentMethod(customer, pm.stripePaymentMethodId());
-            stripe.setDefaultPaymentMethod(customer, pm.stripePaymentMethodId());
-        });
-        SubscriptionSnapshot snap = stripe.createSubscription(customer,
-                plans.stripeLookupKey(sub.planCode(), sub.cadence()), plan.trialDays(), "subscription-" + orgId);
+        TrialDecision trial = tx.execute(s -> trialFor(orgId, plan, org));
+        int trialDays = trial == null ? 0 : trial.days();
+
+        List<String> toCollect = new ArrayList<>();
         tx.executeWithoutResult(s -> subs.lock(orgId).filter(x -> x.status() == SubscriptionStatus.PENDING_ACTIVATION)
                 .ifPresent(x -> {
-                    Instant now = Instant.now(clock);
-                    Subscription saved = subs.update(applySnapshot(x, snap, now));
-                    publish(saved, "ACTIVATED", null, null, now);
+                    Instant t = Instant.now(clock);
+                    Instant anchor;
+                    SubscriptionStatus status;
+                    Instant trialEnd;
+                    Instant periodStart;
+                    Instant periodEnd;
+
+                    if (trialDays > 0) {
+                        trialEnd = t.plus(Duration.ofDays(trialDays));
+                        anchor = trialEnd; // period anchor starts after the trial
+                        status = SubscriptionStatus.TRIALING;
+                        periodStart = t;
+                        periodEnd = trialEnd;
+                    } else {
+                        trialEnd = null;
+                        anchor = t;
+                        status = SubscriptionStatus.ACTIVE;
+                        periodStart = t;
+                        periodEnd = scheduler.nextPeriodEnd(anchor, x.cadence(), t);
+                    }
+
+                    Subscription saved = subs.update(x.withPeriod(anchor, status, trialEnd, periodStart, periodEnd,
+                            false, t));
+                    subs.setTrialSource(orgId, trial == null ? null : trial.source(),
+                            trial == null ? null : trial.campaignId());
+                    if (trial != null && trial.campaignId() != null && !trialsRedeem(trial)) {
+                        LOG.info("Campaign {} reached its redemptions while {} activated", trial.campaignId(), orgId);
+                    }
+                    publish(saved, "ACTIVATED", null, null, t);
+                    if (trialEnd == null) {
+                        issueAndCollect(saved, periodStart, periodEnd, Invoice.REASON_CREATE, toCollect);
+                    }
                 }));
+        collectAll(toCollect);
     }
 
     @Override
@@ -368,72 +497,50 @@ class BillingServiceImpl implements BillingService {
     }
 
     @Override
-    @Transactional(propagation = Propagation.MANDATORY)
-    public String handle(StripeEvent e) {
+    public int renewDueSubscriptions() {
+        int renewed = 0;
         Instant now = Instant.now(clock);
-        if (e.invoice() != null) {
-            InvoiceSnapshot inv = e.invoice();
-            Optional<Subscription> found = subs.findByCustomer(inv.customerId());
-            if (found.isEmpty()) {
-                return "ignored-unknown-customer";
+        for (Subscription s : subs.dueRenewals(now, 100)) {
+            try {
+                List<String> toCollect = new ArrayList<>();
+                Boolean ok = tx.execute(t -> renewOne(s.orgId(), now, toCollect));
+                renewed += Boolean.TRUE.equals(ok) ? 1 : 0;
+                collectAll(toCollect);
+            } catch (RuntimeException e) {
+                LOG.warn("Renewal of {} failed; will retry", s.orgId(), e);
             }
-            String orgId = found.get().orgId();
-            invoices.upsert(new Invoice(inv.id(), orgId, inv.number(), inv.periodStart(), inv.periodEnd(),
-                    inv.amountDue(), inv.amountPaid(), inv.currency(), inv.status(), inv.billingReason(),
-                    inv.hostedInvoiceUrl(), inv.invoicePdf(), inv.created() == null ? now : inv.created(),
-                    inv.lines().stream().map(this::resolveMeter).toList()));
-            Subscription sub = subs.lock(orgId).orElseThrow();
-            if ("invoice.payment_failed".equals(e.type())) {
-                DunningState d = inv.nextPaymentAttempt() == null ? DunningState.FINAL_ATTEMPT_FAILED
-                        : DunningState.RETRYING;
-                Subscription saved = subs.update(sub.withDunning(d, SubscriptionStatus.PAST_DUE, inv.attemptCount(),
-                        inv.nextPaymentAttempt(), now));
-                publish(saved, "PAYMENT_FAILED", sub.planCode(), sub.cadence(), now);
-            } else if ("invoice.paid".equals(e.type())
-                    && (sub.dunning() != DunningState.NONE || sub.status() == SubscriptionStatus.PAST_DUE
-                    || sub.status() == SubscriptionStatus.UNPAID)) {
-                SubscriptionStatus status = sub.status() == SubscriptionStatus.PAST_DUE
-                        || sub.status() == SubscriptionStatus.UNPAID ? SubscriptionStatus.ACTIVE : sub.status();
-                Subscription saved = subs.update(sub.withDunning(DunningState.NONE, status, 0, null, now));
-                publish(saved, "PAYMENT_SUCCEEDED", sub.planCode(), sub.cadence(), now);
-            }
-            return "applied";
         }
-        if (e.subscription() != null) {
-            SubscriptionSnapshot snap = e.subscription();
-            Optional<Subscription> locked = subs.lockByStripeSubscription(snap.id());
-            if (locked.isEmpty()) {
-                return "ignored-unknown-subscription";
-            }
-            Subscription sub = locked.get();
-            Subscription next = applySnapshot(sub, snap, now);
-            if ("customer.subscription.deleted".equals(e.type())) {
-                next = next.withStripe(next.stripeCustomerId(), next.stripeSubscriptionId(), next.stripeItemId(),
-                        SubscriptionStatus.CANCELED, next.trialEndsAt(), next.currentPeriodStart(),
-                        next.currentPeriodEnd(), false, now);
-            }
-            Optional<PlanRepository.PriceRef> ref = plans.byLookupKey(snap.lookupKey());
-            if (ref.isPresent() && (!ref.get().planCode().equals(sub.planCode())
-                    || ref.get().cadence() != sub.cadence())) {
-                next = next.withPlan(ref.get().planCode(), ref.get().cadence(), now);
-            }
-            boolean changed = next.status() != sub.status() || !Objects.equals(next.planCode(), sub.planCode())
-                    || next.cadence() != sub.cadence() || next.cancelAtPeriodEnd() != sub.cancelAtPeriodEnd();
-            Subscription saved = subs.update(next);
-            if (changed) {
-                publish(saved, "STATUS_CHANGED", sub.planCode(), sub.cadence(), now);
-            }
-            return "applied";
-        }
-        return "ignored";
+        return renewed;
     }
 
-    /** A line without a known lookup key is metered when it bills one of our metered subscription items. */
-    private InvoiceLine resolveMeter(InvoiceLine line) {
-        if (line.metered() || line.subscriptionItemId() == null) {
-            return line;
+    // ── private helpers ───────────────────────────────────────────────────────────────────────────────────────────
+
+    private Boolean renewOne(String orgId, Instant now, List<String> toCollect) {
+        Subscription sub = subs.lock(orgId).orElseThrow();
+        if (sub.anchorDate() == null || sub.currentPeriodEnd() == null
+                || sub.currentPeriodEnd().isAfter(now)
+                || sub.status() == SubscriptionStatus.CANCELED) {
+            return false;
         }
-        return usage.meterOfItem(line.subscriptionItemId()).map(line::withMeter).orElse(line);
+        if (sub.cancelAtPeriodEnd()) {
+            Subscription canceled = subs.update(sub.withPeriod(sub.anchorDate(), SubscriptionStatus.CANCELED,
+                    null, sub.currentPeriodEnd(), null, false, now));
+            publish(canceled, "CANCELED", sub.planCode(), sub.cadence(), now);
+            return true;
+        }
+        // A pending plan or cadence change takes effect at this renewal.
+        Subscription base = sub;
+        if (sub.hasPendingChange()) {
+            base = base.withPlan(sub.pendingPlanCode(),
+                    plan(sub.pendingPlanCode()).version(), sub.pendingCadence(), now)
+                    .withPending(null, null, null, now);
+        }
+        Instant nextStart = sub.currentPeriodEnd();
+        Instant nextEnd = scheduler.nextPeriodEnd(base.anchorDate(), base.cadence(), nextStart);
+        Subscription renewed = subs.update(base.withNextPeriod(nextStart, nextEnd, now));
+        publish(renewed, "RENEWED", sub.planCode(), sub.cadence(), now);
+        issueAndCollect(renewed, nextStart, nextEnd, Invoice.REASON_CYCLE, toCollect);
+        return true;
     }
 
     private Boolean applyChange(String orgId) {
@@ -444,25 +551,8 @@ class BillingServiceImpl implements BillingService {
         }
         Plan target = plan(sub.pendingPlanCode());
         Cadence cadence = sub.pendingCadence();
-        Subscription next;
-        if (target.isFree()) {
-            if (sub.stripeSubscriptionId() != null) {
-                stripe.cancelNow(sub.stripeSubscriptionId());
-            }
-            next = sub.withStripe(sub.stripeCustomerId(), null, null, SubscriptionStatus.ACTIVE, null, now, null,
-                    false, now).withPlan(target.code(), cadence, now);
-        } else if (sub.stripeSubscriptionId() == null) {
-            Organisation org = orgs.findById(orgId).orElseThrow();
-            SubscriptionSnapshot snap = stripe.createSubscription(ensureCustomer(sub, org),
-                    plans.stripeLookupKey(target.code(), cadence), 0, "renewal-" + orgId + "-"
-                            + sub.pendingEffectiveAt().getEpochSecond());
-            next = applySnapshot(subs.find(orgId).orElse(sub), snap, now).withPlan(target.code(), cadence, now);
-        } else {
-            SubscriptionSnapshot snap = stripe.changePrice(sub.stripeSubscriptionId(), sub.stripeItemId(),
-                    plans.stripeLookupKey(target.code(), cadence), false,
-                    "renewal-" + orgId + "-" + sub.pendingEffectiveAt().getEpochSecond());
-            next = applySnapshot(sub, snap, now).withPlan(target.code(), cadence, now);
-        }
+        Subscription next = sub.withPlan(target.code(), target.version(), cadence, now)
+                .withPending(null, null, null, now);
         Subscription saved = subs.update(next);
         publish(saved, "CHANGE_APPLIED", sub.planCode(), sub.cadence(), now);
         return true;
@@ -482,7 +572,11 @@ class BillingServiceImpl implements BillingService {
         }
         Instant now = Instant.now(clock);
         Cadence cadence = p.cadence() == null ? Cadence.MONTHLY : p.cadence();
-        subs.insert(Subscription.selected(orgId, p.planCode(), cadence, p.paymentMethodKind(), now));
+        Plan chosen = plans.find(p.planCode()).filter(Plan::isOpen).orElseThrow(() -> new SellerStateConflict(
+                "seller.plan-not-available", "Plan " + p.planCode() + " is not published"));
+        subs.insert(Subscription.selected(orgId, p.planCode(), chosen.version(), cadence, p.paymentMethodKind(), now));
+        // How the plan is paid (S298): the Plan step's choice, else the platform default for new sellers.
+        planFees.initialise(orgId, p.planFeeCollection(), app.applicantUserId());
         if (p.stripePaymentMethodId() != null) {
             PayoutSection bank = app.data().payouts();
             PaymentMethod pm = p.paymentMethodKind() == PaymentMethodKind.CARD
@@ -499,20 +593,6 @@ class BillingServiceImpl implements BillingService {
         return subs.find(orgId).orElseThrow();
     }
 
-    private String ensureCustomer(Subscription sub, Organisation org) {
-        if (sub.stripeCustomerId() != null) {
-            return sub.stripeCustomerId();
-        }
-        String email = apps.findByOrg(org.id()).map(a -> a.data().business() == null ? null
-                : a.data().business().contactEmail()).orElse(null);
-        String customer = stripe.createCustomer(org.id(), org.legalName() == null ? org.displayName()
-                : org.legalName(), email, "customer-" + org.id());
-        Instant now = Instant.now(clock);
-        subs.update(sub.withStripe(customer, sub.stripeSubscriptionId(), sub.stripeItemId(), sub.status(),
-                sub.trialEndsAt(), sub.currentPeriodStart(), sub.currentPeriodEnd(), sub.cancelAtPeriodEnd(), now));
-        return customer;
-    }
-
     /** AfroTransact Retail is the merchant of record, not a marketplace seller: it has no plan or billing. */
     private void requireNotRetail(String orgId) {
         if (settings.isRetail(orgId)) {
@@ -525,28 +605,21 @@ class BillingServiceImpl implements BillingService {
         access.orgRole(orgId, AccessGuard.OWNER, null);
         requireNotRetail(orgId);
         Subscription sub = subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
-        if (sub.stripeSubscriptionId() == null) {
-            throw new SellerStateConflict("seller.no-paid-subscription", "There is no paid subscription to "
+        if (sub.anchorDate() == null) {
+            throw new SellerStateConflict("seller.no-paid-subscription", "There is no active subscription to "
                     + (cancel ? "cancel" : "resume"));
         }
         if (sub.cancelAtPeriodEnd() == cancel) {
             return build(sub);
         }
         Instant now = Instant.now(clock);
-        SubscriptionSnapshot snap = stripe.setCancelAtPeriodEnd(sub.stripeSubscriptionId(), cancel);
-        Subscription saved = subs.update(applySnapshot(sub, snap, now).withCancelAtPeriodEnd(cancel, now));
+        Subscription saved = subs.update(sub.withCancelAtPeriodEnd(cancel, now));
         publish(saved, cancel ? "CANCEL_SCHEDULED" : "RESUMED", sub.planCode(), sub.cadence(), now);
         return build(saved);
     }
 
-    private Subscription applySnapshot(Subscription sub, SubscriptionSnapshot snap, Instant now) {
-        return sub.withStripe(sub.stripeCustomerId() != null ? sub.stripeCustomerId() : snap.customerId(), snap.id(),
-                snap.itemId() == null ? sub.stripeItemId() : snap.itemId(), SubscriptionStatus.fromStripe(snap.status()),
-                snap.trialEnd(), snap.currentPeriodStart(), snap.currentPeriodEnd(), snap.cancelAtPeriodEnd(), now);
-    }
-
     private BillingOverview build(Subscription sub) {
-        Plan plan = plan(sub.planCode());
+        Plan plan = plan(sub);
         PlanQuote quote = PlanPricing.quote(plan, sub.cadence());
         Plan pending = sub.pendingPlanCode() == null ? null : plan(sub.pendingPlanCode());
         List<PaymentMethod> pms = methods.list(sub.orgId());
@@ -568,7 +641,34 @@ class BillingServiceImpl implements BillingService {
                     ? "Free trial ends " + day(sub.trialEndsAt()) + " · first charge " + PlanPricing.usd(amount) + to
                     : "Next charge " + PlanPricing.usd(amount) + (nextAt == null ? "" : " on " + day(nextAt)) + to;
         }
-        return new BillingOverview(sub, plan, quote, pending, nextAt, amount, label, pms);
+        SubscriptionTerms terms = subs.terms(sub.orgId());
+        long progress = 0;
+        String gateLabel = null;
+        ChargeGate gate = terms.chargeGate();
+        if (gate != null) {
+            Instant now = Instant.now(clock);
+            progress = gates.progress(sub.orgId(), gate, now);
+            ChargeGate.Decision d = gate.decide(now, progress);
+            gateLabel = gateLabel(gate, d, progress);
+            if (!plan.isFree() && !d.charge() && sub.status() == SubscriptionStatus.ACTIVE && !sub.cancelAtPeriodEnd()) {
+                label = "No charge now — " + Character.toLowerCase(d.reason().charAt(0)) + d.reason().substring(1);
+                amount = 0;
+            }
+        }
+        return new BillingOverview(sub, plan, quote, pending, nextAt, amount, label, pms, terms, progress, gateLabel);
+    }
+
+    private static String gateLabel(ChargeGate gate, ChargeGate.Decision d, long progress) {
+        return switch (gate.mode()) {
+            case START_AFTER -> gate.metAt() != null ? "You reached " + gate.metric().format(gate.threshold()) + " "
+                    + gate.metric().noun() + " — plan charges have started"
+                    : "Charging starts after " + gate.metric().format(gate.threshold()) + " " + gate.metric().noun()
+                    + " — you're at " + gate.metric().format(progress);
+            case WAIVE_WHILE -> "Plan charges are waived while you have " + gate.metric().format(gate.threshold())
+                    + " " + gate.metric().noun() + " — you have " + gate.metric().format(progress);
+            case WAIVE_UNTIL -> d.expired() ? "The free period has ended" : "Plan charges are waived until "
+                    + day(gate.until());
+        };
     }
 
     private void validate(AddPaymentMethodCommand cmd) {
@@ -620,6 +720,95 @@ class BillingServiceImpl implements BillingService {
     private PaymentMethod method(String orgId, UUID id) {
         return methods.find(orgId, id).orElseThrow(() -> new NotFoundException("seller.payment-method-not-found",
                 "Payment method " + id + " not found"));
+    }
+
+    /** The plan priced at the subscription's own version (older versions keep their prices until migrated). */
+    private Plan plan(Subscription sub) {
+        return plans.find(sub.planCode(), sub.planVersion()).filter(p -> p.version() > 0)
+                .orElseGet(() -> plan(sub.planCode()));
+    }
+
+    /**
+     * A plan the organisation may move to: published, of its kind, and public, invite-only with an invitation, or its
+     * current plan.
+     */
+    /** Staff may assign any open plan of the organisation's kind: public, invite-only or hidden. */
+    private Plan assignable(Organisation org, String planCode) {
+        return plans.find(planCode).filter(p -> p.kind() == org.kind() && p.isOpen())
+                .orElseThrow(() -> new SellerRuleViolation("seller.unknown-plan", "Plan " + planCode
+                        + " isn't available for this organisation", Map.of("planCode", "Unknown")));
+    }
+
+    private Plan selectable(Organisation org, Subscription sub, String planCode) {
+        return plans.find(planCode).filter(p -> p.kind() == org.kind() && p.isOpen())
+                .filter(p -> p.visibility() == PlanVisibility.PUBLIC || p.code().equals(sub.planCode())
+                        || (p.visibility() == PlanVisibility.INVITE_ONLY
+                        && plans.invitedPlans(org.id()).contains(p.code())))
+                .orElseThrow(() -> new SellerRuleViolation("seller.unknown-plan", "Plan " + planCode
+                        + " isn't available", Map.of("planCode", "Unknown")));
+    }
+
+    /** The trial: staff override, else the longest of the plan's and the matching campaigns' (promo code, window). */
+    private TrialDecision trialFor(String orgId, Plan plan, Organisation org) {
+        Application app = apps.findByOrg(orgId).orElse(null);
+        String promo = app == null || app.data().plan() == null ? null : app.data().plan().promoCode();
+        Instant signup = app == null || app.submittedAt() == null ? Instant.now(clock) : app.submittedAt();
+        return trials.decide(plan, org.kind(), signup, promo, subs.terms(orgId).trialDaysOverride());
+    }
+
+    private boolean trialsRedeem(TrialDecision trial) {
+        return trials.redeem(trial.campaignId());
+    }
+
+    /**
+     * The charge for moving to a dearer plan mid-period: the price difference for the part of the period left (the
+     * unused part of the old plan is credited against the new one). Never negative.
+     */
+    private long proration(Subscription sub, Plan from, Plan to, Cadence cadence, Instant now) {
+        if (sub.currentPeriodStart() == null || sub.currentPeriodEnd() == null) {
+            return PlanPricing.quote(to, cadence).totalCents();
+        }
+        long total = sub.currentPeriodEnd().getEpochSecond() - sub.currentPeriodStart().getEpochSecond();
+        long left = sub.currentPeriodEnd().getEpochSecond() - now.getEpochSecond();
+        if (total <= 0 || left <= 0) {
+            return 0;
+        }
+        long difference = PlanPricing.quote(to, cadence).totalCents() - PlanPricing.quote(from, cadence).totalCents();
+        return difference <= 0 ? 0 : Math.round((double) difference * left / total);
+    }
+
+    /** A free plan moving to a paid one: the first paid period starts now (after the plan's trial, if never used). */
+    private Subscription startPaidPeriod(Subscription sub, Plan target, Cadence cadence, Instant now,
+                                         List<String> toCollect) {
+        Subscription planned = sub.withPlan(target.code(), target.version(), cadence, now);
+        boolean trialUsed = subs.terms(sub.orgId()).trialSource() != null;
+        if (target.trialDays() > 0 && !trialUsed) {
+            Instant trialEnd = now.plus(Duration.ofDays(target.trialDays()));
+            subs.setTrialSource(sub.orgId(), TrialSource.PLAN, null);
+            return subs.update(planned.withPeriod(trialEnd, SubscriptionStatus.TRIALING, trialEnd, now, trialEnd,
+                    false, now));
+        }
+        Instant end = scheduler.nextPeriodEnd(now, cadence, now);
+        Subscription saved = subs.update(planned.withPeriod(now, SubscriptionStatus.ACTIVE, null, now, end, false,
+                now));
+        issueAndCollect(saved, now, end, Invoice.REASON_CREATE, toCollect);
+        return saved;
+    }
+
+    /** Issues the period's invoice inside the current transaction; the caller collects {@code toCollect} afterwards. */
+    private void issueAndCollect(Subscription sub, Instant start, Instant end, String reason, List<String> toCollect) {
+        invoicing.issue(sub, start, end, reason).filter(Invoice::isOpen).ifPresent(i -> toCollect.add(i.id()));
+    }
+
+    /** After the transaction committed: settles the issued invoices. A failure leaves them open for the job. */
+    private void collectAll(List<String> invoiceIds) {
+        for (String id : invoiceIds) {
+            try {
+                collection.collect(id);
+            } catch (RuntimeException e) {
+                LOG.warn("Collecting invoice {} failed; the collection job will try again", id, e);
+            }
+        }
     }
 
     private Plan plan(String code) {

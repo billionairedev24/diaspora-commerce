@@ -47,17 +47,18 @@ class JdbcModerationRepository implements ModerationRepository {
                     status, priority, triage_status, triage, enqueued_at, sla_started_at, due_at, item_type, flag_id,
                     report_source, report_reason, report_details, reporter_id, report_risk, report_count, booking_id,
                     service_id, service_name, customer_id, reviewer_name, rating, review_text, review_created_at,
-                    version)
+                    review_title, review_photos, review_flags, version)
                 values (:id, :productId, :atin, :org, :ownerKind, :title, :type, :status, :priority, :triageStatus,
                     cast(:triage as jsonb), :enqueuedAt, :slaStart, :dueAt, :itemType, :flagId, :reportSource,
                     :reportReason, :reportDetails, :reporterId, :reportRisk, :reportCount, :bookingId, :serviceId,
-                    :serviceName, :customerId, :reviewerName, :rating, :reviewText, :reviewCreatedAt, 0)
+                    :serviceName, :customerId, :reviewerName, :rating, :reviewText, :reviewCreatedAt, :reviewTitle,
+                    :reviewPhotos, :reviewFlags, 0)
                 """)
                 .params(reportParams(i))
                 .params(reviewParams(i.review()))
                 .param("id", i.id())
                 .param("productId", p == null ? null : p.productId())
-                .param("atin", p == null ? null : p.atin())
+                .param("atin", p != null ? p.atin() : i.review() == null ? null : i.review().atin())
                 .param("org", i.orgId())
                 .param("ownerKind", p == null ? null : p.ownerKind())
                 .param("title", i.title())
@@ -84,7 +85,7 @@ class JdbcModerationRepository implements ModerationRepository {
                     version = version + 1
                 where id = :id and version = :version
                 """)
-                .param("reportCount", i.report() == null ? 0 : i.report().reports())
+                .param("reportCount", reports(i))
                 .param("status", i.status().name())
                 .param("priority", i.priority().name())
                 .param("triageStatus", i.triageStatus().name())
@@ -158,6 +159,14 @@ class JdbcModerationRepository implements ModerationRepository {
                 .param("now", Sql.ts(now)).param("limit", limit).query(this::map).list();
     }
 
+    /** Reports counted on the item: a listing's flags, or the reports on a product review. */
+    private static int reports(ModerationItem i) {
+        if (i.report() != null) {
+            return i.report().reports();
+        }
+        return i.review() == null ? 0 : i.review().reports();
+    }
+
     private static Map<String, Object> reportParams(ModerationItem i) {
         ListingReport r = i.report();
         Map<String, Object> p = new HashMap<>();
@@ -182,6 +191,13 @@ class JdbcModerationRepository implements ModerationRepository {
         p.put("rating", r == null ? null : r.rating());
         p.put("reviewText", r == null ? null : r.text());
         p.put("reviewCreatedAt", r == null ? null : Sql.ts(r.submittedAt()));
+        p.put("reviewTitle", r == null ? null : r.title());
+        p.put("reviewPhotos", r == null || r.photoUrls().isEmpty() ? null : String.join("\n", r.photoUrls()));
+        p.put("reviewFlags", r == null || r.flags().isEmpty() ? null : String.join(",", r.flags()));
+        if (r != null && r.productReview()) {
+            p.put("reportCount", r.reports());
+            p.put("reportReason", r.reportReason());
+        }
         return p;
     }
 
@@ -190,9 +206,20 @@ class JdbcModerationRepository implements ModerationRepository {
         if (bookingId == null) {
             return null;
         }
-        return new ReviewSubmission(bookingId, rs.getString("seller_org_id"), rs.getObject("service_id", UUID.class),
-                rs.getString("service_name"), rs.getString("customer_id"), rs.getString("reviewer_name"),
-                rs.getInt("rating"), rs.getString("review_text"), Sql.instant(rs, "review_created_at"));
+        if (!"PRODUCT_REVIEW".equals(rs.getString("item_type"))) {
+            return new ReviewSubmission(bookingId, rs.getString("seller_org_id"), rs.getObject("service_id", UUID.class),
+                    rs.getString("service_name"), rs.getString("customer_id"), rs.getString("reviewer_name"),
+                    rs.getInt("rating"), rs.getString("review_text"), Sql.instant(rs, "review_created_at"));
+        }
+        String photos = rs.getString("review_photos");
+        String flags = rs.getString("review_flags");
+        return ReviewSubmission.productReview(bookingId, rs.getString("seller_org_id"),
+                rs.getObject("service_id", UUID.class), rs.getString("atin"), rs.getString("service_name"),
+                rs.getString("customer_id"), rs.getString("reviewer_name"), rs.getInt("rating"),
+                rs.getString("review_title"), rs.getString("review_text"),
+                photos == null || photos.isBlank() ? List.of() : List.of(photos.split("\n")),
+                flags == null || flags.isBlank() ? List.of() : List.of(flags.split(",")), rs.getInt("report_count"),
+                rs.getString("report_reason"), Sql.instant(rs, "review_created_at"));
     }
 
     private static ProductSubmission product(ResultSet rs) throws SQLException {

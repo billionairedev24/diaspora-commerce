@@ -1,3 +1,4 @@
+import { withCorrelationHeaders } from './correlation';
 import { ApiError, problemFrom } from './errors';
 import { absolute, type ApiClientOptions, joinUrl } from './http';
 import { type LolaChatRequest, type LolaEvent, LolaEventSchema } from './schemas/shopper';
@@ -78,7 +79,7 @@ export async function streamLola(
   const res = await doFetch(
     new Request(absolute(joinUrl(options.baseUrl, '/v1/lola/chat')), {
       method: 'POST',
-      headers: { Accept: 'text/event-stream', 'Content-Type': 'application/json', ...options.headers },
+      headers: withCorrelationHeaders({ Accept: 'text/event-stream', 'Content-Type': 'application/json', ...options.headers }),
       body: JSON.stringify(request),
       credentials: 'include',
       signal

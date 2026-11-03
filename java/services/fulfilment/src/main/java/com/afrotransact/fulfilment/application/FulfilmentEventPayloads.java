@@ -17,6 +17,18 @@ public final class FulfilmentEventPayloads {
                             String status, String packageLabel, String reason, Instant at) {
     }
 
+    /**
+     * fulfilment.run.planned (S264, key = run id): the run's routes were planned.
+     *
+     * @param dropMode DOORSTEP or PICKUP_POINT
+     * @param routes   routes planned now (more than one when the run is split by capacity)
+     * @param orders   orders planned now
+     * @param shipments shipments planned now
+     */
+    public record RunPlanned(String runId, String town, LocalDate serviceDate, String dropMode, int routes, int orders,
+                             int shipments, Instant at) {
+    }
+
     /** fulfilment.route.* (key = route id). */
     public record RouteEvent(String routeId, String zone, LocalDate serviceDate, String depotNodeId, String driverId,
                              String vehicleId, String status, int stops, int packages, Instant at) {

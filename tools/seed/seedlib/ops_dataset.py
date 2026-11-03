@@ -15,8 +15,16 @@ SEED_SOURCE = "demo-seed"  # orders' attribution source: how the ops step recogn
 HOUSTON = "customer.houston@afrotransact.test"
 LUBBOCK = "customer.lubbock@afrotransact.test"
 SELLER_OWNER = "seller.owner@afrotransact.test"  # Mama Put Pantry
+SELLER_BAMAKO = "seller.bamako@afrotransact.test"  # Bamako Home (seller-fulfilled)
 DRIVER = "driver@afrotransact.test"
 FINANCE_ORG = "org_mama_put_pantry"  # the seller whose matured sale is paid out
+BAMAKO_ORG = "org_bamako_home"
+
+# Seller-fulfilled shipments in demo ops are packed with these seller test users (see ops._drive_shipment).
+SELLER_FULFILMENT_ACTORS: dict[str, str] = {
+    FINANCE_ORG: SELLER_OWNER,
+    BAMAKO_ORG: SELLER_BAMAKO,
+}
 
 
 # ------------------------------------------------------------------------------------------------ AfroTransact Retail

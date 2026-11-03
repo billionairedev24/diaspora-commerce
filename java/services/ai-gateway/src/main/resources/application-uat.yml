@@ -3,6 +3,8 @@ at:
   api-docs:
     enabled: true
   ai:
+    provider-privacy:
+      zero-data-retention: ${AI_PROVIDER_ZDR:true}
     budgets:
       lola: {user-daily-tokens: 300000, user-daily-cost-usd: 0.50, feature-daily-cost-usd: 50, degrade-on-exceed: true}
 spring:

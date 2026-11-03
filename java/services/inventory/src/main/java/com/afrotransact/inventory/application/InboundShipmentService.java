@@ -1,5 +1,6 @@
 package com.afrotransact.inventory.application;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.inventory.domain.InboundShipment;
@@ -17,6 +18,15 @@ public interface InboundShipmentService {
 
     /** Creates a plan (WORKING): SKUs and quantities, destination FC assigned, AT-FN codes issued by catalog. */
     InboundShipment create(InboundCommands.CreatePlan command);
+
+    /**
+     * catalog.product.approved of a Fulfilled by AfroTransact listing (inbox-deduplicated): opens the seller's inbound
+     * plan (WORKING, destination assigned) with the units they listed, so all that is left is to ship them with a label
+     * or hand them in. Skipped when a plan for the listing's SKUs exists already.
+     *
+     * @return the plan, or empty when none was created
+     */
+    Optional<InboundShipment> listingApproved(UUID eventId, InboundCommands.ApprovedListing listing);
 
     InboundShipment get(UUID id);
 

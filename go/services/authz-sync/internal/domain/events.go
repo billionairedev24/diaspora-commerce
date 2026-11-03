@@ -38,7 +38,7 @@ type RoleChanged struct {
 	UserID  string  `json:"userId"`
 	RoleKey string  `json:"roleKey"`
 	OrgID   *string `json:"orgId"`
-	// Market scopes a platform role to one market (ISO 3166-1 alpha-2). Not published by identity yet; when absent
+	// Market scopes a platform role to one market (ISO 3166-1 alpha-2). Identity publishes it on role events; when absent
 	// the grant is platform-wide.
 	Market string `json:"market"`
 }
@@ -186,4 +186,16 @@ func kindFlags(kind string) (products, services bool) {
 	default:
 		return false, false
 	}
+}
+
+// ServiceClientChange gives each first-party service client the `service` relation on the platform, so FGA enforcement
+// does not block service-to-service calls. Idempotent: writing an existing tuple is not an error.
+func ServiceClientChange(clientIDs []string) Change {
+	var c Change
+	for _, id := range clientIDs {
+		if id = strings.TrimSpace(id); id != "" {
+			c.Writes = append(c.Writes, Tuple{User: "client:" + id, Relation: "service", Object: Platform})
+		}
+	}
+	return c
 }

@@ -22,9 +22,10 @@ import com.afrotransact.content.domain.ContentRuleViolation;
  * @param sortOrder order within the list
  * @param updatedAt last change
  * @param version   optimistic-locking version
+ * @param updatedBy who changed it last (null for the initial load)
  */
 public record HelpArticle(String slug, HelpTopic topic, String title, String summary, List<HelpSection> sections,
-                          HelpArticleStatus status, int sortOrder, Instant updatedAt, long version) {
+                          HelpArticleStatus status, int sortOrder, Instant updatedAt, long version, String updatedBy) {
 
     /** The help center hub rendered at /help. */
     public static final String HUB = "help-center";

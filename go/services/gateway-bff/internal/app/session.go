@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"github.com/golang-jwt/jwt/v5"
 	"log/slog"
 	"strings"
 	"time"
@@ -21,6 +22,12 @@ type ResolveInput struct {
 	AppGuestCartID string
 	ClientIP       string
 	Language       string
+	// Origin and Path are the request's Origin header and URL path: the audience of a session stored before the
+	// sign-out policy existed is worked out from the Origin, and sign-in routes (/v1/auth/) are never answered 401.
+	Origin string
+	Path   string
+	// Activity says whether the request counts as real user activity (see ActivityKind).
+	Activity ActivityKind
 }
 
 // SessionService resolves the caller (cookie session or app bearer), refreshes tokens before they expire and
@@ -37,6 +44,13 @@ type SessionService interface {
 	Cookie(c *domain.Caller) string
 	// IdleTTL is how long an untouched session lives (cookie Max-Age).
 	IdleTTL() time.Duration
+	// Policy is the sign-out policy in force for the caller (GET /v1/session/policy and the `session` member of
+	// GET /v1/me). appHint (X-App: customer or driver) names the app of a bearer caller; web sessions know theirs.
+	Policy(ctx context.Context, c *domain.Caller, appHint string) (domain.SessionPolicyView, error)
+	// RefreshNow rotates the web session's tokens now, whatever their expiry, because their claims are stale (identity
+	// just added the person to an approved organisation). The caller's bearer token becomes the new access token.
+	// False when there is nothing to refresh (an app bearer, a guest, no refresh token) or identity refused.
+	RefreshNow(ctx context.Context, c *domain.Caller) bool
 }
 
 // SessionOptions configure sessions.
@@ -47,6 +61,10 @@ type SessionOptions struct {
 	VerifyBearer bool
 	Clock        Clock
 	Log          *slog.Logger
+	// Policies serves the sign-out policy per audience; nil applies the built-in defaults.
+	Policies SessionPolicies
+	// AppOrigins maps each web app key (storefront, seller-center, staff-console) to its origin.
+	AppOrigins map[string]string
 }
 
 type sessionServiceImpl struct {
@@ -61,13 +79,16 @@ var _ SessionService = (*sessionServiceImpl)(nil)
 // NewSessionService returns the SessionService.
 func NewSessionService(store port.SessionStore, identity port.IdentityClient, verifier port.TokenVerifier, o SessionOptions) SessionService {
 	if o.IdleTTL <= 0 {
-		o.IdleTTL = 30 * 24 * time.Hour
+		o.IdleTTL = 92 * 24 * time.Hour
 	}
 	if o.RefreshSkew <= 0 {
 		o.RefreshSkew = 30 * time.Second
 	}
 	if o.Log == nil {
 		o.Log = slog.Default()
+	}
+	if o.Policies == nil {
+		o.Policies = NewSessionPolicies(nil, SessionPoliciesOptions{Clock: o.Clock, Log: o.Log})
 	}
 	return &sessionServiceImpl{store: store, identity: identity, verifier: verifier, o: o}
 }
@@ -124,7 +145,13 @@ func (s *sessionServiceImpl) Resolve(ctx context.Context, in ResolveInput) (*dom
 	}
 	c.Session = sess
 	if sess.Tokens.Valid() {
-		s.refreshIfNeeded(ctx, c)
+		// The sign-out policy first: an expired session is ended, never refreshed.
+		if err := s.enforce(ctx, c, in); err != nil {
+			return nil, err
+		}
+		if c.Session.Tokens.Valid() {
+			s.refreshIfNeeded(ctx, c)
+		}
 	}
 	if c.Session.Authenticated() {
 		c.BearerToken = c.Session.Tokens.AccessToken
@@ -139,7 +166,14 @@ func (s *sessionServiceImpl) resolveApp(ctx context.Context, c *domain.Caller, i
 	if s.o.VerifyBearer {
 		sub, _, err := s.verifier.VerifyAccess(ctx, in.BearerToken)
 		if err != nil {
-			return nil, domain.NewProblem(401, domain.CodeUnauthenticated, "Sign in required", "Invalid or expired token.").WithCause(err)
+			s.o.Log.Warn("app bearer token rejected", "error", err)
+			detail := "Invalid or expired token."
+			if errors.Is(err, jwt.ErrTokenInvalidIssuer) {
+				// Said plainly because it is the usual local-development cause: the app signed in at another identity
+				// address than the one this stack was started with.
+				detail = "The app signed in at a different identity address than this server expects (local: restart the stack with the same MOBILE_HOST)."
+			}
+			return nil, domain.NewProblem(401, domain.CodeUnauthenticated, "Sign in required", detail).WithCause(err)
 		}
 		c.Subject = sub
 	} else {
@@ -157,13 +191,33 @@ func (s *sessionServiceImpl) resolveApp(ctx context.Context, c *domain.Caller, i
 	return c, nil
 }
 
+func (s *sessionServiceImpl) RefreshNow(ctx context.Context, c *domain.Caller) bool {
+	if c == nil || c.App || c.Session == nil || !c.Session.Tokens.Valid() || c.Session.Tokens.RefreshToken == "" {
+		return false
+	}
+	stale := c.Session.Tokens.AccessToken
+	s.refresh(ctx, c, true)
+	if !c.Session.Authenticated() || c.Session.Tokens.AccessToken == stale {
+		return false
+	}
+	c.BearerToken = c.Session.Tokens.AccessToken
+	return true
+}
+
 // refreshIfNeeded rotates the access token shortly before it expires. One replica refreshes (Valkey lock); others
 // wait for the new token, because identity's refresh tokens are single-use.
 func (s *sessionServiceImpl) refreshIfNeeded(ctx context.Context, c *domain.Caller) {
+	s.refresh(ctx, c, false)
+}
+
+// refresh rotates the tokens when they are about to expire, or now when force is set (stale claims). A rotation
+// another request made meanwhile (the session in the store has another access token) counts as done.
+func (s *sessionServiceImpl) refresh(ctx context.Context, c *domain.Caller, force bool) {
 	now := s.o.Clock.now()
-	if !c.Session.Tokens.NeedsRefresh(now, s.o.RefreshSkew) {
+	if !force && !c.Session.Tokens.NeedsRefresh(now, s.o.RefreshSkew) {
 		return
 	}
+	stale := c.Session.Tokens.AccessToken
 	key := "web:" + c.Session.ID
 	unlock, ok, err := s.store.Lock(ctx, "refresh:"+c.Session.ID, 10*time.Second)
 	if err != nil {
@@ -177,7 +231,8 @@ func (s *sessionServiceImpl) refreshIfNeeded(ctx context.Context, c *domain.Call
 	defer unlock()
 	if fresh, err := s.store.Load(ctx, key); err == nil && fresh != nil {
 		c.Session = fresh
-		if !fresh.Tokens.NeedsRefresh(now, s.o.RefreshSkew) {
+		rotated := fresh.Tokens.Valid() && fresh.Tokens.AccessToken != stale
+		if (!force && !fresh.Tokens.NeedsRefresh(now, s.o.RefreshSkew)) || (force && rotated) {
 			return
 		}
 	}

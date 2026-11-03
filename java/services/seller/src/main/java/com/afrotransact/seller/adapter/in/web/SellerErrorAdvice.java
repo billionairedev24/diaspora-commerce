@@ -1,6 +1,7 @@
 package com.afrotransact.seller.adapter.in.web;
 
 import com.afrotransact.platform.web.error.ProblemTypes;
+import com.afrotransact.seller.domain.ApplicationAlreadyDecided;
 import com.afrotransact.seller.domain.SellerForbidden;
 import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.SellerStateConflict;
@@ -34,6 +35,16 @@ class SellerErrorAdvice {
     @ExceptionHandler(SellerStateConflict.class)
     ProblemDetail state(SellerStateConflict ex) {
         return problem(HttpStatus.CONFLICT, ex.code(), "Invalid state", ex.getMessage());
+    }
+
+    /** Already decided: says what, by whom and when, so the console can show the current state as information. */
+    @ExceptionHandler(ApplicationAlreadyDecided.class)
+    ProblemDetail decided(ApplicationAlreadyDecided ex) {
+        ProblemDetail pd = problem(HttpStatus.CONFLICT, ex.code(), "Already decided", ex.getMessage());
+        pd.setProperty("decision", ex.status().name());
+        pd.setProperty("decidedBy", ex.deciderLabel());
+        pd.setProperty("decidedAt", ex.decidedAt());
+        return pd;
     }
 
     @ExceptionHandler(SellerForbidden.class)

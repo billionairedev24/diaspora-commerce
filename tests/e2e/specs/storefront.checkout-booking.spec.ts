@@ -20,7 +20,12 @@ test.describe('storefront · signed-in shopper', () => {
     // One page: the default address, every package with delivery or pickup and its items, payment, the summary.
     await expect(page.getByTestId('checkout-address').first()).toBeVisible();
     await expect(page.getByTestId('checkout-payment').first()).toBeVisible();
+    // A saved method is selected, so the card form stays closed until the shopper chooses another payment method.
+    await expect(page.getByTestId('checkout-new-method')).toBeHidden();
+    await page.getByTestId('checkout-use-new').click();
     await expect(page.getByTestId('checkout-new-method')).toBeVisible();
+    await page.getByTestId('checkout-payment').first().click();
+    await expect(page.getByTestId('checkout-new-method')).toBeHidden();
     await expect(page.getByRole('group', { name: 'Express checkout' })).toHaveCount(0);
     const pkg = page.getByTestId('checkout-package').first();
     await expect(pkg.getByTestId('checkout-item').first()).toBeVisible();
@@ -67,13 +72,22 @@ test.describe('storefront · signed-in shopper', () => {
     expect((clicks[0] as { adToken?: string }).adToken).toBeTruthy();
   });
 
-  test('orders: the order page shows the return window and links to its returns (S148)', async ({ page }) => {
+  test('help: a delivered order has no self-service return; the customer reports a problem with a photo and follows it', async ({ page }) => {
     await signIn(page.request);
-    await page.goto('/orders/AT-2026-104221');
-    await expect(page.getByRole('link', { name: 'Return or replace items' })).toBeVisible();
-    await expect(page.getByText(/Return eligible through/)).toBeVisible();
-    await page.getByRole('link', { name: 'View returns' }).click();
-    await expect(page).toHaveURL(/\/account\/returns\?order=AT-2026-104221/);
-    await expect(page.getByText('Showing returns for order AT-2026-104221.')).toBeVisible();
+    await page.goto('/orders');
+    await page.locator('a[href="/account/help/new?order=AT-2026-104221"]').first().click();
+    await expect(page).toHaveURL(/\/account\/help\/new\?order=AT-2026-104221/);
+    await page.getByRole('radio', { name: 'It arrived damaged' }).check();
+    await page.getByRole('textbox', { name: 'Tell us what happened' }).fill('The jar arrived cracked and leaking.');
+    await page.getByTestId('photo-input').setInputFiles({ name: 'cracked-jar.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('jpeg-bytes') });
+    await expect(page.getByTestId('photo').getByText('cracked-jar.jpg added')).toBeVisible();
+    await page.getByRole('button', { name: 'Send request' }).click();
+    await expect(page.getByTestId('help-request-sent')).toContainText('Your reference is CLM-');
+    await page.getByRole('link', { name: 'See my requests' }).click();
+    await expect(page).toHaveURL(/\/account\/help$/);
+    await expect(page.getByTestId('help-request').first()).toContainText('Received');
+    // The old return pages lead here.
+    await page.goto('/account/returns?order=AT-2026-104221');
+    await expect(page).toHaveURL(/\/account\/help/);
   });
 });

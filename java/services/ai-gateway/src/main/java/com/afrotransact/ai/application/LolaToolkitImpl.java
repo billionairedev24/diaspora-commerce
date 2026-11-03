@@ -12,6 +12,7 @@ import com.afrotransact.ai.domain.guardrail.InjectionFilter;
 import com.afrotransact.ai.domain.lola.ActionProposal;
 import com.afrotransact.ai.domain.lola.ProductCard;
 import com.afrotransact.ai.domain.lola.ProposalType;
+import com.afrotransact.ai.port.AccountReader;
 import com.afrotransact.ai.port.AiMetrics;
 import com.afrotransact.ai.port.CatalogReader;
 import com.afrotransact.ai.port.DeliveryPromises;
@@ -40,13 +41,15 @@ class LolaToolkitImpl implements LolaToolkit {
     private final DeliveryPromises promises;
     private final OrderTracker orders;
     private final ServiceDirectory services;
+    private final AccountReader account;
     private final InjectionFilter injection;
     private final JsonMapper json;
     private final AiSettings settings;
     private final AiMetrics metrics;
 
     LolaToolkitImpl(ProductSearch search, CatalogReader catalog, OfferReader offers, DeliveryPromises promises,
-                    OrderTracker orders, ServiceDirectory services, InjectionFilter injection, JsonMapper json,
+                    OrderTracker orders, ServiceDirectory services, AccountReader account, InjectionFilter injection,
+                    JsonMapper json,
                     AiSettings settings, AiMetrics metrics) {
         this.search = search;
         this.catalog = catalog;
@@ -54,6 +57,7 @@ class LolaToolkitImpl implements LolaToolkit {
         this.promises = promises;
         this.orders = orders;
         this.services = services;
+        this.account = account;
         this.injection = injection;
         this.json = json;
         this.settings = settings;
@@ -77,6 +81,11 @@ class LolaToolkitImpl implements LolaToolkit {
             case LolaToolSpecs.BUILD_CART_FROM_RECIPE -> "Building a cart for " + text(a, "dish")
                     + (a.path("servings").asInt(0) > 0 ? " for " + a.path("servings").asInt(0) : "");
             case LolaToolSpecs.TRACK_ORDER -> "Tracking order " + text(a, "orderId");
+            case LolaToolSpecs.MY_ORDERS -> "Looking at your recent orders";
+            case LolaToolSpecs.VIEW_CART -> "Looking at your cart";
+            case LolaToolSpecs.MY_BOOKINGS -> "Looking at your bookings";
+            case LolaToolSpecs.RETURN_STATUS -> "Checking your returns";
+            case LolaToolSpecs.REFUND_STATUS -> "Checking your refunds";
             case LolaToolSpecs.START_RETURN -> "Preparing a return for order " + text(a, "orderId");
             case LolaToolSpecs.FIND_SERVICE -> "Finding " + text(a, "query");
             case LolaToolSpecs.BOOK_SERVICE -> "Preparing your booking";
@@ -101,6 +110,11 @@ class LolaToolkitImpl implements LolaToolkit {
                 case LolaToolSpecs.ADD_TO_CART -> addToCart(a, ctx);
                 case LolaToolSpecs.BUILD_CART_FROM_RECIPE -> buildCart(a, ctx);
                 case LolaToolSpecs.TRACK_ORDER -> trackOrder(a, ctx);
+                case LolaToolSpecs.MY_ORDERS -> myOrders(a, ctx);
+                case LolaToolSpecs.VIEW_CART -> viewCart(ctx);
+                case LolaToolSpecs.MY_BOOKINGS -> myBookings(ctx);
+                case LolaToolSpecs.RETURN_STATUS -> returnStatus(a, ctx, false);
+                case LolaToolSpecs.REFUND_STATUS -> returnStatus(a, ctx, true);
                 case LolaToolSpecs.START_RETURN -> startReturn(a);
                 case LolaToolSpecs.FIND_SERVICE -> findService(a, ctx);
                 case LolaToolSpecs.BOOK_SERVICE -> bookService(a);
@@ -313,6 +327,137 @@ class LolaToolkitImpl implements LolaToolkit {
         }
         return new ToolOutcome(lookup.availability() != OrderTracker.Availability.UNAVAILABLE, "order", data,
                 quote(LolaToolSpecs.TRACK_ORDER, data), null, null);
+    }
+
+    private ToolOutcome myOrders(JsonNode a, ToolContext ctx) {
+        int limit = Math.max(1, Math.min(10, a.path("limit").asInt(5)));
+        AccountReader.Result<List<AccountReader.OrderSummary>> r = account.recentOrders(ctx.caller().bearerToken(), limit);
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (!r.available()) {
+            data.put("note", "Order history is not available yet; offer a hand-off to support.");
+        } else {
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (AccountReader.OrderSummary o : r.value()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("orderNumber", o.orderNumber());
+                m.put("status", o.status());
+                m.put("placed", o.placedAt());
+                m.put("total", money(o.totalMinor(), o.currency()));
+                m.put("shipments", o.shipments());
+                rows.add(m);
+            }
+            data.put("orders", rows);
+            if (rows.isEmpty()) {
+                data.put("note", "The shopper has no orders yet.");
+            }
+        }
+        return new ToolOutcome(r.available(), "orders", data, quote(LolaToolSpecs.MY_ORDERS, data), null, null);
+    }
+
+    private ToolOutcome viewCart(ToolContext ctx) {
+        AccountReader.Result<AccountReader.CartSummary> r = account.cart(ctx.caller().bearerToken());
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (!r.available()) {
+            data.put("note", "The cart is not available right now.");
+        } else {
+            AccountReader.CartSummary c = r.value();
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (AccountReader.CartLine l : c.lines()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("atin", l.atin());
+                m.put("title", clean(l.title()));
+                m.put("quantity", l.quantity());
+                m.put("price", money(l.priceMinor(), c.currency()));
+                if (l.unavailable()) {
+                    m.put("warning", "unavailable: left out of checkout");
+                } else if (l.priceChanged()) {
+                    m.put("warning", "the price changed since it was added");
+                }
+                rows.add(m);
+            }
+            data.put("items", rows);
+            data.put("itemCount", c.itemCount());
+            data.put("subtotal", money(c.subtotalMinor(), c.currency()));
+            data.put("readyForCheckout", c.checkoutable());
+            if (rows.isEmpty()) {
+                data.put("note", "The cart is empty.");
+            }
+        }
+        return new ToolOutcome(r.available(), "cart", data, quote(LolaToolSpecs.VIEW_CART, data), null, null);
+    }
+
+    private ToolOutcome myBookings(ToolContext ctx) {
+        AccountReader.Result<List<AccountReader.BookingSummary>> r = account.bookings(ctx.caller().bearerToken());
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (!r.available()) {
+            data.put("note", "Bookings are not available yet; offer a hand-off to support.");
+        } else {
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (AccountReader.BookingSummary b : r.value()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("reference", b.reference());
+                m.put("service", clean(b.service()));
+                m.put("status", b.status());
+                m.put("start", b.startAt());
+                m.put("price", money(b.priceMinor(), "USD"));
+                m.put("deposit", money(b.depositMinor(), "USD"));
+                rows.add(m);
+            }
+            data.put("bookings", rows);
+            if (rows.isEmpty()) {
+                data.put("note", "The shopper has no bookings.");
+            }
+        }
+        return new ToolOutcome(r.available(), "bookings", data, quote(LolaToolSpecs.MY_BOOKINGS, data), null, null);
+    }
+
+    private ToolOutcome returnStatus(JsonNode a, ToolContext ctx, boolean refundsOnly) {
+        String tool = refundsOnly ? LolaToolSpecs.REFUND_STATUS : LolaToolSpecs.RETURN_STATUS;
+        AccountReader.Result<List<AccountReader.ReturnSummary>> r = account.returns(ctx.caller().bearerToken(),
+                text(a, "orderId"));
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (!r.available()) {
+            data.put("note", "Returns and refunds are not available right now; offer a hand-off to support.");
+        } else {
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (AccountReader.ReturnSummary s : r.value()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("return", s.number());
+                m.put("order", s.orderNumber());
+                if (!refundsOnly) {
+                    m.put("status", s.status());
+                    m.put("method", s.method());
+                    m.put("started", s.createdAt());
+                    if (!s.dropOffBy().isBlank()) {
+                        m.put("dropOffBy", s.dropOffBy());
+                    }
+                    List<Map<String, Object>> lines = new ArrayList<>();
+                    for (AccountReader.ReturnLine l : s.lines()) {
+                        Map<String, Object> lm = new LinkedHashMap<>();
+                        lm.put("item", clean(l.title()));
+                        lm.put("quantity", l.quantity());
+                        lm.put("reason", l.reason());
+                        if (!l.outcome().isBlank()) {
+                            lm.put("outcome", l.outcome());
+                        }
+                        lines.add(lm);
+                    }
+                    m.put("items", lines);
+                } else {
+                    m.put("returnStatus", s.status());
+                }
+                m.put("refundState", s.refundState().isBlank() ? "not issued yet" : s.refundState());
+                m.put("refund", money(s.refundMinor(), s.currency()));
+                ctx.facts().addAmount(s.refundMinor());
+                rows.add(m);
+            }
+            data.put(refundsOnly ? "refunds" : "returns", rows);
+            if (rows.isEmpty()) {
+                data.put("note", "No returns found" + (text(a, "orderId").isEmpty() ? "" : " for that order")
+                        + ". Do not invent one; offer start_return if the item is eligible.");
+            }
+        }
+        return new ToolOutcome(r.available(), refundsOnly ? "refunds" : "returns", data, quote(tool, data), null, null);
     }
 
     private ToolOutcome startReturn(JsonNode a) {

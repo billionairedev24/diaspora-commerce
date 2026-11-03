@@ -56,7 +56,7 @@ class FirstPartySignInServiceImplTest {
 
     private FirstPartySignInServiceImpl service() {
         return new FirstPartySignInServiceImpl(new CurrentUser(() -> caller),
-                new FirstPartySignInSettings(Set.of("gateway-bff")), users, hasher, signIn, protection, store,
+                new FirstPartySignInSettings(Set.of("gateway-bff"), Set.of("customer-app", "driver-app")), users, hasher, signIn, protection, store,
                 passkeys, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -144,6 +144,33 @@ class FirstPartySignInServiceImplTest {
         assertThat(s.redeemLoginTicket(ticket, "gateway-bff")).map(RedeemedLoginTicket::userId).contains(ada.id());
         assertThat(s.redeemLoginTicket(ticket, "gateway-bff")).isEmpty();
         assertThat(s.redeemLoginTicket("", "gateway-bff")).isEmpty();
+    }
+
+    @Test
+    void ticketForANativeAppRedeemsOnlyForThatApp() {
+        when(users.findByEmail("ada@example.com")).thenReturn(Optional.of(ada));
+        when(hasher.matches("right", "{bcrypt}hash")).thenReturn(true);
+        when(signIn.challenge(eq(ada.id()), any(), eq(false))).thenReturn(SecondFactorChallenge.none());
+        FirstPartySignInServiceImpl s = service();
+        ClientContext app = new ClientContext("203.0.113.7", "AfroTransact/1", "customer-app");
+        String ticket = s.password(new PasswordSignIn("ada@example.com", "right", null, app)).loginTicket();
+
+        assertThat(s.redeemLoginTicket(ticket, "gateway-bff")).as("not the BFF's").isEmpty();
+        String again = s.password(new PasswordSignIn("ada@example.com", "right", null, app)).loginTicket();
+        assertThat(s.redeemLoginTicket(again, "driver-app")).as("not another app's").isEmpty();
+        String third = s.password(new PasswordSignIn("ada@example.com", "right", null, app)).loginTicket();
+        assertThat(s.redeemLoginTicket(third, "customer-app")).map(RedeemedLoginTicket::userId).contains(ada.id());
+    }
+
+    @Test
+    void unknownNativeAppsAreRefused() {
+        when(users.findByEmail("ada@example.com")).thenReturn(Optional.of(ada));
+        when(hasher.matches("right", "{bcrypt}hash")).thenReturn(true);
+        when(signIn.challenge(eq(ada.id()), any(), eq(false))).thenReturn(SecondFactorChallenge.none());
+        ClientContext rogue = new ClientContext("203.0.113.7", null, "evil-app");
+
+        assertThatThrownBy(() -> service().password(new PasswordSignIn("ada@example.com", "right", null, rogue)))
+                .isInstanceOf(ForbiddenActionException.class);
     }
 
     @Test

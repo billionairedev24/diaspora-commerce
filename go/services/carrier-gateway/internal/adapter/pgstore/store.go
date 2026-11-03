@@ -167,6 +167,13 @@ func (s *storeImpl) Get(ctx context.Context, id string) (domain.LabelRecord, err
 		left join tracked_shipment t on t.label_id = l.id where l.id::text = $1`, id))
 }
 
+func (s *storeImpl) ByTracking(ctx context.Context, carrier domain.CarrierCode, trackingNumber string) (domain.LabelRecord, error) {
+	return scanLabel(s.pool.QueryRow(ctx, `select `+labelColumns+` from shipment_label l
+		left join tracked_shipment t on t.label_id = l.id
+		where l.carrier = $1 and l.tracking_number = $2 and l.status = 'purchased' order by l.created_at desc limit 1`,
+		string(carrier), trackingNumber))
+}
+
 func (s *storeImpl) MarkVoided(ctx context.Context, id string, at time.Time, voided events.Envelope) error {
 	return inTx(ctx, s.pool, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `update shipment_label set status = 'voided', voided_at = $2, updated_at = now()

@@ -18,10 +18,14 @@ import java.util.regex.Pattern;
  * @param pickupPoint    required for pickup-point runs
  * @param cutoffPolicy   what happens at cutoff when the minimum is not met
  * @param extendDays     days an EXTEND moves the cutoff and window by (1–30)
+ * @param notes          optional note for staff and the driver (at most {@value #MAX_NOTES} characters)
  */
 public record RunTerms(DeliveryWindow window, Instant cutoffAt, Instant opensAt, Instant sellerPickupAt, long feeMinor,
                        String currency, int minOrders, Capacity capacity, DropMode dropMode, PickupPoint pickupPoint,
-                       CutoffPolicy cutoffPolicy, int extendDays) {
+                       CutoffPolicy cutoffPolicy, int extendDays, String notes) {
+
+    /** Longest note kept. */
+    public static final int MAX_NOTES = 500;
 
     private static final Pattern CURRENCY = Pattern.compile("^[A-Z]{3}$");
 
@@ -60,12 +64,24 @@ public record RunTerms(DeliveryWindow window, Instant cutoffAt, Instant opensAt,
         if (extendDays < 1 || extendDays > 30) {
             throw new RuleViolation("delivery-runs.invalid-extension", "Extend days must be between 1 and 30");
         }
+        notes = notes == null || notes.isBlank() ? null : notes.trim();
+        if (notes != null && notes.length() > MAX_NOTES) {
+            throw new RuleViolation("delivery-runs.notes-too-long", "Notes are at most " + MAX_NOTES + " characters");
+        }
+    }
+
+    /** Terms without a note. */
+    public RunTerms(DeliveryWindow window, Instant cutoffAt, Instant opensAt, Instant sellerPickupAt, long feeMinor,
+                    String currency, int minOrders, Capacity capacity, DropMode dropMode, PickupPoint pickupPoint,
+                    CutoffPolicy cutoffPolicy, int extendDays) {
+        this(window, cutoffAt, opensAt, sellerPickupAt, feeMinor, currency, minOrders, capacity, dropMode,
+                pickupPoint, cutoffPolicy, extendDays, null);
     }
 
     /** The same terms with a new cutoff, window and seller pickup (extensions). */
     public RunTerms reschedule(Instant newCutoff, DeliveryWindow newWindow, Instant newSellerPickupAt) {
         return new RunTerms(newWindow, newCutoff, opensAt != null && opensAt.isBefore(newCutoff) ? opensAt : null,
                 newSellerPickupAt, feeMinor, currency, minOrders, capacity, dropMode, pickupPoint, cutoffPolicy,
-                extendDays);
+                extendDays, notes);
     }
 }

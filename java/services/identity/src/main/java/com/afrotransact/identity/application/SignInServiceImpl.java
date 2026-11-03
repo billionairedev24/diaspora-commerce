@@ -7,10 +7,12 @@ import java.util.OptionalLong;
 import java.util.UUID;
 
 import com.afrotransact.identity.domain.AccessPolicy;
+import com.afrotransact.identity.domain.EffectiveAccess;
 import com.afrotransact.identity.domain.IdentityRuleViolation;
 import com.afrotransact.identity.domain.MfaEnrolment;
 import com.afrotransact.identity.domain.MfaFactor;
 import com.afrotransact.identity.domain.MfaPolicy;
+import com.afrotransact.identity.domain.MfaRequirement;
 import com.afrotransact.identity.domain.RecoveryCodes;
 import com.afrotransact.identity.domain.SecretHashing;
 import com.afrotransact.identity.domain.TotpAuthenticator;
@@ -38,12 +40,13 @@ class SignInServiceImpl implements SignInService {
     private final MfaPolicy policy;
     private final TotpAuthenticator totp;
     private final CodeIssuer codes;
+    private final AuthSettingsService authSettings;
     private final AccessChangeLog changeLog;
     private final Clock clock;
 
     SignInServiceImpl(UserAccountRepository users, AccessProfileLoader profiles, AccessPolicy accessPolicy,
                       MfaRepository mfa, MfaSupport support, MfaPolicy policy, TotpAuthenticator totp,
-                      CodeIssuer codes, AccessChangeLog changeLog, Clock clock) {
+                      CodeIssuer codes, AuthSettingsService authSettings, AccessChangeLog changeLog, Clock clock) {
         this.users = users;
         this.profiles = profiles;
         this.accessPolicy = accessPolicy;
@@ -52,6 +55,7 @@ class SignInServiceImpl implements SignInService {
         this.policy = policy;
         this.totp = totp;
         this.codes = codes;
+        this.authSettings = authSettings;
         this.changeLog = changeLog;
         this.clock = clock;
     }
@@ -72,16 +76,16 @@ class SignInServiceImpl implements SignInService {
     @Transactional(readOnly = true)
     public SecondFactorChallenge challenge(UUID userId, Optional<String> trustedBrowserToken, boolean passkey) {
         UserAccount u = user(userId);
-        boolean staff = accessPolicy.resolve(profiles.load(u)).staff();
         MfaEnrolment e = support.enrolment(userId);
+        boolean mandatory = secondFactorMandatory(u, e);
         Instant now = Instant.now(clock);
         boolean trusted = trustedBrowserToken
                 .flatMap(t -> mfa.trustedBrowser(userId, SecretHashing.sha256Hex(t), now))
                 .isPresent();
-        if (!policy.secondFactorRequired(staff, e, trusted, passkey)) {
+        if (!policy.secondFactorRequired(mandatory, e, trusted, passkey)) {
             return SecondFactorChallenge.none();
         }
-        String smsPhone = smsDestination(u, e);
+        String smsPhone = smsDestination(u, e, mandatory);
         return new SecondFactorChallenge(true, e.totp(), smsPhone != null, mask(smsPhone), e.recoveryCodesLeft() > 0);
     }
 
@@ -89,7 +93,8 @@ class SignInServiceImpl implements SignInService {
     @Transactional
     public Instant sendSmsCode(UUID userId) {
         UserAccount u = user(userId);
-        String phone = smsDestination(u, support.enrolment(userId));
+        MfaEnrolment enrolment = support.enrolment(userId);
+        String phone = smsDestination(u, enrolment, secondFactorMandatory(u, enrolment));
         if (phone == null) {
             throw new IdentityRuleViolation("identity.sms-unavailable", "Text-message codes are not set up");
         }
@@ -141,13 +146,19 @@ class SignInServiceImpl implements SignInService {
         }
     }
 
-    /** Enrolled SMS phone; staff without any factor fall back to the verified phone on file. */
-    private String smsDestination(UserAccount u, MfaEnrolment e) {
+    /** Staff always; others when their portal's MFA setting is on (S291) and a factor can be asked of them. */
+    private boolean secondFactorMandatory(UserAccount u, MfaEnrolment e) {
+        EffectiveAccess access = accessPolicy.resolve(profiles.load(u));
+        return MfaRequirement.mandatory(access.staff(), access.roles(), authSettings.effective(), e,
+                u.phone() != null);
+    }
+
+    /** Enrolled SMS phone; people who must use a second factor but have none fall back to the phone on file. */
+    private String smsDestination(UserAccount u, MfaEnrolment e, boolean mandatory) {
         if (e.sms()) {
             return e.smsPhone();
         }
-        boolean staff = accessPolicy.resolve(profiles.load(u)).staff();
-        return staff && !e.totp() ? u.phone() : null;
+        return mandatory && !e.totp() ? u.phone() : null;
     }
 
     private static String mask(String phone) {

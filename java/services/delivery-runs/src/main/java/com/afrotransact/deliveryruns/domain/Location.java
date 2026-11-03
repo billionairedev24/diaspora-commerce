@@ -22,6 +22,14 @@ public record Location(UUID id, LocationDetails details, Instant createdAt, Inst
                 d.defaultExtendDays(), false), now);
     }
 
+    public Location activate(Instant now) {
+        LocationDetails d = details;
+        return update(new LocationDetails(d.slug(), d.name(), d.market(), d.state(), d.timeZone(), d.area(), d.origin(),
+                d.defaultFeeMinor(), d.currency(), d.defaultMinOrders(), d.defaultCapacity(), d.dropMode(),
+                d.pickupPoint(), d.whatsappInviteUrl(), d.socialLinks(), d.defaultCutoffPolicy(),
+                d.defaultExtendDays(), true), now);
+    }
+
     public String name() {
         return details.name();
     }

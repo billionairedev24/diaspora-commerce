@@ -1,9 +1,12 @@
 package com.afrotransact.identity.adapter.in.web;
 
+import java.time.Duration;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 import com.afrotransact.identity.application.AccountService;
 import com.afrotransact.identity.application.SignUpCommand;
@@ -13,11 +16,14 @@ import com.afrotransact.identity.domain.RateLimitExceeded;
 import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.DomainException;
 import io.swagger.v3.oas.annotations.Hidden;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.context.MessageSource;
 import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,6 +45,7 @@ class SignUpPageController {
     private static final String VIEW = "signup";
     private static final String VERIFY_VIEW = "signup-verify";
     private static final String SHOP = "shop";
+    private static final String DEVICE_COOKIE = "at_device";
     private static final String REDIRECT = "redirect:";
     private static final List<String> FIELDS = List.of("firstName", "lastName", "email", "phone", "password",
             "confirmPassword", "termsAccepted");
@@ -64,6 +71,8 @@ class SignUpPageController {
         values.put("phoneRegion", PhoneCountries.DEFAULT_REGION);
         values.put("termsAccepted", false);
         values.put("smsConsent", false);
+        values.put("referralCode", ctx.referral());
+        ensureDeviceCookie(request, response);
         return render(model, values, Map.of(), null);
     }
 
@@ -76,6 +85,7 @@ class SignUpPageController {
                   @RequestParam(defaultValue = "") String confirmPassword,
                   @RequestParam(defaultValue = "false") boolean termsAccepted,
                   @RequestParam(defaultValue = "false") boolean smsConsent,
+                  @RequestParam(defaultValue = "") String referralCode,
                   HttpServletRequest request, HttpServletResponse response, Model model) {
         HostedPageContext ctx = pages.apply(model, request, response, HostedPageModel.SIGN_UP);
         Map<String, Object> values = new LinkedHashMap<>();
@@ -87,6 +97,7 @@ class SignUpPageController {
         values.put("phoneRegion", region);
         values.put("termsAccepted", termsAccepted);
         values.put("smsConsent", smsConsent);
+        values.put("referralCode", referralCode);
         if (!ctx.app().selfSignUp()) {
             return render(model, values, Map.of(), null);
         }
@@ -94,7 +105,7 @@ class SignUpPageController {
         try {
             result = accounts.signUp(new SignUpCommand(firstName, lastName, email, phone, region, password,
                     confirmPassword, termsAccepted, smsConsent, ctx.intent() == null ? SHOP : ctx.intent(),
-                    ctx.invitation()));
+                    ctx.invitation(), referralCode, deviceId(request), request.getRemoteAddr()));
         } catch (IdentityRuleViolation ex) {
             return render(model, values, ordered(ex.fieldErrors()), ex.fieldErrors().isEmpty() ? ex.getMessage() : null);
         } catch (ConflictException ex) {
@@ -167,6 +178,28 @@ class SignUpPageController {
             request.getSession().removeAttribute(PENDING);
             return REDIRECT + "/login";
         }
+    }
+
+    /**
+     * A random id in a first-party cookie, set on the sign-up form. Only a keyed hash of it is published with the
+     * registration, for the referral program's same-device check (S322); it is not used to track anyone elsewhere.
+     */
+    private static void ensureDeviceCookie(HttpServletRequest request, HttpServletResponse response) {
+        if (deviceId(request) != null) {
+            return;
+        }
+        ResponseCookie cookie = ResponseCookie.from(DEVICE_COOKIE, UUID.randomUUID().toString()).httpOnly(true)
+                .secure(request.isSecure()).sameSite("Lax").path("/").maxAge(Duration.ofDays(365)).build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private static String deviceId(HttpServletRequest request) {
+        Cookie[] cookies = request.getCookies();
+        if (cookies == null) {
+            return null;
+        }
+        return Arrays.stream(cookies).filter(c -> DEVICE_COOKIE.equals(c.getName())).map(Cookie::getValue)
+                .findFirst().orElse(null);
     }
 
     private String render(Model model, Map<String, Object> values, Map<String, String> errors, String formError) {

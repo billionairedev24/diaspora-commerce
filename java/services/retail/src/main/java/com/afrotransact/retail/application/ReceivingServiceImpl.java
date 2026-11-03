@@ -200,7 +200,7 @@ class ReceivingServiceImpl implements ReceivingService {
         InventoryReceiptResult result;
         try {
             // QA-failed batches carry holdReason and arrive in quarantine: no separate quarantine call (S226).
-            result = inventory.receive(inventoryRequest(prepared, byId), "retail-" + prepared.id());
+            result = inventory.receive(inventoryRequest(prepared, orders.findById(prepared.poId()).orElseThrow(), byId), "retail-" + prepared.id());
         } catch (InventoryRejectedException e) {
             tx.executeWithoutResult(s -> reopen(id));
             throw new RetailRuleViolation("retail.inventory-rejected", "Inventory rejected the receipt: "
@@ -353,17 +353,30 @@ class ReceivingServiceImpl implements ReceivingService {
         return landedCost.calculate(settings.baseCurrency(), inputs, charges);
     }
 
-    private InventoryReceipt inventoryRequest(GoodsReceipt r, Map<UUID, RetailItem> byId) {
+    /**
+     * The lots for inventory. Costs are booked in USD; when the PO is in another currency (a Mexican supplier paid in
+     * pesos) inventory also gets that currency, the PO's captured rate and date, and the exact USD cost retail booked,
+     * so the lot shows what was paid and its USD value ties to the GL.
+     */
+    private InventoryReceipt inventoryRequest(GoodsReceipt r, PurchaseOrder po, Map<UUID, RetailItem> byId) {
+        boolean foreign = !po.currency().equals(r.landedCost().currency());
         List<InventoryReceipt.Line> lines = new ArrayList<>();
         for (ReceiptLine l : r.lines()) {
             if (l.received() == 0) {
                 continue;
             }
             RetailItem item = byId.get(l.itemId());
-            lines.add(new InventoryReceipt.Line(l.sku(), l.lotNo(), l.mfgDate(), l.expDate(), l.qtyGood(),
-                    l.qtyDamaged(), l.bin(), r.landedCost().line(l.lineNo()).unitCostMinor(),
-                    r.landedCost().currency(), item == null ? null : item.shelfLifeDays(),
-                    l.qa() == QaResult.FAIL && l.qtyGood() > 0 ? "QA failed at receipt " + r.number() : null));
+            long usdUnit = r.landedCost().line(l.lineNo()).unitCostMinor();
+            String hold = l.qa() == QaResult.FAIL && l.qtyGood() > 0 ? "QA failed at receipt " + r.number() : null;
+            Integer shelfLife = item == null ? null : item.shelfLifeDays();
+            if (foreign) {
+                lines.add(new InventoryReceipt.Line(l.sku(), l.lotNo(), l.mfgDate(), l.expDate(), l.qtyGood(),
+                        l.qtyDamaged(), l.bin(), po.fx().fromBase(usdUnit), po.currency(), shelfLife, hold,
+                        po.fx().baseUnitsPerUnit(), po.fx().asOf(), usdUnit));
+            } else {
+                lines.add(new InventoryReceipt.Line(l.sku(), l.lotNo(), l.mfgDate(), l.expDate(), l.qtyGood(),
+                        l.qtyDamaged(), l.bin(), usdUnit, r.landedCost().currency(), shelfLife, hold));
+            }
         }
         return new InventoryReceipt(r.number(), r.nodeId(), settings.retailOwnerOrg(), r.shipmentRef(), lines);
     }

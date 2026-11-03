@@ -1,0 +1,28 @@
+# Fresh install, mock sign-in, passcode, notifications off. Used by every flow.
+# Mocks accept any valid email and any password except "wrong"; the keyboard's Enter key moves email → password → submit.
+appId: com.afrotransact.customer.local
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- tapOn: "you@example.com"
+- inputText: "adaeze@example.com"
+- pressKey: Enter
+- inputText: "Passw0rd!"
+- pressKey: Enter
+- assertVisible: "Set up this phone"
+- tapOn:
+    text: "Not now"
+    optional: true
+- assertVisible: "Create a passcode"
+- repeat:
+    times: 2
+    commands:
+      - tapOn: "1"
+      - tapOn: "3"
+      - tapOn: "5"
+      - tapOn: "7"
+      - tapOn: "9"
+      - tapOn: "0"
+- tapOn: "Not now"
+- assertVisible: "Home"

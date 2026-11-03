@@ -10,9 +10,13 @@ import { resolvedVariables } from '@afrotransact/tokens';
 import { type Metadata, type Viewport } from 'next';
 import { type ReactNode } from 'react';
 
+import { maintenanceProps } from '@/components/shell/maintenanceProps';
+import { MaintenanceScreen } from '@/components/shell/MaintenanceScreen';
+import { SignInPending } from '@/components/shell/SignInPending';
 import { messagesFor } from '@/i18n/catalogs';
 import { getLocale, getT } from '@/i18n/server';
 import { storefrontUrl } from '@/lib/config';
+import { maintenanceNow } from '@/lib/maintenance';
 import { Providers } from '@/lib/query/Providers';
 import { RuntimeConfigProvider } from '@/lib/runtime-config';
 
@@ -33,6 +37,7 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1, view
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const locale = await getLocale();
   const t = await getT();
+  const maintenance = await maintenanceNow();
   return (
     // suppressHydrationWarning: browser extensions stamp classes / attributes onto <html> before React hydrates
     // (e.g. Storylane's js-storylane-extension), which React reports as a root attribute mismatch. It covers
@@ -43,9 +48,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           {t('sc.layout.skip')}
         </a>
         <I18nProvider locale={locale} messages={messagesFor(locale)}>
+          <SignInPending />
           <WebVitalsReporter />
           <RuntimeConfigProvider value={{ storefrontUrl: storefrontUrl() }}>
-            <Providers>{children}</Providers>
+            <Providers>{maintenance ? <MaintenanceScreen {...maintenanceProps(maintenance, locale, t)} /> : children}</Providers>
           </RuntimeConfigProvider>
         </I18nProvider>
       </body>

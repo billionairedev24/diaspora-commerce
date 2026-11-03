@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"os/signal"
@@ -160,8 +161,14 @@ func run() error {
 		return fmt.Errorf("template samples: %w", err)
 	}
 	stockAlerts := app.NewStockAlerts(postgres.NewStockAlertStore(pool), notifier, resolver, links, log)
+	audiences := deliveryRunsAudiences(cfg, local, log)
+	var preorders port.PreorderAudience
+	var locationAudience port.LocationAudience
+	if audiences != nil {
+		preorders, locationAudience = audiences, audiences
+	}
 	ingest := app.NewIngest(notifier, app.IngestConfig{Resolver: resolver, Links: links, StockAlerts: stockAlerts,
-		Contacts: contactCache, Audience: preorderAudience(cfg, local, log)}, log)
+		Contacts: contactCache, Audience: preorders, Locations: locationAudience, Rules: eventRules(cfg, log)}, log)
 
 	twilioV, resendV, sendGridV, err := verifiers(cfg)
 	if err != nil {
@@ -239,9 +246,22 @@ func recipientResolver(cfg config.Config, local bool, log *slog.Logger) contactc
 		MaxEntries: cfg.Identity.CacheMax})
 }
 
-// preorderAudience builds delivery-runs' pre-order audience client with the identity client's credentials. Without
-// it, pre-order announcements, reminders and last calls reach nobody (buyers still get closed / out for delivery).
-func preorderAudience(cfg config.Config, local bool, log *slog.Logger) port.PreorderAudience {
+// eventRules are the platform's event rules, with the run announcements' WhatsApp channel switched on when
+// configured (approved templates only: see deliveryRuns.whatsapp in the config).
+func eventRules(cfg config.Config, log *slog.Logger) map[string][]app.EventRule {
+	rules := maps.Clone(app.DefaultEventRules)
+	if !cfg.DeliveryRuns.WhatsApp.Enabled {
+		return rules
+	}
+	log.Info("run announcements go to WhatsApp as templates (deliveryRuns.whatsapp.enabled)")
+	maps.Copy(rules, app.RunRulesWithWhatsApp(true))
+	return rules
+}
+
+// deliveryRunsAudiences builds delivery-runs' audience client (pre-order windows and locations) with the identity
+// client's credentials. Without it, pre-order announcements, reminders and last calls and run announcements reach
+// nobody (buyers still get closed / out for delivery).
+func deliveryRunsAudiences(cfg config.Config, local bool, log *slog.Logger) deliveryruns.Audiences {
 	if !cfg.DeliveryRuns.Enabled {
 		log.Warn("delivery-runs audience disabled: pre-order announcements, reminders and last calls are not sent")
 		return nil

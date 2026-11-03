@@ -16,6 +16,7 @@ import java.util.UUID;
 
 import com.afrotransact.identity.adapter.out.crypto.TestSecretCiphers;
 import com.afrotransact.identity.domain.DefaultTotpAuthenticator;
+import com.afrotransact.identity.domain.SigningKey;
 import com.afrotransact.identity.it.BrowserSession.AuthorizeResult;
 import com.afrotransact.identity.it.BrowserSession.Tokens;
 import com.afrotransact.identity.port.EncryptedSecretRepository;
@@ -193,6 +194,15 @@ class DataProtectionIT {
         assertThat(stored(rotated).keyId()).as("a sign-in re-seals its row under the current key")
                 .isEqualTo(CURRENT_KEY_ID);
         insertSealed(rotated, rotatedSecret, TestSecretCiphers.local(OLD_KEY_ID, OLD_KEY, ""));
+        // the active signing key's private half is sealed with the same keys (S291): put it under the retired key too
+        String activeKid = jdbc.sql("select kid from signing_key where status = 'ACTIVE'").query(String.class).single();
+        String signingPem = TestSecretCiphers.local(CURRENT_KEY_ID, CURRENT_KEY, "").open(jdbc
+                .sql("select private_key_sealed from signing_key where kid = :k").param("k", activeKid)
+                .query(byte[].class).single(), SigningKey.sealContext(activeKid));
+        SecretCipher.Sealed underOld = TestSecretCiphers.local(OLD_KEY_ID, OLD_KEY, "").seal(signingPem,
+                SigningKey.sealContext(activeKid));
+        jdbc.sql("update signing_key set private_key_sealed = :b, seal_key_id = :k where kid = :kid")
+                .param("b", underOld.envelope()).param("k", OLD_KEY_ID).param("kid", activeKid).update();
 
         String customerEmail = "not.admin." + UUID.randomUUID() + "@example.com";
         registerAndVerify(s, customerEmail);
@@ -207,7 +217,8 @@ class DataProtectionIT {
         String admin = adminToken();
         JsonNode status = BrowserSession.json(s.api("GET", "/v1/admin/data-protection", admin, null).body());
         assertThat(status.get("currentKeyId").asString()).isEqualTo(CURRENT_KEY_ID);
-        assertThat(status.get("secretsByKey").get(OLD_KEY_ID).asLong()).isEqualTo(1);
+        assertThat(status.get("secretsByKey").get(OLD_KEY_ID).asLong()).as("a TOTP secret and the signing key")
+                .isEqualTo(2);
         assertThat(status.get("secretsByKey").get("it-lost").asLong()).isEqualTo(1);
 
         HttpResponse<String> rotation = s.api("POST", "/v1/admin/data-protection/rotate", admin, null);
@@ -220,6 +231,10 @@ class DataProtectionIT {
         assertThat(report.get("remaining").has(OLD_KEY_ID)).isFalse();
         assertThat(report.get("remaining").has(EncryptedSecretRepository.PLAINTEXT)).isFalse();
         assertThat(report.get("remaining").get("it-lost").asLong()).isEqualTo(1);
+
+        assertThat(jdbc.sql("select seal_key_id from signing_key where kid = :k").param("k", activeKid)
+                .query(String.class).single()).as("the signing key was re-sealed too").isEqualTo(CURRENT_KEY_ID);
+        assertThat(report.get("remaining").has(OLD_KEY_ID)).isFalse();
 
         StoredTotp row = stored(rotated);
         assertThat(row.keyId()).isEqualTo(CURRENT_KEY_ID);

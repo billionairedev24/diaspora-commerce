@@ -1,0 +1,25 @@
+kind,country,state,name,zipPrefix,generalRate,groceryRate,preparedFoodRate,shippingTaxable,facilitator,localRate,appliesToGrocery
+STATE,US,TX,Texas,,0.0625,0,0.0625,true,true,,
+LOCAL,US,TX,Houston area (770*),770,,,,,,0.02,false
+LOCAL,US,TX,Houston TX 77019,77019,,,,,,0.02,false
+LOCAL,US,TX,Houston TX 77042,77042,,,,,,0.02,false
+LOCAL,US,TX,Houston area (771*),771,,,,,,0.02,false
+LOCAL,US,TX,Houston area (772*),772,,,,,,0.02,false
+LOCAL,US,TX,North Houston suburbs (773*),773,,,,,,0.02,false
+LOCAL,US,TX,West Houston Katy (774*),774,,,,,,0.02,false
+LOCAL,US,TX,Galveston Bay area (775*),775,,,,,,0.02,false
+LOCAL,US,TX,Dallas (752*),752,,,,,,0.02,false
+LOCAL,US,TX,North Dallas Plano (750*),750,,,,,,0.02,false
+LOCAL,US,TX,South Dallas (751*),751,,,,,,0.02,false
+LOCAL,US,TX,Austin (787*),787,,,,,,0.02,false
+LOCAL,US,TX,Austin suburbs (786*),786,,,,,,0.02,false
+LOCAL,US,TX,San Antonio (782*),782,,,,,,0.0175,false
+LOCAL,US,TX,San Antonio north (781*),781,,,,,,0.0175,false
+LOCAL,US,TX,Fort Worth (761*),761,,,,,,0.025,false
+LOCAL,US,TX,Arlington (760*),760,,,,,,0.02,false
+LOCAL,US,TX,El Paso (799*),799,,,,,,0.02,false
+LOCAL,US,TX,Corpus Christi (784*),784,,,,,,0.02,false
+LOCAL,US,TX,Lubbock (794*),794,,,,,,0.02,false
+LOCAL,US,TX,McAllen Rio Grande Valley (785*),785,,,,,,0.02,false
+LOCAL,US,TX,Waco (767*),767,,,,,,0.02,false
+LOCAL,US,TX,Amarillo (791*),791,,,,,,0.02,false

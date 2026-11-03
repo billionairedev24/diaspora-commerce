@@ -12,7 +12,7 @@ import {
   validateInboundLine
 } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Checkbox, cx, Select, Sheet, TextField } from '@afrotransact/ui';
+import { Button, Checkbox, cx, Select, Sheet, SheetTableScroll, TextField } from '@afrotransact/ui';
 import { Plus, Trash } from '@phosphor-icons/react/ssr';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -218,7 +218,7 @@ export function ShipmentSheet({ id, onClose }: { id: string | null; onClose: () 
           <Timeline shipment={s} />
           <dl className="m-0 grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3 gap-y-1 text-sm">
             {[
-              ['Stock owner', s.ownerOrg ?? '—'],
+              ['Stock owner', s.ownerOrgName ?? '—'],
               ['Fulfilment centre', `${s.nodeId}${s.assignmentReason ? ` · ${s.assignmentReason}` : ''}`],
               ['Carrier · tracking', s.carrier ? `${s.carrier} · ${s.trackingNumber ?? ''}` : '—'],
               ['Expected arrival', shortDate(s.expectedArrival)],
@@ -232,8 +232,9 @@ export function ShipmentSheet({ id, onClose }: { id: string | null; onClose: () 
               </div>
             ))}
           </dl>
-          <div className="overflow-x-auto rounded-md border border-border">
-            <table className="at-table w-full text-xs" aria-label="Shipment lines">
+          <div className="overflow-hidden rounded-md border border-border">
+            <SheetTableScroll>
+            <table className="at-table text-xs" aria-label="Shipment lines">
               <thead className="bg-surface-muted text-left text-muted">
                 <tr>
                   {['SKU', 'Case pack', 'Lot', 'Made', 'Expires', 'Expected', 'Good', 'Damaged', 'Short / over'].map((h) => (
@@ -244,7 +245,7 @@ export function ShipmentSheet({ id, onClose }: { id: string | null; onClose: () 
               <tbody>
                 {s.lines.map((l) => (
                   <tr key={l.lineNo} className="border-t border-border">
-                    <td className="px-2 py-1.5 font-mono">{l.sku}{l.atin ? <span className="block text-muted">{l.atin}</span> : null}</td>
+                    <td className="px-2 py-1.5 font-mono">{l.sku}{l.atin ? <span className="at-cell-stack block text-muted">{l.atin}</span> : null}</td>
                     <td className="px-2 py-1.5">{l.casePack ? `${l.casePack} × ${l.cases}` : '—'}</td>
                     <td className="px-2 py-1.5 font-mono">{l.lotNo ?? '—'}</td>
                     <td className="px-2 py-1.5">{shortDate(l.mfgDate)}</td>
@@ -259,6 +260,7 @@ export function ShipmentSheet({ id, onClose }: { id: string | null; onClose: () 
                 ))}
               </tbody>
             </table>
+            </SheetTableScroll>
           </div>
           {s.discrepancies.length ? (
             <p className="m-0 text-sm text-warning" role="status">
@@ -291,7 +293,7 @@ export function ShipmentSheet({ id, onClose }: { id: string | null; onClose: () 
           ) : null}
           {inventoryEdit && s.source === 'FBA' && (s.status === 'WORKING' || s.status === 'SHIPPED') ? (
             <form
-              className="flex flex-wrap items-end gap-2"
+              className="flex flex-wrap at-align gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (carrier.trim() && tracking.trim()) track.mutate(undefined);
@@ -338,7 +340,7 @@ export function InboundPanel() {
     () => [
       { id: 'number', accessorFn: (s) => s.number, header: 'Shipment', size: 170, meta: { kind: 'mono' }, cell: ({ row }) => <span className="font-mono text-xs font-semibold">{row.original.number}</span> },
       { id: 'source', accessorFn: (s) => (s.source === 'RETAIL_ASN' ? 'Retail ASN' : 'FBA'), header: 'Type', size: 100 },
-      { id: 'ownerOrg', accessorFn: (s) => s.ownerOrg ?? '', header: 'Owner', size: 190 },
+      { id: 'ownerOrg', accessorFn: (s) => s.ownerOrgName ?? '', header: 'Owner', size: 190 },
       { id: 'nodeId', accessorFn: (s) => s.nodeId, header: 'FC', size: 90 },
       { id: 'skus', accessorFn: (s) => s.lines.map((l) => l.sku).join(', '), header: 'SKUs', size: 200, cell: ({ row }) => <span className="block truncate font-mono text-xs">{row.original.lines.map((l) => l.sku).join(', ')}</span> },
       { id: 'expectedUnits', accessorFn: (s) => s.expectedUnits, header: 'Units', size: 80, meta: { kind: 'number', align: 'end' } },

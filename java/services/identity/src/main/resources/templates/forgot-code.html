@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{layout :: head(#{auth.title.reset})}"></head>
+<body>
+<a class="skip" href="#main" th:text="#{auth.skip}">Skip to the form</a>
+<div class="page" th:attr="data-app=${brand.app}">
+  <div class="card">
+    <aside th:replace="~{layout :: aside}"></aside>
+    <main id="main" tabindex="-1" class="form-col">
+      <a th:replace="~{layout :: logo}"></a>
+      <div class="form" data-page="forgot-code">
+        <h1 class="h1" th:text="#{auth.reset.title}">Set a new password</h1>
+        <p class="lead" th:text="#{auth.reset.hint(${destination}, ${minutes})}"></p>
+        <th:block th:replace="~{layout :: alert('success', ${notice})}"></th:block>
+        <th:block th:replace="~{layout :: alert('error', ${formError})}"></th:block>
+        <form class="form" method="post" th:action="@{/login/forgot/code}" data-once novalidate>
+          <input type="hidden" id="email" th:value="${email}">
+          <div class="field">
+            <label class="label" for="code" th:text="#{auth.reset.code}">Code</label>
+            <input class="control code" id="code" name="code" inputmode="numeric" autocomplete="one-time-code"
+                   pattern="[0-9]{6}" maxlength="6" required autofocus
+                   th:attr="aria-invalid=${errors.containsKey('code') ? 'true' : null},aria-describedby=${errors.containsKey('code') ? 'code-error' : null}">
+            <p class="message message-error" id="code-error" th:text="${errors['code']}"></p>
+          </div>
+          <div class="field">
+            <label class="label" for="password" th:text="#{auth.reset.newPassword}">New password</label>
+            <div class="with-addon">
+              <input class="control" id="password" name="password" type="password" autocomplete="new-password" required
+                     maxlength="128" th:attr="aria-invalid=${errors.containsKey('password') ? 'true' : null},aria-describedby=${errors.containsKey('password') ? 'password-error password-rules' : 'password-rules'}">
+              <button type="button" class="addon" data-toggle-password="password" aria-pressed="false" hidden
+                      th:attr="aria-label=#{auth.showPassword}">
+                <span class="when-hidden"><th:block th:replace="~{icons :: icon('eye')}"></th:block></span>
+                <span class="when-shown"><th:block th:replace="~{icons :: icon('eyeSlash')}"></th:block></span>
+              </button>
+            </div>
+            <p class="message message-error" id="password-error" th:text="${errors['password']}"></p>
+          </div>
+          <div class="field">
+            <label class="label" for="confirmPassword" th:text="#{auth.confirmPassword}">Confirm password</label>
+            <div class="with-addon">
+              <input class="control" id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password"
+                     required maxlength="128" th:attr="aria-invalid=${errors.containsKey('confirmPassword') ? 'true' : null},aria-describedby=${errors.containsKey('confirmPassword') ? 'confirmPassword-error' : null}">
+              <button type="button" class="addon" data-toggle-password="confirmPassword" aria-pressed="false" hidden
+                      th:attr="aria-label=#{auth.showPassword}">
+                <span class="when-hidden"><th:block th:replace="~{icons :: icon('eye')}"></th:block></span>
+                <span class="when-shown"><th:block th:replace="~{icons :: icon('eyeSlash')}"></th:block></span>
+              </button>
+            </div>
+            <p class="message message-error" id="confirmPassword-error" th:text="${errors['confirmPassword']}"></p>
+          </div>
+          <ul class="rules" id="password-rules" data-password-rules aria-live="polite" th:attr="aria-label=#{auth.passwordRules}">
+            <li class="rule" th:each="r : ${ {'length', 'case', 'number', 'personal', 'match'} }" th:attr="data-rule=${r},data-met=#{auth.rule.met},data-unmet=#{auth.rule.unmet}" data-ok="false">
+              <span th:text="#{'auth.rule.' + ${r}}"></span><span class="visually-hidden"> — <span data-state th:text="#{auth.rule.unmet}"></span></span>
+            </li>
+          </ul>
+          <p class="message" th:text="#{auth.reset.signsOut}">Every device and app signed in to your account will be signed out.</p>
+          <button type="submit" class="btn btn-primary" th:text="#{auth.reset.submit}">Set new password</button>
+        </form>
+        <div class="links">
+          <form method="post" th:action="@{/login/forgot/resend}" class="inline-form">
+            <button type="submit" class="btn btn-link" th:text="#{auth.verify.resend}">Resend code</button>
+          </form>
+          <a th:href="@{/login/forgot}" th:text="#{auth.verify.startAgain}">Use a different email</a>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

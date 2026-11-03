@@ -91,6 +91,8 @@ at:
     live-countries: ${SELLER_LIVE_COUNTRIES:US}
     # AfroTransact Retail (1P): never on a plan, never metered, never suspended.
     retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
+    # Where AfroTransact's public pages live: a business without a website is given <this>/b/<slug> as its website.
+    public-web-url: ${PUBLIC_WEB_URL:http://localhost:3000}
     stripe:
       secret-key: ${STRIPE_SECRET_KEY:}
       connect-webhook-secret: ${STRIPE_CONNECT_WEBHOOK_SECRET:}
@@ -115,6 +117,20 @@ at:
       # identity.role.granted / revoked (S236: org_member mirrors identity). Off in tests without a broker.
       enabled: ${SELLER_CONSUMERS_ENABLED:true}
       identity-topic: ${IDENTITY_EVENTS_TOPIC:at.identity.events}
+      # S296 reward metrics: delivered shipments (sales, orders), completed bookings, live offers (listings).
+      orders-topic: ${ORDER_EVENTS_TOPIC:at.order.events}
+      bookings-topic: ${BOOKINGS_EVENTS_TOPIC:at.bookings.events}
+      offers-topic: ${OFFERS_EVENTS_TOPIC:at.offers.events}
+    # S292–S297: plans, trials, credits and rewards are ours; Stripe Billing executes the charges.
+    billing:
+      # Reconcile the plan catalogue with Stripe at startup (adopt make stripe-setup prices, create missing ones).
+      sync-on-startup: ${PLAN_SYNC_ON_STARTUP:true}
+      # S298 kill switch: organisations may pay their plan from their sales (payments withholds each invoice from the
+      # next transfers; per-organisation choice EARNINGS_FIRST / CARD). Off: the choice is hidden and every plan
+      # invoice is charged to the card. On in local and dev profiles; uat / prod set it in Helm values.
+      collect-from-earnings: ${COLLECT_PLAN_FEES_FROM_EARNINGS:false}
+      payments-url: ${PAYMENTS_URL:http://localhost:8105}
+      timeout: ${PAYMENTS_TIMEOUT:10s}
     # S206 metered billing: usage sources (service token of the seller-service client, scopes
     # inventory:storage.read ads:spend.read ai:usage.read) and the daily metering run.
     metering:
@@ -129,8 +145,16 @@ at:
       enabled: ${SELLER_JOBS_ENABLED:true}
       # Hourly: reminders 7/3/1 days before current_deadline (idempotent per threshold).
       reminder-cron: ${REMINDER_CRON:0 15 * * * *}
+      # Nightly (UTC): registers every Connect account with payments, which transfers only to accounts it knows.
+      account-sync-cron: ${ACCOUNT_SYNC_CRON:0 30 2 * * *}
       plan-change-cron: ${PLAN_CHANGE_CRON:0 5 * * * *}
       activation-retry-interval: ${ACTIVATION_RETRY_INTERVAL:10m}
       # Daily: meters the two previous UTC days (late usage is picked up; re-runs only send differences).
       metering-cron: ${METERING_CRON:0 20 1 * * *}
+      # Daily: every live reward rule for every organisation (days since approval, windows without events).
+      rewards-cron: ${REWARDS_CRON:0 40 2 * * *}
+      # S299: rules checked at window end (low-sales relief), decided when due (lead before the window/trial ends).
+      reward-window-interval: ${REWARD_WINDOW_INTERVAL:15m}
+      grant-retry-interval: ${GRANT_RETRY_INTERVAL:15m}
+      earnings-interval: ${EARNINGS_COLLECTION_INTERVAL:1m}
       zone: ${JOBS_ZONE:UTC}

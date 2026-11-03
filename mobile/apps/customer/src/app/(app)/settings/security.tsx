@@ -19,7 +19,7 @@ export default function Security() {
   const [changing, setChanging] = useState(false);
   const [confirmAll, setConfirmAll] = useState(false);
   if (changing) {
-    return <PasscodeSetupView header={<SubHeader title="Change passcode" onBack={() => setChanging(false)} />} stepLabel="CHANGE PASSCODE" onDone={async (pin) => { await savePasscode(pin); setChanging(false); toast('Passcode updated'); }} />;
+    return <PasscodeSetupView header={<SubHeader title="Change passcode" onBack={() => setChanging(false)} />} onDone={async (pin) => { await savePasscode(pin); setChanging(false); toast('Passcode updated'); }} />;
   }
   return (
     <Screen header={<SubHeader title="Sign-in & security" />}>
@@ -32,7 +32,7 @@ export default function Security() {
       <Sheet visible={confirmAll} onClose={() => setConfirmAll(false)}>
         <AppText variant="heading">Sign out everywhere?</AppText>
         <AppText color={c.textMuted}>Ends this session and removes {biometryLabel} and your passcode from this phone. Other devices sign out when their session is revoked.</AppText>
-        <Button kind="danger" label="Sign out of all devices" onPress={() => { setConfirmAll(false); void signOut({ flash: 'Signed out on all devices' }); }} />
+        <Button kind="danger" label="Sign out of all devices" onPress={() => { setConfirmAll(false); void signOut({ flash: { code: 'all-devices' } }); }} />
         <Button kind="ghost" label="Cancel" onPress={() => setConfirmAll(false)} />
       </Sheet>
     </Screen>

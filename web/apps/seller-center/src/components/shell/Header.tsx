@@ -41,7 +41,7 @@ export function Header({ session, menuButton }: { session: SellerSession | null;
       {applying ? (
         <button
           type="button"
-          onClick={() => void signOutEverywhere(storefrontUrl)}
+          onClick={() => void signOutEverywhere()}
           className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-pill border border-header-muted bg-header px-3 text-sm font-semibold text-header-text hover:border-header-text"
         >
           <SignOut size={16} aria-hidden />
@@ -64,7 +64,7 @@ export function Header({ session, menuButton }: { session: SellerSession | null;
           ]}
           signOutLabel={t('sc.header.signOut')}
           signOutIcon={<SignOut aria-hidden />}
-          onSignOut={() => void signOutEverywhere(storefrontUrl)}
+          onSignOut={() => void signOutEverywhere()}
         />
       ) : null}
     </header>

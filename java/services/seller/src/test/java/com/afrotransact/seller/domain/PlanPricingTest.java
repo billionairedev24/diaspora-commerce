@@ -12,7 +12,7 @@ class PlanPricingTest {
     private static final Plan ESSENTIALS = plan("seller_essentials", 0, 0);
     private static final Plan GROWTH = plan("seller_growth", 3900, 30);
     private static final Plan PRO = plan("seller_pro", 12900, 14);
-    private static final Plan STUDIO = new Plan("provider_studio", OrgKind.PROVIDER, "Provider Studio", null, 4900,
+    private static final Plan STUDIO = Plan.standard("provider_studio", OrgKind.PROVIDER, "Provider Studio", null, 4900,
             30, List.of(), 20);
 
     @Test
@@ -81,6 +81,6 @@ class PlanPricingTest {
     }
 
     private static Plan plan(String code, long cents, int trial) {
-        return new Plan(code, OrgKind.SELLER, code, null, cents, trial, List.of(), 0);
+        return Plan.standard(code, OrgKind.SELLER, code, null, cents, trial, List.of(), 0);
     }
 }

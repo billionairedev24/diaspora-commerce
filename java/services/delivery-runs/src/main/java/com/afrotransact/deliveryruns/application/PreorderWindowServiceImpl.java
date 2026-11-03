@@ -44,8 +44,9 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
     private static final Map<String, Set<PreorderStatus>> TABS = Map.of(
             "open", EnumSet.of(PreorderStatus.OPEN),
             "upcoming", EnumSet.of(PreorderStatus.UPCOMING),
+            "decision", EnumSet.of(PreorderStatus.AWAITING_DECISION),
             "scheduled", EnumSet.of(PreorderStatus.UPCOMING),
-            "closed", EnumSet.of(PreorderStatus.CLOSED, PreorderStatus.DELIVERED),
+            "closed", EnumSet.of(PreorderStatus.CLOSED, PreorderStatus.DELIVERED, PreorderStatus.CANCELLED),
             "draft", EnumSet.of(PreorderStatus.DRAFT),
             "drafts", EnumSet.of(PreorderStatus.DRAFT));
 
@@ -91,7 +92,7 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
         List<PreorderWindow> searched = all.stream().filter(w -> query.isEmpty() || matches(w, query)).toList();
         Map<String, Integer> tabs = new LinkedHashMap<>();
         tabs.put("all", searched.size());
-        for (String tab : List.of("open", "upcoming", "closed", "draft")) {
+        for (String tab : List.of("open", "upcoming", "decision", "closed", "draft")) {
             Set<PreorderStatus> in = TABS.get(tab);
             tabs.put(tab, (int) searched.stream().filter(w -> in.contains(w.status(now))).count());
         }
@@ -99,7 +100,8 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
         List<PreorderWindow> filtered = searched.stream().filter(byStatus).toList();
         List<WindowView> items = filtered.stream().skip((long) pageNo * pageSize).limit(pageSize)
                 .map(w -> support.view(w, coverage, totals, now)).toList();
-        return new WindowPage(items, filtered.size(), pageNo, pageSize, tabs, coverage.settings().enabled());
+        return new WindowPage(items, filtered.size(), pageNo, pageSize, tabs, coverage.settings().enabled(),
+                support.defaultMinOrders());
     }
 
     @Override
@@ -107,7 +109,7 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
     public WindowView create(WindowCommand command) {
         permissions.require(DeliveryRunsPermissions.PREORDERS_MANAGE);
         Instant now = Instant.now(clock);
-        WindowDetails details = PreorderSupport.details(command);
+        WindowDetails details = PreorderSupport.details(command, support.defaultMinOrders());
         String prefix = PreorderWindow.codePrefix(details.targets());
         String code = prefix + "-" + sequences.next("code:" + prefix, 1);
         PreorderWindow saved = windows.insert(PreorderWindow.draft(UUID.randomUUID(), code, details, now));
@@ -129,8 +131,8 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
         Instant now = Instant.now(clock);
         PreorderWindow w = support.lock(id, expectedVersion);
         PaymentSettings payment = support.coverage().settings().payment();
-        WindowDetails details = PreorderSupport.details(command);
-        PreorderWindow saved = windows.update(w.edit(details, payment, support.pageUrl(), now));
+        WindowDetails details = PreorderSupport.details(command, w.details().minOrders());
+        PreorderWindow saved = windows.update(w.edit(details, support.coverage().fees(), support.pageUrl(), now));
         rememberAreas(details);
         if (!saved.draft()) {
             events.window(DeliveryRunsEvents.PREORDER_WINDOW_UPDATED, saved, payment, now);
@@ -145,7 +147,7 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
         Instant now = Instant.now(clock);
         PreorderWindow w = support.lock(id, expectedVersion);
         PaymentSettings payment = support.coverage().settings().payment();
-        PreorderWindow saved = windows.update(w.publish(payment, support.pageUrl(), now));
+        PreorderWindow saved = windows.update(w.publish(support.coverage().fees(), support.pageUrl(), now));
         events.window(DeliveryRunsEvents.PREORDER_WINDOW_PUBLISHED, saved, payment, now);
         return support.view(saved, now);
     }
@@ -168,7 +170,7 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
         Instant now = Instant.now(clock);
         PaymentSettings payment = support.coverage().settings().payment();
         PreorderWindow saved = windows.update(support.lock(id, expectedVersion)
-                .resume(payment, support.pageUrl(), now));
+                .resume(support.coverage().fees(), support.pageUrl(), now));
         events.window(DeliveryRunsEvents.PREORDER_WINDOW_RESUMED, saved, payment, now, actor.subject());
         return support.view(saved, now);
     }
@@ -219,7 +221,7 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
     /** Flips the window's own switch when it differs (never the master switch) and records who did it. */
     private WindowView switchOne(PreorderWindow w, boolean active, Actor actor, Instant now) {
         PaymentSettings payment = support.coverage().settings().payment();
-        PreorderWindow next = w.switchTo(active, payment, support.pageUrl(), now);
+        PreorderWindow next = w.switchTo(active, support.coverage().fees(), support.pageUrl(), now);
         if (next == w) {
             return support.view(w, now);
         }

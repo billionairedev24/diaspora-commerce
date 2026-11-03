@@ -164,6 +164,7 @@ class LongDatedBookingsIT extends PaymentsIntegrationTest {
                 .as("the order's primary payment").isEqualTo(paymentId);
 
         // Completed: capture the balance through the usual endpoint, then settle the whole order.
+        STRIPE.retrieveIntent(childPi, BALANCE, "requires_capture");
         STRIPE.capture(childPi, "ch_os_" + booking, BALANCE, "succeeded");
         STRIPE.chargeFees("ch_os_" + booking, new long[] {BALANCE, 262});
         ok(send("POST", "/v1/payments/" + childId + "/capture", Map.of("shipmentId", "balance", "lineIds",

@@ -1,0 +1,44 @@
+# tools/ops/kafka-replay (Go): vet and test on every change to the tool. No image; operators build it (README).
+name: tool-kafka-replay
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/ops/kafka-replay/**
+      - go/.golangci.yml
+      - .github/workflows/tool-kafka-replay.yml
+  pull_request:
+    paths:
+      - tools/ops/kafka-replay/**
+      - go/.golangci.yml
+      - .github/workflows/tool-kafka-replay.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.27.2"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/ops/kafka-replay
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: tools/ops/kafka-replay/go.sum
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test -race ./...
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+          install-mode: goinstall
+          working-directory: tools/ops/kafka-replay
+          args: --config ../../../go/.golangci.yml --timeout 5m

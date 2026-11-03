@@ -7,6 +7,10 @@ kafka:
   brokers: [localhost:9092]
   group: indexer
   topics: [at.product.events, at.inventory.events, at.offers.events, at.seller-org.events]
+# Meilisearch is the default engine (tools/dev/local.sh starts it; the key is the local compose default). SEARCH_PROVIDER=elasticsearch switches.
+meilisearch:
+  url: http://localhost:7700
+  apiKey: local-meili-master-key
 elasticsearch:
   urls: [http://localhost:9200]
   refresh: true
@@ -33,6 +37,14 @@ embeddings:
   cacheSize: 10000
   backfillInterval: 15m
   backfillBatch: 100
+# `indexer reindex` (make reindex-search): rebuilds the index from catalog (search export, scope catalog:read of client
+# indexer-service), offers (public buy boxes) and inventory (public availability) instead of Kafka history.
+reindex:
+  offersUrl: http://localhost:8102
+  inventoryUrl: http://localhost:8103
+  scopes: ["catalog:read"]
+  batch: 100
+  concurrency: 4
 retry:
   attempts: 4
   backoffMs: 250

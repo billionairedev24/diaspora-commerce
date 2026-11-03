@@ -21,8 +21,6 @@ public interface ApplicationRules {
 
     Validated<List<Owner>> owners(List<Owner> owners, EntityType entityType, RuleContext ctx, boolean complete);
 
-    Validated<PayoutSection> payouts(PayoutInput in, PayoutSection existing, boolean complete);
-
     Validated<PlanSection> plan(PlanSection in, Optional<Plan> plan, ApplicationData data, RuleContext ctx,
                                 boolean complete);
 

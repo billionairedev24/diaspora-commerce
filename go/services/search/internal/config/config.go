@@ -9,9 +9,15 @@ import (
 
 // Config for the search service.
 type Config struct {
-	Port          int      `yaml:"port" env:"PORT"`
-	DocsEnabled   bool     `yaml:"docsEnabled" env:"DOCS_ENABLED"`
-	Markets       []string `yaml:"markets" env:"MARKETS"`
+	Port        int      `yaml:"port" env:"PORT"`
+	DocsEnabled bool     `yaml:"docsEnabled" env:"DOCS_ENABLED"`
+	Markets     []string `yaml:"markets" env:"MARKETS"`
+	// SearchProvider selects the engine: "elasticsearch" (default) or "meilisearch". The indexer must use the same one.
+	SearchProvider string `yaml:"searchProvider" env:"SEARCH_PROVIDER"`
+	Meilisearch    struct {
+		URL    string `yaml:"url" env:"MEILISEARCH_URL"`
+		APIKey string `yaml:"apiKey" env:"MEILISEARCH_API_KEY"`
+	} `yaml:"meilisearch"`
 	Elasticsearch struct {
 		URLs     []string `yaml:"urls" env:"ES_URLS"`
 		Username string   `yaml:"username" env:"ES_USERNAME"`

@@ -1,15 +1,14 @@
 env: prod
-replicas: 3
+replicas: 1
 autoscaling:
-  enabled: true
-  min: 3
-  max: 12
-  cpu: 70
+  enabled: false
 rollout:
-  enabled: true
+  enabled: false
 resources:
-  requests: {cpu: 500m, memory: 256Mi}
-  limits: {memory: 512Mi}
+  requests: {cpu: 25m, memory: 48Mi}
+  limits: {memory: 160Mi}
+monitoring:
+  serviceMonitor: false     # no in-cluster Prometheus on the lean footprint (docs/engineering/cloud-cost.md)
 telemetry:
   otlpEndpoint: otel-collector.observability:4318
   sampling: "0.1"

@@ -1,0 +1,4 @@
+# orders on this server: the in-cluster Temporal (no TLS, namespace afrotransact), not the Temporal Cloud values-dev.yaml names.
+extraEnv:
+  TEMPORAL_TARGET: temporal.temporal.svc.cluster.local:7233
+  TEMPORAL_NAMESPACE: afrotransact

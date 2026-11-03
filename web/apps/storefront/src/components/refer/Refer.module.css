@@ -1,0 +1,8 @@
+/* Refer a friend (S322). Flat; design tokens only. */
+.stack { display: flex; flex-direction: column; gap: var(--at-space-3); max-inline-size: 46rem; }
+.code { font-size: var(--at-text-2xl); font-weight: var(--at-weight-bold); letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
+.link { overflow-wrap: anywhere; font-size: var(--at-text-md); }
+.share { display: flex; flex-wrap: wrap; gap: var(--at-space-2) var(--at-space-6); align-items: center; font-size: var(--at-text-md); }
+.steps { margin: 0; padding-inline-start: var(--at-space-5); display: flex; flex-direction: column; gap: var(--at-space-2); font-size: var(--at-text-md); line-height: var(--at-leading-normal); }
+.fine { margin: 0; font-size: var(--at-text-sm); color: var(--at-color-text-muted); line-height: var(--at-leading-normal); }
+.para { margin: 0; font-size: var(--at-text-md); line-height: var(--at-leading-normal); }

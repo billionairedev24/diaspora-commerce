@@ -11,6 +11,7 @@ import { palletSscc } from '@/components/inventory/Labels';
 import { ReceivingPanel } from '@/components/inventory/ReceivingPanel';
 import { pickRanks } from '@/components/inventory/StockPanel';
 import { rowsOf } from '@/components/retail/ReceiptScreen';
+import { RetailView } from '@/components/retail/RetailView';
 
 import { renderScreen } from './render';
 import { nav } from './setup';
@@ -72,7 +73,7 @@ describe('receiving and cycle count screens', () => {
     const dock = await screen.findAllByTestId('dock-shipment');
     await user.click(dock.find((d) => d.textContent?.includes('FBA-IN-006601')) as HTMLElement);
     const screenEl = await screen.findByTestId('receiving-screen');
-    await user.type(within(screenEl).getByLabelText(/Scan a box/), 'LPN7Q4K2M9X{Enter}');
+    await user.type(within(screenEl).getByLabelText(/Barcode, LPN, GS1-128/), 'LPN7Q4K2M9X{Enter}');
     expect(await within(screenEl).findByText(/Box LPN7Q4K2M9X: 36 units counted/)).toBeInTheDocument();
     const good = within(screenEl).getByLabelText('Good units');
     await user.clear(good);
@@ -108,6 +109,57 @@ describe('receiving and cycle count screens', () => {
     await waitFor(() => expect(post).toBeEnabled());
     await user.click(post);
     expect(await within(sheet).findByText(/-2 posted/)).toBeInTheDocument();
+  });
+});
+
+describe('retail purchase order: costs of the inbound shipment', () => {
+  beforeEach(() => {
+    resetHubDb(new Date());
+  });
+
+  it('shows the associated costs and saves new ones on the shipment', async () => {
+    nav.set('/retail?tab=pos');
+    await renderScreen(<RetailView />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('PO-1P-000322'));
+    const sheet = await screen.findByRole('dialog', { name: /Purchase order PO-1P-000322/ });
+    const costs = await within(sheet).findByTestId('po-shipment-costs');
+    expect(costs).toHaveTextContent(/Freight \$1,840\.00 \(MSC freight invoice 4412\)/);
+    await user.click(within(costs).getByRole('button', { name: 'Edit costs' }));
+    await user.click(within(costs).getByRole('button', { name: /Add a cost/ }));
+    const amounts = within(costs).getAllByLabelText('Amount');
+    await user.type(amounts[amounts.length - 1]!, '620.50');
+    await user.click(within(costs).getByRole('button', { name: 'Save costs' }));
+    await waitFor(() => expect(within(sheet).getByTestId('po-shipment-costs')).toHaveTextContent(/\$620\.50/));
+  });
+});
+
+describe('suppliers: edit, stop doing business', () => {
+  beforeEach(() => {
+    resetHubDb(new Date());
+  });
+
+  it('edits a supplier with country and currency lists, then stops and resumes business with a reason', async () => {
+    nav.set('/retail?tab=suppliers');
+    await renderScreen(<RetailView />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Accra Spice Co.'));
+    const sheet = await screen.findByRole('dialog', { name: /Accra Spice Co\./ });
+    expect(within(sheet).getByLabelText('Country')).toBeDisabled();
+    const currency = within(sheet).getByLabelText('Currency we pay in');
+    expect(within(currency).getAllByRole('option').some((o) => o.textContent?.startsWith('GHS'))).toBe(true);
+    const name = within(sheet).getByLabelText('Supplier name');
+    await user.clear(name);
+    await user.type(name, 'Accra Spice Company');
+    await user.click(within(sheet).getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByRole('dialog', { name: /Accra Spice Company/ })).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: /Accra Spice Company/ });
+    await user.click(within(dialog).getByRole('button', { name: 'Stop doing business' }));
+    expect(within(dialog).getByRole('button', { name: 'Stop doing business' })).toBeDisabled();
+    await user.type(within(dialog).getByLabelText(/Why\?/), 'Quality problems');
+    await user.click(within(dialog).getByRole('button', { name: 'Stop doing business' }));
+    expect(await within(screen.getByRole('dialog')).findByRole('button', { name: 'Resume business' })).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).getByText('Quality problems')).toBeInTheDocument();
   });
 });
 

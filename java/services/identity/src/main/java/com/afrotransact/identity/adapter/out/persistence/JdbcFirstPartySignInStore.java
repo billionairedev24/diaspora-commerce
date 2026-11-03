@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import com.afrotransact.identity.domain.ChallengeKind;
 import com.afrotransact.identity.domain.LoginTicket;
+import com.afrotransact.identity.domain.SessionDevice;
 import com.afrotransact.identity.domain.SignInChallenge;
 import com.afrotransact.identity.domain.SignInMethod;
 import com.afrotransact.identity.port.FirstPartySignInStore;
@@ -53,12 +54,14 @@ class JdbcFirstPartySignInStore implements FirstPartySignInStore {
     @Override
     public void insertTicket(LoginTicket t) {
         jdbc.sql("""
-                insert into login_ticket (token_hash, user_id, client_id, method, created_at, expires_at)
-                values (:hash, :user, :client, :method, :created, :expires)
+                insert into login_ticket (token_hash, user_id, client_id, method, created_at, expires_at, user_agent, ip_hash)
+                values (:hash, :user, :client, :method, :created, :expires, :userAgent, :ipHash)
                 """)
                 .param("hash", t.tokenHash()).param("user", t.userId()).param("client", t.clientId())
                 .param("method", t.method().name()).param("created", Jdbc.ts(t.createdAt()))
                 .param("expires", Jdbc.ts(t.expiresAt()))
+                .param("userAgent", t.device() == null ? null : t.device().userAgent())
+                .param("ipHash", t.device() == null ? null : t.device().ipHash())
                 .update();
     }
 
@@ -66,12 +69,13 @@ class JdbcFirstPartySignInStore implements FirstPartySignInStore {
     public Optional<LoginTicket> burnTicket(String tokenHash, Instant now) {
         return jdbc.sql("""
                 update login_ticket set used_at = :now where token_hash = :hash and used_at is null
-                returning token_hash, user_id, client_id, method, created_at, expires_at, used_at
+                returning token_hash, user_id, client_id, method, created_at, expires_at, used_at, user_agent, ip_hash
                 """)
                 .param("now", Jdbc.ts(now)).param("hash", tokenHash)
                 .query((rs, n) -> new LoginTicket(rs.getString("token_hash"), rs.getObject("user_id", UUID.class),
                         rs.getString("client_id"), SignInMethod.valueOf(rs.getString("method")),
-                        Jdbc.instant(rs, "created_at"), Jdbc.instant(rs, "expires_at"), null))
+                        Jdbc.instant(rs, "created_at"), Jdbc.instant(rs, "expires_at"), null,
+                        SessionDevice.stored(rs.getString("user_agent"), rs.getString("ip_hash"))))
                 .optional();
     }
 

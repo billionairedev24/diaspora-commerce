@@ -68,11 +68,34 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 	mustStatus(t, b.do("GET", "/v1/services/"+testkit.ShopperServiceID+"/summary?mode=IN_PERSON", nil), 200)
 	r = b.do("GET", "/v1/service-providers/"+testkit.ShopperProviderID, nil)
 	mustStatus(t, r, 200)
-	design, _ := r.json(t)["design"].(map[string]any)
-	if design == nil || design["layout"] != "GALLERY_FIRST" || len(design["social"].([]any)) != 1 {
-		t.Fatalf("provider page should carry the published layout and only approved links: %v", design)
+	if _, has := r.json(t)["design"]; has {
+		t.Fatal("the provider page no longer carries a designed page")
 	}
 	mustStatus(t, b.do("GET", "/v1/service-providers/org_nope", nil), 404)
+	// A text search also carries the services matching its words (first page only), so "braids" finds a provider.
+	sp := b.do("GET", "/v1/search?q=jollof", nil).json(t)
+	if svc, _ := sp["services"].([]any); len(svc) != 1 || svc[0].(map[string]any)["name"] != "Knotless braids" {
+		t.Fatalf("search services = %v", sp["services"])
+	}
+	if svc, _ := b.do("GET", "/v1/search?q=jollof&page=1", nil).json(t)["services"].([]any); len(svc) != 0 {
+		t.Fatalf("only the first page carries services: %v", svc)
+	}
+	// The plain public page of a business (what Stripe is given as its website): public, with a provider's services.
+	r = b.do("GET", "/v1/business-pages/braids-by-ama", nil)
+	mustStatus(t, r, 200)
+	page := r.json(t)
+	if page["name"] != "Braids by Ama" || page["brandColor"] != "#8a3b12" || page["indexable"] != true || len(page["services"].([]any)) != 1 {
+		t.Fatalf("business page = %v", page)
+	}
+	// A seller's page lists its live products (through search, limited to the seller) and stays out of search engines
+	// until the organisation is approved.
+	r = b.do("GET", "/v1/business-pages/ades-kitchen", nil)
+	mustStatus(t, r, 200)
+	if sp := r.json(t); sp["indexable"] != false || len(sp["products"].([]any)) == 0 {
+		t.Fatalf("seller business page = %v", sp)
+	}
+	mustStatus(t, b.do("GET", "/v1/business-pages/nobody", nil), 404)
+	mustStatus(t, b.do("GET", "/v1/business-pages/Not%20A%20Slug", nil), 404)
 	mustStatus(t, b.do("GET", "/v1/account/security", nil), 401)
 	mustStatus(t, b.do("POST", "/v1/lola/chat", map[string]any{"message": "hi"}), 401)
 
@@ -116,6 +139,10 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 	if sh["returnable"] != true || sh["returnWindowEndsAt"] != "2026-11-02T17:00:00Z" || sh["problemReportOnly"] != false {
 		t.Fatalf("order detail should carry the return window: %v", sh)
 	}
+	if rule, _ := sh["deliveryFeeRule"].(map[string]any); rule == nil || rule["method"] != "CARRIER" || rule["ruleVersion"] != float64(4) ||
+		rule["band"] != "free over 35.00" || rule["source"] != "RULE" || rule["amountMinor"] != float64(0) {
+		t.Fatalf("order detail keeps the delivery fee rule it was charged by: %v", sh["deliveryFeeRule"])
+	}
 	if line := sh["lines"].([]any)[0].(map[string]any); line["refundedMinor"] != float64(1353) {
 		t.Fatalf("line refunds from payments: %v", line)
 	}
@@ -131,38 +158,8 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 	}
 	mustStatus(t, b.do("POST", "/v1/account/orders/"+testkit.ShopperOrderNumber+"/shipments/"+testkit.ShopperShipmentID+"/cancel", map[string]any{"reason": "late"}), 409)
 
-	// Returns via tax-returns.
-	r = b.do("GET", "/v1/account/orders/"+testkit.ShopperOrderNumber+"/returnable", nil)
-	mustStatus(t, r, 200)
-	mustStatus(t, b.do("POST", "/v1/account/returns", map[string]any{"orderNumber": testkit.ShopperOrderNumber, "shipmentId": testkit.ShopperShipmentID,
-		"method": "DROP_OFF", "lines": []map[string]any{{"lineId": testkit.ShopperLineID, "quantity": 1, "reason": "BROKEN"}}}), 422)
-	r = b.do("POST", "/v1/account/returns", map[string]any{"orderNumber": testkit.ShopperOrderNumber, "shipmentId": testkit.ShopperShipmentID,
-		"method": "DROP_OFF", "lines": []map[string]any{{"lineId": testkit.ShopperLineID, "quantity": 1, "reason": "DAMAGED", "comment": "Torn"}}})
-	mustStatus(t, r, 201)
-	if r.json(t)["qrPayload"] == nil || r.json(t)["refundMinor"].(float64) != 1353 {
-		t.Fatalf("start return: %s", r.body)
-	}
-	// The customer app's short form.
-	mustStatus(t, b.do("POST", "/v1/account/returns", map[string]any{"orderNumber": testkit.ShopperOrderNumber, "atin": "ATJOLLOFV1", "reason": "NO_LONGER_NEEDED"}), 201)
-	mustStatus(t, b.do("GET", "/v1/account/returns", nil), 200)
-	r = b.do("GET", "/v1/account/returns?orderNumber="+testkit.ShopperOrderNumber, nil)
-	mustStatus(t, r, 200)
-	if n := len(r.json(t)["items"].([]any)); n != 1 {
-		t.Fatalf("returns of the order: %d", n)
-	}
-	mustStatus(t, b.do("GET", "/v1/account/returns?orderNumber=AT-2026-NOPE", nil), 404)
-	r = b.do("GET", "/v1/account/returns/RMA-0000ABCD", nil) // by number (QR)
-	mustStatus(t, r, 200)
-	if r.json(t)["rmaId"] != testkit.ShopperRMAID {
-		t.Fatalf("by number: %s", r.body)
-	}
-	r = b.do("GET", "/v1/account/returns/"+testkit.ShopperRMAID, nil)
-	mustStatus(t, r, 200)
-	if r.json(t)["quote"] == nil {
-		t.Fatal("return detail needs the refund quote")
-	}
-	mustStatus(t, b.do("POST", "/v1/account/returns/"+testkit.ShopperRMAID+"/cancel", nil), 200)
-	mustStatus(t, b.do("GET", "/v1/account/returns/nope", nil), 404)
+	// Help requests (the customer side of disputes); the full flow and its guards are in help_requests_test.go.
+	exerciseHelpRequests(t, b, u)
 
 	// Login & security.
 	r = b.do("GET", "/v1/account/security", nil)
@@ -317,7 +314,8 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 
 	for _, op := range []string{"searchServices", "getService", "getServiceDays", "getServiceSlots", "getBookingQuote", "getProviderPage",
 		"listPaymentMethods", "createSetupIntent", "deletePaymentMethod", "setDefaultPaymentMethod", "createPaymentSheetKeys", "listOrders",
-		"getOrder", "trackOrder", "cancelShipment", "getReturnEligibility", "startReturn", "listReturns", "getReturn", "cancelReturn",
+		"getOrder", "trackOrder", "cancelShipment", "requestHelpEvidenceUpload", "completeHelpEvidenceUpload", "createHelpRequest",
+		"listHelpRequests", "getHelpRequest",
 		"getSecurity", "changePassword", "startTotp", "confirmTotp", "disableTotp", "startSmsMfa", "confirmSmsMfa", "disableSmsMfa",
 		"regenerateRecoveryCodes", "removePasskey", "revokeSession", "revokeOtherSessions", "removeDevice", "unlinkAccount",
 		"getNotificationPreferences", "saveNotificationPreferences", "bookService", "syncBookingPayment", "listMyBookings", "getMyBooking",

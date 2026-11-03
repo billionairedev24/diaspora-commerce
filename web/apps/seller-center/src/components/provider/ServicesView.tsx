@@ -2,7 +2,7 @@
 
 import { sellerKeys, sellerQueries, type ServiceInput, ServiceInputSchema, type ServiceOffer } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Checkbox, Dialog, TextField, useToast } from '@afrotransact/ui';
+import { Button, Checkbox, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
@@ -87,7 +87,7 @@ export function ServicesView() {
         error={q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : undefined}
         onRowClick={editable ? (s) => open(s) : undefined}
         empty="No services yet. Add the first thing customers can book." onExport={exportDataset} pollExport={pollExport} />
-      <Dialog open={editing !== null} onOpenChange={(o) => (o ? undefined : setEditing(null))} width={520} title={editing === 'new' ? 'Add service' : 'Edit service'}
+      <Sheet open={editing !== null} onOpenChange={(o) => (o ? undefined : setEditing(null))} width={520} title={editing === 'new' ? 'Add service' : 'Edit service'}
         description="Customers pay the deposit when they book; the rest is charged when you mark the booking complete.">
         <form className="flex flex-col gap-1" onSubmit={(e) => { e.preventDefault(); submit(); }}>
           <TextField label="Name" value={draft.name} error={errors.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
@@ -107,7 +107,7 @@ export function ServicesView() {
           {errors.form ? <span role="alert" className="text-sm text-danger">{errors.form}</span> : null}
           <Button type="submit" loading={save.isPending}>Save service</Button>
         </form>
-      </Dialog>
+      </Sheet>
     </ModulePage>
   );
 }

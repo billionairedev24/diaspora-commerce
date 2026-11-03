@@ -35,6 +35,12 @@ func writeProblem(w http.ResponseWriter, r *http.Request, log *slog.Logger, err 
 		"instance": r.URL.Path,
 		"code":     p.Code,
 	}
+	// Staff are told which service is not answering, so an outage reads as one ("delivery-runs isn't responding") and
+	// not as a bug on the page; customers and sellers never see service names.
+	if p.Status == http.StatusServiceUnavailable && p.Upstream != "" && strings.HasPrefix(r.URL.Path, "/v1/staff/") {
+		doc["upstream"] = p.Upstream
+		doc["detail"] = "The " + p.Upstream + " service isn't responding. Try again in a moment; if it keeps failing, ask an engineer to check that it is running."
+	}
 	for k, v := range p.Extra {
 		doc[k] = v
 	}

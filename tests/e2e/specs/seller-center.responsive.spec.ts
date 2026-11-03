@@ -13,7 +13,36 @@ const openMenu = async (page: Page) => {
 const SELLER_ROUTES: AuditRoute[] = [
   { label: 'dashboard', path: '/', open: { label: 'menu', run: openMenu } },
   { label: 'listings', path: '/listings' },
-  { label: 'new listing', path: '/listings/new' },
+  {
+    label: 'new listing',
+    path: '/listings/new',
+    // A chosen category brings every section (price, details, variations, shipping, compliance) onto the page.
+    open: {
+      label: 'category chosen',
+      run: async (p) => {
+        await p.getByRole('combobox', { name: 'Category' }).fill('spices');
+        await p.getByRole('option', { name: /Spices & seasonings/ }).click();
+        await p.getByRole('heading', { name: 'Compliance' }).waitFor();
+      }
+    }
+  },
+  {
+    label: 'new sized listing',
+    path: '/listings/new',
+    // A sized category adds the Size guide section; its chart table, the own-size input and the grouped quality list must fit every width.
+    open: {
+      label: 'sized category chosen',
+      run: async (p) => {
+        await p.getByRole('combobox', { name: 'Category' }).fill('kaftans');
+        await p.getByRole('option', { name: /Kaftans & shirts/ }).click();
+        await p.getByRole('heading', { name: 'Size guide' }).waitFor();
+        await p.getByLabel('Size chart').selectOption({ label: 'Kaftans and shirts' });
+        await p.getByRole('table', { name: 'Size chart Kaftans and shirts' }).waitFor();
+      }
+    }
+  },
+  { label: 'size charts', path: '/listings/size-charts', open: { label: 'chart editor', run: (p) => p.getByRole('button', { name: 'New size chart' }).click() } },
+  { label: 'import size charts', path: '/listings/size-charts/import' },
   { label: 'inventory', path: '/inventory' },
   { label: 'orders', path: '/orders', open: { label: 'order sheet', run: (p) => p.getByTestId('order-row').first().click() } },
   { label: 'ship from', path: '/orders/ship-from' },

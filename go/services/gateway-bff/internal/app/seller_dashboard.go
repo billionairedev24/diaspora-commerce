@@ -19,13 +19,16 @@ type SellerDashboardService interface {
 	Dashboard(ctx context.Context, c *domain.Caller, rangeDays int) (domain.Dashboard, error)
 }
 
-type sellerDashboardImpl struct{ r *orgResolver }
+type sellerDashboardImpl struct {
+	r     *orgResolver
+	cache *feedCache[domain.Dashboard]
+}
 
 var _ SellerDashboardService = (*sellerDashboardImpl)(nil)
 
 // NewSellerDashboardService returns the SellerDashboardService.
 func NewSellerDashboardService(d SellerDeps) SellerDashboardService {
-	return &sellerDashboardImpl{r: newResolver(d)}
+	return &sellerDashboardImpl{r: newResolver(d), cache: newFeedCache[domain.Dashboard]()}
 }
 
 func dollars(minor int64) float64 { return math.Round(float64(minor)) / 100 }
@@ -71,10 +74,15 @@ func (s *sellerDashboardImpl) Dashboard(ctx context.Context, c *domain.Caller, r
 	now := s.r.d.Clock.now().In(s.r.d.Location)
 	to := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.r.d.Location)
 	from := to.AddDate(0, 0, -(rangeDays - 1))
-	if sc.kind() == domain.OrgKindProvider {
-		return s.provider(ctx, c, sc, from, to, rangeDays), nil
-	}
-	return s.seller(ctx, c, sc, from, to, rangeDays), nil
+	// Cached for a minute per organisation, member and range: access was checked above, and the upstream answers depend on
+	// what this member may read (S195).
+	key := fmt.Sprintf("%s|%s|%s|%d", sc.org.ID, sc.member.ID, sc.access.Role, rangeDays)
+	return s.cache.do(key, s.r.d.Clock.now(), func() domain.Dashboard {
+		if sc.kind() == domain.OrgKindProvider {
+			return s.provider(ctx, c, sc, from, to, rangeDays)
+		}
+		return s.seller(ctx, c, sc, from, to, rangeDays)
+	}), nil
 }
 
 type dashSources struct {

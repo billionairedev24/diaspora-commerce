@@ -8,11 +8,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.afrotransact.trustops.application.SellerHealthService;
 import com.afrotransact.trustops.port.ShipmentFact;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -34,7 +33,6 @@ class OrderEventListener {
     /** Shipment status meaning the carrier or driver collected it from the seller (the handover). */
     static final String PICKED_UP = "picked_up";
 
-    private static final Logger LOG = LoggerFactory.getLogger(OrderEventListener.class);
 
     private final SellerHealthService health;
     private final JsonMapper json;
@@ -55,16 +53,13 @@ class OrderEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id", type, rec.topic(), rec.partition(),
-                    rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         List<ShipmentFact> facts;
         try {
             facts = facts(type, json.readTree(rec.value()));
         } catch (JacksonException | IllegalArgumentException | NullPointerException | DateTimeParseException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         health.recordShipments(eventId.get(), facts);
     }

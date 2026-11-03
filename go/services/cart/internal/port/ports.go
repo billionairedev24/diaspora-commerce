@@ -59,3 +59,9 @@ type OfferLookup interface {
 type PreorderEligibility interface {
 	Eligibility(ctx context.Context, loc domain.Location, variantATINs []string) (map[string]domain.PreorderLine, error)
 }
+
+// DeliveryRuns lists the open delivery runs staff scheduled that cover a ZIP (delivery-runs
+// GET /v1/public/runs/available, S261), earliest cutoff first. Public: no token.
+type DeliveryRuns interface {
+	OpenRuns(ctx context.Context, zip string) ([]domain.OpenRun, error)
+}

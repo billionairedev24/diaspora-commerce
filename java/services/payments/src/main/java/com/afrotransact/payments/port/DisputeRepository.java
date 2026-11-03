@@ -1,7 +1,9 @@
 package com.afrotransact.payments.port;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.payments.domain.Dispute;
@@ -17,4 +19,7 @@ public interface DisputeRepository {
     void update(Dispute dispute);
 
     List<Dispute> ofPayment(UUID paymentId);
+
+    /** Those of {@code orderIds} with an OPEN dispute (plan fees are never withheld from them, S298). */
+    Set<String> openOrders(Collection<String> orderIds);
 }

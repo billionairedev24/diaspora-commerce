@@ -18,6 +18,7 @@ import {
   type PreorderWindow
 } from '../preorders';
 import { type Cart, type CartPackage, type DeliveryOption } from '../schemas/cart';
+import { type DeliveryFeeRuleRef } from '../schemas/common';
 import { type CheckoutPackage, type PickupPoint } from '../schemas/shopper';
 import { getDb, type MockSession } from './db';
 import { DEFAULT_ZIP, locationForZip } from './delivery';
@@ -71,6 +72,8 @@ export interface PreorderPreview {
   stage?: PreorderStage;
   enabled?: boolean;
   fallback?: PreorderFallback;
+  /** Serve the window as a delivery run staff scheduled (S261) with this minimum progress. */
+  run?: { minOrders: number; ordersSoFar: number };
 }
 
 type Status = 'draft' | 'paused' | 'upcoming' | 'open' | 'closed' | 'delivered';
@@ -271,18 +274,25 @@ export function withPreorderPackage(cart: Cart, session: MockSession, now: Date)
       return { ...p, lines, itemCount: lines.reduce((a, l) => a + l.quantity, 0), subtotalMinor: selected.reduce((a, l) => a + l.lineTotalMinor, 0) };
     })
     .filter((p) => p.lines.length > 0);
-  const options = [w.door && { fulfilment: 'DOOR' as const, feeMinor: w.doorFeeMinor }, w.pickup && { fulfilment: 'PICKUP' as const, feeMinor: w.pickupFeeMinor }].filter((o): o is { fulfilment: PreorderFulfilment; feeMinor: number } => !!o);
+  const ruleOf = (f: PreorderFulfilment, amountMinor: number): DeliveryFeeRuleRef =>
+    f === 'DOOR'
+      ? { method: 'AFROTRANSACT_DELIVERY', ruleId: 'fee-door', ruleVersion: 1, currency: w.currency, amountMinor, source: 'RULE', band: 'Up to 100 mi' }
+      : { method: 'PICKUP', ruleId: 'fee-pickup', ruleVersion: 1, currency: w.currency, amountMinor, source: 'RULE' };
+  const options = [w.door && { fulfilment: 'DOOR' as const, feeMinor: w.doorFeeMinor, rule: ruleOf('DOOR', w.doorFeeMinor) }, w.pickup && { fulfilment: 'PICKUP' as const, feeMinor: w.pickupFeeMinor, rule: ruleOf('PICKUP', w.pickupFeeMinor) }].filter((o): o is { fulfilment: PreorderFulfilment; feeMinor: number; rule: DeliveryFeeRuleRef } => !!o);
   const chosen: PreorderFulfilment = options.some((o) => o.fulfilment === stored.preorderFulfilment) ? (stored.preorderFulfilment as PreorderFulfilment) : (options[0]?.fulfilment ?? 'DOOR');
   const deliversT = dayLabel(w.deliversOn);
-  const toOption = (o: { fulfilment: PreorderFulfilment; feeMinor: number }): DeliveryOption =>
+  const toOption = (o: { fulfilment: PreorderFulfilment; feeMinor: number; rule: DeliveryFeeRuleRef }): DeliveryOption =>
     o.fulfilment === 'DOOR'
-      ? { key: 'afrotransact_delivery', label: 'Pre-order door delivery', eta: deliversT, feeMinor: o.feeMinor, free: o.feeMinor === 0 }
-      : { key: 'pickup', label: 'Pre-order pickup point', eta: `${deliversT}, ${w.pickupWindow}`, feeMinor: o.feeMinor, free: o.feeMinor === 0 };
+      ? { key: 'afrotransact_delivery', label: 'Pre-order door delivery', eta: deliversT, feeMinor: o.feeMinor, free: o.feeMinor === 0, feeRule: o.rule }
+      : { key: 'pickup', label: 'Pre-order pickup point', eta: `${deliversT}, ${w.pickupWindow}`, feeMinor: o.feeMinor, free: o.feeMinor === 0, feeRule: o.rule };
   const ordered = [...options].sort((a, b) => (a.fulfilment === chosen ? -1 : b.fulfilment === chosen ? 1 : 0));
   const block: CartPreorder = {
-    windowId: w.id, code: w.code, name: w.name, stage: r.stage, opensAt: w.opensAt, closesAt: w.closesAt, deliversOn: w.deliversOn, timeZone: w.timeZone, fulfilment: chosen, options,
-    door: w.door, pickup: w.pickup, doorFeeMinor: w.doorFeeMinor, pickupFeeMinor: w.pickupFeeMinor, currency: w.currency, pickupWindow: w.pickupWindow, allowedMethods: w.allowedMethods
+    windowId: w.id, code: w.code, name: w.name, stage: r.stage, opensAt: w.opensAt, closesAt: w.closesAt, deliversOn: w.deliversOn, timeZone: w.timeZone, fulfilment: chosen, feeRule: options.find((o) => o.fulfilment === chosen)?.rule, options,
+    door: w.door, pickup: w.pickup, doorFeeMinor: w.doorFeeMinor, pickupFeeMinor: w.pickupFeeMinor, currency: w.currency, pickupWindow: w.pickupWindow, allowedMethods: w.allowedMethods,
+    kind: 'WINDOW', minOrders: 0, ordersSoFar: 0, minimumMet: false
   };
+  const run = stored.preorderPreview?.run;
+  if (run) Object.assign(block, { kind: 'RUN', minOrders: run.minOrders, ordersSoFar: run.ordersSoFar, minimumMet: run.minOrders <= 0 || run.ordersSoFar >= run.minOrders });
   const fee = chosen === 'PICKUP' ? w.pickupFeeMinor : w.doorFeeMinor;
   const lines = preLines.map((l) => ({ ...l, preorderEligible: true }));
   const pkg: CartPackage = {

@@ -29,15 +29,27 @@ import com.afrotransact.orders.port.CartClient;
  * @param preorderFulfilment    door / pickup per pre-order window chosen in the cart (S272; window id → DOOR|PICKUP)
  * @param lateAdd               set for a customer-service late pre-order add (S272): the window may be CLOSED
  * @param savePaymentMethod     the PaymentIntent saves the shopper's new method (setup_future_usage=off_session, S282)
+ * @param useCredit             pay with the shopper's AfroTransact credit first; the card pays only the rest (S320)
  */
 public record CheckoutInput(String orderId, String orderNumber, String customerId, String idempotencyKey,
                             String workflowId, String currency, ShipTo shipTo, List<CartClient.Item> items,
                             List<Selection> selections, long paymentTimeoutSeconds, Instant requestedAt,
                             String couponCode, Attribution attribution, Map<String, String> preorderFulfilment,
-                            LateAdd lateAdd, boolean savePaymentMethod) {
+                            LateAdd lateAdd, boolean savePaymentMethod, boolean useCredit) {
 
     public CheckoutInput {
         preorderFulfilment = preorderFulfilment == null ? Map.of() : Map.copyOf(preorderFulfilment);
+    }
+
+    /** An input that does not use credit (late adds, older workflow histories). */
+    public CheckoutInput(String orderId, String orderNumber, String customerId, String idempotencyKey,
+                         String workflowId, String currency, ShipTo shipTo, List<CartClient.Item> items,
+                         List<Selection> selections, long paymentTimeoutSeconds, Instant requestedAt,
+                         String couponCode, Attribution attribution, Map<String, String> preorderFulfilment,
+                         LateAdd lateAdd, boolean savePaymentMethod) {
+        this(orderId, orderNumber, customerId, idempotencyKey, workflowId, currency, shipTo, items, selections,
+                paymentTimeoutSeconds, requestedAt, couponCode, attribution, preorderFulfilment, lateAdd,
+                savePaymentMethod, false);
     }
 
     /** An input that does not save the payment method (late adds, older workflow histories). */

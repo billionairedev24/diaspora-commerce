@@ -16,6 +16,7 @@ import (
 	"github.com/getkin/kin-openapi/routers"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
 
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/testkit"
 )
 
@@ -88,6 +89,9 @@ func TestContractConformance(t *testing.T) {
 	b.do("PUT", "/v1/delivery-location", map[string]any{"zip": "77042"})
 	b.do("PUT", "/v1/delivery-location", map[string]any{"zip": "99999"})
 	b.do("GET", "/v1/geo/address-suggestions?q=9800", nil)
+	b.do("GET", "/v1/geo/address-suggestions?q=9800&sessionToken=no%20spaces", nil)
+	b.do("GET", "/v1/geo/address-suggestions/g%3AChIJpeckham?sessionToken=tok_12345678", nil)
+	b.do("GET", "/v1/geo/address-suggestions/o%3A1?sessionToken=x", nil)
 	b.do("GET", "/v1/search?q=shea&sort=price_asc&page=0&size=12", nil)
 	b.do("GET", "/v1/search?sort=nope", nil)
 	b.do("GET", "/v1/search/suggestions?q=jol", nil)
@@ -127,6 +131,10 @@ func TestContractConformance(t *testing.T) {
 	b.do("GET", "/v1/auth/login?returnTo=/account&prompt=create&login_hint=ada%40example.com&invitation=inv-1", nil)
 	b.do("GET", "/v1/auth/login?returnTo="+url.QueryEscape(testkit.SellerCenterOrigin+"/orders"), nil)
 	b.do("POST", "/v1/auth/sign-out", nil)
+	b.do("POST", "/v1/auth/sign-out", map[string]any{"returnTo": "/deals"})
+	b.do("GET", "/v1/auth/signed-out/storefront?state=%2Fdeals", nil)
+	b.do("GET", "/v1/auth/signed-out/seller-center", nil)
+	b.do("GET", "/v1/auth/signed-out/nope", nil)
 	// Account (signed in).
 	b.do("GET", "/v1/account/addresses", nil)
 	mustStatus(t, signIn(t, bff, b, "/"), 302)
@@ -150,6 +158,21 @@ func TestContractConformance(t *testing.T) {
 	b.do("POST", "/v1/cart/items", map[string]any{"offerId": "ATSHEAV001", "quantity": 1})
 	b.do("GET", "/v1/checkout/summary", nil)
 	b.do("POST", "/v1/checkout/orders", map[string]any{"addressId": "", "deliverySelections": []any{}})
+	// Legal & privacy center: the index, every document (success and 404) and the cookie / consent / privacy answers.
+	b.do("GET", "/v1/legal", nil)
+	for _, key := range domain.LegalDocumentKeys {
+		b.do("GET", "/v1/legal/"+key, nil)
+	}
+	b.do("GET", "/v1/legal/sms-terms?locale=fr&version=1.0", nil)
+	b.do("GET", "/v1/legal/nope", nil)
+	b.do("GET", "/v1/consent/cookie-policy", nil)
+	b.do("POST", "/v1/consent/records", map[string]any{"categories": map[string]bool{"analytics": true}, "source": "banner"})
+	b.do("POST", "/v1/consent/records", map[string]any{"categories": map[string]bool{}, "source": "nope"})
+	b.do("POST", "/v1/privacy/requests", map[string]any{"type": "access", "email": "ada@example.com", "state": "TX"})
+	b.do("POST", "/v1/privacy/requests", map[string]any{"type": "nope", "email": "x", "state": "ZZ"})
+	b.do("GET", "/v1/help/articles", nil)
+	b.do("GET", "/v1/help/articles/help-center", nil)
+	b.do("GET", "/v1/help/articles/nope", nil)
 	// Careers.
 	b.do("GET", "/v1/careers/jobs", nil)
 	b.do("POST", "/v1/careers/uploads", map[string]any{"fileName": "cv.pdf", "contentType": "application/pdf", "size": 120000})
@@ -162,8 +185,10 @@ func TestContractConformance(t *testing.T) {
 	for _, op := range []string{"getSiteConfig", "getHome", "subscribeNewsletter", "getDeliveryLocation", "setDeliveryLocation",
 		"suggestAddresses", "search", "suggest", "getProduct", "createStockAlert", "getCart", "addToCart", "updateCartLine",
 		"removeCartLine", "selectAllCartLines", "saveForLater", "moveToCart", "removeSaved", "getMe", "startHostedLogin",
-		"startSocialLogin", "signOut", "listAddresses",
+		"startSocialLogin", "signOut", "signedOut", "listAddresses",
 		"createAddress", "deleteAddress", "listPaymentMethods", "createSetupIntent", "getCheckoutSummary", "placeOrder",
+		"listLegalDocuments", "getLegalDocument", "getCookiePolicy", "recordConsent", "submitPrivacyRequest",
+		"listHelpArticles", "getHelpArticle",
 		"listJobs", "applyToJob", "listStockAlerts", "removeStockAlert",
 		"requestResumeUpload", "completeResumeUpload", "startPhoneVerification", "confirmPhoneVerification"} {
 		if validated[op] == 0 {

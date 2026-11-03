@@ -120,6 +120,11 @@ class IdentityFlowIT {
         assertThat(t.accessClaims().get("pt").asString()).isEqualTo("SERVICE");
         assertThat(t.accessClaims().get("perms").toString()).contains("orgs:manage");
         assertThat(t.accessClaims().get("sub").asString()).isEqualTo("seller-service");
+        // S298: the seller service withholds plan fees from earnings at payments.
+        Tokens planFees = new BrowserSession(base()).clientCredentials("seller-service", "local-seller-secret",
+                "payments:plan-fees");
+        assertThat(planFees.status()).as(planFees.body()).isEqualTo(200);
+        assertThat(strings(planFees.accessClaims().get("perms"))).containsExactly("payments:plan-fees");
         long ttl = t.accessClaims().get("exp").asLong() - t.accessClaims().get("iat").asLong();
         assertThat(ttl).isEqualTo(300);
 

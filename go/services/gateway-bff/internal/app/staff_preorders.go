@@ -28,6 +28,17 @@ type StaffPreordersService interface {
 	Update(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
 	// Act runs publish, pause or resume.
 	Act(ctx context.Context, c *domain.Caller, id, action string) (any, error)
+	// Decide records the staff decision for a window that closed below its minimum order count ({decision: CANCEL |
+	// PROCEED, reason}); the reason is required and logged with who and when. CANCEL refunds every order in full.
+	Decide(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
+	// Cancel cancels a published window that is not delivered and refunds every order in full ({reason}, required).
+	Cancel(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
+	// CloseEarly closes an open window before its close date once its minimum is met ({reason}, required).
+	CloseEarly(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
+	// Decisions is the window's decision log: who decided what, when and why.
+	Decisions(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// Refunds is the refund progress of a cancelled window (orders per status; each order's status is on Orders).
+	Refunds(ctx context.Context, c *domain.Caller, id string) (any, error)
 	// SetActive sets one window's own on/off switch ({active}); the master switch is never touched.
 	SetActive(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
 	// SetActiveMany switches several windows ({ids, active}), each on its own.
@@ -56,6 +67,73 @@ type StaffPreordersService interface {
 	VerifyAddress(ctx context.Context, c *domain.Caller, a PreorderAddressInput) (domain.AddressVerification, error)
 	// RequestUpload signs a direct media upload for a creative.
 	RequestUpload(ctx context.Context, c *domain.Caller, in PreorderUploadInput) (domain.PreorderUploadTicket, error)
+	// DeliveryFees lists the delivery fee rules (ADR 0005 §3): one per delivery method and currency.
+	DeliveryFees(ctx context.Context, c *domain.Caller) (any, error)
+	// UpdateDeliveryFee sets one rule ({bands} | {handlingMinor, fallbackMinor, freeAboveMinor} | {feeMinor}, {reason}
+	// required, If-Match); the audit trail records who, when and why.
+	UpdateDeliveryFee(ctx context.Context, c *domain.Caller, method, currency, ifMatch string, body map[string]any) (any, error)
+	// DeliveryFeeChanges is the audit trail of the rules, newest first (?method=&currency=&limit=).
+	DeliveryFeeChanges(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
+	// PreviewDeliveryFee answers what a customer would pay with the resolution checkout runs.
+	PreviewDeliveryFee(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	// EconomicsSettings is the driver cost model behind run economics (S265); version 0 = the environment's defaults.
+	EconomicsSettings(ctx context.Context, c *domain.Caller) (any, error)
+	// UpdateEconomicsSettings saves the next version of the cost model ({numbers, reason} required, If-Match).
+	UpdateEconomicsSettings(ctx context.Context, c *domain.Caller, ifMatch string, body map[string]any) (any, error)
+	// EconomicsChanges is the cost model's audit trail, newest first (?limit=).
+	EconomicsChanges(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
+	// WindowEconomics is a window's orders, revenue, fees, cost, margin and break-even (a cancelled one: orders refunded).
+	WindowEconomics(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// PlanWindow is the break-even shown beside a window's minimum while the window is created or edited.
+	PlanWindow(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	// RunLocations lists the towns served by delivery runs.
+	RunLocations(ctx context.Context, c *domain.Caller) (any, error)
+	// CreateRunLocation adds a town delivery runs serve (name, area, defaults, time zone, community link).
+	CreateRunLocation(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	// UpdateRunLocation replaces a location's details; it never switches the location on or off.
+	UpdateRunLocation(ctx context.Context, c *domain.Caller, id string, body map[string]any) (any, error)
+	// SwitchRunLocation switches a location off (reason required, audited) or back on (reason optional).
+	SwitchRunLocation(ctx context.Context, c *domain.Caller, id string, on bool, body map[string]any) (any, error)
+	// RunLocationHistory is a location's runs (orders, fees, refunds), subscriber counts and subscriber growth.
+	RunLocationHistory(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// SearchFeaturedProducts finds products to feature on an advertorial's card (?q=, 2 to 120 characters): the
+	// product code, name and picture, never a price.
+	SearchFeaturedProducts(ctx context.Context, c *domain.Caller, q string) (any, error)
+	// RunLocationAttribution is the visits and sign-ups of a location or one of its runs per UTM source, medium and campaign.
+	RunLocationAttribution(ctx context.Context, c *domain.Caller, id string, q url.Values) (any, error)
+	// Runs lists runs (?locationId=&status=&limit=).
+	Runs(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
+	// RunPnl is a run's P&L before it, after it, or the orders a cancelled run refunded.
+	RunPnl(ctx context.Context, c *domain.Caller, id string, q url.Values) (any, error)
+	// PlanRun is the planner for a run at a location: cost, break-even and P&L.
+	PlanRun(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	// Advertorials lists location advertorials with views, clicks and orders (?source=&sourceId=&status=&limit=).
+	Advertorials(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
+	Advertorial(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// GenerateAdvertorial drafts the advertorial of a window or run from its data, live at once.
+	GenerateAdvertorial(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	CreateAdvertorial(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	UpdateAdvertorial(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
+	// ActAdvertorial publishes, pauses or ends an advertorial (If-Match).
+	ActAdvertorial(ctx context.Context, c *domain.Caller, id, action, ifMatch string) (any, error)
+	// Run is one delivery run with its location (name and area), break-even and what staff may do with it (S260).
+	Run(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// CreateRun schedules a run (a draft) for a location; UpdateRun changes it before it opens; DeleteRun removes a draft.
+	CreateRun(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	UpdateRun(ctx context.Context, c *domain.Caller, id string, body map[string]any) (any, error)
+	DeleteRun(ctx context.Context, c *domain.Caller, id string) error
+	// ActRun announces (a draft) or opens (a draft or announced run).
+	ActRun(ctx context.Context, c *domain.Caller, id, action string) (any, error)
+	// ExtendRun moves the cutoff later ({cutoffAt, reason, ...}); the reason is required and logged.
+	ExtendRun(ctx context.Context, c *domain.Caller, id string, body map[string]any) (any, error)
+	// ConfirmRun confirms a run now; below its minimum a {reason} is required and the override is logged.
+	ConfirmRun(ctx context.Context, c *domain.Caller, id string, body map[string]any) (any, error)
+	// CancelRun cancels a run and refunds every order in full ({reason}, required and logged).
+	CancelRun(ctx context.Context, c *domain.Caller, id string, body map[string]any) (any, error)
+	// RunLog is what was decided about a run: who extended, confirmed or cancelled it, when and why.
+	RunLog(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// RunOrders are the orders on a run.
+	RunOrders(ctx context.Context, c *domain.Caller, id string, q url.Values) (any, error)
 	// Customers is the late-add customer picker: identity's people search with each customer's saved addresses.
 	Customers(ctx context.Context, c *domain.Caller, q, windowID string) (domain.LateAddCustomers, error)
 }
@@ -92,6 +170,7 @@ func (s *staffPreordersImpl) need(ctx context.Context, c *domain.Caller, ability
 		return sc, domain.PreorderCan{}, err
 	}
 	can := domain.PreorderPermissions(sc.access)
+	sc.nameWho = true
 	switch ability {
 	case poManage:
 		if !can.Manage {
@@ -255,6 +334,97 @@ func (s *staffPreordersImpl) Act(ctx context.Context, c *domain.Caller, id, acti
 		return nil, err
 	}
 	return withCan(out, can), nil
+}
+
+// maxReason is delivery-runs' limit on the reason of a decision.
+const maxReason = 500
+
+// preorderChoices are the decisions for a window that closed below its minimum.
+var preorderChoices = []string{"CANCEL", "PROCEED"}
+
+// reasonOf reads the required reason of a decision.
+func reasonOf(body map[string]any) (string, error) {
+	reason, _ := body["reason"].(string)
+	reason = strings.TrimSpace(reason)
+	switch {
+	case reason == "":
+		return "", domain.ValidationProblem(map[string]string{"reason": "Say why: the reason is logged with your name"})
+	case len([]rune(reason)) > maxReason:
+		return "", domain.ValidationProblem(map[string]string{"reason": "At most 500 characters"})
+	}
+	return reason, nil
+}
+
+// decide sends one reasoned decision ({reason} plus extra) to delivery-runs as a manager.
+func (s *staffPreordersImpl) decide(ctx context.Context, c *domain.Caller, id, ifMatch, action string, body map[string]any, extra map[string]any) (any, error) {
+	if p := domain.ValidPreorderID(id); p != nil {
+		return nil, p
+	}
+	reason, err := reasonOf(body)
+	if err != nil {
+		return nil, err
+	}
+	sent := map[string]any{"reason": reason}
+	for k, v := range extra {
+		sent[k] = v
+	}
+	sc, can, err := s.need(ctx, c, poManage)
+	if err != nil {
+		return nil, err
+	}
+	out, err := sc.send(ctx, http.MethodPost, windowPath(id, "/", action), ifMatch, sent)
+	if err != nil {
+		return nil, err
+	}
+	return withCan(out, can), nil
+}
+
+func (s *staffPreordersImpl) Decide(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error) {
+	choice, _ := body["decision"].(string)
+	choice = strings.ToUpper(strings.TrimSpace(choice))
+	if !slices.Contains(preorderChoices, choice) {
+		return nil, domain.ValidationProblem(map[string]string{"decision": "Choose CANCEL or PROCEED"})
+	}
+	return s.decide(ctx, c, id, ifMatch, "decision", body, map[string]any{"decision": choice})
+}
+
+func (s *staffPreordersImpl) Cancel(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error) {
+	return s.decide(ctx, c, id, ifMatch, "cancel", body, nil)
+}
+
+func (s *staffPreordersImpl) CloseEarly(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error) {
+	return s.decide(ctx, c, id, ifMatch, "close-early", body, nil)
+}
+
+// read relays a view-level read of one window sub-resource.
+func (s *staffPreordersImpl) read(ctx context.Context, c *domain.Caller, id, rest string) (any, error) {
+	if p := domain.ValidPreorderID(id); p != nil {
+		return nil, p
+	}
+	sc, _, err := s.need(ctx, c, poView)
+	if err != nil {
+		return nil, err
+	}
+	var out any
+	if err := sc.get(ctx, sc.up.DeliveryRuns, windowPath(id, rest), nil, &out); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = map[string]any{}
+	}
+	return out, nil
+}
+
+func (s *staffPreordersImpl) Decisions(ctx context.Context, c *domain.Caller, id string) (any, error) {
+	out, err := s.read(ctx, c, id, "/decisions")
+	if err != nil {
+		return nil, err
+	}
+	return items(out), nil
+}
+
+func (s *staffPreordersImpl) Refunds(ctx context.Context, c *domain.Caller, id string) (any, error) {
+	return s.read(ctx, c, id, "/refunds")
 }
 
 // maxBulkSwitch is how many windows one bulk switch may name (delivery-runs' limit).
@@ -422,6 +592,7 @@ var PreorderOrderColumns = []domain.Column{
 	{Key: "zip", Label: "ZIP", Kind: "mono"}, {Key: "deliveryNote", Label: "Delivery note", Kind: "text"}, {Key: "placedAt", Label: "Placed", Kind: "datetime"},
 	{Key: "channel", Label: "Channel", Kind: "status"}, {Key: "trackingTag", Label: "Tracking tag", Kind: "mono"}, {Key: "units", Label: "Units", Kind: "number"},
 	{Key: "fulfilment", Label: "Fulfil", Kind: "status"}, {Key: "total", Label: "Total", Kind: "money"}, {Key: "status", Label: "Status", Kind: "status"},
+	{Key: "refundStatus", Label: "Refund", Kind: "status"},
 }
 
 func preorderOrderColumn(k string) bool {

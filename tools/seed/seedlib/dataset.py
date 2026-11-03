@@ -101,6 +101,8 @@ class Product:
     also: tuple[tuple[str, float], ...] = ()  # other sellers offering it: (seller key, price factor)
     attrs: dict = field(default_factory=dict)  # product-type attributes (defaults fill the rest)
     images: int = 3
+    chart: str = ""  # SIZE_CHARTS key: the size chart linked to the listing (sized fashion types)
+    fit: str = ""  # RUNS_SMALL | TRUE_TO_SIZE | RUNS_LARGE: the product's own fit note (the chart's applies without one)
 
 
 def P(key, title, path, seller, brand, community, origin, bullets, variants, queries, **kw) -> Product:
@@ -123,6 +125,55 @@ PARTY = "Event & party › Party supplies › Decorations"
 
 SC = lambda size, color: {"Size": size, "Color": color}
 LP = lambda length, pattern: {"Length": length, "Pattern": pattern}
+
+
+@dataclass(frozen=True)
+class SizeChartSpec:
+    """A size chart of the demo seller (the seeder writes it through catalog's /v1/size-charts, as the platform's own seller).
+
+    Sellers write their charts; the category only suggests. These follow the rules in docs/engineering/size-charts.md:
+    every size has a value (a number or a min-max range) for every measurement, and a product's chart has a row for every
+    size the product sells."""
+    key: str
+    name: str
+    path: str  # category path of a product type the chart is made for; the seeder looks the type up
+    unit: str  # CM | IN
+    columns: tuple[tuple[str, str], ...]  # (key, label)
+    rows: tuple[tuple[str, tuple[tuple[float, float], ...]], ...]  # size, one (min, max) per column
+    fit: str = ""
+    how: str = ""
+
+
+def R(size: str, *values) -> tuple[str, tuple[tuple[float, float], ...]]:
+    """A chart row: R("M", (88, 92), 70) — a pair is a range, a single number is one value."""
+    return size, tuple(v if isinstance(v, tuple) else (v, v) for v in values)
+
+
+SIZE_CHARTS: list[SizeChartSpec] = [
+    SizeChartSpec(
+        "womens-dresses", "Women's dresses", DRESSES, "CM", (("bust", "Bust"), ("waist", "Waist"), ("hip", "Hip")),
+        (R("XS", (80, 83), (62, 65), (88, 91)), R("S", (84, 87), (66, 69), (92, 95)), R("M", (88, 92), (70, 74), (96, 100)),
+         R("L", (93, 98), (75, 80), (101, 106)), R("XL", (99, 105), (81, 88), (107, 113)), R("UK 12", (89, 93), (71, 75), (97, 101)),
+         R("Free size", (88, 110), (70, 96), (96, 120))),
+        fit="TRUE_TO_SIZE",
+        how="Measure over light clothing, keeping the tape level and snug but not tight. For the bust, measure around the fullest part."),
+    SizeChartSpec(
+        "womens-tops", "Women's tops and wrappers", TOPS, "CM", (("bust", "Bust"), ("waist", "Waist"), ("hip", "Hip")),
+        (R("XS", (80, 83), (62, 65), (88, 91)), R("S", (84, 87), (66, 69), (92, 95)), R("M", (88, 92), (70, 74), (96, 100)),
+         R("L", (93, 98), (75, 80), (101, 106)), R("XL", (99, 105), (81, 88), (107, 113))),
+        fit="RUNS_SMALL", how="Measure over light clothing. If you are between two sizes, take the larger."),
+    SizeChartSpec(
+        "mens-tops", "Men's shirts and kaftans", MEN_SHIRTS, "IN", (("chest", "Chest"), ("waist", "Waist"), ("sleeve_length", "Sleeve length")),
+        (R("S", (35, 37), (29, 31), 24.5), R("M", (38, 40), (32, 34), 25), R("L", (41, 43), (35, 37), 25.5),
+         R("XL", (44, 46), (38, 40), 26), R("2XL", (47, 49), (41, 43), 26.5), R("3XL", (50, 52), (44, 46), 27)),
+        fit="TRUE_TO_SIZE", how="Chest: around the fullest part. Sleeve: from the shoulder seam to the wrist, arm slightly bent."),
+    SizeChartSpec(
+        "kids-dresses", "Kids' party dresses", KIDS, "CM", (("height", "Height"), ("chest", "Chest"), ("waist", "Waist")),
+        (R("4", (99, 104), (54, 56), (51, 53)), R("6", (111, 116), (58, 60), (53, 55)), R("8", (123, 128), (62, 65), (55, 58)),
+         R("10", (135, 140), (67, 70), (58, 61))),
+        fit="RUNS_SMALL", how="Height: standing, without shoes. If the child is between two sizes, take the larger: the skirt twirls."),
+]
+SIZE_CHART_BY_KEY = {c.key: c for c in SIZE_CHARTS}
 
 PRODUCTS: list[Product] = [
     # ---------------------------------------------------------------------------------------- grains, flours, beans
@@ -338,23 +389,32 @@ PRODUCTS: list[Product] = [
       ["adire", "indigo dye", "tie-dye fabric"], unit="4 yd", stock=18),
     P("ankara-maxi-dress", "Ankara Print Maxi Dress", DRESSES, "kente-co", "Kente & Co.", "Nigerian", "United States",
       ["Wax-print cotton with side pockets", "Sewn in Atlanta"], [(SC(s, "Multicolour"), 6800) for s in ("S", "M", "L", "XL")],
-      ["ankara dress", "african print dress", "wax print dress"], unit="One piece", stock=12),
+      ["ankara dress", "african print dress", "wax print dress"], unit="One piece", stock=12, chart="womens-dresses"),
+    P("adire-shift-dress", "Adire Indigo Shift Dress", DRESSES, "kente-co", "Abeokuta Dyers", "Nigerian", "Nigeria",
+      ["Hand-dyed adire cotton, each dress one of a kind", "Sold in UK sizes and one free size"],
+      [(SC(s, "Indigo adire"), 7400) for s in ("S", "M", "UK 12", "Free size")],
+      ["adire dress", "indigo dress", "african dress"], unit="One piece", stock=8, attrs={"material": "Cotton"}, chart="womens-dresses",
+      fit="TRUE_TO_SIZE"),
     P("auto-gele", "Ready-to-Wear Auto Gele Headwrap", HEADWRAPS, "owambe", "Owambe Party Co.", "Nigerian", "United States",
       ["Pre-tied, pleated aso-oke", "Adjustable band"], [(c, 3500) for c in ("Gold", "Wine", "Royal blue")],
       ["gele", "headwrap", "head tie"], unit="One size", stock=14),
+    P("sequin-gele", "Sequin Auto Gele Headwrap", HEADWRAPS, "owambe", "Owambe Party Co.", "Nigerian", "United States",
+      ["Pre-tied with sequin trim", "Adjustable band, one size"], [(c, 4200) for c in ("Gold", "Champagne", "Teal & gold")],
+      ["sequin gele", "headwrap", "party head tie"], unit="One size", stock=10),
     P("ankara-wrap-top", "Ankara Wrap Top", TOPS, "kente-co", "Kente & Co.", "Ghanaian", "United States",
       ["Wrap front with tie waist", "Pairs with jeans or a matching skirt"], [(SC(s, "Multicolour"), 3900) for s in ("S", "M", "L")],
-      ["ankara top", "wax print", "african fashion"], unit="One piece", stock=12),
+      ["ankara top", "wax print", "african fashion"], unit="One piece", stock=12, chart="womens-tops"),
     P("dashiki", "Dashiki Shirt, Cotton", MEN_SHIRTS, "kente-co", "Kente & Co.", "Pan-African", "Ghana",
       ["Classic angelina print", "Relaxed fit, short sleeves"], [(SC(s, "Multicolour"), 4500) for s in ("M", "L", "XL")],
-      ["dashiki", "dashiki shirt", "angelina print"], unit="One piece", stock=12, attrs={"fit": "Relaxed"}),
+      ["dashiki", "dashiki shirt", "angelina print"], unit="One piece", stock=12, attrs={"fit": "Relaxed"}, chart="mens-tops",
+      fit="RUNS_LARGE"),
     P("agbada", "Three-Piece Agbada Set", MEN_AGBADA, "owambe", "Owambe Party Co.", "Nigerian", "Nigeria",
       ["Agbada, buba and sokoto", "Embroidered neckline"], [(SC(s, "White"), 18900) for s in ("L", "XL", "2XL")],
       ["agbada", "yoruba attire", "nigerian wedding attire"], unit="3 pieces", stock=6,
-      attrs={"material": "Brocade", "pieces": "3 (agbada set)"}),
+      attrs={"material": "Brocade", "pieces": "3 (agbada set)"}, chart="mens-tops"),
     P("kids-ankara-dress", "Kids' Ankara Party Dress", KIDS, "kente-co", "Kente & Co.", "Nigerian", "United States",
       ["Puff sleeves and a twirl skirt", "Cotton wax print"], [(SC(s, "Multicolour"), 2900) for s in ("4", "6", "8")],
-      ["children african print", "kids dress", "african print"], unit="One piece", stock=10),
+      ["children african print", "kids dress", "african print"], unit="One piece", stock=10, chart="kids-dresses"),
     # ---------------------------------------------------------------------------------------- books
     P("pepper-and-palm", "Pepper & Palm: A West African Kitchen (Hardcover)", COOKBOOKS, "books", "Diaspora Books",
       "West African", "United States", ["120 recipes from Dakar to Lagos", "Photographed in home kitchens"],
@@ -519,6 +579,7 @@ TEST_USERS: list[tuple[str, str, str, Union[str, None], bool]] = [
     ("customer.lubbock@afrotransact.test", "Customer, Lubbock 79401 address (open pre-order)", "Storefront", None, False),
     ("seller.owner@afrotransact.test", "Owner, Mama Put Pantry", "Seller Center", "org_mama_put_pantry", False),
     ("seller.staff@afrotransact.test", "Catalog manager, Mama Put Pantry", "Seller Center", "org_mama_put_pantry", False),
+    ("seller.bamako@afrotransact.test", "Owner, Bamako Home", "Seller Center", "org_bamako_home", False),
     ("provider.owner@afrotransact.test", "Owner, Aminata's Braids", "Provider Hub", "org_aminatas_braids", False),
     ("retail.operator@afrotransact.test", "Operator, AfroTransact Retail (1P)", "Seller Center", RETAIL_ORG, False),
     ("staff.admin@afrotransact.test", "Super Admin", "Staff console", None, True),
@@ -563,5 +624,13 @@ PICKUP_POINTS = [
      "address": {"line1": "1600 Murphy Ave SW", "city": "Atlanta", "state": "GA", "postalCode": "30310", "country": "US"},
      "timezone": "America/New_York", "hours": _hours((1, 2, 3, 4, 5, 6), "08:00", "18:00"), "readyHours": 3,
      "position": {"lat": 33.7144, "lng": -84.4185}},
+    {"id": "6f3a2c1e-0b7d-4c55-9a10-000000000105", "kind": "PLATFORM_COUNTER", "name": "Dallas FC — Will Call",
+     "address": {"line1": "5000 Singleton Blvd", "city": "Dallas", "state": "TX", "postalCode": "75212", "country": "US"},
+     "timezone": "America/Chicago", "hours": _hours((1, 2, 3, 4, 5, 6), "08:00", "20:00"), "readyHours": 2,
+     "position": {"lat": 32.776, "lng": -96.822}},
+    {"id": "6f3a2c1e-0b7d-4c55-9a10-000000000106", "kind": "LOCKER", "name": "AfroTransact Locker · Oak Lawn",
+     "address": {"line1": "2727 Oak Lawn Ave", "city": "Dallas", "state": "TX", "postalCode": "75219", "country": "US"},
+     "timezone": "America/Chicago", "hours": _hours((0, 1, 2, 3, 4, 5, 6), "06:00", "22:00"), "readyHours": 18,
+     "position": {"lat": 32.802, "lng": -96.801}},
 ]
 PICKUP_OWNER = "afrotransact"

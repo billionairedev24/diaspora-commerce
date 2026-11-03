@@ -14,6 +14,21 @@ public interface PublicRunService {
      */
     List<AvailableRun> available(String zip, Double lat, Double lng);
 
+    /**
+     * The same for a member with early access (S323): announced runs opening within {@code earlyAccessHours} are listed
+     * too. The run itself only takes the member's order when the reservation names the same hours.
+     */
+    List<AvailableRun> available(String zip, Double lat, Double lng, int earlyAccessHours);
+
+    /**
+     * The active locations whose area covers the address (a 5-digit ZIP's centre or coordinates), by name; empty when
+     * geo does not know the ZIP. The same coverage {@link #available} uses.
+     */
+    List<Location> coveringLocations(String zip, Double lat, Double lng);
+
+    /** Open runs (and, with early access, announced runs opening soon) of these locations, soonest cutoff first. */
+    List<AvailableRun> available(List<Location> covering, int earlyAccessHours);
+
     /** Active locations, by name. */
     List<Location> locations();
 

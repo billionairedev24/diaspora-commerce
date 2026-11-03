@@ -149,6 +149,19 @@ class OrdersAccess {
                 + "and staff");
     }
 
+    /**
+     * The verified-purchase check (S324): SERVICE principals with orders:purchase-check (catalog-service) or
+     * orders:lookup, or staff with orders:read.
+     */
+    Actor purchaseCheckCaller() {
+        Actor actor = actors.current();
+        if (actor.type() == PrincipalType.SERVICE && actor.can(OrdersPermissions.PURCHASE_CHECK)) {
+            return relationships.require(OrdersPermissions.PURCHASE_CHECK, OrdersRelations.PLATFORM_VIEW_ALL,
+                    FgaObject.PLATFORM);
+        }
+        return lookupCaller();
+    }
+
     /** Decides what the current actor may see of an order; 404 (not 403) when nothing, to avoid leaking it. */
     Viewer viewerOf(Order order) {
         Actor actor = actors.current();

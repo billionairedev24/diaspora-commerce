@@ -20,6 +20,9 @@ export interface FixtureProduct {
   sameDay: boolean;
   perishable: boolean;
   stock: number;
+  /** Variants of one garment: the first is the listed product, the others are only reachable from its option chips. */
+  family?: { root: string; label: string; options: Record<string, string> };
+  sized?: boolean;
 }
 
 const p = (
@@ -42,6 +45,54 @@ export const PRODUCTS: FixtureProduct[] = [
   p('ATKENTE008', 'Kente Print Headwrap', 1800, 'Lagos Textile Hub', 'SELLER', 'Atlanta, GA', 'SELLER', 'Atlanta, GA', 'Fashion', 4.6, 150, 'Wax cotton, 70 × 22 in', 'Bold kente-inspired print, pre-washed.', 'each', false, false, 3),
   p('ATJOLTRY09', 'Party Jollof Tray (serves 10)', 6500, "Mama Tee's Pantry", 'SELLER', 'Houston, TX', 'SELLER', 'Houston, TX', 'Groceries', 4.9, 88, 'Cooked to order · keep refrigerated', 'Smoky party jollof with fried plantain, cooked the morning of delivery.', 'per tray', true, true, 6)
 ];
+
+const GARMENT_ROOT = 'ATADIRE000';
+const GARMENT_SIZES = ['S', 'M', 'UK 12', 'Free size'];
+const GARMENT_COLOURS = ['Ankara blue print', 'Indigo adire'];
+
+/** Adire Wrap Dress: 4 sizes x 2 colours; Free size in Indigo adire is sold out and M in Ankara blue print is low. */
+export const GARMENT_VARIANTS: FixtureProduct[] = GARMENT_COLOURS.flatMap((colour, ci) =>
+  GARMENT_SIZES.map((size, si): FixtureProduct => {
+    const atin = `ATADIRE0${ci}${si}`;
+    return {
+      ...p(atin, 'Adire Wrap Dress, Hand-Dyed Cotton', size === 'Free size' ? 9200 : 8500, 'Ile Adire Studio', 'SELLER', 'Houston, TX', 'SELLER', 'Houston, TX', 'Fashion', 4.7, 218,
+        'Hand-dyed cotton, colour-fast after the first wash', 'Wrap front with a tie waist; midi length. Check the size guide before you choose.', `${size}, ${colour}`, false, false,
+        size === 'Free size' && ci === 1 ? 0 : size === 'M' && ci === 0 ? 3 : 12),
+      sized: true,
+      family: { root: GARMENT_ROOT, label: `${size} · ${colour}`, options: { Size: size, Color: colour } }
+    };
+  })
+);
+
+PRODUCTS.push(...GARMENT_VARIANTS);
+
+/** The seller's dress size chart as the product page receives it (values in cm, inches alongside). */
+export const DRESS_SIZE_CHART = {
+  name: 'Dresses and wraps',
+  unitSystem: 'CM' as const,
+  alternateUnit: 'IN' as const,
+  columns: [
+    { key: 'bust', label: 'Bust', unit: 'CM' as const },
+    { key: 'waist', label: 'Waist', unit: 'CM' as const },
+    { key: 'hip', label: 'Hip', unit: 'CM' as const }
+  ],
+  rows: [
+    ['S', [84, 88], [66, 70], [92, 96]],
+    ['M', [90, 94], [72, 76], [98, 102]],
+    ['UK 12', [96, 100], [78, 82], [104, 108]],
+    ['Free size', [84, 104], [66, 86], [92, 112]]
+  ].map(([size, bust, waist, hip]) => {
+    const range = (v: number[]) => ({ min: v[0] as number, max: v[1] as number });
+    const inch = (v: number[]) => ({ min: Math.round(((v[0] as number) / 2.54) * 10) / 10, max: Math.round(((v[1] as number) / 2.54) * 10) / 10 });
+    return {
+      size: size as string,
+      values: { bust: range(bust as number[]), waist: range(waist as number[]), hip: range(hip as number[]) },
+      alternateValues: { bust: inch(bust as number[]), waist: inch(waist as number[]), hip: inch(hip as number[]) }
+    };
+  }),
+  fitNote: 'TRUE_TO_SIZE' as const,
+  howToMeasure: 'Bust: around the fullest part, tape level.\nWaist: around the narrowest part.\nHip: around the fullest part of the hips.'
+};
 
 export const USER = { id: 'usr_adaeze', firstName: 'Adaeze', lastName: 'Okafor', email: 'adaeze@example.com', phone: '(713) 555-0142' };
 

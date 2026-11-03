@@ -36,12 +36,19 @@ type jwksVerifier struct {
 	mu      sync.RWMutex
 	keys    map[string]any
 	fetched time.Time
+	// forced is the last refetch a signature failure triggered (at most one per refetchEvery).
+	forced time.Time
 }
+
+// refetchEvery bounds the JWKS refetches a bad signature can trigger (a forged token must not hammer identity).
+const refetchEvery = 30 * time.Second
 
 var _ Verifier = (*jwksVerifier)(nil)
 
 // NewJWKSVerifier verifies RS256/ES256 tokens issued by issuer against its JWKS (cached for 10 minutes,
-// refreshed early when an unknown key id appears, which covers key rotation).
+// refreshed early when an unknown key id appears, which covers key rotation, or when a signature fails with the
+// cached key: the issuer replaced the key under the same key id, as a restarted local identity with its ephemeral key
+// does).
 func NewJWKSVerifier(issuer, audience string, client *http.Client) Verifier {
 	return &jwksVerifier{
 		issuer:   strings.TrimSuffix(issuer, "/"),
@@ -68,11 +75,23 @@ func (v *jwksVerifier) Verify(ctx context.Context, raw string) (Actor, error) {
 	if v.audience != "" {
 		opts = append(opts, jwt.WithAudience(v.audience))
 	}
-	_, err := jwt.ParseWithClaims(raw, &c, func(t *jwt.Token) (any, error) {
+	keyFunc := func(t *jwt.Token) (any, error) {
 		kid, _ := t.Header["kid"].(string)
 		return v.key(ctx, kid)
-	}, opts...)
+	}
+	_, err := jwt.ParseWithClaims(raw, &c, keyFunc, opts...)
+	if err != nil && errors.Is(err, jwt.ErrTokenSignatureInvalid) && v.mayRefetch() {
+		if rerr := v.refresh(ctx); rerr == nil {
+			c = claims{}
+			_, err = jwt.ParseWithClaims(raw, &c, keyFunc, opts...)
+		}
+	}
 	if err != nil {
+		if errors.Is(err, jwt.ErrTokenInvalidIssuer) {
+			// The usual local cause of a signed-in app getting 401 on everything: it signed in at a different identity
+			// address (localhost vs the LAN IP) than the issuer this service was started with.
+			err = fmt.Errorf("token not issued by %s (check AUTH_ISSUER_URL / MOBILE_HOST): %w", v.issuer, err)
+		}
 		return Actor{}, fmt.Errorf("%w: %w", ErrUnauthenticated, err)
 	}
 	perms := append([]string{}, c.Perms...)
@@ -84,6 +103,17 @@ func (v *jwksVerifier) Verify(ctx context.Context, raw string) (Actor, error) {
 		pt = "CUSTOMER"
 	}
 	return Actor{Subject: c.Subject, Type: strings.ToUpper(pt), OrgID: c.Org, Roles: c.Roles, Permissions: perms}, nil
+}
+
+// mayRefetch reports (and records) whether a signature failure may refetch the JWKS now.
+func (v *jwksVerifier) mayRefetch() bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if time.Since(v.forced) < refetchEvery {
+		return false
+	}
+	v.forced = time.Now()
+	return true
 }
 
 func (v *jwksVerifier) key(ctx context.Context, kid string) (any, error) {

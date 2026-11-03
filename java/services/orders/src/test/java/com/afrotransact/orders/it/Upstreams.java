@@ -42,6 +42,14 @@ final class Upstreams {
         server.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/service/preorders/eligibility")).atPriority(100)
                 .willReturn(WireMock.aResponse().withStatus(200).withHeader("Content-Type", "application/json")
                         .withBody("{\"items\":[]}")));
+        // S261: no delivery run is open unless a test says so.
+        server.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/public/runs/available")).atPriority(100)
+                .willReturn(WireMock.aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody("{\"runs\":[]}")));
+        // ADR 0005 §3: no staff carrier rule unless a test says so (checkouts keep the flat carrier rates).
+        server.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/service/delivery-fees/carrier")).atPriority(100)
+                .willReturn(WireMock.aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody("{\"applies\":false}")));
     }
 
     /** A cart for one customer token. Lines: {atin, sellerOrg, fulfilment AFROTRANSACT|SELLER, price, qty}. */
@@ -97,6 +105,26 @@ final class Upstreams {
                 .withRequestBody(WireMock.matchingJsonPath("$.metadata.customer_id", WireMock.equalTo(customerId))),
                 200, "{\"id\":\"" + paymentId + "\",\"status\":\"REQUIRES_PAYMENT_METHOD\",\"clientSecret\":\""
                         + "pi_" + paymentId + "_secret\",\"amountMinor\":1}");
+        json(WireMock.post(WireMock.urlPathEqualTo("/v1/payments/" + paymentId + "/cancel")), 200,
+                "{\"id\":\"" + paymentId + "\",\"status\":\"CANCELED\"}");
+    }
+
+    /**
+     * S320: the payment of a checkout that asked to use credit ({@code useCredit: true}). {@code creditMinor} of it is
+     * paid with credit; when that is the whole order ({@code fullCredit}) payments answers AUTHORIZED with no
+     * PaymentIntent and no client secret.
+     */
+    void paymentWithCredit(String customerId, String paymentId, long creditMinor, boolean fullCredit) {
+        String body = fullCredit
+                ? "{\"id\":\"" + paymentId + "\",\"status\":\"AUTHORIZED\",\"amountMinor\":" + creditMinor
+                + ",\"creditMinor\":" + creditMinor + "}"
+                : "{\"id\":\"" + paymentId + "\",\"status\":\"REQUIRES_PAYMENT_METHOD\",\"clientSecret\":\"pi_"
+                + paymentId + "_secret\",\"amountMinor\":99999,\"creditMinor\":" + creditMinor + "}";
+        json(WireMock.post(WireMock.urlPathEqualTo("/v1/payments"))
+                .withRequestBody(WireMock.matchingJsonPath("$.metadata.customer_id", WireMock.equalTo(customerId)))
+                .withRequestBody(WireMock.matchingJsonPath("$.useCredit", WireMock.equalTo("true"))), 200, body);
+        json(WireMock.get(WireMock.urlPathEqualTo("/v1/payments/" + paymentId)), 200,
+                body.replace("REQUIRES_PAYMENT_METHOD", "AUTHORIZED"));
         json(WireMock.post(WireMock.urlPathEqualTo("/v1/payments/" + paymentId + "/cancel")), 200,
                 "{\"id\":\"" + paymentId + "\",\"status\":\"CANCELED\"}");
     }

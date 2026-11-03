@@ -4,7 +4,7 @@ import { type StaffMarketsApi } from '@afrotransact/api-client/staff-markets';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LocationTree, type TreeOps } from '@/components/locations/LocationTree';
 import {
@@ -211,8 +211,15 @@ describe('LocationTree', () => {
   });
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('Settings → Markets & locations', () => {
+  // The seeded pre-order windows are dated from 10 Oct 2026; only Date is pinned so they stay open whenever this runs.
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-10T15:00:00Z'));
     resetStaffDb(new Date('2026-10-10T15:00:00Z'));
     asRoles(null);
     nav.set('/markets');
@@ -272,7 +279,10 @@ describe('Settings → Markets & locations', () => {
 });
 
 describe('Pre-orders → Pre-order areas use the same tree', () => {
+  // The seeded pre-order windows are dated from 10 Oct 2026; only Date is pinned so they stay open whenever this runs.
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-10T15:00:00Z'));
     resetStaffDb(new Date('2026-10-10T15:00:00Z'));
     asRoles(null);
     nav.set('/preorders/settings');

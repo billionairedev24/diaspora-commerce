@@ -205,6 +205,17 @@ func (m *memStore) Release(_ context.Context, id string) error {
 	return nil
 }
 
+func (m *memStore) ByTracking(_ context.Context, carrier domain.CarrierCode, trackingNumber string) (domain.LabelRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, l := range m.labels {
+		if l.Carrier == carrier && l.TrackingNumber == trackingNumber && l.Status == domain.LabelPurchased {
+			return l, nil
+		}
+	}
+	return domain.LabelRecord{}, domain.ErrNotFound
+}
+
 func (m *memStore) Get(_ context.Context, id string) (domain.LabelRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

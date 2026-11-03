@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import com.afrotransact.fulfilment.application.PlacedOrder;
 import com.afrotransact.fulfilment.application.ShipmentIntakeService;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
@@ -57,7 +58,8 @@ class OrdersEventListener {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record LineMessage(String lineId, String variantAtin, String title, int quantity) {
+    record LineMessage(String lineId, String variantAtin, String title, int quantity, String sellerOrgId,
+                       String sellerName) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -74,9 +76,7 @@ class OrdersEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", type, rec.topic(),
-                    rec.partition(), rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         try {
             if (ORDER_PLACED.equals(type)) {
@@ -95,7 +95,7 @@ class OrdersEventListener {
                 intake.shipmentCancelled(eventId.get(), m.shipmentId(), m.reason());
             }
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
+            throw MalformedEvent.of(type, ex);
         }
     }
 
@@ -104,7 +104,8 @@ class OrdersEventListener {
                 .map(s -> new PlacedOrder.PlacedShipment(s.shipmentId(), s.sellerOrgId(), s.sellerName(),
                         s.fulfilmentType(), s.deliveryMethod(), s.promisedBy(), s.handoverRequired(), s.perishable(),
                         s.nodeId(), s.lines() == null ? List.of() : s.lines().stream()
-                        .map(l -> new PlacedOrder.PlacedLine(l.lineId(), l.variantAtin(), l.title(), l.quantity()))
+                        .map(l -> new PlacedOrder.PlacedLine(l.lineId(), l.variantAtin(), l.title(), l.quantity(),
+                                l.sellerOrgId(), l.sellerName()))
                         .toList(), s.shipBy(), s.pickup() == null ? null
                         : new PlacedOrder.SellerPickup(s.pickup().locationId(), s.pickup().lat(), s.pickup().lng())))
                 .toList();

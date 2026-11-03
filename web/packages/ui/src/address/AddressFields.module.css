@@ -1,0 +1,2 @@
+.fields { display: flex; flex-direction: column; gap: var(--at-space-3); min-width: 0; }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: var(--at-space-3); }

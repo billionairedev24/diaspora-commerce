@@ -80,7 +80,7 @@ func TestSignInRotatesSessionMergesCartRefreshesAndSignsOut(t *testing.T) {
 	}
 
 	// Sign-out revokes the refresh token, clears the cookie and hands back identity's end-session URL (single
-	// sign-out) returning to the calling app's home page.
+	// sign-out) returning to the calling app's signed-out landing (registered at identity per app).
 	r = b.do("POST", "/v1/auth/sign-out", nil)
 	mustStatus(t, r, 200)
 	if ck := r.header.Get("Set-Cookie"); !strings.Contains(ck, "Max-Age=0") {
@@ -88,7 +88,9 @@ func TestSignInRotatesSessionMergesCartRefreshesAndSignsOut(t *testing.T) {
 	}
 	logout, err := url.Parse(r.json(t)["redirectTo"].(string))
 	if err != nil || logout.Path != "/connect/logout" || logout.Query().Get("id_token_hint") == "" ||
-		logout.Query().Get("client_id") != "gateway-bff" || logout.Query().Get("post_logout_redirect_uri") != testkit.WebOrigin+"/" {
+		logout.Query().Get("client_id") != "gateway-bff" ||
+		logout.Query().Get("post_logout_redirect_uri") != testkit.WebOrigin+"/api/bff/v1/auth/signed-out/storefront" ||
+		logout.Query().Has("state") {
 		t.Fatalf("logout redirect = %v (%v)", logout, err)
 	}
 	if rev := bff.Upstreams.Revoked(); len(rev) < 1 || !strings.HasPrefix(rev[0], "rt-") {
@@ -224,12 +226,129 @@ func TestSignInFromAnotherAppReturnsThere(t *testing.T) {
 	r = b.do("POST", "/v1/auth/sign-out", nil)
 	mustStatus(t, r, 200)
 	logout, _ := url.Parse(r.json(t)["redirectTo"].(string))
-	if logout.Query().Get("post_logout_redirect_uri") != testkit.SellerCenterOrigin+"/" {
+	if logout.Query().Get("post_logout_redirect_uri") != testkit.SellerCenterOrigin+"/api/bff/v1/auth/signed-out/seller-center" {
 		t.Fatalf("post-logout = %s", logout)
 	}
-	// Signed out: nothing to end at identity any more.
-	if v := b.do("POST", "/v1/auth/sign-out", nil).json(t); v["redirectTo"] != nil {
+	// Signed out: nothing to end at identity any more, so straight to Seller Center's signed-out landing.
+	if v := b.do("POST", "/v1/auth/sign-out", nil).json(t); v["redirectTo"] != testkit.SellerCenterOrigin+"/api/bff/v1/auth/signed-out/seller-center" {
 		t.Fatalf("second sign-out = %v", v)
+	}
+}
+
+func TestForeignOriginErrorRedirectsToLoginWithoutStorefrontError(t *testing.T) {
+	bff, b := setup(t, testkit.Options{})
+	// Sign in to storefront first to establish a storefront session.
+	mustStatus(t, signIn(t, bff, b, "/"), 302)
+	if b.cookie == "" {
+		t.Fatal("expected storefront session cookie")
+	}
+
+	// Now navigate towards Seller Center.
+	r := b.do("GET", "/v1/auth/login?returnTo="+url.QueryEscape(testkit.SellerCenterOrigin+"/orders"), nil)
+	mustStatus(t, r, 302)
+	loc, _ := url.Parse(r.header.Get("Location"))
+	state := loc.Query().Get("state")
+
+	// If identity returns an error, gateway-bff routes directly to Seller Center's login start
+	// with prompt=login, never showing an intermediate storefront error page.
+	r = b.do("GET", "/v1/auth/oidc/callback?error=access_denied&state="+state, nil)
+	mustStatus(t, r, 302)
+	wantLoc := testkit.SellerCenterOrigin + "/api/bff/v1/auth/login?prompt=login&retried=1&returnTo=" + url.QueryEscape(testkit.SellerCenterOrigin+"/orders")
+	if got := r.header.Get("Location"); got != wantLoc {
+		t.Fatalf("location = %s, want %s", got, wantLoc)
+	}
+
+	// Cross-app session ID difference does not trigger state_mismatch for foreign origins.
+	r = b.do("GET", "/v1/auth/login?returnTo="+url.QueryEscape(testkit.SellerCenterOrigin+"/dashboard"), nil)
+	mustStatus(t, r, 302)
+	loc, _ = url.Parse(r.header.Get("Location"))
+	q := loc.Query()
+	code := bff.Upstreams.IssueCode(q.Get("code_challenge"), q.Get("nonce"), "user-1", testkit.SellerCenterRedirectURI)
+
+	// Simulate different cookie context on Seller Center origin proxy
+	b.cookie = "other-cookie"
+	r = b.do("GET", "/v1/auth/oidc/callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(q.Get("state")), nil)
+	mustStatus(t, r, 302)
+	if to := r.header.Get("Location"); to != testkit.SellerCenterOrigin+"/dashboard" {
+		t.Fatalf("callback redirect = %s, want %s", to, testkit.SellerCenterOrigin+"/dashboard")
+	}
+}
+
+// Signing out of each web app ends the identity session too (single sign-out) and comes back to that app: the
+// storefront stays signed out on the page (with signedOut=1 for the toast), Seller Center and the staff console go
+// straight to their own branded sign-in (prompt=login, notice=signed_out) and return there afterwards.
+func TestSignOutReturnsEachAppToItsOwnPage(t *testing.T) {
+	bff, b := setup(t, testkit.Options{})
+	cases := []struct {
+		origin, app, callback string
+	}{
+		{testkit.WebOrigin, "storefront", testkit.RedirectURI},
+		{testkit.SellerCenterOrigin, "seller-center", testkit.SellerCenterRedirectURI},
+		{testkit.StaffConsoleOrigin, "staff-console", testkit.StaffConsoleRedirectURI},
+	}
+	for _, c := range cases {
+		b.origin = c.origin
+		r := b.do("GET", "/v1/auth/login?returnTo="+url.QueryEscape(c.origin+"/start"), nil)
+		loc, _ := url.Parse(r.header.Get("Location"))
+		q := loc.Query()
+		if q.Get("redirect_uri") != c.callback {
+			t.Fatalf("%s: redirect_uri = %s", c.app, q.Get("redirect_uri"))
+		}
+		code := bff.Upstreams.IssueCode(q.Get("code_challenge"), q.Get("nonce"), "user-1", c.callback)
+		mustStatus(t, b.do("GET", "/v1/auth/oidc/callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(q.Get("state")), nil), 302)
+
+		r = b.do("POST", "/v1/auth/sign-out", map[string]any{"returnTo": "/orders?tab=open"})
+		mustStatus(t, r, 200)
+		logout, _ := url.Parse(r.json(t)["redirectTo"].(string))
+		lq := logout.Query()
+		landing := c.origin + "/api/bff/v1/auth/signed-out/" + c.app
+		if logout.Path != "/connect/logout" || lq.Get("id_token_hint") == "" || lq.Get("client_id") != "gateway-bff" ||
+			lq.Get("post_logout_redirect_uri") != landing || lq.Get("state") != "/orders?tab=open" {
+			t.Fatalf("%s: logout = %s", c.app, logout)
+		}
+	}
+
+	// Identity then sends the browser to the landing (state appended).
+	r := b.do("GET", "/v1/auth/signed-out/storefront?state="+url.QueryEscape("/deals?page=2"), nil)
+	mustStatus(t, r, 302)
+	if to := r.header.Get("Location"); to != testkit.WebOrigin+"/deals?page=2&signedOut=1" {
+		t.Fatalf("storefront landing = %s", to)
+	}
+	if to := b.do("GET", "/v1/auth/signed-out/storefront", nil).header.Get("Location"); to != testkit.WebOrigin+"/?signedOut=1" {
+		t.Fatalf("storefront home landing = %s", to)
+	}
+	// Never an open redirect.
+	for _, bad := range []string{"https://evil.example/x", "//evil.example", "/\\evil.example"} {
+		if to := b.do("GET", "/v1/auth/signed-out/storefront?state="+url.QueryEscape(bad), nil).header.Get("Location"); to != testkit.WebOrigin+"/?signedOut=1" {
+			t.Fatalf("state %q → %s", bad, to)
+		}
+	}
+	for _, c := range cases[1:] {
+		r := b.do("GET", "/v1/auth/signed-out/"+c.app+"?state="+url.QueryEscape("/orders"), nil)
+		mustStatus(t, r, 302)
+		loc, _ := url.Parse(r.header.Get("Location"))
+		q := loc.Query()
+		if loc.Path != "/oauth2/authorize" || q.Get("redirect_uri") != c.callback || q.Get("prompt") != "login" ||
+			q.Get("notice") != "signed_out" || q.Get("client_id") != "gateway-bff" {
+			t.Fatalf("%s landing = %s", c.app, loc)
+		}
+		// Signing in again returns to that app's page.
+		code := bff.Upstreams.IssueCode(q.Get("code_challenge"), q.Get("nonce"), "user-1", c.callback)
+		back := b.do("GET", "/v1/auth/oidc/callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(q.Get("state")), nil)
+		if to := back.header.Get("Location"); to != c.origin+"/orders" {
+			t.Fatalf("%s: back to %s", c.app, to)
+		}
+	}
+	mustStatus(t, b.do("GET", "/v1/auth/signed-out/nope", nil), 404)
+
+	// A foreign returnTo is never carried.
+	b.origin = testkit.WebOrigin
+	r = b.do("POST", "/v1/auth/sign-out", map[string]any{"returnTo": "https://evil.example/"})
+	mustStatus(t, r, 200)
+	foreign, _ := url.Parse(r.json(t)["redirectTo"].(string))
+	if foreign.Query().Get("post_logout_redirect_uri") != testkit.WebOrigin+"/api/bff/v1/auth/signed-out/storefront" ||
+		foreign.Query().Has("state") {
+		t.Fatalf("foreign returnTo sign-out = %s", foreign)
 	}
 }
 
@@ -295,9 +414,12 @@ func TestAccountAddresses(t *testing.T) {
 		t.Fatalf("payment methods = %v", pms)
 	}
 	mustStatus(t, b.do("POST", "/v1/account/payment-methods/setup-intents", nil), 201)
-	// Orders (orders service) and returns (tax-returns) are served.
-	for _, p := range []string{"/v1/account/orders", "/v1/account/returns"} {
-		mustStatus(t, b.do("GET", p, nil), 200)
+	// Orders (orders service) are served; the old self-service returns routes are gone.
+	mustStatus(t, b.do("GET", "/v1/account/orders", nil), 200)
+	for _, p := range []string{"/v1/account/returns", "/v1/account/returns/RMA-0000ABCD", "/v1/account/orders/" + testkit.ShopperOrderNumber + "/returnable"} {
+		if st := b.do("GET", p, nil).status; st != 404 && st != 405 {
+			t.Fatalf("%s should be gone, got %d", p, st)
+		}
 	}
 	// Checkout summary composes cart + addresses + payment methods.
 	mustStatus(t, b.do("POST", "/v1/cart/items", map[string]any{"offerId": "ATSHEAV001", "quantity": 2}), 200)

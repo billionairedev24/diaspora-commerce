@@ -1,6 +1,6 @@
 'use client';
 
-import { type AvailableSlot, type BookingCreated, bookingKeys, definitiveFailure, isApiError, type ServiceMode } from '@afrotransact/api-client';
+import { type AvailableSlot, type BookingCreated, bookingKeys, definitiveFailure, isApiError, randomUuid,type ServiceMode } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, CheckCircle, Plus, ShieldCheck, Skeleton } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -42,7 +42,7 @@ export function ServiceDetailView({ serviceId }: { serviceId: string }) {
   const [addPm, setAddPm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<BookingCreated['booking'] | null>(null);
-  const [key, setKey] = useState(() => `bk-${crypto.randomUUID()}`);
+  const [key, setKey] = useState(() => `bk-${randomUuid()}`);
   const signedIn = me.data?.authenticated === true;
   const methods = useQuery({ ...shopperQueries.paymentMethods(api), enabled: signedIn });
   const s = svc.data;
@@ -71,7 +71,7 @@ export function ServiceDetailView({ serviceId }: { serviceId: string }) {
     onError: (e) => {
       // Same key for a retry after a timeout or a card error (bookings replays the booking and its deposit
       // PaymentIntent, so the deposit is never taken twice); a new one only once the attempt was refused (4xx).
-      if (definitiveFailure(e)) setKey(`bk-${crypto.randomUUID()}`);
+      if (definitiveFailure(e)) setKey(`bk-${randomUuid()}`);
       setError(isApiError(e) ? (e.fieldErrors.startAt ?? Object.values(e.fieldErrors)[0] ?? e.message) : e instanceof Error ? e.message : t('auth.genericError'));
       void qc.invalidateQueries({ queryKey: ['services', 'slots'] });
     }

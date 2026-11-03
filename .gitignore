@@ -4,6 +4,8 @@ target/
 .mvn/wrapper/maven-wrapper.jar
 # Go
 /go/**/bin/
+# `go build` inside a service directory drops the binary next to the sources
+/go/services/*/gateway-bff
 *.test
 coverage.out
 # Node
@@ -42,6 +44,8 @@ __pycache__/
 *.tsbuildinfo
 .next-e2e/
 .next-prod/
+# Any other Next.js build folder (NEXT_DIST_DIR=.next-<purpose>: repro, resp, …)
+.next-*/
 .local/
 # Written by next dev (Next.js 16 agent notes)
 web/apps/*/AGENTS.md
@@ -50,3 +54,8 @@ web/apps/*/next-env.d.ts
 
 # Optional welcome photos / videos for the Expo apps (tools/seed/mobile_hero.py; docs/engineering/mobile-on-your-phone.md)
 mobile/apps/*/assets/hero/
+.junie/
+*.whl
+infra/ovh-vps/config.env
+infra/ovh-vps/secrets.local.env
+.ovh/

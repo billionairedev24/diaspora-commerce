@@ -70,8 +70,8 @@ class PreorderResolverTest {
         assertThat(o.window()).isEqualTo(open);
         assertThat(o.count()).isEqualTo(142);
         assertThat(o.countdownTarget()).isEqualTo(open.details().closesAt());
-        assertThat(o.doorFee()).isEqualTo(new Money(799, "USD"));
-        assertThat(o.pickupFee()).isEqualTo(new Money(0, "USD"));
+        assertThat(o.doorFee().amount()).isEqualTo(new Money(799, "USD"));
+        assertThat(o.pickupFee().amount()).isEqualTo(new Money(0, "USD"));
 
         Resolution onlyClosed = resolver.resolve("US", "TX", "Lubbock", List.of(closed), c, Map.of(), false, NOW);
         assertThat(onlyClosed.stage()).isEqualTo(PreorderStatus.CLOSED);

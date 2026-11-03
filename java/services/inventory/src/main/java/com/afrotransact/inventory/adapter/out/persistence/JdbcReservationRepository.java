@@ -66,13 +66,14 @@ class JdbcReservationRepository implements ReservationRepository {
             for (LotAllocation a : line.allocations()) {
                 jdbc.sql("""
                         insert into reservation_allocation (reservation_id, line_no, lot_id, lot_no, qty, exp_date,
-                                                            unit_landed_cost_minor, currency)
-                        values (:id, :lineNo, :lotId, :lotNo, :qty, :exp, :cost, :currency)
+                                                            unit_landed_cost_minor, currency, unit_cost_usd_minor)
+                        values (:id, :lineNo, :lotId, :lotNo, :qty, :exp, :cost, :currency, :costUsd)
                         """)
                         .param("id", r.id()).param("lineNo", line.lineNo()).param("lotId", a.lotId())
                         .param("lotNo", a.lotNo()).param("qty", a.qty())
                         .param("exp", a.expDate() == null ? null : Date.valueOf(a.expDate()))
                         .param("cost", a.unitLandedCostMinor()).param("currency", a.currency())
+                        .param("costUsd", a.unitCostUsdMinor())
                         .update();
             }
         }
@@ -139,7 +140,8 @@ class JdbcReservationRepository implements ReservationRepository {
         List<UUID> ids = headers.stream().map(Reservation::id).toList();
         Map<String, List<LotAllocation>> allocations = new LinkedHashMap<>();
         jdbc.sql("""
-                select reservation_id, line_no, lot_id, lot_no, qty, exp_date, unit_landed_cost_minor, currency
+                select reservation_id, line_no, lot_id, lot_no, qty, exp_date, unit_landed_cost_minor, currency,
+                       unit_cost_usd_minor
                 from reservation_allocation where reservation_id in (:ids)
                 order by reservation_id, line_no, exp_date nulls last, lot_no
                 """)
@@ -149,7 +151,8 @@ class JdbcReservationRepository implements ReservationRepository {
                     allocations.computeIfAbsent(rs.getObject("reservation_id", UUID.class) + "#" + rs.getInt("line_no"),
                             k -> new ArrayList<>()).add(new LotAllocation(rs.getObject("lot_id", UUID.class),
                             rs.getString("lot_no"), rs.getInt("qty"), exp == null ? null : exp.toLocalDate(),
-                            rs.getLong("unit_landed_cost_minor"), rs.getString("currency")));
+                            rs.getLong("unit_landed_cost_minor"), rs.getString("currency"),
+                            rs.getLong("unit_cost_usd_minor")));
                 });
         Map<UUID, List<ReservationLine>> lines = new LinkedHashMap<>();
         jdbc.sql("""

@@ -1,6 +1,7 @@
 package com.afrotransact.fulfilment.port;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,7 +19,17 @@ public interface DeliveryShipmentRepository {
     /** Locks the given shipments (for routing). */
     List<DeliveryShipment> lockAll(List<String> shipmentIds);
 
+    /**
+     * Shipments waiting for a route, oldest promise first. Community pre-order shipments are not in it: a run plans
+     * them (S264), so neither the zone builder nor the seller-pickup screens pick them up on their own.
+     */
     List<DeliveryShipment> awaitingRoute(String nodeId, int limit);
+
+    /** These shipments (unknown ids are absent), by shipment id. */
+    List<DeliveryShipment> findAllById(Collection<String> shipmentIds);
+
+    /** Shipments of these orders (any status), by shipment id. */
+    List<DeliveryShipment> findByOrderIds(Collection<String> orderIds);
 
     void updateStatus(String shipmentId, DeliveryShipmentStatus status, String routeId);
 

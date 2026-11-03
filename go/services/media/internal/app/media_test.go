@@ -215,3 +215,40 @@ func TestDeliveryRunsReadsCreativesWithMediaRead(t *testing.T) {
 		t.Fatal("media must accept delivery-runs-service's own token")
 	}
 }
+
+// gateway-bff reads driver proof photos (private) with its own token and media:read, to hand the order pages a short-lived
+// link; it may not read other private purposes, nor read without the scope, nor upload.
+func TestGatewayBFFReadsProofPhotosOnly(t *testing.T) {
+	proofStore, priv := &memStore{objects: map[string][]byte{}}, &memStore{objects: map[string][]byte{}}
+	repo := &memRepo{assets: map[string]domain.Asset{}}
+	svc := app.NewMediaService(map[domain.Purpose]port.ObjectStore{
+		domain.PurposeProofPhoto: proofStore, domain.PurposeKYCDocument: priv,
+	}, repo, inspect.New(40_000_000), domain.LinkPolicy{})
+	driver := auth.Actor{Subject: "drv-1", Type: "DRIVER", Permissions: []string{"delivery:operate"}}
+	bff := auth.Actor{Subject: domain.ClientGatewayBFF, Type: "SERVICE", Permissions: []string{domain.PermissionMediaRead}}
+	ctx := context.Background()
+
+	proof, _, err := svc.RequestUpload(ctx, driver, domain.PurposeProofPhoto, "door.jpg", "image/jpeg", 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := svc.Get(ctx, bff, proof.ID, 0); err != nil || got.ID != proof.ID {
+		t.Fatalf("gateway-bff must read a proof photo: %+v %v", got, err)
+	}
+	noScope := bff
+	noScope.Permissions = nil
+	if _, err := svc.Get(ctx, noScope, proof.ID, 0); !errors.Is(err, app.ErrForbidden) {
+		t.Fatalf("without media:read the read must be refused, got %v", err)
+	}
+	kyc, _, err := svc.RequestUpload(ctx, auth.Actor{Subject: "u1", Type: "SELLER_MEMBER", OrgID: "org_lagos"},
+		domain.PurposeKYCDocument, "ein.pdf", "application/pdf", 2000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Get(ctx, bff, kyc.ID, 0); !errors.Is(err, app.ErrForbidden) {
+		t.Fatalf("gateway-bff must not read other private purposes, got %v", err)
+	}
+	if _, _, err := svc.RequestUpload(ctx, bff, domain.PurposeProofPhoto, "x.jpg", "image/jpeg", 1000); !errors.Is(err, app.ErrForbidden) {
+		t.Fatalf("gateway-bff must not upload, got %v", err)
+	}
+}

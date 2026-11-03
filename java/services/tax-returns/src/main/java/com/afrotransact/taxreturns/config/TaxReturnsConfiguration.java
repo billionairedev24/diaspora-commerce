@@ -1,12 +1,9 @@
 package com.afrotransact.taxreturns.config;
 
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 
 import com.afrotransact.taxreturns.application.ReturnsSettings;
-import com.afrotransact.taxreturns.application.TaxSettings;
 import com.afrotransact.taxreturns.domain.returns.DefaultRefundCalculator;
 import com.afrotransact.taxreturns.domain.returns.DefaultReturnPolicy;
 import com.afrotransact.taxreturns.domain.returns.RefundCalculator;
@@ -14,7 +11,6 @@ import com.afrotransact.taxreturns.domain.returns.ReturnAddress;
 import com.afrotransact.taxreturns.domain.returns.ReturnPolicy;
 import com.afrotransact.taxreturns.domain.returns.ReturnPolicySettings;
 import com.afrotransact.taxreturns.domain.tax.DefaultTaxRules;
-import com.afrotransact.taxreturns.domain.tax.TaxCategory;
 import com.afrotransact.taxreturns.domain.tax.TaxRules;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -27,18 +23,12 @@ class TaxReturnsConfiguration {
 
     @Bean
     TaxRules taxRules(TaxReturnsProperties props) {
-        if (props.tax().provider() != TaxReturnsProperties.TaxProvider.RULES) {
-            throw new IllegalStateException("at.taxreturns.tax.provider=" + props.tax().provider()
-                    + " needs an external TaxCalculator adapter, which is not installed; use RULES");
+        TaxReturnsProperties.TaxProvider provider = props.tax().provider();
+        if (provider != TaxReturnsProperties.TaxProvider.RULES && provider != TaxReturnsProperties.TaxProvider.STRIPE_TAX) {
+            throw new IllegalStateException("at.taxreturns.tax.provider=" + provider
+                    + " needs an external TaxCalculator adapter, which is not installed; use RULES or STRIPE_TAX");
         }
         return new DefaultTaxRules();
-    }
-
-    @Bean
-    TaxSettings taxSettings(TaxReturnsProperties props) {
-        Map<String, TaxCategory> map = new HashMap<>();
-        props.tax().categoryByProductType().forEach((type, category) -> map.put(type, TaxCategory.parse(category)));
-        return new TaxSettings(map);
     }
 
     @Bean

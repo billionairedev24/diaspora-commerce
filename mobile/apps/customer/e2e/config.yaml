@@ -1,0 +1,3 @@
+appId: com.afrotransact.customer.local
+flows:
+  - 0*.yaml

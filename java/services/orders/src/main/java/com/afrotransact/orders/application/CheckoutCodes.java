@@ -26,6 +26,10 @@ public final class CheckoutCodes {
     public static final String PREORDER_NOT_OPEN = "orders.preorder-not-open";
     /** S272: a late pre-order add names a product that is not sold in that window at the customer's address. */
     public static final String PREORDER_NOT_ELIGIBLE = "orders.preorder-not-eligible";
+    /** S261: the delivery run the order was priced for closed (its cutoff passed) before the order could take a slot. */
+    public static final String RUN_CLOSED = "orders.run-closed";
+    /** S261: the delivery run the order was priced for is full. */
+    public static final String RUN_FULL = "orders.run-full";
     /** S255: geo could not locate the delivery address to measure the distance. */
     public static final String DELIVERY_ADDRESS_NOT_LOCATED = "orders.delivery-address-not-located";
     /** The customer's previous checkout is still being settled (payment processing or compensations running): 409,

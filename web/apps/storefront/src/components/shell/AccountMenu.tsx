@@ -2,10 +2,12 @@
 
 import { accountKeys, cartKeys, type Me } from '@afrotransact/api-client';
 import {
-  ArrowUUpLeft,
   CalendarCheck,
   CaretDown,
   CreditCard,
+  Desktop,
+  Gift,
+  Headset,
   MapPin,
   Menu,
   MenuGroup,
@@ -30,18 +32,20 @@ import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 
 import styles from './AccountMenu.module.css';
-import { type AccountMenuIcon, accountMenuModel } from './accountMenuItems';
+import { type AccountMenuIcon, accountMenuModel, signOutReturnTo } from './accountMenuItems';
 
 const ICONS: Record<AccountMenuIcon, ReactNode> = {
   user: <UserCircle aria-hidden />,
   package: <Package aria-hidden />,
-  returns: <ArrowUUpLeft aria-hidden />,
+  help: <Headset aria-hidden />,
   pin: <MapPin aria-hidden />,
   card: <CreditCard aria-hidden />,
+  gift: <Gift aria-hidden />,
   shield: <ShieldCheck aria-hidden />,
   sparkle: <Sparkle aria-hidden />,
   store: <Storefront aria-hidden />,
   calendar: <CalendarCheck aria-hidden />,
+  desktop: <Desktop aria-hidden />,
   signin: <SignIn aria-hidden />,
   signup: <UserPlus aria-hidden />
 };
@@ -49,13 +53,15 @@ const ICONS: Record<AccountMenuIcon, ReactNode> = {
 export interface AccountMenuProps {
   me: Me | undefined;
   onAskLola: () => void;
+  /** The tier name of a member ("Plus"), shown as a badge under the name. */
+  memberTier?: string | null;
   /** Render the menu inline (tests). */
   inline?: boolean;
   defaultOpen?: boolean;
 }
 
 /** Circular avatar with a dropdown: "Welcome, Guest" (sign in / create account) or the signed-in account menu. */
-export function AccountMenu({ me, onAskLola, inline, defaultOpen }: AccountMenuProps) {
+export function AccountMenu({ me, onAskLola, inline, defaultOpen, memberTier }: AccountMenuProps) {
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
@@ -69,12 +75,13 @@ export function AccountMenu({ me, onAskLola, inline, defaultOpen }: AccountMenuP
   const signOut = async () => {
     let redirectTo: string | null = null;
     try {
-      ({ redirectTo } = await browserApi().signOut());
+      ({ redirectTo } = await browserApi().signOut({ returnTo: signOutReturnTo(window.location.pathname, window.location.search) }));
     } catch {
       /* signed out locally anyway: the session cookie is gone or was never there */
     }
     if (redirectTo) {
-      // Ends the identity session too (single sign-out); identity then returns the browser to the storefront home.
+      // Ends the identity session too (single sign-out); identity then returns the browser to this page (or the home
+      // page) with signedOut=1, where SignedOutNotice says so. No sign-in wall.
       window.location.assign(redirectTo);
       return;
     }
@@ -102,6 +109,11 @@ export function AccountMenu({ me, onAskLola, inline, defaultOpen }: AccountMenuP
         <span className={styles.headText}>
           <strong>{title}</strong>
           <span className={styles.headSub}>{subtitle}</span>
+          {isUser && memberTier && (
+            <span className={styles.memberBadge} data-testid="member-badge">
+              {t('mem.badge', { tier: memberTier })}
+            </span>
+          )}
         </span>
       </div>
       <MenuGroup>

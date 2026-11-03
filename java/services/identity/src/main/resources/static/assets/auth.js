@@ -144,8 +144,21 @@
 
   function preventDoubleSubmit() {
     document.querySelectorAll('form[data-once]').forEach((form) => {
-      form.addEventListener('submit', () => {
+      form.addEventListener('submit', (e) => {
+        if (form.dataset.submitting === 'true') {
+          e.preventDefault();
+          return;
+        }
+        form.dataset.submitting = 'true';
         form.querySelectorAll('button[type="submit"]').forEach((b) => b.setAttribute('aria-busy', 'true'));
+      });
+    });
+    // Back/forward restores the page from the browser's cache with the button still busy.
+    window.addEventListener('pageshow', (e) => {
+      if (!e.persisted) return;
+      document.querySelectorAll('form[data-once]').forEach((form) => {
+        delete form.dataset.submitting;
+        form.querySelectorAll('button[type="submit"]').forEach((b) => b.removeAttribute('aria-busy'));
       });
     });
   }

@@ -1,6 +1,6 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
-import { type NotificationPreviewRequest, type ResourceKey } from '../schemas/staff';
+import { type LookupKind, type NotificationPreviewRequest, type ResourceKey, type RunDispatchStatus } from '../schemas/staff';
 import { type ResourceQuery, type StaffApiClient } from '../staff-client';
 
 /* TanStack Query key factories for the staff console. Everything hangs off ['staff'] so signing out (or a role change)
@@ -17,14 +17,19 @@ export const staffKeys = {
   exportJob: (id: string) => [...staffKeys.exports(), id] as const,
   customers: (q: string) => [...staffKeys.all, 'support', 'customers', q] as const,
   customer: (id: string) => [...staffKeys.all, 'support', 'customer', id] as const,
+  identityDocuments: () => [...staffKeys.all, 'identity', 'documents'] as const,
   fees: () => [...staffKeys.all, 'fees'] as const,
   feeOrgs: (q: string) => [...staffKeys.fees(), 'orgs', q] as const,
+  lookup: (kind: string, q: string) => [...staffKeys.all, 'lookup', kind, q] as const,
   deliveryQuote: (orgId: string, miles: number, packages: number) => [...staffKeys.fees(), 'delivery-quote', orgId, miles, packages] as const,
   pickups: () => [...staffKeys.all, 'dispatch', 'pickups'] as const,
   pickupList: (nodeId: string) => [...staffKeys.pickups(), 'list', nodeId] as const,
   pickup: (shipmentId: string) => [...staffKeys.pickups(), 'pickup', shipmentId] as const,
   pickupSuggestions: (shipmentId: string) => [...staffKeys.pickup(shipmentId), 'suggestions'] as const,
   pickupAssignments: (shipmentId: string) => [...staffKeys.pickup(shipmentId), 'assignments'] as const,
+  runs: () => [...staffKeys.all, 'dispatch', 'runs'] as const,
+  runList: (status: string) => [...staffKeys.runs(), 'list', status] as const,
+  run: (runId: string) => [...staffKeys.runs(), 'run', runId] as const,
   templates: () => [...staffKeys.all, 'notifications', 'templates'] as const,
   templateList: (q: string) => [...staffKeys.templates(), 'list', q] as const,
   template: (key: string) => [...staffKeys.templates(), 'template', key] as const,
@@ -54,7 +59,11 @@ export const staffQueries = {
     queryOptions({ queryKey: staffKeys.customers(q), queryFn: ({ signal }) => api.searchCustomers(q, signal), staleTime: 30_000 }),
   customer: (api: StaffApiClient, id: string) =>
     queryOptions({ queryKey: staffKeys.customer(id), queryFn: ({ signal }) => api.getCustomer(id, signal), staleTime: 15_000 }),
+  identityDocuments: (api: StaffApiClient) =>
+    queryOptions({ queryKey: staffKeys.identityDocuments(), queryFn: ({ signal }) => api.getIdentityDocuments(signal), staleTime: 60_000 }),
   fees: (api: StaffApiClient) => queryOptions({ queryKey: staffKeys.fees(), queryFn: ({ signal }) => api.getFees(signal), staleTime: 15_000 }),
+  lookup: (api: StaffApiClient, kind: LookupKind, q: string) =>
+    queryOptions({ queryKey: staffKeys.lookup(kind, q), queryFn: ({ signal }) => api.lookup(kind, q, signal), staleTime: 30_000 }),
   feeOrgs: (api: StaffApiClient, q: string) =>
     queryOptions({ queryKey: staffKeys.feeOrgs(q), queryFn: ({ signal }) => api.searchFeeOrgs(q, signal), staleTime: 30_000 }),
   deliveryQuote: (api: StaffApiClient, orgId: string, miles: number, packages: number) =>
@@ -69,6 +78,10 @@ export const staffQueries = {
     queryOptions({ queryKey: staffKeys.pickupSuggestions(shipmentId), queryFn: ({ signal }) => api.getPickupSuggestions(shipmentId, signal), staleTime: 10_000 }),
   pickupAssignments: (api: StaffApiClient, shipmentId: string) =>
     queryOptions({ queryKey: staffKeys.pickupAssignments(shipmentId), queryFn: ({ signal }) => api.getPickupAssignments(shipmentId, signal), staleTime: 10_000 }),
+  runs: (api: StaffApiClient, status: RunDispatchStatus | '' = '') =>
+    queryOptions({ queryKey: staffKeys.runList(status), queryFn: ({ signal }) => api.listRuns(status || undefined, signal), staleTime: 10_000, refetchInterval: 30_000 }),
+  run: (api: StaffApiClient, runId: string) =>
+    queryOptions({ queryKey: staffKeys.run(runId), queryFn: ({ signal }) => api.getRun(runId, signal), staleTime: 10_000, refetchInterval: 30_000 }),
   templates: (api: StaffApiClient, q = '') =>
     queryOptions({ queryKey: staffKeys.templateList(q), queryFn: ({ signal }) => api.listNotificationTemplates(q, signal), placeholderData: keepPreviousData, staleTime: 30_000 }),
   template: (api: StaffApiClient, key: string) =>

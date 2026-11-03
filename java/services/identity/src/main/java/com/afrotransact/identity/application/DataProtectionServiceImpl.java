@@ -1,6 +1,8 @@
 package com.afrotransact.identity.application;
 
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.BiFunction;
 
@@ -42,14 +44,27 @@ class DataProtectionServiceImpl implements DataProtectionService {
     @Override
     public DataProtectionStatus status() {
         requireSuperAdmin();
-        return new DataProtectionStatus(cipher.currentKeyId(), secrets.totpSecretsByKey());
+        return new DataProtectionStatus(cipher.currentKeyId(), sealedByKey());
     }
 
     @Override
     public ResealReport rotate() {
         Actor actor = requireSuperAdmin();
         String keyId = cipher.currentKeyId();
-        ResealReport report = reseal((after, limit) -> secrets.totpSecretsNotSealedUnder(keyId, after, limit));
+        ResealReport totp = reseal((after, limit) -> secrets.totpSecretsNotSealedUnder(keyId, after, limit));
+        // The active signing key's private half is sealed with the same keys: leaving it under a key that is then
+        // removed would stop identity from signing any token.
+        int resealed = totp.resealed();
+        int failed = totp.failed();
+        try {
+            if (secrets.resealActiveSigningKey()) {
+                resealed++;
+            }
+        } catch (SecretCipherException ex) {
+            failed++;
+            LOG.warn("The active signing key cannot be opened and was left as it is: {}", ex.getMessage());
+        }
+        ResealReport report = new ResealReport(keyId, resealed, totp.skipped(), failed, sealedByKey());
         changeLog.append(actor.subject(), "data-protection.rotated", null, null, "mfa_totp.secret -> " + keyId,
                 "resealed=" + report.resealed() + " skipped=" + report.skipped() + " failed=" + report.failed());
         LOG.info("Data-protection rotation to key {} by {}: {}", keyId, actor.subject(), report);
@@ -89,7 +104,14 @@ class DataProtectionServiceImpl implements DataProtectionService {
             after = batch.get(batch.size() - 1);
             batch = page.apply(after, BATCH);
         }
-        return new ResealReport(keyId, resealed, skipped, failed, secrets.totpSecretsByKey());
+        return new ResealReport(keyId, resealed, skipped, failed, sealedByKey());
+    }
+
+    /** Everything sealed with a data-protection key, per key id: TOTP seeds and the active signing key. */
+    private Map<String, Long> sealedByKey() {
+        Map<String, Long> all = new TreeMap<>(secrets.totpSecretsByKey());
+        secrets.signingKeysByKey().forEach((key, n) -> all.merge(key, n, Long::sum));
+        return all;
     }
 
     private Actor requireSuperAdmin() {

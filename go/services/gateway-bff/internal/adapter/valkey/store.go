@@ -27,7 +27,9 @@ type Store interface {
 	port.SessionStore
 	port.EphemeralStore
 	port.SelectionStore
+	port.ReceiptStore
 	port.RateLimiter
+	port.DailyCounter
 	Ping(ctx context.Context) error
 }
 
@@ -239,6 +241,50 @@ func (s *storeImpl) SetSelected(ctx context.Context, owner string, atins []strin
 		return fmt.Errorf("set selection: %w", err)
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------- receipts
+
+func (s *storeImpl) Recall(ctx context.Context, key string) (string, bool, error) {
+	v, err := s.rdb.Get(ctx, prefix+"receipt:"+key).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("recall: %w", err)
+	}
+	return v, true, nil
+}
+
+func (s *storeImpl) Remember(ctx context.Context, key, value string, ttl time.Duration) error {
+	if err := s.rdb.Set(ctx, prefix+"receipt:"+key, value, ttl).Err(); err != nil {
+		return fmt.Errorf("remember: %w", err)
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------- daily counters
+
+// Add adds n to key's count for today (UTC) and returns the new count; n = 0 reads it.
+func (s *storeImpl) Add(ctx context.Context, key string, n int) (int, error) {
+	k := fmt.Sprintf("%sdc:%s:%s", prefix, key, time.Now().UTC().Format("20060102"))
+	if n == 0 {
+		v, err := s.rdb.Get(ctx, k).Int()
+		if errors.Is(err, redis.Nil) {
+			return 0, nil
+		}
+		if err != nil {
+			return 0, fmt.Errorf("daily counter: %w", err)
+		}
+		return v, nil
+	}
+	pipe := s.rdb.TxPipeline()
+	incr := pipe.IncrBy(ctx, k, int64(n))
+	pipe.Expire(ctx, k, port.DailyCounterTTL)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return 0, fmt.Errorf("daily counter: %w", err)
+	}
+	return int(incr.Val()), nil
 }
 
 // ---------------------------------------------------------------- rate limits

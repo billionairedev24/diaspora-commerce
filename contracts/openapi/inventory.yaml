@@ -42,6 +42,10 @@ tags:
   description: Batches with expiry, FEFO order, quarantine, write-off, cycle counts, transfers
 - name: Storage
   description: FBA storage volume for metered billing (S206)
+- name: Exchange rates
+  description: Customers pay in USD, but stock is sourced and received in the currency actually paid (ADR 0005 §7). The currencies
+    stock can be costed in and the staff-managed rates to USD that are suggested at receiving; every change is audited with
+    a reason.
 - name: Reservations
   description: 'Checkout holds: reserve → confirm → commit (ship) or release. Called by the orders service (SERVICE principal
     with inventory:reserve).'
@@ -74,6 +78,22 @@ paths:
                 items:
                   $ref: '#/components/schemas/Availability'
       security: []
+  /v1/currencies:
+    get:
+      tags:
+      - Exchange rates
+      summary: Currencies stock can be received in (inventory:read)
+      description: The configured list (`at.inventory.cost-currencies`), USD first.
+      operationId: listCostCurrencies
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CostCurrency'
   /v1/cycle-counts:
     get:
       tags:
@@ -252,6 +272,129 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/CycleCount'
+  /v1/exchange-rates:
+    get:
+      tags:
+      - Exchange rates
+      summary: Exchange rates to USD, newest day first (staff, inventory:read)
+      operationId: listExchangeRates
+      parameters:
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ExchangeRatePage'
+  /v1/exchange-rates/current:
+    get:
+      tags:
+      - Exchange rates
+      summary: The rate suggested at receiving, per currency (staff, inventory:read)
+      description: 'For every currency that has one: the latest rate on or before `asOf` (default today, UTC).'
+      operationId: currentExchangeRates
+      parameters:
+      - name: asOf
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExchangeRate'
+  /v1/exchange-rates/history:
+    get:
+      tags:
+      - Exchange rates
+      summary: Who changed which rate and why, newest first (staff, inventory:read)
+      operationId: exchangeRateHistory
+      parameters:
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ExchangeRateChangePage'
+  /v1/exchange-rates/{currency}/{date}:
+    put:
+      tags:
+      - Exchange rates
+      summary: Set the rate of a currency on a day (inventory:adjust)
+      description: Creates the rate, or replaces it; the reason is required and kept in the audit with the old and new rate.
+        422 for a currency that is not in the configured list (or USD), a rate that is not positive, a future day or a missing
+        reason.
+      operationId: putExchangeRate
+      parameters:
+      - name: currency
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: date
+        in: path
+        required: true
+        schema:
+          type: string
+          format: date
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetExchangeRateRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ExchangeRate'
   /v1/fba/inventory:
     get:
       tags:
@@ -1985,6 +2128,51 @@ components:
         trackingRegistered:
           type: boolean
           description: carrier-gateway tracks the number (scans update the shipment)
+    SetExchangeRateRequest:
+      type: object
+      properties:
+        rateToUsd:
+          type: number
+          description: US dollars per 1 unit of the currency (> 0, at most 10 decimals)
+          exclusiveMinimum: 0
+          maximum: 1000000000
+        note:
+          type: string
+          description: Where the rate comes from, e.g. "Banxico FIX"
+          maxLength: 200
+          minLength: 0
+        reason:
+          type: string
+          description: Why the rate is set or changed (3 to 500 characters)
+          maxLength: 500
+          minLength: 3
+      required:
+      - rateToUsd
+      - reason
+    ExchangeRate:
+      type: object
+      description: On `rateDate` one unit of `currency` was worth `rateToUsd` US dollars
+      properties:
+        currency:
+          type: string
+        rateDate:
+          type: string
+          format: date
+        rateToUsd:
+          type: number
+        note:
+          type: string
+        updatedBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
     CycleCountEntry:
       type: object
       properties:
@@ -2187,9 +2375,31 @@ components:
       - orderId
       - reason
       - sku
+    CostComponents:
+      type: object
+      description: Unit landed cost by what it is made of, in the lot's currency and minor units; the four add up to the unit
+        cost
+      properties:
+        goodsMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        freightMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        dutyMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        otherMinor:
+          type: integer
+          format: int64
+          minimum: 0
     Lot:
       type: object
-      description: A batch of one SKU at one node with dates, bin, unit landed cost and status
+      description: A batch of one SKU at one node with dates, bin, unit landed cost and status. The cost is kept in the currency
+        paid with the rate to USD fixed at receiving and the USD value valuation and COGS use.
       properties:
         id:
           type: string
@@ -2225,8 +2435,27 @@ components:
         unitLandedCostMinor:
           type: integer
           format: int64
+          description: Unit landed cost in minor units of `currency`
         currency:
           type: string
+          description: ISO 4217 code of the currency the lot was paid in
+        fxRateToUsd:
+          type: number
+          description: US dollars per 1 unit of `currency` when the lot was received
+        fxRateDate:
+          type: string
+          format: date
+          description: The day the rate is for
+        fxRateSource:
+          type: string
+          description: BASE (USD), ENTERED (by the receiver or sender) or TABLE (the staff-managed rates)
+        unitCostUsdMinor:
+          type: integer
+          format: int64
+          description: Unit landed cost in US cents, fixed at receiving
+        costComponents:
+          $ref: '#/components/schemas/CostComponents'
+          description: Unit cost by goods, freight, duty and other, in `currency`
         status:
           type: string
         reason:
@@ -2335,6 +2564,10 @@ components:
           format: int64
         currency:
           type: string
+        unitCostUsdMinor:
+          type: integer
+          format: int64
+          description: Unit landed cost of the lot in US cents (what COGS uses)
     Reservation:
       type: object
       properties:
@@ -2411,7 +2644,8 @@ components:
       - groups
     CommitResult:
       type: object
-      description: Shipped reservation with COGS at lot landed cost
+      description: 'Shipped reservation with COGS at lot landed cost: in USD (`cogsUsdMinor`, what margin uses) and per currency
+        the lots were paid in (`cogs`)'
       properties:
         reservation:
           $ref: '#/components/schemas/Reservation'
@@ -2419,6 +2653,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Money'
+        cogsUsdMinor:
+          type: integer
+          format: int64
+          description: COGS in US cents
         lines:
           type: array
           items:
@@ -2442,6 +2680,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Money'
+        cogsUsdMinor:
+          type: integer
+          format: int64
         group:
           type: string
         stockOwnerOrgId:
@@ -2535,9 +2776,11 @@ components:
         unitLandedCostMinor:
           type: integer
           format: int64
+          description: Unit landed cost in minor units of `currency`
           minimum: 0
         currency:
           type: string
+          description: 'The currency actually paid: USD or one of GET /v1/currencies'
           maxLength: 3
           minLength: 3
         shelfLifeDays:
@@ -2551,6 +2794,25 @@ components:
             sellable stock
           maxLength: 500
           minLength: 0
+        fxRateToUsd:
+          type: number
+          description: US dollars per 1 unit of `currency` (> 0, at most 10 decimals); omit to use the latest rate on or before
+            the receiving date in GET /v1/exchange-rates; not needed for USD
+          exclusiveMinimum: 0
+        fxRateDate:
+          type: string
+          format: date
+          description: The day `fxRateToUsd` is for; omit for the receiving date
+        unitCostUsdMinor:
+          type: integer
+          format: int64
+          description: Unit cost in US cents when the sender already valued it (needs `fxRateToUsd`); omit to use unit cost
+            × rate
+          minimum: 0
+        costComponents:
+          $ref: '#/components/schemas/CostComponents'
+          description: Goods, freight, duty and other per unit in `currency`; must add up to `unitLandedCostMinor`; omit for
+            all goods
       required:
       - currency
       - lotNo
@@ -2827,6 +3089,31 @@ components:
           minItems: 0
       required:
       - lines
+    InboundReceiveCost:
+      type: object
+      description: The unit cost of received stock in the currency paid; valued in USD at the rate entered or, without one,
+        the staff-managed table's latest rate
+      properties:
+        unitLandedCostMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 3
+        fxRateToUsd:
+          type: number
+          description: US dollars per 1 unit of `currency`; omit to use the rates table
+          exclusiveMinimum: 0
+        fxRateDate:
+          type: string
+          format: date
+          description: The day `fxRateToUsd` is for; omit for the receiving date
+        costComponents:
+          $ref: '#/components/schemas/CostComponents'
+      required:
+      - currency
     InboundReceiveLine:
       type: object
       description: Units of one SKU, by SKU or by the scanned AT-FN unit label
@@ -2868,6 +3155,10 @@ components:
           description: Receive the good units into quarantine with this reason
           maxLength: 500
           minLength: 0
+        cost:
+          $ref: '#/components/schemas/InboundReceiveCost'
+          description: What the units cost, in the currency actually paid, for AfroTransact-owned stock (not allowed on seller
+            FBA shipments)
     InboundReceiveRequest:
       type: object
       description: What the FC counted against the plan
@@ -3025,6 +3316,20 @@ components:
           format: date
         message:
           type: string
+    CurrencyValue:
+      type: object
+      properties:
+        currency:
+          type: string
+        units:
+          type: integer
+          format: int64
+        valueMinor:
+          type: integer
+          format: int64
+        valueUsdMinor:
+          type: integer
+          format: int64
     ExpiryCount:
       type: object
       properties:
@@ -3091,6 +3396,10 @@ components:
         inbound:
           type: integer
           format: int64
+        byCurrency:
+          type: array
+          items:
+            $ref: '#/components/schemas/CurrencyValue'
     Overview:
       type: object
       properties:
@@ -3137,6 +3446,9 @@ components:
           type: integer
           format: int64
         valueMinor:
+          type: integer
+          format: int64
+        valueUsdMinor:
           type: integer
           format: int64
     Movement:
@@ -3389,6 +3701,64 @@ components:
           additionalProperties:
             type: integer
             format: int64
+    ExchangeRatePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExchangeRate'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    ExchangeRateChange:
+      type: object
+      description: One audited change of a rate
+      properties:
+        id:
+          type: integer
+          format: int64
+        occurredAt:
+          type: string
+          format: date-time
+        currency:
+          type: string
+        rateDate:
+          type: string
+          format: date
+        action:
+          type: string
+        oldRate:
+          type: number
+          description: The rate before an UPDATE; null for a CREATE
+        newRate:
+          type: number
+        reason:
+          type: string
+        actor:
+          type: string
+    ExchangeRateChangePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExchangeRateChange'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
     CycleCountPage:
       type: object
       properties:
@@ -3405,6 +3775,21 @@ components:
         size:
           type: integer
           format: int32
+    CostCurrency:
+      type: object
+      description: A currency stock can be received in
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        minorUnits:
+          type: integer
+          format: int32
+          description: Digits after the decimal point; amounts are in minor units
+        base:
+          type: boolean
+          description: True for USD, in which customers pay and stock is valued
     Availability:
       type: object
       properties:

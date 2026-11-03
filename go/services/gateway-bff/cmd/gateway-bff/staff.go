@@ -22,6 +22,7 @@ import (
 // the remaining ones are created here.
 type staffClients struct {
 	identity, catalog, inventory, payments, orders, deliveryRuns, offers httpclient.Client
+	proofLinks                                                           port.ProofLinks
 }
 
 // staffServices wires the staff console (contracts/openapi/gateway-bff-staff.yaml): shell, tables and sheets,
@@ -30,7 +31,7 @@ type staffClients struct {
 // It also returns Seller Center's export stores (same job store, renderer and file directory; seller links are served by
 // /v1/seller/export-files/{id}).
 func staffServices(cfg config.Config, client func(string, config.Upstream) httpclient.Client, sc staffClients, rdb redis.UniversalClient,
-	cache port.Cache, log *slog.Logger) (httpapi.StaffServices, app.ExportDeps, port.LocalExportFiles, error) {
+	cache port.Cache, counter port.DailyCounter, maintenance app.MaintenanceService, log *slog.Logger) (httpapi.StaffServices, app.ExportDeps, port.LocalExportFiles, error) {
 	up := cfg.Upstreams
 	media := client("media", up.Media)
 	d := app.StaffDeps{
@@ -45,17 +46,25 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 			Media: upstreams.NewStaffUpstream(media), Geo: upstreams.NewStaffUpstream(client("geo", up.Geo)),
 			Offers: upstreams.NewStaffUpstream(sc.offers), Search: upstreams.NewStaffUpstream(client("search", up.Search)),
 			Carrier: upstreams.NewStaffUpstream(client("carrier-gateway", up.Carrier)),
+			Proof:   sc.proofLinks,
 		},
 		Matrix: upstreams.NewOrgAccess(sc.identity), Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL,
-		Jobs: valkey.NewExportJobs(rdb), Renderer: exportfiles.NewRenderer(), ExportBasePath: cfg.Web.BFFPath, Log: log, RetailOrgID: cfg.Commerce.RetailOrgID,
+		Maintenance: maintenance, Jobs: valkey.NewExportJobs(rdb), Renderer: exportfiles.NewRenderer(), ExportBasePath: cfg.Web.BFFPath, StorefrontURL: cfg.Web.PublicOrigin, Log: log, RetailOrgID: cfg.Commerce.RetailOrgID,
 	}
 	out := httpapi.StaffServices{}
 	seller := app.ExportDeps{Jobs: d.Jobs, Renderer: d.Renderer, BasePath: cfg.Web.BFFPath}
 	var sellerFiles port.LocalExportFiles
 	switch cfg.Staff.ExportStore {
 	case "media":
+		// Staff exports go to media (purpose export is staff-only, so it takes staff tokens); Seller Center exports carry
+		// a seller's token, which media refuses for that purpose, so they stay on the BFF's own signed-link store.
 		d.Blobs = upstreams.NewMediaExports(media, nil)
-		seller.Blobs = d.Blobs
+		sf, err := exportfiles.NewLocal(exportfiles.Options{Dir: cfg.Staff.ExportDir, SigningKey: cfg.Session.SigningKey, BasePath: cfg.Web.BFFPath,
+			FilesPath: "/v1/seller/export-files/"})
+		if err != nil {
+			return out, seller, nil, fmt.Errorf("seller export store: %w", err)
+		}
+		seller.Blobs, sellerFiles = sf, sf
 	case "", "local":
 		files, err := exportfiles.NewLocal(exportfiles.Options{Dir: cfg.Staff.ExportDir, SigningKey: cfg.Session.SigningKey, BasePath: cfg.Web.BFFPath})
 		if err != nil {
@@ -78,6 +87,13 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 	out.Inventory = app.NewStaffInventoryService(d)
 	out.Markets = app.NewStaffMarketsService(d)
 	out.Search = app.NewStaffSearchService(d, []string{cfg.Market})
+	out.ContentPages = app.NewStaffContentPagesService(d)
+	out.Taxonomy = app.NewStaffTaxonomyService(d)
+	out.Plans = app.NewStaffPlansService(d)
+	out.Identity = app.NewStaffIdentityService(d)
+	// Lola for staff: read-only lookups through the console's own use cases, one model turn at ai-gateway per round.
+	out.Assistant = app.NewStaffAssistantService(d, app.StaffAssistantDeps{Model: upstreams.NewStaffAssistantModel(client("ai-gateway", up.AIGateway)),
+		Counter: counter, Records: out.Records, Dashboard: out.Dashboard})
 	return out, seller, sellerFiles, nil
 }
 

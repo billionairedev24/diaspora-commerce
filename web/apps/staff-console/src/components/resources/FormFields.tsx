@@ -2,12 +2,13 @@
 
 import { type FieldValue, type FormField, type StaffForm, validateStaffForm } from '@afrotransact/api-client';
 import { Button, Checkbox, Field, fieldStyles, Select, TextField } from '@afrotransact/ui';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, Fragment, useState } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
 import { toLocalInput, toMinor } from '@/lib/format';
 
 import { FormErrors } from '../ui/FormErrors';
+import { LookupField } from './LookupField';
 
 type Draft = Record<string, string | boolean | string[]>;
 
@@ -66,6 +67,7 @@ const fieldId = (key: string) => `fld-${key.replace(/[^a-z0-9]/gi, '-')}`;
 function Input({ f, value, error, onChange }: { f: FormField; value: string | boolean | string[] | undefined; error?: string; onChange: (v: string | boolean | string[]) => void }) {
   const id = fieldId(f.key);
   const label = `${f.label}${f.required && f.type !== 'toggle' ? '' : ' (optional)'}`;
+  if (f.lookup && f.type === 'text') return <LookupField field={f} id={id} label={label} value={typeof value === 'string' ? value : ''} error={error} onChange={onChange} />;
   switch (f.type) {
     case 'toggle':
       return <Checkbox id={id} label={f.label} checked={value === true} onChange={(e) => onChange(e.currentTarget.checked)} />;
@@ -104,7 +106,7 @@ function Input({ f, value, error, onChange }: { f: FormField; value: string | bo
           step={f.type === 'number' ? 'any' : undefined}
           maxLength={f.maxLength}
           placeholder={f.placeholder}
-          autoComplete={f.type === 'password' ? 'new-password' : 'off'}
+          autoComplete={f.type === 'password' ? (f.key === 'stepUpPassword' ? 'current-password' : 'new-password') : 'off'}
           value={typeof value === 'string' ? value : ''}
           onChange={(e) => onChange(e.currentTarget.value)}
           error={error}
@@ -134,8 +136,13 @@ export function FormFields({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [attempts, setAttempts] = useState(0);
   const shown = { ...serverErrors, ...errors };
+  const initial = draftOf(form);
+  // A form that names its change fields can only be saved once one of them differs from what it opened with.
+  const unchanged = form.changeKeys !== undefined && form.changeKeys.length > 0 && form.changeKeys.every((k) => String(draft[k]) === String(initial[k]));
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    // One request at a time: Enter or a second click while the first is in flight does nothing.
+    if (busy || unchanged) return;
     const values = valuesOf(form, draft);
     const found = validateStaffForm(form, values);
     setErrors(found);
@@ -144,9 +151,13 @@ export function FormFields({
   };
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-3">
+      {form.intro ? <p className="m-0 text-sm text-muted">{form.intro}</p> : null}
       <FormErrors errors={shown} ids={Object.fromEntries(form.fields.map((f) => [f.key, fieldId(f.key)]))} submitCount={attempts} />
-      {form.fields.map((f) => (
-        <Input key={f.key} f={f} value={draft[f.key]} error={shown[f.key]} onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))} />
+      {form.fields.map((f, i) => (
+        <Fragment key={f.key}>
+          {f.section && f.section !== form.fields[i - 1]?.section ? <h3 className="m-0 mt-2 border-b border-border pb-1 text-sm font-semibold">{f.section}</h3> : null}
+          <Input f={f} value={draft[f.key]} error={shown[f.key]} onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))} />
+        </Fragment>
       ))}
       {error ? (
         <Notice tone="danger" title="Not saved." role="alert">
@@ -159,7 +170,7 @@ export function FormFields({
             Cancel
           </Button>
         ) : null}
-        <Button type="submit" loading={busy}>
+        <Button type="submit" loading={busy} disabled={unchanged}>
           {form.submitLabel}
         </Button>
       </div>

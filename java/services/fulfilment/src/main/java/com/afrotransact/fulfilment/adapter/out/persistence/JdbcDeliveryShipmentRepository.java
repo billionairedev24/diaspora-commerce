@@ -2,6 +2,7 @@ package com.afrotransact.fulfilment.adapter.out.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,10 +71,28 @@ class JdbcDeliveryShipmentRepository implements DeliveryShipmentRepository {
     public List<DeliveryShipment> awaitingRoute(String nodeId, int limit) {
         return jdbc.sql("""
                 select * from delivery_shipment
-                where status = 'AWAITING_ROUTE'
+                where status = 'AWAITING_ROUTE' and fulfilment_type <> 'PREORDER'
                   and (cast(:node as varchar) is null or origin = 'SELLER' or node_id = :node or node_id is null)
                 order by promised_by nulls last, created_at limit :limit
                 """).param("node", nodeId).param("limit", limit).query(this::map).list();
+    }
+
+    @Override
+    public List<DeliveryShipment> findAllById(Collection<String> shipmentIds) {
+        if (shipmentIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("select * from delivery_shipment where shipment_id in (:ids) order by shipment_id")
+                .param("ids", shipmentIds).query(this::map).list();
+    }
+
+    @Override
+    public List<DeliveryShipment> findByOrderIds(Collection<String> orderIds) {
+        if (orderIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("select * from delivery_shipment where order_id in (:ids) order by shipment_id")
+                .param("ids", orderIds).query(this::map).list();
     }
 
     @Override
@@ -101,7 +120,7 @@ class JdbcDeliveryShipmentRepository implements DeliveryShipmentRepository {
                 left join route_package p on p.shipment_id = s.shipment_id and p.route_id = s.route_id
                     and p.status not in ('REASSIGNED', 'CANCELLED')
                 left join route_stop st on st.id = p.pickup_stop_id
-                where s.origin = 'SELLER'
+                where s.origin = 'SELLER' and s.fulfilment_type <> 'PREORDER'
                 """);
         Map<String, Object> params = new HashMap<>();
         if (q.routed() == null) {

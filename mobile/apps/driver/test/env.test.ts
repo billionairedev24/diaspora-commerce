@@ -6,8 +6,14 @@ describe('driver env', () => {
   it('falls back to the local stack, on the dev host when one is set', () => {
     expect(resolveEnv({}).fulfilmentUrl).toBe('http://localhost:8108');
     expect(resolveEnv({})).toMatchObject(localUrls());
+    expect(resolveEnv({}).bffUrl).toBe('http://localhost:8200');
     expect(resolveEnv({}).oidcClientId).toBe('driver-app');
     expect(resolveEnv({ devHost: '10.0.2.2' }).mediaUrl).toBe('http://10.0.2.2:8207');
+  });
+
+  it('has no dispatch contact unless the build sets one', () => {
+    expect(resolveEnv({})).toMatchObject({ dispatchPhone: '', dispatchEmail: '' });
+    expect(resolveEnv({ dispatchPhone: ' +1 713 555 0100 ', dispatchEmail: 'dispatch@example.com' })).toMatchObject({ dispatchPhone: '+1 713 555 0100', dispatchEmail: 'dispatch@example.com' });
   });
 
   it('uses the URLs the build profile sets', () => {

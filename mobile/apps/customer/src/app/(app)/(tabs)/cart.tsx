@@ -8,6 +8,7 @@ import { ProductImage, QtyStepper } from '@/features/shop/components';
 import { useFormatters, useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { AppText, Button, Empty, KeyValue, Loading, SectionLabel } from '@/ui/primitives';
+import { ErrorView, useRefresh } from '@/ui/QueryStates';
 import { Screen } from '@/ui/Screen';
 
 export default function CartScreen() {
@@ -17,11 +18,13 @@ export default function CartScreen() {
   const cart = useCart();
   const { update, remove } = useCartActions();
   const data = cart.data;
+  const refresh = useRefresh(cart);
   const header = <View style={styles.header}><AppText variant="display" accessibilityRole="header">{tr('cu.cart.cart')}</AppText></View>;
-  if (cart.isLoading) return <Screen inTabs header={header}><Loading /></Screen>;
+  if (cart.isPending) return <Screen inTabs header={header}><Loading /></Screen>;
+  if (cart.isError && !data) return <Screen inTabs header={header} refresh={refresh}><ErrorView error={cart.error} onRetry={() => void cart.refetch()} retrying={cart.isFetching} /></Screen>;
   if (!data || data.itemCount === 0) {
     return (
-      <Screen inTabs header={header}>
+      <Screen inTabs header={header} refresh={refresh}>
         <Empty icon={ShoppingCart} title={tr('cu.cart.yourCartIsEmpty')} action={{ label: 'Start shopping', onPress: () => router.navigate('/') }} />
       </Screen>
     );
@@ -30,6 +33,7 @@ export default function CartScreen() {
   return (
     <Screen
       inTabs
+      refresh={refresh}
       header={header}
       footer={<Button icon={LockSimple} label={tr('cu.cart.checkout', { amount: fmt.money(data.subtotalMinor, data.currency) })} onPress={() => router.push('/checkout')} disabled={data.selectedCount === 0} />}
     >
@@ -38,7 +42,7 @@ export default function CartScreen() {
           <SectionLabel>{pkg.heading.toUpperCase()}</SectionLabel>
           {pkg.lines.map((l) => (
             <View key={l.lineId} style={styles.line}>
-              <ProductImage title={l.title} size={72} />
+              <ProductImage title={l.title} uri={l.imageUrl} size={72} />
               <View style={{ flex: 1, gap: 4 }}>
                 <AppText numberOfLines={2}>{l.title}</AppText>
                 <AppText variant="bodyStrong">{fmt.money(l.lineTotalMinor, data.currency)}</AppText>

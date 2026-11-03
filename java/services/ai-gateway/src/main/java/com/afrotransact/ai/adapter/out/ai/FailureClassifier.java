@@ -20,7 +20,8 @@ final class FailureClassifier {
         int depth = 0;
         while (t != null && depth++ < 10) {
             if (t instanceof OpenAIServiceException service) {
-                return FailureKind.ofStatus(service.statusCode());
+                return service.statusCode() == 404 && mentionsDataPolicy(service.getMessage() + " " + service.body())
+                        ? FailureKind.PRIVACY_POLICY : FailureKind.ofStatus(service.statusCode());
             }
             if (t instanceof TimeoutException || t instanceof SocketTimeoutException) {
                 return FailureKind.TIMEOUT;
@@ -35,5 +36,14 @@ final class FailureClassifier {
             t = t.getCause() == t ? null : t.getCause();
         }
         return FailureKind.UNKNOWN;
+    }
+
+    /** OpenRouter: "No endpoints found matching your data policy (Zero data retention)". */
+    private static boolean mentionsDataPolicy(String message) {
+        if (message == null) {
+            return false;
+        }
+        String m = message.toLowerCase(Locale.ROOT);
+        return m.contains("data policy") || m.contains("zero data retention") || m.contains("zdr");
     }
 }

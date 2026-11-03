@@ -13,6 +13,8 @@ import { atinOf,DEPARTMENTS, type FixtureProduct, PLATFORM_SELLER } from './fixt
 import { PLACEMENTS, SPONSORED_SEARCH } from './fixtures/content';
 import { completePhrases, matchScore } from './matching';
 import { fixturePreorderEligible, withPreorderPackage } from './preorders';
+import { publicSizeChart, seedSizeCharts,SIZE_CHART_IDS } from './seller/size-charts';
+import { PROVIDERS, SERVICES } from './shopper-state';
 
 export class MockProblem extends Error {
   constructor(
@@ -27,6 +29,36 @@ export class MockProblem extends Error {
 }
 
 const CURRENCY = 'USD';
+
+/** Stable product thumb for mocks (matches seller listing placeholders). */
+export function mockProductImageUrl(atin: string): string {
+  return `https://img.afrotransact.dev/products/${atin}.webp`;
+}
+
+/** Catalog product-type codes used by tax-returns' category-by-product-type mapping. */
+const GROCERY_PRODUCT_TYPES = new Set(['fresh-produce', 'pantry', 'spices', 'grains', 'frozen-food', 'meat-seafood']);
+
+export function fixtureProductType(p: FixtureProduct): string {
+  if (p.cat !== 'Groceries') {
+    const byDept: Record<string, string> = {
+      Fashion: 'dress',
+      Beauty: 'beauty',
+      Books: 'book',
+      Party: 'apparel',
+      Health: 'supplements',
+      'Home & Art': 'home-decor'
+    };
+    return byDept[p.cat] ?? 'general';
+  }
+  const n = p.name.toLowerCase();
+  if (/spice|seasoning|berbere|xawaash|jerk|epis|shito|jollof/.test(n)) return 'spices';
+  if (/rice|flour|teff|grain|ofada|basmati/.test(n)) return 'grains';
+  return 'pantry';
+}
+
+export function isGroceryProductType(productType: string | undefined): boolean {
+  return productType !== undefined && GROCERY_PRODUCT_TYPES.has(productType);
+}
 
 export function stockStatus(qty: number): StockStatus {
   return qty <= 0 ? 'OUT_OF_STOCK' : qty <= LOW_STOCK_THRESHOLD ? 'LOW_STOCK' : 'IN_STOCK';
@@ -75,7 +107,7 @@ export function summarize(p: FixtureProduct, metro: string, now: Date, sponsor: 
     unit: p.unit,
     rating: p.rating,
     reviewCount: p.reviews,
-    imageUrl: null,
+    imageUrl: mockProductImageUrl(atin),
     offerId: bb.offerId,
     priceMinor: bb.priceMinor,
     listPriceMinor: bb.listPriceMinor,
@@ -107,8 +139,12 @@ export function productDetail(atin: string, metro: string, now: Date): ProductDe
   const purchasable = bb.stock > 0;
   const baseId = p.variantOf ?? p.id;
   const family = [...db.products.values()].filter((x) => x.id === baseId || x.variantOf === baseId);
+  // A product that links a seller's size chart carries it (fixtures name the chart; nothing is decided by category).
+  const chartId = p.sizeChart ? SIZE_CHART_IDS[p.sizeChart] : undefined;
+  const chart = chartId ? seedSizeCharts('fixture', now).find((c) => c.id === chartId) : undefined;
   const isAT = bb.fulfilment === 'AFROTRANSACT' || bb.sellerName === PLATFORM_SELLER;
   return {
+    sizeChart: chart ? publicSizeChart(chart) : null,
     product: {
       atin,
       title: p.name,
@@ -127,7 +163,8 @@ export function productDetail(atin: string, metro: string, now: Date): ProductDe
           ? family.map((x) => {
               const xa = atinOf(x.id);
               const xbb = buyBox(db.offersByAtin.get(xa) ?? []);
-              return { atin: xa, label: x.variantLabel ?? 'Standard', selected: xa === atin, available: xbb.stock > 0, priceMinor: xbb.priceMinor };
+              const label = x.variantLabel ?? 'Standard';
+              return { atin: xa, label, selected: xa === atin, available: xbb.stock > 0, priceMinor: xbb.priceMinor, options: { ...x.options } };
             })
           : []
     },
@@ -171,7 +208,7 @@ export function search(q: SearchQuery, loc: DeliveryLocation, now: Date): Search
   const started = Date.now();
   const db = getDb();
   const metro = metroOf(loc);
-  const cands: Candidate[] = [...db.products.values()].map((p) => ({ p, s: summarize(p, metro, now), score: q.q.trim() ? matchScore(p, q.q) : 1 }));
+  const cands: Candidate[] = [...db.products.values()].filter((p) => !p.unlisted).map((p) => ({ p, s: summarize(p, metro, now), score: q.q.trim() ? matchScore(p, q.q) : 1 }));
   let list = cands.filter((c) => passes(c, q, null));
   const sorters: Record<SearchQuery['sort'], ((a: Candidate, b: Candidate) => number) | null> = {
     relevance: q.q.trim() ? (a, b) => b.score - a.score : null,
@@ -222,8 +259,22 @@ export function search(q: SearchQuery, loc: DeliveryLocation, now: Date): Search
     pageCount,
     facets,
     deliverToLabel: loc.label,
-    tookMs: Date.now() - started
+    tookMs: Date.now() - started,
+    services: page === 0 ? matchingServices(q.q) : []
   };
+}
+
+/** Services whose name, description, category or provider contain every typed word (first page of a text search). */
+function matchingServices(text: string): SearchPage['services'] {
+  const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  return SERVICES.filter((s) => {
+    const hay = `${s.name} ${s.description} ${s.category} ${s.providerName}`.toLowerCase();
+    return words.every((w) => hay.includes(w));
+  })
+    .slice(0, 4)
+    .map((s) => ({ serviceId: s.id, orgId: s.orgId, name: s.name, providerName: s.providerName, category: s.category, durationMinutes: s.durationMinutes,
+      priceFromMinor: s.priceMinor, currency: s.currency, location: PROVIDERS[s.orgId]?.location ?? '' }));
 }
 
 export function suggest(query: string, loc: DeliveryLocation, now: Date): Suggestions {
@@ -232,7 +283,7 @@ export function suggest(query: string, loc: DeliveryLocation, now: Date): Sugges
   const q = query.trim();
   if (!q) return { query: q, phrases: [], products: [] };
   const terms = completePhrases(q);
-  const ranked = [...db.products.values()]
+  const ranked = [...db.products.values()].filter((p) => !p.unlisted)
     .map((p) => ({ p, sc: matchScore(p, q) }))
     .filter((x) => x.sc > 0)
     .sort((a, b) => b.sc - a.sc)
@@ -251,7 +302,7 @@ export function suggest(query: string, loc: DeliveryLocation, now: Date): Sugges
 export function home(loc: DeliveryLocation, now: Date): Home {
   const db = getDb();
   const metro = metroOf(loc);
-  const all = [...db.products.values()].map((p) => summarize(p, metro, now));
+  const all = [...db.products.values()].filter((p) => !p.unlisted).map((p) => summarize(p, metro, now));
   const rails = PLACEMENTS.rails.map((r) => {
     let items: ProductSummary[] = [];
     if (r.source.kind === 'fulfilled-fastest') items = all.filter((x) => x.fulfilment === 'AFROTRANSACT').sort((a, b) => a.delivery.days - b.delivery.days).slice(0, r.source.limit);
@@ -365,7 +416,8 @@ export function buildCart(s: MockSession, now: Date): Cart {
         title: p.name,
         unit: p.unit,
         department: p.cat,
-        imageUrl: null,
+        productType: fixtureProductType(p),
+        imageUrl: mockProductImageUrl(offer.atin),
         priceMinor: offer.priceMinor,
         lineTotalMinor: offer.priceMinor * line.quantity,
         quantity: line.quantity,

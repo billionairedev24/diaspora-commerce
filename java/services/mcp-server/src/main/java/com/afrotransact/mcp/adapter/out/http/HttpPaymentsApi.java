@@ -23,4 +23,16 @@ class HttpPaymentsApi implements PaymentsApi {
     public Downstream orderSplit(String orderId, String bearerToken) {
         return http.call(bearerToken, c -> c.get().uri("/v1/orders/{orderId}/payment-split", orderId));
     }
+
+    @Override
+    public Downstream payoutBalance(String orgId, String bearerToken) {
+        return http.call(bearerToken, c -> c.get().uri(u -> u.path("/v1/payouts/balance").queryParam("orgId", orgId)
+                .build()));
+    }
+
+    @Override
+    public Downstream payoutRequests(String orgId, int limit, String bearerToken) {
+        return http.call(bearerToken, c -> c.get().uri(u -> u.path("/v1/payouts/requests").queryParam("orgId", orgId)
+                .queryParam("limit", limit).build()));
+    }
 }

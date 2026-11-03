@@ -1,36 +1,12 @@
-import { type ChartSpec, type ProductTypeSchema } from '@afrotransact/api-client';
+import { type ChartSpec } from '@afrotransact/api-client';
 import { strFromU8,unzipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 
-import { emptyBuilder, gtinOk, validateStep } from '@/components/listings/builder-model';
 import { validateCustom } from '@/components/provider/PolicyEditor';
 import { estimateTakeHome } from '@/components/provider/ServicesView';
 import { toCsv } from '@/lib/export/csv';
 import { tabular } from '@/lib/export/table';
 import { toXlsx } from '@/lib/export/xlsx';
-
-const dress: ProductTypeSchema = {
-  code: 'DRESS', label: 'Dresses', identifierRule: 'gtin',
-  attributes: [{ key: 'brand', label: 'Brand', options: [], required: true, multiline: false }],
-  themes: [{ name: 'Size', dimensions: [{ name: 'Size', options: ['S', 'M'] }] }]
-};
-
-describe('product builder steps', () => {
-  it('blocks each step until it is complete', () => {
-    const s = emptyBuilder();
-    expect(validateStep('category', s, undefined)).toHaveProperty('category');
-    expect(validateStep('category', { ...s, request: { id: 'cr1', path: 'Fashion › Bridal', reference: 'CR-1' } }, undefined)).toEqual({});
-    expect(validateStep('images', s, dress)).toHaveProperty('images');
-    expect(validateStep('details', { ...s, title: 'Short' }, dress)).toMatchObject({ title: expect.any(String), brand: 'Required' });
-    expect(validateStep('details', { ...s, title: 'Ankara wrap dress', attrs: { brand: 'Lagos' } }, dress)).toEqual({});
-    expect(validateStep('variations', s, dress)).toHaveProperty('theme');
-  });
-
-  it('checks GTIN check digits', () => {
-    expect(gtinOk('4006381333931')).toBe(true);
-    expect(gtinOk('4006381333932')).toBe(false);
-  });
-});
 
 describe('provider rules', () => {
   it('rejects a partial-refund window that starts outside the free window', () => {

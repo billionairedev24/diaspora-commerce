@@ -40,9 +40,15 @@ type WalletEphemeralKey struct {
 	Secret     string `json:"secret"`
 }
 
+// Wallet is payments' WalletResponse.
+type Wallet struct {
+	StripeCustomerID string         `json:"stripeCustomerId"`
+	Items            []WalletMethod `json:"items"`
+}
+
 // WalletClient manages the shopper's saved Stripe payment methods (/v1/customers/me/...).
 type WalletClient interface {
-	List(ctx context.Context, bearer string) ([]WalletMethod, error)
+	List(ctx context.Context, bearer string) (Wallet, error)
 	SetupIntent(ctx context.Context, bearer string, types []string) (WalletSetupIntent, error)
 	MakeDefault(ctx context.Context, bearer, id string) (WalletMethod, error)
 	Remove(ctx context.Context, bearer, id string) error
@@ -70,6 +76,8 @@ type UpTimelineEntry struct {
 	From string `json:"from"`
 	To   string `json:"to"`
 	At   string `json:"at"`
+	// Proof is the driver's proof of delivery on a delivered (or failed) step; nil for every other entry.
+	Proof *UpDeliveryProof `json:"proof"`
 }
 
 // UpPreferences is orders' DeliveryPreferences (upper-case enums).
@@ -82,25 +90,28 @@ type UpPreferences struct {
 
 // UpShipment is orders' ShipmentView.
 type UpShipment struct {
-	ID               string            `json:"id"`
-	ShipmentID       string            `json:"shipmentId"`
-	Label            string            `json:"label"`
-	SellerName       string            `json:"sellerName"`
-	FulfilmentType   string            `json:"fulfilmentType"`
-	DeliveryMethod   string            `json:"deliveryMethod"`
-	ServiceLevel     string            `json:"serviceLevel"`
-	Preferences      *UpPreferences    `json:"preferences"`
-	Perishable       bool              `json:"perishable"`
-	HandoverRequired bool              `json:"handoverRequired"`
-	HandoverCode     string            `json:"handoverCode"`
-	Status           string            `json:"status"`
-	Items            string            `json:"items"`
-	Carrier          string            `json:"carrier"`
-	TrackingNumber   string            `json:"trackingNumber"`
-	PromisedFrom     string            `json:"promisedFrom"`
-	PromisedBy       string            `json:"promisedBy"`
-	DeliveredAt      string            `json:"deliveredAt"`
-	Cancellable      bool              `json:"cancellable"`
+	ID               string         `json:"id"`
+	ShipmentID       string         `json:"shipmentId"`
+	Label            string         `json:"label"`
+	SellerOrgID      string         `json:"sellerOrgId"`
+	SellerName       string         `json:"sellerName"`
+	FulfilmentType   string         `json:"fulfilmentType"`
+	DeliveryMethod   string         `json:"deliveryMethod"`
+	ServiceLevel     string         `json:"serviceLevel"`
+	Preferences      *UpPreferences `json:"preferences"`
+	Perishable       bool           `json:"perishable"`
+	HandoverRequired bool           `json:"handoverRequired"`
+	HandoverCode     string         `json:"handoverCode"`
+	Status           string         `json:"status"`
+	Items            string         `json:"items"`
+	Carrier          string         `json:"carrier"`
+	TrackingNumber   string         `json:"trackingNumber"`
+	PromisedFrom     string         `json:"promisedFrom"`
+	PromisedBy       string         `json:"promisedBy"`
+	DeliveredAt      string         `json:"deliveredAt"`
+	Cancellable      bool           `json:"cancellable"`
+	// CancellableUntil is when the customer's Cancel stops being offered (RFC 3339; empty when it is not offered).
+	CancellableUntil string            `json:"cancellableUntil"`
 	Lines            []UpOrderLine     `json:"lines"`
 	Timeline         []UpTimelineEntry `json:"timeline"`
 	// Returns (S148/S166): whether a return can start, until when, and whether only a problem report is possible.
@@ -111,6 +122,18 @@ type UpShipment struct {
 	LocalDelivery *LocalDeliveryView `json:"localDelivery"`
 	// PickupLocationID is the pickup point of a PICKUP shipment (carrier-gateway pickup location).
 	PickupLocationID string `json:"pickupLocationId"`
+	// DeliveryFeeRule is the staff delivery fee rule the shipping was charged by, as it was at checkout (ADR 0005 §3).
+	DeliveryFeeRule *domain.FeeRuleRef `json:"deliveryFeeRule"`
+	// MembershipWaiver is the shipping fee the shopper's membership waived (S323).
+	MembershipWaiver *UpMembershipWaiverRef `json:"membershipWaiver"`
+}
+
+// UpMembershipWaiverRef is orders' MembershipWaiverView.
+type UpMembershipWaiverRef struct {
+	TierCode    string `json:"tierCode"`
+	TierName    string `json:"tierName"`
+	Benefit     string `json:"benefit"`
+	WaivedMinor int64  `json:"waivedMinor"`
 }
 
 // UpShipTo is orders' ShipTo snapshot.
@@ -164,6 +187,8 @@ type UpCheckout struct {
 	TotalMinor          int64                `json:"totalMinor"`
 	Currency            string               `json:"currency"`
 	Shipments           []UpCheckoutShipment `json:"shipments"`
+	// CreditMinor is the part of the total paid with AfroTransact credit (S320); the card pays the rest.
+	CreditMinor int64 `json:"creditMinor"`
 	// Preorder is orders' pre-order confirmation block (null without a pre-order package).
 	Preorder json.RawMessage `json:"preorder"`
 }
@@ -187,6 +212,8 @@ type UpCheckoutRequest struct {
 	CouponCode         string                `json:"couponCode,omitempty"`
 	// SavePaymentMethod asks orders for a PaymentIntent with setup_future_usage=off_session (new method saved).
 	SavePaymentMethod bool `json:"savePaymentMethod,omitempty"`
+	// UseCredit pays with the shopper's AfroTransact credit first; the card pays only the rest (S320).
+	UseCredit bool `json:"useCredit,omitempty"`
 	// Attribution {src, cr, po} is stored on the order and echoed in orders.order.placed.
 	Attribution *domain.Attribution `json:"attribution,omitempty"`
 }
@@ -238,78 +265,98 @@ type UpRma struct {
 	CreatedAt     string      `json:"createdAt"`
 }
 
-// UpLineEligibility is tax-returns' LineEligibility.
-type UpLineEligibility struct {
-	LineID            string   `json:"lineId"`
-	ATIN              string   `json:"atin"`
-	Title             string   `json:"title"`
-	Quantity          int      `json:"quantity"`
-	UnitPriceMinor    int64    `json:"unitPriceMinor"`
-	Eligible          bool     `json:"eligible"`
-	ReportProblemOnly bool     `json:"reportProblemOnly"`
-	SellerFaultOnly   bool     `json:"sellerFaultOnly"`
-	MaxQuantity       int      `json:"maxQuantity"`
-	WindowEndsAt      string   `json:"windowEndsAt"`
-	Methods           []string `json:"methods"`
-	IneligibleCode    string   `json:"ineligibleCode"`
+// ReturnsClient calls tax-returns for checkout tax estimates. Customers have no self-service return: problems go
+// through help requests (trust-ops claims).
+type ReturnsClient interface {
+	TaxQuote(ctx context.Context, req UpTaxQuoteRequest) (UpTaxQuote, error)
 }
 
-// UpShipmentEligibility is tax-returns' ShipmentEligibility.
-type UpShipmentEligibility struct {
-	ShipmentID  string              `json:"shipmentId"`
-	SellerName  string              `json:"sellerName"`
-	DeliveredAt string              `json:"deliveredAt"`
-	Lines       []UpLineEligibility `json:"lines"`
+// UpTaxQuoteLine is tax-returns' TaxQuoteLine.
+type UpTaxQuoteLine struct {
+	LineID         string `json:"lineId"`
+	ATIN           string `json:"atin"`
+	SellerOrgID    string `json:"sellerOrgId"`
+	ProductType    string `json:"productType,omitempty"`
+	Quantity       int    `json:"quantity"`
+	UnitPriceMinor int64  `json:"unitPriceMinor"`
+	DiscountMinor  int64  `json:"discountMinor"`
+	ShippingMinor  int64  `json:"shippingMinor"`
 }
 
-// UpReturnEligibility is tax-returns' ReturnEligibility.
-type UpReturnEligibility struct {
-	OrderID     string                  `json:"orderId"`
-	OrderNumber string                  `json:"orderNumber"`
-	Currency    string                  `json:"currency"`
-	Shipments   []UpShipmentEligibility `json:"shipments"`
-}
-
-// UpReturnAddress is tax-returns' Address (returnFrom).
-type UpReturnAddress struct {
-	Name       string `json:"name,omitempty"`
-	Phone      string `json:"phone,omitempty"`
-	Line1      string `json:"line1"`
-	Line2      string `json:"line2,omitempty"`
-	City       string `json:"city"`
+// UpTaxShipTo is tax-returns' TaxShipTo.
+type UpTaxShipTo struct {
+	Country    string `json:"country,omitempty"`
 	State      string `json:"state"`
 	PostalCode string `json:"postalCode"`
-	Country    string `json:"country"`
+	City       string `json:"city,omitempty"`
 }
 
-// UpCreateReturnLine is tax-returns' CreateReturnLine.
-type UpCreateReturnLine struct {
-	LineID   string `json:"lineId"`
+// UpTaxQuoteRequest is tax-returns' TaxQuoteRequest.
+type UpTaxQuoteRequest struct {
+	Currency string           `json:"currency"`
+	ShipTo   UpTaxShipTo      `json:"shipTo"`
+	Lines    []UpTaxQuoteLine `json:"lines"`
+}
+
+// UpTaxLineQuote is tax-returns' TaxLineQuote.
+type UpTaxLineQuote struct {
+	LineID            string  `json:"lineId"`
+	TaxMinor          int64   `json:"taxMinor"`
+	Jurisdiction      string  `json:"jurisdiction"`
+	LocalJurisdiction string  `json:"localJurisdiction,omitempty"`
+	ShippingTaxMinor  int64   `json:"shippingTaxMinor"`
+	Rate              float64 `json:"rate"`
+}
+
+// UpTaxQuote is tax-returns' TaxQuote.
+type UpTaxQuote struct {
+	Jurisdiction  string           `json:"jurisdiction"`
+	TotalTaxMinor int64            `json:"totalTaxMinor"`
+	Lines         []UpTaxLineQuote `json:"lines"`
+}
+
+// ---------------------------------------------------------------- offers coupons (checkout preview)
+
+// CheckoutCouponsClient validates a coupon against the cart (no redemption).
+type CheckoutCouponsClient interface {
+	Validate(ctx context.Context, bearer string, req CouponValidateRequest) (CouponQuote, error)
+}
+
+// CouponValidateLine is one offer line sent to offers-service.
+type CouponValidateLine struct {
+	OfferID  string `json:"offerId"`
 	Quantity int    `json:"quantity"`
-	Reason   string `json:"reason"`
-	Comment  string `json:"comment,omitempty"`
 }
 
-// UpCreateReturn is tax-returns' CreateReturn.
-type UpCreateReturn struct {
-	OrderID    string               `json:"orderId"`
-	ShipmentID string               `json:"shipmentId"`
-	Method     string               `json:"method"`
-	Lines      []UpCreateReturnLine `json:"lines"`
-	ReturnFrom *UpReturnAddress     `json:"returnFrom,omitempty"`
+// CouponValidateRequest is offers POST /v1/coupons/validate.
+type CouponValidateRequest struct {
+	Code          string               `json:"code"`
+	CustomerID    string               `json:"customerId,omitempty"`
+	Currency      string               `json:"currency"`
+	Lines         []CouponValidateLine `json:"lines"`
+	ShippingMinor int64                `json:"shippingMinor"`
+	FirstOrder    bool                 `json:"firstOrder"`
 }
 
-// ReturnsClient calls tax-returns with the customer's token.
-type ReturnsClient interface {
-	Eligibility(ctx context.Context, bearer, orderID string) (UpReturnEligibility, error)
-	Create(ctx context.Context, bearer, key string, req UpCreateReturn) (UpRma, error)
-	// List returns the customer's returns, optionally for one order (orderID "" = all).
-	List(ctx context.Context, bearer, orderID string) ([]UpRma, error)
-	Get(ctx context.Context, bearer, id string) (UpRma, error)
-	// ByNumber reads a return by its number (RMA-XXXXXXXX).
-	ByNumber(ctx context.Context, bearer, number string) (UpRma, error)
-	Cancel(ctx context.Context, bearer, id string) (UpRma, error)
-	Quote(ctx context.Context, bearer, id string) (domain.RefundQuote, error)
+// CouponQuoteLine is a per-offer discount from offers-service.
+type CouponQuoteLine struct {
+	LineRef       string `json:"lineRef"`
+	SellerOrgID   string `json:"sellerOrgId"`
+	DiscountMinor int64  `json:"discountMinor"`
+}
+
+// CouponQuote is the validation result (always 200 from offers; applicable=false when it does not apply).
+type CouponQuote struct {
+	Code                  string            `json:"code"`
+	Applicable            bool              `json:"applicable"`
+	Rejection             string            `json:"rejection"`
+	Message               string            `json:"message"`
+	DiscountMinor         int64             `json:"discountMinor"`
+	ShippingDiscountMinor int64             `json:"shippingDiscountMinor"`
+	TotalDiscountMinor    int64             `json:"totalDiscountMinor"`
+	Funding               string            `json:"funding"`
+	FundedByOrg           string            `json:"fundedByOrg"`
+	Lines                 []CouponQuoteLine `json:"lines"`
 }
 
 // ---------------------------------------------------------------- identity /v1/me security (contracts/openapi/identity.yaml)
@@ -570,46 +617,6 @@ type CustomerBookingsClient interface {
 	NewTime(ctx context.Context, bearer, key, id string, accept bool) (UpBkBooking, error)
 	Review(ctx context.Context, bearer, id string, rating int, text string) (domain.BookingReview, error)
 	SyncPayment(ctx context.Context, bearer, id string) (UpBkBooking, error)
-}
-
-// ---------------------------------------------------------------- storefront published pages (contracts/openapi/storefront.yaml)
-
-// UpPublishedPage is the storefront service's public Storefront.
-type UpPublishedPage struct {
-	OrgID    string            `json:"orgId"`
-	Kind     string            `json:"kind"`
-	Slug     string            `json:"slug"`
-	Name     string            `json:"name"`
-	Tagline  string            `json:"tagline"`
-	Tokens   map[string]string `json:"tokens"`
-	Provider *struct {
-		Layout      string `json:"layout"`
-		Header      string `json:"header"`
-		CoverURL    string `json:"coverUrl"`
-		ButtonShape string `json:"buttonShape"`
-	} `json:"provider"`
-	Gallery []struct {
-		URL     string `json:"url"`
-		Caption string `json:"caption"`
-	} `json:"gallery"`
-	Featured []struct {
-		ID        string `json:"id"`
-		Headline  string `json:"headline"`
-		Body      string `json:"body"`
-		URL       string `json:"url"`
-		ServiceID string `json:"serviceId"`
-		Published *bool  `json:"published"`
-	} `json:"featured"`
-	Social []struct {
-		Network string `json:"network"`
-		URL     string `json:"url"`
-		Status  string `json:"status"`
-	} `json:"social"`
-}
-
-// PublishedPagesClient reads published storefront pages by slug (approved links only).
-type PublishedPagesClient interface {
-	Published(ctx context.Context, slug string) (UpPublishedPage, error)
 }
 
 // ---------------------------------------------------------------- ai-gateway (contracts/openapi/ai-gateway.yaml)

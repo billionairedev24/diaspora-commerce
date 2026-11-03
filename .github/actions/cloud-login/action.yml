@@ -3,9 +3,13 @@ description: >
   Federate the workflow's GitHub OIDC token into aws | gcp | azure - no long-lived keys. Values come from
   GitHub environment variables published by `tofu output github_oidc` (see docs/engineering/ci-cd.md).
   The job needs `id-token: write`.
+  ovh is the exception: OVHcloud cannot trust GitHub's OIDC token (no workload identity federation for CI), so it
+  uses scoped API credentials and S3 keys kept in GitHub secrets (plan and apply identities are separate; the
+  deploy job needs neither, only the registry robot account). Nothing is written to disk; the values are masked
+  and exported to the job environment for the OVH provider and OpenTofu's S3 state backend.
 inputs:
   cloud:
-    description: aws | gcp | azure
+    description: aws | gcp | azure | ovh
     required: true
   aws-role-arn:
     description: IAM role to assume (aws).
@@ -35,6 +39,34 @@ inputs:
     description: Subscription id (azure).
     required: false
     default: ""
+  ovh-endpoint:
+    description: OVHcloud API endpoint (ovh) - ovh-eu, ovh-ca or ovh-us.
+    required: false
+    default: ovh-eu
+  ovh-application-key:
+    description: OVHcloud API application key (ovh). Empty for a registry-only identity (deploy).
+    required: false
+    default: ""
+  ovh-application-secret:
+    description: OVHcloud API application secret (ovh).
+    required: false
+    default: ""
+  ovh-consumer-key:
+    description: OVHcloud API consumer key (ovh); its access rules are the permission boundary of plan vs apply.
+    required: false
+    default: ""
+  ovh-service-name:
+    description: Public Cloud project id (ovh).
+    required: false
+    default: ""
+  ovh-s3-access-key:
+    description: Object Storage (S3) access key for the OpenTofu state bucket (ovh).
+    required: false
+    default: ""
+  ovh-s3-secret-key:
+    description: Object Storage (S3) secret key for the OpenTofu state bucket (ovh).
+    required: false
+    default: ""
 outputs:
   gcp-access-token:
     description: Short-lived access token (gcp only) for registry logins.
@@ -47,7 +79,7 @@ runs:
       env:
         CLOUD: ${{ inputs.cloud }}
       run: |
-        case "$CLOUD" in aws|gcp|azure) ;; *) echo "::error::cloud must be aws, gcp or azure (got '$CLOUD')"; exit 1 ;; esac
+        case "$CLOUD" in aws|gcp|azure|ovh) ;; *) echo "::error::cloud must be aws, gcp, azure or ovh (got '$CLOUD')"; exit 1 ;; esac
 
     - name: AWS
       if: inputs.cloud == 'aws'
@@ -73,3 +105,39 @@ runs:
         client-id: ${{ inputs.azure-client-id }}
         tenant-id: ${{ inputs.azure-tenant-id }}
         subscription-id: ${{ inputs.azure-subscription-id }}
+
+    - name: OVHcloud
+      if: inputs.cloud == 'ovh'
+      shell: bash
+      env:
+        ENDPOINT: ${{ inputs.ovh-endpoint }}
+        APP_KEY: ${{ inputs.ovh-application-key }}
+        APP_SECRET: ${{ inputs.ovh-application-secret }}
+        CONSUMER_KEY: ${{ inputs.ovh-consumer-key }}
+        SERVICE_NAME: ${{ inputs.ovh-service-name }}
+        S3_ACCESS: ${{ inputs.ovh-s3-access-key }}
+        S3_SECRET: ${{ inputs.ovh-s3-secret-key }}
+      run: |
+        set -euo pipefail
+        case "$ENDPOINT" in ovh-eu|ovh-ca|ovh-us) ;; *) echo "::error::ovh-endpoint must be ovh-eu, ovh-ca or ovh-us (got '$ENDPOINT')"; exit 1 ;; esac
+        if [[ -z "$APP_KEY$APP_SECRET$CONSUMER_KEY$S3_ACCESS$S3_SECRET" ]]; then
+          echo "::notice::ovh: registry-only identity (no API or state credentials requested)."
+          exit 0
+        fi
+        # Plan/apply need the whole set; a half-filled secret list is a setup mistake, not a soft failure.
+        for pair in "ovh-application-key:$APP_KEY" "ovh-application-secret:$APP_SECRET" "ovh-consumer-key:$CONSUMER_KEY" \
+                    "ovh-service-name:$SERVICE_NAME" "ovh-s3-access-key:$S3_ACCESS" "ovh-s3-secret-key:$S3_SECRET"; do
+          [[ -n "${pair#*:}" ]] || { echo "::error::ovh: ${pair%%:*} is empty. Set the OVH_PLAN_*/OVH_APPLY_* secrets (docs/engineering/ci-cd.md#ovhcloud)."; exit 1; }
+        done
+        for v in "$APP_KEY" "$APP_SECRET" "$CONSUMER_KEY" "$S3_ACCESS" "$S3_SECRET"; do echo "::add-mask::$v"; done
+        {
+          echo "OVH_ENDPOINT=$ENDPOINT"
+          echo "OVH_APPLICATION_KEY=$APP_KEY"
+          echo "OVH_APPLICATION_SECRET=$APP_SECRET"
+          echo "OVH_CONSUMER_KEY=$CONSUMER_KEY"
+          echo "OVH_CLOUD_PROJECT_SERVICE=$SERVICE_NAME"
+          # OpenTofu's s3 backend (state bucket on OVH Object Storage) and the S3-compatible provider calls.
+          echo "AWS_ACCESS_KEY_ID=$S3_ACCESS"
+          echo "AWS_SECRET_ACCESS_KEY=$S3_SECRET"
+          echo "AWS_EC2_METADATA_DISABLED=true"
+        } >> "$GITHUB_ENV"

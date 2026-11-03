@@ -1,17 +1,20 @@
 'use client';
 
-import { type Payout, sellerKeys, sellerQueries } from '@afrotransact/api-client';
+import { type Payout, type PlanFeeDeduction, sellerKeys, sellerQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useRef, useState } from 'react';
 
 import { Card } from '@/components/ui/Card';
 import { ModulePage } from '@/components/ui/ModulePage';
+import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
+import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { idempotencyKey, money, shortDate, toMinor } from '@/lib/format';
 import { useSeller } from '@/lib/session';
@@ -25,8 +28,46 @@ const columns: ColumnDef<Payout>[] = [
   { id: 'note', accessorFn: (p) => p.holdReason ?? p.failureMessage ?? undefined, header: 'Note', size: 260, cell: ({ row }) => <span className="text-xs text-muted">{row.original.holdReason ?? row.original.failureMessage ?? ''}</span> }
 ];
 
+/**
+ * Plan invoices paid from sales (S298): one "Plan fee (invoice …)" line each, with the settlements it was deducted
+ * from, so the seller's own books reconcile with what was transferred.
+ */
+function PlanFeeDeductions({ items, currency, t }: { items: PlanFeeDeduction[]; currency: string; t: Translator<MessageKey> }) {
+  return (
+    <Card title={t('sc.payouts.planFees.title')}>
+      <p className="m-0 text-sm text-muted">{t('sc.payouts.planFees.help')}</p>
+      <ul aria-label={t('sc.payouts.planFees.title')} className="m-0 flex list-none flex-col gap-3 p-0 text-sm">
+        {items.map((d) => (
+          <li key={d.invoiceId} className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <strong className="flex-1">{t('sc.payouts.planFees.line', { invoice: d.invoiceNumber ?? d.invoiceId })}</strong>
+              <span className="text-xs text-muted">{shortDate(d.createdAt)}</span>
+              <strong>{money(-(d.withheldMinor - d.releasedMinor), currency)}</strong>
+            </div>
+            {d.transfers.map((x) => (
+              <span key={`${x.orderId}-${x.at}`} className="flex gap-2 pl-3 text-xs text-muted">
+                <span className="flex-1">
+                  {x.amountMinor >= 0 ? t('sc.payouts.planFees.deducted', { order: x.orderNumber ?? t('sc.payouts.order.unnamed') }) : t('sc.payouts.planFees.paidBack', { order: x.orderNumber ?? t('sc.payouts.order.unnamed') })}
+                </span>
+                <span>{money(-x.amountMinor, currency)}</span>
+              </span>
+            ))}
+            {d.status === 'RELEASED' ? <span className="pl-3 text-xs text-muted">{t('sc.payouts.planFees.released')}</span> : null}
+            {d.outstandingMinor > 0 ? (
+              <span className="pl-3 text-xs text-warning">{t('sc.payouts.planFees.outstanding', { amount: money(d.outstandingMinor, currency) })}</span>
+            ) : d.outstandingMinor < 0 ? (
+              <span className="pl-3 text-xs text-success">{t('sc.payouts.planFees.owed', { amount: money(-d.outstandingMinor, currency) })}</span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 /** Payouts: available / on hold / on the way, holds per order, history and "Request payout" (payments). */
 export function PayoutsView() {
+  const t = useT();
   const api = sellerApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -62,34 +103,86 @@ export function PayoutsView() {
         ) : null
       }
     >
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-3">
-        {[
-          ['Available to request', money(b.availableMinor, b.currency), b.payoutsPaused ? 'Paused — see above' : `Minimum ${money(b.minimumPayoutMinor, b.currency)} · one request a day`],
-          ['Still settling', money(b.onHoldMinor, b.currency), 'Released after delivery or completion'],
-          ['On the way', money(b.requestedOrInTransitMinor, b.currency), 'Requested or in transit to your bank'],
-          ['Paid out', money(b.paidMinor, b.currency), 'All time'],
-          ...(b.providerFeesMinor ? [['Provider fees', money(b.providerFeesMinor, b.currency), 'Late cancellations debited from your balance']] : [])
-        ].map(([label, value, detail]) => (
-          <div key={label} className="flex flex-col gap-1 rounded-md border border-border p-4">
-            <span className="text-xs font-semibold text-muted">{label}</span>
-            <strong className="text-2xl">{value}</strong>
-            <span className="text-xs text-muted">{detail}</span>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-3">
+        <div className={`flex flex-col gap-1 rounded-md border p-4 ${b.availableMinor < 0 ? 'border-amber-500/40 bg-amber-500/5' : 'border-border'}`}>
+          <span className="text-xs font-semibold text-muted">Available to request</span>
+          <strong className={`text-2xl ${b.availableMinor < 0 ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+            {money(b.availableMinor, b.currency)}
+          </strong>
+          <span className="text-xs text-muted">
+            {b.payoutsPaused
+              ? 'Paused — see above'
+              : b.availableMinor < 0
+              ? 'Negative balance: shipping label charges will be covered once orders on hold settle.'
+              : `Minimum ${money(b.minimumPayoutMinor, b.currency)} · one request a day`}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-1 rounded-md border border-border p-4">
+          <span className="text-xs font-semibold text-muted">Still settling (on hold)</span>
+          <strong className="text-2xl">{money(b.onHoldMinor, b.currency)}</strong>
+          <span className="text-xs text-muted">Released after delivery or completion buffer</span>
+        </div>
+
+        <div className="flex flex-col gap-1 rounded-md border border-border p-4">
+          <span className="text-xs font-semibold text-muted">On the way</span>
+          <strong className="text-2xl">{money(b.requestedOrInTransitMinor, b.currency)}</strong>
+          <span className="text-xs text-muted">Requested or in transit to your bank</span>
+        </div>
+
+        <div className="flex flex-col gap-1 rounded-md border border-border p-4">
+          <span className="text-xs font-semibold text-muted">Paid out</span>
+          <strong className="text-2xl">{money(b.paidMinor, b.currency)}</strong>
+          <span className="text-xs text-muted">Total earnings transferred to date</span>
+        </div>
+
+        {b.providerFeesMinor ? (
+          <div className="flex flex-col gap-1 rounded-md border border-border p-4">
+            <span className="text-xs font-semibold text-muted">Provider fees</span>
+            <strong className="text-2xl">{money(b.providerFeesMinor, b.currency)}</strong>
+            <span className="text-xs text-muted">Late cancellations debited from your balance</span>
           </div>
-        ))}
+        ) : null}
       </div>
+
+      {b.payoutAccountMissing ? (
+        <Notice tone="warning" title={t('sc.payouts.accountMissing.title')}>
+          {t('sc.payouts.accountMissing.body')}{' '}
+          <Link href="/account-health" className="font-semibold">
+            {t('sc.payouts.accountMissing.action')}
+          </Link>
+        </Notice>
+      ) : null}
+
+      {b.availableMinor < 0 ? (
+        <Notice tone="warning" title="Account balance is negative.">
+          You have {money(Math.abs(b.availableMinor), b.currency)} in shipping label or service charges awaiting settlement. Once your held funds of {money(b.onHoldMinor, b.currency)} release upon delivery, this amount will automatically be offset and the remainder will be available to request.
+        </Notice>
+      ) : null}
+
       {b.holds.length ? (
-        <Card title="On hold per order">
+        <Card title="Funds on hold per order">
+          <p className="m-0 mb-3 text-xs text-muted">
+            Customer payments are held securely until the shipment is confirmed delivered to protect against disputes and returns.
+          </p>
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
             {b.holds.map((h) => (
-              <li key={h.orderId} className="flex gap-2">
-                <span className="flex-1 font-mono text-xs">{h.orderId}</span>
-                <span className="text-muted">{h.releaseAt ? `Releases ${shortDate(h.releaseAt)}` : 'Releases after delivery'}</span>
+              <li key={h.orderId} className="flex items-center gap-2 border-b border-border/50 py-1.5 last:border-0">
+                <span className="flex-1 font-mono text-xs text-text" data-testid="hold-order">
+                  {h.orderNumber ?? t('sc.payouts.order.unnamed')}
+                </span>
+                <span className="text-xs text-muted">{h.releaseAt ? `Releases ${shortDate(h.releaseAt)}` : 'Releases after delivery'}</span>
                 <strong>{money(h.amountMinor, b.currency)}</strong>
               </li>
             ))}
           </ul>
         </Card>
       ) : null}
+      {q.data.planFeeDeductions.length ? <PlanFeeDeductions items={q.data.planFeeDeductions} currency={b.currency} t={t} /> : null}
+      <Card title={t('sc.tax.link')}>
+        <p className="m-0 text-sm text-muted">{t('sc.tax.linkHelp')}</p>
+        <Link href="/payouts/tax" className="text-sm font-semibold">{t('sc.tax.link')}</Link>
+      </Card>
       <h2 className="m-0 text-lg font-semibold">History</h2>
       {q.data.historyAvailable ? (
         <DataTable<Payout> id="seller.payouts" label="Payouts" columns={columns} data={q.data.payouts} getRowId={(p) => p.id} rowLabel={(p) => p.id}

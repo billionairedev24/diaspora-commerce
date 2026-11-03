@@ -20,6 +20,11 @@
 .element[aria-busy='true'] { min-height: 160px; }
 .paymentElement { display: flex; flex-direction: column; gap: var(--at-space-3); }
 .mockFields { display: flex; flex-direction: column; gap: var(--at-space-3); }
+.accepted { display: flex; flex-wrap: wrap; gap: var(--at-space-2); align-items: center; }
+.acceptedWallets { font-size: var(--at-text-xs); color: var(--at-color-text-muted); line-height: var(--at-leading-normal); }
+.mockTabs { display: flex; gap: var(--at-space-2); }
+.mockTab { flex: 1; padding: var(--at-space-2) var(--at-space-3); border: 1px solid var(--at-color-border-strong); border-radius: var(--at-radius-sm); background: var(--at-color-surface); font: inherit; font-size: var(--at-text-sm); cursor: pointer; }
+.mockTab[aria-selected='true'] { border-color: var(--at-color-action-secondary); box-shadow: inset 0 0 0 1px var(--at-color-action-secondary); font-weight: var(--at-weight-bold); color: var(--at-color-link); }
 
 @media (max-width: 599px) {
   .two, .three, .quick { grid-template-columns: 1fr; }

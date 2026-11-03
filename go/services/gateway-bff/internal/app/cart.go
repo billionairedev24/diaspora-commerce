@@ -78,6 +78,9 @@ func (s *cartServiceImpl) owner(ctx context.Context, c *domain.Caller) port.Cart
 		return o
 	}
 	loc := s.d.Location.Current(ctx, c)
+	if zip := strings.TrimSpace(loc.ZIP); len(zip) == 5 {
+		o.Zip = zip
+	}
 	if loc.State == "" {
 		return o
 	}
@@ -421,8 +424,8 @@ func (s *cartServiceImpl) RemoveSaved(ctx context.Context, c *domain.Caller, sav
 }
 
 type lineInfo struct {
-	department, unit string
-	perishable       bool
+	department, unit, productType, imageURL string
+	perishable                              bool
 }
 
 // perishableProduct mirrors orders' rule (HttpProductFactsClient): product type "perishable" or attribute
@@ -446,9 +449,11 @@ func (s *cartServiceImpl) enrich(ctx context.Context, atins []string) map[string
 				return
 			}
 			info := lineInfo{
-				department: departmentFor(ctx, s.d.Catalog, v.Product.CategoryID),
-				unit:       firstNonEmpty(optionsLabel(v.Variant.Options), attr(v.Product.Attributes, "unit", "size", "netContent", "packSize")),
-				perishable: perishableProduct(v.Product),
+				department:  departmentFor(ctx, s.d.Catalog, v.Product.CategoryID),
+				unit:        firstNonEmpty(optionsLabel(v.Variant.Options), attr(v.Product.Attributes, "unit", "size", "netContent", "packSize")),
+				productType: strings.TrimSpace(v.Product.ProductType),
+				imageURL:    catalogImageURL(v.Product),
+				perishable:  perishableProduct(v.Product),
 			}
 			mu.Lock()
 			out[a] = info
@@ -508,7 +513,9 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 			sel := !deselected[l.VariantATIN] && !l.Unavailable
 			line := domain.CartLine{
 				LineID: l.VariantATIN, ATIN: firstNonEmpty(l.ProductATIN, l.VariantATIN), OfferID: firstNonEmpty(l.OfferID, l.VariantATIN), Title: l.Title,
-				Unit: info[l.VariantATIN].unit, Department: info[l.VariantATIN].department, Perishable: info[l.VariantATIN].perishable, ImageURL: strPtr(l.ImageURL),
+				Unit: info[l.VariantATIN].unit, Department: info[l.VariantATIN].department, ProductType: info[l.VariantATIN].productType,
+				Perishable: info[l.VariantATIN].perishable,
+				ImageURL:   strPtr(firstNonEmpty(l.ImageURL, info[l.VariantATIN].imageURL)),
 				PriceMinor: l.PriceMinor, LineTotalMinor: l.PriceMinor * int64(qty), Quantity: qty,
 				MaxQuantity: domain.MaxQuantity(available), AvailableQty: available, StockStatus: domain.StockStatusFor(available), Selected: sel,
 			}

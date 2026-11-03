@@ -10,6 +10,7 @@ import java.util.Set;
  * @param retailOrgId             AfroTransact Retail organisation (1P seller of record)
  * @param paymentTimeout          how long checkout waits for the payment authorisation (reservation TTL)
  * @param checkoutResponseTimeout how long POST /v1/checkout waits for the saga to reach "awaiting payment"
+ * @param cancellationWindow      how long after placement a customer may cancel a shipment
  * @param perishableTypes         catalog product types treated as perishable
  * @param commissionCategories    catalog product type → payments commission category
  * @param followUpBatch           follow-up tasks per run
@@ -17,9 +18,9 @@ import java.util.Set;
  * @param zone                    business time zone for promised dates
  */
 public record OrdersSettings(String retailOrgId, Duration paymentTimeout,
-                             Duration checkoutResponseTimeout, Set<String> perishableTypes,
-                             Map<String, String> commissionCategories, int followUpBatch, int followUpMaxAttempts,
-                             String zone) {
+                             Duration checkoutResponseTimeout, Duration cancellationWindow,
+                             Set<String> perishableTypes, Map<String, String> commissionCategories,
+                             int followUpBatch, int followUpMaxAttempts, String zone) {
 
     public OrdersSettings {
         perishableTypes = Set.copyOf(perishableTypes);

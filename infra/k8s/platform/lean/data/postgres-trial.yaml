@@ -1,0 +1,95 @@
+# Postgres 17 + PostGIS in the cluster: FOR THE TRIAL ONLY (free-credit accounts), so the whole workflow can be tested
+# before paying Layerbase. NOT for production: one pod, no replica, backups are your job. ~25 small databases fit in 1 GiB.
+# Create the per-service databases with infra/tofu/scripts/postgres-bootstrap.sh (PGHOST via kubectl port-forward).
+# Admin password: ExternalSecret key afrotransact/trial-postgres, property password. Host: postgres.data.svc.cluster.local.
+# The image is x86 (the GCP lean node); on an arm64 node (AWS/Azure lean) use a multi-arch PostGIS image.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: postgres
+  namespace: data
+spec:
+  refreshInterval: 1h
+  secretStoreRef: {kind: ClusterSecretStore, name: platform-secrets}
+  target: {name: postgres}
+  data:
+    - {secretKey: POSTGRES_PASSWORD, remoteRef: {key: afrotransact/trial-postgres, property: password}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: data
+spec:
+  selector: {app.kubernetes.io/name: postgres}
+  ports:
+    - {name: pg, port: 5432}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: data
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: postgres}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: postgres}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: postgres
+          image: postgis/postgis:17-3.5
+          args: ["-c", "max_connections=200", "-c", "shared_buffers=256MB", "-c", "work_mem=4MB", "-c", "max_wal_size=1GB"]
+          envFrom:
+            - secretRef: {name: postgres}
+          env:
+            - {name: POSTGRES_USER, value: at_admin}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          ports:
+            - {name: pg, containerPort: 5432}
+          readinessProbe:
+            exec: {command: ["pg_isready", "-U", "at_admin"]}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 768Mi}
+            limits: {memory: 1280Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 20Gi}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres
+  namespace: data
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: postgres}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {app.kubernetes.io/part-of: afrotransact}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: temporal}
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: openfga}
+      ports:
+        - {port: 5432}
