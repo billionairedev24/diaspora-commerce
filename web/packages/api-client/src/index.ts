@@ -46,6 +46,14 @@ export {
   staffPlaceQueries
 } from './staff-markets';
 export { createStaffPreordersApi, staffPreorderKeys, staffPreorderQueries, type StaffPreordersApi } from './staff-preorders';
+export {
+  createStaffSearchApi,
+  type StaffSearchApi,
+  staffSearchKeys,
+  staffSearchQueries,
+  type StaffSearchQuery,
+  type StaffSearchReportKind
+} from './staff-search';
 export { tableSearchParams } from './table-query';
 export { US_STATES } from './us-states';
 export { ALL_CATEGORIES, type FeeDraftRules, normalizeFeeCategory, validateDeliveryDraft, validateFeeDraft } from './validation/fee-draft';

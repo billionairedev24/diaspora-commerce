@@ -56,6 +56,7 @@ import {
 } from './schemas/staff';
 import { createStaffMarketsApi } from './staff-markets';
 import { createStaffPreordersApi } from './staff-preorders';
+import { createStaffSearchApi } from './staff-search';
 import { tableSearchParams } from './table-query';
 
 /** Server-driven table query: one search over every column, the sort (`<column>,asc|desc`), page or cursor, size. */
@@ -151,6 +152,9 @@ export function createStaffApiClient(options: ApiClientOptions) {
 
     /* Settings → Markets & locations: /v1/staff/markets/** (location tree) and /v1/staff/places (gazetteer) */
     markets: createStaffMarketsApi(request),
+
+    /* Search analytics and synonym rules: /v1/staff/search/** */
+    search: createStaffSearchApi(request),
 
     /* Pre-orders (S274): /v1/staff/preorders/** mirrors delivery-runs' staff API */
     preorders: createStaffPreordersApi(request, options),

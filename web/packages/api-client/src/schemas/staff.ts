@@ -11,7 +11,7 @@ const nullableString = z.string().nullable();
 /* ── Shell ─────────────────────────────────────────────── */
 
 export const StaffModuleKeySchema = z.enum([
-  'dash', 'exports', 'orders', 'catalog', 'inventory', 'retail', 'dispatch', 'apps', 'support', 'rbac', 'payouts', 'fees', 'marketing', 'disputes',
+  'dash', 'exports', 'orders', 'catalog', 'search', 'inventory', 'retail', 'dispatch', 'apps', 'support', 'rbac', 'payouts', 'fees', 'marketing', 'disputes',
   'audit', 'markets', 'siteCfg', 'dev', 'notifications', 'preorders'
 ]);
 export type StaffModuleKey = z.infer<typeof StaffModuleKeySchema>;
