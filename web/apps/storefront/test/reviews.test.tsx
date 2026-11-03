@@ -30,9 +30,9 @@ describe('ratings section of the product page (mock BFF)', () => {
     expect(reviews).toHaveLength(5);
     expect(within(reviews[0] as HTMLElement).getByText('Verified purchase')).toBeInTheDocument();
     expect(screen.getByText('Amara O.')).toBeInTheDocument();
-    // A guest cannot write; the reason is shown.
+    // A guest cannot write and is not told who may: there is simply no link.
     expect(screen.queryByRole('button', { name: 'Write a review' })).not.toBeInTheDocument();
-    expect(await screen.findByText(tEn('rev.onlyBuyers'))).toBeInTheDocument();
+    expect(screen.queryByText(/only customers who received/i)).not.toBeInTheDocument();
     // Filter by stars.
     await user.click(rows[0] as HTMLElement);
     await waitFor(() => expect(screen.getAllByTestId('review')).toHaveLength(3));
@@ -56,11 +56,12 @@ describe('ratings section of the product page (mock BFF)', () => {
     expect(screen.queryByRole('button', { name: 'Write a review' })).not.toBeInTheDocument();
   });
 
-  it('tells a shopper who did not receive the item that only buyers can review', async () => {
+  it('shows no write link and no explanation to a shopper who did not receive the item', async () => {
     await signInDemo();
     renderWithProviders(<ProductReviews atin={RICE} title="Rice" />);
-    expect(await screen.findByText(tEn('rev.onlyBuyers'))).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('product-reviews')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: 'Write a review' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/only customers who received/i)).not.toBeInTheDocument();
   });
 });
 
