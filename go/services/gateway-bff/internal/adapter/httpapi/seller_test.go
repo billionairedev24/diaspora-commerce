@@ -289,6 +289,7 @@ func TestSellerContractConformance(t *testing.T) {
 	exerciseSellerFba(t, b)
 	exerciseSellerListing(t, bff, b)
 	exerciseSellerSizeCharts(t, bff, b)
+	exerciseSellerScope(t, b)
 	// Money.
 	// S298: plan invoices paid from sales are listed as "Plan fee (invoice …)" deductions; DECLINED ones took nothing.
 	// Held funds and plan fee deductions name the order by its number, never by payments' id.
@@ -641,7 +642,7 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, kb.do("POST", "/v1/seller/reviews/"+testkit.ReviewSeededID+"/reports", map[string]any{"reasonCode": "SPAM"}), 200)
 
 	for _, op := range []string{"getSellerSession", "setActiveOrg", "getOnboarding", "getCompliance", "getDashboard", "listSellerOrders", "getSellerOrder",
-		"updateShipmentStatus", "quoteShippingRates", "buyShippingLabel", "listListings", "setListingActive", "submitProduct", "getCategoryTree",
+		"updateShipmentStatus", "quoteShippingRates", "buyShippingLabel", "listListings", "setListingActive", "submitProduct", "getCategoryTree", "getSellerCatalogScope", "listSellerDepartments", "requestSellerDepartment",
 		"getProductType", "checkGtin", "listCategoryRequests", "requestCategory", "requestUpload", "completeUpload", "getInventory", "adjustStock",
 		"getPayouts", "requestPayout", "getSellerFees", "getBilling", "changePlan", "makeDefaultPaymentMethod", "removePaymentMethod", "getTeam", "inviteMember",
 		"assignRole", "removeMember", "revokeInvitation", "lookupInvitation", "acceptInvitation", "getCalendar", "listBookingRequests", "actOnBooking", "getWorkingHours", "saveWorkingHours", "listServices", "createService",

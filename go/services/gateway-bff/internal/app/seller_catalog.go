@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -314,6 +315,15 @@ func treeOf(nodes []port.CatalogCategoryNode) []domain.CategoryNode {
 func (s *sellerCatalogImpl) Categories(ctx context.Context, c *domain.Caller) ([]domain.CategoryNode, error) {
 	if err := requireCustomer(c); err != nil {
 		return nil, err
+	}
+	// The member's own tree: only the departments the organisation may sell in (catalog enforces the same on writes).
+	if s.r.d.ScopeCatalog != nil {
+		var nodes []port.CatalogCategoryNode
+		q := url.Values{"forSeller": {"true"}}
+		if err := s.r.d.ScopeCatalog.Call(ctx, c.BearerToken, port.StaffCall{Method: http.MethodGet, Path: "/v1/categories", Query: q}, &nodes); err != nil {
+			return nil, mapErr("catalog", err)
+		}
+		return treeOf(nodes), nil
 	}
 	nodes, err := s.r.d.Catalog.CategoryTree(ctx)
 	if err != nil {

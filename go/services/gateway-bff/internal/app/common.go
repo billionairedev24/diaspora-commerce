@@ -56,6 +56,10 @@ func mapErr(upstream string, err error) error {
 			return domain.NewProblem(http.StatusUnauthorized, domain.CodeUnauthenticated, "Sign in required",
 				"Sign in to continue. ("+upstream+" did not accept the sign-in)").WithCause(err)
 		case http.StatusForbidden:
+			if scopeRefusals[p.Code] {
+				// The catalog's department refusal is written for the seller and says how to add the department.
+				return domain.NewProblem(http.StatusForbidden, p.Code, "Department not available to your store", p.Detail).WithCause(err)
+			}
 			return domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Forbidden", "You can't do that.").WithCause(err)
 		case http.StatusNotFound:
 			return domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "We couldn't find that.").WithCause(err)
@@ -86,6 +90,9 @@ func mapErr(upstream string, err error) error {
 	}
 	return domain.UpstreamError(upstream, 0).WithCause(err)
 }
+
+// scopeRefusals are the 403 codes of catalog's department scope; their detail reaches the seller as written.
+var scopeRefusals = map[string]bool{"catalog.department-not-allowed": true, "catalog.no-departments": true}
 
 func firstNonEmpty(vals ...string) string {
 	for _, v := range vals {

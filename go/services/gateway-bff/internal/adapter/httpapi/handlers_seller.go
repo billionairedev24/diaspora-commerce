@@ -117,6 +117,9 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("GET /v1/seller/catalog/brands", h.brands)
 		route("POST /v1/seller/catalog/brands", h.createBrand)
 	}
+	if h.s.SellerScope != nil {
+		h.registerSellerScope(route)
+	}
 	if h.s.SellerSizeCharts != nil {
 		route("GET /v1/seller/size-charts", h.sizeCharts)
 		route("POST /v1/seller/size-charts", h.createSizeChart)

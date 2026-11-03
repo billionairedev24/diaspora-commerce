@@ -28,7 +28,7 @@ class SellerCatalogScopeController {
                     + "when an allowed department has a product type with the sizing trait. 503 "
                     + "catalog.scope-unavailable when seller-service cannot say.")
     @GetMapping("/v1/seller/catalog-scope")
-    SellerScopeResponse mine() {
+    SellerScopeResponse sellerCatalogScope() {
         return SellerScopeResponse.of(scope.mine());
     }
 

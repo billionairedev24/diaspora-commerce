@@ -40,6 +40,10 @@ type SellerDeps struct {
 	Listing port.SellerListingClient
 	// SizeCharts is catalog's size chart API: the organisation's charts and the size chart upload; nil answers 503.
 	SizeCharts port.SizeChartClient
+	// ScopeCatalog and ScopeSeller are catalog and seller-service for the department scope routes and the seller's
+	// scoped category tree (member token); nil answers 503 (the unscoped public tree is used for the tree).
+	ScopeCatalog port.StaffUpstream
+	ScopeSeller  port.StaffUpstream
 	// Writer is ai-gateway's AI listing writer (nil: never offered).
 	Writer port.ListingWriterClient
 	// Fees reads payments' fee schedules with the BFF's service token (nil: the Fees page answers 503).

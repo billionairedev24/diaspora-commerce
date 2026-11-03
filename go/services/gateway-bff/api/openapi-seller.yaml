@@ -61,6 +61,15 @@ tags:
       a unit (the other shown by conversion), fit note and how-to-measure text. The category only suggests sizes and
       measurements (`GET /v1/seller/size-charts/suggestions`); sellers add their own sizes, colours and columns. Link a
       chart to a product with `listing.sizeChartId` + `listing.fitNote`. Mirrors catalog-service `/v1/size-charts`.
+  - name: Catalog scope
+    description: |
+      The catalog departments the organisation may sell in: the ones chosen at onboarding (and later approved requests).
+      Seller Center shows only these in every category picker and hides screens that do not apply (Size charts when no
+      allowed department sells sized goods). catalog-service enforces the same on the server: creating or changing a
+      product, draft, bulk-upload row, size chart or category request in another department answers 403
+      `catalog.department-not-allowed` (or `catalog.no-departments` when none are recorded yet) with a plain message
+      that says how to add the department; 503 `catalog.scope-unavailable` when the scope cannot be checked.
+      AfroTransact Retail and staff are exempt.
   - name: Image library
     description: The organisation's product image library (files, folders, ZIPs) matched to listings by SKU file names (S310)
   - name: Returns & disputes
@@ -1344,10 +1353,63 @@ paths:
       operationId: getCategoryTree
       security: [{sessionCookie: []}]
       summary: Category tree (department › category › product type) for the product form's category picker
-      description: catalog `GET /v1/categories`, nested.
+      description: catalog `GET /v1/categories?forSeller=true`, nested. Only the departments the organisation may sell in.
       responses:
         '200': {description: Tree, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/CategoryNode'}}}}}
         '401': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/catalog-scope:
+    get:
+      tags: [Catalog scope]
+      operationId: getSellerCatalogScope
+      security: [{sessionCookie: []}]
+      summary: The departments the organisation may sell in, whether any sells sized goods, and its department requests
+      description: |
+        catalog `GET /v1/seller/catalog-scope`. `hasSizing` is true when an allowed department has a product type with
+        the sizing trait: Seller Center shows Size charts only then. `exempt` (AfroTransact Retail) means every
+        department. One cached query (`useSellerScope`) feeds the pickers, the sidebar and the page guards.
+      responses:
+        '200': {description: Scope, content: {application/json: {schema: {$ref: '#/components/schemas/SellerCatalogScope'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/departments:
+    get:
+      tags: [Catalog scope]
+      operationId: listSellerDepartments
+      security: [{sessionCookie: []}]
+      summary: The catalog's departments with the evidence each asks for (what onboarding offers)
+      description: |
+        seller-service `GET /v1/departments`: the active departments of the catalog tree. `requires` comes from the
+        department's compliance data (FOOD_PERMIT, BEAUTY_LABELLING), so the wizard asks for the food permit exactly
+        when a chosen department says so.
+      responses:
+        '200': {description: Departments, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/SellerDepartment'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/department-requests:
+    post:
+      tags: [Catalog scope]
+      operationId: requestSellerDepartment
+      security: [{sessionCookie: []}]
+      summary: Ask to sell in another department
+      description: |
+        seller-service `POST /v1/orgs/{orgId}/department-requests` for the active organisation (Listings: EDIT).
+        Staff approve or reject; approving adds the department at once. `needs` lists what the seller still has to
+        provide for it (a food permit, beauty labelling). Asking again while one is pending returns it. 409 when the
+        department is already allowed.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SellerDepartmentRequestInput'}}}
+      responses:
+        '201': {description: Requested, content: {application/json: {schema: {$ref: '#/components/schemas/SellerDepartmentRequest'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/catalog/product-types/{code}:
@@ -4055,6 +4117,57 @@ components:
       required: [active]
       properties:
         active: {type: boolean}
+    SellerDepartment:
+      type: object
+      required: [code, name, requires]
+      properties:
+        code: {type: string, description: 'The catalog department node code'}
+        name: {type: string}
+        requires: {type: array, items: {type: string, enum: [FOOD_PERMIT, BEAUTY_LABELLING]}}
+    SellerScopeDepartment:
+      type: object
+      required: [id, code, name, hasSizing]
+      properties:
+        id: {type: string}
+        code: {type: string}
+        name: {type: string}
+        hasSizing: {type: boolean}
+    SellerDepartmentRequest:
+      type: object
+      required: [departmentCode, status, needs]
+      properties:
+        id: {type: string}
+        orgId: {type: string}
+        departmentCode: {type: string}
+        departmentName: {type: string}
+        note: {type: [string, 'null']}
+        status: {type: string, enum: [PENDING, APPROVED, REJECTED]}
+        needs: {type: array, items: {type: string, enum: [FOOD_PERMIT, BEAUTY_LABELLING]}}
+        createdAt: {type: string, format: date-time}
+        decisionNote: {type: [string, 'null']}
+    SellerDepartmentRequestInput:
+      type: object
+      required: [departmentCode]
+      properties:
+        departmentCode: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,118}$'}
+        note: {type: string, maxLength: 500}
+    SellerCatalogScope:
+      type: object
+      required: [exempt, departments, hasSizing, requests]
+      properties:
+        exempt: {type: boolean, description: 'AfroTransact Retail: every department'}
+        departments: {type: array, items: {$ref: '#/components/schemas/SellerScopeDepartment'}}
+        hasSizing: {type: boolean}
+        requests: {type: array, items: {$ref: '#/components/schemas/SellerScopeRequest'}}
+    SellerScopeRequest:
+      type: object
+      required: [departmentCode, departmentName, status, needs]
+      properties:
+        departmentCode: {type: string}
+        departmentName: {type: string}
+        status: {type: string, enum: [PENDING, APPROVED, REJECTED]}
+        needs: {type: array, items: {type: string}}
+        createdAt: {type: string, format: date-time}
     CategoryNode:
       type: object
       required: [id, name, level, productType, path, children]

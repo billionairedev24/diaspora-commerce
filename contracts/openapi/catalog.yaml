@@ -208,7 +208,7 @@ paths:
       tags:
       - Categories
       summary: My organisation's category requests
-      operationId: mine
+      operationId: sellerCatalogScope
       responses:
         '200':
           description: OK
