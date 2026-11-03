@@ -1,4 +1,4 @@
-import { type OnboardingForm } from '@afrotransact/api-client';
+import { type OnboardingForm, type SellerDepartment } from '@afrotransact/api-client';
 import { type AddressSuggestionItem } from '@afrotransact/ui';
 import { describe, expect, it } from 'vitest';
 
@@ -96,7 +96,7 @@ const form = (over: Partial<OnboardingForm> = {}): OnboardingForm => ({
     planFeeCollectionDefault: 'CARD'
   },
   compliance: {
-    categories: [],
+    departments: [],
     foodPermit: null,
     beautyLabellingConfirmed: null,
     services: [],
@@ -306,8 +306,14 @@ describe('Payouts', () => {
 });
 
 describe('Catalog, permits & licences', () => {
+  /** As the catalog serves them: compliance is data on the department. */
+  const DEPARTMENTS: SellerDepartment[] = [
+    { code: 'groceries', name: 'Groceries', requires: ['FOOD_PERMIT'] },
+    { code: 'beauty', name: 'Beauty', requires: ['BEAUTY_LABELLING'] },
+    { code: 'fashion', name: 'Fashion', requires: [] }
+  ];
   const base: ComplianceValues = {
-    categories: [],
+    departments: [],
     permitType: '',
     permitNumber: '',
     permitExpiresOn: '',
@@ -320,18 +326,18 @@ describe('Catalog, permits & licences', () => {
     w9Certified: true
   };
 
-  it('asks for a food permit and beauty labelling only when those categories are chosen', () => {
-    expect(validateCompliance(base, 'PRODUCTS', TODAY)).toEqual({
-      categories: 'Pick at least one category'
+  it('asks for a food permit and beauty labelling only when departments that ask for them are chosen', () => {
+    expect(validateCompliance(base, 'PRODUCTS', DEPARTMENTS, TODAY)).toEqual({
+      departments: 'Pick at least one department'
     });
-    expect(Object.keys(validateCompliance({ ...base, categories: ['groceries', 'beauty'] }, 'PRODUCTS', TODAY)).sort()).toEqual([
+    expect(Object.keys(validateCompliance({ ...base, departments: ['groceries', 'beauty'] }, 'PRODUCTS', DEPARTMENTS, TODAY)).sort()).toEqual([
       'beautyLabellingConfirmed',
       'permitDocumentAssetId',
       'permitExpiresOn',
       'permitNumber',
       'permitType'
     ]);
-    expect(validateCompliance({ ...base, categories: ['fashion'] }, 'PRODUCTS', TODAY)).toEqual({});
+    expect(validateCompliance({ ...base, departments: ['fashion'] }, 'PRODUCTS', DEPARTMENTS, TODAY)).toEqual({});
   });
 
   it('providers list licences per service and insurance; expired licences are refused', () => {
@@ -349,6 +355,7 @@ describe('Catalog, permits & licences', () => {
         ]
       },
       'SERVICES',
+      DEPARTMENTS,
       TODAY
     );
     expect(e).toEqual({
@@ -358,17 +365,18 @@ describe('Catalog, permits & licences', () => {
     const input = toComplianceInput(
       {
         ...base,
-        categories: ['groceries'],
+        departments: ['groceries'],
         permitType: 'COTTAGE_FOOD',
         permitNumber: 'CF-1',
         permitExpiresOn: '2027-01-01',
         permitDocumentAssetId: 'd'
       },
       'PRODUCTS',
-      'Ada Okafor'
+      'Ada Okafor',
+      DEPARTMENTS
     );
     expect(input).toMatchObject({
-      categories: ['groceries'],
+      departments: ['groceries'],
       foodPermit: { permitType: 'COTTAGE_FOOD' },
       agreementsAccepted: true,
       w9SignerName: 'Ada Okafor',

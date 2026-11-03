@@ -80,7 +80,7 @@ export function ProductForm({ productId }: { productId?: string }) {
   const editing = Boolean(productId);
   const draftParam = params.get('draft') ?? '';
 
-  const tree = useQuery(sellerQueries.categories(api));
+  const tree = useQuery(sellerQueries.categories(api, orgId));
   const ctx = useQuery(sellerQueries.listingContext(api, orgId));
   const shipFrom = useQuery(sellerQueries.shipFrom(api, orgId));
   const detail = useQuery(sellerQueries.product(api, orgId, productId ?? ''));

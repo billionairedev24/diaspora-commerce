@@ -6,6 +6,7 @@ import { HourglassMedium, LockSimple } from '@phosphor-icons/react/ssr';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
+import { RequestDepartmentLink } from '@/components/listings/RequestDepartment';
 import { problemMessage } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
@@ -98,6 +99,7 @@ export function CategoryPicker({ tree, s, locked, error, onChoose }: Props) {
           <HourglassMedium size={16} aria-hidden /> {t('sc.pf.category.requested', { reference: s.request.reference })}
         </p>
       ) : null}
+      <RequestDepartmentLink />
       {reqOpen ? (
         <form
           className="flex flex-col gap-1 rounded-sm bg-surface-muted p-3"

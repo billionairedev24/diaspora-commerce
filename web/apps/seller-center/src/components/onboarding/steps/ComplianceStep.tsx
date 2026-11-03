@@ -1,20 +1,19 @@
 'use client';
 
-import { LEGAL_DOCUMENT_TITLES, type LegalDocumentKey, legalHref, type OnboardingForm, PROVIDER_AGREEMENTS, SELLER_AGREEMENTS } from '@afrotransact/api-client';
+import { LEGAL_DOCUMENT_TITLES, type LegalDocumentKey, legalHref, type OnboardingForm, PROVIDER_AGREEMENTS, SELLER_AGREEMENTS, sellerQueries } from '@afrotransact/api-client';
 import { Checkbox, cx, Select, TextField } from '@afrotransact/ui';
 import { Check } from '@phosphor-icons/react/ssr';
+import { useQuery } from '@tanstack/react-query';
 import { useImperativeHandle } from 'react';
 
 import { sellerApi } from '@/lib/api';
 import {
-  BEAUTY_CATEGORIES,
   type ComplianceValues,
   complianceValues,
   fieldId,
-  FOOD_CATEGORIES,
   FOOD_PERMITS,
   offersServices,
-  PRODUCT_CATEGORIES,
+  requirementsOf,
   sellsProducts,
   SERVICES,
   toComplianceInput,
@@ -113,18 +112,22 @@ export function ComplianceStep({ status, ref }: StepProps) {
   const v = f.values;
   const signer = w9Signer(form);
   const storefront = useStorefrontUrl();
+  // The departments to choose from are the catalog's, with what each asks for (a food permit, beauty labelling).
+  const departmentsQuery = useQuery({ ...sellerQueries.departments(sellerApi()), enabled: sellsProducts(offering) });
+  const departments = departmentsQuery.data ?? [];
 
   useImperativeHandle(ref, () => ({
     save: (mode) =>
       f.run(
         mode,
-        () => validateCompliance(f.values, offering),
-        () => sellerApi().saveOnboardingCompliance(toComplianceInput(f.values, offering, signer))
+        () => validateCompliance(f.values, offering, departments),
+        () => sellerApi().saveOnboardingCompliance(toComplianceInput(f.values, offering, signer, departments))
       )
   }));
 
-  const food = v.categories.some((c) => FOOD_CATEGORIES.has(c));
-  const beauty = v.categories.some((c) => BEAUTY_CATEGORIES.has(c));
+  const requires = requirementsOf(v.departments, departments);
+  const food = requires.has('FOOD_PERMIT');
+  const beauty = requires.has('BEAUTY_LABELLING');
   const setService = (i: number, p: Partial<ComplianceValues['services'][number]>, clear: string) =>
     f.patch({ services: v.services.map((s, j) => (j === i ? { ...s, ...p } : s)) }, [`services.${i}.${clear}`]);
 
@@ -133,25 +136,31 @@ export function ComplianceStep({ status, ref }: StepProps) {
       <StepErrors errors={f.errors} submitCount={f.submitCount} />
       {sellsProducts(offering) ? (
         <>
-          <Chips
-            id="categories"
-            title="What will you sell?"
-            options={PRODUCT_CATEGORIES}
-            selected={v.categories}
-            disabled={disabled}
-            error={f.errors.categories}
-            onToggle={(k) =>
-              f.patch(
-                {
-                  categories: v.categories.includes(k) ? v.categories.filter((x) => x !== k) : [...v.categories, k]
-                },
-                ['categories']
-              )
-            }
-          />
+          {departmentsQuery.isError ? (
+            <p role="alert" className="m-0 text-sm text-danger">
+              We could not load the departments right now. Try again in a minute.
+            </p>
+          ) : (
+            <Chips
+              id="departments"
+              title="What will you sell?"
+              options={departments.map((d) => ({ key: d.code, label: d.name }))}
+              selected={v.departments}
+              disabled={disabled || departmentsQuery.isPending}
+              error={f.errors.departments}
+              onToggle={(k) =>
+                f.patch(
+                  {
+                    departments: v.departments.includes(k) ? v.departments.filter((x) => x !== k) : [...v.departments, k]
+                  },
+                  ['departments']
+                )
+              }
+            />
+          )}
           {food ? (
             <section aria-label="Food permit" className="flex flex-col gap-2">
-              <SectionTitle hint="Groceries and prepared food need a valid permit before they can be listed.">Food permit</SectionTitle>
+              <SectionTitle hint="Some of the departments you chose need a valid permit before they can be listed.">Food permit</SectionTitle>
               <FieldGrid>
                 <Cell span={4}>
                   <Select

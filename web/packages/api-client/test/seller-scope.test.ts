@@ -33,8 +33,8 @@ describe('the departments an organisation may sell in (mock BFF)', () => {
     const api = client();
     await api.setActiveOrg(SELLER_ORG);
     const scope = await api.getCatalogScope();
-    expect(scope.departments.map((d) => d.code).sort()).toEqual(['beauty', 'fashion', 'groceries']);
-    expect(names(await api.getCategoryTree())).toEqual(['Groceries', 'Fashion', 'Beauty']);
+    expect(scope.departments.map((d) => d.code).sort()).toEqual(['beauty', 'books', 'fashion', 'groceries']);
+    expect(names(await api.getCategoryTree())).toEqual(['Groceries', 'Fashion', 'Beauty', 'Books']);
   });
 
   it('asking for another department is remembered, says what is still needed, and is refused for one it has', async () => {

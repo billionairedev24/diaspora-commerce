@@ -9,6 +9,7 @@ import { type DragEvent, useMemo, useState } from 'react';
 
 import { DEFAULT_LIMITS, fileProblem } from '@/components/listings/bulk/bulk-model';
 import { leavesOf } from '@/components/listings/form-model';
+import { RequestDepartmentLink } from '@/components/listings/RequestDepartment';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { problemMessage } from '@/components/ui/States';
@@ -32,7 +33,7 @@ export function SizeChartImportView() {
   const toast = useToast();
   const { orgId, can } = useSeller();
   const editable = can('listings');
-  const tree = useQuery(sellerQueries.categories(api));
+  const tree = useQuery(sellerQueries.categories(api, orgId));
   const leaves = useMemo(() => leavesOf(tree.data ?? []), [tree.data]);
   const [category, setCategory] = useState('');
   const [format, setFormat] = useState<SpreadsheetFormat>('xlsx');
@@ -93,6 +94,7 @@ export function SizeChartImportView() {
           <p className="m-0 text-sm text-muted">{t('sc.szi.step1Hint')}</p>
           <Select label={t('sc.szi.category')} value={category} onChange={(e) => setCategory(e.target.value)}
             options={[{ value: '', label: t('sc.szi.generic') }, ...leaves.map((l) => ({ value: l.id, label: l.path }))]} />
+          <RequestDepartmentLink />
           <ChipGroup label={t('sc.bulk.format')} value={format} onChange={setFormat} options={[{ value: 'xlsx', label: t('sc.bulk.excel') }, { value: 'csv', label: t('sc.bulk.csv') }]} />
           <Button variant="neutral" loading={template.isPending} disabled={!editable} onClick={() => template.mutate()} className="self-start" data-testid="download-chart-template">
             <DownloadSimple size={18} aria-hidden /> {t('sc.szi.download')}

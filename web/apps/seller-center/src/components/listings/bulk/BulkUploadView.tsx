@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type DragEvent, useMemo, useState } from 'react';
 
+import { RequestDepartmentLink } from '@/components/listings/RequestDepartment';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { problemMessage } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
@@ -31,7 +32,7 @@ export function BulkUploadView() {
   const toast = useToast();
   const router = useRouter();
   const { orgId } = useSeller();
-  const tree = useQuery(sellerQueries.categories(api));
+  const tree = useQuery(sellerQueries.categories(api, orgId));
   const ctx = useQuery(sellerQueries.listingContext(api, orgId));
   const recent = useQuery(sellerQueries.imports(api, orgId, 0, 5));
   const limits = ctx.data?.importLimits ?? DEFAULT_LIMITS;
@@ -97,6 +98,7 @@ export function BulkUploadView() {
           <p className="m-0 text-sm text-muted">{t('sc.bulk.step1Hint')}</p>
           <Select label={t('sc.bulk.category')} value={category} onChange={(e) => setCategory(e.target.value)}
             options={[{ value: '', label: t('sc.bulk.generic') }, ...leavesOf(tree.data ?? []).map((l) => ({ value: l.id, label: l.path }))]} />
+          <RequestDepartmentLink />
           <ChipGroup label={t('sc.bulk.format')} value={format} onChange={setFormat}
             options={[{ value: 'xlsx', label: t('sc.bulk.excel') }, { value: 'csv', label: t('sc.bulk.csv') }]} />
           <Button variant="neutral" loading={template.isPending} onClick={() => template.mutate()} className="self-start" data-testid="download-template">

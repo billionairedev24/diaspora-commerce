@@ -32,7 +32,7 @@ export const MOCK_FASHION_ORG = 'org-adire-atelier';
 
 /** The departments each mock organisation may sell in (Ade’s Kitchen is the multi-department seller). */
 export const MOCK_ORG_DEPARTMENTS: Record<string, string[]> = {
-  'org-ade-kitchen': ['groceries', 'fashion', 'beauty'],
+  'org-ade-kitchen': ['groceries', 'fashion', 'beauty', 'books'],
   [MOCK_FOOD_ORG]: ['groceries'],
   [MOCK_FASHION_ORG]: ['fashion'],
   'org-bonwire': ['fashion']

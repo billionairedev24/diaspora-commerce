@@ -34,7 +34,7 @@ export function SizeChartsView() {
   const [withRetired, setWithRetired] = useState(false);
   const [editing, setEditing] = useState<SizeChart | 'new' | null>(null);
   const [retiring, setRetiring] = useState<SizeChart | null>(null);
-  const tree = useQuery(sellerQueries.categories(api));
+  const tree = useQuery(sellerQueries.categories(api, orgId));
   const typeName = useMemo(() => {
     const leaves = leavesOf(tree.data ?? []);
     return (code: string | null) => (code ? (leaves.find((l) => l.productType === code)?.name ?? code) : t('sc.sz.anyCategory'));

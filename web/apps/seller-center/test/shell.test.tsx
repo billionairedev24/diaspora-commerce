@@ -27,7 +27,8 @@ describe('portal shell', () => {
 
   it('shows the owner every seller module, grouped, with the payouts-paused banner', async () => {
     renderWithProviders(<PortalShell><p>page body</p></PortalShell>);
-    expect(await navHrefs()).toEqual(['/', '/orders', '/returns', '/disputes', '/listings', '/listings/size-charts', '/reviews', '/inventory', '/coupons', '/payouts', '/fees', '/billing', '/account-health', '/team']);
+    // Size charts joins Listings once the organisation's departments are known (this one sells fashion).
+    await waitFor(async () => expect(await navHrefs()).toEqual(['/', '/orders', '/returns', '/disputes', '/listings', '/listings/size-charts', '/reviews', '/inventory', '/coupons', '/payouts', '/fees', '/billing', '/account-health', '/team']));
     expect(screen.getByRole('button', { name: /commerce/i })).toHaveAttribute('aria-expanded', 'false');
     expect(await screen.findByText('Payouts are paused.')).toBeInTheDocument();
     expect(screen.getByText('page body')).toBeInTheDocument();

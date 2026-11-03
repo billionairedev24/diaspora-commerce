@@ -1,13 +1,13 @@
 'use client';
 
-import { isApiError, LEGAL_DOCUMENT_TITLES, type LegalDocumentKey, type OnboardingForm, type OnboardingStatus, sellerKeys } from '@afrotransact/api-client';
+import { isApiError, LEGAL_DOCUMENT_TITLES, type LegalDocumentKey, type OnboardingForm, type OnboardingStatus, type SellerDepartment,sellerKeys, sellerQueries } from '@afrotransact/api-client';
 import { WarningCircle } from '@phosphor-icons/react/ssr';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type ReactNode, useImperativeHandle, useRef, useState } from 'react';
 
 import { sellerApi } from '@/lib/api';
-import { displayPhone, ENTITY_TYPES, FOOD_PERMITS, OFFERINGS, payoutAccountLabel, PRODUCT_CATEGORIES } from '@/lib/onboarding-form';
+import { displayPhone, ENTITY_TYPES, FOOD_PERMITS, OFFERINGS, payoutAccountLabel } from '@/lib/onboarding-form';
 import { onboardingHref } from '@/lib/onboarding-wizard';
 import { useSeller } from '@/lib/session';
 
@@ -23,7 +23,7 @@ const BRANDS: Record<string, string> = { visa: 'Visa', mastercard: 'Mastercard',
 const brandName = (b: string | null): string => (b ? (BRANDS[b.toLowerCase()] ?? b) : 'Card');
 
 /** Rows of each section, keyed by the step's slug. */
-function sectionRows(st: OnboardingStatus): Record<string, Row[]> {
+function sectionRows(st: OnboardingStatus, departments: SellerDepartment[]): Record<string, Row[]> {
   const f = st.form;
   const b = f.business;
   const d = f.details;
@@ -90,7 +90,7 @@ function sectionRows(st: OnboardingStatus): Record<string, Row[]> {
       ]
     ],
     'catalog-compliance': [
-      ...(c.categories.length ? [['Categories', c.categories.map((k) => PRODUCT_CATEGORIES.find((x) => x.key === k)?.label ?? k).join(', ')] as Row] : []),
+      ...(c.departments.length ? [['Departments', c.departments.map((k) => departments.find((x) => x.code === k)?.name ?? k).join(', ')] as Row] : []),
       ...(permit
         ? [
             [
@@ -130,7 +130,8 @@ export function ReviewStep({ status, ref }: StepProps) {
   const [problems, setProblems] = useState<{ slug: string; label: string; count: number }[]>([]);
   const [failure, setFailure] = useState<string | null>(null);
   const box = useRef<HTMLDivElement>(null);
-  const rows = sectionRows(status);
+  const departmentsQuery = useQuery(sellerQueries.departments(sellerApi()));
+  const rows = sectionRows(status, departmentsQuery.data ?? []);
   const sections = status.steps.filter((s) => s.key !== 'REVIEW');
 
   useImperativeHandle(ref, () => ({

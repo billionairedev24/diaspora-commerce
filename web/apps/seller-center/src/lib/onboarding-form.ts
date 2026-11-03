@@ -1,4 +1,5 @@
 import {
+  type DepartmentRequirement,
   type OnboardingAddress,
   type OnboardingAddressInput,
   type OnboardingBusinessInput,
@@ -10,6 +11,7 @@ import {
   type OnboardingOffering,
   type OnboardingOwnersInput,
   type OrgKind,
+  type SellerDepartment,
   US_STATES
 } from '@afrotransact/api-client';
 import { type AddressSuggestionItem } from '@afrotransact/ui';
@@ -400,19 +402,15 @@ export function payoutAccountLabel(p: OnboardingForm['payouts']): string {
 
 /* ── Step 7: Catalog, permits & licences / Services & licences ── */
 
-/** Product categories as designed (BO.PRODUCT_CATS); keys are what the seller service checks (food, beauty). */
-export const PRODUCT_CATEGORIES: { key: string; label: string }[] = [
-  { key: 'groceries', label: 'Groceries' },
-  { key: 'prepared_food', label: 'Prepared food' },
-  { key: 'fashion', label: 'Fashion' },
-  { key: 'beauty', label: 'Beauty' },
-  { key: 'home_art', label: 'Home & Art' },
-  { key: 'books', label: 'Books' },
-  { key: 'health', label: 'Health' },
-  { key: 'party', label: 'Party' }
-];
-export const FOOD_CATEGORIES = new Set(['groceries', 'prepared_food', 'perishables']);
-export const BEAUTY_CATEGORIES = new Set(['beauty', 'cosmetics']);
+/**
+ * What the chosen departments ask the seller to have on file. The departments and their requirements come from the
+ * catalog (GET /v1/seller/departments: compliance data on the department node); nothing here names a department.
+ */
+export function requirementsOf(selected: string[], departments: SellerDepartment[]): Set<DepartmentRequirement> {
+  const out = new Set<DepartmentRequirement>();
+  for (const code of selected) departments.find((d) => d.code === code)?.requires.forEach((r) => out.add(r));
+  return out;
+}
 
 export const FOOD_PERMITS: {
   value: OnboardingFoodPermitType;
@@ -463,7 +461,8 @@ export interface ServiceValues {
 }
 
 export interface ComplianceValues {
-  categories: string[];
+  /** Catalog department codes. */
+  departments: string[];
   permitType: OnboardingFoodPermitType | '';
   permitNumber: string;
   permitExpiresOn: string;
@@ -484,7 +483,7 @@ export function complianceValues(form: OnboardingForm): ComplianceValues {
   const accepted = c.agreementsAccepted === true;
   const type = p?.permitType;
   return {
-    categories: [...c.categories],
+    departments: [...c.departments],
     permitType: FOOD_PERMITS.some((x) => x.value === type) ? (type as OnboardingFoodPermitType) : '',
     permitNumber: text(p?.permitNumber),
     permitExpiresOn: text(p?.expiresOn),
@@ -507,19 +506,20 @@ export function complianceValues(form: OnboardingForm): ComplianceValues {
 export const sellsProducts = (o: OnboardingOffering | '' | null): boolean => o !== 'SERVICES';
 export const offersServices = (o: OnboardingOffering | '' | null): boolean => o === 'SERVICES' || o === 'BOTH';
 
-export function validateCompliance(v: ComplianceValues, offering: OnboardingOffering | '' | null, today = new Date()): Errors {
+export function validateCompliance(v: ComplianceValues, offering: OnboardingOffering | '' | null, departments: SellerDepartment[], today = new Date()): Errors {
   const e: Errors = {};
+  const requires = requirementsOf(v.departments, departments);
   const iso = today.toISOString().slice(0, 10);
   if (sellsProducts(offering)) {
-    if (!v.categories.length) e.categories = 'Pick at least one category';
-    if (v.categories.some((c) => FOOD_CATEGORIES.has(c))) {
+    if (!v.departments.length) e.departments = 'Pick at least one department';
+    if (requires.has('FOOD_PERMIT')) {
       if (!v.permitType) e.permitType = 'Choose the permit type';
       if (!v.permitNumber.trim()) e.permitNumber = 'Enter the permit number';
       if (!v.permitExpiresOn) e.permitExpiresOn = 'Enter the expiry date';
       else if (v.permitExpiresOn < iso) e.permitExpiresOn = 'This permit has expired';
       if (!v.permitDocumentAssetId) e.permitDocumentAssetId = 'Upload your permit';
     }
-    if (v.categories.some((c) => BEAUTY_CATEGORIES.has(c)) && !v.beautyLabellingConfirmed) e.beautyLabellingConfirmed = 'Required for beauty sellers';
+    if (requires.has('BEAUTY_LABELLING') && !v.beautyLabellingConfirmed) e.beautyLabellingConfirmed = 'Required for beauty sellers';
   }
   if (offersServices(offering)) {
     if (!v.services.length) e.services = 'Pick at least one service';
@@ -539,11 +539,12 @@ export function validateCompliance(v: ComplianceValues, offering: OnboardingOffe
   return e;
 }
 
-export function toComplianceInput(v: ComplianceValues, offering: OnboardingOffering | '' | null, signer: string): OnboardingComplianceInput {
+export function toComplianceInput(v: ComplianceValues, offering: OnboardingOffering | '' | null, signer: string, departments: SellerDepartment[]): OnboardingComplianceInput {
   const products = sellsProducts(offering);
-  const food = products && v.categories.some((c) => FOOD_CATEGORIES.has(c));
+  const requires = requirementsOf(v.departments, departments);
+  const food = products && requires.has('FOOD_PERMIT');
   return {
-    categories: products ? v.categories : [],
+    departments: products ? v.departments : [],
     foodPermit: food
       ? {
           permitType: v.permitType || undefined,
@@ -552,7 +553,7 @@ export function toComplianceInput(v: ComplianceValues, offering: OnboardingOffer
           documentAssetId: opt(v.permitDocumentAssetId)
         }
       : undefined,
-    beautyLabellingConfirmed: products && v.categories.some((c) => BEAUTY_CATEGORIES.has(c)) ? v.beautyLabellingConfirmed : undefined,
+    beautyLabellingConfirmed: products && requires.has('BEAUTY_LABELLING') ? v.beautyLabellingConfirmed : undefined,
     services: offersServices(offering)
       ? v.services.map((s) => ({
           serviceName: s.serviceName,

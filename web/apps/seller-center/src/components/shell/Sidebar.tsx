@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { useT } from '@/i18n/t';
 import { MODULE_ICONS } from '@/lib/modules';
 import { hrefOf } from '@/lib/routes';
+import { useSellerScopeOf } from '@/lib/seller-scope';
 
 function orgSub(o: OrgSummary): string {
   const kind = o.kind === 'PROVIDER' ? 'Service provider' : 'Seller';
@@ -66,7 +67,7 @@ export function OrgSwitcher({ session, onSwitch, busy }: { session: SellerSessio
 
 const SIZE_CHARTS_HREF = '/listings/size-charts';
 
-function NavGroupSection({ group, active, single }: { group: NavGroup; active: ModuleKey | null; single: boolean }) {
+function NavGroupSection({ group, active, single, showSizeCharts }: { group: NavGroup; active: ModuleKey | null; single: boolean; showSizeCharts: boolean }) {
   const t = useT();
   const holdsActive = group.modules.some((m) => m.key === active);
   // Collapsed by default except the group holding the current page; every group folds on click.
@@ -110,7 +111,7 @@ function NavGroupSection({ group, active, single }: { group: NavGroup; active: M
                 <span className="flex-1 truncate">{m.label}</span>
                 {m.badge ? <span className="min-w-5 rounded-pill bg-gold-500 px-1.5 text-center text-2xs font-bold text-ink-1000">{m.badge}</span> : null}
               </Link>
-              {m.key === 'listings' ? (
+              {m.key === 'listings' && showSizeCharts ? (
                 <Link
                   href={SIZE_CHARTS_HREF}
                   aria-current={onSizeCharts ? 'page' : undefined}
@@ -134,13 +135,18 @@ function NavGroupSection({ group, active, single }: { group: NavGroup; active: M
 export function Sidebar({ session, active, onSwitch, switching }: { session: SellerSession; active: ModuleKey | null; onSwitch: (orgId: string) => void; switching: boolean }) {
   const t = useT();
   const single = session.navGroups.length === 1;
+  // Size charts only where the store sells sized goods: one of its departments has a product type with sizes. While the
+  // scope loads nothing flashes in; if it cannot be read the entry stays (the catalog enforces the scope on the server).
+  const org = session.activeOrg;
+  const scope = useSellerScopeOf(org?.id, !!org && org.kind === 'SELLER' && org.approved);
+  const showSizeCharts = scope.exempt || scope.hasSizing || scope.isError || (!!org && org.kind !== 'SELLER');
   return (
     <nav aria-label={t('sc.sidebar.backOffice')} className="flex h-full flex-col gap-0.5 px-3 pt-4 pb-[calc(1rem+var(--at-chat-fab-clear,0px))]">
       <div className="pb-3">
         <OrgSwitcher session={session} onSwitch={onSwitch} busy={switching} />
       </div>
       {session.navGroups.map((g) => (
-        <NavGroupSection key={`${session.activeOrg?.id}-${g.key}`} group={g} active={active} single={single} />
+        <NavGroupSection key={`${session.activeOrg?.id}-${g.key}`} group={g} active={active} single={single} showSizeCharts={showSizeCharts} />
       ))}
       <p className="mt-auto px-2 pt-3 text-2xs leading-normal text-subtle">
         {t('sc.sidebar.access')} <strong>{session.activeOrg?.roleLabel ?? '—'}</strong>

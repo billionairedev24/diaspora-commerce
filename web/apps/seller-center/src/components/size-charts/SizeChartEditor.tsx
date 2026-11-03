@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ClipboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { leavesOf } from '@/components/listings/form-model';
+import { RequestDepartmentLink } from '@/components/listings/RequestDepartment';
 import { Notice } from '@/components/ui/Notice';
 import { problemMessage } from '@/components/ui/States';
 import { type MessageKey, useT } from '@/i18n/t';
@@ -46,7 +47,7 @@ function EditorShell({ chart, scope, selling = [], onClose, onSaved }: Omit<Prop
   const qc = useQueryClient();
   const toast = useToast();
   const { orgId } = useSeller();
-  const tree = useQuery(sellerQueries.categories(api));
+  const tree = useQuery(sellerQueries.categories(api, orgId));
   const leaves = useMemo(() => leavesOf(tree.data ?? []), [tree.data]);
 
   const initial = useMemo<EditorState>(() => (chart ? stateOf(chart) : { ...emptyEditor(), productTypeCode: scope?.productType ?? '' }), [chart, scope?.productType]);
@@ -154,6 +155,7 @@ function EditorShell({ chart, scope, selling = [], onClose, onSaved }: Omit<Prop
               }} />
           )}
         </div>
+        {chart ? null : <RequestDepartmentLink />}
         {!chart && type && sug.data && !sug.data.sized ? <Notice tone="info" title={t('sc.sz.notSized', { type: type.label })}>{t('sc.sz.notSizedBody')}</Notice> : null}
 
         <div className="flex flex-wrap items-end gap-4">

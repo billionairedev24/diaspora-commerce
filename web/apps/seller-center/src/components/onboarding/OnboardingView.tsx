@@ -45,7 +45,7 @@ const SUBTITLES: Partial<Record<OnboardingStepSlug, string>> = {
   'stripe-verification': 'Stripe, our payments partner, verifies your business and keeps your payout bank account safe. It takes about three minutes.',
   payouts: 'Stripe holds the bank account your payouts go to. It must belong to the business or owner; change it here any time.',
   plan: 'Every paid plan starts with a free trial. Change plans any time.',
-  'catalog-compliance': 'Some categories need permits. We only ask for what applies to you.',
+  'catalog-compliance': 'Some departments need permits. We only ask for what applies to you.',
   review: 'Our trust team reviews every application, usually within 2 business days. You can’t sell until it’s approved.'
 };
 
