@@ -172,7 +172,7 @@ export interface paths {
         get?: never;
         /**
          * Save "Catalog, permits & licences" / "Services & licences"
-         * @description seller `PUT /v1/applications/me/steps/catalog-compliance`: categories (lower-cased keys), the food permit for groceries / prepared food, beauty labelling, service licences, insurance, agreements and the W-9 certification.
+         * @description seller `PUT /v1/applications/me/steps/catalog-compliance`: departments (catalog department codes from `GET /v1/seller/departments`), the food permit and beauty labelling when a chosen department asks for them, service licences, insurance, agreements and the W-9 certification.
          */
         put: operations["saveOnboardingCompliance"];
         post?: never;
@@ -2964,7 +2964,8 @@ export interface components {
                 planFeeCollectionDefault: components["schemas"]["PlanFeeCollectionMode"];
             };
             compliance: {
-                categories: string[];
+                /** @description Catalog department codes; they become the departments the organisation may sell in once approved */
+                departments: string[];
                 foodPermit: components["schemas"]["OnboardingFoodPermit"] | null;
                 beautyLabellingConfirmed: boolean | null;
                 services: components["schemas"]["OnboardingServiceLicence"][];
@@ -3071,7 +3072,8 @@ export interface components {
             documentAssetId?: string;
         };
         OnboardingComplianceInput: {
-            categories?: string[];
+            /** @description Catalog department codes */
+            departments?: string[];
             foodPermit?: components["schemas"]["OnboardingFoodPermitInput"];
             beautyLabellingConfirmed?: boolean;
             services?: components["schemas"]["OnboardingServiceLicenceInput"][];

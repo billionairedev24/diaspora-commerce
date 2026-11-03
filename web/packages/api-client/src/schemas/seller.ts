@@ -199,7 +199,8 @@ export const OnboardingFormSchema = z.object({
     planFeeCollectionDefault: z.enum(['EARNINGS_FIRST', 'CARD']).default('CARD')
   }),
   compliance: z.object({
-    categories: z.array(z.string()),
+    /** Catalog department codes chosen at onboarding (GET /v1/seller/departments). */
+    departments: z.array(z.string()),
     foodPermit: OnboardingFoodPermitSchema.nullable(),
     beautyLabellingConfirmed: z.boolean().nullable(),
     services: z.array(OnboardingServiceLicenceSchema),
@@ -303,7 +304,7 @@ export interface OnboardingPlanInput {
 
 /** PUT /v1/seller/onboarding/catalog-compliance. */
 export interface OnboardingComplianceInput {
-  categories?: string[];
+  departments?: string[];
   foodPermit?: { permitType?: OnboardingFoodPermitType; permitNumber?: string; issuingAuthority?: string; expiresOn?: string; documentAssetId?: string };
   beautyLabellingConfirmed?: boolean;
   services?: { serviceName: string; regulated?: boolean; licenceNumber?: string; issuingState?: string; expiresOn?: string; documentAssetId?: string }[];
@@ -936,6 +937,33 @@ export const CategoryRequestSchema = z.object({
   createdAt: z.string()
 });
 export type CategoryRequest = z.infer<typeof CategoryRequestSchema>;
+
+/** What a department asks the seller to have on file (data on the catalog department node). */
+export const DepartmentRequirementSchema = z.enum(['FOOD_PERMIT', 'BEAUTY_LABELLING']);
+export type DepartmentRequirement = z.infer<typeof DepartmentRequirementSchema>;
+/** GET /v1/seller/departments: the catalog's departments onboarding offers. */
+export const SellerDepartmentSchema = z.object({ code: z.string(), name: z.string(), requires: z.array(DepartmentRequirementSchema) });
+export type SellerDepartment = z.infer<typeof SellerDepartmentSchema>;
+export const SellerDepartmentRequestSchema = z.object({
+  id: z.string().optional(),
+  departmentCode: z.string(),
+  departmentName: z.string().optional(),
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED']),
+  needs: z.array(DepartmentRequirementSchema),
+  createdAt: z.string().optional(),
+  decisionNote: nullableString.optional()
+});
+export type SellerDepartmentRequest = z.infer<typeof SellerDepartmentRequestSchema>;
+export const SellerDepartmentRequestInputSchema = z.object({ departmentCode: z.string().min(1), note: z.string().max(500).optional() });
+export type SellerDepartmentRequestInput = z.infer<typeof SellerDepartmentRequestInputSchema>;
+/** GET /v1/seller/catalog-scope: the departments the organisation may sell in. */
+export const SellerCatalogScopeSchema = z.object({
+  exempt: z.boolean(),
+  departments: z.array(z.object({ id: z.string(), code: z.string(), name: z.string(), hasSizing: z.boolean() })),
+  hasSizing: z.boolean(),
+  requests: z.array(z.object({ departmentCode: z.string(), departmentName: z.string(), status: z.enum(['PENDING', 'APPROVED', 'REJECTED']), needs: z.array(z.string()), createdAt: z.string().optional() }))
+});
+export type SellerCatalogScope = z.infer<typeof SellerCatalogScopeSchema>;
 
 export const ProductImageInputSchema = z.object({
   url: z.string().min(1),

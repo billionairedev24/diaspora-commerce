@@ -29,7 +29,12 @@ export const sellerKeys = {
   listings: (orgId: string) => [...sellerKeys.org(orgId), 'listings'] as const,
   offers: (orgId: string, productId: string) => [...sellerKeys.listings(orgId), 'offers', productId] as const,
   listingPage: (orgId: string, q: ListingsQuery) => [...sellerKeys.listings(orgId), 'page', q] as const,
-  categories: () => [...sellerKeys.all, 'catalog', 'categories'] as const,
+  /** The tree is the organisation's own: only the departments it may sell in. */
+  categories: (orgId: string) => [...sellerKeys.org(orgId), 'catalog', 'categories'] as const,
+  /** Which departments the organisation may sell in, whether any sells sized goods, its requests. */
+  scope: (orgId: string) => [...sellerKeys.org(orgId), 'catalog-scope'] as const,
+  /** The catalog's departments onboarding offers. */
+  departments: () => [...sellerKeys.all, 'catalog', 'departments'] as const,
   productType: (code: string) => [...sellerKeys.all, 'catalog', 'product-type', code] as const,
   product: (orgId: string, productId: string) => [...sellerKeys.listings(orgId), 'product', productId] as const,
   productDrafts: (orgId: string) => [...sellerKeys.org(orgId), 'product-drafts'] as const,
@@ -115,8 +120,12 @@ export const sellerQueries = {
     queryOptions({ queryKey: sellerKeys.shipFrom(orgId), queryFn: ({ signal }) => api.listShipFrom(signal), staleTime: 5 * MINUTE }),
   listings: (api: SellerApiClient, orgId: string, q: ListingsQuery) =>
     queryOptions({ queryKey: sellerKeys.listingPage(orgId, q), queryFn: ({ signal }) => api.listListings(q, signal), placeholderData: keepPreviousData, staleTime: 30_000 }),
-  categories: (api: SellerApiClient) =>
-    queryOptions({ queryKey: sellerKeys.categories(), queryFn: ({ signal }) => api.getCategoryTree(signal), staleTime: 30 * MINUTE }),
+  categories: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.categories(orgId), queryFn: ({ signal }) => api.getCategoryTree(signal), staleTime: 5 * MINUTE }),
+  scope: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.scope(orgId), queryFn: ({ signal }) => api.getCatalogScope(signal), staleTime: MINUTE }),
+  departments: (api: SellerApiClient) =>
+    queryOptions({ queryKey: sellerKeys.departments(), queryFn: ({ signal }) => api.listDepartments(signal), staleTime: 30 * MINUTE }),
   productType: (api: SellerApiClient, code: string) =>
     queryOptions({ queryKey: sellerKeys.productType(code), queryFn: ({ signal }) => api.getProductType(code, signal), staleTime: 30 * MINUTE, enabled: code !== '' }),
   product: (api: SellerApiClient, orgId: string, productId: string) =>

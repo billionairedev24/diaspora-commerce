@@ -19,6 +19,7 @@ import {
 } from '../../schemas/seller';
 import { LEGAL_DOCUMENTS } from '../fixtures/legal';
 import { type MockOrg, type MockSellerDb, plansFor } from './db';
+import { departmentsRequiring } from './departments';
 
 /** The legal documents an application accepts, each at the version in force (what gateway-bff records). */
 export function acceptedAgreements(offering: string | null, on: string): OnboardingForm['compliance']['agreements'] {
@@ -53,8 +54,9 @@ const STEPS: { key: OnboardingStepKey; slug: OnboardingStepSlug; label: string; 
 const US_STATES = new Set(
   'AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY PR GU VI AS MP'.split(' ')
 );
-const FOOD = new Set(['groceries', 'perishables', 'prepared_food']);
-const BEAUTY = new Set(['beauty', 'cosmetics']);
+/** The departments that ask for a food permit / beauty labelling (compliance data on the catalog department). */
+const FOOD = departmentsRequiring('FOOD_PERMIT');
+const BEAUTY = departmentsRequiring('BEAUTY_LABELLING');
 const ACCOUNT_ADDRESS = { line1: '4410 Bellaire Blvd', line2: null, city: 'Houston', state: 'TX', postalCode: '77025', country: 'US' };
 /* Stripe collects the payout bank account in its embedded onboarding (seller accounts are Stripe-collected): the
    wizard's "Payouts" only mirrors what Stripe holds. */
@@ -78,7 +80,7 @@ export function accountForm(db: MockSellerDb, kind: OrgKind): OnboardingForm {
     payouts: { ...NO_BANK },
     plan: { planCode: null, planName: null, cadence: null, paymentMethodKind: null, cardBrand: null, cardLast4: null, cardExpMonth: null, cardExpYear: null, firstCharge: null,
       planFeeCollection: null, planFeeCollectionAvailable: true, planFeeCollectionDefault: 'CARD' },
-    compliance: { categories: [], foodPermit: null, beautyLabellingConfirmed: null, services: [], insuranceDocumentAssetId: null, agreementsAccepted: null, w9Certified: null, w9SignerName: null, agreements: [] },
+    compliance: { departments: [], foodPermit: null, beautyLabellingConfirmed: null, services: [], insuranceDocumentAssetId: null, agreementsAccepted: null, w9Certified: null, w9SignerName: null, agreements: [] },
     documents: [],
     prefilled: ['business.contactEmail', 'business.phone', 'details.address', 'details.legalFirstName', 'details.legalLastName'],
     editable: true
@@ -95,7 +97,7 @@ function submittedForm(db: MockSellerDb, org: MockOrg): OnboardingForm {
     owners: [{ firstName: 'Kwame', lastName: 'Asante', title: 'Owner', email: 'kwame@bonwire.example', ownershipPercent: 100, significantControl: true, dateOfBirth: '1984-05-02', address: { ...ACCOUNT_ADDRESS } }],
     payouts: { status: 'READY', bankName: 'Chase', accountLast4: '4417', bankStatus: 'verified', linked: true },
     plan: { ...f.plan, planCode: 'seller_essentials', planName: 'Seller Essentials', cadence: 'MONTHLY' },
-    compliance: { ...f.compliance, categories: ['groceries'], foodPermit: { permitType: 'FOOD_ESTABLISHMENT', permitNumber: 'HC-FE-1', issuingAuthority: 'Harris County', expiresOn: '2025-12-31', documentAssetId: 'asset-permit' }, agreementsAccepted: true, w9Certified: true, w9SignerName: 'Kwame Asante',
+    compliance: { ...f.compliance, departments: ['groceries'], foodPermit: { permitType: 'FOOD_ESTABLISHMENT', permitNumber: 'HC-FE-1', issuingAuthority: 'Harris County', expiresOn: '2025-12-31', documentAssetId: 'asset-permit' }, agreementsAccepted: true, w9Certified: true, w9SignerName: 'Kwame Asante',
       agreements: acceptedAgreements('PRODUCTS', '2026-09-01') },
     prefilled: []
   };
@@ -204,9 +206,9 @@ export function stepErrors(key: OnboardingStepKey, app: MockApplication, kind: O
     case 'CATALOG_COMPLIANCE': {
       const c = f.compliance;
       const offering = f.business.offering;
-      if (offering !== 'SERVICES' && !c.categories.length) e['compliance.categories'] = 'Choose what you’ll sell';
+      if (offering !== 'SERVICES' && !c.departments.length) e['compliance.departments'] = 'Choose what you’ll sell';
       if (offering !== 'PRODUCTS' && !c.services.length) e['compliance.services'] = 'Add the services you’ll offer';
-      if (c.categories.some((x) => FOOD.has(x))) {
+      if (c.departments.some((x) => FOOD.has(x))) {
         const p = c.foodPermit;
         if (!p) e['compliance.foodPermit'] = 'Food sellers need a food establishment or cottage food permit';
         else {
@@ -216,7 +218,7 @@ export function stepErrors(key: OnboardingStepKey, app: MockApplication, kind: O
           req(blank(p.documentAssetId), 'compliance.foodPermit.documentAssetId');
         }
       }
-      if (c.categories.some((x) => BEAUTY.has(x)) && c.beautyLabellingConfirmed !== true) e['compliance.beautyLabellingConfirmed'] = 'Confirm your beauty products carry full ingredient labelling';
+      if (c.departments.some((x) => BEAUTY.has(x)) && c.beautyLabellingConfirmed !== true) e['compliance.beautyLabellingConfirmed'] = 'Confirm your beauty products carry full ingredient labelling';
       c.services.forEach((s, i) => {
         if (!s.regulated) return;
         req(blank(s.licenceNumber), `compliance.services[${i}].licenceNumber`);
@@ -395,7 +397,7 @@ export function saveCompliance(app: MockApplication, c: OnboardingComplianceInpu
   update(app, {
     ...app.form,
     compliance: {
-      categories: [...new Set((c.categories ?? []).map((x) => x.trim().toLowerCase()).filter(Boolean))],
+      departments: [...new Set((c.departments ?? []).map((x) => x.trim().toLowerCase()).filter(Boolean))],
       foodPermit: p ? { permitType: p.permitType ?? null, permitNumber: trimOrNull(p.permitNumber), issuingAuthority: trimOrNull(p.issuingAuthority), expiresOn: trimOrNull(p.expiresOn), documentAssetId: trimOrNull(p.documentAssetId) } : null,
       beautyLabellingConfirmed: c.beautyLabellingConfirmed ?? null,
       services: (c.services ?? []).map((s) => ({ serviceName: s.serviceName, regulated: s.regulated === true, licenceNumber: trimOrNull(s.licenceNumber), issuingState: trimOrNull(s.issuingState)?.toUpperCase() ?? null, expiresOn: trimOrNull(s.expiresOn), documentAssetId: trimOrNull(s.documentAssetId) })),

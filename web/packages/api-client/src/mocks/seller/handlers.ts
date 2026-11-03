@@ -20,6 +20,7 @@ import {
   CadenceSchema,
   CancellationPolicyInputSchema,
   CarrierSchema,
+  type CategoryNode,
   CategoryRequestInputSchema,
   type ChartSpec,
   CreateSellerCouponSchema,
@@ -37,6 +38,7 @@ import {
   ProductDraftSchema,
   SellerAddressSchema,
   type SellerCoupon,
+  SellerDepartmentRequestInputSchema,
   type SellerFeesView,
   type SellerFeeVersion,
   type SellerOrderDetail,
@@ -62,6 +64,7 @@ import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
 import { sessionHandlers } from '../session';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
 import { capabilitiesOf, CATEGORY_TREE, departmentsOf, getSellerDb, MOCK_BRANDS, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, resetSellerDb, SELLER_ORG } from './db';
+import { MOCK_DEPARTMENTS, MOCK_ORG_DEPARTMENTS } from './departments';
 import {
   advanceImport,
   categoryLeaves,
@@ -241,6 +244,28 @@ function require(ctx: Ctx, module: ModuleKey | null, level: 'VIEW' | 'EDIT', kin
 }
 
 type Resolver = (ctx: Ctx, params: Record<string, string>) => Promise<unknown> | unknown;
+
+/** The department codes the active organisation may sell in (an unknown organisation: none). */
+function allowedCodes(ctx: Ctx): Set<string> {
+  return new Set(MOCK_ORG_DEPARTMENTS[ctx.org.id] ?? []);
+}
+
+/** The category tree limited to the active organisation's departments, as catalog's `?forSeller=true` tree. */
+function scopedTree(ctx: Ctx): CategoryNode[] {
+  const allowed = allowedCodes(ctx);
+  const ids = new Set(MOCK_DEPARTMENTS.filter((d) => allowed.has(d.code)).map((d) => d.id));
+  return CATEGORY_TREE.filter((d) => ids.has(d.id));
+}
+
+function hasSizingNode(n: CategoryNode): boolean {
+  return (n.productType !== null && PRODUCT_TYPES[n.productType]?.traits.sizing != null) || n.children.some(hasSizingNode);
+}
+
+function catalogScope(ctx: Ctx) {
+  const departments = scopedTree(ctx).map((d) => ({ id: d.id, code: MOCK_DEPARTMENTS.find((m) => m.id === d.id)?.code ?? d.id, name: d.name, hasSizing: hasSizingNode(d) }));
+  const requests = (ctx.db.departmentRequests[ctx.org.id] ?? []).map((r) => ({ departmentCode: r.departmentCode, departmentName: r.departmentName ?? r.departmentCode, status: r.status, needs: r.needs, createdAt: r.createdAt }));
+  return { exempt: false, departments, hasSizing: departments.some((d) => d.hasSizing), requests };
+}
 
 function route(fn: Resolver, status: number | ((out: unknown) => number) = 200) {
   return async ({ request, params }: { request: Request; params: Record<string, string | readonly string[] | undefined> }) => {
@@ -770,7 +795,7 @@ const OnboardingPlanBody = z.object({
   planFeeCollection: z.enum(['EARNINGS_FIRST', 'CARD'], 'Choose EARNINGS_FIRST or CARD').optional()
 });
 const ComplianceBody = z.object({
-  categories: z.array(z.string()).optional(),
+  departments: z.array(z.string()).optional(),
   foodPermit: z.object({ permitType: z.enum(['FOOD_ESTABLISHMENT', 'COTTAGE_FOOD', 'FDA_FACILITY', 'FOOD_HANDLER']).optional(), permitNumber: z.string().optional(),
     issuingAuthority: z.string().optional(), expiresOn: z.string().optional(), documentAssetId: z.string().optional() }).optional(),
   beautyLabellingConfirmed: z.boolean().optional(),
@@ -1656,7 +1681,25 @@ export const sellerHandlers = [
       return importView(imp);
     }, 202)
   ),
-  http.get(`${W}/catalog/categories`, route(() => CATEGORY_TREE)),
+  http.get(`${W}/catalog/categories`, route((ctx) => scopedTree(ctx))),
+  http.get(`${W}/catalog-scope`, route((ctx) => catalogScope(ctx))),
+  http.get(`${W}/departments`, route(() => MOCK_DEPARTMENTS.map((d) => ({ code: d.code, name: d.name, requires: d.requires })))),
+  http.post(
+    `${W}/department-requests`,
+    route(async (ctx) => {
+      const b = await body(ctx.request, SellerDepartmentRequestInputSchema);
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      const dept = MOCK_DEPARTMENTS.find((d) => d.code === b.departmentCode.trim().toLowerCase());
+      if (!dept) throw invalid({ departmentCode: 'Choose a department from the list' });
+      if (allowedCodes(ctx).has(dept.code)) throw new SellerProblem(409, 'seller.department-already-allowed', 'Invalid state', `Your store can already sell in ${dept.name}`);
+      const mine = (ctx.db.departmentRequests[ctx.org.id] ??= []);
+      const open = mine.find((r) => r.departmentCode === dept.code && r.status === 'PENDING');
+      if (open) return open;
+      const req = { id: nextId(ctx.db, 'dr'), departmentCode: dept.code, departmentName: dept.name, status: 'PENDING' as const, needs: dept.requires, createdAt: ctx.now.toISOString(), decisionNote: null };
+      mine.unshift(req);
+      return req;
+    }, 201)
+  ),
   http.get(
     `${W}/catalog/product-types/:code`,
     route((_ctx, p) => {

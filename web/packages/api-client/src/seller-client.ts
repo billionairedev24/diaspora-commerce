@@ -130,9 +130,16 @@ import {
   SavedProductDraftSchema,
   type SaveProductDraftRequest,
   type SellerAddress,
+  type SellerCatalogScope,
+  SellerCatalogScopeSchema,
   type SellerCoupon,
   SellerCouponListSchema,
   SellerCouponSchema,
+  type SellerDepartment,
+  type SellerDepartmentRequest,
+  type SellerDepartmentRequestInput,
+  SellerDepartmentRequestSchema,
+  SellerDepartmentSchema,
   type SellerDispute,
   SellerDisputeListSchema,
   type SellerFeesView,
@@ -478,6 +485,13 @@ export function createSellerApiClient(options: ApiClientOptions) {
     listCategoryRequests: (signal?: AbortSignal): Promise<CategoryRequest[]> => request('/v1/seller/category-requests', z.array(CategoryRequestSchema), { signal }),
     requestCategory: (input: CategoryRequestInput): Promise<CategoryRequest> =>
       request('/v1/seller/category-requests', CategoryRequestSchema, { method: 'POST', body: input }),
+    /** The departments the organisation may sell in, whether any sells sized goods, and its department requests. */
+    getCatalogScope: (signal?: AbortSignal): Promise<SellerCatalogScope> => request('/v1/seller/catalog-scope', SellerCatalogScopeSchema, { signal }),
+    /** The catalog's departments with the evidence each asks for (what onboarding offers). */
+    listDepartments: (signal?: AbortSignal): Promise<SellerDepartment[]> => request('/v1/seller/departments', z.array(SellerDepartmentSchema), { signal }),
+    /** Ask staff to let the organisation sell in another department. */
+    requestDepartment: (input: SellerDepartmentRequestInput): Promise<SellerDepartmentRequest> =>
+      request('/v1/seller/department-requests', SellerDepartmentRequestSchema, { method: 'POST', body: input }),
     requestUpload: (input: UploadRequest): Promise<UploadTicket> => request('/v1/seller/uploads', UploadTicketSchema, { method: 'POST', body: input }),
     completeUpload: (assetId: string): Promise<Asset> => request(`/v1/seller/uploads/${enc(assetId)}/complete`, AssetSchema, { method: 'POST' }),
     getInventory: (lowStock: boolean, signal?: AbortSignal): Promise<InventoryView> =>

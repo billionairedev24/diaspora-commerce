@@ -26,6 +26,7 @@ import {
   type ProductTypeSchema,
   ProductTypeSchemaSchema,
   type SellerCoupon,
+  type SellerDepartmentRequest,
   type SellerDispute,
   type SellerOffer,
   type SellerOrderDetail,
@@ -40,12 +41,12 @@ import {
   type TeamMember
 } from '../../schemas/seller';
 import { chargeTermsOf, planFeatureList } from '../../staff-plans';
+import { MOCK_FASHION_ORG, MOCK_FOOD_ORG } from './departments';
 import { type MockDraft, type MockImport } from './listing-form';
 import { allowedBookingActions, BOOKING_LABELS, SHIPMENT_LABELS, takeHome } from './model';
 import { type MockApplication } from './onboarding';
 import { seedRunPickups } from './run-pickups';
 import { type MockSizeChart, seedSizeCharts } from './size-charts';
-
 export interface MockOrg {
   id: string;
   kind: OrgKind;
@@ -62,6 +63,8 @@ export interface MockSellerDb {
   labels: Record<string, string>;
   listings: (ListingRow & { variants: { sku: string; quantity: number }[] })[];
   categoryRequests: CategoryRequest[];
+  /** Requests to sell in another department, per organisation (newest first). */
+  departmentRequests: Record<string, SellerDepartmentRequest[]>;
   /** Brands this organisation typed in: pending review, visible to it only, scoped to a department. */
   pendingBrands: { id: string; name: string; departmentId: string }[];
   payouts: Payout[];
@@ -519,7 +522,10 @@ function freshDb(now: Date): MockSellerDb {
     orgs: [
       { id: SELLER_ORG, kind: 'SELLER', name: 'Ade’s Kitchen', status: 'APPROVED', role: 'seller.owner' },
       { id: PROVIDER_ORG, kind: 'PROVIDER', name: 'Ama’s Braiding Studio', status: 'APPROVED', role: 'provider.owner' },
-      { id: PENDING_ORG, kind: 'SELLER', name: 'Bonwire Weavers', status: 'INFO_REQUESTED', role: 'seller.owner' }
+      { id: PENDING_ORG, kind: 'SELLER', name: 'Bonwire Weavers', status: 'INFO_REQUESTED', role: 'seller.owner' },
+      // Scenarios for the department scope: a food-only seller and a fashion-only seller (Ade’s Kitchen sells in several).
+      { id: MOCK_FOOD_ORG, kind: 'SELLER', name: 'Mama Ngozi’s Pantry', status: 'APPROVED', role: 'seller.owner' },
+      { id: MOCK_FASHION_ORG, kind: 'SELLER', name: 'Adire Atelier', status: 'APPROVED', role: 'seller.owner' }
     ],
     activeOrgId: SELLER_ORG,
     onboarding: {},
@@ -532,6 +538,7 @@ function freshDb(now: Date): MockSellerDb {
     imports: [],
     listings: seedListings(now),
     pendingBrands: [],
+    departmentRequests: {},
     categoryRequests: [{ id: 'cr-1', reference: 'REQ-4821', path: 'Fashion › Women › Bridal aso-ebi sets', status: 'PENDING_REVIEW', decisionNote: null, createdAt: iso(new Date(now.getTime() - 2 * DAY)) }],
     payouts: [
       { id: 'po_77012', amountMinor: 93210, currency: 'USD', status: 'PAID', requestedAt: iso(new Date(now.getTime() - 7 * DAY)), holdReason: null, failureMessage: null },

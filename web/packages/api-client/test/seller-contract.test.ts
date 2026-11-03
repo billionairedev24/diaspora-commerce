@@ -361,7 +361,7 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     expect(plans.plans.map((x) => x.code)).toEqual(['seller_essentials', 'seller_growth', 'seller_pro']);
     await api.saveOnboardingPlan({ planCode: 'seller_essentials', cadence: 'MONTHLY' });
     await expect(api.submitOnboarding()).rejects.toSatisfy((e) => isApiError(e) && e.fieldErrors['compliance.agreementsAccepted'] !== undefined);
-    const c = await api.saveOnboardingCompliance({ categories: ['groceries'], foodPermit: { permitType: 'COTTAGE_FOOD', permitNumber: 'CF-1', expiresOn: '2030-01-01', documentAssetId: 'asset-doc-2' },
+    const c = await api.saveOnboardingCompliance({ departments: ['groceries'], foodPermit: { permitType: 'COTTAGE_FOOD', permitNumber: 'CF-1', expiresOn: '2030-01-01', documentAssetId: 'asset-doc-2' },
       agreementsAccepted: true, w9Certified: true, w9SignerName: 'Titi Adebayo' });
     expect(c.resumeStep).toBe('review');
     // The documents accepted are recorded with the version in force, sellers: seller terms, payments terms, DPA.
