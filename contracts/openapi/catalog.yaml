@@ -18,6 +18,8 @@ servers:
 security:
 - bearer: []
 tags:
+- name: Seller scope
+  description: The departments the signed-in seller's organisation may list in. Creating or changing anything in another department is refused with 403 catalog.department-not-allowed (or catalog.no-departments); 503 catalog.scope-unavailable when seller-service cannot be asked.
 - name: Public catalog
   description: Anonymous reads of live products (storefront, cart, search)
 - name: Categories
@@ -133,9 +135,17 @@ paths:
       - Categories
       summary: Full active category tree (department › category › product type)
       description: includeRetired=true also lists retired nodes, for consumers that resolve the category of an existing product.
+        forSeller=true (signed in, catalog:write) limits the tree to the departments the caller's organisation may sell in; 503
+        catalog.scope-unavailable when seller-service cannot say.
       operationId: tree
       parameters:
       - name: includeRetired
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: forSeller
         in: query
         required: false
         schema:
@@ -1105,12 +1115,36 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ReviewReportResult'
+  /v1/seller/catalog-scope:
+    get:
+      tags:
+      - Seller scope
+      summary: Departments my organisation may list in, whether any sells sized goods, and my department requests
+      description: Recorded by seller-service from the departments chosen at onboarding (and later approved requests). exempt
+        is true for AfroTransact Retail and staff. hasSizing is true when an allowed department has a product type with the sizing
+        trait. 503 catalog.scope-unavailable when seller-service cannot say.
+      operationId: mine
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerCatalogScope'
   /v1/product-types:
     get:
       tags:
       - Categories
       summary: All product-type schemas
+      description: forSeller=true limits them to the product types used in the caller's departments.
       operationId: productTypes
+      parameters:
+      - name: forSeller
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
       responses:
         '200':
           description: OK
@@ -4598,6 +4632,9 @@ components:
         parentId:
           type: string
           format: uuid
+        code:
+          type: string
+          description: Stable machine code of the node (a department's code is what seller-service stores)
         name:
           type: string
         level:
@@ -4606,6 +4643,60 @@ components:
           type: string
         path:
           type: string
+        compliance:
+          type: array
+          description: On a department, the evidence sellers must have on file to sell in it (FOOD_PERMIT, BEAUTY_LABELLING)
+          items:
+            type: string
+    SellerCatalogScope:
+      type: object
+      properties:
+        exempt:
+          type: boolean
+          description: AfroTransact Retail and staff; every department is allowed
+        departments:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellerScopeDepartment'
+        hasSizing:
+          type: boolean
+          description: True when an allowed department has a product type with the sizing trait
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellerScopeRequest'
+    SellerScopeDepartment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        hasSizing:
+          type: boolean
+    SellerScopeRequest:
+      type: object
+      properties:
+        departmentCode:
+          type: string
+        departmentName:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - APPROVED
+          - REJECTED
+        needs:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
     AttachLibraryImagesRequest:
       type: object
       properties:

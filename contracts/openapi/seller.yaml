@@ -20,6 +20,8 @@ servers:
 security:
 - bearer: []
 tags:
+- name: Catalog scope
+  description: The catalog departments an organisation may sell in. catalog-service reads and enforces them; staff change them and decide the requests sellers make.
 - name: Billing adjustments
   description: Staff per-seller billing panel and audited adjustments (credits, free days, waived invoices, trial overrides)
     with reason codes; billing:adjust to change. The Idempotency-Key header makes a retried request return the first grant.
@@ -1125,6 +1127,150 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/OrgDirectoryPage'
+  /v1/departments:
+    get:
+      tags:
+      - Catalog scope
+      summary: The catalog's departments with the evidence each asks for (what onboarding offers)
+      description: Any signed-in user. code is the catalog department node code; requires lists FOOD_PERMIT and/or BEAUTY_LABELLING,
+        taken from the department's compliance data in the catalog. 503 seller.departments-unavailable when the catalog cannot
+        be reached.
+      operationId: departments
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SellerDepartment'
+  /v1/orgs/{orgId}/catalog-scope:
+    get:
+      tags:
+      - Catalog scope
+      summary: The departments an organisation may sell in
+      description: Readable by the organisation's members, by staff, and by catalog-service (sellers:catalog-scope.read). departments
+        are catalog department node codes, recorded when the application was approved; none means nothing in a department can
+        be listed yet. exempt is AfroTransact Retail.
+      operationId: scope
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CatalogScope'
+  /v1/orgs/{orgId}/catalog-scope/departments:
+    put:
+      tags:
+      - Catalog scope
+      summary: 'Staff: replace an organisation''s departments, with the reason (applications:approve)'
+      operationId: setDepartments
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetDepartments'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CatalogScope'
+  /v1/orgs/{orgId}/department-requests:
+    post:
+      tags:
+      - Catalog scope
+      summary: Ask to sell in another department (owner, admin, catalog)
+      description: Staff approve or reject. Idempotent while one is pending. 409 seller.department-already-allowed when the
+        department is already in the set. needs lists the evidence still to provide (food permit, beauty labelling).
+      operationId: request
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestDepartment'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DepartmentRequest'
+  /v1/department-requests:
+    get:
+      tags:
+      - Catalog scope
+      summary: 'Staff: department requests waiting for a decision (applications:review)'
+      operationId: queue
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - APPROVED
+          - REJECTED
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DepartmentRequest'
+  /v1/department-requests/{id}/decision:
+    post:
+      tags:
+      - Catalog scope
+      summary: 'Staff: approve or reject a department request (applications:approve)'
+      description: Approving adds the department to the organisation's set at once.
+      operationId: decide
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Decision'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DepartmentRequest'
   /v1/orgs/mirror:
     get:
       tags:
@@ -3251,12 +3397,108 @@ components:
           enum:
           - EARNINGS_FIRST
           - CARD
+    SellerDepartment:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        requires:
+          type: array
+          items:
+            type: string
+            enum:
+            - FOOD_PERMIT
+            - BEAUTY_LABELLING
+    DepartmentRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        departmentCode:
+          type: string
+        note:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - APPROVED
+          - REJECTED
+        requestedBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        decidedBy:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+        decisionNote:
+          type: string
+        needs:
+          type: array
+          items:
+            type: string
+    CatalogScope:
+      type: object
+      properties:
+        orgId:
+          type: string
+        exempt:
+          type: boolean
+        departments:
+          type: array
+          items:
+            type: string
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/DepartmentRequest'
+    SetDepartments:
+      type: object
+      required:
+      - departments
+      - reason
+      properties:
+        departments:
+          type: array
+          items:
+            type: string
+        reason:
+          type: string
+    RequestDepartment:
+      type: object
+      required:
+      - departmentCode
+      properties:
+        departmentCode:
+          type: string
+        note:
+          type: string
+          maxLength: 500
+    Decision:
+      type: object
+      required:
+      - approve
+      properties:
+        approve:
+          type: boolean
+        note:
+          type: string
+          maxLength: 500
     CatalogComplianceStep:
       type: object
       description: Step 'catalog-compliance'
       properties:
-        categories:
+        departments:
           type: array
+          description: Catalog department node codes chosen at onboarding (GET /v1/departments); they become the departments the organisation may sell in once approved
           items:
             type: string
         foodPermit:
@@ -4451,8 +4693,9 @@ components:
     ComplianceSection:
       type: object
       properties:
-        categories:
+        departments:
           type: array
+          description: Catalog department node codes chosen at onboarding (GET /v1/departments); they become the departments the organisation may sell in once approved
           items:
             type: string
         foodPermit:
