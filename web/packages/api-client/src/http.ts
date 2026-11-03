@@ -2,6 +2,7 @@ import { type z } from 'zod';
 
 import { withCorrelationHeaders } from './correlation';
 import { ApiError, problemFrom } from './errors';
+import { reportSessionEnd, type SessionEndBus, sessionEndReasonOf } from './session-end';
 
 export type FetchLike = (input: Request) => Promise<Response>;
 
@@ -12,7 +13,19 @@ export interface ApiClientOptions {
   fetch?: FetchLike;
   /** Extra headers on every request (e.g. forwarded Cookie, Accept-Language). */
   headers?: Record<string, string>;
+  /** Hears 401 SESSION_IDLE_TIMEOUT / SESSION_ABSOLUTE_TIMEOUT (default: the page's bus, browser only). */
+  sessionEnd?: SessionEndBus;
 }
+
+/** Request header the BFF reads: this request was not made by the person, so it must not count as activity. */
+export const BACKGROUND_HEADER = 'X-Background';
+
+/**
+ * Pass as the `background` argument of an API method for requests nobody asked for (polling, refresh timers): the BFF
+ * still checks the session but does not treat the request as the person being active, so a tab left open still times
+ * out. The default is foreground (counts as activity).
+ */
+export const BACKGROUND = true;
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -20,6 +33,8 @@ export interface RequestOptions {
   query?: URLSearchParams | Record<string, string | undefined>;
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  /** Sends `X-Background: 1`: not the person's doing (see {@link BACKGROUND}). Default false. */
+  background?: boolean;
 }
 
 export function joinUrl(base: string, path: string, query?: RequestOptions['query']): string {
@@ -43,11 +58,27 @@ export function absolute(url: string): string {
 
 export type Requester = <S extends z.ZodType>(path: string, schema: S, opts?: RequestOptions) => Promise<z.infer<S>>;
 
-/** JSON request helper shared by the storefront and seller clients: problem documents become ApiError, bodies are Zod-validated. */
-export function createRequester(options: ApiClientOptions): Requester {
+/** Sends a request and answers its Response when ok; problem documents become ApiError. */
+export type Transport = (path: string, opts?: RequestOptions) => Promise<Response>;
+
+/**
+ * Turns a failed response into the ApiError to throw. A 401 with SESSION_IDLE_TIMEOUT or SESSION_ABSOLUTE_TIMEOUT also
+ * tells the page (once, however many requests fail together) that the session is over. Every fetch of a BFF call that
+ * is not made through {@link createTransport} (streams, downloads) fails through here too.
+ */
+export async function apiErrorOf(options: Pick<ApiClientOptions, 'sessionEnd'>, res: Response): Promise<ApiError> {
+  const problem = await problemFrom(res);
+  const reason = res.status === 401 ? sessionEndReasonOf(problem.code) : undefined;
+  if (reason) reportSessionEnd(reason, options.sessionEnd);
+  return new ApiError(problem);
+}
+
+/** Shared by every JSON and session call: correlation id, credentials, the X-Background flag and the session-end report. */
+export function createTransport(options: ApiClientOptions): Transport {
   const doFetch: FetchLike = options.fetch ?? ((req) => fetch(req));
-  return async function request<S extends z.ZodType>(path: string, schema: S, opts: RequestOptions = {}): Promise<z.infer<S>> {
+  return async function send(path: string, opts: RequestOptions = {}): Promise<Response> {
     const headers: Record<string, string> = withCorrelationHeaders({ Accept: 'application/json', ...options.headers, ...opts.headers });
+    if (opts.background) headers[BACKGROUND_HEADER] = '1';
     // FormData (file uploads) sets its own multipart Content-Type with the boundary.
     const form = typeof FormData !== 'undefined' && opts.body instanceof FormData;
     if (opts.body !== undefined && !form) headers['Content-Type'] = 'application/json';
@@ -59,7 +90,16 @@ export function createRequester(options: ApiClientOptions): Requester {
       signal: opts.signal
     });
     const res = await doFetch(req);
-    if (!res.ok) throw new ApiError(await problemFrom(res));
+    if (!res.ok) throw await apiErrorOf(options, res);
+    return res;
+  };
+}
+
+/** JSON request helper shared by the storefront and seller clients: problem documents become ApiError, bodies are Zod-validated. */
+export function createRequester(options: ApiClientOptions): Requester {
+  const send = createTransport(options);
+  return async function request<S extends z.ZodType>(path: string, schema: S, opts: RequestOptions = {}): Promise<z.infer<S>> {
+    const res = await send(path, opts);
     if (res.status === 204) return schema.parse(undefined);
     return schema.parse(await res.json());
   };
@@ -82,10 +122,9 @@ export function createDownloader(options: ApiClientOptions): Downloader {
       credentials: 'include'
     });
     const res = await doFetch(req);
-    if (!res.ok) throw new ApiError(await problemFrom(res));
+    if (!res.ok) throw await apiErrorOf(options, res);
     const disposition = res.headers.get('Content-Disposition') ?? '';
     const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
     return { blob: await res.blob(), fileName: match?.[1] ? decodeURIComponent(match[1]) : fallbackName };
   };
 }
-

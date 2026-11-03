@@ -7,7 +7,8 @@ import { z } from 'zod';
 
 import { withCorrelationHeaders } from './correlation';
 import { ApiError, problemFrom } from './errors';
-import { absolute, type ApiClientOptions, type FetchLike, joinUrl, type Requester } from './http';
+import { absolute, type ApiClientOptions, apiErrorOf, BACKGROUND, type FetchLike, joinUrl, type Requester } from './http';
+import { pollingOf,type PollRule } from './query/polling';
 import { type DeliveryFeeRule, type FeeRuleRef, FeeRuleRefSchema, resolveDoorFee, resolvePickupFee } from './staff-delivery-fees';
 import { tableSearchParams } from './table-query';
 import { randomUuid } from './uuid';
@@ -949,14 +950,15 @@ export function createStaffPreordersApi(request: Requester, options: ApiClientOp
       request(`${P}/${enc(id)}/close-early`, PreorderWindowSchema, { method: 'POST', body: { reason }, headers: version === undefined ? undefined : ifMatch(version) }),
     decisions: (id: string, signal?: AbortSignal): Promise<PreorderDecision[]> =>
       request(`${P}/${enc(id)}/decisions`, PreorderDecisionLogSchema, { signal }).then((r) => r.items),
-    refunds: (id: string, signal?: AbortSignal): Promise<PreorderRefunds> => request(`${P}/${enc(id)}/refunds`, PreorderRefundsSchema, { signal }),
+    refunds: (id: string, signal?: AbortSignal, background?: boolean): Promise<PreorderRefunds> =>
+      request(`${P}/${enc(id)}/refunds`, PreorderRefundsSchema, { signal, background }),
     setCreative: (id: string, slot: CreativeSlot, assetId: string): Promise<PreorderWindow> =>
       request(`${P}/${enc(id)}/creatives/${slot}`, PreorderWindowSchema, { method: 'PUT', body: { assetId } }),
     removeCreative: (id: string, slot: CreativeSlot): Promise<PreorderWindow> => request(`${P}/${enc(id)}/creatives/${slot}`, PreorderWindowSchema, { method: 'DELETE' }),
     requestUpload: (body: { fileName: string; contentType: string; size: number; width: number; height: number }): Promise<PreorderUploadTicket> =>
       request(`${P}/uploads`, UploadTicketSchema, { method: 'POST', body }),
-    orders: (id: string, q: PreorderOrdersQuery, signal?: AbortSignal): Promise<PreorderOrderPage> =>
-      request(`${P}/${enc(id)}/orders`, PreorderOrderPageSchema, { query: tableSearchParams(ordersQuery(q), q.sort), signal }),
+    orders: (id: string, q: PreorderOrdersQuery, signal?: AbortSignal, background?: boolean): Promise<PreorderOrderPage> =>
+      request(`${P}/${enc(id)}/orders`, PreorderOrderPageSchema, { query: tableSearchParams(ordersQuery(q), q.sort), signal, background }),
     summary: (id: string, signal?: AbortSignal): Promise<PreorderSummary> => request(`${P}/${enc(id)}/summary`, PreorderSummarySchema, { signal }),
     products: (id: string, signal?: AbortSignal): Promise<PreorderProduct[]> =>
       request(`${P}/${enc(id)}/products`, PreorderProductListSchema, { signal }).then((r) => r.items),
@@ -1005,7 +1007,7 @@ export function createStaffPreordersApi(request: Requester, options: ApiClientOp
     /** Fetches a CSV export and saves it in the browser. Returns the file name and row count (lines − header). */
     downloadCsv: async (id: string, kind: PreorderExportKind, q?: PreorderOrdersQuery): Promise<{ fileName: string; rows: number }> => {
       const res = await doFetch(new Request(api.exportUrl(id, kind, q), { headers: withCorrelationHeaders({ Accept: 'text/csv', ...options.headers }), credentials: 'include' }));
-      if (!res.ok) throw new ApiError(await problemFrom(res));
+      if (!res.ok) throw await apiErrorOf(options, res);
       const text = await res.text();
       const fileName = fileNameOf(res.headers.get('content-disposition'), `${id}-${kind}.csv`);
       triggerDownload(new Blob([text], { type: 'text/csv;charset=utf-8' }), fileName);
@@ -1049,13 +1051,20 @@ export const staffPreorderQueries = {
   list: (api: StaffPreordersApi, q: PreorderListQuery) =>
     queryOptions({ queryKey: staffPreorderKeys.list(q), queryFn: ({ signal }) => api.list(q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
   window: (api: StaffPreordersApi, id: string) => queryOptions({ queryKey: staffPreorderKeys.window(id), queryFn: ({ signal }) => api.get(id, signal), staleTime: 10_000 }),
-  orders: (api: StaffPreordersApi, id: string, q: PreorderOrdersQuery) =>
-    queryOptions({ queryKey: staffPreorderKeys.orders(id, q), queryFn: ({ signal }) => api.orders(id, q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
+  /** `poll`: refresh by itself (a background poll, so it never counts as the person being active). */
+  orders: (api: StaffPreordersApi, id: string, q: PreorderOrdersQuery, poll?: PollRule<PreorderOrderPage>) =>
+    queryOptions({
+      queryKey: staffPreorderKeys.orders(id, q),
+      queryFn: ({ signal }) => api.orders(id, q, signal, poll ? BACKGROUND : undefined),
+      placeholderData: keepPreviousData,
+      staleTime: 10_000,
+      ...pollingOf(poll)
+    }),
   summary: (api: StaffPreordersApi, id: string) => queryOptions({ queryKey: staffPreorderKeys.summary(id), queryFn: ({ signal }) => api.summary(id, signal), staleTime: 15_000 }),
   decisions: (api: StaffPreordersApi, id: string) => queryOptions({ queryKey: staffPreorderKeys.decisions(id), queryFn: ({ signal }) => api.decisions(id, signal), staleTime: 5_000 }),
-  /** Refresh every few seconds while orders-service is still refunding. */
-  refunds: (api: StaffPreordersApi, id: string) =>
-    queryOptions({ queryKey: staffPreorderKeys.refunds(id), queryFn: ({ signal }) => api.refunds(id, signal), staleTime: 2_000 }),
+  /** `poll`: refresh every few seconds while orders-service is still refunding (a background poll). */
+  refunds: (api: StaffPreordersApi, id: string, poll?: PollRule<PreorderRefunds>) =>
+    queryOptions({ queryKey: staffPreorderKeys.refunds(id), queryFn: ({ signal }) => api.refunds(id, signal, poll ? BACKGROUND : undefined), staleTime: 2_000, ...pollingOf(poll) }),
   products: (api: StaffPreordersApi, id: string) => queryOptions({ queryKey: staffPreorderKeys.products(id), queryFn: ({ signal }) => api.products(id, signal), staleTime: 60_000 }),
   customers: (api: StaffPreordersApi, id: string, q: string) =>
     queryOptions({ queryKey: staffPreorderKeys.customers(id, q), queryFn: ({ signal }) => api.customers(q, id, signal), placeholderData: keepPreviousData, staleTime: 30_000 }),

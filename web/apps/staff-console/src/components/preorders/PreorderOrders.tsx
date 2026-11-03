@@ -1,6 +1,6 @@
 'use client';
 
-import { staffKeys, staffPreorderQueries } from '@afrotransact/api-client';
+import { pollWhile, staffKeys, staffPreorderQueries } from '@afrotransact/api-client';
 import { PREORDER_CHANNEL_LABEL, PREORDER_ORDER_STATUS_LABEL, type PreorderOrder, type PreorderOrdersQuery, type PreorderWindow } from '@afrotransact/api-client/staff-preorders';
 import { DataTable, type TableExportRequest, useTableState } from '@afrotransact/data-table';
 import { useToast } from '@afrotransact/ui';
@@ -32,10 +32,9 @@ export function PreorderOrders({ w, canExport }: { w: PreorderWindow; canExport:
   const filters: PreorderOrdersQuery = { q: state.q || undefined, sort: state.sort, page: state.pagination.pageIndex, size: state.pagination.pageSize };
   const t = useT();
   const query = useQuery({
-    ...staffPreorderQueries.orders(api, w.id, filters),
-    placeholderData: keepPreviousData,
-    // While orders-service is still refunding a cancelled window, keep the refund column moving.
-    refetchInterval: (q) => (q.state.data?.items.some((o) => o.refundStatus === 'PENDING') ? 3000 : false)
+    // While orders-service is still refunding a cancelled window, keep the refund column moving (a background poll).
+    ...staffPreorderQueries.orders(api, w.id, filters, pollWhile(3000, (d) => d?.items.some((o) => o.refundStatus === 'PENDING') ?? false)),
+    placeholderData: keepPreviousData
   });
   const showRefund = w.outcome === 'CANCELLED' || (query.data?.items.some((o) => o.refundStatus) ?? false);
   const [busy, setBusy] = useState(false);

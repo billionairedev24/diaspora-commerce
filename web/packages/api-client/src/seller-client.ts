@@ -309,8 +309,10 @@ export function createSellerApiClient(options: ApiClientOptions) {
     updateBusinessPage: (input: BusinessPageSettingsInput): Promise<BusinessPageSettings> =>
       request('/v1/seller/business-page', BusinessPageSettingsSchema, { method: 'PUT', body: input }),
     /* Delivery run pick lists (S264) */
-    listRunPickups: async (signal?: AbortSignal): Promise<SellerRunPickupList> => request('/v1/seller/run-pickups', SellerRunPickupListSchema, { signal }),
-    getRunPickup: (runId: string, signal?: AbortSignal): Promise<SellerRunPickup> => request(`/v1/seller/run-pickups/${enc(runId)}`, SellerRunPickupSchema, { signal }),
+    listRunPickups: async (signal?: AbortSignal, background?: boolean): Promise<SellerRunPickupList> =>
+      request('/v1/seller/run-pickups', SellerRunPickupListSchema, { signal, background }),
+    getRunPickup: (runId: string, signal?: AbortSignal, background?: boolean): Promise<SellerRunPickup> =>
+      request(`/v1/seller/run-pickups/${enc(runId)}`, SellerRunPickupSchema, { signal, background }),
     listShipFrom: async (signal?: AbortSignal): Promise<ShipFromAddress[]> => (await request('/v1/seller/ship-from-addresses', ShipFromListSchema, { signal })).items,
     createShipFrom: (input: ShipFromInput): Promise<ShipFromAddress> =>
       request('/v1/seller/ship-from-addresses', ShipFromAddressSchema, { method: 'POST', body: input }),
@@ -390,7 +392,8 @@ export function createSellerApiClient(options: ApiClientOptions) {
     },
     listImports: (page: number, size: number, signal?: AbortSignal): Promise<ProductImportPage> =>
       request('/v1/seller/imports', ProductImportPageSchema, { query: { page: String(page), size: String(size) }, signal }),
-    getImport: (id: string, signal?: AbortSignal): Promise<ProductImport> => request(`/v1/seller/imports/${enc(id)}`, ProductImportSchema, { signal }),
+    getImport: (id: string, signal?: AbortSignal, background?: boolean): Promise<ProductImport> =>
+      request(`/v1/seller/imports/${enc(id)}`, ProductImportSchema, { signal, background }),
     listImportRows: (id: string, q: ImportRowsQuery, signal?: AbortSignal): Promise<ProductImportRowPage> =>
       request(`/v1/seller/imports/${enc(id)}/rows`, ProductImportRowPageSchema, {
         query: { status: q.status, outcome: q.outcome, page: String(q.page), size: String(q.size) },

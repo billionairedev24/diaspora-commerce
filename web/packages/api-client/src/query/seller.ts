@@ -1,7 +1,9 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
-import { type BrandScope, type Cadence, type ImageLibraryQuery } from '../schemas/seller';
+import { BACKGROUND } from '../http';
+import { type BrandScope, type Cadence, type ImageLibraryQuery, type ProductImport } from '../schemas/seller';
 import { type ImportRowsQuery, type ListingsQuery, type SellerApiClient, type SellerOrdersQuery, type SizeChartsQuery } from '../seller-client';
+import { pollingOf,type PollRule } from './polling';
 
 /* TanStack Query key factories for the Seller Center & Provider Hub. Everything hangs off ['seller', orgId] so
    switching organisation (org switcher) or signing out invalidates a whole family at once. */
@@ -106,9 +108,9 @@ export const sellerQueries = {
   businessPage: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.businessPage(orgId), queryFn: ({ signal }) => api.getBusinessPage(signal), staleTime: MINUTE }),
   runPickups: (api: SellerApiClient, orgId: string) =>
-    queryOptions({ queryKey: sellerKeys.runPickups(orgId), queryFn: ({ signal }) => api.listRunPickups(signal), staleTime: 30_000, refetchInterval: 60_000 }),
+    queryOptions({ queryKey: sellerKeys.runPickups(orgId), queryFn: ({ signal }) => api.listRunPickups(signal, BACKGROUND), staleTime: 30_000, refetchInterval: 60_000 }),
   runPickup: (api: SellerApiClient, orgId: string, runId: string) =>
-    queryOptions({ queryKey: sellerKeys.runPickup(orgId, runId), queryFn: ({ signal }) => api.getRunPickup(runId, signal), staleTime: 30_000, refetchInterval: 60_000 }),
+    queryOptions({ queryKey: sellerKeys.runPickup(orgId, runId), queryFn: ({ signal }) => api.getRunPickup(runId, signal, BACKGROUND), staleTime: 30_000, refetchInterval: 60_000 }),
   shipFrom: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.shipFrom(orgId), queryFn: ({ signal }) => api.listShipFrom(signal), staleTime: 5 * MINUTE }),
   listings: (api: SellerApiClient, orgId: string, q: ListingsQuery) =>
@@ -127,8 +129,9 @@ export const sellerQueries = {
     queryOptions({ queryKey: sellerKeys.listingContext(orgId), queryFn: ({ signal }) => api.getListingContext(signal), staleTime: 5 * MINUTE }),
   imports: (api: SellerApiClient, orgId: string, page: number, size: number) =>
     queryOptions({ queryKey: sellerKeys.importPage(orgId, page, size), queryFn: ({ signal }) => api.listImports(page, size, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
-  importJob: (api: SellerApiClient, orgId: string, id: string) =>
-    queryOptions({ queryKey: sellerKeys.importJob(orgId, id), queryFn: ({ signal }) => api.getImport(id, signal), staleTime: 0 }),
+  /** `poll`: refresh by itself while the import runs (a background poll, so it never counts as the person being active). */
+  importJob: (api: SellerApiClient, orgId: string, id: string, poll?: PollRule<ProductImport>) =>
+    queryOptions({ queryKey: sellerKeys.importJob(orgId, id), queryFn: ({ signal }) => api.getImport(id, signal, poll ? BACKGROUND : undefined), staleTime: 0, ...pollingOf(poll) }),
   importRows: (api: SellerApiClient, orgId: string, id: string, q: ImportRowsQuery) =>
     queryOptions({ queryKey: sellerKeys.importRows(orgId, id, q), queryFn: ({ signal }) => api.listImportRows(id, q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
   sizeCharts: (api: SellerApiClient, orgId: string, q: SizeChartsQuery) =>

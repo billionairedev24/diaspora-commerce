@@ -1,7 +1,10 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
+import { BACKGROUND } from '../http';
+import { type ExportJobList } from '../schemas/exports';
 import { type LookupKind, type NotificationPreviewRequest, type ResourceKey, type RunDispatchStatus } from '../schemas/staff';
 import { type ResourceQuery, type StaffApiClient } from '../staff-client';
+import { pollingOf,type PollRule } from './polling';
 
 /* TanStack Query key factories for the staff console. Everything hangs off ['staff'] so signing out (or a role change)
    invalidates the whole family; each resource has its own branch so an action refreshes its table and sheet only. */
@@ -52,7 +55,9 @@ export const staffQueries = {
     }),
   record: (api: StaffApiClient, resource: ResourceKey, id: string) =>
     queryOptions({ queryKey: staffKeys.record(resource, id), queryFn: ({ signal }) => api.getRecord(resource, id, signal), staleTime: 10_000 }),
-  exports: (api: StaffApiClient) => queryOptions({ queryKey: staffKeys.exports(), queryFn: ({ signal }) => api.listExports(signal), staleTime: 5_000 }),
+  /** `poll`: refresh by itself while jobs run (a background poll, so it never counts as the person being active). */
+  exports: (api: StaffApiClient, poll?: PollRule<ExportJobList>) =>
+    queryOptions({ queryKey: staffKeys.exports(), queryFn: ({ signal }) => api.listExports(signal, poll ? BACKGROUND : undefined), staleTime: 5_000, ...pollingOf(poll) }),
   exportJob: (api: StaffApiClient, id: string) =>
     queryOptions({ queryKey: staffKeys.exportJob(id), queryFn: ({ signal }) => api.getExport(id, signal), staleTime: 0 }),
   customers: (api: StaffApiClient, q: string) =>
@@ -79,9 +84,9 @@ export const staffQueries = {
   pickupAssignments: (api: StaffApiClient, shipmentId: string) =>
     queryOptions({ queryKey: staffKeys.pickupAssignments(shipmentId), queryFn: ({ signal }) => api.getPickupAssignments(shipmentId, signal), staleTime: 10_000 }),
   runs: (api: StaffApiClient, status: RunDispatchStatus | '' = '') =>
-    queryOptions({ queryKey: staffKeys.runList(status), queryFn: ({ signal }) => api.listRuns(status || undefined, signal), staleTime: 10_000, refetchInterval: 30_000 }),
+    queryOptions({ queryKey: staffKeys.runList(status), queryFn: ({ signal }) => api.listRuns(status || undefined, signal, BACKGROUND), staleTime: 10_000, refetchInterval: 30_000 }),
   run: (api: StaffApiClient, runId: string) =>
-    queryOptions({ queryKey: staffKeys.run(runId), queryFn: ({ signal }) => api.getRun(runId, signal), staleTime: 10_000, refetchInterval: 30_000 }),
+    queryOptions({ queryKey: staffKeys.run(runId), queryFn: ({ signal }) => api.getRun(runId, signal, BACKGROUND), staleTime: 10_000, refetchInterval: 30_000 }),
   templates: (api: StaffApiClient, q = '') =>
     queryOptions({ queryKey: staffKeys.templateList(q), queryFn: ({ signal }) => api.listNotificationTemplates(q, signal), placeholderData: keepPreviousData, staleTime: 30_000 }),
   template: (api: StaffApiClient, key: string) =>

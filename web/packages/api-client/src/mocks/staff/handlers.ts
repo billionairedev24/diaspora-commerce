@@ -47,6 +47,7 @@ import { validateStaffForm } from '../../validation/staff-form';
 import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
 import { exportFileOf, type MockExportColumn } from '../export-file';
 import { type HubGate, inventoryHubHandlers } from '../inventory-hub';
+import { sessionHandlers } from '../session';
 import { parseSort, queryRows, type SortKey } from '../table';
 import { contentPageHandlers } from './content-pages';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
@@ -665,6 +666,7 @@ const hubGate: HubGate = (request, area, level) => {
 };
 
 export const staffHandlers = [
+  ...sessionHandlers('staff', { withMe: true }),
   // Address fields (Google-like: resolved when picked), as the shopper mocks answer.
   http.get('*/v1/geo/address-suggestions', ({ request }) => {
     const p = new URL(request.url).searchParams;

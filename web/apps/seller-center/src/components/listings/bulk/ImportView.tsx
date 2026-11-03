@@ -1,6 +1,6 @@
 'use client';
 
-import { type ImportRowImage, isApiError, type ProductImport, type ProductImportRow, type ProductImportRowPage, sellerKeys, sellerQueries, type SpreadsheetFormat } from '@afrotransact/api-client';
+import { type ImportRowImage, isApiError, pollWhile, type ProductImport, type ProductImportRow, type ProductImportRowPage, sellerKeys, sellerQueries, type SpreadsheetFormat } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, Checkbox, cx, Menu, MenuItem, useToast } from '@afrotransact/ui';
 import { CaretDown, CheckCircle, DownloadSimple, FileCsv, ImageBroken, LinkSimple, MicrosoftExcelLogo, WarningCircle, XCircle } from '@phosphor-icons/react/ssr';
@@ -51,13 +51,8 @@ export function ImportView({ importId }: { importId: string }) {
   const { orgId, can } = useSeller();
   const editable = can('listings');
   const [errorsOnly, setErrorsOnly] = useState(false);
-  const job = useQuery({
-    ...sellerQueries.importJob(api, orgId, importId),
-    refetchInterval: (q) => {
-      const d = q.state.data;
-      return d && (d.status === 'QUEUED' || d.status === 'RUNNING') ? POLL_MS : false;
-    }
-  });
+  // Polls while the import runs, as a background request (it never counts as the seller being active).
+  const job = useQuery(sellerQueries.importJob(api, orgId, importId, pollWhile(POLL_MS, (d) => d?.status === 'QUEUED' || d?.status === 'RUNNING')));
   const imp = job.data;
   const phase = imp ? phaseOf(imp) : 'review';
   const rowsQuery = useQuery({

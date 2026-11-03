@@ -1,5 +1,6 @@
 'use client';
 
+import { BACKGROUND_HEADER } from '@afrotransact/api-client';
 import { Button, MaintenancePage } from '@afrotransact/ui';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -30,10 +31,11 @@ export function MaintenanceScreen({ title, message, expectedBackAt, expectedTemp
     const time = new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }).format(new Date(expectedBackAt));
     setExpected(expectedTemplate.replace('{time}', time));
   }, [expectedBackAt, expectedTemplate, locale]);
-  const check = useCallback(async () => {
+  // `background`: the timed re-check is not the person's doing (X-Background), the "Check again" button is.
+  const check = useCallback(async (background = false) => {
     setChecking(true);
     try {
-      const res = await fetch(`${BFF_BASE_PATH}/v1/maintenance`, { cache: 'no-store' });
+      const res = await fetch(`${BFF_BASE_PATH}/v1/maintenance`, { cache: 'no-store', headers: background ? { [BACKGROUND_HEADER]: '1' } : undefined });
       if (res.ok && !((await res.json()) as { active: boolean }).active) window.location.reload();
     } catch {
       /* still unreachable: keep the page up */
@@ -42,7 +44,7 @@ export function MaintenanceScreen({ title, message, expectedBackAt, expectedTemp
     }
   }, []);
   useEffect(() => {
-    const id = window.setInterval(() => void check(), POLL_MS);
+    const id = window.setInterval(() => void check(true), POLL_MS);
     return () => window.clearInterval(id);
   }, [check]);
   return (

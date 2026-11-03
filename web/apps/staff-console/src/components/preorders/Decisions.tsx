@@ -1,6 +1,6 @@
 'use client';
 
-import { staffPreorderKeys, staffPreorderQueries } from '@afrotransact/api-client';
+import { pollWhile, staffPreorderKeys, staffPreorderQueries } from '@afrotransact/api-client';
 import {
   DECISION_REASON_MAX,
   decisionReasonProblem,
@@ -227,9 +227,8 @@ export function RefundProgress({ w }: { w: PreorderWindow }) {
   const api = usePreordersApi();
   const t = useT();
   const refunds = useQuery({
-    ...staffPreorderQueries.refunds(api, w.id),
-    enabled: w.status === 'CANCELLED',
-    refetchInterval: (q) => (q.state.data && !q.state.data.done ? 3000 : false)
+    ...staffPreorderQueries.refunds(api, w.id, pollWhile(3000, (d) => d !== undefined && !d.done)),
+    enabled: w.status === 'CANCELLED'
   });
   const r = refunds.data;
   if (w.status !== 'CANCELLED' || !r) return null;

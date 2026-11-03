@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { SessionEndReasonSchema, SessionPolicySchema } from './session';
+
 /** A back office the signed-in person can open from the storefront (Seller Center, Provider Hub, staff console). */
 export const BackOfficeSchema = z.object({
   app: z.enum(['seller-center', 'provider-hub', 'staff-console']),
@@ -25,7 +27,11 @@ export const MeSchema = z.object({
       backOffices: z.array(BackOfficeSchema).default([])
     })
     .nullable(),
-  counts: z.object({ orders: z.number().int(), addresses: z.number().int(), paymentMethods: z.number().int() }).nullable()
+  counts: z.object({ orders: z.number().int(), addresses: z.number().int(), paymentMethods: z.number().int() }).nullable(),
+  /** The sign-out policy of this web session (signed in only). */
+  session: SessionPolicySchema.optional(),
+  /** Guest answers only, for ten minutes after the sign-out policy ended the session: why the person was signed out. */
+  signedOutReason: SessionEndReasonSchema.optional()
 });
 export type Me = z.infer<typeof MeSchema>;
 

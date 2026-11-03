@@ -25,6 +25,9 @@ export const BFF_PROXY_FORWARD_REQUEST = [
   'if-none-match',
   'origin',
   'user-agent',
+  // Marks a request the person did not make (polling): the BFF must not count it as activity. Dropping it here would
+  // let every poll keep a session alive.
+  'x-background',
   'x-correlation-id',
   'x-request-id'
 ] as const;
@@ -33,6 +36,8 @@ export const BFF_PROXY_FORWARD_RESPONSE = [
   'cache-control',
   'content-disposition',
   'content-type',
+  // The BFF's clock: the session timer works out the browser's clock offset from it.
+  'date',
   'etag',
   'location',
   'retry-after',

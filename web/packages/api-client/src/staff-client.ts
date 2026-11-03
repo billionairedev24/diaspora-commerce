@@ -140,7 +140,8 @@ export function createStaffApiClient(options: ApiClientOptions) {
     getIdentityDocuments: (signal?: AbortSignal): Promise<IdentityDocuments> => request('/v1/staff/identity/documents', IdentityDocumentsSchema, { signal }),
 
     /* Exports */
-    listExports: (signal?: AbortSignal): Promise<ExportJobList> => request('/v1/staff/exports', ExportJobListSchema, { signal }),
+    /** `background`: a poll nobody asked for (does not count as activity). */
+    listExports: (signal?: AbortSignal, background?: boolean): Promise<ExportJobList> => request('/v1/staff/exports', ExportJobListSchema, { signal, background }),
     createExport: (body: ExportRequest, key?: string): Promise<ExportJob> => request('/v1/staff/exports', ExportJobSchema, { method: 'POST', body, headers: idem(key) }),
     getExport: (id: string, signal?: AbortSignal): Promise<ExportJob> => request(`/v1/staff/exports/${enc(id)}`, ExportJobSchema, { signal }),
 
@@ -180,9 +181,10 @@ export function createStaffApiClient(options: ApiClientOptions) {
     getPickupAssignments: (shipmentId: string, signal?: AbortSignal): Promise<PickupAssignmentList> =>
       request(`/v1/staff/dispatch/pickups/${enc(shipmentId)}/assignments`, PickupAssignmentListSchema, { signal }),
     /* Dispatch: delivery runs (S264) */
-    listRuns: (status?: RunDispatchStatus, signal?: AbortSignal): Promise<RunDispatchList> =>
-      request('/v1/staff/dispatch/runs', RunDispatchListSchema, { query: { status: status || undefined }, signal }),
-    getRun: (runId: string, signal?: AbortSignal): Promise<RunDispatch> => request(`/v1/staff/dispatch/runs/${enc(runId)}`, RunDispatchSchema, { signal }),
+    listRuns: (status?: RunDispatchStatus, signal?: AbortSignal, background?: boolean): Promise<RunDispatchList> =>
+      request('/v1/staff/dispatch/runs', RunDispatchListSchema, { query: { status: status || undefined }, signal, background }),
+    getRun: (runId: string, signal?: AbortSignal, background?: boolean): Promise<RunDispatch> =>
+      request(`/v1/staff/dispatch/runs/${enc(runId)}`, RunDispatchSchema, { signal, background }),
     planRun: (runId: string): Promise<RunDispatch> => request(`/v1/staff/dispatch/runs/${enc(runId)}/plan`, RunDispatchSchema, { method: 'POST' }),
     advanceRun: (runId: string, body: RunAdvanceRequest): Promise<RunDispatch> =>
       request(`/v1/staff/dispatch/runs/${enc(runId)}/advance`, RunDispatchSchema, { method: 'POST', body }),

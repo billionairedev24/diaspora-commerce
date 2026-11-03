@@ -59,6 +59,7 @@ import { cleanValue, sizesMissingFromChart, valueKey } from '../../size-charts';
 import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
 import { exportFileOf } from '../export-file';
 import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
+import { sessionHandlers } from '../session';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
 import { capabilitiesOf, CATEGORY_TREE, departmentsOf, getSellerDb, MOCK_BRANDS, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, resetSellerDb, SELLER_ORG } from './db';
 import {
@@ -1013,6 +1014,7 @@ function sizeChartHandlers() {
 }
 
 export const sellerHandlers = [
+  ...sessionHandlers('seller', { withMe: true }),
   /* ── Shell ── */
   http.get(
     `${W}/session`,

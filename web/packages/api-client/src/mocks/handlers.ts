@@ -40,6 +40,7 @@ import {
   suggest,
   updateLine
 } from './service';
+import { mockSessionEnded, mockSessionMembers, sessionHandlers } from './session';
 import { shopperSettingsHandlers } from './settings-shopper';
 import { shopperHandlers } from './shopper';
 import { accountCounts } from './shopper-state';
@@ -48,8 +49,10 @@ const cartOf = (ctx: Ctx) => json(buildCart(ctx.session, ctx.now));
 
 function me(ctx: Ctx) {
   const u = userById(ctx.session.userId);
-  if (!u) return { authenticated: false, user: null, counts: null };
+  // The sign-out policy (session timer): once it has ended the session the answer is a guest that says why.
+  if (!u || mockSessionEnded('customer-web', ctx.request)) return { authenticated: false, user: null, counts: null, ...mockSessionMembers('customer-web', false, ctx.request) };
   return {
+    ...mockSessionMembers('customer-web', true, ctx.request),
     authenticated: true,
     user: { id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email, initials: (u.firstName[0] ?? '') + (u.lastName[0] ?? ''), roles: u.roles,
       ...(u.phone ? { phone: '•••• ' + u.phone.slice(-4) } : {}), phoneVerified: phoneVerified.has(u.id), backOffices: mockBackOffices(u.roles) },
@@ -94,6 +97,7 @@ const prefixOf = (url: string) => {
 export { SESSION_COOKIE } from './http-kit';
 
 export const handlers = [
+  ...sessionHandlers('customer-web'),
   /* Site & content */
   http.get('*/v1/site-config', route(() => json(SITE_CONFIG))),
   http.get('*/v1/home', route((ctx) => json(home(sessionLocation(ctx.session), ctx.now)))),
