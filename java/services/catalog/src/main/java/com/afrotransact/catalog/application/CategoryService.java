@@ -23,6 +23,15 @@ public interface CategoryService {
      */
     List<CategoryNode> tree(boolean includeRetired);
 
+    /**
+     * The active tree limited to the departments the caller's organisation may sell in (what the seller's category
+     * pickers show); unrestricted for AfroTransact Retail and staff.
+     */
+    List<CategoryNode> treeForSeller();
+
+    /** The product-type schemas used in the caller's departments (all of them for Retail and staff). */
+    List<ProductType> productTypesForSeller();
+
     ProductType productType(String code);
 
     List<ProductType> productTypes();

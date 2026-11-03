@@ -37,15 +37,25 @@ class CategoryController {
 
     @Operation(summary = "Full active category tree (department › category › product type)",
             description = "includeRetired=true also lists retired nodes, for consumers that resolve the category of "
-                    + "an existing product.")
+                    + "an existing product. forSeller=true (signed in, catalog:write) limits the tree to the "
+                    + "departments the caller's organisation may sell in; 503 catalog.scope-unavailable when "
+                    + "seller-service cannot say.")
     @GetMapping("/v1/categories")
-    List<CategoryNodeResponse> tree(@RequestParam(defaultValue = "false") boolean includeRetired) {
+    List<CategoryNodeResponse> tree(@RequestParam(defaultValue = "false") boolean includeRetired,
+                                    @RequestParam(defaultValue = "false") boolean forSeller) {
+        if (forSeller) {
+            return categories.treeForSeller().stream().map(CategoryNodeResponse::of).toList();
+        }
         return categories.tree(includeRetired).stream().map(CategoryNodeResponse::of).toList();
     }
 
-    @Operation(summary = "All product-type schemas")
+    @Operation(summary = "All product-type schemas",
+            description = "forSeller=true limits them to the product types used in the caller's departments.")
     @GetMapping("/v1/product-types")
-    List<ProductTypeResponse> productTypes() {
+    List<ProductTypeResponse> productTypes(@RequestParam(defaultValue = "false") boolean forSeller) {
+        if (forSeller) {
+            return categories.productTypesForSeller().stream().map(ProductTypeResponse::of).toList();
+        }
         return categories.productTypes().stream().map(ProductTypeResponse::of).toList();
     }
 

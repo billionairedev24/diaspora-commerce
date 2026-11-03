@@ -29,15 +29,18 @@ class BrandCatalogServiceImpl implements BrandCatalogService {
     private final PermissionChecker permissions;
     private final ResourceAccessChecker access;
     private final OwnerResolver owners;
+    private final SellerScopeGuard scopeGuard;
 
     BrandCatalogServiceImpl(BrandRepository brands, CategoryRepository categories, BrandResolver resolver,
-                            PermissionChecker permissions, ResourceAccessChecker access, OwnerResolver owners) {
+                            PermissionChecker permissions, ResourceAccessChecker access, OwnerResolver owners,
+                            SellerScopeGuard scopeGuard) {
         this.brands = brands;
         this.categories = categories;
         this.resolver = resolver;
         this.permissions = permissions;
         this.access = access;
         this.owners = owners;
+        this.scopeGuard = scopeGuard;
     }
 
     @Override
@@ -46,6 +49,7 @@ class BrandCatalogServiceImpl implements BrandCatalogService {
         ListingOwner owner = owner(CatalogRelations.ORG_VIEW_PRODUCTS);
         BrandScopes scopes = new BrandScopes(categories.findAll());
         List<CategoryNode> nodes = scopes.nodesOf(productType, category);
+        scopeGuard.scopeOf(owner).requireAny(nodes);
         Set<UUID> covering = new LinkedHashSet<>();
         Set<UUID> departments = new LinkedHashSet<>();
         for (CategoryNode n : nodes) {
@@ -67,6 +71,7 @@ class BrandCatalogServiceImpl implements BrandCatalogService {
         ListingOwner owner = owner(CatalogRelations.ORG_MANAGE_PRODUCTS);
         BrandScopes scopes = new BrandScopes(categories.findAll());
         List<CategoryNode> nodes = scopes.nodesOf(productType, category);
+        scopeGuard.scopeOf(owner).requireAny(nodes);
         Set<UUID> covering = new LinkedHashSet<>();
         Set<UUID> departments = new LinkedHashSet<>();
         for (CategoryNode n : nodes) {

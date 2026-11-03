@@ -17,6 +17,7 @@ import com.afrotransact.catalog.domain.CategoryLevel;
 import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.CategoryRequest;
 import com.afrotransact.catalog.domain.CategoryRequestStatus;
+import com.afrotransact.catalog.domain.DepartmentScope;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.taxonomy.AuditSubject;
@@ -48,12 +49,13 @@ class CategoryServiceImpl implements CategoryService {
     private final ProductEvents productEvents;
     private final TaxonomyAdminService taxonomy;
     private final TaxonomyAuditRepository audit;
+    private final SellerScopeGuard scopeGuard;
     private final Clock clock;
 
     CategoryServiceImpl(CategoryRepository categories, CategoryRequestRepository requests, ProductRepository products,
                         IdentifierIssuer ids, PermissionChecker permissions, OwnerResolver owners,
                         DomainEventPublisher events, ProductEvents productEvents, TaxonomyAdminService taxonomy,
-                        TaxonomyAuditRepository audit, Clock clock) {
+                        TaxonomyAuditRepository audit, SellerScopeGuard scopeGuard, Clock clock) {
         this.categories = categories;
         this.requests = requests;
         this.products = products;
@@ -64,6 +66,7 @@ class CategoryServiceImpl implements CategoryService {
         this.productEvents = productEvents;
         this.taxonomy = taxonomy;
         this.audit = audit;
+        this.scopeGuard = scopeGuard;
         this.clock = clock;
     }
 
@@ -71,6 +74,21 @@ class CategoryServiceImpl implements CategoryService {
     @Transactional(readOnly = true)
     public List<CategoryNode> tree() {
         return categories.findAllActive();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CategoryNode> treeForSeller() {
+        Actor actor = permissions.require(CatalogPermissions.WRITE);
+        return scopeGuard.scopeOf(actor).filter(categories.findAllActive());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ProductType> productTypesForSeller() {
+        Actor actor = permissions.require(CatalogPermissions.WRITE);
+        DepartmentScope scope = scopeGuard.scopeOf(actor);
+        return categories.findAllProductTypes().stream().filter(t -> scope.allowsProductType(t.code())).toList();
     }
 
     @Override
@@ -96,6 +114,7 @@ class CategoryServiceImpl implements CategoryService {
     @Transactional
     public CategoryRequest request(String parentPath, String name, String exampleProduct, String detailsNeeded) {
         Actor actor = permissions.require(CatalogPermissions.WRITE);
+        scopeGuard.scopeOf(actor).requirePath(parentPath);
         String org = owners.ownerFor(actor).orgId();
         CategoryRequest created = requests.insert(CategoryRequest.open(UUID.randomUUID(),
                 ids.nextCategoryRequestReference(), org, parentPath, name, exampleProduct, detailsNeeded,

@@ -13,6 +13,7 @@ import java.util.concurrent.Executor;
 
 import com.afrotransact.catalog.domain.CategoryLevel;
 import com.afrotransact.catalog.domain.CategoryNode;
+import com.afrotransact.catalog.domain.DepartmentScope;
 import com.afrotransact.catalog.domain.Gtin;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.ProductType;
@@ -79,6 +80,7 @@ class ProductImportServiceImpl implements ProductImportService {
     private final ImportSettings settings;
     private final ImageLibraryLookup library;
     private final Executor executor;
+    private final SellerScopeGuard scopeGuard;
     private final Clock clock;
     private final TransactionTemplate tx;
 
@@ -86,7 +88,7 @@ class ProductImportServiceImpl implements ProductImportService {
                              SizeChartRepository sizeCharts, CategoryRepository categories, SpreadsheetReader reader, SpreadsheetWriter writer,
                              ImportJob job, PermissionChecker permissions, ResourceAccessChecker access,
                              OwnerResolver owners, ImportSettings settings, ImageLibraryLookup library,
-                             @Qualifier("importExecutor") Executor executor, Clock clock,
+                             @Qualifier("importExecutor") Executor executor, SellerScopeGuard scopeGuard, Clock clock,
                              PlatformTransactionManager transactions) {
         this.imports = imports;
         this.products = products;
@@ -101,16 +103,21 @@ class ProductImportServiceImpl implements ProductImportService {
         this.settings = settings;
         this.library = library;
         this.executor = executor;
+        this.scopeGuard = scopeGuard;
         this.clock = clock;
         this.tx = new TransactionTemplate(transactions);
     }
 
     @Override
     public FileContent template(String productType, UUID categoryId, SpreadsheetFormat format) {
-        permissions.require(CatalogPermissions.WRITE);
+        Actor actor = permissions.require(CatalogPermissions.WRITE);
+        DepartmentScope scope = scopeGuard.scopeOf(actor);
         ProductType type = typeOf(productType, categoryId);
-        TemplateSpec spec = type == null ? ImportTemplates.generic(leaves(null))
-                : ImportTemplates.forType(type, leaves(type.code()));
+        if (type != null) {
+            scope.requireProductType(type.code());
+        }
+        TemplateSpec spec = type == null ? ImportTemplates.generic(allowed(leaves(null), scope))
+                : ImportTemplates.forType(type, allowed(leaves(type.code()), scope));
         return new FileContent(spec.fileStem() + "." + format.extension(), format.contentType(),
                 writer.template(spec, format));
     }
@@ -127,7 +134,7 @@ class ProductImportServiceImpl implements ProductImportService {
         }
         ProductType fixed = productType == null || productType.isBlank() ? null : typeOf(productType, null);
         ParsedSheet sheet = ImageColumns.fold(reader.read(content, format));
-        ImportContext ctx = context(sheet, mode == null ? ImportMode.CREATE : mode, fixed, owner.orgId());
+        ImportContext ctx = context(sheet, mode == null ? ImportMode.CREATE : mode, fixed, owner);
         ValidationResult result = ImportValidator.validate(sheet, ctx);
         Instant now = Instant.now(clock);
         String name = fileName.replaceAll("[\\\\/]", "_");
@@ -145,10 +152,14 @@ class ProductImportServiceImpl implements ProductImportService {
     }
 
     /** What validation needs from the catalog, for the SKUs and barcodes in the sheet only. */
-    private ImportContext context(ParsedSheet sheet, ImportMode mode, ProductType fixed, String orgId) {
+    private ImportContext context(ParsedSheet sheet, ImportMode mode, ProductType fixed, ListingOwner owner) {
+        String orgId = owner.orgId();
+        DepartmentScope scope = scopeGuard.scopeOf(owner);
         Map<String, ProductType> types = new HashMap<>();
         categories.findAllProductTypes().forEach(t -> types.put(t.code(), t));
-        List<ImportCategory> cats = leaves(fixed == null ? null : fixed.code());
+        List<ImportCategory> every = leaves(fixed == null ? null : fixed.code());
+        List<ImportCategory> cats = allowed(every, scope);
+        List<ImportCategory> blocked = every.stream().filter(c -> !scope.allowsPath(c.path())).toList();
         ImportContext probe = new ImportContext(mode, fixed, types, cats, Set.of(), Set.of(), Map.of());
         Map<String, Integer> index = ImportColumns.resolve(sheet.header(), probe.columns());
         Set<String> skus = new LinkedHashSet<>();
@@ -185,7 +196,7 @@ class ProductImportServiceImpl implements ProductImportService {
         Set<String> librarySkus = new LinkedHashSet<>(skus);
         librarySkus.addAll(parents);
         return new ImportContext(mode, fixed, types, cats, owned.keySet(), existingGtins, existing,
-                libraryFor(orgId, librarySkus, fileNames), orgId, sizeCharts.activeByNames(orgId, chartNames));
+                libraryFor(orgId, librarySkus, fileNames), orgId, sizeCharts.activeByNames(orgId, chartNames), blocked);
     }
 
     /** The library images for these SKUs and file names; empty (rows then need links) when media is unavailable. */
@@ -337,6 +348,10 @@ class ProductImportServiceImpl implements ProductImportService {
         String code = productType.strip();
         return categories.findProductType(code)
                 .orElseThrow(() -> new NotFoundException("catalog.product-type-not-found", "Unknown product type " + code));
+    }
+
+    private static List<ImportCategory> allowed(List<ImportCategory> cats, DepartmentScope scope) {
+        return cats.stream().filter(c -> scope.allowsPath(c.path())).toList();
     }
 
     /** Product-type categories (the Category dropdown), optionally of one product type. */

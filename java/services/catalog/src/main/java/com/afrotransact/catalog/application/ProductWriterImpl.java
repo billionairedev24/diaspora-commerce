@@ -16,6 +16,7 @@ import com.afrotransact.catalog.domain.CategoryLevel;
 import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.CategoryRequest;
 import com.afrotransact.catalog.domain.CategoryRequestStatus;
+import com.afrotransact.catalog.domain.DepartmentScope;
 import com.afrotransact.catalog.domain.Gtin;
 import com.afrotransact.catalog.domain.ListingDetails;
 import com.afrotransact.catalog.domain.ListingOwner;
@@ -52,11 +53,13 @@ class ProductWriterImpl implements ProductWriter {
     private final SizeChartRepository charts;
     private final ProductEvents events;
     private final BrandResolver brands;
+    private final SellerScopeGuard scopeGuard;
     private final Clock clock;
 
     ProductWriterImpl(ProductRepository products, CategoryRepository categories, CategoryRequestRepository requests,
                       ProductDraftRepository drafts, IdentifierIssuer ids, ProductDraftPolicy policy,
-                      SizeChartPolicy sizePolicy, SizeChartRepository charts, ProductEvents events, BrandResolver brands, Clock clock) {
+                      SizeChartPolicy sizePolicy, SizeChartRepository charts, ProductEvents events, BrandResolver brands, SellerScopeGuard scopeGuard,
+                      Clock clock) {
         this.products = products;
         this.categories = categories;
         this.requests = requests;
@@ -67,6 +70,7 @@ class ProductWriterImpl implements ProductWriter {
         this.charts = charts;
         this.events = events;
         this.brands = brands;
+        this.scopeGuard = scopeGuard;
         this.clock = clock;
     }
 
@@ -268,10 +272,12 @@ class ProductWriterImpl implements ProductWriter {
             throw new CatalogRuleViolation("Choose a product type, or request a new category",
                     Map.of("category", "Required"));
         }
+        DepartmentScope scope = scopeGuard.scopeOf(owner);
         if (categoryId != null) {
             CategoryNode node = categories.findById(categoryId)
                     .filter(CategoryNode::active)
                     .orElseThrow(() -> new NotFoundException("catalog.category-not-found", "Category not found"));
+            scope.require(node);
             if (node.level() != CategoryLevel.PRODUCT_TYPE) {
                 throw new CatalogRuleViolation("Pick a product type (third level)", Map.of("category", "Too broad"));
             }
@@ -287,6 +293,7 @@ class ProductWriterImpl implements ProductWriter {
         if (request.status() == CategoryRequestStatus.REJECTED) {
             throw new CatalogRuleViolation("That category request was rejected", Map.of("category", "Rejected"));
         }
+        scope.requirePath(request.parentPath());
         return new Placement(null, request, type(ProductType.CUSTOM));
     }
 

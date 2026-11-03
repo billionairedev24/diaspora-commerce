@@ -15,6 +15,8 @@ import java.util.UUID;
 
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
 import com.afrotransact.catalog.domain.CategoryLevel;
+import com.afrotransact.catalog.domain.DepartmentNotAllowed;
+import com.afrotransact.catalog.domain.DepartmentScope;
 import com.afrotransact.catalog.domain.ListingDetails;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductImage;
@@ -81,12 +83,13 @@ class ImportJobImpl implements ImportJob {
     private final ImageLibraryLookup library;
     private final DomainEventPublisher events;
     private final Clock clock;
+    private final SellerScopeGuard scopeGuard;
     private final TransactionTemplate tx;
     private final TransactionTemplate savepoint;
 
     ImportJobImpl(ProductImportRepository imports, ProductRepository products, SizeChartRepository sizeCharts,
                   CategoryRepository categories, ProductWriter writer, ImageImporter images, ImageLibraryLookup library,
-                  DomainEventPublisher events, Clock clock, PlatformTransactionManager transactions) {
+                  SellerScopeGuard scopeGuard, DomainEventPublisher events, Clock clock, PlatformTransactionManager transactions) {
         this.imports = imports;
         this.products = products;
         this.sizeCharts = sizeCharts;
@@ -94,6 +97,7 @@ class ImportJobImpl implements ImportJob {
         this.writer = writer;
         this.images = images;
         this.library = library;
+        this.scopeGuard = scopeGuard;
         this.events = events;
         this.clock = clock;
         this.tx = new TransactionTemplate(transactions);
@@ -190,11 +194,14 @@ class ImportJobImpl implements ImportJob {
         if (u.productTypeCode() != null && fixed == null) {
             throw new ImportRefused("The template's product type is no longer available");
         }
-        List<ImportCategory> cats = categories.findAllActive().stream()
+        DepartmentScope scope = scopeGuard.scopeOf(u.owner());
+        List<ImportCategory> every = categories.findAllActive().stream()
                 .filter(n -> n.level() == CategoryLevel.PRODUCT_TYPE && n.productTypeCode() != null)
                 .filter(n -> fixed == null || fixed.code().equals(n.productTypeCode()))
                 .map(n -> new ImportCategory(n.id(), n.path(), n.productTypeCode()))
                 .toList();
+        List<ImportCategory> cats = every.stream().filter(c -> scope.allowsPath(c.path())).toList();
+        List<ImportCategory> blocked = every.stream().filter(c -> !scope.allowsPath(c.path())).toList();
         Map<String, ExistingListing> existing = new LinkedHashMap<>();
         if (u.mode() == ImportMode.UPDATE) {
             UUID productId = UUID.fromString(rows.getFirst().groupKey());
@@ -204,7 +211,7 @@ class ImportJobImpl implements ImportJob {
         }
         ImageLibrary lib = libraryFor(u, fixed, types, cats, rows);
         ImportContext ctx = new ImportContext(u.mode(), fixed, types, cats, Set.of(), Set.of(),
-                existing, lib, u.owner().orgId(), sizeChartsOf(u, fixed, types, cats, rows));
+                existing, lib, u.owner().orgId(), sizeChartsOf(u, fixed, types, cats, rows), blocked);
         ParsedSheet sheet = new ParsedSheet(u.header(),
                 rows.stream().map(r -> new SheetRow(r.rowNumber(), r.cells())).toList());
         ValidationResult result = ImportValidator.validate(sheet, ctx);
@@ -357,6 +364,8 @@ class ImportJobImpl implements ImportJob {
             String fields = ex.fieldErrors().isEmpty() ? "" : " (" + String.join(", ", ex.fieldErrors().entrySet()
                     .stream().map(e -> e.getKey() + ": " + e.getValue()).toList()) + ")";
             fail(importId, u, pending, ex.getMessage() + fields, now);
+        } catch (DepartmentNotAllowed ex) {
+            fail(importId, u, pending, ex.getMessage(), now);
         } catch (ConflictException | NotFoundException | IllegalStateException | IllegalArgumentException ex) {
             fail(importId, u, pending, ex.getMessage(), now);
         }

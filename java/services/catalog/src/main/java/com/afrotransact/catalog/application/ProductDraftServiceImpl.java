@@ -30,15 +30,18 @@ class ProductDraftServiceImpl implements ProductDraftService {
     private final PermissionChecker permissions;
     private final ResourceAccessChecker access;
     private final OwnerResolver owners;
+    private final SellerScopeGuard scopeGuard;
     private final Clock clock;
 
     ProductDraftServiceImpl(ProductDraftRepository drafts, ProductRepository products, PermissionChecker permissions,
-                            ResourceAccessChecker access, OwnerResolver owners, Clock clock) {
+                            ResourceAccessChecker access, OwnerResolver owners, SellerScopeGuard scopeGuard,
+                            Clock clock) {
         this.drafts = drafts;
         this.products = products;
         this.permissions = permissions;
         this.access = access;
         this.owners = owners;
+        this.scopeGuard = scopeGuard;
         this.clock = clock;
     }
 
@@ -59,6 +62,7 @@ class ProductDraftServiceImpl implements ProductDraftService {
     public SavedDraft create(UUID productId, String title, String categoryPath, String payload) {
         ListingOwner owner = owner();
         checkPayload(payload);
+        scopeGuard.scopeOf(owner).requirePath(categoryPath);
         Instant now = Instant.now(clock);
         if (productId != null) {
             Product p = products.findById(productId).filter(x -> x.owner().orgId().equals(owner.orgId()))
@@ -79,7 +83,9 @@ class ProductDraftServiceImpl implements ProductDraftService {
     @Transactional
     public SavedDraft save(UUID id, long version, String title, String categoryPath, String payload) {
         checkPayload(payload);
-        SavedDraft d = owned(id, owner());
+        ListingOwner owner = owner();
+        scopeGuard.scopeOf(owner).requirePath(categoryPath);
+        SavedDraft d = owned(id, owner);
         if (d.version() != version) {
             throw new ConflictException("catalog.draft-changed",
                     "This draft was saved from another tab or device; reload it to keep editing");

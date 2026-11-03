@@ -65,11 +65,13 @@ class SizeChartServiceImpl implements SizeChartService {
     private final OwnerResolver owners;
     private final SpreadsheetReader reader;
     private final SpreadsheetWriter writer;
+    private final SellerScopeGuard scopeGuard;
     private final Clock clock;
 
     SizeChartServiceImpl(SizeChartRepository charts, ProductRepository products, CategoryRepository categories,
                          PermissionChecker permissions, ResourceAccessChecker access, OwnerResolver owners,
-                         SpreadsheetReader reader, SpreadsheetWriter writer, Clock clock) {
+                         SpreadsheetReader reader, SpreadsheetWriter writer, SellerScopeGuard scopeGuard,
+                         Clock clock) {
         this.charts = charts;
         this.products = products;
         this.categories = categories;
@@ -78,6 +80,7 @@ class SizeChartServiceImpl implements SizeChartService {
         this.owners = owners;
         this.reader = reader;
         this.writer = writer;
+        this.scopeGuard = scopeGuard;
         this.clock = clock;
     }
 
@@ -163,7 +166,7 @@ class SizeChartServiceImpl implements SizeChartService {
     @Override
     @Transactional(readOnly = true)
     public Suggestions suggestions(UUID categoryId, String productType) {
-        permissions.require(CatalogPermissions.WRITE);
+        Actor actor = permissions.require(CatalogPermissions.WRITE);
         String code = blankToNull(productType);
         if (categoryId != null) {
             CategoryNode node = categories.findById(categoryId).filter(CategoryNode::active)
@@ -179,14 +182,19 @@ class SizeChartServiceImpl implements SizeChartService {
         }
         ProductType type = categories.findProductType(code)
                 .orElseThrow(() -> new NotFoundException("catalog.product-type-not-found", "Unknown product type"));
+        scopeGuard.scopeOf(actor).requireProductType(type.code());
         return suggestionsOf(type);
     }
 
     @Override
     @Transactional(readOnly = true)
     public FileContent template(String productType, UUID categoryId, SpreadsheetFormat format) {
-        permissions.require(CatalogPermissions.WRITE);
-        TemplateSpec spec = ChartImportColumns.template(typeOf(productType, categoryId));
+        Actor actor = permissions.require(CatalogPermissions.WRITE);
+        ProductType type = typeOf(productType, categoryId);
+        if (type != null) {
+            scopeGuard.scopeOf(actor).requireProductType(type.code());
+        }
+        TemplateSpec spec = ChartImportColumns.template(type);
         return new FileContent(spec.fileStem() + "." + format.extension(), format.contentType(),
                 writer.template(spec, format));
     }
@@ -201,6 +209,9 @@ class SizeChartServiceImpl implements SizeChartService {
             throw new SpreadsheetRejected("Upload an Excel (.xlsx) or CSV (.csv) file");
         }
         ProductType type = typeOf(productType, categoryId);
+        if (type != null) {
+            scopeGuard.scopeOf(owner).requireProductType(type.code());
+        }
         MeasurementUnit unit = type == null ? MeasurementUnit.CM : suggestionsOf(type).unitSystem();
         ChartImportResult read = ChartImportValidator.validate(reader.read(content, format),
                 new ChartImportContext(type == null ? null : type.code(), unit));
@@ -300,6 +311,7 @@ class SizeChartServiceImpl implements SizeChartService {
     // ------------------------------------------------------------------ helpers
 
     private SizeChart insertChart(ListingOwner owner, ChartContent valid) {
+        scopeGuard.scopeOf(owner).requireProductType(valid.productTypeCode());
         requireNameFree(owner.orgId(), valid.name(), null);
         Instant now = Instant.now(clock);
         return insert(new SizeChart(UUID.randomUUID(), owner.orgId(), valid.name(), valid.unitSystem(),
@@ -309,6 +321,7 @@ class SizeChartServiceImpl implements SizeChartService {
 
     /** Saves the new content of an owned chart unless {@code save} is false (a dry run only runs the checks). */
     private SizeChart updateChart(ListingOwner owner, SizeChart current, ChartContent valid, boolean save) {
+        scopeGuard.scopeOf(owner).requireProductType(valid.productTypeCode());
         requireNameFree(owner.orgId(), valid.name(), current.id());
         SizeChart next = current.replaced(valid, Instant.now(clock));
         requireSizesStillCovered(next);

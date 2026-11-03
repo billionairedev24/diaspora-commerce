@@ -19,11 +19,22 @@ import com.afrotransact.catalog.domain.sizing.SizeChart;
  * @param library       the organisation's library images for the file's SKUs and image file names (S310)
  * @param ownerOrg      the uploading organisation; size charts are the organisation's own
  * @param charts        the organisation's active size charts named in the file, by lower-case name
+ * @param blocked       categories that exist but belong to a department the organisation may not sell in: a row
+ *                      naming one is refused with a message that says how to add the department
  */
 public record ImportContext(ImportMode mode, ProductType fixedType, Map<String, ProductType> types,
                             List<ImportCategory> categories, Set<String> takenSkus, Set<String> existingGtins,
                             Map<String, ExistingListing> existing, ImageLibrary library, String ownerOrg,
-                            Map<String, SizeChart> charts) {
+                            Map<String, SizeChart> charts, List<ImportCategory> blocked) {
+
+    /** Every category is allowed. */
+    public ImportContext(ImportMode mode, ProductType fixedType, Map<String, ProductType> types,
+                         List<ImportCategory> categories, Set<String> takenSkus, Set<String> existingGtins,
+                         Map<String, ExistingListing> existing, ImageLibrary library, String ownerOrg,
+                         Map<String, SizeChart> charts) {
+        this(mode, fixedType, types, categories, takenSkus, existingGtins, existing, library, ownerOrg, charts,
+                List.of());
+    }
 
     /** Without size charts. */
     public ImportContext(ImportMode mode, ProductType fixedType, Map<String, ProductType> types,
@@ -41,6 +52,7 @@ public record ImportContext(ImportMode mode, ProductType fixedType, Map<String, 
 
     public ImportContext {
         charts = charts == null ? Map.of() : Map.copyOf(charts);
+        blocked = blocked == null ? List.of() : List.copyOf(blocked);
         library = library == null ? ImageLibrary.EMPTY : library;
         types = Map.copyOf(types);
         categories = List.copyOf(categories);

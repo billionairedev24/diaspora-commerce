@@ -3,6 +3,8 @@ package com.afrotransact.catalog.adapter.in.web;
 import java.util.Map;
 
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
+import com.afrotransact.catalog.domain.DepartmentNotAllowed;
+import com.afrotransact.catalog.port.SellerScopes.ScopeUnavailable;
 import com.afrotransact.catalog.domain.PreconditionRequiredException;
 import com.afrotransact.catalog.domain.StaleVersionException;
 import com.afrotransact.catalog.domain.ReviewStateConflict;
@@ -29,6 +31,25 @@ class CatalogErrorAdvice {
         pd.setTitle("Catalog rule violated");
         pd.setProperty("code", "catalog.rule-violation");
         pd.setProperty("fieldErrors", ex.fieldErrors());
+        return pd;
+    }
+
+    @ExceptionHandler(DepartmentNotAllowed.class)
+    ProblemDetail departmentNotAllowed(DepartmentNotAllowed ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.FORBIDDEN, ex.getMessage());
+        pd.setType(ProblemTypes.of(ex.code()));
+        pd.setTitle("Department not available to your store");
+        pd.setProperty("code", ex.code());
+        return pd;
+    }
+
+    @ExceptionHandler(ScopeUnavailable.class)
+    ProblemDetail scopeUnavailable(ScopeUnavailable ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "We could not check which departments your store sells in; try again in a minute");
+        pd.setType(ProblemTypes.of("catalog.scope-unavailable"));
+        pd.setTitle("Departments unavailable");
+        pd.setProperty("code", "catalog.scope-unavailable");
         return pd;
     }
 

@@ -122,7 +122,13 @@ at:
       token-path: /oauth2/token
       client-id: ${CATALOG_CLIENT_ID:catalog-service}
       client-secret: ${CATALOG_CLIENT_SECRET:local-catalog-service-secret}
-      scopes: media:import orders:purchase-check
+      scopes: media:import orders:purchase-check sellers:catalog-scope.read
+    # Which departments an organisation may sell in: seller-service GET /v1/orgs/{orgId}/catalog-scope (scope
+    # sellers:catalog-scope.read). Unreachable = the catalog refuses non-exempt organisations (fail closed).
+    seller:
+      base-url: ${SELLER_URL:http://localhost:8106}
+      timeout: ${SELLER_TIMEOUT:3s}
+      scope-ttl: ${SELLER_SCOPE_TTL:15s}
     # S324 verified-purchase product reviews: catalog asks orders-service whether the customer received the product
     # (GET /v1/lookup/customers/{customerId}/purchases/{atin}, scope orders:purchase-check).
     orders:

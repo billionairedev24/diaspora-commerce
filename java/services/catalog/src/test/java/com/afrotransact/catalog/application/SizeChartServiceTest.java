@@ -59,6 +59,9 @@ import com.afrotransact.platform.security.relationship.ResourceAccessChecker;
 import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.platform.web.error.NotFoundException;
+import com.afrotransact.catalog.domain.DepartmentNotAllowed;
+import com.afrotransact.catalog.domain.DepartmentScope;
+import com.afrotransact.catalog.port.SellerScopes.OrgScope;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -92,7 +95,7 @@ class SizeChartServiceTest {
         when(categories.findProductType("shoes")).thenReturn(Optional.of(SizingFixtures.SHOES));
         when(categories.findProductType("grocery")).thenReturn(Optional.of(SizingFixtures.SPICES));
         service = new SizeChartServiceImpl(charts, products, categories, permissions, access,
-                new RetailAwareOwnerResolver(RETAIL), reader, writer,
+                new RetailAwareOwnerResolver(RETAIL), reader, writer, new UnrestrictedScopeGuard(),
                 Clock.fixed(Instant.parse("2026-11-02T10:00:00Z"), ZoneOffset.UTC));
     }
 
@@ -103,6 +106,49 @@ class SizeChartServiceTest {
         }
         return new ChartContent(name, MeasurementUnit.CM, "dress", null,
                 SizingFixtures.columns(MeasurementUnit.CM, "Bust", "Waist"), rows, FitNote.TRUE_TO_SIZE, null);
+    }
+
+    /** A seller whose departments do not include the one the dress type belongs to. */
+    private SizeChartServiceImpl foodOnlyService() {
+        UUID dept = UUID.randomUUID();
+        UUID food = UUID.randomUUID();
+        List<CategoryNode> tree = List.of(
+                new CategoryNode(dept, null, "groceries", "Groceries", CategoryLevel.DEPARTMENT, null, "Groceries", 0,
+                        true, 0, null, null),
+                new CategoryNode(food, dept, "groceries-grains", "Grains", CategoryLevel.PRODUCT_TYPE, "grocery",
+                        "Groceries › Grains", 0, true, 0, null, null),
+                new CategoryNode(UUID.randomUUID(), null, "fashion", "Fashion", CategoryLevel.DEPARTMENT, null,
+                        "Fashion", 1, true, 0, null, null));
+        DepartmentScope scope = DepartmentScope.of(Set.of("groceries"), tree);
+        return new SizeChartServiceImpl(charts, products, categories, permissions, access,
+                new RetailAwareOwnerResolver(RETAIL), reader, writer, new SellerScopeGuard() {
+                    @Override
+                    public DepartmentScope scopeOf(ListingOwner owner) {
+                        return scope;
+                    }
+
+                    @Override
+                    public DepartmentScope scopeOf(Actor who) {
+                        return scope;
+                    }
+
+                    @Override
+                    public OrgScope orgScopeOf(Actor who) {
+                        return new OrgScope(false, Set.of("groceries"), List.of());
+                    }
+                }, Clock.fixed(Instant.parse("2026-11-02T10:00:00Z"), ZoneOffset.UTC));
+    }
+
+    @Test
+    void aSellerWhoDoesNotSellFashionCannotMakeOrImportSizeCharts() {
+        SizeChartServiceImpl foodOnly = foodOnlyService();
+        assertThatThrownBy(() -> foodOnly.create(content("Adire dresses", "S", "M")))
+                .isInstanceOf(DepartmentNotAllowed.class).hasMessageContaining("not set up to sell in");
+        assertThatThrownBy(() -> foodOnly.suggestions(null, "dress")).isInstanceOf(DepartmentNotAllowed.class);
+        assertThatThrownBy(() -> foodOnly.template("dress", null, SpreadsheetFormat.CSV))
+                .isInstanceOf(DepartmentNotAllowed.class);
+        assertThatThrownBy(() -> foodOnly.importCharts("charts.csv", new byte[0], "dress", null, true))
+                .isInstanceOf(DepartmentNotAllowed.class);
     }
 
     @Test

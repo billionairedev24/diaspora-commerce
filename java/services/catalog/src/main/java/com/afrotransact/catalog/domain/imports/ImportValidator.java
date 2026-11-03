@@ -300,6 +300,25 @@ public final class ImportValidator {
             return null;
         }
         String wanted = normalPath(raw);
+        Optional<ImportCategory> match = find(cats, wanted);
+        if (match.isEmpty()) {
+            Optional<ImportCategory> blocked = find(ctx.blocked(), wanted);
+            if (blocked.isPresent()) {
+                String department = blocked.get().path().replace('›', '>').split(">")[0].strip();
+                add(r, err(ImportColumns.CATEGORY, "Your store is not set up to sell in " + department + ". Request "
+                        + "the department under Listings in Seller Center, then upload again"));
+                return null;
+            }
+        }
+        if (match.isEmpty()) {
+            add(r, err(ImportColumns.CATEGORY, ctx.fixedType() == null ? "Unknown category; choose one from the "
+                    + "Category list" : "Not a category of this template; download the template of that category"));
+            return null;
+        }
+        return match.get();
+    }
+
+    private static Optional<ImportCategory> find(List<ImportCategory> cats, String wanted) {
         Optional<ImportCategory> match = cats.stream().filter(c -> normalPath(c.path()).equals(wanted)).findFirst();
         if (match.isEmpty()) {
             // A unique last segment ("Dresses") is enough.
@@ -309,12 +328,7 @@ public final class ImportValidator {
             }).toList();
             match = byName.size() == 1 ? Optional.of(byName.getFirst()) : Optional.empty();
         }
-        if (match.isEmpty()) {
-            add(r, err(ImportColumns.CATEGORY, ctx.fixedType() == null ? "Unknown category; choose one from the "
-                    + "Category list" : "Not a category of this template; download the template of that category"));
-            return null;
-        }
-        return match.get();
+        return match;
     }
 
     private static String normalPath(String p) {
