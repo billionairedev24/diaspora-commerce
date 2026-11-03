@@ -8,6 +8,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import com.afrotransact.seller.domain.Application;
 import com.afrotransact.seller.domain.ApplicationData;
@@ -27,6 +29,8 @@ import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.TaxIds;
 import com.afrotransact.seller.domain.ReviewAction;
 import com.afrotransact.seller.domain.TimelineEntry;
+import com.afrotransact.seller.domain.Department;
+import com.afrotransact.seller.port.DepartmentDirectory;
 import com.afrotransact.seller.port.FieldCipher;
 import com.afrotransact.seller.port.PlanRepository;
 import org.springframework.stereotype.Component;
@@ -41,21 +45,38 @@ class ApplicationViews {
     private final SellerSettings settings;
     private final TrialService trials;
     private final PlanFeeCollectionService planFees;
+    private final DepartmentDirectory directory;
     private final Clock clock;
 
     ApplicationViews(ApplicationRules rules, PlanRepository plans, FieldCipher cipher, SellerSettings settings,
-                     TrialService trials, PlanFeeCollectionService planFees, Clock clock) {
+                     TrialService trials, PlanFeeCollectionService planFees, DepartmentDirectory directory,
+                     Clock clock) {
         this.rules = rules;
         this.plans = plans;
         this.cipher = cipher;
         this.settings = settings;
         this.trials = trials;
         this.planFees = planFees;
+        this.directory = directory;
         this.clock = clock;
     }
 
+    /** The rule context for reading an application; the catalog's departments are left out when it is down. */
     RuleContext context(Application app) {
-        return new RuleContext(app.kind(), settings.liveCountries(), LocalDate.now(clock));
+        try {
+            return strictContext(app);
+        } catch (DepartmentDirectory.DirectoryUnavailable ex) {
+            return new RuleContext(app.kind(), settings.liveCountries(), LocalDate.now(clock));
+        }
+    }
+
+    /**
+     * The rule context for saving the departments step and for submitting: the catalog's departments (so a chosen
+     * department must exist and its food permit / labelling rules apply). Throws when the catalog cannot be asked.
+     */
+    RuleContext strictContext(Application app) {
+        return new RuleContext(app.kind(), settings.liveCountries(), LocalDate.now(clock), directory.departments()
+                .stream().collect(Collectors.toMap(Department::code, Function.identity(), (a, b) -> a)));
     }
 
     /** The chosen plan when new organisations may still choose it (published, not retired). */

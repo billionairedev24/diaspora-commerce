@@ -79,7 +79,7 @@ class OnboardingReturnToApplicantIT extends SellerIntegrationTest {
 
         // The applicant fixes it and resubmits; it is back in the queue as an ordinary submission.
         TestActors.as(TestActors.applicant(user));
-        assertThat(put("/v1/applications/me/steps/catalog-compliance", Map.of("categories", List.of("fashion",
+        assertThat(put("/v1/applications/me/steps/catalog-compliance", Map.of("departments", List.of("fashion",
                 "home"), "agreementsAccepted", true, "w9Certified", true, "w9SignerName", "Ade")).status())
                 .isEqualTo(200);
         Response resubmitted = post("/v1/applications/me/submit", Map.of());

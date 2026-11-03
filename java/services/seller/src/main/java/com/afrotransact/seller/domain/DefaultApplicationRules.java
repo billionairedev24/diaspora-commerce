@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -18,8 +19,6 @@ public class DefaultApplicationRules implements ApplicationRules {
 
     private static final int MAX_PAGE_DESCRIPTION = 500;
 
-    public static final Set<String> FOOD_CATEGORIES = Set.of("groceries", "perishables", "prepared_food");
-    public static final Set<String> BEAUTY_CATEGORIES = Set.of("beauty", "cosmetics");
     public static final Set<String> CARD_BRANDS = Set.of("visa", "mastercard", "amex", "discover");
     public static final Set<String> US_STATES = Set.of("AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL",
             "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE",
@@ -275,10 +274,19 @@ public class DefaultApplicationRules implements ApplicationRules {
             e.required(complete, "agreementsAccepted");
             return new Validated<>(null, e.map());
         }
-        List<String> categories = in.categories().stream().map(c -> c.trim().toLowerCase(Locale.ROOT)).distinct()
+        List<String> categories = in.departments().stream().map(c -> c.trim().toLowerCase(Locale.ROOT)).distinct()
                 .toList();
-        boolean food = categories.stream().anyMatch(FOOD_CATEGORIES::contains);
-        boolean beauty = categories.stream().anyMatch(BEAUTY_CATEGORIES::contains);
+        if (!ctx.departments().isEmpty()) {
+            for (String code : categories) {
+                if (!ctx.departments().containsKey(code)) {
+                    e.put("departments", "Choose from the departments in the list");
+                }
+            }
+        }
+        boolean food = categories.stream().map(ctx.departments()::get).filter(Objects::nonNull)
+                .anyMatch(d -> d.requires().contains(Department.Requirement.FOOD_PERMIT));
+        boolean beauty = categories.stream().map(ctx.departments()::get).filter(Objects::nonNull)
+                .anyMatch(d -> d.requires().contains(Department.Requirement.BEAUTY_LABELLING));
         ComplianceSection.FoodPermit permit = in.foodPermit();
         if (permit != null && permit.expiresOn() != null && permit.expiresOn().isBefore(ctx.today())) {
             e.put("foodPermit.expiresOn", "This permit has expired");
@@ -325,7 +333,7 @@ public class DefaultApplicationRules implements ApplicationRules {
         }
         if (complete) {
             if (offering != null && offering.includesProducts() && categories.isEmpty()) {
-                e.put("categories", "Choose what you'll sell");
+                e.put("departments", "Choose what you'll sell");
             }
             if (offering != null && offering.includesServices() && in.services().isEmpty()) {
                 e.put("services", "Add the services you'll offer");

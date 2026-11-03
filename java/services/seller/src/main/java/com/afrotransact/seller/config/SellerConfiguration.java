@@ -1,11 +1,15 @@
 package com.afrotransact.seller.config;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Set;
 
 import com.afrotransact.seller.adapter.out.billing.RruleBillingScheduler;
+import com.afrotransact.seller.adapter.out.catalog.HttpDepartmentDirectory;
 import com.afrotransact.seller.adapter.out.crypto.AesGcmFieldCipher;
 import com.afrotransact.seller.adapter.out.geo.HttpGeoClient;
+import com.afrotransact.seller.port.DepartmentDirectory;
+import org.springframework.beans.factory.annotation.Value;
 import com.afrotransact.seller.adapter.out.localtest.LocalTestPlanPayments;
 import com.afrotransact.seller.adapter.out.localtest.LocalTestStripeConnect;
 import com.afrotransact.seller.adapter.out.media.HttpMediaClient;
@@ -77,6 +81,13 @@ class SellerConfiguration {
     SellerSettings sellerSettings(SellerProperties props) {
         return new SellerSettings(Set.copyOf(props.liveCountries()), props.stripe().sessionComponents(),
                 props.retailOrgId(), props.geo().pickupMaxRadiusMiles());
+    }
+
+    @Bean
+    DepartmentDirectory departmentDirectory(@Value("${at.seller.catalog.base-url:http://localhost:8101}") String baseUrl,
+                                            @Value("${at.seller.catalog.timeout:3s}") Duration timeout,
+                                            @Value("${at.seller.catalog.departments-ttl:60s}") Duration ttl, Clock clock) {
+        return new HttpDepartmentDirectory(baseUrl, timeout, ttl, clock);
     }
 
     @Bean

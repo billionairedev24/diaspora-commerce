@@ -163,7 +163,7 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         assertThat(incomplete.text("/code")).isEqualTo("seller.application-incomplete");
         assertThat(incomplete.body().path("fieldErrors").has("compliance.agreementsAccepted")).isTrue();
 
-        Map<String, Object> compliance = Map.of("categories", List.of("groceries"),
+        Map<String, Object> compliance = Map.of("departments", List.of("groceries"),
                 "foodPermit", Map.of("permitNumber", "FE-1001", "issuingAuthority", "Harris County",
                         "expiresOn", "2027-12-31", "documentAssetId", "asset-permit-1",
                         "permitType", "FOOD_ESTABLISHMENT"),
@@ -223,7 +223,7 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         // Applicant edits and resubmits.
         TestActors.as(TestActors.applicant(user));
         assertThat(get("/v1/applications/me").text("/status")).isEqualTo("INFO_REQUESTED");
-        Map<String, Object> newPermit = Map.of("categories", List.of("groceries"),
+        Map<String, Object> newPermit = Map.of("departments", List.of("groceries"),
                 "foodPermit", Map.of("permitNumber", "FE-2002", "issuingAuthority", "Harris County",
                         "expiresOn", "2028-06-30", "documentAssetId", "asset-permit-2",
                         "permitType", "FOOD_ESTABLISHMENT"),

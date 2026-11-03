@@ -236,7 +236,7 @@ class OnboardingServiceImpl implements OnboardingService {
             throw new SellerStateConflict("seller.application-locked",
                     "Application " + app.reference() + " is " + app.status() + " and can't be edited");
         }
-        RuleContext ctx = views.context(app);
+        RuleContext ctx = step == OnboardingStep.CATALOG_COMPLIANCE ? views.strictContext(app) : views.context(app);
         ApplicationData data = app.data();
         ApplicationData next = switch (step) {
             case BUSINESS -> saveBusiness(data, in, ctx);
@@ -280,7 +280,7 @@ class OnboardingServiceImpl implements OnboardingService {
             throw new SellerStateConflict("seller.application-locked",
                     "Application " + app.reference() + " is already " + app.status());
         }
-        Map<String, String> errors = rules.submission(app.data(), views.plan(app.data()), views.context(app));
+        Map<String, String> errors = rules.submission(app.data(), views.plan(app.data()), views.strictContext(app));
         if (!errors.isEmpty()) {
             throw new SellerRuleViolation("seller.application-incomplete",
                     "Some steps are incomplete or invalid; fix the highlighted fields and submit again", errors);

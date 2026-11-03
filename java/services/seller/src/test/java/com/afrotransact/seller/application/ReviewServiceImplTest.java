@@ -50,7 +50,7 @@ class ReviewServiceImplTest {
     private final AccessGuard access = mock(AccessGuard.class);
     private final DomainEventPublisher events = mock(DomainEventPublisher.class);
     private final ReviewServiceImpl service = new ReviewServiceImpl(apps, orgs, reasons, mock(MediaClient.class),
-            views, billing, access, events, TransactionOperations.withoutTransaction(),
+            views, billing, access, mock(CatalogScopeService.class), events, TransactionOperations.withoutTransaction(),
             Clock.fixed(NOW, ZoneOffset.UTC));
 
     private final Application approved = Application.start("app_1", "APP-30200", "org_1", "applicant",

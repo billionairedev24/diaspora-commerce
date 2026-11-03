@@ -28,11 +28,12 @@ final class CategoryDtos {
     }
 
     @Schema(name = "CategoryNode")
-    record CategoryNodeResponse(UUID id, UUID parentId, String name, String level, String productType, String path) {
+    record CategoryNodeResponse(UUID id, UUID parentId, String code, String name, String level, String productType,
+                                String path, List<String> compliance) {
 
         static CategoryNodeResponse of(CategoryNode n) {
-            return new CategoryNodeResponse(n.id(), n.parentId(), n.name(), n.level().name(), n.productTypeCode(),
-                    n.path());
+            return new CategoryNodeResponse(n.id(), n.parentId(), n.code(), n.name(), n.level().name(),
+                    n.productTypeCode(), n.path(), n.compliance().stream().sorted().toList());
         }
     }
 

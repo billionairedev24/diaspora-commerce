@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -18,6 +19,11 @@ class DefaultApplicationRulesTest {
 
     private static final LocalDate TODAY = LocalDate.of(2026, 10, 10);
     private static final RuleContext SELLER = new RuleContext(OrgKind.SELLER, Set.of("US"), TODAY);
+    /** The catalog's departments as seller-service reads them: compliance is data on the node. */
+    private static final RuleContext WITH_DEPARTMENTS = new RuleContext(OrgKind.SELLER, Set.of("US"), TODAY, Map.of(
+            "groceries", new Department("groceries", "Groceries", Set.of(Department.Requirement.FOOD_PERMIT)),
+            "beauty", new Department("beauty", "Beauty", Set.of(Department.Requirement.BEAUTY_LABELLING)),
+            "fashion", new Department("fashion", "Fashion", Set.of())));
     private static final RuleContext PROVIDER = new RuleContext(OrgKind.PROVIDER, Set.of("US"), TODAY);
     private static final Address ADDRESS = new Address("9800 Westheimer Rd", null, "Houston", "TX", "77042", "US");
 
@@ -178,12 +184,16 @@ class DefaultApplicationRulesTest {
 
         ComplianceSection food = new ComplianceSection(List.of("Groceries", "beauty"), null, false, List.of(), null,
                 false, null, null);
-        assertThat(rules.compliance(food, Offering.PRODUCTS, SELLER, true).errors()).containsOnlyKeys(
+        assertThat(rules.compliance(food, Offering.PRODUCTS, WITH_DEPARTMENTS, true).errors()).containsOnlyKeys(
                 "compliance.foodPermit", "compliance.beautyLabellingConfirmed", "compliance.agreementsAccepted",
                 "compliance.w9Certified");
         ComplianceSection complete = new ComplianceSection(List.of("groceries"), new ComplianceSection.FoodPermit(
                 "FE-1", "Harris County", TODAY.plusYears(1), "asset-permit", "COTTAGE_FOOD"), null, List.of(), null, true, true, "Ade");
-        assertThat(rules.compliance(complete, Offering.PRODUCTS, SELLER, true).errors()).isEmpty();
+        assertThat(rules.compliance(complete, Offering.PRODUCTS, WITH_DEPARTMENTS, true).errors()).isEmpty();
+        ComplianceSection unknown = new ComplianceSection(List.of("hardware"), null, null, List.of(), null, true, true,
+                "Ade");
+        assertThat(rules.compliance(unknown, Offering.PRODUCTS, WITH_DEPARTMENTS, true).errors())
+                .containsKey("compliance.departments");
     }
 
     @Test
@@ -192,9 +202,9 @@ class DefaultApplicationRulesTest {
                 new ComplianceSection.AcceptedAgreement("seller-terms", "2.4", null),
                 new ComplianceSection.AcceptedAgreement("payments-terms", "1.0", null),
                 new ComplianceSection.AcceptedAgreement("data-processing", "1.0", null));
-        ComplianceSection ok = new ComplianceSection(List.of("clothing"), null, null, List.of(), null, true, true, "Ade",
+        ComplianceSection ok = new ComplianceSection(List.of("fashion"), null, null, List.of(), null, true, true, "Ade",
                 seller);
-        Validated<ComplianceSection> accepted = rules.compliance(ok, Offering.PRODUCTS, SELLER, true);
+        Validated<ComplianceSection> accepted = rules.compliance(ok, Offering.PRODUCTS, WITH_DEPARTMENTS, true);
         assertThat(accepted.errors()).isEmpty();
         assertThat(accepted.value().agreements()).extracting(ComplianceSection.AcceptedAgreement::key,
                 ComplianceSection.AcceptedAgreement::version, ComplianceSection.AcceptedAgreement::acceptedOn)
@@ -293,14 +303,14 @@ class DefaultApplicationRulesTest {
     void foodPermitNeedsAKnownType() {
         ComplianceSection.FoodPermit noType = new ComplianceSection.FoodPermit("FE-1", null, TODAY.plusYears(1),
                 "asset-permit", null);
-        ComplianceSection c = new ComplianceSection(List.of("prepared_food"), noType, null, List.of(), null, true,
+        ComplianceSection c = new ComplianceSection(List.of("groceries"), noType, null, List.of(), null, true,
                 true, "Ade");
-        assertThat(rules.compliance(c, Offering.PRODUCTS, SELLER, true).errors())
+        assertThat(rules.compliance(c, Offering.PRODUCTS, WITH_DEPARTMENTS, true).errors())
                 .containsOnlyKeys("compliance.foodPermit.permitType");
         ComplianceSection.FoodPermit odd = new ComplianceSection.FoodPermit("FE-1", null, TODAY.plusYears(1),
                 "asset-permit", "LIQUOR");
         assertThat(rules.compliance(new ComplianceSection(List.of("groceries"), odd, null, List.of(), null, null, null,
-                null), Offering.PRODUCTS, SELLER, false).errors()).containsOnlyKeys("compliance.foodPermit.permitType");
+                null), Offering.PRODUCTS, WITH_DEPARTMENTS, false).errors()).containsOnlyKeys("compliance.foodPermit.permitType");
     }
 
     private static Owner owner(String name, int pct, boolean control) {

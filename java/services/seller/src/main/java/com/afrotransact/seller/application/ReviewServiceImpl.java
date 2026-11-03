@@ -50,13 +50,14 @@ class ReviewServiceImpl implements ReviewService {
     private final ApplicationViews views;
     private final BillingService billing;
     private final AccessGuard access;
+    private final CatalogScopeService catalogScope;
     private final DomainEventPublisher events;
     private final TransactionOperations tx;
     private final Clock clock;
 
     ReviewServiceImpl(ApplicationRepository apps, OrganisationRepository orgs, ReasonCodeRepository reasons,
                       MediaClient media, ApplicationViews views, BillingService billing, AccessGuard access,
-                      DomainEventPublisher events, TransactionOperations tx, Clock clock) {
+                      CatalogScopeService catalogScope, DomainEventPublisher events, TransactionOperations tx, Clock clock) {
         this.apps = apps;
         this.orgs = orgs;
         this.reasons = reasons;
@@ -64,6 +65,7 @@ class ReviewServiceImpl implements ReviewService {
         this.views = views;
         this.billing = billing;
         this.access = access;
+        this.catalogScope = catalogScope;
         this.events = events;
         this.tx = tx;
         this.clock = clock;
@@ -160,6 +162,7 @@ class ReviewServiceImpl implements ReviewService {
         Organisation org = syncOrg(next, now);
         switch (cmd.action()) {
             case FINAL_APPROVE -> {
+                catalogScope.recordFromApplication(org.id(), next.data());
                 publish(SellerEvents.APPLICATION_APPROVED, next, entry);
                 List<String> owners = orgs.members(org.id()).stream().filter(OrgMember::isOwner)
                         .map(OrgMember::userId).toList();

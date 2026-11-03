@@ -6,6 +6,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.catalog.domain.CategoryLevel;
@@ -202,7 +203,11 @@ class JdbcCategoryRepository implements CategoryRepository {
                 rs.getString("code"), rs.getString("name"), CategoryLevel.valueOf(rs.getString("level")),
                 rs.getString("product_type_code"), rs.getString("path"), rs.getInt("position"),
                 rs.getBoolean("active"), rs.getLong("version"), retired == null ? null : retired.toInstant(),
-                rs.getString("retired_reason"));
+                rs.getString("retired_reason"), compliance(rs.getString("compliance")));
+    }
+
+    private static Set<String> compliance(String csv) {
+        return csv == null || csv.isBlank() ? Set.of() : Set.of(csv.split(","));
     }
 
     private StoredProductType mapType(ResultSet rs, int rowNum) throws SQLException {

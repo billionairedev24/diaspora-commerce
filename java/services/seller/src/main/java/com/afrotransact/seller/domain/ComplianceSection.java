@@ -5,11 +5,11 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Step "catalog & compliance": categories, permits, service licences, insurance, agreements and W-9.
+ * Step "catalog & compliance": departments, permits, service licences, insurance, agreements and W-9.
  *
  * @param agreements the legal documents accepted, each with the version that was shown (empty until accepted)
  */
-public record ComplianceSection(List<String> categories, FoodPermit foodPermit, Boolean beautyLabellingConfirmed,
+public record ComplianceSection(List<String> departments, FoodPermit foodPermit, Boolean beautyLabellingConfirmed,
                                 List<ServiceLicence> services, String insuranceDocumentAssetId,
                                 Boolean agreementsAccepted, Boolean w9Certified, String w9SignerName,
                                 List<AcceptedAgreement> agreements) {
@@ -26,16 +26,16 @@ public record ComplianceSection(List<String> categories, FoodPermit foodPermit, 
             "FDA_FACILITY", "FOOD_HANDLER");
 
     public ComplianceSection {
-        categories = categories == null ? List.of() : List.copyOf(categories);
+        departments = departments == null ? List.of() : List.copyOf(departments);
         services = services == null ? List.of() : List.copyOf(services);
         agreements = agreements == null ? List.of() : List.copyOf(agreements);
     }
 
     /** Without agreements (no document versions recorded). */
-    public ComplianceSection(List<String> categories, FoodPermit foodPermit, Boolean beautyLabellingConfirmed,
+    public ComplianceSection(List<String> departments, FoodPermit foodPermit, Boolean beautyLabellingConfirmed,
                              List<ServiceLicence> services, String insuranceDocumentAssetId,
                              Boolean agreementsAccepted, Boolean w9Certified, String w9SignerName) {
-        this(categories, foodPermit, beautyLabellingConfirmed, services, insuranceDocumentAssetId, agreementsAccepted,
+        this(departments, foodPermit, beautyLabellingConfirmed, services, insuranceDocumentAssetId, agreementsAccepted,
                 w9Certified, w9SignerName, List.of());
     }
 

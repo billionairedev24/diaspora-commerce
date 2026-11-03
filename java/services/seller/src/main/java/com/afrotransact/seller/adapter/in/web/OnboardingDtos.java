@@ -138,13 +138,13 @@ final class OnboardingDtos {
     }
 
     @Schema(name = "CatalogComplianceStep", description = "Step 'catalog-compliance'")
-    record ComplianceStep(List<String> categories, ComplianceSection.FoodPermit foodPermit,
+    record ComplianceStep(List<String> departments, ComplianceSection.FoodPermit foodPermit,
                           Boolean beautyLabellingConfirmed, List<ServiceLicenceDto> services,
                           String insuranceDocumentAssetId, Boolean agreementsAccepted, Boolean w9Certified,
                           String w9SignerName, List<AgreementRef> agreements) {
 
         ComplianceSection toSection() {
-            return new ComplianceSection(categories, foodPermit, beautyLabellingConfirmed,
+            return new ComplianceSection(departments, foodPermit, beautyLabellingConfirmed,
                     services == null ? List.of() : services.stream().map(ServiceLicenceDto::toLicence).toList(),
                     insuranceDocumentAssetId, agreementsAccepted, w9Certified, w9SignerName,
                     agreements == null ? List.of() : agreements.stream()
