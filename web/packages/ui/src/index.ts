@@ -80,6 +80,26 @@ export { Menu, MenuGroup, MenuItem, type MenuItemProps, type MenuProps, MenuSepa
 export { type TabItem, Tabs, type TabsProps } from './overlay/Tabs';
 export { type ToastAction, type ToastMessage, ToastProvider, useToast } from './overlay/Toast';
 export { QR_QUIET_ZONE, QrCodeImage, type QrCodeImageProps, type QrMatrix, qrMatrix, qrPath } from './security/QrCodeImage';
+export { announceSignOut, createBroadcastSessionChannel, createStorageSessionChannel, getSessionChannel, resetSessionChannel, type SessionChannel, type SessionMessage } from './session/channel';
+export { clockText, fill, localTimeText, spokenDuration } from './session/format';
+export { type SessionTimeoutLabels } from './session/labels';
+export { endedMessage, SessionEndedScreen, type SessionEndedScreenProps } from './session/SessionEndedScreen';
+export { SessionTimeoutDialog, type SessionTimeoutDialogProps } from './session/SessionTimeoutDialog';
+export { SessionTimeoutGuard, type SessionTimeoutGuardProps, type SessionTimeoutHookOptions, type SessionTimeoutState, useSessionTimeout } from './session/SessionTimeoutGuard';
+export {
+  createSessionTimeout,
+  type EndSource,
+  REOPEN_AT_SECONDS,
+  reportIntervalMs,
+  type SessionEndReason,
+  type SessionOverReason,
+  type SessionTimeoutController,
+  type SessionTimeoutOptions,
+  type TimeoutView,
+  type TimerLoadedPolicy,
+  type TimerPolicy,
+  type WarningKind
+} from './session/timeout';
 export { BackofficeFrame, type BackofficeFrameProps } from './shell/BackofficeFrame';
 export { createNavGuard, destinationKey, LOADING_STALE_MS, NAV_LOOP_LIMIT, NAV_LOOP_WINDOW_MS, type NavGuard, type NavGuardOptions, type NavLoop, useNavLoop } from './shell/nav-guard';
 export { UserMenu, type UserMenuLink, type UserMenuProps } from './shell/UserMenu';

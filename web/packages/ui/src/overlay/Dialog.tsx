@@ -1,7 +1,7 @@
 'use client';
 
 import { Close, Content, Description, Overlay, Portal, Root, Title } from '@radix-ui/react-dialog';
-import { type CSSProperties, type ReactNode, useLayoutEffect, useRef } from 'react';
+import { type CSSProperties, type ReactNode, type RefObject, useLayoutEffect, useRef } from 'react';
 
 import { cx } from '../cx';
 import { X } from '../icons';
@@ -36,16 +36,27 @@ export interface DialogProps {
   width?: number;
   closeLabel?: string;
   className?: string;
+  /** Element to focus when the dialog opens (default: the first focusable element, the close button). */
+  initialFocus?: RefObject<HTMLElement | null>;
 }
 
 /** Modal dialog (focus trap, Esc to close, focus returns to the trigger). */
-export function Dialog({ open, onOpenChange, title, description, children, width = 400, closeLabel = 'Close', className }: DialogProps) {
+export function Dialog({ open, onOpenChange, title, description, children, width = 400, closeLabel = 'Close', className, initialFocus }: DialogProps) {
   const returnFocus = useReturnFocus(open);
   return (
     <Root open={open} onOpenChange={onOpenChange}>
       <Portal>
         <Overlay className={styles.overlay} />
-        <Content className={cx(styles.dialog, className)} style={{ '--dialog-width': `${width}px` } as CSSProperties} onCloseAutoFocus={returnFocus}>
+        <Content
+          className={cx(styles.dialog, className)}
+          style={{ '--dialog-width': `${width}px` } as CSSProperties}
+          onCloseAutoFocus={returnFocus}
+          onOpenAutoFocus={(e) => {
+            if (!initialFocus?.current) return;
+            e.preventDefault();
+            initialFocus.current.focus();
+          }}
+        >
           <div className={styles.head}>
             <Title className={styles.title}>{title}</Title>
             <Close className={styles.close} aria-label={closeLabel}>
