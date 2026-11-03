@@ -91,6 +91,11 @@ at:
     live-countries: ${SELLER_LIVE_COUNTRIES:US}
     # AfroTransact Retail (1P): never on a plan, never metered, never suspended.
     retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
+    # catalog-service: the departments onboarding offers (its public category tree) and what each asks for.
+    catalog:
+      base-url: ${CATALOG_URL:http://localhost:8101}
+      timeout: ${CATALOG_TIMEOUT:3s}
+      departments-ttl: ${DEPARTMENTS_TTL:60s}
     # Where AfroTransact's public pages live: a business without a website is given <this>/b/<slug> as its website.
     public-web-url: ${PUBLIC_WEB_URL:http://localhost:3000}
     stripe:

@@ -46,6 +46,19 @@ from a spreadsheet (**Listings → Size charts → Import charts**): download th
 **Check the file**; nothing is saved until you import, each chart is saved whole or not at all, and a name you already use
 updates that chart. A chart you retire keeps showing on products that already use it.
 
+### Which departments you sell in
+
+You choose your **departments** (Groceries, Fashion, Beauty and so on) when you apply, and AfroTransact records them when
+your application is approved. From then on Seller Center shows only those departments: in the product form, the bulk
+upload and its template, brand choices and the size chart pages. **Size charts** appears under Listings only when one of
+your departments sells clothing or shoes. The same rule is enforced on our side, so a listing, draft, upload row or size
+chart in another department is refused with a plain message that tells you how to add it.
+
+Need another department? Under any category picker choose **Need another department? Request it**, pick the department and
+send. AfroTransact reviews the request and, when it is approved, the department is added to your store at once. The answer
+tells you what that department also needs, for example your food permit for Groceries or confirming full ingredient
+labelling for Beauty. Listings you already have stay live and you can keep editing their price, stock and text.
+
 ## 3. Fulfil orders
 
 New orders appear in **Orders**. Ship with USPS, UPS or FedEx, add tracking, and mark as shipped. Customers are

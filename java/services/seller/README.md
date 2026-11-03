@@ -260,6 +260,21 @@ it while it still holds that role. Mirroring was chosen over dropping the table 
 back to the member list when a token's org/roles are stale, and the applicant must be a member before identity
 knows the organisation.
 
+## Catalog scope: the departments an organisation may sell in
+
+Recorded when an application is finally approved, from the `departments` chosen in step 7 (`catalog-compliance`:
+catalog department node codes, validated against catalog-service's tree and compliance data); changed by staff or by an
+approved department request. catalog-service reads them with `GET /v1/orgs/{orgId}/catalog-scope` (scope
+`sellers:catalog-scope.read`) and enforces them. Members and staff can read the same endpoint. `GET /v1/departments` lists
+the catalog's departments with `requires` (FOOD_PERMIT / BEAUTY_LABELLING, data on the department node). Members with the
+owner, admin or catalog role ask for another department with `POST /v1/orgs/{orgId}/department-requests`; staff
+(applications:review to list, applications:approve to decide) use `GET /v1/department-requests`,
+`POST /v1/department-requests/{id}/decision` and `PUT /v1/orgs/{orgId}/catalog-scope/departments`. AfroTransact Retail is
+exempt. Provisioning (`POST /v1/orgs`, local/dev) accepts `departments`. Details: `docs/engineering/seller-catalog-scope.md`.
+Config: `at.seller.catalog.base-url` (default `http://localhost:8101`), `timeout`, `departments-ttl` (60 s). When the
+catalog cannot be reached the departments step answers 503 `seller.departments-unavailable` (the last answer is served
+while it is down).
+
 ## Events (outbox → Kafka, `contracts/asyncapi/fragments/seller.yaml`)
 
 | Topic (key) | Types | Consumers |
