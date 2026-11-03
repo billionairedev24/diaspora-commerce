@@ -415,6 +415,7 @@ const ROUTES: Array<[string, string, Handler]> = [
   ['GET', '/v1/account/orders/:orderNumber/tracking', ({ params }) => { const t = tracking(params.orderNumber ?? ''); return t ? json(t) : problem(404, 'Order not found', 'NOT_FOUND'); }],
   ['GET', '/v1/checkout/summary', () => { const s = checkoutSummary(); return s ? json(s) : problem(409, 'Your cart is empty', 'CART_EMPTY'); }],
   ['POST', '/v1/checkout/orders', ({ body }) => placeOrder(body as Parameters<typeof placeOrder>[0])],
+  ['GET', '/v1/session/policy', () => json({ audience: 'customer-app', idleTimeoutSeconds: 30 * 86400, absoluteTimeoutSeconds: 90 * 86400, warnSeconds: 0, lastActivityAt: null, expiresAt: null })],
   /* identity */
   ['POST', '/v1/me/devices', ({ body }) => {
     const b = body as { token: string; app: string; platform: string; provider?: string; deviceName?: string };

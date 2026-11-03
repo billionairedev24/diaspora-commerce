@@ -24,7 +24,9 @@ const FLASH_KEY: Record<SignOutFlash['code'], MessageKey> = {
   'passcode-locked': 'cu.flash.passcodeLocked',
   'passcode-reset': 'cu.flash.passcodeReset',
   'session-ended': 'cu.flash.sessionEnded',
-  'all-devices': 'cu.flash.allDevices'
+  'all-devices': 'cu.flash.allDevices',
+  'session-idle': 'cu.session.idle',
+  'session-absolute': 'cu.session.absolute'
 };
 
 interface Errors {

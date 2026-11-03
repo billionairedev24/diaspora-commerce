@@ -169,5 +169,11 @@
   "dr.profile.biometricHint": "Abre la app con tu rostro o tu huella. El código siempre es la alternativa.",
   "dr.profile.biometricUnavailable": "{method} no está configurado en este teléfono.",
   "dr.profile.biometricFailed": "No se pudo cambiar {method}. Inténtalo de nuevo.",
-  "dr.profile.lockNow": "Bloquear ahora"
+  "dr.profile.lockNow": "Bloquear ahora",
+  "dr.session.idle": "Cerramos tu sesión tras un periodo de inactividad. Inicia sesión de nuevo. Las actualizaciones sin enviar se quedan en este teléfono.",
+  "dr.session.absolute": "Por tu seguridad, tu sesión alcanzó su duración máxima. Inicia sesión de nuevo. Las actualizaciones sin enviar se quedan en este teléfono.",
+  "dr.session.warnTitle": "¿Sigues ahí?",
+  "dr.session.warnBody": "Cerraremos tu sesión en {n, plural, one {# segundo} other {# segundos}}.",
+  "dr.session.stay": "Seguir conectado",
+  "dr.session.signOut": "Cerrar sesión"
 }

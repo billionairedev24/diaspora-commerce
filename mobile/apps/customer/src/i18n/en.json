@@ -241,5 +241,11 @@
   "cu.sizeGuide.selectShort": "Select",
   "cu.sizeGuide.soldOut": "Sold out",
   "cu.sizeGuide.howToMeasure": "How to measure",
-  "cu.sizeGuide.size": "Size"
+  "cu.sizeGuide.size": "Size",
+  "cu.session.idle": "You were signed out after a period of inactivity. Sign in again.",
+  "cu.session.absolute": "For your security, your session reached its maximum length. Sign in again.",
+  "cu.session.warnTitle": "Still there?",
+  "cu.session.warnBody": "You'll be signed out in {n, plural, one {# second} other {# seconds}}.",
+  "cu.session.stay": "Stay signed in",
+  "cu.session.signOut": "Sign out"
 }

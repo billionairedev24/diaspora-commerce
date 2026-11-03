@@ -248,5 +248,11 @@
   "cu.sizeGuide.selectShort": "Elegir",
   "cu.sizeGuide.soldOut": "Agotado",
   "cu.sizeGuide.howToMeasure": "Cómo medirse",
-  "cu.sizeGuide.size": "Talla"
+  "cu.sizeGuide.size": "Talla",
+  "cu.session.idle": "Cerramos tu sesión tras un periodo de inactividad. Inicia sesión de nuevo.",
+  "cu.session.absolute": "Por tu seguridad, tu sesión alcanzó su duración máxima. Inicia sesión de nuevo.",
+  "cu.session.warnTitle": "¿Sigues ahí?",
+  "cu.session.warnBody": "Cerraremos tu sesión en {n, plural, one {# segundo} other {# segundos}}.",
+  "cu.session.stay": "Seguir conectado",
+  "cu.session.signOut": "Cerrar sesión"
 }

@@ -169,5 +169,11 @@
   "dr.profile.biometricHint": "Ṣí áàpù pẹ̀lú ojú tàbí ìka ọwọ́ rẹ. Kóòdù àṣínà ni àfidípò nígbà gbogbo.",
   "dr.profile.biometricUnavailable": "{method} kò sí lórí fóònù yìí.",
   "dr.profile.biometricFailed": "Kò ṣeé yí {method} padà. Tún gbìyànjú.",
-  "dr.profile.lockNow": "Tì báyìí"
+  "dr.profile.lockNow": "Tì báyìí",
+  "dr.session.idle": "A ti mú ọ jáde lẹ́yìn àkókò tí o kò lo ohun èlò náà. Tún wọlé. Àwọn ìmúdójúìwọ̀n tí a kò ì fi ránṣẹ́ wà lórí fóònù yìí.",
+  "dr.session.absolute": "Fún ààbò rẹ, ìgbà wíwọlé rẹ ti dé òpin tó pọ̀ jù. Tún wọlé. Àwọn ìmúdójúìwọ̀n tí a kò ì fi ránṣẹ́ wà lórí fóònù yìí.",
+  "dr.session.warnTitle": "Ṣé o ṣì wà níbẹ̀?",
+  "dr.session.warnBody": "A óò mú ọ jáde láàrín {n, plural, other {# ìṣẹ́jú àáyá}}.",
+  "dr.session.stay": "Dúró ní wíwọlé",
+  "dr.session.signOut": "Jáde"
 }

@@ -169,5 +169,11 @@
   "dr.profile.biometricHint": "Ouvrez l’app avec votre visage ou votre empreinte. Le code reste la solution de secours.",
   "dr.profile.biometricUnavailable": "{method} n’est pas configuré sur ce téléphone.",
   "dr.profile.biometricFailed": "Impossible de modifier {method}. Réessayez.",
-  "dr.profile.lockNow": "Verrouiller maintenant"
+  "dr.profile.lockNow": "Verrouiller maintenant",
+  "dr.session.idle": "Vous avez été déconnecté après une période d’inactivité. Reconnectez-vous. Les mises à jour non envoyées restent sur ce téléphone.",
+  "dr.session.absolute": "Pour votre sécurité, votre session a atteint sa durée maximale. Reconnectez-vous. Les mises à jour non envoyées restent sur ce téléphone.",
+  "dr.session.warnTitle": "Vous êtes toujours là ?",
+  "dr.session.warnBody": "Vous serez déconnecté dans {n, plural, one {# seconde} other {# secondes}}.",
+  "dr.session.stay": "Rester connecté",
+  "dr.session.signOut": "Se déconnecter"
 }

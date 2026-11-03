@@ -7,7 +7,7 @@ import { createApiClient, type FetchLike } from '@afrotransact/api-client';
 
 import { env } from '@/config/env';
 
-import { createAuthFetch, createJsonRequester, type TokenSource } from './http';
+import { BACKGROUND_ON, createAuthFetch, createJsonRequester, type TokenSource } from './http';
 import { mockFetch } from './mock/router';
 import { withDeadline } from './network';
 import {
@@ -30,6 +30,7 @@ import {
   type PublicService,
   type PublicServiceSearch,
   type RegisterDeviceRequest,
+  type SessionPolicyBody,
   type SetupIntent
 } from './types';
 
@@ -50,6 +51,10 @@ export function createCustomerApi(tokens: TokenSource, network: FetchLike = with
       /** What orders knows of an attempt (placed, awaiting payment; a failed order answers 4xx). */
       status: (orderNumber: string) => bffJson<OrderConfirmation>(`/v1/checkout/orders/${encodeURIComponent(orderNumber)}`)
     },
+    session: {
+      /** Sign-out policy for this app. Background (never counts as activity); the customer app sends no X-App. */
+      policy: () => bffJson<SessionPolicyBody>('/v1/session/policy', { headers: { ...BACKGROUND_ON } })
+    },
     account: {
       createSetupIntent: () => bffJson<SetupIntent>('/v1/account/payment-methods/setup-intents', { method: 'POST' }),
       deletePaymentMethod: (id: string) => bffJson<void>(`/v1/account/payment-methods/${encodeURIComponent(id)}`, { method: 'DELETE' }),
@@ -57,8 +62,8 @@ export function createCustomerApi(tokens: TokenSource, network: FetchLike = with
       tracking: (orderNumber: string) => bffJson<OrderTracking>(`/v1/account/orders/${encodeURIComponent(orderNumber)}/tracking`)
     },
     identity: {
-      registerDevice: (body: RegisterDeviceRequest) => identity<Device>('/v1/me/devices', { method: 'POST', body }),
-      unregisterDevice: (token: string) => identity<void>('/v1/me/devices', { method: 'DELETE', body: { token } }),
+      registerDevice: (body: RegisterDeviceRequest) => identity<Device>('/v1/me/devices', { method: 'POST', body, headers: { ...BACKGROUND_ON } }),
+      unregisterDevice: (token: string) => identity<void>('/v1/me/devices', { method: 'DELETE', body: { token }, headers: { ...BACKGROUND_ON } }),
       getPreferences: () => identity<NotificationPreferences>('/v1/me/notification-preferences'),
       putPreferences: (body: { email: boolean; sms: boolean; push: boolean; marketingOptIn: boolean }) =>
         identity<NotificationPreferences>('/v1/me/notification-preferences', { method: 'PUT', body })

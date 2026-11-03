@@ -162,5 +162,11 @@
   "dr.profile.biometricHint": "Open the app with your face or fingerprint. The passcode is always the fallback.",
   "dr.profile.biometricUnavailable": "{method} isn’t set up on this phone.",
   "dr.profile.biometricFailed": "Couldn’t change {method}. Try again.",
-  "dr.profile.lockNow": "Lock now"
+  "dr.profile.lockNow": "Lock now",
+  "dr.session.idle": "You were signed out after a period of inactivity. Sign in again. Unsent updates are kept on this phone.",
+  "dr.session.absolute": "For your security, your session reached its maximum length. Sign in again. Unsent updates are kept on this phone.",
+  "dr.session.warnTitle": "Still there?",
+  "dr.session.warnBody": "You'll be signed out in {n, plural, one {# second} other {# seconds}}.",
+  "dr.session.stay": "Stay signed in",
+  "dr.session.signOut": "Sign out"
 }

@@ -2,7 +2,7 @@
    five wrong passcodes force a full sign-in, sign-out removes Face ID and the passcode from the device. */
 import * as Crypto from 'expo-crypto';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Keyboard } from 'react-native';
 
 import { type TokenSource } from '@/api/http';
 import { env } from '@/config/env';
@@ -10,6 +10,9 @@ import { decodeJwt, initialsOf, isExpiring } from '@/domain/jwt';
 import { phaseOnLaunch, type SessionPhase, shouldLockOnResume } from '@/domain/lockPolicy';
 import { type SecondFactor, type SignInStep } from '@/domain/nativeSignIn';
 import { digestsEqual, passcodeDigestInput, recordUnlockAttempt, type UnlockResult } from '@/domain/passcode';
+import { flashCodeFor, type SessionFlashCode } from '@/domain/sessionFlash';
+import { SessionGuard } from '@/domain/sessionGuard';
+import { type SessionEndReason, type SessionWarning } from '@/domain/sessionPolicy';
 
 import { authenticateBiometric, biometricLabel, biometricsAvailable } from './biometrics';
 import { beginNativeSignIn, type NativeAttempt } from './nativeAuth';
@@ -22,7 +25,7 @@ export type SetupStep = 'face-id' | 'passcode' | 'notifications';
 
 /** Why the person is back on sign-in; the screen words it in the shopper's language (cu.flash.*). `detail` is a dev-only hint. */
 export interface SignOutFlash {
-  code: 'passcode-locked' | 'passcode-reset' | 'session-ended' | 'all-devices';
+  code: 'passcode-locked' | 'passcode-reset' | 'session-ended' | 'all-devices' | SessionFlashCode;
   detail?: string;
 }
 
@@ -65,6 +68,14 @@ interface AuthContextValue {
   confirmWithDevice(reason: string): Promise<boolean>;
   /** Registers work to do before sign-out (e.g. unregister the push token); returns an unsubscribe. */
   onSignOut(hook: () => Promise<void>): () => void;
+  /** Real foreground interaction (touch, keyboard): feeds the inactivity timer. Never call it from timers or background work. */
+  noteActivity(): void;
+  /** Set while the idle limit is close and a warning is configured (warnSeconds > 0); null otherwise. */
+  sessionWarning: SessionWarning | null;
+  /** "Stay signed in" on the warning: counts as activity. */
+  staySignedIn(): void;
+  /** The API provider hands over the call that reads GET /v1/session/policy (sent as background, never activity). */
+  registerPolicyFetcher(fetcher: () => Promise<unknown>): () => void;
   /** Set by the passcode confirmation sheet. */
   passcodePrompt: { reason: string; resolve: (ok: boolean) => void } | null;
 }
@@ -97,34 +108,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const goneReason = useRef('');
   const ending = useRef(false);
   const hooks = useRef(new Set<() => Promise<void>>());
+  const policyFetcher = useRef<(() => Promise<unknown>) | null>(null);
+  const endBySession = useRef<(reason: SessionEndReason) => void>(() => undefined);
+  const bootEnd = useRef<SessionEndReason | null>(null);
+  const readyRef = useRef(false);
+  const [sessionWarning, setSessionWarning] = useState<SessionWarning | null>(null);
+  const [foreground, setForeground] = useState(AppState.currentState !== 'background');
+  /* Sign-out after inactivity / session length (domain/sessionPolicy.ts): the clock and the cached policy live in the
+     secure store; ending the session goes through signOut below, like every other way out. */
+  const guard = useMemo(() => new SessionGuard({
+    audience: 'customer-app',
+    store: secureStorage,
+    fetchPolicy: () => (policyFetcher.current ? policyFetcher.current() : Promise.reject(new Error('API not ready'))),
+    onExpire: (reason) => endBySession.current(reason)
+  }), []);
   const backgroundedAt = useRef<number | null>(null);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
-
-  /* Boot: restore tokens and device security from the secure store. */
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const [rawTokens, passcode, face, setup] = await Promise.all([secureStorage.get(K.tokens), secureStorage.get(K.passcode), secureStorage.get(K.faceId), secureStorage.get(K.setup)]);
-      setBiometryLabel(await biometricLabel());
-      if (!alive) return;
-      if (rawTokens) {
-        try {
-          const t = JSON.parse(rawTokens) as TokenSet;
-          tokens.current = t;
-          setUser(userFrom(t));
-        } catch {
-          tokens.current = null;
-        }
-      }
-      setFaceIdState(face === '1');
-      const p = phaseOnLaunch({ signedIn: !!tokens.current, hasPasscode: !!passcode, setupComplete: setup === '1' });
-      setPhase(p);
-      if (p === 'setup') setSetupStep(passcode ? 'notifications' : 'face-id');
-      setReady(true);
-    })();
-    return () => { alive = false; };
-  }, []);
 
   /* Lock again when the app comes back after the grace period. */
   useEffect(() => {
@@ -140,10 +140,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearDevice = useCallback(async () => {
     await Promise.all(Object.values(K).map((k) => secureStorage.remove(k)));
+    await guard.end();
     tokens.current = null;
+    setSessionWarning(null);
     setUser(null);
     setFaceIdState(false);
-  }, []);
+  }, [guard]);
 
   const signOut = useCallback(async (opts?: { flash?: SignOutFlash }) => {
     for (const h of hooks.current) {
@@ -154,6 +156,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setFlash(opts?.flash ?? null);
     setPhase('signed-out');
   }, [clearDevice]);
+
+  /* Boot: restore tokens and device security from the secure store. A session that has already run past its idle or
+     session-length limit (the phone sat in a drawer) is signed out here, before the lock screen is ever shown. */
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const [rawTokens, passcode, face, setup] = await Promise.all([secureStorage.get(K.tokens), secureStorage.get(K.passcode), secureStorage.get(K.faceId), secureStorage.get(K.setup)]);
+      setBiometryLabel(await biometricLabel());
+      if (!alive) return;
+      if (rawTokens) {
+        try {
+          const t = JSON.parse(rawTokens) as TokenSet;
+          tokens.current = t;
+          setUser(userFrom(t));
+        } catch {
+          tokens.current = null;
+        }
+      }
+      await guard.load(!!tokens.current);
+      if (!alive) return;
+      readyRef.current = true;
+      const ended = bootEnd.current;
+      if (ended && tokens.current) {
+        ending.current = true;
+        await signOut({ flash: { code: flashCodeFor(ended) } });
+        if (alive) setReady(true);
+        return;
+      }
+      setFaceIdState(face === '1');
+      const p = phaseOnLaunch({ signedIn: !!tokens.current, hasPasscode: !!passcode, setupComplete: setup === '1' });
+      setPhase(p);
+      if (p === 'setup') setSetupStep(passcode ? 'notifications' : 'face-id');
+      setReady(true);
+    })();
+    return () => { alive = false; };
+  }, [guard, signOut]);
+
+  endBySession.current = (reason) => {
+    if (!readyRef.current) {
+      bootEnd.current = reason; // cold start: the boot code signs out before showing anything
+      return;
+    }
+    if (ending.current || !tokens.current) return;
+    ending.current = true;
+    void signOut({ flash: { code: flashCodeFor(reason) } });
+  };
 
   const persistTokens = useCallback(async (t: TokenSet) => {
     tokens.current = t;
@@ -194,19 +242,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
     refreshAccessToken,
+    onSessionEnded: (reason) => endBySession.current(reason),
+    onUserRequest: () => { if (phaseRef.current === 'unlocked') guard.touch(); },
     onSessionExpired: () => {
       // Several requests fail together: the first one ends the session, the rest must not overwrite its reason.
       if (ending.current || !tokens.current) return;
       ending.current = true;
       void signOut({ flash: { code: 'session-ended', ...(env.appEnv !== 'prod' && goneReason.current ? { detail: goneReason.current } : {}) } });
     }
-  }), [refreshAccessToken, signOut]);
+  }), [refreshAccessToken, signOut, guard]);
 
   /* A new sign-in on this phone starts the first-time setup (Face ID → passcode → notifications) unless it was done. */
   const startSession = useCallback(async (t: TokenSet) => {
     ending.current = false;
     goneReason.current = '';
     await persistTokens(t);
+    await guard.begin(); // the session length counts from now
+    void guard.refreshPolicy(true);
     setUser(userFrom(t));
     setFlash(null);
     await secureStorage.set(K.attempts, '0');
@@ -218,7 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setSetupStep('face-id');
     setPhase('setup');
-  }, [persistTokens]);
+  }, [persistTokens, guard]);
 
   const signIn = useCallback(async (intent: SignInIntent) => {
     await startSession(await signInWithIdentity(intent));
@@ -285,25 +337,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const attempts = Number((await secureStorage.get(K.attempts)) ?? '0') || 0;
     const r = recordUnlockAttempt(attempts, await verifyPasscode(pin));
     await secureStorage.set(K.attempts, String(r.attempts));
-    if (r.kind === 'unlocked') setPhase('unlocked');
+    if (r.kind === 'unlocked') {
+      guard.touch(); // unlocking is real use
+      setPhase('unlocked');
+    }
     if (r.kind === 'locked-out') await signOut({ flash: { code: 'passcode-locked' } });
     return r;
-  }, [signOut, verifyPasscode]);
+  }, [signOut, verifyPasscode, guard]);
 
   const unlockWithBiometrics = useCallback(async () => {
     if (!faceId) return false;
     const ok = await authenticateBiometric('Unlock AfroTransact');
     if (ok) {
       await secureStorage.set(K.attempts, '0');
+      guard.touch();
       setPhase('unlocked');
     }
     return ok;
-  }, [faceId]);
+  }, [faceId, guard]);
 
   const confirmWithDevice = useCallback(async (reason: string) => {
     if (faceId && (await authenticateBiometric(reason))) return true;
     return new Promise<boolean>((resolve) => setPasscodePrompt({ reason, resolve: (ok) => { setPasscodePrompt(null); resolve(ok); } }));
   }, [faceId]);
+
+  const noteActivity = useCallback(() => {
+    if (phaseRef.current === 'unlocked' || phaseRef.current === 'setup') guard.touch();
+  }, [guard]);
+
+  const staySignedIn = useCallback(() => {
+    guard.stay();
+    setSessionWarning(null);
+  }, [guard]);
+
+  const registerPolicyFetcher = useCallback((fetcher: () => Promise<unknown>) => {
+    policyFetcher.current = fetcher;
+    return () => { if (policyFetcher.current === fetcher) policyFetcher.current = null; };
+  }, []);
+
+  /* Soft keyboard opening is interaction that a touch handler at the root does not see. */
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', noteActivity);
+    return () => sub.remove();
+  }, [noteActivity]);
+
+  /* On every resume: judge the session first (time in the background is idle time), then maybe re-read the policy
+     (at most hourly). Going to the background writes the clock. Neither counts as activity. */
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      setForeground(s === 'active');
+      if (s === 'background') void guard.flush();
+      if (s === 'active' && tokens.current) {
+        guard.check();
+        void guard.refreshPolicy();
+      }
+    });
+    return () => sub.remove();
+  }, [guard]);
+
+  /* While foregrounded: look again when the next limit (or the warning window) is due, never later than a minute. */
+  const watching = ready && phase !== 'signed-out' && foreground;
+  useEffect(() => {
+    if (!watching) {
+      setSessionWarning(null);
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = () => {
+      const c = guard.check();
+      setSessionWarning((prev) => (c?.warning ? { secondsLeft: c.warning.secondsLeft } : prev === null ? prev : null));
+      if (c?.status === 'active') timer = setTimeout(tick, c.recheckInMs);
+    };
+    tick();
+    return () => clearTimeout(timer);
+  }, [watching, guard]);
 
   const onSignOut = useCallback((hook: () => Promise<void>) => {
     hooks.current.add(hook);
@@ -311,11 +418,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
-    ready, phase, setupStep, user, faceId, biometryLabel, flash, tokenSource, passcodePrompt,
+    ready, phase, setupStep, user, faceId, biometryLabel, flash, tokenSource, passcodePrompt, sessionWarning, noteActivity, staySignedIn, registerPolicyFetcher,
     signIn, signInWithPassword, sendSignInCode, verifySecondFactor, cancelSignIn, setFaceId, savePasscode, finishSetup, unlockWithPasscode, unlockWithBiometrics, verifyPasscode,
     lock: () => setPhase((p) => (p === 'unlocked' ? 'locked' : p)),
     signOut, confirmWithDevice, onSignOut
-  }), [ready, phase, setupStep, user, faceId, biometryLabel, flash, tokenSource, passcodePrompt, signIn, signInWithPassword, sendSignInCode, verifySecondFactor, cancelSignIn, setFaceId, savePasscode, finishSetup, unlockWithPasscode, unlockWithBiometrics, verifyPasscode, signOut, confirmWithDevice, onSignOut]);
+  }), [ready, phase, setupStep, user, faceId, biometryLabel, flash, tokenSource, passcodePrompt, sessionWarning, noteActivity, staySignedIn, registerPolicyFetcher, signIn, signInWithPassword, sendSignInCode, verifySecondFactor, cancelSignIn, setFaceId, savePasscode, finishSetup, unlockWithPasscode, unlockWithBiometrics, verifyPasscode, signOut, confirmWithDevice, onSignOut]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
