@@ -181,6 +181,14 @@ class CatalogScopeServiceImpl implements CatalogScopeService {
                 .map(r -> needs(r, null)).toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public DepartmentRequest request(UUID requestId) {
+        access.staffAny(SellerPermissions.APPLICATIONS_REVIEW, SellerPermissions.APPLICATIONS_APPROVE);
+        return needs(scopes.findRequest(requestId).orElseThrow(() ->
+                new NotFoundException("seller.department-request-not-found", "Department request not found")), null);
+    }
+
     private CatalogScope scope(String orgId) {
         if (settings.isRetail(orgId)) {
             return new CatalogScope(orgId, true, Set.of(), List.of());

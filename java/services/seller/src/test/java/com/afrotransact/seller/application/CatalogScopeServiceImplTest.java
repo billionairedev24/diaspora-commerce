@@ -21,6 +21,7 @@ import java.util.UUID;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
+import com.afrotransact.platform.web.error.NotFoundException;
 import com.afrotransact.seller.domain.ApplicationData;
 import com.afrotransact.seller.domain.CatalogScope;
 import com.afrotransact.seller.domain.ComplianceSection;
@@ -143,6 +144,17 @@ class CatalogScopeServiceImplTest {
         verify(events).publish(eq(SellerEvents.DEPARTMENT_REQUEST_DECIDED), eq(SellerEvents.AGGREGATE_APPLICATION),
                 eq("org_1"), eq(new DepartmentRequestDecidedPayload(id, "org_1", "groceries", "REJECTED", "staff_1",
                         "Upload your food permit first", NOW)));
+    }
+
+    @Test
+    void staffReadOneRequestAndAnUnknownOneIsNotFound() {
+        UUID id = UUID.randomUUID();
+        when(scopes.findRequest(id)).thenReturn(Optional.of(new DepartmentRequest(id, "org_1", "groceries", "spices",
+                DepartmentRequestStatus.PENDING, "user_1", NOW, null, null, null, Set.of())));
+        when(applications.findByOrg("org_1")).thenReturn(Optional.empty());
+        assertThat(service.request(id).needs()).containsExactly(Department.Requirement.FOOD_PERMIT);
+        assertThatThrownBy(() -> service.request(UUID.randomUUID()))
+                .isInstanceOf(NotFoundException.class);
     }
 
     @Test
