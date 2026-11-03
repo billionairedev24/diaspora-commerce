@@ -45,9 +45,10 @@ describe('the lock never touches sync', () => {
   it('five wrong passcodes sign out through the same signOut as Profile → Sign out', () => {
     const src = read('session/LockProvider.tsx');
     expect(src).toMatch(/locked-out'\) await signOut\(/);
-    // The provider's signOut flushes, ends the session and leaves the SQLite outbox alone.
+    // The provider's signOut flushes, ends the session and leaves the SQLite outbox alone (session/endSession.ts).
     const driver = read('session/DriverProvider.tsx');
-    expect(driver).toMatch(/engine\.setUser\(null\); \/\/ the outbox stays on the phone/);
+    expect(driver).toMatch(/await endSession\(endParts\)/);
+    expect(read('session/endSession.ts')).toMatch(/p\.engine\.setUser\(null\); \/\/ the outbox stays on the phone/);
   });
 
   it('the navigator stays mounted under the lock (overlay, not a screen swap)', () => {
@@ -74,7 +75,7 @@ describe('sign-out keeps the outbox (the path the lock uses)', () => {
     await e.refreshRoute();
     await e.record({ type: 'loadout.scanned', scan: { label: 'AT-1', method: 'CAMERA' } });
     expect(e.getState().outbox.events).toHaveLength(1);
-    e.setUser(null); // what DriverProvider.clearSession does on sign-out
+    e.setUser(null); // what session/endSession.ts does on sign-out
     expect(e.getState().outbox.events).toHaveLength(1);
     const restarted = make();
     await restarted.init();

@@ -56,7 +56,7 @@ async function readStored(): Promise<StoredSecurity> {
 
 export function LockProvider({ children }: { children: ReactNode }) {
   const tr = useT();
-  const { phase: session, denied, signOut } = useDriver();
+  const { phase: session, denied, signOut, noteActivity } = useDriver();
   const [phase, setPhase] = useState<LockPhase | null>(null);
   const [setupStep, setSetupStep] = useState<SetupStep>('face-id');
   const [faceId, setFaceIdState] = useState(false);
@@ -163,21 +163,25 @@ export function LockProvider({ children }: { children: ReactNode }) {
     }
     const r = recordUnlockAttempt(attempts, correct);
     await secureStorage.set(K.attempts, String(r.attempts));
-    if (r.kind === 'unlocked') setPhase('unlocked');
+    if (r.kind === 'unlocked') {
+      noteActivity(); // unlocking is real use
+      setPhase('unlocked');
+    }
     // Five wrong passcodes: a full sign-out. DriverProvider.signOut keeps the outbox on the phone.
     if (r.kind === 'locked-out') await signOut({ notice: tr('dr.lock.lockedOut') });
     return r;
-  }, [signOut, tr]);
+  }, [signOut, tr, noteActivity]);
 
   const unlockWithBiometrics = useCallback(async () => {
     if (!faceId) return false;
     const ok = await authenticateBiometric(tr('dr.lock.unlockPrompt'), tr('dr.lock.usePasscode'));
     if (ok) {
       await secureStorage.set(K.attempts, '0');
+      noteActivity();
       setPhase('unlocked');
     }
     return ok;
-  }, [faceId, tr]);
+  }, [faceId, tr, noteActivity]);
 
   const value = useMemo<LockCtx>(() => ({
     ready: storedReady && session !== 'booting' && phase !== null,

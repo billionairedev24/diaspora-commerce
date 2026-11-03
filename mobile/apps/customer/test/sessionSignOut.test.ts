@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { BACKGROUND_ON, createAuthFetch, sessionEndReasonOf, type TokenSource } from '../src/api/http';
@@ -81,5 +84,14 @@ describe('what counts as activity in the API layer', () => {
   it('does not count background work, e.g. the policy read and push-token registration', async () => {
     expect(await run(new Request('https://api.example.test/identity/v1/me/devices', { method: 'POST', body: '{}', headers: BACKGROUND_ON }))).toEqual([]);
     expect(await run(new Request('https://api.example.test/bff/v1/session/policy', { headers: BACKGROUND_ON }))).toEqual([]);
+  });
+});
+
+describe('background calls in the typed client are marked', () => {
+  it('the policy read and push-token (un)registration carry X-Background', () => {
+    const src = readFileSync(join(__dirname, '..', 'src/api/client.ts'), 'utf8');
+    expect(src).toMatch(/policy: \(\) => bffJson<SessionPolicyBody>\('\/v1\/session\/policy', \{ headers: \{ \.\.\.BACKGROUND_ON \} \}\)/);
+    expect(src).toMatch(/registerDevice: .*headers: \{ \.\.\.BACKGROUND_ON \}/);
+    expect(src).toMatch(/unregisterDevice: .*headers: \{ \.\.\.BACKGROUND_ON \}/);
   });
 });

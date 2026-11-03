@@ -10,6 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { BootScreen } from '@/brand/BootScreen';
 import { LockLayer, useLockScreen } from '@/features/lock/LockLayer';
+import { IdleWarning } from '@/features/session/IdleWarning';
 import { AppI18nProvider } from '@/i18n';
 import { DriverProvider, useDriver } from '@/session/DriverProvider';
 import { LockProvider, useLock } from '@/session/LockProvider';
@@ -19,14 +20,16 @@ import { DevBuildNote } from '@/ui/DevBuildNote';
 import { ToastProvider } from '@/ui/Toast';
 
 function Gate() {
-  const { phase } = useDriver();
+  const { phase, noteActivity } = useDriver();
   const lock = useLock();
   const covered = useLockScreen() !== null;
   if (phase === 'booting' || !lock.ready) return <BootScreen />;
   /* The lock is a layer: the navigator stays mounted underneath (screen state, camera, signature pad survive), hidden
      from screen readers while the lock is up. */
   return (
-    <View style={{ flex: 1 }}>
+    // A touch that starts anywhere is activity for the inactivity timer (only while unlocked or in setup, never on the
+    // lock screen); the capture handler observes and never claims the gesture. Sync, pings and push are not touches.
+    <View style={{ flex: 1 }} onStartShouldSetResponderCapture={() => { if (lock.phase === 'unlocked' || lock.phase === 'setup') noteActivity(); return false; }}>
     <View style={{ flex: 1 }} accessibilityElementsHidden={covered} importantForAccessibility={covered ? 'no-hide-descendants' : 'auto'}>
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.canvas } }}>
       <Stack.Protected guard={phase === 'signed-out'}>
@@ -42,6 +45,7 @@ function Gate() {
     </Stack>
     </View>
     <LockLayer />
+    <IdleWarning />
     </View>
   );
 }
