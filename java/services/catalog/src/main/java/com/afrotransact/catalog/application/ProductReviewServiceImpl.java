@@ -217,9 +217,10 @@ class ProductReviewServiceImpl implements ProductReviewService {
         }
     }
 
+    /** The product behind an ATIN: its own ATIN, or the ATIN of one of its variants (the product page is opened by variant). */
     private Product findProduct(String raw) {
         Atin atin = parse(raw);
-        return products.findByAtin(atin).orElseThrow(() -> productNotFound(raw));
+        return products.findByAtin(atin).or(() -> products.findByVariantAtin(atin)).orElseThrow(() -> productNotFound(raw));
     }
 
     /** LIVE or PAUSED: a customer can still review what they bought while it is paused. */
@@ -228,7 +229,8 @@ class ProductReviewServiceImpl implements ProductReviewService {
     }
 
     private Product publicProduct(String raw) {
-        return products.findByAtin(parse(raw))
+        Atin atin = parse(raw);
+        return products.findByAtin(atin).or(() -> products.findByVariantAtin(atin))
                 .filter(p -> p.status() == ProductStatus.LIVE && !suppressions.isHidden(p.owner().orgId()))
                 .orElseThrow(() -> productNotFound(raw));
     }
