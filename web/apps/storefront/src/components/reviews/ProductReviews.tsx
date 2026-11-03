@@ -133,7 +133,7 @@ function ReviewItem({ review, canReport }: { review: PublicReview; canReport: bo
 
 /**
  * The ratings section of the product page (S324): average, count and star breakdown (each row filters the list), the
- * reviews sorted and paged, and the shopper's own review or "Write a review" when they received the item.
+ * reviews sorted and paged, and the shopper's own review, and "Write a review" only for a shopper who received the item (no one else is told they cannot review).
  */
 export function ProductReviews({ atin, title }: { atin: string; title: string }) {
   const t = useT();
@@ -173,8 +173,6 @@ export function ProductReviews({ atin, title }: { atin: string; title: string })
         {signedIn && mine.data?.eligible && (
           <Button variant="neutral" onClick={() => setWriting(true)}>{t('rev.write')}</Button>
         )}
-        {signedIn && !own && mine.data && !mine.data.eligible && <p className={styles.muted}>{t('rev.onlyBuyers')}</p>}
-        {!signedIn && me && <p className={styles.muted}>{t('rev.onlyBuyers')}</p>}
       </div>
       <div>
         {own && (
