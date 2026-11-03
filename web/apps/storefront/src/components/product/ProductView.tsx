@@ -123,7 +123,9 @@ export function ProductView({ atin }: { atin: string }) {
           <span className={styles.store}>
             <Link href={`/s?q=${encodeURIComponent(p.brand)}`}>{t('pdp.visitStore', { brand: p.brand })}</Link>
           </span>
-          <Stars rating={p.rating} showValue reviewCount={p.reviewCount} reviewsLabel={(c) => t('pdp.ratings', { count: c })} ratingLabel={(r) => t('card.rating', { rating: r })} locale={fmt.tag} />
+          {p.reviewCount > 0 && (
+            <Stars rating={p.rating} showValue reviewCount={p.reviewCount} reviewsLabel={(c) => t('pdp.ratings', { count: c })} ratingLabel={(r) => t('card.rating', { rating: r })} locale={fmt.tag} />
+          )}
           <hr className={styles.rule} />
           {bb && (
             <>

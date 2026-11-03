@@ -106,7 +106,7 @@ export function Sheet({ open, onOpenChange, title, description, header, children
   return (
     <Root open={open} onOpenChange={onOpenChange} modal={modal}>
       <Portal>
-        {modal ? <Overlay className={styles.overlay} /> : null}
+        {modal ? <Overlay className={cx(styles.overlay, styles.sheetOverlay)} /> : null}
         <Content
           className={cx(styles.sheet, styles[side], !modal && styles.docked, className)}
           onCloseAutoFocus={returnFocus}
