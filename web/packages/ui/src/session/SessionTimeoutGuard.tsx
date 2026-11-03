@@ -51,14 +51,19 @@ export function useSessionTimeout(options: SessionTimeoutHookOptions): SessionTi
   latest.current = options;
   const enabled = options.enabled ?? true;
 
-  const [controller] = useState<SessionTimeoutController>(() =>
-    createSessionTimeout({
+  const [controller] = useState<SessionTimeoutController>(() => {
+    // Resolved on first use, so a page without a session (a guest) never opens a channel.
+    const channel = (): SessionChannel | null => (latest.current.channel === undefined ? getSessionChannel() : latest.current.channel);
+    return createSessionTimeout({
       loadPolicy: (fresh) => latest.current.loadPolicy(fresh),
       reportActivity: () => latest.current.reportActivity(),
       onEnded: (reason, source) => latest.current.onEnded(reason, source),
-      channel: options.channel === undefined ? getSessionChannel() : options.channel
-    })
-  );
+      channel: {
+        post: (message) => channel()?.post(message),
+        subscribe: (listener) => channel()?.subscribe(listener) ?? (() => undefined)
+      }
+    });
+  });
 
   const view = useSyncExternalStore(controller.subscribe, controller.getSnapshot, () => IDLE_VIEW);
 

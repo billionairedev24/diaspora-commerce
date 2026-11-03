@@ -2,6 +2,7 @@
 
 import { accountKeys, cartKeys, type Me } from '@afrotransact/api-client';
 import {
+  announceSignOut,
   CalendarCheck,
   CaretDown,
   CreditCard,
@@ -79,6 +80,8 @@ export function AccountMenu({ me, onAskLola, inline, defaultOpen, memberTier }: 
     } catch {
       /* signed out locally anyway: the session cookie is gone or was never there */
     }
+    // The other tabs of this browser leave too (session timer).
+    announceSignOut();
     if (redirectTo) {
       // Ends the identity session too (single sign-out); identity then returns the browser to this page (or the home
       // page) with signedOut=1, where SignedOutNotice says so. No sign-in wall.
