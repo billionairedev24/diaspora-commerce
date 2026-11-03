@@ -19,6 +19,17 @@ carrier-gateway, CARRIER_GATEWAY_URL), `bookings`, `ops`, `users`. The datasets 
 `seedlib/dataset.py` and `seedlib/ops_dataset.py`; photo sources, attribution and service URLs are described in
 `seed.py` and the guide.
 
+### Departments of the demo sellers
+
+A seller may only create and edit items in the catalog departments recorded for its organisation (docs/engineering/seller-catalog-scope.md).
+The `sellers` step therefore sends each marketplace seller the departments of the products it lists
+(`seller_departments()` in `seedlib/dataset.py`: its own products and the ones it offers next to another seller), as the
+catalog's department node codes read from `GET /v1/categories` (nothing is hard-coded per category). seller-service adds
+them on every call, also to organisations seeded earlier, and never removes one, so a re-run keeps every demo seller
+consistent with its products. Providers and AfroTransact Retail (exempt) get none. The seeder itself writes the catalog
+as AfroTransact Retail, which is exempt, so seeding never depends on a seller's departments. The seed assumes an empty
+database (there is no legacy handling): wipe, then seed.
+
 ### Size charts and sizes of their own
 
 The `size-charts` step writes the demo size charts (`SIZE_CHARTS` in `seedlib/dataset.py`: women's dresses, women's tops,

@@ -3622,6 +3622,13 @@ components:
         country:
           type: string
           example: US
+        departments:
+          type: array
+          description: Catalog department codes the organisation may sell in; added (never removed) on every call, so a re-run keeps a demo seller consistent with its products
+          items:
+            type: string
+          example:
+          - groceries
       required:
       - kind
     OrgMember:

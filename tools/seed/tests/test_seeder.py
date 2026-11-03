@@ -176,9 +176,43 @@ class OffersAndStockTest(unittest.TestCase):
         self.assertEqual(self.s.report.counts[("inventory receipts", "replayed")], 1)
 
 
+DEPARTMENT_NODES = [{"path": n, "name": n, "level": "DEPARTMENT", "code": c} for n, c in (
+    ("Fashion", "fashion"), ("Groceries", "groceries"), ("Beauty", "beauty"), ("Books", "books"),
+    ("Home & Art", "home-art"), ("Health", "health"), ("Event & party", "event-party"))]
+
+
 class SellersTest(unittest.TestCase):
+    def test_every_seller_is_given_the_departments_of_its_products(self):
+        s = seeder()
+        seen = {}
+        s.svc["catalog"].on("GET", "/v1/categories", lambda *a: DEPARTMENT_NODES)
+        s.svc["seller"].on("POST", "/v1/orgs", lambda path, body, kw: seen.__setitem__(body["id"], body) or body)
+        s.step_sellers()
+
+        expected = D.seller_departments()
+        self.assertEqual(s.report.problems, [])
+        self.assertTrue(expected)
+        for org_id, names in expected.items():
+            self.assertEqual(seen[org_id]["departments"], sorted({n["code"] for n in DEPARTMENT_NODES if n["name"] in names}), org_id)
+        # The food sellers sell groceries and the fashion seller only fashion: nothing a seller lists is outside its set.
+        self.assertIn("groceries", seen["org_mama_put_pantry"]["departments"])
+        self.assertNotIn("fashion", seen["org_mama_put_pantry"]["departments"])
+        self.assertEqual(seen["org_kente_and_co"]["departments"], ["fashion"])
+        self.assertNotIn(D.RETAIL_ORG, seen)
+        self.assertTrue(all("departments" not in b for oid, b in seen.items() if oid not in expected))
+
+    def test_a_catalog_that_lacks_a_department_is_reported_and_orgs_are_still_provisioned(self):
+        s = seeder()
+        seen = []
+        s.svc["catalog"].on("GET", "/v1/categories", lambda *a: DEPARTMENT_NODES[:1])
+        s.svc["seller"].on("POST", "/v1/orgs", lambda path, body, kw: seen.append(body) or body)
+        s.step_sellers()
+        self.assertEqual(len(s.report.problems), 1)
+        self.assertEqual(len(seen), len(D.SELLERS) - 1 + len(D.PROVIDERS))
+
     def test_provisions_every_marketplace_org_but_not_retail(self):
         s = seeder()
+        s.svc["catalog"].on("GET", "/v1/categories", lambda *a: DEPARTMENT_NODES)
         seen = []
         s.svc["seller"].on("POST", "/v1/orgs", lambda path, body, kw: seen.append(body) or body)
         s.step_sellers()
@@ -194,6 +228,7 @@ class SellersTest(unittest.TestCase):
         def off(path, body, kw):
             raise ApiError("POST", path, 404, {"code": "seller.provisioning-off"})
 
+        s.svc["catalog"].on("GET", "/v1/categories", lambda *a: DEPARTMENT_NODES)
         s.svc["seller"].on("POST", "/v1/orgs", off)
         s.step_sellers()
         self.assertEqual(len(s.report.problems), 1)

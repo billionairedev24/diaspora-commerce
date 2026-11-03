@@ -634,3 +634,18 @@ PICKUP_POINTS = [
      "position": {"lat": 32.802, "lng": -96.801}},
 ]
 PICKUP_OWNER = "afrotransact"
+
+
+def seller_departments() -> dict[str, list[str]]:
+    """The departments (names in the catalog tree) each marketplace seller sells in, from the products it lists: its own
+    and the ones it offers next to another seller (`also`). The seeder gives a seller exactly these as the departments it
+    may sell in, so seeding its products (and any later edit of them) is consistent with the catalog's department
+    scope. AfroTransact Retail is exempt and absent."""
+    out: dict[str, set[str]] = {}
+    for p in PRODUCTS:
+        department = p.path.split(" › ")[0]
+        for key in (p.seller, *(k for k, _ in p.also)):
+            seller = SELLER_BY_KEY[key]
+            if seller.org_id != RETAIL_ORG:
+                out.setdefault(seller.org_id, set()).add(department)
+    return {org: sorted(names) for org, names in out.items()}

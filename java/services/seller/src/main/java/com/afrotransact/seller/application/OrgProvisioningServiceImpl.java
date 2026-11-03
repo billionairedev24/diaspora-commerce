@@ -3,17 +3,23 @@ package com.afrotransact.seller.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.web.error.NotFoundException;
+import com.afrotransact.seller.domain.Department;
 import com.afrotransact.seller.domain.OrgStatus;
 import com.afrotransact.seller.domain.Organisation;
 import com.afrotransact.seller.domain.SellerRuleViolation;
+import com.afrotransact.seller.port.CatalogScopeRepository;
+import com.afrotransact.seller.port.DepartmentDirectory;
 import com.afrotransact.seller.port.OrganisationRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -29,16 +35,21 @@ class OrgProvisioningServiceImpl implements OrgProvisioningService {
     private final AccessGuard access;
     private final DomainEventPublisher events;
     private final SellerSettings settings;
+    private final CatalogScopeRepository scopes;
+    private final DepartmentDirectory directory;
     private final Clock clock;
     private final boolean enabled;
 
     OrgProvisioningServiceImpl(OrganisationRepository orgs, AccessGuard access, DomainEventPublisher events,
-                               SellerSettings settings, Clock clock,
+                               SellerSettings settings, CatalogScopeRepository scopes, DepartmentDirectory directory,
+                               Clock clock,
                                @Value("${at.seller.provisioning-enabled:false}") boolean enabled) {
         this.orgs = orgs;
         this.access = access;
         this.events = events;
         this.settings = settings;
+        this.scopes = scopes;
+        this.directory = directory;
         this.clock = clock;
         this.enabled = enabled;
     }
@@ -54,6 +65,7 @@ class OrgProvisioningServiceImpl implements OrgProvisioningService {
         String id = cmd.id() == null || cmd.id().isBlank() ? Ids.org() : cmd.id().trim();
         Optional<Organisation> existing = orgs.findById(id);
         if (existing.isPresent()) {
+            addDepartments(id, cmd);
             return new Provisioned(new OrgView(existing.get(), orgs.members(id)), false);
         }
         Instant now = Instant.now(clock);
@@ -65,7 +77,26 @@ class OrgProvisioningServiceImpl implements OrgProvisioningService {
         OrgEventPayload payload = OrgEventPayload.of(org, List.of(), now);
         events.publish(SellerEvents.ORG_APPROVED, SellerEvents.AGGREGATE_ORG, org.id(), payload);
         events.publish(SellerEvents.ORG_UPDATED, SellerEvents.AGGREGATE_ORG, org.id(), payload);
+        addDepartments(id, cmd);
         return new Provisioned(new OrgView(org, List.of()), true);
+    }
+
+    /** Adds the departments the command names (checked against the catalog's departments) to the organisation's set. */
+    private void addDepartments(String orgId, ProvisionCommand cmd) {
+        if (cmd.departments() == null || cmd.departments().isEmpty()) {
+            return;
+        }
+        Set<String> known = directory.departments().stream().map(Department::code).collect(Collectors.toSet());
+        Set<String> wanted = new LinkedHashSet<>();
+        for (String code : cmd.departments()) {
+            String c = code == null ? "" : code.trim().toLowerCase(Locale.ROOT);
+            if (!known.contains(c)) {
+                throw new SellerRuleViolation("seller.invalid-input", "The organisation is not valid",
+                        Map.of("departments", "Unknown department " + code));
+            }
+            wanted.add(c);
+        }
+        scopes.add(orgId, wanted, "STAFF", access.current().subject(), Instant.now(clock));
     }
 
     private void validate(ProvisionCommand cmd) {

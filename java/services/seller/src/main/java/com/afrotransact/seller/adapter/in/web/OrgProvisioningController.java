@@ -1,6 +1,8 @@
 package com.afrotransact.seller.adapter.in.web;
 
 import java.net.URI;
+import java.util.List;
+import java.util.Set;
 
 import com.afrotransact.seller.application.OrgProvisioningService;
 import com.afrotransact.seller.application.OrgProvisioningService.ProvisionCommand;
@@ -36,7 +38,7 @@ class OrgProvisioningController {
         Offering offering = body.offering() != null ? body.offering()
                 : body.kind() == OrgKind.PROVIDER ? Offering.SERVICES : Offering.PRODUCTS;
         Provisioned result = provisioning.provision(new ProvisionCommand(body.id(), body.kind(), offering,
-                body.legalName(), body.displayName(), body.country()));
+                body.legalName(), body.displayName(), body.country(), body.departments() == null ? null : Set.copyOf(body.departments())));
         OrgController.OrgResponse response = OrgController.OrgResponse.of(result.org());
         return result.created()
                 ? ResponseEntity.created(URI.create("/v1/orgs/" + response.id())).body(response)
@@ -50,6 +52,7 @@ class OrgProvisioningController {
             @NotNull OrgKind kind,
             @Schema(description = "Defaults to PRODUCTS for sellers and SERVICES for providers") Offering offering,
             String legalName, String displayName,
-            @Schema(example = "US") String country) {
+            @Schema(example = "US") String country,
+            @Schema(description = "Catalog department codes the organisation may sell in; added (never removed) on every call, so a re-run keeps a demo seller consistent with its products", example = "[\"groceries\"]") List<String> departments) {
     }
 }

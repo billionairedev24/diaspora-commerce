@@ -255,11 +255,20 @@ class Seeder:
             return
         orgs = [(s.org_id, "SELLER", "PRODUCTS", s.legal, s.name) for s in D.SELLERS if s.org_id != D.RETAIL_ORG]
         orgs += [(p.org_id, "PROVIDER", "SERVICES", p.legal, p.name) for p in D.PROVIDERS]
+        # The departments a seller may sell in are the ones its products belong to (the catalog's department codes), set
+        # on every run so an organisation seeded earlier is brought in line too.
+        try:
+            departments = self.seller_department_codes()
+        except (ApiError, ValueError, KeyError) as e:
+            self._problem(f"departments of the sellers: {e}")
+            departments = {}
         for org_id, kind, offering, legal, name in orgs:
             try:
-                res = self.svc["seller"].request("POST", "/v1/orgs", json_body={
-                    "id": org_id, "kind": kind, "offering": offering, "legalName": legal, "displayName": name,
-                    "country": "US"})
+                body = {"id": org_id, "kind": kind, "offering": offering, "legalName": legal, "displayName": name,
+                        "country": "US"}
+                if departments.get(org_id):
+                    body["departments"] = departments[org_id]
+                res = self.svc["seller"].request("POST", "/v1/orgs", json_body=body)
                 self.report.add("sellers", "created" if res.status == 201 else "existing")
             except ApiError as e:
                 if e.status == 404 and e.code == "seller.provisioning-off":
@@ -268,6 +277,17 @@ class Seeder:
                 self._problem(f"seller {name}: {e}")
         self.log(f"  ✓ {len(orgs)} organisations (Stripe Connect is not set up for them: payouts need a Stripe test "
                  "key and onboarding in Seller Center)")
+
+    def seller_department_codes(self) -> dict[str, list[str]]:
+        """Each seller's departments as the catalog's department node codes (what seller-service stores)."""
+        codes = {c["name"]: c["code"] for c in self._categories().values() if c.get("level") == "DEPARTMENT" and c.get("code")}
+        out: dict[str, list[str]] = {}
+        for org_id, names in D.seller_departments().items():
+            missing = [n for n in names if n not in codes]
+            if missing:
+                raise ValueError(f"{org_id}: department {', '.join(missing)} is not in the catalog tree")
+            out[org_id] = sorted(codes[n] for n in names)
+        return out
 
     # ------------------------------------------------------------------------------------------------ size charts
     def step_size_charts(self) -> None:
