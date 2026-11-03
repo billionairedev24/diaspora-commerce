@@ -95,6 +95,36 @@ then create and confirm a 6-digit passcode (not one repeated digit; there is no 
   unavailable and the passcode is the unlock. Android biometrics work in Expo Go.
 - Not built (no API yet): in-app two-step enrolment, forgot password, devices and sessions list. Sign-out is not blocked mid-route.
 
+## Sign-out after inactivity
+
+The driver app signs the driver out after **14 hours without use** or **14 hours after sign-in** (defaults, one shift; staff can change them, see
+[docs/engineering/session-timeouts.md](../../../docs/engineering/session-timeouts.md)).
+
+Same rules in both apps (`src/domain/sessionPolicy.ts` and `sessionGuard.ts` are identical copies; keep them in step).
+
+- **Policy.** `GET /v1/session/policy` on the gateway-bff (`audience`, `idleTimeoutSeconds`, `absoluteTimeoutSeconds`, `warnSeconds`; `lastActivityAt` and
+  `expiresAt` are null for apps). Fetched after sign-in and on resume at most once an hour, always with `X-Background: 1` so it never counts as activity and `X-App: driver`.
+  Validated on arrival (bounds, audience); a failed or invalid answer keeps the cached policy, which survives restarts in the secure store, or the built-in default
+  (14 h idle, 14 h absolute). Staff change the numbers per audience; a new value applies at the next fetch.
+- **Idle** is measured from the last real foreground interaction; time in the background counts as idle. **Absolute** is measured from sign-in, however active
+  the person is. Both are decided on the device, because the BFF cannot see taps in a native app or cap a refresh token.
+- **When it is checked:** at cold start (before the lock screen), on every resume (before the policy is re-read), and by a timer while the app is in the
+  foreground (at the next limit, at most a minute apart).
+- **Clock safety.** The sign-in time and last activity are stored as wall-clock times, with a high-water mark of the latest time ever seen. "Now" is never earlier
+  than that mark, so moving the phone clock backwards never extends a session (it makes the app ask the server, a forced policy read); moving it forwards ends the
+  session early. A tap on an already expired session does not revive it.
+- **Lock is not sign-out.** The 30-second lock is untouched. Touches on the lock screen are not activity; a successful unlock is.
+- **Activity is touches only** (root responder capture in `src/app/_layout.tsx`, the keyboard opening, unlocking, "Stay signed in"). **Location pings, the sync engine,
+  push registration and the access re-check are background work and never count**, and nothing in this feature starts, stops or delays them (`test/sessionSignOut.test.ts`
+  scans that the engine, pinger, location and push code do not reference the session clock, and that only the layout, `DriverProvider` and `LockProvider` record activity).
+- **Ending the session** is `DriverProvider.signOut` (via `src/session/endSession.ts`): a last best-effort sync with the token that is still valid, then the push token and
+  tokens go and the sign-out clock is forgotten. **The SQLite outbox, its sequence counter and the cached route stay on the phone**; unsynced events go out when the same driver
+  signs in again (`test/sessionSignOut.test.ts` proves this against the real sync engine, offline and online). If the limit passes mid-route the driver is signed out only
+  after that sync attempt. The sign-in screen shows the reason in the driver's language (`dr.session.idle` / `dr.session.absolute`, both say unsent updates are kept on the
+  phone). A 401 `SESSION_IDLE_TIMEOUT` / `SESSION_ABSOLUTE_TIMEOUT` takes the same path.
+- **Warning** (only if `warnSeconds` is above 0; the default is none): "Still there?" bottom sheet over the unlocked app, never over the lock screen.
+- Policy types for the BFF endpoint are hand-written (`SessionPolicyBody` in `src/api/client.ts`): this app generates only fulfilment and identity types.
+
 ## Structure
 
 ```

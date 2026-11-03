@@ -81,6 +81,37 @@ public client, grant types `authorization_code` + `refresh_token`, PKCE, `public
 if RP-initiated logout is wanted, and honouring `login_hint`, `idp_hint` (google|apple|facebook) and `prompt=create`
 on the hosted login page (the app sends them; today they are ignored).
 
+## Sign-out after inactivity
+
+The customer app signs the shopper out after **30 days without use** or **90 days after sign-in** (defaults; staff can change them in the staff console, Developer tools,
+Identity & access, Sign-out; see [docs/engineering/session-timeouts.md](../../../docs/engineering/session-timeouts.md)).
+
+Same rules in both apps (`src/domain/sessionPolicy.ts` and `sessionGuard.ts` are identical copies; keep them in step).
+
+- **Policy.** `GET /v1/session/policy` on the gateway-bff (`audience`, `idleTimeoutSeconds`, `absoluteTimeoutSeconds`, `warnSeconds`; `lastActivityAt` and
+  `expiresAt` are null for apps). Fetched after sign-in and on resume at most once an hour, always with `X-Background: 1` so it never counts as activity.
+  Validated on arrival (bounds, audience); a failed or invalid answer keeps the cached policy, which survives restarts in the secure store, or the built-in default
+  (30 d idle, 90 d absolute). Staff change the numbers per audience; a new value applies at the next fetch.
+- **Idle** is measured from the last real foreground interaction; time in the background counts as idle. **Absolute** is measured from sign-in, however active
+  the person is. Both are decided on the device, because the BFF cannot see taps in a native app or cap a refresh token.
+- **When it is checked:** at cold start (before the lock screen), on every resume (before the policy is re-read), and by a timer while the app is in the
+  foreground (at the next limit, at most a minute apart).
+- **Clock safety.** The sign-in time and last activity are stored as wall-clock times, with a high-water mark of the latest time ever seen. "Now" is never earlier
+  than that mark, so moving the phone clock backwards never extends a session (it makes the app ask the server, a forced policy read); moving it forwards ends the
+  session early. A tap on an already expired session does not revive it.
+- **Lock is not sign-out.** The 30-second lock is untouched. Touches on the lock screen are not activity; a successful unlock is.
+- **Activity** is a touch anywhere in the app (a non-claiming responder capture on the root view, in `src/app/_layout.tsx`), the keyboard opening, unlocking, and an API
+  *write* the shopper started (`onUserRequest` in `src/api/http.ts`). Reads do not count (screens refetch on resume by themselves) and neither do requests marked
+  background (the policy read, push-token registration). Recording is throttled to once per 30 s and written to the secure store lazily (every 2 min and when the app goes
+  to the background); a lost write can only end a session earlier.
+- **Ending the session** uses the existing `AuthProvider.signOut` (push token unregistered, refresh token revoked, passcode and Face ID removed), then the sign-in screen
+  shows "You were signed out after a period of inactivity" or "...reached its maximum length" (`cu.session.*`, five locales). A 401 `SESSION_IDLE_TIMEOUT` /
+  `SESSION_ABSOLUTE_TIMEOUT` from the BFF (`src/api/http.ts`) takes the same path with the same messages and is never "refreshed".
+- **Warning** (only if staff set `warnSeconds` above 0; the default is none): a "Still there?" bottom sheet over the unlocked app, Stay signed in / Sign out
+  (`src/features/session/IdleWarning.tsx`). It is never drawn over the lock screen.
+- Tests: `test/sessionPolicy.test.ts`, `sessionGuard.test.ts`, `sessionSignOut.test.ts`. Not verified on a device (see the PR notes): the root touch capture, the real
+  secure store, resume timing.
+
 ## Structure
 
 ```

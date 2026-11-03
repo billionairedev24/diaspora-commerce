@@ -80,12 +80,35 @@ activity, a tab left open would never time out. So:
 
 ### Mobile apps
 
-The BFF cannot see taps in a native app, so the **idle timeout is enforced on the device**: the app reads
-`idleTimeoutSeconds` from `GET /v1/session/policy`, tracks its own last input and signs out when the idle time passes.
-The **session length** for apps is the lifetime of the refresh token, which identity sets per OAuth client (and can cap for
-all clients in the Settings tab); it is not derived from this policy. What remains: the apps should also stop themselves after
-`absoluteTimeoutSeconds` from sign-in, because the BFF does not shorten refresh tokens it did not mint. Native sign-in
-(`/v1/auth/native/*`) is unchanged.
+The BFF cannot see taps in a native app, so the **idle timeout is enforced on the device**: the app reads `idleTimeoutSeconds` from
+`GET /v1/session/policy`, tracks its own last interaction and signs out when the idle time passes. The BFF also cannot shorten refresh tokens it
+did not mint (the lifetime of a refresh token is set per OAuth client in identity), so the apps **also stop themselves after
+`absoluteTimeoutSeconds` from sign-in**. Native sign-in (`/v1/auth/native/*`) is unchanged.
+
+What the apps do (customer app and driver app share the same pure modules, `src/domain/sessionPolicy.ts` and `sessionGuard.ts`):
+
+| | Customer app | Driver app |
+|---|---|---|
+| Policy request | `GET /v1/session/policy` | same, plus `X-App: driver` |
+| Defaults until fetched (fail-safe) | 30 d idle, 90 d absolute | 14 h idle, 14 h absolute |
+| Counts as activity | touches, keyboard, unlock, user-started API writes | touches, keyboard, unlock (never pings, sync, push, access re-check) |
+| On expiry | existing sign-out (tokens revoked, passcode and Face ID removed), message on sign-in | existing sign-out: last best-effort sync, **outbox kept**, message on sign-in |
+
+- The policy request is sent **with `X-Background: 1`** (it never counts as activity, with or without the header), after sign-in and on resume at most
+  once an hour. A failed, malformed, out-of-bounds or other-audience answer is ignored; the cached policy (secure store, survives restarts) or the default
+  keeps applying. The cached copy is never "no timeout".
+- Idle runs from the last real foreground interaction (throttled to 30 s, written lazily, always when the app goes to the background); **time in the background is idle
+  time**. Absolute runs from sign-in. Checked at cold start, on every resume and by a foreground timer (at most a minute apart).
+- The device stores `signedInAt`, `lastActivityAt` and a high-water mark of the latest wall-clock time seen. "Now" is never earlier than the mark, so setting the clock
+  back never extends a session and makes the app re-read the policy; setting it forward ends it early. A session that predates this feature gets one fresh window from
+  the first launch with it (same as legacy web sessions).
+- A 401 with `SESSION_IDLE_TIMEOUT` / `SESSION_ABSOLUTE_TIMEOUT` (when the BFF answers it for an app caller) is mapped to the same sign-out and message, and is not refreshed.
+- The 30-second app lock is a separate layer and is unchanged; the lock is not a sign-out, touches on the lock screen are not activity.
+- Sign-in screen messages: `cu.session.idle` / `cu.session.absolute` (customer), `dr.session.idle` / `dr.session.absolute` (driver), in the five locales
+  (en, fr, es, ar, yo; machine translations flagged `needsReview`). An optional "Still there?" sheet appears only when `warnSeconds` is above 0 and the app is in the
+  foreground and unlocked.
+- Limits: the device clock and the secure store are the device's; a rooted phone can defeat the idle timer. The server-side backstop is the refresh-token
+  lifetime in identity. Staff changes reach a phone at its next policy fetch (up to an hour after a resume).
 
 ## When identity is unreachable (fail safe)
 
@@ -115,3 +138,4 @@ leaving the session unstamped.
   sessions, failing store), `session_policy_test.go` (cache, fail-safe), `internal/adapter/httpapi/session_timeout_test.go`
   (end to end per app), `staff_identity_test.go` (the staff table against `gateway-bff-staff.yaml`).
 - staff console: `test/identity-admin.test.tsx`, `packages/api-client/test/staff-identity.test.ts`.
+- mobile: `mobile/apps/{customer,driver}/test/sessionPolicy.test.ts`, `sessionGuard.test.ts`, `sessionSignOut.test.ts` (driver: outbox kept on sign-out, background work never counts as activity).
