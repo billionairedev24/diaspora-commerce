@@ -50,6 +50,17 @@ export function percent(rate: number): string {
   return `${(rate * 100).toLocaleString(numTag(), { maximumFractionDigits: 3 })} %`;
 }
 
+/** A whole number with the active locale's separators (searches, clicks). */
+export function count(n: number): string {
+  return new Intl.NumberFormat(numTag(), { maximumFractionDigits: 0 }).format(n);
+}
+
+/** A 0–1 share as a percentage with at most one decimal ("12.5%"; shares under 0.1% read "<0.1%"). */
+export function share(rate: number): string {
+  const f = new Intl.NumberFormat(numTag(), { style: 'percent', maximumFractionDigits: 1 });
+  return rate > 0 && rate < 0.001 ? `<${f.format(0.001)}` : f.format(rate);
+}
+
 /** "AWAITING_FINAL_APPROVAL" → "Awaiting final approval". */
 export function humanize(s: string): string {
   const t = s.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase().trim();

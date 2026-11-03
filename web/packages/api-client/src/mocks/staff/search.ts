@@ -223,7 +223,8 @@ export function searchHandlers(W: string, deps: PreorderHandlerDeps) {
         const { page, size } = paging(w.url);
         const trend = dayStats(daysBetween(w.from, w.to));
         const sort = parseSort(w.url.searchParams.get('sort'), { column: 'day', desc: true });
-        const rows = [...trend].sort((a, b) => {
+        const term = (w.url.searchParams.get('q') ?? '').trim();
+        const rows = trend.filter((d) => !term || d.day.includes(term)).sort((a, b) => {
           const key = sort.column in a && sort.column !== 'day' ? (sort.column as keyof StaffSearchDay) : 'day';
           const c = key === 'day' ? a.day.localeCompare(b.day) : Number(a[key]) - Number(b[key]);
           return (sort.desc ? -c : c) || (sort.desc ? b.day.localeCompare(a.day) : a.day.localeCompare(b.day));

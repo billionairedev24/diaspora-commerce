@@ -87,8 +87,8 @@ export interface StaffSearchQuery {
 
 const S = '/v1/staff/search';
 
-function params(q: StaffSearchQuery, withFilter: boolean): URLSearchParams {
-  const p = tableSearchParams({ q: withFilter ? q.q : undefined, page: q.page ?? 1, size: q.size ?? 25 }, q.sort);
+function params(q: StaffSearchQuery): URLSearchParams {
+  const p = tableSearchParams({ q: q.q, page: q.page ?? 1, size: q.size ?? 25 }, q.sort);
   if (q.market) p.set('market', q.market);
   if (q.from) p.set('from', q.from);
   if (q.to) p.set('to', q.to);
@@ -100,9 +100,9 @@ export function createStaffSearchApi(request: Requester) {
   return {
     markets: (signal?: AbortSignal): Promise<StaffSearchMarkets> => request(`${S}/markets`, StaffSearchMarketsSchema, { signal }),
     queries: (kind: StaffSearchReportKind, q: StaffSearchQuery, signal?: AbortSignal): Promise<StaffSearchQueryReport> =>
-      request(`${S}/analytics/${kind}`, StaffSearchQueryReportSchema, { query: params(q, true), signal }),
+      request(`${S}/analytics/${kind}`, StaffSearchQueryReportSchema, { query: params(q), signal }),
     clickThrough: (q: StaffSearchQuery, signal?: AbortSignal): Promise<StaffSearchClickThrough> =>
-      request(`${S}/analytics/ctr`, StaffSearchClickThroughSchema, { query: params(q, false), signal }),
+      request(`${S}/analytics/ctr`, StaffSearchClickThroughSchema, { query: params(q), signal }),
     synonyms: (signal?: AbortSignal): Promise<StaffSynonymList> => request(`${S}/synonyms`, StaffSynonymListSchema, { signal }),
     /** Makes 2 to 20 words or phrases mean the same to search (422 with `errors.terms` when search refuses them). */
     addSynonym: (terms: string[]): Promise<StaffSynonymRule> => request(`${S}/synonyms`, StaffSynonymRuleSchema, { method: 'POST', body: { terms } }),

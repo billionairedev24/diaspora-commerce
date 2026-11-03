@@ -4827,7 +4827,7 @@ export interface components {
         SearchFrom: string;
         /** @description Last day (UTC), YYYY-MM-DD; default today */
         SearchTo: string;
-        /** @description Keeps queries containing this text */
+        /** @description Keeps queries containing this text (click-through: days whose date contains it, e.g. 2026-10) */
         SearchFilter: string;
         SearchPage: number;
         SearchSize: number;
@@ -10089,7 +10089,7 @@ export interface operations {
                 from?: components["parameters"]["SearchFrom"];
                 /** @description Last day (UTC), YYYY-MM-DD; default today */
                 to?: components["parameters"]["SearchTo"];
-                /** @description Keeps queries containing this text */
+                /** @description Keeps queries containing this text (click-through: days whose date contains it, e.g. 2026-10) */
                 q?: components["parameters"]["SearchFilter"];
                 /**
                  * @description Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
@@ -10129,7 +10129,7 @@ export interface operations {
                 from?: components["parameters"]["SearchFrom"];
                 /** @description Last day (UTC), YYYY-MM-DD; default today */
                 to?: components["parameters"]["SearchTo"];
-                /** @description Keeps queries containing this text */
+                /** @description Keeps queries containing this text (click-through: days whose date contains it, e.g. 2026-10) */
                 q?: components["parameters"]["SearchFilter"];
                 /**
                  * @description Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
@@ -10169,6 +10169,8 @@ export interface operations {
                 from?: components["parameters"]["SearchFrom"];
                 /** @description Last day (UTC), YYYY-MM-DD; default today */
                 to?: components["parameters"]["SearchTo"];
+                /** @description Keeps queries containing this text (click-through: days whose date contains it, e.g. 2026-10) */
+                q?: components["parameters"]["SearchFilter"];
                 /**
                  * @description Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
                  *     3). Any column of the table. Empty cells sort last in both directions.

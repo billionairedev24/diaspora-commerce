@@ -3583,6 +3583,7 @@ paths:
         - $ref: '#/components/parameters/SearchMarket'
         - $ref: '#/components/parameters/SearchFrom'
         - $ref: '#/components/parameters/SearchTo'
+        - $ref: '#/components/parameters/SearchFilter'
         - $ref: '#/components/parameters/Sort'
         - $ref: '#/components/parameters/SearchPage'
         - $ref: '#/components/parameters/SearchSize'
@@ -3679,7 +3680,7 @@ components:
     SearchMarket: {name: market, in: query, schema: {type: string, pattern: '^[a-z]{2}$', default: us}, description: Search market code (see /v1/staff/search/markets)}
     SearchFrom: {name: from, in: query, schema: {type: string, format: date}, description: 'First day (UTC), YYYY-MM-DD; default 6 days before `to`'}
     SearchTo: {name: to, in: query, schema: {type: string, format: date}, description: 'Last day (UTC), YYYY-MM-DD; default today'}
-    SearchFilter: {name: q, in: query, schema: {type: string, maxLength: 120}, description: Keeps queries containing this text}
+    SearchFilter: {name: q, in: query, schema: {type: string, maxLength: 120}, description: 'Keeps queries containing this text (click-through: days whose date contains it, e.g. 2026-10)'}
     SearchPage: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
     SearchSize: {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 25}}
   responses:

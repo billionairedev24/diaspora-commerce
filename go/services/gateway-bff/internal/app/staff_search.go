@@ -232,6 +232,9 @@ func (s *staffSearchImpl) queries(ctx context.Context, c *domain.Caller, path st
 }
 
 func (s *staffSearchImpl) ClickThrough(ctx context.Context, c *domain.Caller, q StaffSearchQuery) (domain.StaffClickThrough, error) {
+	if len(q.Q) > maxSearchFilter {
+		return domain.StaffClickThrough{}, domain.ValidationProblem(map[string]string{"q": "Too long"})
+	}
 	page, size, err := paging(q.Page, q.Size)
 	if err != nil {
 		return domain.StaffClickThrough{}, err
@@ -252,6 +255,9 @@ func (s *staffSearchImpl) ClickThrough(ctx context.Context, c *domain.Caller, q 
 	copy(days, rep.Days)
 	slices.SortStableFunc(days, func(a, b domain.StaffDay) int { return strings.Compare(a.Day, b.Day) })
 	paged := slices.Clone(days)
+	if term := strings.TrimSpace(q.Q); term != "" {
+		paged = slices.DeleteFunc(paged, func(d domain.StaffDay) bool { return !strings.Contains(d.Day, term) })
+	}
 	domain.SortDays(paged, domain.ParseQuerySort(q.Sort, domain.QuerySort{Column: "day", Desc: true}))
 	start := min((page-1)*size, len(paged))
 	market := firstNonEmpty(rep.Market, v.Get("market"))

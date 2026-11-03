@@ -281,6 +281,10 @@ func TestStaffSearchAnalytics(t *testing.T) {
 		if len(trend) != 5 || trend[0].(map[string]any)["day"] != "2026-10-28" {
 			t.Errorf("trend = %v", trend)
 		}
+		oct31 := do("viewer", "GET", "/v1/staff/search/analytics/ctr?q=10-31", nil, 200)
+		if oct31["total"] != float64(1) || len(oct31["trend"].([]any)) != 5 {
+			t.Errorf("day filter = %v", oct31)
+		}
 		asc := do("viewer", "GET", "/v1/staff/search/analytics/ctr?sort=searches,asc&size=1", nil, 200)
 		if asc["items"].([]any)[0].(map[string]any)["searches"] != float64(100) {
 			t.Errorf("ascending = %v", asc["items"])
