@@ -266,6 +266,54 @@ class SizeChartsTest(unittest.TestCase):
         self.assertEqual(len(self.s.report.problems), 1)
         self.assertIn("listed without it", self.s.report.problems[0])
 
+    def test_an_existing_product_written_before_charts_gets_its_chart_linked_on_re_run(self):
+        p = next(x for x in D.PRODUCTS if x.key == "dashiki")
+        stored = {"id": "p1", "atin": "AT1", "status": "LIVE", "categoryId": "cat-menwear", "title": p.title, "attributes": {"brand": "x"},
+                  "images": [{"url": "u"}], "variationTheme": "Size", "version": 3, "preorderEligible": False, "shipsNow": True,
+                  "listing": {"description": "d", "handlingDays": 2},
+                  "variants": [{"id": "v1", "atin": "AT1-1", "sellerSku": "S-1", "options": {"Size": "M"}, "priceMinor": 4000,
+                                "currency": "USD", "quantity": 5, "gtinExempt": True}]}
+        sent = []
+        self.catalog.on("GET", "/v1/products/p1", lambda *a: stored)
+
+        def edit(path, body, kw):
+            sent.append(body)
+            return dict(stored, listing=body["listing"])
+
+        self.catalog.on("PUT", "/v1/products/p1", edit)
+
+        done = self.s._link_existing_chart({"id": "p1", "atin": "AT1", "title": p.title}, p, self.s._categories())
+
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0]["version"], 3)
+        self.assertEqual(sent[0]["listing"]["description"], "d", "the rest of the listing is kept")
+        self.assertEqual(sent[0]["listing"]["sizeChartId"], self.charts[0]["id"])
+        self.assertEqual(sent[0]["variants"], [{"options": {"Size": "M"}, "sellerSku": "S-1", "gtinExempt": True, "priceMinor": 4000, "quantity": 5}])
+        self.assertEqual(self.s.report.counts[("product size charts", "linked")], 1)
+        self.assertEqual(done["listing"]["sizeChartId"], self.charts[0]["id"])
+
+        stored["listing"] = sent[0]["listing"]
+        sent.clear()
+        self.assertIsNone(self.s._link_existing_chart({"id": "p1", "atin": "AT1", "title": p.title}, p, self.s._categories()))
+        self.assertEqual(sent, [], "linked already: nothing is sent again")
+        self.assertEqual(self.s.report.counts[("product size charts", "existing")], 1)
+
+    def test_a_product_without_a_chart_in_the_dataset_is_left_alone(self):
+        p = next(x for x in D.PRODUCTS if x.key == "ofada-rice")
+        self.assertIsNone(self.s._link_existing_chart({"id": "p9", "atin": "AT9", "title": p.title}, p, self.s._categories()))
+
+    def test_a_refused_edit_is_reported_and_the_run_goes_on(self):
+        p = next(x for x in D.PRODUCTS if x.key == "dashiki")
+        self.catalog.on("GET", "/v1/products/p1", lambda *a: {"id": "p1", "title": p.title, "listing": {}, "variants": []})
+
+        def refuse(path, body, kw):
+            raise ApiError("PUT", path, 422, {"code": "catalog.invalid"})
+
+        self.catalog.on("PUT", "/v1/products/p1", refuse)
+        self.assertIsNone(self.s._link_existing_chart({"id": "p1", "atin": "AT1", "title": p.title}, p, self.s._categories()))
+        self.assertEqual(len(self.s.report.problems), 1)
+        self.assertIn("could not be linked", self.s.report.problems[0])
+
     def test_the_step_comes_before_the_products_that_link_the_charts(self):
         from seedlib.seeder import STEPS
 

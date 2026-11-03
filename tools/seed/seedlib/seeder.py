@@ -347,6 +347,7 @@ class Seeder:
         if product:
             self.report.add("products", "existing")
             line = f"  · {p.title} (exists, {product['atin']})"
+            product = self._link_existing_chart(product, p, cats) or product
             self._images(p.key, p.queries, p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE, network=False)
         else:
             imgs = self._images(p.key, p.queries, p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE)
@@ -385,6 +386,42 @@ class Seeder:
         offers = self._offers(p, product)
         self._stock(p, product, offers)
         self.log(line)
+
+    def _link_existing_chart(self, found: dict[str, Any], p: D.Product, cats: dict[str, Any]) -> dict[str, Any] | None:
+        """A product written by an earlier run (before size charts existed) gets its chart and fit note on re-run:
+        the whole product is read and sent back through catalog's edit (PUT /v1/products/{id}) with only the listing's
+        sizeChartId and fitNote changed. Returns the edited product, or None when nothing needed doing or it failed
+        (reported; the run goes on)."""
+        if not p.chart:
+            return None
+        try:
+            chart = self._ensure_chart(D.SIZE_CHART_BY_KEY[p.chart], cats)
+            full = self.svc["catalog"].get(f"/v1/products/{found['id']}")
+            listing = dict(full.get("listing") or {})
+            if listing.get("sizeChartId") == chart["id"] and (not p.fit or listing.get("fitNote") == p.fit):
+                self.report.add("product size charts", "existing")
+                return None
+            listing["sizeChartId"] = chart["id"]
+            if p.fit:
+                listing["fitNote"] = p.fit
+            body = {"categoryId": full.get("categoryId"), "title": full["title"], "attributes": full.get("attributes") or {},
+                    "images": full.get("images") or [], "variationTheme": full.get("variationTheme") or "",
+                    "variants": [self._variant_request(v) for v in full.get("variants") or []],
+                    "preorderEligible": bool(full.get("preorderEligible")), "shipsNow": bool(full.get("shipsNow", True)),
+                    "listing": listing, "version": full.get("version")}
+            edited = self.svc["catalog"].put(f"/v1/products/{full['id']}", body)
+            self.report.add("product size charts", "linked")
+            self.log(f"  ✓ {p.title}: linked its size chart ({chart.get('name', p.chart)})")
+            return edited if isinstance(edited, dict) and edited.get("status") else None
+        except (ApiError, ValueError, KeyError) as e:
+            self._problem(f"{p.title}: its size chart could not be linked to the existing product ({e})")
+            return None
+
+    @staticmethod
+    def _variant_request(v: dict[str, Any]) -> dict[str, Any]:
+        """A stored variant as catalog's edit wants it: matched by sellerSku, ids and currency dropped."""
+        keep = ("options", "sellerSku", "gtin", "gtinExempt", "priceMinor", "quantity", "compareAtMinor", "images")
+        return {k: v[k] for k in keep if v.get(k) is not None}
 
     def _chart_for(self, p: D.Product, cats: dict[str, Any]) -> dict[str, Any] | None:
         """The size chart a sized product links (it is written first if it is not there); the product is still listed without it if that fails."""

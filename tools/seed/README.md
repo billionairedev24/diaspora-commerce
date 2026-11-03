@@ -27,8 +27,10 @@ men's shirts and kaftans, kids' party dresses) through catalog's `POST /v1/size-
 `products` step does the same when it runs alone. Fashion products name their chart (`chart=`, and optionally their own
 `fit=`); the listing is created with `listing.sizeChartId` and `fitNote`. Two products show sizes and colours the category
 does not list (`adire-shift-dress`: "UK 12", "Free size", "Indigo adire"; `sequin-gele`: "Champagne", "Teal & gold"), which
-needs the sizing configuration of the catalog (see *Sized product types* below). A product that already exists is not
-changed: to get the link on products seeded earlier, remove them or seed a fresh catalog. `tests/test_dataset.py` checks
+needs the sizing configuration of the catalog (see *Sized product types* below). A product that already exists keeps
+its content, but a re-run links its chart and fit note through catalog's edit (the report line "product size charts"
+shows `linked` or `existing`); if catalog refuses the edit (for example a size the chart has no row for) it is reported
+as a problem and the run goes on. `tests/test_dataset.py` checks
 the charts against catalog's rules and that every size a product sells has a row in its chart.
 
 ## The category tree is not seeded here
