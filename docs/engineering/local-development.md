@@ -159,7 +159,7 @@ never a real mailbox) and one password, **`Test1234!Local`**. Restarting identit
 | `seller.staff@afrotransact.test` | `seller.catalog`, Mama Put Pantry | Seller Center | Same organisation, catalog manager's modules |
 | `provider.owner@afrotransact.test` | `provider.owner`, Aminata's Braids | Seller Center (Provider Hub) | The provider's services, team and calendar |
 | `retail.operator@afrotransact.test` | `seller.admin`, AfroTransact Retail | Seller Center | The first-party (1P) organisation's offers and stock |
-| `staff.admin@afrotransact.test` | `platform.super_admin` | Staff console | Every module (21) |
+| `staff.admin@afrotransact.test` | `platform.super_admin` | Staff console | Every module |
 | `staff.ops@afrotransact.test` | `platform.operations_manager` | Staff console | Every module but Users & roles and Developers |
 | `staff.trust@afrotransact.test` | `platform.trust_safety` | Staff console | Orders, Listing moderation, Applications, Customer support, Disputes, Audit log, Site content |
 | `staff.finance@afrotransact.test` | `platform.finance` | Staff console | Orders, Inventory, Pre-orders, Applications, Payouts & ledger, Fees & tax, Disputes, Audit log |
