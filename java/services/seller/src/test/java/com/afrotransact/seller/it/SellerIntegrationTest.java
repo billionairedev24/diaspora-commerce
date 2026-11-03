@@ -36,6 +36,7 @@ import com.afrotransact.seller.domain.PlanSection;
 import com.afrotransact.seller.domain.ReviewAction;
 import com.afrotransact.platform.test.PostgresTestContainer;
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.stripe.net.Webhook;
 import org.junit.jupiter.api.AfterEach;
@@ -88,6 +89,17 @@ abstract class SellerIntegrationTest {
         }
         STRIPE.start();
         StripeStub.install(STRIPE);
+        installCatalog(STRIPE);
+    }
+
+    /** catalog-service's public category tree: the departments onboarding offers, with their compliance data. */
+    static void installCatalog(WireMockServer server) {
+        server.stubFor(WireMock.get("/v1/categories").willReturn(
+                WireMock.okJson("["
+                        + "{\"id\":\"d1\",\"code\":\"groceries\",\"name\":\"Groceries\",\"level\":\"DEPARTMENT\",\"compliance\":[\"FOOD_PERMIT\"]},"
+                        + "{\"id\":\"d2\",\"code\":\"beauty\",\"name\":\"Beauty\",\"level\":\"DEPARTMENT\",\"compliance\":[\"BEAUTY_LABELLING\"]},"
+                        + "{\"id\":\"d3\",\"code\":\"fashion\",\"name\":\"Fashion\",\"level\":\"DEPARTMENT\",\"compliance\":[]},"
+                        + "{\"id\":\"d4\",\"code\":\"clothing\",\"name\":\"Clothing\",\"level\":\"DEPARTMENT\",\"compliance\":[]}]")));
     }
 
     @DynamicPropertySource
@@ -101,6 +113,7 @@ abstract class SellerIntegrationTest {
         registry.add("at.seller.stripe.files-base", STRIPE::baseUrl);
         registry.add("at.seller.media.base-url", STRIPE::baseUrl);
         registry.add("at.seller.geo.base-url", STRIPE::baseUrl);
+        registry.add("at.seller.catalog.base-url", STRIPE::baseUrl);
         registry.add("at.seller.metering.inventory-url", STRIPE::baseUrl);
         registry.add("at.seller.metering.content-url", STRIPE::baseUrl);
         registry.add("at.seller.metering.ai-url", STRIPE::baseUrl);
