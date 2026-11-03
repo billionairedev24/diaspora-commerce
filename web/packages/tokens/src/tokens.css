@@ -16,6 +16,10 @@
   --at-ink-400:#A29D92; --at-ink-500:#7C776D; --at-ink-550:#69645B; --at-ink-600:#5D5951; --at-ink-700:#44413B; --at-ink-800:#2D2B27; --at-ink-900:#191816; --at-ink-1000:#000000;
 
   --at-red-50:#FDEDEC; --at-red-100:#FAD1CE; --at-red-500:#D92D20; --at-red-600:#B42318; --at-red-700:#912018;
+  /* Alert hues (not in the design file): blue for information and amber for warnings, so alerts read like alerts. */
+  --at-blue-50:#EDF4FE; --at-blue-200:#B9D2F4; --at-blue-600:#2F6FD0; --at-blue-700:#1D5CB8; --at-blue-900:#0F2E5C;
+  --at-amber-50:#FFF6E0; --at-amber-200:#F2CB7E; --at-amber-600:#CC7400; --at-amber-700:#9A5400; --at-amber-900:#4A2A00;
+  --at-red-200:#F5BDB8; --at-red-900:#6B1710;
   --at-sand-100:#F6F0E4; --at-sand-200:#EDE3CF; --at-sand-700:#5E4B2C;
 
   /* ── Third-party brand marks (official colours; used only by brand logos/icons) ── */
@@ -76,6 +80,12 @@
   --at-color-warning: var(--at-gold-800);   --at-color-warning-bg: var(--at-gold-50);
   --at-color-danger: var(--at-red-600);     --at-color-danger-bg: var(--at-red-50);
   --at-color-info: var(--at-ink-700);       --at-color-info-bg: var(--at-ink-100);
+  /* Alerts (WCAG AA, light theme): text 10:1+ and icon 5:1+ on the tint; the accent bar and border are decorative. */
+  --at-color-alert-info-bg: var(--at-blue-50);       --at-color-alert-info-border: var(--at-blue-200);   --at-color-alert-info-accent: var(--at-blue-600);   --at-color-alert-info-icon: var(--at-blue-700);   --at-color-alert-info-text: var(--at-blue-900);
+  --at-color-alert-success-bg: var(--at-green-50);   --at-color-alert-success-border: var(--at-green-200); --at-color-alert-success-accent: var(--at-green-500); --at-color-alert-success-icon: var(--at-green-600); --at-color-alert-success-text: var(--at-green-900);
+  --at-color-alert-warning-bg: var(--at-amber-50);   --at-color-alert-warning-border: var(--at-amber-200); --at-color-alert-warning-accent: var(--at-amber-600); --at-color-alert-warning-icon: var(--at-amber-700); --at-color-alert-warning-text: var(--at-amber-900);
+  --at-color-alert-danger-bg: var(--at-red-50);      --at-color-alert-danger-border: var(--at-red-200);  --at-color-alert-danger-accent: var(--at-red-500);  --at-color-alert-danger-icon: var(--at-red-600);  --at-color-alert-danger-text: var(--at-red-900);
+  --at-color-alert-neutral-bg: var(--at-ink-50);     --at-color-alert-neutral-border: var(--at-ink-200); --at-color-alert-neutral-accent: var(--at-ink-500); --at-color-alert-neutral-icon: var(--at-ink-600); --at-color-alert-neutral-text: var(--at-ink-900);
   --at-color-badge-fulfilled-bg: var(--at-green-50);  --at-color-badge-fulfilled-text: var(--at-green-800);
   --at-color-badge-seller-bg: var(--at-ink-100);      --at-color-badge-seller-text: var(--at-ink-700);
   --at-color-badge-brand-bg: var(--at-ink-1000);      --at-color-badge-brand-text: var(--at-gold-500);
@@ -105,6 +115,13 @@
   --at-shadow-md: 0 4px 14px rgb(25 24 22 / .12);
   --at-shadow-lg: 0 16px 40px rgb(25 24 22 / .22);
   --at-shadow-focus: 0 0 0 3px var(--at-green-200);
+  /* Page rhythm: the one place vertical spacing between page parts is set (header, tabs, alerts, stat strip, toolbar, table). */
+  --at-page-gap-header:24px;   /* page header → tabs / first block */
+  --at-page-gap-tabs:24px;     /* tab row → tab content */
+  --at-page-gap-alert:16px;    /* alert → the next alert or the stat strip */
+  --at-page-gap-section:24px;  /* between blocks: stat strip → toolbar / table, section → section */
+  --at-page-gap-toolbar:12px;  /* toolbar → table */
+  --at-alert-max:720px;
   --at-z-dropdown:20; --at-z-sticky:30; --at-z-drawer:40; --at-z-dialog:50; --at-z-toast:60;
   --at-duration-fast:120ms; --at-duration:200ms; --at-ease: cubic-bezier(.2,.7,.2,1);
 

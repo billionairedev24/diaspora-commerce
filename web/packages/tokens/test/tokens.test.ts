@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 // @ts-expect-error -- plain ESM script without type declarations
 import { fontDeclarations, render, renderFontsCss, renderFontsTs, withFonts } from '../scripts/generate.mjs';
-import { cssVar, cssVariables, fonts, tokens } from '../src';
+import { cssVar, cssVariables, fonts, resolvedVariables, tokens } from '../src';
 import fontsConfig from '../src/fonts.config.json';
 
 const css = readFileSync(resolve(__dirname, '../src/tokens.css'), 'utf8');
@@ -89,5 +89,25 @@ describe('tokens', () => {
 
   it('builds typed var() references', () => {
     expect(cssVar('--at-color-link')).toBe('var(--at-color-link)');
+  });
+});
+
+describe('alert tokens: WCAG AA on the tint (light theme)', () => {
+  const channel = (hex: string, i: number): number => {
+    const v = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = (hex: string): number => 0.2126 * channel(hex, 0) + 0.7152 * channel(hex, 1) + 0.0722 * channel(hex, 2);
+  const contrast = (a: string, b: string): number => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  const resolved = resolvedVariables as Record<string, string>;
+
+  it.each(['info', 'success', 'warning', 'danger', 'neutral'])('%s: text 4.5:1 and icon 3:1 on its tint', (variant) => {
+    const bg = resolved[`--at-color-alert-${variant}-bg`] as string;
+    expect(contrast(resolved[`--at-color-alert-${variant}-text`] as string, bg)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(resolved[`--at-color-alert-${variant}-icon`] as string, bg)).toBeGreaterThanOrEqual(3);
+    for (const part of ['border', 'accent']) expect(resolved[`--at-color-alert-${variant}-${part}`], part).toMatch(/^#[0-9A-F]{6}$/i);
   });
 });
