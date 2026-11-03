@@ -1,7 +1,7 @@
 'use client';
 
-import { AccountFormatPreferences, accountSectionOf } from '@afrotransact/account';
-import { isApiError, staffQueries,type StaffSession } from '@afrotransact/api-client';
+import { AccountFormatPreferences, accountSectionOf, SessionSignedOutLanding } from '@afrotransact/account';
+import { isApiError, sessionEndReasonOf, staffQueries, type StaffSession } from '@afrotransact/api-client';
 import { BackofficeFrame, Button, type NavLoop, useNavLoop } from '@afrotransact/ui';
 import { HourglassMedium, SignOut, WarningCircle } from '@phosphor-icons/react/ssr';
 import { useQuery } from '@tanstack/react-query';
@@ -12,16 +12,20 @@ import { StaffLolaLauncher } from '@/components/assistant/StaffLolaLauncher';
 import { ErrorState, NoAccess, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
-import { loginHref, signOutEverywhere } from '@/lib/auth';
+import { loginHref, signedOutHref, signOutEverywhere } from '@/lib/auth';
 import { setFormatPreferences } from '@/lib/format';
 import { hrefOf, moduleOf } from '@/lib/modules';
 import { navGuard } from '@/lib/nav-guard';
 import { useStorefrontUrl } from '@/lib/runtime-config';
 import { StaffSessionProvider } from '@/lib/session';
+import { sessionApi } from '@/lib/session-api';
+import { sessionLabels } from '@/lib/session-labels';
+import { sessionReturnTo } from '@/lib/session-return';
 import { isSettingsPath, visibleSections } from '@/lib/settings-sections';
 
 import { Header } from './Header';
 import { Sidebar, SidebarRail } from './Sidebar';
+import { StaffSessionTimeout } from './StaffSessionTimeout';
 
 function Centered({ children }: { children: ReactNode }) {
   return <div className="mx-auto flex w-[min(560px,100%)] flex-col items-center gap-4 px-4 py-16 text-center">{children}</div>;
@@ -238,6 +242,14 @@ const allowed = (session: StaffSession, key: ReturnType<typeof moduleOf>) => key
  * Pages the staff member's roles can't open show an access notice instead of their content.
  */
 export function ConsoleShell({ children }: { children: ReactNode }) {
+  return (
+    <StaffSessionTimeout>
+      <ConsoleShellContent>{children}</ConsoleShellContent>
+    </StaffSessionTimeout>
+  );
+}
+
+function ConsoleShellContent({ children }: { children: ReactNode }) {
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
@@ -284,7 +296,14 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
       <>
         <Header session={null} />
         {isApiError(e) && e.status === 401 ? (
-          <AutoSignIn />
+          // The policy may have ended the session a moment ago (this tab, or another): say so before the sign-in.
+          <SessionSignedOutLanding
+            api={sessionApi()}
+            labels={sessionLabels(t)}
+            reason={sessionEndReasonOf(e.code)}
+            onSignIn={() => window.location.assign(signedOutHref(sessionReturnTo(window.location.pathname, window.location.search) ?? '/'))}
+            fallback={<AutoSignIn />}
+          />
         ) : isApiError(e) && e.code === 'NOT_STAFF' ? (
           <StaffOnly />
         ) : (

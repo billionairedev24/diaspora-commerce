@@ -33,6 +33,8 @@ export interface TimerLoadedPolicy {
   policy: TimerPolicy;
   /** The server's clock (epoch ms) from the response's Date header, whole seconds; null when there was none. */
   serverTime: number | null;
+  /** The device clock (epoch ms) when the answer arrived (a cached answer is older than now); default: now. */
+  receivedAt?: number;
 }
 
 export type WarningKind = 'idle' | 'absolute';
@@ -151,7 +153,7 @@ export function createSessionTimeout(options: SessionTimeoutOptions): SessionTim
 
   function adopt(result: TimerLoadedPolicy): void {
     const { policy, serverTime } = result;
-    const received = now();
+    const received = result.receivedAt ?? now();
     if (serverTime !== null) offset = serverTime + DATE_RESOLUTION_MS - received;
     idleMs = policy.idleTimeoutSeconds * SECOND;
     warnMs = policy.warnSeconds * SECOND;

@@ -2,6 +2,8 @@
    sign-on with the storefront and the other AfroTransact apps): the BFF starts the authorization request on this
    app's own origin (/api/bff), so the session cookie is set here, and returns to `returnTo` afterwards. */
 
+import { announceSignOut } from '@afrotransact/ui';
+
 import { BFF_BASE_PATH } from './config';
 
 export interface LoginOptions {
@@ -32,19 +34,18 @@ export function signedOutHref(path: string): string {
 }
 
 /**
- * Ends this app's session and the identity session (single sign-out): the BFF answers identity's end-session URL,
- * and identity then returns the browser to this app's own branded sign-in page, which brings the person back to the
- * page they signed out on. Without an answer the browser goes to that sign-in directly.
+ * Ends this app's session on the server and answers where the browser goes next: identity's end-session URL (single
+ * sign-out; identity then returns to this app's own branded sign-in, which brings the person back to `returnTo`), or
+ * without an answer this app's sign-in directly. Never throws: the session is gone either way.
  */
-export async function signOutEverywhere(): Promise<void> {
-  const path = `${window.location.pathname}${window.location.search}`;
+export async function endSession(returnTo?: string): Promise<string> {
   let redirectTo: string | null = null;
   try {
     const res = await fetch(`${BFF_BASE_PATH}/v1/auth/sign-out`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ returnTo: path })
+      body: JSON.stringify(returnTo ? { returnTo } : {})
     });
     if (res.ok) {
       const body = (await res.json()) as { redirectTo?: string | null };
@@ -53,5 +54,15 @@ export async function signOutEverywhere(): Promise<void> {
   } catch {
     /* the session is gone either way */
   }
-  window.location.assign(redirectTo ?? signedOutHref(path));
+  return redirectTo ?? signedOutHref(returnTo ?? '/');
+}
+
+/**
+ * Ends this app's session and the identity session (single sign-out) and goes to the sign-in. The other tabs of this app
+ * are told (session timer), so they leave too.
+ */
+export async function signOutEverywhere(): Promise<void> {
+  const href = await endSession(`${window.location.pathname}${window.location.search}`);
+  announceSignOut();
+  window.location.assign(href);
 }

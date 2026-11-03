@@ -26,7 +26,7 @@ export function createSessionApi(options: ApiClientOptions) {
     /** GET /v1/session/policy with the server's clock (Date header) so the timer can correct for a wrong device clock. */
     getPolicy: async (signal?: AbortSignal): Promise<LoadedSessionPolicy> => {
       const res = await send('/v1/session/policy', { signal, background: true });
-      return { policy: SessionPolicySchema.parse(await res.json()), serverTime: serverTimeOf(res) };
+      return { policy: SessionPolicySchema.parse(await res.json()), serverTime: serverTimeOf(res), receivedAt: Date.now() };
     },
     /** POST /v1/session/activity: the person used the app (pointer, key, touch, scroll, "Stay signed in"). */
     reportActivity: async (signal?: AbortSignal): Promise<void> => {

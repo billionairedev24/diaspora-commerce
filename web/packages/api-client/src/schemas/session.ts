@@ -27,4 +27,6 @@ export type SessionPolicy = z.infer<typeof SessionPolicySchema>;
 export interface LoadedSessionPolicy {
   policy: SessionPolicy;
   serverTime: number | null;
+  /** The device clock (epoch ms) when the answer arrived: serverTime and receivedAt together give the clock offset. */
+  receivedAt: number;
 }
