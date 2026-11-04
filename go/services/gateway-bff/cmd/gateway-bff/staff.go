@@ -90,6 +90,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 	out.ContentPages = app.NewStaffContentPagesService(d)
 	out.Taxonomy = app.NewStaffTaxonomyService(d)
 	out.Plans = app.NewStaffPlansService(d)
+	out.Departments = app.NewStaffDepartmentsService(d)
 	out.Identity = app.NewStaffIdentityService(d)
 	// Lola for staff: read-only lookups through the console's own use cases, one model turn at ai-gateway per round.
 	out.Assistant = app.NewStaffAssistantService(d, app.StaffAssistantDeps{Model: upstreams.NewStaffAssistantModel(client("ai-gateway", up.AIGateway)),

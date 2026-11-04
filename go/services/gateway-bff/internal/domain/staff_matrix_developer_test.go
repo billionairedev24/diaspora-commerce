@@ -6,7 +6,7 @@ func TestDeveloperDefaultMatrixOpensEveryStaffModule(t *testing.T) {
 	access := StaffAccess{
 		Roles: []string{"platform.developer"},
 		Matrix: DefaultPlatformMatrix,
-		Permissions: []string{"users:read", PermNotificationsRead, PermNotificationsTemplatesWrite, PermPlansManage, PermSellerBilling, PermSearchAnalyticsView},
+		Permissions: []string{"users:read", PermNotificationsRead, PermNotificationsTemplatesWrite, PermPlansManage, PermSellerBilling, PermSearchAnalyticsView, PermApplicationsReview},
 	}
 	for _, g := range StaffNav {
 		for _, m := range g.Modules {
