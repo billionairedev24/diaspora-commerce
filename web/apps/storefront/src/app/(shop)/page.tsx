@@ -1,6 +1,7 @@
 import { Hero } from '@/components/home/Hero';
 import { Banners, Rails, Tiles } from '@/components/home/HomeSections';
 import { PreorderHome } from '@/components/preorder/PreorderHome';
+import { RunAdvertorials } from '@/components/runs/RunAdvertorials';
 import { siteQueries } from '@/lib/api/queries';
 import { serverApi } from '@/lib/api/server';
 import { getQueryClient } from '@/lib/query/getQueryClient';
@@ -13,6 +14,7 @@ export default async function HomePage() {
   return (
     <>
       <PreorderHome />
+      <RunAdvertorials />
       <Hero slides={home.hero} />
       <Tiles tiles={home.tiles} />
       <Banners banners={home.banners} />

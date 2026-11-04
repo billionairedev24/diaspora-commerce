@@ -68,15 +68,15 @@ class SellerToolsServiceImpl implements SellerToolsService {
     }
 
     @Override
-    public ToolResult listMyOrders(McpCaller caller, String status, Integer page) {
+    public ToolResult listMyOrders(McpCaller caller, String status, String cursor) {
         guard.require(caller.profile(), ToolCatalog.LIST_MY_ORDERS);
-        return Results.from(orders.sellerOrders(caller.profile().orgId(), status, page(page), 25,
-                caller.bearerToken()), "order list");
+        return Results.from(orders.sellerShipments(status == null || status.isBlank() ? null
+                : status.trim().toLowerCase(Locale.ROOT), cursor, 25, caller.bearerToken()), "order list");
     }
 
     @Override
     public ToolResult updateShipmentStatus(McpCaller caller, String orderId, String shipmentId, String status,
-                                           String carrier, String trackingNumber) {
+                                           String carrier, String trackingNumber, String handoverCode) {
         guard.require(caller.profile(), ToolCatalog.UPDATE_SHIPMENT_STATUS);
         Downstream order = orders.order(orderId, caller.bearerToken());
         if (!order.ok()) {
@@ -87,22 +87,31 @@ class SellerToolsServiceImpl implements SellerToolsService {
                 && !caller.profile().can("*")) {
             return ToolResult.of("NOT_FOUND", "No shipment " + shipmentId + " of your organisation on order " + orderId);
         }
+        // Tracking given now, else the carrier label already on the shipment (bought in Seller Center).
+        boolean givenTracking = carrier != null && !carrier.isBlank() && trackingNumber != null
+                && !trackingNumber.isBlank();
+        String useCarrier = givenTracking ? carrier.trim() : Results.text(shipment, "carrier");
+        String useTracking = givenTracking ? trackingNumber.trim() : Results.text(shipment, "trackingNumber");
         try {
-            shipments.check(Results.text(shipment, "fulfilment"), Results.text(shipment, "status"), status, carrier,
-                    trackingNumber);
+            shipments.check(Results.text(shipment, "fulfilmentType"), Results.text(shipment, "deliveryMethod"),
+                    Results.text(shipment, "status"), status, useCarrier, useTracking, handoverCode);
         } catch (McpRuleViolation e) {
             return new ToolResult("REJECTED", Map.of("code", e.code()), e.getMessage());
         }
-        Map<String, Object> change = new LinkedHashMap<>();
-        change.put("status", status.trim().toUpperCase(Locale.ROOT));
-        if (carrier != null && !carrier.isBlank()) {
-            change.put("carrier", carrier.trim());
+        String target = status.trim().toUpperCase(Locale.ROOT);
+        if ("SHIPPED".equals(target) && givenTracking && !useTracking.equals(Results.text(shipment, "trackingNumber"))) {
+            Downstream tracked = orders.attachTracking(shipmentId, useCarrier.toLowerCase(Locale.ROOT), useTracking,
+                    caller.bearerToken());
+            if (!tracked.ok()) {
+                return Results.from(tracked, "shipment tracking");
+            }
         }
-        if (trackingNumber != null && !trackingNumber.isBlank()) {
-            change.put("trackingNumber", trackingNumber.trim());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("to", "SHIPPED".equals(target) ? "picked_up" : target.toLowerCase(Locale.ROOT));
+        if ("DELIVERED".equals(target)) {
+            body.put("handoverCode", handoverCode.trim());
         }
-        return Results.from(orders.updateShipmentStatus(orderId, shipmentId, change, caller.bearerToken()),
-                "shipment update");
+        return Results.from(orders.transitionShipment(shipmentId, body, caller.bearerToken()), "shipment update");
     }
 
     @Override

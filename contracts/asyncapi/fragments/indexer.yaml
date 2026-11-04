@@ -20,6 +20,14 @@ operations:
       Each document also carries an embedding of its text (title, brand, category path) from ai-gateway's
       POST /v1/embeddings (purpose search-document, client indexer-service, scope ai:use) for hybrid search (S036);
       an embedding failure never blocks the event, and a backfill embeds LIVE documents without one.
+  consumeIndexerRatingEvents:
+    action: receive
+    channel: {$ref: '#/channels/catalogProductEvents'}
+    summary: >-
+      catalog.product.rating_changed (S324) sets the product document's rating (average, two decimals) and reviewCount
+      without touching the rest of the document; later product upserts keep them. Version = occurred-at, like every
+      other write; an event for a product that is not indexed yet is logged and skipped (the rating arrives again with
+      the product's next review).
   consumeIndexerOffersEvents:
     action: receive
     channel: {$ref: '#/channels/offersEvents'}

@@ -1,0 +1,37 @@
+{
+  "suggestions": [
+    {
+      "placePrediction": {
+        "place": "places/ChIJ7Y7Q6xnDQIYRk3o0Z7Yq1mE",
+        "placeId": "ChIJ7Y7Q6xnDQIYRk3o0Z7Yq1mE",
+        "text": {
+          "text": "9800 Westheimer Rd, Houston, TX, USA",
+          "matches": [{"endOffset": 14}]
+        },
+        "structuredFormat": {
+          "mainText": {"text": "9800 Westheimer Rd", "matches": [{"endOffset": 14}]},
+          "secondaryText": {"text": "Houston, TX, USA"}
+        },
+        "types": ["geocode", "premise"],
+        "distanceMeters": 1820
+      }
+    },
+    {
+      "placePrediction": {
+        "place": "places/EiY5ODAwIFdlc3RoZWltZXIgUmQgIzIxMCwgSG91c3RvbiwgVFgsIFVTQQ",
+        "placeId": "EiY5ODAwIFdlc3RoZWltZXIgUmQgIzIxMCwgSG91c3RvbiwgVFgsIFVTQQ",
+        "text": {"text": "9800 Westheimer Rd #210, Houston, TX, USA"},
+        "structuredFormat": {
+          "mainText": {"text": "9800 Westheimer Rd #210"},
+          "secondaryText": {"text": "Houston, TX, USA"}
+        },
+        "types": ["geocode", "subpremise"]
+      }
+    },
+    {
+      "queryPrediction": {
+        "text": {"text": "9800 westheimer road houston"}
+      }
+    }
+  ]
+}

@@ -34,6 +34,8 @@ class AccountServiceImpl implements AccountService {
 
     static final String SELF = "self";
 
+    private static final int MAX_REFERRAL_CODE = 20;
+
     private final UserAccountRepository users;
     private final UserAccessRepository access;
     private final AccessChangeLog changeLog;
@@ -43,12 +45,13 @@ class AccountServiceImpl implements AccountService {
     private final CodeIssuer codes;
     private final InvitationRedeemer invitations;
     private final DomainEventPublisher events;
+    private final SignUpFingerprints fingerprints;
     private final Clock clock;
 
     AccountServiceImpl(UserAccountRepository users, UserAccessRepository access, AccessChangeLog changeLog,
                        SignUpPolicy signUpPolicy, LandingPolicy landing, PasswordHasher hasher,
                        CodeIssuer codes, InvitationRedeemer invitations, DomainEventPublisher events,
-                       Clock clock) {
+                       SignUpFingerprints fingerprints, Clock clock) {
         this.users = users;
         this.access = access;
         this.changeLog = changeLog;
@@ -58,6 +61,7 @@ class AccountServiceImpl implements AccountService {
         this.codes = codes;
         this.invitations = invitations;
         this.events = events;
+        this.fingerprints = fingerprints;
         this.clock = clock;
     }
 
@@ -106,7 +110,9 @@ class AccountServiceImpl implements AccountService {
         if (existing.isEmpty()) {
             events.publish(IdentityEvents.USER_REGISTERED, IdentityEvents.AGGREGATE, user.id().toString(),
                     new UserRegistered(user.id().toString(), user.email(), user.firstName(), user.lastName(),
-                            user.phone(), intent.name(), granted, "PASSWORD", invited, user.smsConsent(), now));
+                            user.phone(), intent.name(), granted, "PASSWORD", invited, user.smsConsent(), now,
+                            referralCode(c.referralCode()), fingerprints.device(c.deviceId()),
+                            fingerprints.network(c.clientAddress())));
         }
         if (invited) {
             // The invitation link was emailed to this address, which proves the mailbox: no code needed.
@@ -153,5 +159,14 @@ class AccountServiceImpl implements AccountService {
             throw new IdentityRuleViolation("identity.invalid-intent", "Unknown sign-up entry point",
                     Map.of("intent", "Use shop, sell or provide"));
         }
+    }
+
+    /** The code as typed, trimmed and bounded; the referral program decides whether it is a code it knows. */
+    private static String referralCode(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String code = raw.trim();
+        return code.length() > MAX_REFERRAL_CODE ? code.substring(0, MAX_REFERRAL_CODE) : code;
     }
 }

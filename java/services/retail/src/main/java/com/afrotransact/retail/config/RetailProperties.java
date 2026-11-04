@@ -30,7 +30,7 @@ public record RetailProperties(String baseCurrency, String gs1CompanyPrefix, Str
 
     public RetailProperties {
         baseCurrency = baseCurrency == null ? "USD" : baseCurrency;
-        gs1CompanyPrefix = gs1CompanyPrefix == null ? "86001" : gs1CompanyPrefix;
+        gs1CompanyPrefix = gs1CompanyPrefix == null ? "04000" : gs1CompanyPrefix;
         retailOwnerOrg = retailOwnerOrg == null || retailOwnerOrg.isBlank() ? null : retailOwnerOrg;
         approval = approval == null ? new Approval(null) : approval;
         receiving = receiving == null ? new Receiving(null, null, null, null, null, null) : receiving;

@@ -17,6 +17,8 @@ image:
 # (docs/engineering/environments.md). global.urls overrides one derived value env-wide; a service's extraEnv wins.
 global:
   domain: dev.afrotransact.com
+  # The storefront is https://www.dev.afrotransact.com (storefront host rule); dev.afrotransact.com 301-redirects to it at the Cloudflare edge.
+  storefrontHost: www
   # urls:
   #   MEDIA_PUBLIC_URL: https://cdn.example.net
 
@@ -57,3 +59,9 @@ argocd:
 # workloadIdentity:
 #   azure: {clientId: "00000000-0000-0000-0000-000000000000"}                     # user-assigned identity
 # secrets: {enabled: true, store: platform-secrets, keySeparator: "-"}   # Key Vault names allow [A-Za-z0-9-] only
+# ---------------------------------------------------------------------------------------------- OVHcloud (MKS)
+# cloud: ovh
+# image:
+#   registry: abcdef.gra7.container-registry.ovh.net/library       # tofu output registry_url
+# workloadIdentity: {}                                            # none on OVH: object storage uses per-service S3 keys from the secret store
+# secrets: {enabled: true, store: platform-secrets, keySeparator: "/"}   # Secret Manager (OKMS) paths allow "/"

@@ -626,6 +626,27 @@ paths:
       responses:
         '204':
           description: No Content
+  /v1/tax/rates/import:
+    post:
+      tags:
+      - Tax
+      summary: Bulk upsert state rules and local ZIP rates from CSV (tax:configure)
+      description: 'Header: kind,country,state,name,zipPrefix,generalRate,groceryRate,preparedFoodRate,shippingTaxable,facilitator,localRate,appliesToGrocery.
+        kind=STATE|LOCAL.'
+      operationId: importRates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxRatesImportRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxRatesImportResult'
   /v1/tax/rates/states/{state}:
     put:
       tags:
@@ -651,6 +672,189 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/StateTaxRule'
+  /v1/tax/settings:
+    get:
+      tags:
+      - Tax settings
+      summary: The tax method in force and its history (tax:read)
+      operationId: taxSettings
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxSettings'
+    put:
+      tags:
+      - Tax settings
+      summary: Switch who calculates sales tax (tax:configure)
+      description: RULES is our own rules over the rate tables and tax codes; STRIPE_TAX needs Stripe Tax set up (422 tax.stripe-not-set-up otherwise). A reason is required and the change is recorded. It applies to new quotes; placed orders keep the tax they were charged.
+      operationId: changeTaxMethod
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxMethodChangeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxSettings'
+  /v1/tax/remittances:
+    get:
+      tags:
+      - Tax remittance
+      summary: Month by month and state by state, tax due, remitted and outstanding (tax:read)
+      description: The last `months` months (default 6) up to `through` (default this month), newest first. Due is the ledger's net liability now, so a refund or late sale after filing shows as changedSinceFilingMinor and moves the status to OWES_MORE or OVERPAID.
+      operationId: taxObligations
+      parameters:
+      - name: through
+        in: query
+        required: false
+        schema: {type: string, example: 2026-09}
+      - name: months
+        in: query
+        required: false
+        schema: {type: integer, format: int32, default: 6}
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ObligationsResponse'
+    post:
+      tags:
+      - Tax remittance
+      summary: Record a filing and payment to a state (tax:configure)
+      description: 409 tax.remittance-exists when the month and state already have an active record (void it first); 422 for a future month or date. The amount due at the time is stored with it.
+      operationId: recordTaxRemittance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordRemittanceRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxRemittance'
+  /v1/tax/remittances/{month}/{jurisdiction}:
+    get:
+      tags:
+      - Tax remittance
+      summary: One month and state (tax:read)
+      operationId: taxObligation
+      parameters:
+      - {name: month, in: path, required: true, schema: {type: string}}
+      - {name: jurisdiction, in: path, required: true, schema: {type: string}}
+      - {name: currency, in: query, required: false, schema: {type: string, default: USD}}
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxFilingObligation'
+  /v1/tax/remittances/{month}/history:
+    get:
+      tags:
+      - Tax remittance
+      summary: Every record of a month, voided ones included (tax:read)
+      operationId: taxRemittanceHistory
+      parameters:
+      - {name: month, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaxRemittance'
+  /v1/tax/remittances/{id}/void:
+    post:
+      tags:
+      - Tax remittance
+      summary: Withdraw a mistaken record (tax:configure)
+      description: The record stays visible as voided, with who and why. Record the correct one afterwards.
+      operationId: voidTaxRemittance
+      parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoidRemittanceRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxRemittance'
+  /v1/tax/nexus:
+    get:
+      tags:
+      - Tax nexus
+      summary: Nexus tracker, sales into each state over the last 12 months against its thresholds (tax:read)
+      description: 'Most urgent first: EXCEEDED (past a threshold and not registered), APPROACHING (80 % or more), REGISTERED, BELOW. Thresholds are the defaults until staff set a state''s own; confirm them with a tax advisor. This tracks and warns; it registers nobody.'
+      operationId: taxNexusTracker
+      parameters:
+      - {name: through, in: query, required: false, schema: {type: string, example: 2026-09}}
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/NexusResponse'
+  /v1/tax/nexus/{jurisdiction}:
+    get:
+      tags:
+      - Tax nexus
+      summary: One state (tax:read)
+      operationId: taxNexusState
+      parameters:
+      - {name: jurisdiction, in: path, required: true, schema: {type: string, example: US-TX}}
+      - {name: through, in: query, required: false, schema: {type: string}}
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxNexusState'
+    put:
+      tags:
+      - Tax nexus
+      summary: Record a state's thresholds and registration (tax:configure)
+      description: A registration needs its number and the date it took effect. 422 tax.invalid-nexus otherwise.
+      operationId: updateTaxNexus
+      parameters:
+      - {name: jurisdiction, in: path, required: true, schema: {type: string, example: US-TX}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNexusRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxNexusState'
   /v1/tax/reversals:
     post:
       tags:
@@ -722,6 +926,128 @@ paths:
                 type: string
 components:
   schemas:
+    TaxNexusState:
+      type: object
+      properties:
+        jurisdiction: {type: string, example: US-TX}
+        name: {type: string}
+        facilitator: {type: boolean}
+        salesMinor: {type: integer, format: int64, description: Gross sales shipped there over the trailing 12 months, net of refunds}
+        orders: {type: integer, format: int64}
+        salesThresholdMinor: {type: integer, format: int64}
+        transactionsThreshold: {type: integer, format: int32}
+        percent: {type: integer, format: int32, description: The higher of the sales and transaction percentages of their thresholds}
+        status: {type: string, enum: [REGISTERED, EXCEEDED, APPROACHING, BELOW]}
+        registered: {type: boolean}
+        registrationNumber: {type: string}
+        registeredOn: {type: string, format: date}
+        note: {type: string}
+        customised: {type: boolean}
+        updatedBy: {type: string}
+        updatedAt: {type: string, format: date-time}
+    NexusResponse:
+      type: object
+      properties:
+        through: {type: string}
+        windowMonths: {type: integer, format: int32}
+        defaultSalesThresholdMinor: {type: integer, format: int64}
+        states:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxNexusState'
+    UpdateNexusRequest:
+      type: object
+      required: [salesThresholdMinor, registered]
+      properties:
+        salesThresholdMinor: {type: integer, format: int64, minimum: 0}
+        transactionsThreshold: {type: integer, format: int32, minimum: 0}
+        registered: {type: boolean}
+        registrationNumber: {type: string}
+        registeredOn: {type: string, format: date}
+        note: {type: string}
+    TaxRemittance:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        jurisdiction: {type: string, example: US-TX}
+        month: {type: string, example: 2026-09}
+        currency: {type: string}
+        dueMinor: {type: integer, format: int64, description: Net liability when it was recorded}
+        paidMinor: {type: integer, format: int64}
+        filedOn: {type: string, format: date}
+        paidOn: {type: string, format: date}
+        confirmationRef: {type: string}
+        paymentRef: {type: string}
+        note: {type: string}
+        recordedBy: {type: string}
+        recordedAt: {type: string, format: date-time}
+        voidedAt: {type: string, format: date-time}
+        voidedBy: {type: string}
+        voidReason: {type: string}
+        active: {type: boolean}
+    TaxFilingObligation:
+      type: object
+      properties:
+        month: {type: string}
+        jurisdiction: {type: string}
+        currency: {type: string}
+        dueMinor: {type: integer, format: int64, description: 'Net liability now: collected - refunded'}
+        status: {type: string, enum: [NOTHING_DUE, NOT_FILED, SETTLED, OWES_MORE, OVERPAID]}
+        outstandingMinor: {type: integer, format: int64, description: Due now - paid; negative when overpaid}
+        changedSinceFilingMinor: {type: integer, format: int64, description: Due now - due when it was recorded}
+        remittance:
+          $ref: '#/components/schemas/TaxRemittance'
+    ObligationsResponse:
+      type: object
+      properties:
+        obligations:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxFilingObligation'
+    RecordRemittanceRequest:
+      type: object
+      required: [month, jurisdiction, paidMinor, filedOn, paidOn]
+      properties:
+        month: {type: string, example: 2026-09}
+        jurisdiction: {type: string, example: US-TX}
+        currency: {type: string, example: USD}
+        paidMinor: {type: integer, format: int64, minimum: 0}
+        filedOn: {type: string, format: date}
+        paidOn: {type: string, format: date}
+        confirmationRef: {type: string}
+        paymentRef: {type: string}
+        note: {type: string}
+    VoidRemittanceRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 10}
+    TaxMethodChange:
+      type: object
+      properties:
+        from: {type: string, enum: [RULES, STRIPE_TAX]}
+        to: {type: string, enum: [RULES, STRIPE_TAX]}
+        reason: {type: string}
+        changedBy: {type: string}
+        changedAt: {type: string, format: date-time}
+    TaxSettings:
+      type: object
+      properties:
+        method: {type: string, enum: [RULES, STRIPE_TAX]}
+        configuredDefault: {type: string, enum: [RULES, STRIPE_TAX], description: What applies until staff choose (TAX_PROVIDER)}
+        stripeAvailable: {type: boolean, description: Stripe Tax can be chosen (its key is set)}
+        changedBy: {type: string}
+        changedAt: {type: string, format: date-time}
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxMethodChange'
+    TaxMethodChangeRequest:
+      type: object
+      required: [method, reason]
+      properties:
+        method: {type: string, enum: [RULES, STRIPE_TAX]}
+        reason: {type: string}
     StateTaxRule:
       type: object
       description: State rates are fractions (0.0625 = 6.25 %)
@@ -1415,6 +1741,29 @@ components:
         netTaxMinor:
           type: integer
           format: int64
+    TaxRatesImportRequest:
+      type: object
+      required: [csv]
+      properties:
+        csv:
+          type: string
+          minLength: 1
+          maxLength: 2000000
+    TaxRatesImportResult:
+      type: object
+      required: [statesUpserted, localsUpserted, warnings]
+      properties:
+        statesUpserted:
+          type: integer
+          minimum: 0
+        localsUpserted:
+          type: integer
+          minimum: 0
+        warnings:
+          type: array
+          items:
+            type: string
+          maxItems: 500
     TaxRateTable:
       type: object
       properties:

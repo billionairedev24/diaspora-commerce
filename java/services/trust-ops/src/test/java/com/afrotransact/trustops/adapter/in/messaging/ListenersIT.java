@@ -155,6 +155,13 @@ class ListenersIT extends TrustOpsIntegrationTest {
                 "{\"productId\":\"" + product + "\",\"ownerOrgId\":\"" + org + "\",\"status\":\"LIVE\"}"));
         assertThat(jdbc.sql("select status from moderation_item where product_id = :p").param("p", product)
                 .query(String.class).single()).isEqualTo("CLOSED");
+
+        // S307: a rejected listing edited back into review is queued again.
+        products.onMessage(rec("at.product.events", product.toString(), "catalog.product.resubmitted",
+                UUID.randomUUID(), "{\"productId\":\"" + product + "\",\"ownerOrgId\":\"" + org
+                        + "\",\"status\":\"IN_REVIEW\",\"title\":\"Herbal tea (edited)\"}"));
+        assertThat(jdbc.sql("select status from moderation_item where product_id = :p order by status")
+                .param("p", product).query(String.class).list()).containsExactly("CLOSED", "PENDING");
     }
 
     @Test

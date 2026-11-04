@@ -9,14 +9,17 @@ import com.afrotransact.deliveryruns.adapter.out.http.HttpOrdersClient;
 import com.afrotransact.deliveryruns.adapter.out.http.HttpProductSearch;
 import com.afrotransact.deliveryruns.adapter.out.places.GeoPlaceDirectory;
 import com.afrotransact.deliveryruns.application.DeliveryRunsSettings;
+import com.afrotransact.deliveryruns.application.EconomicsBook;
 import com.afrotransact.deliveryruns.application.PreorderOptions;
 import com.afrotransact.deliveryruns.domain.AreaKey;
 import com.afrotransact.deliveryruns.domain.CutoffDecisionPolicy;
 import com.afrotransact.deliveryruns.domain.DefaultCutoffDecisionPolicy;
 import com.afrotransact.deliveryruns.domain.DefaultRunEconomicsCalculator;
+import com.afrotransact.deliveryruns.domain.DefaultRunPnlCalculator;
 import com.afrotransact.deliveryruns.domain.EconomicsSettings;
 import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.RunEconomicsCalculator;
+import com.afrotransact.deliveryruns.domain.RunPnlCalculator;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -38,12 +41,18 @@ class DeliveryRunsConfiguration {
     EconomicsSettings economicsSettings(DeliveryRunsProperties p) {
         DeliveryRunsProperties.Economics e = p.economics();
         return new EconomicsSettings(e.driverCostPerHourMinor(), e.driverCostPerMileMinor(), e.collectionMinutes(),
-                e.perStopMinutes(), e.pickupPointStopMinutes(), e.handoverMinutesPerOrder(), e.roundTrip());
+                e.perStopMinutes(), e.pickupPointStopMinutes(), e.handoverMinutesPerOrder(), e.roundTrip(),
+                e.platformFeePerOrderMinor());
     }
 
     @Bean
-    RunEconomicsCalculator runEconomicsCalculator(EconomicsSettings settings) {
-        return new DefaultRunEconomicsCalculator(settings);
+    RunEconomicsCalculator runEconomicsCalculator(EconomicsBook economics) {
+        return new DefaultRunEconomicsCalculator(economics);
+    }
+
+    @Bean
+    RunPnlCalculator runPnlCalculator(RunEconomicsCalculator calculator, EconomicsBook economics) {
+        return new DefaultRunPnlCalculator(calculator, economics);
     }
 
     @Bean
@@ -68,7 +77,7 @@ class DeliveryRunsConfiguration {
         DeliveryRunsProperties.Preorders o = p.preorders();
         return new PreorderOptions(o.pagePath(), o.metroCities().stream().filter(k -> !k.isBlank())
                         .map(AreaKey::parse).toList(),
-                o.retentionDays(), o.seedDemoAreas(), o.supportPhone());
+                o.retentionDays(), o.seedDemoAreas(), o.supportPhone(), o.defaultMinOrders());
     }
 
     @Bean

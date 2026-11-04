@@ -34,7 +34,7 @@ public class DefaultFefoAllocator implements FefoAllocator {
             }
             int take = Math.min(remaining, lot.available());
             picks.add(new LotAllocation(lot.id(), lot.lotNo(), take, lot.expDate(), lot.unitLandedCostMinor(),
-                    lot.currency()));
+                    lot.currency(), lot.unitCostUsdMinor()));
             remaining -= take;
         }
         return new Result(picks, qty, allocatable);

@@ -1,4 +1,4 @@
-import { type OnboardingForm } from '@afrotransact/api-client';
+import { type OnboardingForm, type SellerDepartment } from '@afrotransact/api-client';
 import { type AddressSuggestionItem } from '@afrotransact/ui';
 import { describe, expect, it } from 'vitest';
 
@@ -18,17 +18,16 @@ import {
   ownershipTotal,
   type OwnerValues,
   ownerValues,
+  payoutAccountLabel,
   prefillNote,
+  toBusinessInput,
   toComplianceInput,
   toDetailsInput,
-  toPayoutsInput,
   validateAddress,
   validateBusiness,
   validateCompliance,
   validateDetails,
   validateOwners,
-  validatePayouts,
-  validRouting,
   validTaxId
 } from '@/lib/onboarding-form';
 
@@ -49,7 +48,9 @@ const form = (over: Partial<OnboardingForm> = {}): OnboardingForm => ({
     storeName: null,
     contactEmail: 'ada@example.com',
     phone: '+17132490142',
-    website: null
+    description: null,
+    brandColor: null,
+    logoUrl: null
   },
   details: {
     legalFirstName: 'Adaeze',
@@ -74,11 +75,10 @@ const form = (over: Partial<OnboardingForm> = {}): OnboardingForm => ({
   },
   owners: [],
   payouts: {
-    accountHolderName: 'Adaeze Okafor',
-    accountType: null,
+    status: 'NOT_STARTED',
     bankName: null,
-    routingLast4: null,
     accountLast4: null,
+    bankStatus: null,
     linked: false
   },
   plan: {
@@ -90,17 +90,21 @@ const form = (over: Partial<OnboardingForm> = {}): OnboardingForm => ({
     cardLast4: null,
     cardExpMonth: null,
     cardExpYear: null,
-    firstCharge: null
+    firstCharge: null,
+    planFeeCollection: null,
+    planFeeCollectionAvailable: false,
+    planFeeCollectionDefault: 'CARD'
   },
   compliance: {
-    categories: [],
+    departments: [],
     foodPermit: null,
     beautyLabellingConfirmed: null,
     services: [],
     insuranceDocumentAssetId: null,
     agreementsAccepted: null,
     w9Certified: null,
-    w9SignerName: null
+    w9SignerName: null,
+    agreements: []
   },
   documents: [],
   prefilled: ['business.contactEmail', 'business.phone', 'details.address', 'details.legalFirstName', 'details.legalLastName'],
@@ -121,16 +125,18 @@ describe('Your business', () => {
     expect(displayPhone('+447700900123')).toBe('+447700900123');
   });
 
-  it('needs offering, business type, store name, email and a US mobile; website must be a full URL', () => {
+  it('needs offering, business type, store name, email and a US mobile; the brand colour must be #rrggbb', () => {
     const v: BusinessValues = {
       offering: '',
       entityType: '',
       storeName: 'A',
       contactEmail: 'nope',
       phone: '713',
-      website: 'adeskitchen.com'
+      description: '',
+      brandColor: 'green',
+      logoUrl: ''
     };
-    expect(Object.keys(validateBusiness(v, 'SELLER')).sort()).toEqual(['contactEmail', 'entityType', 'offering', 'phone', 'storeName', 'website']);
+    expect(Object.keys(validateBusiness(v, 'SELLER')).sort()).toEqual(['brandColor', 'contactEmail', 'entityType', 'offering', 'phone', 'storeName']);
     expect(
       validateBusiness(
         {
@@ -140,13 +146,19 @@ describe('Your business', () => {
           storeName: 'Ade’s Kitchen',
           contactEmail: 'a@b.co',
           phone: '(713) 249-0142',
-          website: ''
+          brandColor: '#1a7f4b'
         },
         'SELLER'
       )
     ).toEqual({
       offering: 'Seller accounts sell products (choose products or both)'
     });
+  });
+
+  it('sends the uploaded logo URL and leaves it out when there is none', () => {
+    const v: BusinessValues = { ...businessValues(form(), 'SELLER'), logoUrl: 'https://img.afrotransact.dev/a1.webp' };
+    expect(toBusinessInput(v).logoUrl).toBe('https://img.afrotransact.dev/a1.webp');
+    expect(toBusinessInput({ ...v, logoUrl: '' }).logoUrl).toBeUndefined();
   });
 });
 
@@ -284,42 +296,24 @@ describe('Owners', () => {
 });
 
 describe('Payouts', () => {
-  it('checks the routing checksum and matching account numbers; sends digits only', () => {
-    expect(validRouting('021000021')).toBe(true);
-    expect(validRouting('021000022')).toBe(false);
-    expect(
-      validatePayouts({
-        accountHolderName: 'Ada',
-        accountType: 'checking',
-        routingNumber: '021000022',
-        accountNumber: '000123456789',
-        accountNumberConfirmation: '000123456780'
-      })
-    ).toEqual({
-      routingNumber: 'Not a valid ABA routing number',
-      accountNumberConfirmation: 'Account numbers don’t match'
-    });
-    expect(
-      toPayoutsInput({
-        accountHolderName: ' Ada ',
-        accountType: 'savings',
-        routingNumber: '021 000 021',
-        accountNumber: '0001-2345',
-        accountNumberConfirmation: '00012345'
-      })
-    ).toEqual({
-      accountHolderName: 'Ada',
-      accountType: 'savings',
-      routingNumber: '021000021',
-      accountNumber: '00012345',
-      accountNumberConfirmation: '00012345'
-    });
+  it('shows only what Stripe holds: bank name and last 4 (Stripe collects the account)', () => {
+    expect(payoutAccountLabel({ status: 'READY', bankName: 'STRIPE TEST BANK', accountLast4: '6789', bankStatus: 'new', linked: true })).toBe(
+      'STRIPE TEST BANK ••6789'
+    );
+    expect(payoutAccountLabel({ status: 'VERIFYING', bankName: null, accountLast4: '4417', bankStatus: 'new', linked: true })).toBe('Bank account ••4417');
+    expect(payoutAccountLabel({ status: 'NEEDS_BANK', bankName: null, accountLast4: null, bankStatus: null, linked: false })).toBe('Not added yet');
   });
 });
 
 describe('Catalog, permits & licences', () => {
+  /** As the catalog serves them: compliance is data on the department. */
+  const DEPARTMENTS: SellerDepartment[] = [
+    { code: 'groceries', name: 'Groceries', requires: ['FOOD_PERMIT'] },
+    { code: 'beauty', name: 'Beauty', requires: ['BEAUTY_LABELLING'] },
+    { code: 'fashion', name: 'Fashion', requires: [] }
+  ];
   const base: ComplianceValues = {
-    categories: [],
+    departments: [],
     permitType: '',
     permitNumber: '',
     permitExpiresOn: '',
@@ -332,18 +326,18 @@ describe('Catalog, permits & licences', () => {
     w9Certified: true
   };
 
-  it('asks for a food permit and beauty labelling only when those categories are chosen', () => {
-    expect(validateCompliance(base, 'PRODUCTS', TODAY)).toEqual({
-      categories: 'Pick at least one category'
+  it('asks for a food permit and beauty labelling only when departments that ask for them are chosen', () => {
+    expect(validateCompliance(base, 'PRODUCTS', DEPARTMENTS, TODAY)).toEqual({
+      departments: 'Pick at least one department'
     });
-    expect(Object.keys(validateCompliance({ ...base, categories: ['groceries', 'beauty'] }, 'PRODUCTS', TODAY)).sort()).toEqual([
+    expect(Object.keys(validateCompliance({ ...base, departments: ['groceries', 'beauty'] }, 'PRODUCTS', DEPARTMENTS, TODAY)).sort()).toEqual([
       'beautyLabellingConfirmed',
       'permitDocumentAssetId',
       'permitExpiresOn',
       'permitNumber',
       'permitType'
     ]);
-    expect(validateCompliance({ ...base, categories: ['fashion'] }, 'PRODUCTS', TODAY)).toEqual({});
+    expect(validateCompliance({ ...base, departments: ['fashion'] }, 'PRODUCTS', DEPARTMENTS, TODAY)).toEqual({});
   });
 
   it('providers list licences per service and insurance; expired licences are refused', () => {
@@ -361,6 +355,7 @@ describe('Catalog, permits & licences', () => {
         ]
       },
       'SERVICES',
+      DEPARTMENTS,
       TODAY
     );
     expect(e).toEqual({
@@ -370,17 +365,18 @@ describe('Catalog, permits & licences', () => {
     const input = toComplianceInput(
       {
         ...base,
-        categories: ['groceries'],
+        departments: ['groceries'],
         permitType: 'COTTAGE_FOOD',
         permitNumber: 'CF-1',
         permitExpiresOn: '2027-01-01',
         permitDocumentAssetId: 'd'
       },
       'PRODUCTS',
-      'Ada Okafor'
+      'Ada Okafor',
+      DEPARTMENTS
     );
     expect(input).toMatchObject({
-      categories: ['groceries'],
+      departments: ['groceries'],
       foodPermit: { permitType: 'COTTAGE_FOOD' },
       agreementsAccepted: true,
       w9SignerName: 'Ada Okafor',

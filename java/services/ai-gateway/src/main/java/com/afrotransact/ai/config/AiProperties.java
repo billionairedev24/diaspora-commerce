@@ -3,6 +3,7 @@ package com.afrotransact.ai.config;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -18,10 +19,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param lola          Lola agent settings
  * @param maxInputChars longest accepted chat message
  * @param embeddings    embedding settings
+ * @param providerPrivacy OpenRouter provider preferences sent with every request (no training, zero data retention)
  */
 @ConfigurationProperties(prefix = "at.ai")
 public record AiProperties(Map<String, Route> routes, List<Price> prices, Price defaultPrice,
-                           Map<String, Budget> budgets, Lola lola, Integer maxInputChars, Embeddings embeddings) {
+                           Map<String, Budget> budgets, Lola lola, Integer maxInputChars, Embeddings embeddings,
+                           ProviderPrivacy providerPrivacy) {
 
     public AiProperties {
         routes = routes == null ? Map.of() : Map.copyOf(routes);
@@ -31,6 +34,7 @@ public record AiProperties(Map<String, Route> routes, List<Price> prices, Price 
         lola = lola == null ? new Lola(null, null, null, null, null) : lola;
         maxInputChars = maxInputChars == null ? 4000 : maxInputChars;
         embeddings = embeddings == null ? new Embeddings(null) : embeddings;
+        providerPrivacy = providerPrivacy == null ? new ProviderPrivacy(null, null) : providerPrivacy;
     }
 
     /** One task's route. */
@@ -77,6 +81,28 @@ public record AiProperties(Map<String, Route> routes, List<Price> prices, Price 
 
         public Embeddings {
             dimensions = dimensions == null ? 0 : dimensions;
+        }
+    }
+
+    /**
+     * What we ask OpenRouter of the model providers behind every request.
+     *
+     * @param dataCollection    {@code deny} (default: only providers that do not store or train on prompts) or
+     *                          {@code allow}
+     * @param zeroDataRetention {@code true} = only zero-data-retention endpoints (a model without one fails and the
+     *                          router falls back to the next candidate)
+     */
+    public record ProviderPrivacy(String dataCollection, Boolean zeroDataRetention) {
+
+        public ProviderPrivacy {
+            String value = dataCollection == null || dataCollection.isBlank() ? "deny"
+                    : dataCollection.trim().toLowerCase(Locale.ROOT);
+            if (!value.equals("deny") && !value.equals("allow")) {
+                throw new IllegalArgumentException("at.ai.provider-privacy.data-collection must be deny or allow, got '"
+                        + dataCollection + "'");
+            }
+            dataCollection = value;
+            zeroDataRetention = zeroDataRetention == null ? Boolean.FALSE : zeroDataRetention;
         }
     }
 }

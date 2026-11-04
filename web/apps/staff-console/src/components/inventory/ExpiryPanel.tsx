@@ -11,6 +11,7 @@ import { useMemo } from 'react';
 import { Card } from '@/components/ui/Card';
 import { ErrorState } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { useT } from '@/i18n/t';
 import { humanize, idempotencyKey, money, shortDate } from '@/lib/format';
 import { exportDataset } from '@/lib/table-export';
 
@@ -36,6 +37,7 @@ export function markdownSuggestion(days: number | null): string {
 
 /** Expiry: units by days to expiry, markdown suggestions and runs, expired lots to write off. */
 export function ExpiryPanel() {
+  const t = useT();
   const api = useHub();
   const qc = useQueryClient();
   const { inventoryEdit, inventoryApprove } = useHubAccess();
@@ -65,13 +67,13 @@ export function ExpiryPanel() {
       { id: 'lotNo', accessorFn: (l) => l.lotNo, header: 'Lot', size: 140, meta: { kind: 'mono' } },
       { id: 'nodeId', accessorFn: (l) => l.nodeId, header: 'FC', size: 90 },
       { id: 'qtyOnHand', accessorFn: (l) => l.qtyOnHand, header: 'Units', size: 80, meta: { kind: 'number', align: 'end' } },
-      { id: 'value', accessorFn: (l) => l.qtyOnHand * l.unitLandedCostMinor, header: 'Value', size: 100, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.qtyOnHand * row.original.unitLandedCostMinor) },
+      { id: 'value', accessorFn: (l) => l.qtyOnHand * l.unitCostUsdMinor, header: t('st.expiry.valueUsd'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.qtyOnHand * row.original.unitCostUsdMinor) },
       { id: 'expDate', accessorFn: (l) => l.expDate ?? '', header: 'Expires', size: 110, meta: { kind: 'date' }, cell: ({ row }) => shortDate(row.original.expDate) },
       { id: 'days', accessorFn: (l) => expiryLabel(daysToExpiry(l.expDate, today)), header: 'Days left', size: 120 },
       { id: 'suggestion', accessorFn: (l) => (l.status === 'EXPIRED' ? 'Write off' : markdownSuggestion(daysToExpiry(l.expDate, today))), header: 'Suggestion', size: 110, cell: ({ getValue }) => <strong>{String(getValue())}</strong> },
       { id: 'status', accessorFn: (l) => humanize(l.status), header: 'Status', size: 110, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{humanize(row.original.status)}</StatusPill> }
     ],
-    [today]
+    [today, t]
   );
   return (
     <div className="flex flex-col gap-4">

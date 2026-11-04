@@ -10,6 +10,8 @@ export interface TableColumnLike {
 export interface TableRowLike {
   id: string;
   cells: Record<string, TableCell>;
+  /** Text the table does not show but its search finds (the ids behind names), like the BFF's Row.Search. */
+  search?: readonly string[];
 }
 
 const humanize = (s: string) =>
@@ -50,10 +52,10 @@ export function cellTexts(kind: string, v: TableCell): string[] {
 
 export const searchTerms = (q: string | null | undefined) => (q ?? '').trim().toLowerCase().split(/\s+/).filter(Boolean);
 
-/** Every term must be found in some cell (or the id). */
+/** Every term must be found in some cell (or the id, or a hidden id the row carries). */
 export function matchesSearch(cols: readonly TableColumnLike[], row: TableRowLike, terms: readonly string[]): boolean {
   if (!terms.length) return true;
-  const texts = [row.id.toLowerCase(), ...cols.flatMap((c) => cellTexts(c.kind, row.cells[c.key]))];
+  const texts = [row.id.toLowerCase(), ...(row.search ?? []).map((s) => s.toLowerCase()), ...cols.flatMap((c) => cellTexts(c.kind, row.cells[c.key]))];
   return terms.every((t) => texts.some((x) => x.includes(t)));
 }
 

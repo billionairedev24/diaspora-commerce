@@ -38,7 +38,10 @@ paths:
         keystroke and with `GET /v1/addresses/resolve/{id}` for the picked suggestion: Google Places bills the whole
         entry as one session. `kind` narrows suggestions to the field (street addresses, ZIP codes or cities), `near`
         biases them towards a point (the deliver-to location, a warehouse) and `lang` sets the language of the text.
-        Providers fail over in order; responses are never cached (`Cache-Control: no-store`).
+        With a Google Maps Platform key (GOOGLE_PLACES_API_KEY or GOOGLE_MAPS_API_KEY) Google Places (New)
+        Autocomplete is the only provider and the resolve is a Place Details (Essentials) call that closes the session;
+        without a key OpenStreetMap Nominatim (and fixtures locally) answer. Responses are never cached
+        (`Cache-Control: no-store`).
       security: []
       parameters:
         - {name: q, in: query, required: true, description: What the user typed (one character is enough), schema: {type: string, maxLength: 120}}

@@ -2,6 +2,7 @@ package com.afrotransact.trustops.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
@@ -88,5 +89,40 @@ class DefaultAuditClassifierTest {
         assertThat(areas.entityId()).isEqualTo("US/TX");
         assertThat(classifier.classify("preorder.settings.changed", Map.of("enabled", false, "actor", "staff-4"),
                 "preorder-settings").orElseThrow().summary()).contains("master switch off");
+    }
+
+    @Test
+    void deliveryLocationSwitchesNameTheStaffMemberAndTheReason() {
+        AuditFacts off = classifier.classify("delivery-runs.location.changed", Map.of("locationId", "loc-1", "name",
+                "Bastrop", "action", "DEACTIVATED", "actorId", "staff-3", "reason", "Seasonal pause"), "loc-1")
+                .orElseThrow();
+        assertThat(off.actorId()).isEqualTo("staff-3");
+        assertThat(off.entityType()).isEqualTo("DELIVERY_RUN_LOCATION");
+        assertThat(off.entityId()).isEqualTo("loc-1");
+        assertThat(off.summary()).isEqualTo("Switched off delivery location Bastrop — Seasonal pause");
+        assertThat(classifier.classify("delivery-runs.location.changed", Map.of("locationId", "loc-1", "name",
+                "Bastrop", "action", "ACTIVATED", "actorId", "staff-3"), "loc-1").orElseThrow().summary())
+                .isEqualTo("Switched on delivery location Bastrop");
+        assertThat(classifier.classify("delivery-runs.location.changed", Map.of("locationId", "loc-1", "name",
+                "Bastrop", "action", "UPDATED", "actorId", "staff-3"), "loc-1").orElseThrow().summary())
+                .startsWith("Edited");
+    }
+
+    @Test
+    void departmentDecisionsSayWhoWhatAndWhy() {
+        assertThat(classifier.classify("seller.department_request.decided", Map.of("requestId", "r-1", "orgId", "org_9",
+                "departmentCode", "home-art", "decision", "REJECTED", "actorId", "staff-3",
+                "reason", "Upload your permit first"), "org_9").orElseThrow())
+                .satisfies(f -> {
+                    assertThat(f.actorId()).isEqualTo("staff-3");
+                    assertThat(f.orgId()).isEqualTo("org_9");
+                    assertThat(f.summary()).isEqualTo("Rejected the request to sell in Home art — Upload your permit first");
+                });
+        assertThat(classifier.classify("seller.org.departments_changed", Map.of("orgId", "org_9",
+                "after", List.of("fashion"), "added", List.of("fashion"),
+                "removed", List.of("groceries"), "actorId", "staff-3", "reason", "Seller stopped selling food"),
+                "org_9").orElseThrow())
+                .satisfies(f -> assertThat(f.summary()).isEqualTo(
+                        "Departments set to Fashion (added Fashion; removed Groceries) — Seller stopped selling food"));
     }
 }

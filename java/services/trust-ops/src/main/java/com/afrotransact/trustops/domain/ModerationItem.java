@@ -11,11 +11,13 @@ import java.util.UUID;
  * elsewhere.
  * {@link ModerationItemType#NEW_LISTING} items are submissions (approve / reject in catalog);
  * {@link ModerationItemType#LIVE_LISTING} items are reported or flagged live listings (keep live, or take down);
- * {@link ModerationItemType#SERVICE_REVIEW} items are customer reviews of bookings (publish or reject in bookings).
+ * {@link ModerationItemType#SERVICE_REVIEW} items are customer reviews of bookings (publish or reject in bookings);
+ * {@link ModerationItemType#PRODUCT_REVIEW} items are verified-purchase reviews of products (publish, reject or remove
+ * in catalog).
  *
  * @param product the listing (listing items; null for reviews)
  * @param report  why a live listing is queued (null for new submissions and reviews)
- * @param review  the review (review items; null for listings)
+ * @param review  the review (review items; null for listings; for product reviews its bookingId is the review id)
  */
 public record ModerationItem(UUID id, ProductSubmission product, ModerationItemType type, ListingReport report,
                              ReviewSubmission review, ModerationStatus status, ModerationPriority priority,
@@ -79,6 +81,34 @@ public record ModerationItem(UUID id, ProductSubmission product, ModerationItemT
     }
 
     /**
+     * Queues a verified-purchase review of a product: one that failed the automatic checks (reports = 0) or a published
+     * one that was reported (reports at least 1). The listing SLA applies; a high-risk AI hint raises the priority and
+     * shortens it.
+     */
+    public static ModerationItem queueProductReview(UUID id, ReviewSubmission review, TriageHint triage, Instant now,
+                                                    SlaPolicy sla) {
+        Objects.requireNonNull(review, "review");
+        if (!review.productReview()) {
+            throw new IllegalArgumentException("Not a product review");
+        }
+        ModerationPriority priority = triage != null && triage.highRisk() ? ModerationPriority.HIGH
+                : ModerationPriority.NORMAL;
+        return new ModerationItem(id, null, ModerationItemType.PRODUCT_REVIEW, null, review,
+                ModerationStatus.PENDING, priority, triage == null ? TriageStatus.UNAVAILABLE : TriageStatus.COMPLETED,
+                triage, now, sla.moderation(now, priority), null, null, false, null, null, null, null, null, null, 0);
+    }
+
+    /**
+     * Another report for this open product-review item: counted, so moderators see how many people reported it.
+     */
+    public ModerationItem reviewReportedAgain() {
+        requireOpen();
+        return new ModerationItem(id, product, type, report, review.reportedAgain(), status, priority, triageStatus,
+                triage, enqueuedAt, sla, assignee, assignedAt, escalated, escalationReason, escalatedAt, decidedBy,
+                decidedAt, reasonCode, decisionNote, version);
+    }
+
+    /**
      * Another report or flag for this open live-listing item: counted, and a high-risk flag raises the priority
      * (the SLA is recomputed from the enqueue time unless already escalated).
      */
@@ -96,23 +126,46 @@ public record ModerationItem(UUID id, ProductSubmission product, ModerationItemT
         return type == ModerationItemType.LIVE_LISTING;
     }
 
+    /** A review of a booking. */
     public boolean serviceReview() {
         return type == ModerationItemType.SERVICE_REVIEW;
     }
 
-    /** What the item is about: the product id of a listing, the booking (= review) id of a review. */
-    public UUID subjectId() {
-        return serviceReview() ? review.bookingId() : product.productId();
+    /** A verified-purchase review of a product. */
+    public boolean productReview() {
+        return type == ModerationItemType.PRODUCT_REVIEW;
     }
 
-    /** The organisation the decision affects: the listing's seller or the reviewed provider. */
+    /** A review of either kind. */
+    public boolean reviewItem() {
+        return type.review();
+    }
+
+    /**
+     * What the item is about: the product id of a listing, the review id of a review (the booking id for booking
+     * reviews).
+     */
+    public UUID subjectId() {
+        return reviewItem() ? review.bookingId() : product.productId();
+    }
+
+    /** The organisation the decision affects: the listing's seller, the reviewed provider or the product's owner. */
     public String orgId() {
-        return serviceReview() ? review.orgId() : product.sellerOrgId();
+        return reviewItem() ? review.orgId() : product.sellerOrgId();
     }
 
     /** The listing title, or a one-line summary of the review. */
     public String title() {
-        return serviceReview() ? review.summary() : product.title();
+        return reviewItem() ? review.summary() : product.title();
+    }
+
+    /**
+     * An open item for a review that was edited or resubmitted: closed without a decision, as a newer item replaces
+     * it.
+     */
+    public ModerationItem supersede(Instant now) {
+        requireOpen();
+        return decided(ModerationStatus.CLOSED, "catalog", null, "Superseded by a newer version of the review", now);
     }
 
     /** Attaches a (re-run) triage hint. The timer is recomputed from the enqueue time unless already escalated. */
@@ -157,8 +210,8 @@ public record ModerationItem(UUID id, ProductSubmission product, ModerationItemT
         }
         if (!code.appliesTo(type)) {
             throw new TrustRuleViolation("trustops.reason-code-not-applicable", code.name() + " cannot remove "
-                    + (serviceReview() ? "a review" : "a listing"),
-                    Map.of("reasonCode", serviceReview() ? "Use a review reason code" : "Use a listing reason code"));
+                    + (reviewItem() ? "a review" : "a listing"),
+                    Map.of("reasonCode", reviewItem() ? "Use a review reason code" : "Use a listing reason code"));
         }
         String n = code == ModerationReasonCode.OTHER ? Texts.required(note, "note", "Note", 1000)
                 : Texts.optional(note, "note", "Note", 1000);
@@ -194,7 +247,7 @@ public record ModerationItem(UUID id, ProductSubmission product, ModerationItemT
 
     private void requireOpen() {
         if (!open()) {
-            throw new IllegalStateException((serviceReview() ? "Review " : "Listing ") + subjectId() + " is already "
+            throw new IllegalStateException((reviewItem() ? "Review " : "Listing ") + subjectId() + " is already "
                     + status);
         }
     }

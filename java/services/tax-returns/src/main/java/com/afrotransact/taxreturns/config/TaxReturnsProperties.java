@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * {@code at.taxreturns.*}.
  *
- * @param tax       tax provider and product-type → tax-category mapping
+ * @param tax       tax provider
  * @param returns   platform return policy and label settings
  * @param upstreams payments, inventory, carrier-gateway and catalog URLs and the client-credentials client
  * @param consumers Kafka topics consumed
@@ -36,14 +36,28 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
     }
 
     /**
-     * @param provider                tax engine (default RULES, no external calls)
-     * @param categoryByProductType   catalog product type → GENERAL | GROCERY | PREPARED_FOOD (default GENERAL)
+     * @param provider tax engine: RULES (default, built-in rules over the rate tables) or STRIPE_TAX (rules remain the
+     *                 fallback when Stripe is unreachable or an item has no Stripe tax code yet)
+     * @param stripe   Stripe Tax settings (used only with STRIPE_TAX)
      */
-    public record Tax(TaxProvider provider, Map<String, String> categoryByProductType) {
+    public record Tax(TaxProvider provider, StripeTax stripe) {
 
         public Tax {
             provider = provider == null ? TaxProvider.RULES : provider;
-            categoryByProductType = categoryByProductType == null ? Map.of() : Map.copyOf(categoryByProductType);
+            stripe = stripe == null ? new StripeTax(null, null, null) : stripe;
+        }
+    }
+
+    /**
+     * @param secretKey      Stripe secret key (env STRIPE_SECRET_KEY); never logged
+     * @param baseUrl        Stripe API base URL
+     * @param shippingTaxCode Stripe tax code used for delivery charges (check it against Stripe's list)
+     */
+    public record StripeTax(String secretKey, String baseUrl, String shippingTaxCode) {
+
+        public StripeTax {
+            baseUrl = baseUrl == null || baseUrl.isBlank() ? "https://api.stripe.com" : baseUrl;
+            shippingTaxCode = shippingTaxCode == null || shippingTaxCode.isBlank() ? "txcd_92010001" : shippingTaxCode;
         }
     }
 

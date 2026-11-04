@@ -10,8 +10,9 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 
 /**
- * In-JVM WireMock standing in for api.stripe.com, files.stripe.com and media-service. Responses are templated so
- * every organisation gets distinct Stripe ids.
+ * In-JVM WireMock standing in for api.stripe.com and media-service. Responses are templated so every organisation
+ * gets distinct Stripe ids. Seller accounts are Stripe-collected, so there are no stubs for account, person or bank
+ * account updates: a call to one fails the test. Retrieved accounts list the bank Stripe's onboarding collected.
  */
 final class StripeStub {
 
@@ -26,48 +27,31 @@ final class StripeStub {
                         + "\"payouts_enabled\":false,\"details_submitted\":false}")));
         wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/accounts/acct_[A-Za-z0-9]+"))
                 .willReturn(json(account("{{request.pathSegments.[2]}}"))));
-        wm.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/accounts/acct_[A-Za-z0-9]+"))
-                .willReturn(json(account("{{request.pathSegments.[2]}}"))));
-        wm.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/accounts/acct_[A-Za-z0-9]+/external_accounts"))
-                .willReturn(json("{\"id\":\"ba_" + RANDOM + "\",\"object\":\"bank_account\",\"last4\":\"6789\","
-                        + "\"bank_name\":\"Chase\",\"status\":\"new\"}")));
-        wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/accounts/acct_[A-Za-z0-9]+/persons"))
-                .willReturn(json("{\"object\":\"list\",\"data\":[{\"id\":\"person_Rep1\",\"object\":\"person\","
-                        + "\"relationship\":{\"representative\":true}}],\"has_more\":false,\"url\":\"/v1/persons\"}")));
-        wm.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/accounts/acct_[A-Za-z0-9]+/persons/person_[A-Za-z0-9]+"))
-                .willReturn(json("{\"id\":\"{{request.pathSegments.[4]}}\",\"object\":\"person\"}")));
         wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/account_sessions"))
                 .willReturn(json("{\"object\":\"account_session\",\"account\":\"acct_x\",\"client_secret\":"
                         + "\"accs_secret_test\",\"expires_at\":4102444800,\"livemode\":false}")));
-        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/files"))
-                .willReturn(json("{\"id\":\"file_" + RANDOM + "\",\"object\":\"file\",\"purpose\":"
-                        + "\"account_requirement\"}")));
+        // Plan fees are plain Stripe Payments: a customer per organisation, SetupIntents, off-session PaymentIntents.
         wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/customers"))
                 .willReturn(json("{\"id\":\"cus_" + RANDOM + "\",\"object\":\"customer\"}")));
-        wm.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/customers/cus_[A-Za-z0-9]+"))
-                .willReturn(json("{\"id\":\"{{request.pathSegments.[2]}}\",\"object\":\"customer\"}")));
         wm.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/payment_methods/pm_[A-Za-z0-9_]+/(attach|detach)"))
                 .willReturn(json("{\"id\":\"{{request.pathSegments.[2]}}\",\"object\":\"payment_method\"}")));
-        wm.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/prices"))
-                .willReturn(json("{\"object\":\"list\",\"data\":[{\"id\":\"price_" + RANDOM + "\",\"object\":"
-                        + "\"price\",\"active\":true}],\"has_more\":false,\"url\":\"/v1/prices\"}")));
-        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/subscriptions"))
-                .willReturn(json(subscription("sub_" + RANDOM, "trialing"))));
-        wm.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/subscriptions/sub_[A-Za-z0-9]+"))
-                .willReturn(json(subscription("{{request.pathSegments.[2]}}", "active"))));
-        wm.stubFor(WireMock.delete(WireMock.urlPathMatching("/v1/subscriptions/sub_[A-Za-z0-9]+"))
-                .willReturn(json(subscription("{{request.pathSegments.[2]}}", "canceled"))));
-        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/billing/meter_events"))
-                .willReturn(json("{\"object\":\"billing.meter_event\",\"event_name\":\"x\","
-                        + "\"identifier\":\"x\",\"payload\":{},\"timestamp\":0,\"livemode\":false}")));
         wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/setup_intents"))
                 .willReturn(json("{\"id\":\"seti_" + RANDOM + "\",\"object\":\"setup_intent\",\"client_secret\":"
                         + "\"seti_" + RANDOM + "_secret_test\",\"status\":\"requires_payment_method\"}")));
-        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/invoices/create_preview"))
-                .willReturn(json("{\"object\":\"invoice\",\"amount_due\":1734,\"total\":1734,"
-                        + "\"currency\":\"usd\"}")));
-        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/subscription_items"))
-                .willReturn(json("{\"id\":\"si_" + RANDOM + "\",\"object\":\"subscription_item\"}")));
+        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
+                .willReturn(json("{\"id\":\"pi_" + RANDOM + "\",\"object\":\"payment_intent\",\"status\":"
+                        + "\"succeeded\"}")));
+        // Bank debits settle later: the payment method id says so.
+        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
+                .withRequestBody(WireMock.containing("payment_method=pm_ach")).atPriority(1)
+                .willReturn(json("{\"id\":\"pi_" + RANDOM + "\",\"object\":\"payment_intent\",\"status\":"
+                        + "\"processing\"}")));
+        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
+                .withRequestBody(WireMock.containing("payment_method=pm_decline")).atPriority(1)
+                .willReturn(WireMock.aResponse().withStatus(402).withHeader("Content-Type", "application/json")
+                        .withBody("{\"error\":{\"type\":\"card_error\",\"code\":\"card_declined\","
+                                + "\"decline_code\":\"generic_decline\",\"message\":\"Your card was declined.\","
+                                + "\"payment_intent\":{\"id\":\"pi_declined\",\"object\":\"payment_intent\"}}}")));
         wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/assets/[A-Za-z0-9-]+"))
                 .willReturn(json("{\"id\":\"{{request.pathSegments.[2]}}\",\"fileName\":\"document.pdf\","
                         + "\"contentType\":\"application/pdf\",\"status\":\"READY\","
@@ -83,16 +67,10 @@ final class StripeStub {
                 + "\"individual\":{\"verification\":{\"status\":\"verified\"}},"
                 + "\"capabilities\":{\"card_payments\":\"active\",\"transfers\":\"active\"},"
                 + "\"requirements\":{\"currently_due\":[],\"eventually_due\":[],\"past_due\":[],"
-                + "\"pending_verification\":[],\"errors\":[],\"current_deadline\":null,\"disabled_reason\":null}}";
-    }
-
-    private static String subscription(String id, String status) {
-        long now = System.currentTimeMillis() / 1000;
-        return "{\"id\":\"" + id + "\",\"object\":\"subscription\",\"customer\":\"cus_x\",\"status\":\"" + status
-                + "\",\"cancel_at_period_end\":false,\"trial_end\":" + (now + 30L * 86400) + ",\"items\":{\"object\":"
-                + "\"list\",\"data\":[{\"id\":\"si_" + RANDOM + "\",\"object\":\"subscription_item\","
-                + "\"current_period_start\":" + now + ",\"current_period_end\":" + (now + 30L * 86400)
-                + ",\"price\":{\"id\":\"price_x\",\"object\":\"price\"}}]}}";
+                + "\"pending_verification\":[],\"errors\":[],\"current_deadline\":null,\"disabled_reason\":null},"
+                + "\"external_accounts\":{\"object\":\"list\",\"data\":[{\"id\":\"ba_" + id + "\","
+                + "\"object\":\"bank_account\",\"bank_name\":\"STRIPE TEST BANK\",\"last4\":\"6789\","
+                + "\"status\":\"new\",\"default_for_currency\":true,\"currency\":\"usd\"}],\"has_more\":false}}";
     }
 
     private static ResponseDefinitionBuilder json(String body) {

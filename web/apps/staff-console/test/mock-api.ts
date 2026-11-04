@@ -1,4 +1,4 @@
-import { createSettingsApiClient, createStaffApiClient, type SettingsApiClient, type StaffApiClient } from '@afrotransact/api-client';
+import { createSessionApi, createSettingsApiClient, createStaffApiClient, type SessionApi, type SettingsApiClient, type StaffApiClient } from '@afrotransact/api-client';
 import { MOCK_STAFF_ROLE_COOKIE } from '@afrotransact/api-client/mocks/staff';
 import { handleStaffMockRequest } from '@afrotransact/api-client/mocks/staff-runtime';
 
@@ -23,6 +23,11 @@ export function mockApi(): StaffApiClient {
     headers: roles ? { cookie: `${MOCK_STAFF_ROLE_COOKIE}=${roles}` } : {},
     fetch: send
   });
+}
+
+/** The sign-out timer's calls (policy, activity, /v1/me) against the same in-process mocks. */
+export function mockSessionApi(): SessionApi {
+  return createSessionApi({ baseUrl: 'http://staff.test/api/bff', fetch: send });
 }
 
 /** My account (/v1/account/…) against the same in-process mocks. */

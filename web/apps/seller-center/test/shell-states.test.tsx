@@ -1,13 +1,14 @@
 import { createSellerApiClient } from '@afrotransact/api-client';
 import { PENDING_ORG, resetSellerDb } from '@afrotransact/api-client/mocks/seller';
 import { handleSellerMockRequest } from '@afrotransact/api-client/mocks/seller-runtime';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PortalShell } from '@/components/shell/PortalShell';
 import { AutoSignIn, ShellLoading, SIGN_IN_LOOP_MS } from '@/components/shell/ShellStates';
 import { signOutEverywhere } from '@/lib/auth';
+import { navGuard } from '@/lib/nav-guard';
 
 import { renderWithProviders } from './render';
 import { nav } from './setup';
@@ -44,7 +45,8 @@ describe('shell loading and sign-in states', () => {
     nav.replace.mockReset();
     assign.mockReset();
     window.sessionStorage.clear();
-    vi.stubGlobal('location', { ...window.location, href: 'http://localhost/onboarding?role=seller', assign });
+    navGuard.reset();
+    vi.stubGlobal('location', { ...window.location, origin: 'http://localhost', href: 'http://localhost/onboarding?role=seller', assign, reload: vi.fn() });
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -127,5 +129,75 @@ describe('shell loading and sign-in states', () => {
     );
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/onboarding'));
     expect(window.sessionStorage.getItem('at.sc.signInStartedAt')).toBeNull();
+  });
+
+  it('the slow note counts from the first loader: a loader mounted again (a redirect loop) still says so in time', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    const first = renderWithProviders(<ShellLoading label="Loading your back office…" onRetry={() => undefined} />);
+    await act(async () => {
+      vi.advanceTimersByTime(6_000);
+    });
+    first.unmount();
+    // The next page load of the loop: a new loader, the same streak.
+    renderWithProviders(<ShellLoading label="Loading your back office…" onRetry={() => undefined} />);
+    await act(async () => {
+      vi.advanceTimersByTime(4_500);
+    });
+    expect(screen.getByText('This is taking longer than usual')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Go to storefront' })).toHaveAttribute('href', 'http://localhost:3000');
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+  });
+
+  it('redirects that go round in circles stop with a panel naming where they went, Try again, storefront and Sign out', async () => {
+    const user = userEvent.setup();
+    const api = createSellerApiClient({ baseUrl: 'http://seller.test/api/bff', fetch: (req: Request) => handleSellerMockRequest(req) });
+    await api.setActiveOrg(PENDING_ORG);
+    // Three round trips to onboarding already happened in this tab (onboarding sent the page back each time).
+    window.sessionStorage.setItem('at.sc.nav.redirects', JSON.stringify({ '/onboarding': [Date.now() - 9_000, Date.now() - 6_000, Date.now() - 3_000] }));
+    nav.pathname = '/';
+    renderWithProviders(
+      <PortalShell>
+        <p>page</p>
+      </PortalShell>
+    );
+    expect(await screen.findByRole('heading', { name: 'Seller Center keeps redirecting' })).toBeInTheDocument();
+    expect(screen.getByText('/onboarding')).toBeInTheDocument();
+    expect(screen.getByText(/4 times in 30 seconds/)).toBeInTheDocument();
+    expect(nav.replace).not.toHaveBeenCalled();
+    const panel = screen.getAllByRole('alert').find((el) => el.textContent?.includes('keeps redirecting'));
+    if (!panel) throw new Error('loop panel');
+    expect(within(panel).getByRole('link', { name: 'Go to storefront' })).toBeInTheDocument();
+    await user.click(within(panel).getByRole('button', { name: 'Sign out' }));
+    expect(signOutEverywhere).toHaveBeenCalled();
+    await user.click(within(panel).getByRole('button', { name: 'Try again' }));
+    expect(window.location.reload).toHaveBeenCalled();
+    // The counts start over: the next redirect goes through.
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/onboarding'));
+    expect(JSON.parse(window.sessionStorage.getItem('at.sc.nav.redirects') ?? '{}')['/onboarding']).toHaveLength(1);
+  });
+
+  it('an approved seller arriving on onboarding is sent home once, not round in a loop', async () => {
+    nav.pathname = '/onboarding';
+    renderWithProviders(
+      <PortalShell>
+        <p>page</p>
+      </PortalShell>
+    );
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/'));
+    expect(nav.replace).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('heading', { name: 'Seller Center keeps redirecting' })).not.toBeInTheDocument();
+  });
+
+  it('a sign-in that keeps coming back signed out is a loop even after the 2-minute guard was cleared', async () => {
+    const login = '/api/bff/v1/auth/login?returnTo=http%3A%2F%2Flocalhost%2Fonboarding%3Frole%3Dseller';
+    window.sessionStorage.setItem('at.sc.nav.redirects', JSON.stringify({ [login]: [Date.now() - 3_000, Date.now() - 2_000, Date.now() - 1_000] }));
+    state.mode = 'signedOut';
+    renderWithProviders(
+      <PortalShell>
+        <p>page</p>
+      </PortalShell>
+    );
+    expect(await screen.findByRole('heading', { name: 'Seller Center keeps redirecting' })).toBeInTheDocument();
+    expect(assign).not.toHaveBeenCalled();
   });
 });

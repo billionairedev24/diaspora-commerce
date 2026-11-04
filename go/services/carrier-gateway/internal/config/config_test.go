@@ -22,7 +22,11 @@ func TestEveryEnvironmentLoads(t *testing.T) {
 			if cfg.PublicBaseURL == "" {
 				t.Fatal("publicBaseUrl (or apiBaseUrl) is required for carrier webhooks")
 			}
-			if cfg.Rates.Budget != 1200*time.Millisecond || cfg.Rates.QuoteTTL != 10*time.Minute || cfg.Polling.Interval != 2*time.Hour {
+			wantInterval := 2 * time.Hour
+			if env == "local" {
+				wantInterval = 1 * time.Minute
+			}
+			if cfg.Rates.Budget != 1200*time.Millisecond || cfg.Rates.QuoteTTL != 10*time.Minute || cfg.Polling.Interval != wantInterval {
 				t.Fatalf("durations %+v %+v", cfg.Rates, cfg.Polling)
 			}
 			if cfg.USPS.ClientID != "id" || cfg.FedEx.WebhookSecret != "s" || cfg.UPS.Paths.Rate != "/api/rating/v2409/Shop" ||

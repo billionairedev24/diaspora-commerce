@@ -48,4 +48,49 @@ class DefaultProductDraftPolicyTest {
                 List.of(new VariantDraft(Map.of("Format", "Hardcover"), "PEPPER-HC", null, true, 3499, 5)))))
                 .isInstanceOf(CatalogRuleViolation.class);
     }
+
+    private static final ProductType FOOD = new ProductType("grocery", "Packaged food", List.of(
+            new AttributeDefinition("shelf", "Shelf life", List.of(), true, false, AttributeKind.NUMBER,
+                    List.of("days", "months"), AttributeSection.FOOD, null)),
+            List.of(new VariationTheme("Net weight", List.of(new VariationDimension("Net weight",
+                    List.of("8 oz", "1 lb"))))),
+            IdentifierRule.GTIN, new ProductTypeTraits(true, false, false, true));
+
+    @Test
+    void aProductWithoutVariationsHasOneVariantWithoutOptions() {
+        policy.validate(new ProductDraft(FOOD, "Suya Pepper Spice Blend", Map.of("shelf", "12 months"), List.of(BIG),
+                "", List.of(new VariantDraft(Map.of(), "SUYA-1", null, true, 899, 40))));
+        assertThatThrownBy(() -> policy.validate(new ProductDraft(FOOD, "Suya Pepper Spice Blend",
+                Map.of("shelf", "12"), List.of(BIG), "", List.of(
+                        new VariantDraft(Map.of(), "SUYA-1", null, true, 899, 40),
+                        new VariantDraft(Map.of(), "SUYA-2", null, true, 899, 40)))))
+                .isInstanceOfSatisfying(CatalogRuleViolation.class,
+                        ex -> assertThat(ex.fieldErrors()).containsKey("variationTheme"));
+    }
+
+    @Test
+    void numberAttributesTakeKnownUnits() {
+        assertThatThrownBy(() -> policy.validate(new ProductDraft(FOOD, "Suya Pepper Spice Blend",
+                Map.of("shelf", "12 weeks"), List.of(BIG), "",
+                List.of(new VariantDraft(Map.of(), "SUYA-1", null, true, 899, 40)))))
+                .isInstanceOfSatisfying(CatalogRuleViolation.class, ex -> assertThat(ex.fieldErrors())
+                        .containsEntry("attributes.shelf", "Unit must be one of days, months"));
+        assertThat(FOOD.attribute("shelf").orElseThrow().normalise("12")).isEqualTo("12 days");
+        assertThat(FOOD.attribute("shelf").orElseThrow().normalise("3 Months")).isEqualTo("3 months");
+    }
+
+    @Test
+    void compareAtPricePackageAndHandlingTimeAreChecked() {
+        ListingDetails fba = new ListingDetails("Hand-ground", ItemCondition.NEW, List.of("suya"),
+                FulfilmentMode.AFROTRANSACT, null, 45, null);
+        assertThatThrownBy(() -> policy.validate(new ProductDraft(FOOD, "Suya Pepper Spice Blend",
+                Map.of("shelf", "12 months"), List.of(BIG), "",
+                List.of(new VariantDraft(Map.of(), "SUYA-1", null, true, 899, 40, 899L, List.of())), fba)))
+                .isInstanceOfSatisfying(CatalogRuleViolation.class, ex -> assertThat(ex.fieldErrors()).containsKeys(
+                        "variants[0].compareAtPrice", "packaging", "handlingDays"));
+        policy.validate(new ProductDraft(FOOD, "Suya Pepper Spice Blend", Map.of("shelf", "12 months"), List.of(BIG),
+                "", List.of(new VariantDraft(Map.of(), "SUYA-1", null, true, 899, 40, 1299L, List.of(BIG))),
+                new ListingDetails(null, null, null, FulfilmentMode.AFROTRANSACT, new PackageDimensions(6, 4, 2, 0.6),
+                        3, null)));
+    }
 }

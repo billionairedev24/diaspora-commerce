@@ -72,31 +72,29 @@ func run() error {
 	httpClient := &http.Client{Timeout: 3 * time.Second}
 	osm := nominatim.New(cfg.Nominatim.URL, cfg.Nominatim.UserAgent, httpClient) // one rate limit + cache for both chains
 	fixtures := fixture.New()
+	googleKey := cfg.GoogleKey()
 	providers := make([]port.Autocompleter, 0, len(cfg.Providers))
-	for _, name := range cfg.Providers {
+	for _, name := range cfg.AddressProviders() {
 		switch name {
-		case "google-places":
-			if cfg.Google.APIKey != "" {
-				providers = append(providers, places.New(cfg.Google.APIKey, "", httpClient))
-			}
-		case "osm-nominatim":
+		case config.ProviderGooglePlaces:
+			providers = append(providers, places.New(googleKey, "", httpClient))
+		case config.ProviderNominatim:
 			providers = append(providers, osm)
-		case "fixture":
+		case config.ProviderFixture:
 			providers = append(providers, fixtures)
 		default:
 			return fmt.Errorf("unknown address provider %q", name)
 		}
 	}
-	reversers := make([]port.ReverseGeocoder, 0, len(cfg.ReverseProviders))
-	for _, name := range cfg.ReverseProviders {
+	log.Info("address autocomplete providers", "providers", cfg.AddressProviders())
+	reversers := make([]port.ReverseGeocoder, 0, len(cfg.ReverseProviders)+1)
+	for _, name := range cfg.ReverseGeocoders() {
 		switch name {
-		case "google-geocoding":
-			if cfg.Google.APIKey != "" {
-				reversers = append(reversers, places.NewGeocoder(cfg.Google.APIKey, "", httpClient))
-			}
-		case "osm-nominatim":
+		case config.ProviderGoogleGeocoding:
+			reversers = append(reversers, places.NewGeocoder(googleKey, "", httpClient))
+		case config.ProviderNominatim:
 			reversers = append(reversers, osm)
-		case "fixture":
+		case config.ProviderFixture:
 			reversers = append(reversers, fixtures)
 		default:
 			return fmt.Errorf("unknown reverse geocoding provider %q", name)
@@ -154,7 +152,7 @@ func routingProviders(cfg config.Config, client *http.Client, log *slog.Logger) 
 		case "google":
 			key := cfg.Routing.GoogleAPIKey
 			if key == "" {
-				key = cfg.Google.APIKey
+				key = cfg.GoogleKey()
 			}
 			if key == "" {
 				log.Info("routing provider google skipped: no GOOGLE_MAPS_API_KEY")

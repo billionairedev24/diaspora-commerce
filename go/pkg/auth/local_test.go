@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
@@ -51,13 +52,13 @@ func TestMiddlewareWithoutVerifierUsesLocalActor(t *testing.T) {
 	h := Middleware(nil, false)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		got, _ = FromContext(r.Context())
 	}))
-	req := httptest.NewRequest(http.MethodGet, "/v1/cart", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/cart", nil)
 	req.Header.Set("Authorization", "Bearer "+unsigned(`{"sub":"cust-9","pt":"CUSTOMER"}`))
 	h.ServeHTTP(httptest.NewRecorder(), req)
 	if got.Subject != "cust-9" {
 		t.Fatalf("customer token: got %+v", got)
 	}
-	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/cart", nil))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/cart", nil))
 	if got.Subject != "local-dev" {
 		t.Fatalf("no token: got %+v", got)
 	}

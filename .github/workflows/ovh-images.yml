@@ -1,0 +1,89 @@
+# Builds and pushes ALL 26 service images at the commit this run is started on, WITHOUT the verify/contract/security gates
+# of the per-service pipelines. For the OVH test environment only: use it when you need images for `ovh-vps` at a commit
+# whose per-service pipelines are not green. The image policy check, Trivy image scan (CRITICAL fails), SBOM and cosign
+# signature of the publish-image action still run. Production images come from the per-service pipelines on main.
+#   Actions > ovh-images > Run workflow (branch main), then copy the commit sha into the ovh-vps workflow's image-tag.
+name: ovh-images
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Optional: build only these services (space separated, e.g. 'identity payments'); empty = all 26"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: m
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          set -euo pipefail
+          items=()
+          for d in java/services/*/; do items+=("$(basename "$d") java"); done
+          for d in go/services/*/; do [[ -f "$d/Dockerfile" ]] && items+=("$(basename "$d") go"); done
+          json="["
+          sep=""
+          for it in "${items[@]}"; do
+            svc="${it% *}"; lang="${it#* }"
+            if [[ -n "$ONLY" ]] && ! [[ " $ONLY " == *" $svc "* ]]; then continue; fi
+            json+="${sep}{\"service\":\"$svc\",\"lang\":\"$lang\"}"; sep=","
+          done
+          json+="]"
+          echo "matrix=$json" >> "$GITHUB_OUTPUT"
+          echo "$json" | jq -r '.[]|"\(.lang) \(.service)"'
+
+  image:
+    name: image ${{ matrix.lang }}/${{ matrix.service }}
+    needs: list
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        include: ${{ fromJSON(needs.list.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Publish (Java)
+        if: matrix.lang == 'java'
+        uses: ./.github/actions/publish-image
+        with:
+          service: ${{ matrix.service }}
+          context: java
+          dockerfile: java/Dockerfile
+          build-args: SERVICE=${{ matrix.service }}
+          push: "true"
+          required-env: SPRING_PROFILES_ACTIVE=prod
+      - name: Publish (Go)
+        if: matrix.lang == 'go'
+        uses: ./.github/actions/publish-image
+        with:
+          service: ${{ matrix.service }}
+          context: go
+          dockerfile: go/services/${{ matrix.service }}/Dockerfile
+          push: "true"
+          required-env: APP_ENV=prod PORT=8080
+
+  summary:
+    needs: image
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "### Images built at \`${GITHUB_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Use this full sha as \`image-tag\` in the ovh-vps workflow." >> "$GITHUB_STEP_SUMMARY"
+          echo "Result of the image jobs: ${{ needs.image.result }}" >> "$GITHUB_STEP_SUMMARY"

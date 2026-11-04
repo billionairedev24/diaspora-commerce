@@ -49,22 +49,28 @@ import tools.jackson.databind.json.JsonMapper;
 @Import(TestSupport.class)
 public abstract class TrustOpsIntegrationTest {
 
-    protected static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
+    /** {@code AT_IT_POSTGRES_URL=jdbc:postgresql://…} runs the tests on that PostgreSQL instead of a container. */
+    protected static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");
+    protected static final PostgreSQLContainer POSTGRES = EXTERNAL_DB == null ? PostgresTestContainer.create() : null;
     protected static final WireMockServer UPSTREAM = new WireMockServer(WireMockConfiguration.options()
             .dynamicPort().globalTemplating(true));
     protected static final JsonMapper JSON = JsonMapper.builder().build();
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
     static {
-        POSTGRES.start();
+        if (POSTGRES != null) {
+            POSTGRES.start();
+        }
         UPSTREAM.start();
     }
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.datasource.url", () -> EXTERNAL_DB != null ? EXTERNAL_DB : POSTGRES.getJdbcUrl());
+        registry.add("spring.datasource.username", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_USER", "postgres") : POSTGRES.getUsername());
+        registry.add("spring.datasource.password", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_PASSWORD", "") : POSTGRES.getPassword());
         registry.add("at.trustops.client.token-uri", () -> UPSTREAM.baseUrl() + "/oauth2/token");
         registry.add("at.trustops.catalog.base-url", UPSTREAM::baseUrl);
         registry.add("at.trustops.payments.base-url", UPSTREAM::baseUrl);
@@ -97,6 +103,8 @@ public abstract class TrustOpsIntegrationTest {
                 .willReturn(WireMock.okJson("{\"access_token\":\"tok-trust-ops\",\"token_type\":\"Bearer\","
                         + "\"expires_in\":300}")));
         UPSTREAM.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/products/[^/]+/(approve|reject|takedown)"))
+                .willReturn(WireMock.okJson("{\"id\":\"{{request.pathSegments.[2]}}\"}")));
+        UPSTREAM.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/product-reviews/[^/]+/(approve|reject|remove)"))
                 .willReturn(WireMock.okJson("{\"id\":\"{{request.pathSegments.[2]}}\"}")));
         UPSTREAM.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/reviews/[^/]+/(approve|reject)"))
                 .willReturn(WireMock.okJson("{\"bookingId\":\"{{request.pathSegments.[2]}}\"}")));

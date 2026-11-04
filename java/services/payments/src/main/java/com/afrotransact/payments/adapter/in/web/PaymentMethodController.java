@@ -10,6 +10,7 @@ import com.afrotransact.payments.adapter.in.web.PaymentsDtos.SetupIntentResponse
 import com.afrotransact.payments.application.EphemeralKeyResult;
 import com.afrotransact.payments.application.PaymentMethodService;
 import com.afrotransact.payments.application.SetupIntentResult;
+import com.afrotransact.payments.application.Wallet;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
@@ -35,8 +36,10 @@ class PaymentMethodController {
 
     @Operation(summary = "List saved payment methods (display data only, never full numbers)")
     @GetMapping("/v1/customers/me/payment-methods")
-    List<PaymentMethodResponse> list() {
-        return methods.list().stream().map(PaymentMethodResponse::of).toList();
+    PaymentsDtos.WalletResponse list() {
+        Wallet w = methods.list();
+        return new PaymentsDtos.WalletResponse(w.stripeCustomerId(),
+                w.items().stream().map(PaymentMethodResponse::of).toList());
     }
 
     @Operation(summary = "Start saving a method: SetupIntent client secret for Stripe Elements / PaymentSheet",

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/elastic/go-elasticsearch/v9"
@@ -44,7 +45,17 @@ for (def e : params.doc.entrySet()) {
   if (params.preserve.contains(e.getKey()) && ctx._source[e.getKey()] != null) { continue; }
   ctx._source[e.getKey()] = e.getValue();
 }
+if (ctx._source.rating == null) { ctx._source.rating = 0.0; }
+if (ctx._source.review_count == null) { ctx._source.review_count = 0; }
 ctx._source.version = params.version;` + recompute
+
+// ratingScript sets the rating catalog computed from the product's published reviews (S324). Product upserts never touch
+// rating and review_count, so reviews survive every catalog.product.* event.
+const ratingScript = `
+if (ctx._source.rating_version != null && ((Number) ctx._source.rating_version).longValue() > params.version) { ctx.op = 'noop'; return; }
+ctx._source.rating = params.rating;
+ctx._source.review_count = params.count;
+ctx._source.rating_version = params.version;`
 
 const availabilityScript = `
 if (ctx._source.variant_qty == null) { ctx._source.variant_qty = new HashMap(); }
@@ -66,8 +77,9 @@ func NewIndex(es *elasticsearch.Client, refresh bool) port.ProductIndex {
 	return &indexImpl{es: es, refresh: refresh}
 }
 
-// managed fields are owned by the index (availability) and never overwritten by product upserts.
-var managed = []string{"available_qty", "in_stock", "variant_qty", "variant_qty_version", "version", "updated_at"}
+// managed fields are owned by the index (availability, ratings) and never overwritten by product upserts.
+var managed = []string{"available_qty", "in_stock", "variant_qty", "variant_qty_version", "version", "updated_at",
+	"rating", "review_count", "rating_version"}
 
 const renameScript = `ctx._source.seller_name = params.name; ctx._source.updated_at = params.now;`
 
@@ -116,6 +128,30 @@ func (i *indexImpl) UpsertProduct(ctx context.Context, market string, doc search
 		return fmt.Errorf("update %s: %s: %s", doc.ATIN, res.Status(), msg)
 	}
 	return nil
+}
+
+func (i *indexImpl) ApplyRating(ctx context.Context, market, atin string, average float64, count int, version int64) (bool, error) {
+	buf, err := json.Marshal(map[string]any{"script": map[string]any{
+		"lang": "painless", "source": ratingScript,
+		"params": map[string]any{"rating": average, "count": count, "version": version},
+	}})
+	if err != nil {
+		return false, fmt.Errorf("encode: %w", err)
+	}
+	res, err := i.es.Update(searchindex.Alias(market), atin, bytes.NewReader(buf), i.es.Update.WithContext(ctx),
+		i.es.Update.WithRetryOnConflict(5), i.es.Update.WithRefresh(i.refreshParam()))
+	if err != nil {
+		return false, fmt.Errorf("update %s: %w", atin, err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	if res.IsError() {
+		msg, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
+		return false, fmt.Errorf("update %s: %s: %s", atin, res.Status(), msg)
+	}
+	return true, nil
 }
 
 func (i *indexImpl) ApplyAvailability(ctx context.Context, market, variantATIN, node string, qty int, version int64) (bool, error) {

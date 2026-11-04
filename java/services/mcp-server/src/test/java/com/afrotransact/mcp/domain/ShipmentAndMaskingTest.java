@@ -14,23 +14,45 @@ class ShipmentAndMaskingTest {
     private final DefaultShipmentStatusPolicy shipments = new DefaultShipmentStatusPolicy();
     private final DefaultPiiMasker masker = new DefaultPiiMasker();
 
+    private static final String S = "SELLER_FULFILLED";
+
     @Test
     void sellersMoveTheirShipmentsForward() {
-        assertThatCode(() -> shipments.check("SELLER", "PROCESSING", "packed", null, null)).doesNotThrowAnyException();
-        assertThatCode(() -> shipments.check("SELLER", "PACKED", "SHIPPED", "USPS", "9400111")).doesNotThrowAnyException();
-        assertThatCode(() -> shipments.check("SELLER", "SHIPPED", "DELIVERED", null, null)).doesNotThrowAnyException();
+        assertThatCode(() -> shipments.check(S, "CARRIER", "placed", "CONFIRMED", null, null, null)).doesNotThrowAnyException();
+        assertThatCode(() -> shipments.check(S, "CARRIER", "confirmed", "packed", null, null, null)).doesNotThrowAnyException();
+        assertThatCode(() -> shipments.check(S, "CARRIER", "packed", "READY", null, null, null)).doesNotThrowAnyException();
+        assertThatCode(() -> shipments.check(S, "CARRIER", "ready", "SHIPPED", "USPS", "9400111", null)).doesNotThrowAnyException();
+        assertThatCode(() -> shipments.check(S, "PICKUP", "ready", "DELIVERED", null, null, "0427")).doesNotThrowAnyException();
     }
 
     @Test
     void sellersCannotCancelSkipBackOrTouchFulfilmentCentreShipments() {
-        assertThatThrownBy(() -> shipments.check("SELLER", "PROCESSING", "CANCELLED", null, null))
+        assertThatThrownBy(() -> shipments.check(S, "CARRIER", "placed", "CANCELLED", null, null, null))
                 .isInstanceOf(McpRuleViolation.class).hasMessageContaining("support");
-        assertThatThrownBy(() -> shipments.check("AFROTRANSACT", "PROCESSING", "PACKED", null, null))
+        assertThatThrownBy(() -> shipments.check("FBA_AFROTRANSACT", "CARRIER", "placed", "PACKED", null, null, null))
                 .satisfies(e -> assertThat(((McpRuleViolation) e).code()).isEqualTo("mcp.not-seller-fulfilled"));
-        assertThatThrownBy(() -> shipments.check("SELLER", "DELIVERED", "PACKED", null, null))
+        assertThatThrownBy(() -> shipments.check(S, "CARRIER", "delivered", "PACKED", null, null, null))
                 .satisfies(e -> assertThat(((McpRuleViolation) e).code()).isEqualTo("mcp.invalid-transition"));
-        assertThatThrownBy(() -> shipments.check("SELLER", "PACKED", "SHIPPED", "USPS", " "))
+        assertThatThrownBy(() -> shipments.check(S, "CARRIER", "confirmed", "READY", null, null, null))
+                .as("no skipping packing").satisfies(e -> assertThat(((McpRuleViolation) e).code()).isEqualTo("mcp.invalid-transition"));
+        assertThatThrownBy(() -> shipments.check(S, "CARRIER", "packed", "SHIPPED", "USPS", "9400111", null))
+                .as("must be READY first").satisfies(e -> assertThat(((McpRuleViolation) e).code()).isEqualTo("mcp.invalid-transition"));
+        assertThatThrownBy(() -> shipments.check(S, "CARRIER", "ready", "SHIPPED", "USPS", " ", null))
                 .satisfies(e -> assertThat(((McpRuleViolation) e).code()).isEqualTo("mcp.tracking-required"));
+    }
+
+    @Test
+    void aPickupOrderIsHandedOverWithTheBuyersCodeAndOnlyAPickupOrder() {
+        assertThatThrownBy(() -> shipments.check(S, "PICKUP", "ready", "DELIVERED", null, null, null))
+                .satisfies(e -> assertThat(((McpRuleViolation) e).code()).isEqualTo("mcp.handover-code-required"));
+        assertThatThrownBy(() -> shipments.check(S, "PICKUP", "ready", "DELIVERED", null, null, "12"))
+                .satisfies(e -> assertThat(((McpRuleViolation) e).code()).isEqualTo("mcp.handover-code-required"));
+        assertThatThrownBy(() -> shipments.check(S, "PICKUP", "ready", "SHIPPED", "USPS", "9400111", null))
+                .satisfies(e -> assertThat(((McpRuleViolation) e).code()).isEqualTo("mcp.invalid-transition"));
+        assertThatThrownBy(() -> shipments.check(S, "CARRIER", "ready", "DELIVERED", null, null, "0427"))
+                .satisfies(e -> assertThat(((McpRuleViolation) e).code()).isEqualTo("mcp.invalid-transition"));
+        assertThatThrownBy(() -> shipments.check(S, "AFROTRANSACT_DELIVERY", "ready", "SHIPPED", "USPS", "9400111", null))
+                .satisfies(e -> assertThat(((McpRuleViolation) e).code()).isEqualTo("mcp.invalid-transition"));
     }
 
     @Test

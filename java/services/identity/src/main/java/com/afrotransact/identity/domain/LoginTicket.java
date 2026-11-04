@@ -9,7 +9,12 @@ import java.util.UUID;
  * {@link #TTL}, on {@code /oauth2/authorize?login_ticket=…}; only its SHA-256 hash is stored.
  */
 public record LoginTicket(String tokenHash, UUID userId, String clientId, SignInMethod method, Instant createdAt,
-                          Instant expiresAt, Instant usedAt) {
+                          Instant expiresAt, Instant usedAt, SessionDevice device) {
+
+    public LoginTicket(String tokenHash, UUID userId, String clientId, SignInMethod method, Instant createdAt,
+                       Instant expiresAt, Instant usedAt) {
+        this(tokenHash, userId, clientId, method, createdAt, expiresAt, usedAt, null);
+    }
 
     public static final Duration TTL = Duration.ofSeconds(60);
 

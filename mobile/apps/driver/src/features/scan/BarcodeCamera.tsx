@@ -4,12 +4,15 @@ import { useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { isRepeat, normalizeLabel } from '@/domain/scan';
+import { useAppLocked } from '@/session/LockProvider';
 import { c, sp, t } from '@/theme';
 import { AppText, Button } from '@/ui/primitives';
 
 export function BarcodeCamera({ hint, onScan, paused }: { hint: string; onScan: (label: string) => void; paused: boolean }) {
   const [perm, requestPerm] = useCameraPermissions();
   const last = useRef<{ label: string; at: number } | null>(null);
+  // The camera stays mounted under the lock screen; it just stops reading labels until unlocked.
+  const locked = useAppLocked();
   return (
     <View style={styles.box} accessibilityLabel="Barcode scanner">
       {perm?.granted ? (
@@ -17,7 +20,7 @@ export function BarcodeCamera({ hint, onScan, paused }: { hint: string; onScan: 
           style={StyleSheet.absoluteFill}
           facing="back"
           barcodeScannerSettings={{ barcodeTypes: ['code128'] }}
-          onBarcodeScanned={paused ? undefined : ({ data }) => {
+          onBarcodeScanned={paused || locked ? undefined : ({ data }) => {
             const label = normalizeLabel(data);
             const now = Date.now();
             if (isRepeat(last.current, label, now)) return;

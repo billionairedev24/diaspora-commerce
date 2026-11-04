@@ -1,12 +1,14 @@
 package com.afrotransact.seller.adapter.in.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.NonRetryableEventException;
 import com.afrotransact.seller.application.OrgMemberSyncService;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
@@ -64,11 +66,12 @@ class IdentityRoleEventListenerTest {
     @Test
     void otherEventsMalformedOnesAndRolesWithoutOrgAreSkipped() {
         assertThat(listener.handle(rec("identity.user.registered", UUID.randomUUID().toString(), "{}"))).isFalse();
-        assertThat(listener.handle(rec("identity.role.granted", null, role("seller.catalog", "org_1")))).isFalse();
-        assertThat(listener.handle(rec("identity.role.granted", "not-a-uuid", role("seller.catalog", "org_1"))))
-                .isFalse();
-        assertThat(listener.handle(rec("identity.role.granted", UUID.randomUUID().toString(), "{not json")))
-                .isFalse();
+        assertThatThrownBy(() -> listener.handle(rec("identity.role.granted", null, role("seller.catalog", "org_1"))))
+                .isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.handle(rec("identity.role.granted", "not-a-uuid",
+                role("seller.catalog", "org_1")))).isInstanceOf(NonRetryableEventException.class);
+        assertThatThrownBy(() -> listener.handle(rec("identity.role.granted", UUID.randomUUID().toString(),
+                "{not json"))).isInstanceOf(NonRetryableEventException.class);
         assertThat(listener.handle(rec("identity.role.granted", UUID.randomUUID().toString(),
                 role("account.customer", null)))).isFalse();
         assertThat(calls).isEmpty();

@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import com.afrotransact.offers.application.RetailListingSyncService;
 import com.afrotransact.offers.application.RetailListingSyncService.RetailItem;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
@@ -49,16 +50,13 @@ class RetailEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", type, rec.topic(),
-                    rec.partition(), rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         ItemMessage m;
         try {
             m = json.readValue(rec.value(), ItemMessage.class);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         if (m == null || m.sku() == null || m.listingStatus() == null) {
             LOG.warn("Skipping {} event {} with missing fields", type, eventId.get());

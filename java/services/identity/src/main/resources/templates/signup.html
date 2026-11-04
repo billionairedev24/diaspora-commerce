@@ -106,6 +106,12 @@
               <a th:href="${links.privacy}" target="_blank" rel="noopener"><th:block th:text="#{auth.privacyLink}"></th:block><span class="visually-hidden" th:text="' ' + #{auth.opensNewTab}"></span></a><th:block th:text="#{auth.terms.after}"></th:block></span>
           </label>
           <p class="message message-error check-error" id="termsAccepted-error" th:if="${errors.containsKey('termsAccepted')}" th:text="${errors['termsAccepted']}"></p>
+          <div class="field">
+            <label class="label" for="referralCode"><span th:text="#{auth.referralCode}">Referral code</span> <span class="optional" th:text="#{auth.optional}">(optional)</span></label>
+            <input class="control" id="referralCode" name="referralCode" autocomplete="off" autocapitalize="characters"
+                   maxlength="20" th:value="${values['referralCode']}" aria-describedby="referralCode-help">
+            <p class="message" id="referralCode-help" th:text="#{auth.referralCodeHelp}"></p>
+          </div>
           <label class="check" for="smsConsent">
             <input type="checkbox" id="smsConsent" name="smsConsent" value="true" th:checked="${values['smsConsent']}">
             <span><strong th:text="#{auth.smsTitle}"></strong>

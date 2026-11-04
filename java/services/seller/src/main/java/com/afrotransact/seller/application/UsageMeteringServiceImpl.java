@@ -29,7 +29,6 @@ import com.afrotransact.seller.port.AdSpendSource;
 import com.afrotransact.seller.port.AiUsageSource;
 import com.afrotransact.seller.port.GatewayException;
 import com.afrotransact.seller.port.StorageUsageSource;
-import com.afrotransact.seller.port.StripeBillingGateway;
 import com.afrotransact.seller.port.SubscriptionRepository;
 import com.afrotransact.seller.port.UsageRepository;
 import com.afrotransact.seller.port.UsageRepository.UsageRun;
@@ -52,21 +51,19 @@ class UsageMeteringServiceImpl implements UsageMeteringService {
     private final StorageUsageSource storage;
     private final AdSpendSource ads;
     private final AiUsageSource ai;
-    private final StripeBillingGateway stripe;
     private final AccessGuard access;
     private final TransactionOperations tx;
     private final SellerSettings settings;
     private final Clock clock;
 
     UsageMeteringServiceImpl(UsageRepository usage, SubscriptionRepository subs, StorageUsageSource storage,
-                             AdSpendSource ads, AiUsageSource ai, StripeBillingGateway stripe, AccessGuard access,
+                             AdSpendSource ads, AiUsageSource ai, AccessGuard access,
                              TransactionOperations tx, SellerSettings settings, Clock clock) {
         this.usage = usage;
         this.subs = subs;
         this.storage = storage;
         this.ads = ads;
         this.ai = ai;
-        this.stripe = stripe;
         this.access = access;
         this.tx = tx;
         this.settings = settings;
@@ -163,8 +160,7 @@ class UsageMeteringServiceImpl implements UsageMeteringService {
             changed += collect(UsageMeter.ADS_SPEND, from, to, "ADS", failedSources, () -> adSamples(from, to));
             changed += collect(UsageMeter.AI_CREDITS, from, to, "AI", failedSources, () -> aiSamples(from, to));
             Report report = report(from, to);
-            String status = failedSources.size() == 3 ? "FAILED"
-                    : failedSources.isEmpty() && report.pending() == 0 ? "COMPLETED" : "PARTIAL";
+            String status = failedSources.size() == 3 ? "FAILED" : failedSources.isEmpty() ? "COMPLETED" : "PARTIAL";
             UsageRun done = new UsageRun(runId, from, to, trigger, actorId, status, changed, report.reported(),
                     report.pending(), report.corrections(), failedSources, started, Instant.now(clock));
             tx.executeWithoutResult(s -> usage.saveRun(done));
@@ -264,86 +260,24 @@ class UsageMeteringServiceImpl implements UsageMeteringService {
     private record Report(int reported, int pending, int corrections) {
     }
 
-    /** Sends a meter event for every positive difference between stored usage and what Stripe has. */
+    /**
+     * What is still to be invoiced: usage days whose quantity differs from what plan invoices have billed. Nothing is
+     * sent anywhere; the next plan invoice bills these days (see {@code InvoiceIssuingService}).
+     */
     private Report report(LocalDate from, LocalDate to) {
-        int reported = 0;
         int pending = 0;
         int corrections = 0;
-        Map<String, List<UsageDay>> byOrg = new LinkedHashMap<>();
-        tx.execute(s -> usage.unreported(from, to)).stream().filter(d -> !settings.isRetail(d.orgId())).forEach(d ->
-                byOrg.computeIfAbsent(d.orgId(), k -> new ArrayList<>()).add(d));
-        for (Map.Entry<String, List<UsageDay>> e : byOrg.entrySet()) {
-            Optional<Subscription> sub = tx.execute(s -> subs.find(e.getKey()));
-            String customer = sub == null ? null : sub.map(Subscription::stripeCustomerId).orElse(null);
-            if (customer != null) {
-                ensureMeteredItems(sub.get());
-            }
-            for (UsageDay d : e.getValue()) {
-                Instant now = Instant.now(clock);
-                if (d.needsCorrection()) {
-                    corrections++;
-                    tx.executeWithoutResult(s -> usage.markError(d, "Usage dropped by " + d.meter().display(-d.delta())
-                            + " " + d.meter().displayUnit() + " after it was billed; issue a credit", now));
-                    continue;
-                }
-                if (customer == null) {
-                    pending++;
-                    tx.executeWithoutResult(s -> usage.markError(d, "No Stripe customer yet", now));
-                    continue;
-                }
-                if (!d.reportable(now)) {
-                    pending++;
-                    tx.executeWithoutResult(s -> usage.markError(d, "Older than " + UsageDay.STRIPE_MAX_AGE_DAYS
-                            + " days: Stripe no longer accepts meter events for it", now));
-                    continue;
-                }
-                if (send(d, customer)) {
-                    reported++;
-                } else {
-                    pending++;
-                }
-            }
-        }
-        return new Report(reported, pending, corrections);
-    }
-
-    private boolean send(UsageDay d, String customer) {
-        Instant now = Instant.now(clock);
-        String identifier = d.nextIdentifier();
-        try {
-            stripe.reportMeterEvent(d.meter().stripeEventName(), customer, d.delta(), identifier,
-                    d.eventTimestamp(now));
-        } catch (GatewayException e) {
-            LOG.warn("Meter event {} failed: {}", identifier, e.getMessage());
-            tx.executeWithoutResult(s -> usage.markError(d, e.getMessage(), now));
-            return false;
-        }
-        tx.executeWithoutResult(s -> usage.lock(d.orgId(), d.meter(), d.day()).ifPresent(locked -> usage.markReported(
-                locked, d.quantity(), d.revision() + 1, identifier, d.delta(), customer, now)));
-        return true;
-    }
-
-    /** Adds the metered prices to the paid subscription once, so Stripe invoices carry the usage lines. */
-    private void ensureMeteredItems(Subscription sub) {
-        if (sub.stripeSubscriptionId() == null) {
-            return;
-        }
-        Set<UsageMeter> present = tx.execute(s -> usage.meteredItems(sub.orgId(), sub.stripeSubscriptionId()));
-        for (UsageMeter m : UsageMeter.values()) {
-            if (present != null && present.contains(m)) {
+        for (UsageDay d : tx.execute(s -> usage.unreported(from, to))) {
+            if (settings.isRetail(d.orgId())) {
                 continue;
             }
-            try {
-                String item = stripe.addSubscriptionItem(sub.stripeSubscriptionId(), m.priceLookupKey(),
-                        "metered-item-" + sub.orgId() + "-" + m.name() + "-" + sub.stripeSubscriptionId());
-                Instant now = Instant.now(clock);
-                tx.executeWithoutResult(s -> usage.saveMeteredItem(sub.orgId(), m, sub.stripeSubscriptionId(), item,
-                        now));
-            } catch (GatewayException e) {
-                LOG.warn("Could not add metered price {} to {}: {}", m.priceLookupKey(), sub.stripeSubscriptionId(),
-                        e.getMessage());
+            if (d.needsCorrection()) {
+                corrections++;
+            } else {
+                pending++;
             }
         }
+        return new Report(0, pending, corrections);
     }
 
     private LocalDate[] currentPeriod(String orgId) {

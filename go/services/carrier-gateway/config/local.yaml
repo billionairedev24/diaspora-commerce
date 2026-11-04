@@ -7,6 +7,9 @@ docsEnabled: true
 databaseUrl: postgres://carriers:carriers@localhost:5432/carriers
 redisUrl: redis://localhost:6379/2
 publicBaseUrl: http://localhost:8209
+# Carriers without credentials get the local test carrier: test rates, PDF labels marked TEST and tracking that
+# moves to delivered within 15 minutes. Add real sandbox credentials (.local/secrets.env) to use the carrier itself.
+localTestCarriers: true
 kafka:
   enabled: true
   brokers: [localhost:9092]
@@ -18,9 +21,9 @@ outbox:
   batch: 100
 polling:
   enabled: true
-  carriers: [usps]      # carriers without push tracking
-  tick: 1m
-  interval: 2h          # per tracking number while active
+  carriers: [usps, ups, fedex, dhl]   # local: every carrier is polled (the test carrier has no push tracking)
+  tick: 15s
+  interval: 1m          # per tracking number while active (production: 2h)
   maxBackoff: 12h       # after repeated failures
   lease: 10m
   batch: 50

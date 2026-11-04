@@ -1,9 +1,11 @@
 package com.afrotransact.seller.adapter.in.web;
 
 import com.afrotransact.platform.web.error.ProblemTypes;
+import com.afrotransact.seller.domain.ApplicationAlreadyDecided;
 import com.afrotransact.seller.domain.SellerForbidden;
 import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.SellerStateConflict;
+import com.afrotransact.seller.port.DepartmentDirectory;
 import com.afrotransact.seller.port.GatewayException;
 import com.afrotransact.seller.port.GeoUnavailableException;
 import org.slf4j.Logger;
@@ -36,9 +38,26 @@ class SellerErrorAdvice {
         return problem(HttpStatus.CONFLICT, ex.code(), "Invalid state", ex.getMessage());
     }
 
+    /** Already decided: says what, by whom and when, so the console can show the current state as information. */
+    @ExceptionHandler(ApplicationAlreadyDecided.class)
+    ProblemDetail decided(ApplicationAlreadyDecided ex) {
+        ProblemDetail pd = problem(HttpStatus.CONFLICT, ex.code(), "Already decided", ex.getMessage());
+        pd.setProperty("decision", ex.status().name());
+        pd.setProperty("decidedBy", ex.deciderLabel());
+        pd.setProperty("decidedAt", ex.decidedAt());
+        return pd;
+    }
+
     @ExceptionHandler(SellerForbidden.class)
     ProblemDetail forbidden(SellerForbidden ex) {
         return problem(HttpStatus.FORBIDDEN, ex.code(), "Not allowed", ex.getMessage());
+    }
+
+    @ExceptionHandler(DepartmentDirectory.DirectoryUnavailable.class)
+    ProblemDetail departmentsUnavailable(DepartmentDirectory.DirectoryUnavailable ex) {
+        LOG.warn("Departments unavailable: {}", ex.getMessage());
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "seller.departments-unavailable", "Departments unavailable",
+                "We could not load the departments right now. Try again in a minute.");
     }
 
     @ExceptionHandler(GatewayException.class)

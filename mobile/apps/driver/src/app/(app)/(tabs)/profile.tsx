@@ -1,6 +1,6 @@
 /* Profile & sync (design: SYNC / PROFILE): who you are, the outbox and refused actions, an offline switch, sign out. */
 import { localeInfo } from '@afrotransact/i18n';
-import { CheckCircleIcon as CheckCircle, ClockIcon as Clock, WarningCircleIcon as WarningCircle } from 'phosphor-react-native';
+import { CheckCircleIcon as CheckCircle, ClockIcon as Clock, LockSimpleIcon as LockSimple, WarningCircleIcon as WarningCircle } from 'phosphor-react-native';
 import { useState } from 'react';
 import { StyleSheet, Switch, View } from 'react-native';
 
@@ -10,6 +10,7 @@ import { env } from '@/config/env';
 import { type MessageKey, type Translator, useFormatters, useLocale, useT } from '@/i18n';
 import { EN_MESSAGES } from '@/i18n/catalogs';
 import { useDriver } from '@/session/DriverProvider';
+import { useLock } from '@/session/LockProvider';
 import { c, sp, t } from '@/theme';
 import { DriverScreen } from '@/ui/DriverScreen';
 import { LanguageSheet } from '@/ui/LanguageSheet';
@@ -28,6 +29,12 @@ export default function Profile() {
   const out = sync.outbox;
   const [language, setLanguage] = useState(false);
   const locale = useLocale();
+  const lock = useLock();
+  const [faceIdNote, setFaceIdNote] = useState('');
+  const toggleFaceId = async (on: boolean) => {
+    setFaceIdNote('');
+    if (!(await lock.setFaceId(on))) setFaceIdNote(tr('dr.profile.biometricFailed', { method: lock.biometryLabel }));
+  };
   return (
     <DriverScreen title={tr('dr.profile.profileSync')} inTabs>
       <Card>
@@ -78,6 +85,14 @@ export default function Profile() {
         {sync.lastError ? <AppText variant="small" color={c.danger}>{sync.lastError}</AppText> : null}
         <Button kind="outline" label={sync.syncing ? tr('dr.profile.syncing') : tr('dr.profile.syncNow')} disabled={!sync.online || sync.syncing} onPress={() => void engine.flush()} />
       </View>
+      <View style={styles.row}>
+        <View style={{ flex: 1 }}>
+          <AppText variant="bodyStrong">{tr('dr.profile.biometricUnlock', { method: lock.biometryLabel })}</AppText>
+          <AppText variant="small" color={faceIdNote ? c.danger : c.textMuted}>{faceIdNote || (lock.biometricsAvailable ? tr('dr.profile.biometricHint') : tr('dr.profile.biometricUnavailable', { method: lock.biometryLabel }))}</AppText>
+        </View>
+        <Switch accessibilityLabel={tr('dr.profile.biometricUnlock', { method: lock.biometryLabel })} value={lock.faceId} disabled={!lock.biometricsAvailable && !lock.faceId} onValueChange={(v) => void toggleFaceId(v)} trackColor={{ true: c.success, false: t.ink['200'] }} thumbColor={c.surface} />
+      </View>
+      <Button kind="outline" icon={LockSimple} label={tr('dr.profile.lockNow')} onPress={lock.lock} />
       {env.mocks && user ? <Button kind="ghost" label={tr('dr.profile.devSimulateAccessRevoked')} onPress={() => { mockRevokeAccess(user.sub); void engine.record({ type: 'session.signed_in' }); }} /> : null}
       <Button kind="outline" label={`${tr('dr.profile.language')} · ${localeInfo(locale).name}`} onPress={() => setLanguage(true)} />
       <LanguageSheet visible={language} onClose={() => setLanguage(false)} title={tr('dr.profile.chooseLanguage')} rtlNote={tr('dr.profile.rtlRestart')} />

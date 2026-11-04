@@ -1,0 +1,38 @@
+# GENERATED from infra/observability/rules/payments-transfer-recovery.yaml by generate_rules.py — do not edit by hand.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: afrotransact-payments-transfer-recovery
+  namespace: observability
+  labels:
+    release: kube-prometheus-stack
+    app.kubernetes.io/part-of: afrotransact
+spec:
+  groups:
+  - name: afrotransact-payments-transfer-recovery
+    rules:
+    - alert: TransferReversalRefused
+      expr: |
+        sum by (env, code) (increase(payments_transfer_reversals_refused_total[1h])) > 0
+      for: 5m
+      labels:
+        severity: ticket
+        team: payments
+      annotations:
+        summary: Stripe refused {{ $value }} transfer reversal(s) for refunds in the last hour ({{ $labels.code }})
+        description: "A refund debited a seller whose balance had already been paid out, so Stripe would not take the transfer back. The customer was refunded; the seller owes the platform (Payouts \u2192\
+          \ Refund recoveries). Finance recovers it from their next transfers, or resolves it with four eyes."
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/TransferReversalRefused.md
+        dashboard: /d/at-platform-overview
+    - alert: TransferReversalRefusedUnexpectedly
+      expr: |
+        sum by (env) (increase(payments_transfer_reversals_refused_total{code!="balance_insufficient"}[1h])) > 0
+      for: 5m
+      labels:
+        severity: ticket
+        team: payments
+      annotations:
+        summary: Stripe refused a transfer reversal for a reason other than an empty balance
+        description: 'Not the usual case of a seller who was already paid out: check the code on the Refund recoveries table (an already-reversed or missing transfer points at our own data).'
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/TransferReversalRefused.md
+        dashboard: /d/at-platform-overview

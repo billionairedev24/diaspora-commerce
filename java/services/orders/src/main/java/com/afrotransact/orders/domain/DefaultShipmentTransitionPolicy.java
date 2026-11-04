@@ -10,8 +10,8 @@ import java.util.Set;
 /**
  * Architecture §17c "Who can do what", enforced here rather than in any UI:
  * <ul>
- *   <li><b>Seller-fulfilled</b>: only the seller confirms, packs and marks ready (and hands a pickup order to the
- *       customer at its own shop). Carriers (webhooks) and AfroTransact Delivery couriers move the transit steps.
+ *   <li><b>Seller-fulfilled</b>: only the seller confirms, packs and marks ready, marks a carrier parcel shipped
+ *       (handed to the carrier, once a label exists), confirms it delivered when the carrier's tracking has not, and hands a pickup order to the customer at its own shop. Carriers (webhooks) and AfroTransact Delivery couriers move the transit steps.
  *       Platform admins may confirm delivery, record a failure, process returns or cancel — never "packed" (nor
  *       confirmed / ready).</li>
  *   <li><b>Fulfilled by AfroTransact / AfroTransact Retail</b>: admins and fulfilment ops own every step; carriers
@@ -19,6 +19,8 @@ import java.util.Set;
  *   <li><b>Customers</b> may cancel a shipment until it is packed.</li>
  *   <li><b>Carriers and couriers</b> only move forward: an event for an earlier step than the current one is ignored,
  *       never applied (a failed delivery may be re-attempted).</li>
+ *   <li><b>Pre-order pickup points</b> (S264): the run's AfroTransact driver moves a PREORDER pickup shipment through
+ *       the transit steps and hands it over with the customer's code, exactly as at a doorstep.</li>
  *   <li><b>Pickup points</b> ({@code carrier.pickup.ready}) only mark a pickup shipment ready: from confirmed or
  *       packed; a shipment already ready or further along is left as it is.</li>
  * </ul>
@@ -46,6 +48,10 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         Set<ShipmentStatus> from = rules.get(to);
         if (from == null) {
             throw TransitionRefused.forbidden(actor, to, shipment.fulfilmentType());
+        }
+        if (actor == ActorKind.SELLER && to == ShipmentStatus.PICKED_UP && shipment.status() != to
+                && (shipment.trackingNumber() == null || shipment.trackingNumber().isBlank())) {
+            throw TransitionRefused.forbidden("Buy a shipping label before marking the order shipped");
         }
         if (shipment.status() == to) {
             return TransitionDecision.unchanged();
@@ -81,7 +87,10 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         }
         DeliveryMethod expected = actor == ActorKind.CARRIER ? DeliveryMethod.CARRIER
                 : DeliveryMethod.AFROTRANSACT_DELIVERY;
-        if (s.deliveryMethod() != expected) {
+        // A run's driver also hands pre-order packages to their customers at the window's pickup point (S264).
+        boolean runPickupDrop = actor == ActorKind.COURIER && s.fulfilmentType() == FulfilmentType.PREORDER
+                && s.deliveryMethod() == DeliveryMethod.PICKUP;
+        if (s.deliveryMethod() != expected && !runPickupDrop) {
             throw TransitionRefused.forbidden((actor == ActorKind.CARRIER ? "Carrier events" : "Courier events")
                     + " only apply to " + expected.name().toLowerCase(Locale.ROOT).replace('_', ' ')
                     + " shipments");
@@ -147,6 +156,15 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         m.put(ShipmentStatus.READY, EnumSet.of(ShipmentStatus.PACKED));
         if (method == DeliveryMethod.PICKUP) {
             m.put(ShipmentStatus.DELIVERED, EnumSet.of(ShipmentStatus.READY));
+        }
+        if (method == DeliveryMethod.CARRIER) {
+            // "Shipped": the parcel with its label is handed to the carrier; the carrier's tracking moves it on.
+            m.put(ShipmentStatus.PICKED_UP, EnumSet.of(ShipmentStatus.READY));
+            // "Delivered": the carrier's tracking normally reports it; when it does not (no webhook, a tracking gap)
+            // the seller confirms it so the order does not sit "in progress" for ever. Later carrier events for a
+            // delivered shipment are ignored.
+            m.put(ShipmentStatus.DELIVERED, EnumSet.of(ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT,
+                    ShipmentStatus.OUT_FOR_DELIVERY));
         }
         return m;
     }

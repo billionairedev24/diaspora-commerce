@@ -8,6 +8,7 @@ import java.util.UUID;
 
 import com.afrotransact.content.application.AdDeliveryService;
 import com.afrotransact.content.domain.ads.PlacedOrder;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
@@ -58,16 +59,13 @@ class OrderEventsListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", ORDER_PLACED, rec.topic(),
-                    rec.partition(), rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(ORDER_PLACED, rec);
         }
         OrderPlacedMessage m;
         try {
             m = json.readValue(rec.value(), OrderPlacedMessage.class);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", ORDER_PLACED, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(ORDER_PLACED, ex);
         }
         if (m == null || m.orderId() == null || m.placedAt() == null || m.shipments() == null) {
             LOG.warn("Skipping {} event {} with missing fields", ORDER_PLACED, eventId.get());

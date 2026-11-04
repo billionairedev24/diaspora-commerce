@@ -1,6 +1,7 @@
 import { type CellValue, type ColumnKind, type RecordTone } from '@afrotransact/api-client';
 
 import { StatusPill } from '@/components/ui/StatusPill';
+import { EN_MESSAGES, type MessageKey, type Translator, useT } from '@/i18n/t';
 import { dateTime, humanize, money, percent, shortDate } from '@/lib/format';
 
 /** Renders one server-driven cell by its column kind (money in minor units, ISO dates, status chips…). */
@@ -26,6 +27,21 @@ export function Cell({ kind, value, tone }: { kind: ColumnKind; value: CellValue
     case 'text':
       return <span>{String(value)}</span>;
   }
+}
+
+/** A column header: the BFF's English label, or the catalogue's translation when `st.col.<key>` exists. */
+export function columnLabel(t: Translator<MessageKey>, c: { key: string; label: string }): string {
+  const key = `st.col.${c.key}`;
+  return key in EN_MESSAGES ? t(key as MessageKey) : c.label;
+}
+
+/** "Chrome on macOS" from the BFF, with the joining word in the active language ("Chrome sur macOS"). */
+export function DeviceCell({ value }: { value: CellValue | undefined }) {
+  const t = useT();
+  if (value === null || value === undefined || value === '') return <span className="text-subtle">—</span>;
+  const text = String(value);
+  const m = /^(.+) on (.+)$/.exec(text);
+  return <span>{m ? t('st.device.on', { browser: m[1] ?? '', os: m[2] ?? '' }) : text}</span>;
 }
 
 /** A sheet field value formatted by kind. */

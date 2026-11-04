@@ -151,9 +151,10 @@ class PreorderOrderServiceImpl implements PreorderOrderService {
         }
         PreorderFulfilment fulfilment = w.details().door() ? PreorderFulfilment.DOOR : PreorderFulfilment.PICKUP;
         Money fee = fulfilment == PreorderFulfilment.DOOR
-                ? w.doorFee(payment).orElseThrow(() -> new RuleViolation("delivery-runs.preorder-fee-missing",
-                        "No door delivery fee is set for " + w.details().currency()))
-                : w.pickupFee(payment);
+                ? w.doorFee(support.coverage().fees()).orElseThrow(() -> new RuleViolation(
+                        "delivery-runs.preorder-fee-missing", "No door delivery fee applies to "
+                        + w.details().name() + " (" + w.details().currency() + ")")).amount()
+                : w.pickupFee(support.coverage().fees()).amount();
         // Never invented here: a key generated per request would make every retry a new order and a new charge.
         String key = c.idempotencyKey() == null ? "" : c.idempotencyKey().trim();
         Address address = address(w, c);

@@ -18,6 +18,11 @@ final class LolaToolSpecs {
     static final String BOOK_SERVICE = "book_service";
     static final String PROCEED_TO_CHECKOUT = "proceed_to_checkout";
     static final String HANDOFF_TO_SUPPORT = "handoff_to_support";
+    static final String MY_ORDERS = "my_orders";
+    static final String VIEW_CART = "view_cart";
+    static final String MY_BOOKINGS = "my_bookings";
+    static final String RETURN_STATUS = "return_status";
+    static final String REFUND_STATUS = "refund_status";
 
     static final List<ToolSpec> ALL = List.of(
             new ToolSpec(SEARCH_PRODUCTS, """
@@ -66,6 +71,35 @@ final class LolaToolSpecs {
                     {"type":"object","properties":{
                       "orderId":{"type":"string","description":"Order number or id"}
                     },"required":["orderId"],"additionalProperties":false}"""),
+            new ToolSpec(MY_ORDERS, """
+                    The shopper's recent orders, newest first, with order number, status, date and total. Use it for \
+                    'what did I order', 'where are my orders' or to find an order number; then track_order for details.""",
+                    """
+                    {"type":"object","properties":{
+                      "limit":{"type":"integer","minimum":1,"maximum":10,"default":5}
+                    },"additionalProperties":false}"""),
+            new ToolSpec(VIEW_CART, """
+                    What is in the shopper's cart now: items, quantities, prices, anything unavailable or with a \
+                    changed price, and the subtotal.""", """
+                    {"type":"object","properties":{},"additionalProperties":false}"""),
+            new ToolSpec(MY_BOOKINGS, """
+                    The shopper's service bookings (braiders, caterers, tailors ...): reference, service, status, \
+                    start time, price and deposit.""", """
+                    {"type":"object","properties":{},"additionalProperties":false}"""),
+            new ToolSpec(RETURN_STATUS, """
+                    Status of the shopper's returns: return number, order, items and reasons, where it is (label \
+                    issued, handed over, received, refunded), drop-off deadline and the refund. Optionally for one \
+                    order only. Use it for 'where is my return' or 'did you get my return'.""", """
+                    {"type":"object","properties":{
+                      "orderId":{"type":"string","description":"Order number to narrow to; omit for all returns"}
+                    },"additionalProperties":false}"""),
+            new ToolSpec(REFUND_STATUS, """
+                    Whether and when the shopper's refund was or will be issued: amount, state and which return it \
+                    belongs to. Optionally for one order only. Use it for 'where is my refund' or 'when will I be \
+                    refunded'.""", """
+                    {"type":"object","properties":{
+                      "orderId":{"type":"string","description":"Order number to narrow to; omit for all refunds"}
+                    },"additionalProperties":false}"""),
             new ToolSpec(START_RETURN, """
                     Prepare a 'Start a return' button for an order. The return is only created when the shopper taps \
                     it.""", """

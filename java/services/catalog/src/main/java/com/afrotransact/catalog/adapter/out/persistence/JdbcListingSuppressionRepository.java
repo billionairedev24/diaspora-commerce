@@ -2,6 +2,9 @@ package com.afrotransact.catalog.adapter.out.persistence;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import com.afrotransact.catalog.port.ListingSuppressionRepository;
@@ -46,5 +49,19 @@ class JdbcListingSuppressionRepository implements ListingSuppressionRepository {
     public boolean isHidden(String orgId) {
         return jdbc.sql("select exists(select 1 from org_listing_suppression where org_id = :org and hidden)")
                 .param("org", orgId).query(Boolean.class).single();
+    }
+
+    @Override
+    public Map<String, Decision> decisions(Collection<String> orgIds) {
+        if (orgIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, Decision> out = new HashMap<>();
+        jdbc.sql("select org_id, hidden, changed_at from org_listing_suppression where org_id in (:orgs)")
+                .param("orgs", orgIds)
+                .query((rs, n) -> out.put(rs.getString("org_id"),
+                        new Decision(rs.getBoolean("hidden"), rs.getTimestamp("changed_at").toInstant())))
+                .list();
+        return out;
     }
 }

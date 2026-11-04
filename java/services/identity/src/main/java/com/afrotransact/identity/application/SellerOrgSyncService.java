@@ -17,4 +17,14 @@ public interface SellerOrgSyncService {
 
     /** {@code seller.org.updated}: refreshes name, kind, status and market (memberships are left as they are). */
     boolean updated(SellerOrgChange change);
+
+    /**
+     * Repairs identity's copy from the seller service's current state of the organisation (not an event: no inbox):
+     * the organisation is created or its status, kind and name corrected, and every owner the seller service lists
+     * is made an owner member (the approved applicant too, unless they are already a member with another role). A copy
+     * changed after {@code truth.occurredAt()} (a newer event got here first) is left as it is.
+     *
+     * @return true when anything was repaired
+     */
+    boolean reconcile(SellerOrgChange truth);
 }

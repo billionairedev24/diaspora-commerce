@@ -14,8 +14,9 @@ import (
 
 // Delivery tariff modes.
 const (
-	TariffFlat     = "FLAT"
-	TariffDistance = "DISTANCE"
+	TariffFlat      = "FLAT"
+	TariffDistance  = "DISTANCE"
+	TariffPerWeight = "PER_WEIGHT"
 )
 
 // AfroTransactDelivery is the offer / package fulfilment of AfroTransact Delivery from the seller's store.
@@ -34,6 +35,7 @@ type DeliveryTariff struct {
 	FlatPerPackageMinor *int64         `json:"flatPerPackageMinor"`
 	BaseMinor           *int64         `json:"baseMinor"`
 	PerMileMinor        *int64         `json:"perMileMinor"`
+	PerLbMinor          *int64         `json:"perLbMinor,omitempty"`
 	Bands               []DeliveryBand `json:"bands"`
 	MinMinor            *int64         `json:"minMinor"`
 	MaxMinor            *int64         `json:"maxMinor"`
@@ -100,13 +102,27 @@ type DeliveryQuoteRequest struct {
 }
 
 // QuoteTariff prices one trip like payments: FLAT counts packages; DISTANCE uses the band covering the miles, else
-// base + per mile × miles (half up), then at least min and at most max. A nil tariff is free.
-func QuoteTariff(t *DeliveryTariff, miles float64, packages int) int64 {
+// base + per mile × miles (half up); PER_WEIGHT uses base + perLbMinor * weightLb. A nil tariff is free.
+func QuoteTariff(t *DeliveryTariff, miles float64, packages int, weightLb ...float64) int64 {
 	if t == nil {
 		return 0
 	}
 	if strings.EqualFold(t.Mode, TariffFlat) {
 		return val(t.FlatPerPackageMinor) * int64(max(1, packages))
+	}
+	if strings.EqualFold(t.Mode, TariffPerWeight) {
+		wt := 1.0
+		if len(weightLb) > 0 && weightLb[0] > 0 {
+			wt = weightLb[0]
+		}
+		fee := val(t.BaseMinor) + int64(math.Floor(float64(val(t.PerLbMinor))*wt+0.5))
+		if t.MinMinor != nil && fee < *t.MinMinor {
+			fee = *t.MinMinor
+		}
+		if t.MaxMinor != nil && fee > *t.MaxMinor {
+			fee = *t.MaxMinor
+		}
+		return fee
 	}
 	fee := int64(-1)
 	for _, b := range t.Bands {
@@ -141,6 +157,16 @@ func TariffSummary(t *DeliveryTariff) string {
 	}
 	if strings.EqualFold(t.Mode, TariffFlat) {
 		return FormatMinor(val(t.FlatPerPackageMinor)) + " per package"
+	}
+	if strings.EqualFold(t.Mode, TariffPerWeight) {
+		s := FormatMinor(val(t.BaseMinor)) + " + " + FormatMinor(val(t.PerLbMinor)) + "/lb"
+		if t.MinMinor != nil && *t.MinMinor > 0 {
+			s += ", at least " + FormatMinor(*t.MinMinor)
+		}
+		if t.MaxMinor != nil {
+			s += ", at most " + FormatMinor(*t.MaxMinor)
+		}
+		return s
 	}
 	parts := []string{}
 	if len(t.Bands) > 0 {
@@ -218,6 +244,14 @@ func validateTariff(errs map[string]string, key string, t *DeliveryTariff, l Fee
 	switch strings.ToUpper(t.Mode) {
 	case TariffFlat:
 		amount("flatPerPackageMinor", t.FlatPerPackageMinor, true)
+	case TariffPerWeight:
+		amount("baseMinor", t.BaseMinor, true)
+		amount("perLbMinor", t.PerLbMinor, true)
+		amount("minMinor", t.MinMinor, false)
+		amount("maxMinor", t.MaxMinor, false)
+		if t.MinMinor != nil && t.MaxMinor != nil && *t.MinMinor > *t.MaxMinor && errs[key+".maxMinor"] == "" {
+			errs[key+".maxMinor"] = "The maximum must not be below the minimum"
+		}
 	case TariffDistance:
 		amount("baseMinor", t.BaseMinor, true)
 		amount("perMileMinor", t.PerMileMinor, true)
@@ -250,6 +284,6 @@ func validateTariff(errs map[string]string, key string, t *DeliveryTariff, l Fee
 			}
 		}
 	default:
-		errs[key+".mode"] = "Choose flat or by distance"
+		errs[key+".mode"] = "Choose flat, per-weight or by distance"
 	}
 }

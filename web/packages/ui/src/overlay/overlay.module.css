@@ -1,4 +1,6 @@
 .overlay { position: fixed; inset: 0; background: var(--at-color-overlay); z-index: var(--at-z-dialog); }
+/* A modal sheet's overlay sits just under the sheet (drawer layer), never over it, or the sheet is dimmed and cannot be used. */
+.sheetOverlay { z-index: calc(var(--at-z-drawer) - 1); }
 
 .dialog {
   position: fixed;
@@ -53,7 +55,7 @@
 }
 
 .sheet:focus { outline: none; }
-.right { right: 0; }
+.right { right: 0; width: min(820px, 100%); }
 /* Non-modal sheets start below the app's sticky header (each shell publishes --at-sticky-header-h) and use a border
    instead of the overlay to separate them from the page. */
 .docked { top: var(--at-sticky-header-h, 0px); border-inline-start: 1px solid var(--at-color-border); }
@@ -132,7 +134,7 @@
 }
 
 .tab[data-state='active'] { color: var(--at-color-text); border-bottom-color: var(--at-color-action-primary); }
-.tabPanel { padding-top: var(--at-space-4); }
+.tabPanel { padding-top: var(--at-page-gap-tabs, 24px); }
 .tabPanel:focus-visible { outline: 2px solid var(--at-color-focus); }
 
 /* Toast */

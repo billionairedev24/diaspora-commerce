@@ -1,0 +1,47 @@
+# Kafka topic lists must not drift: contracts/asyncapi/events.yaml is the source; infra/tofu/kafka-topics.json (what the
+# Terraform envs read), infra/local/kafka/topics.txt and the lean (OVH) DLQ list must match it, and every consumer group id
+# in the code must be covered by its ACL prefix. docs/engineering/kafka-topics-and-acls.md.
+# Hand-written (tools/ci/gen_workflows.py generates only the per-service, web and promote workflows).
+name: kafka-topics
+
+on:
+  pull_request:
+    paths:
+      - contracts/asyncapi/**
+      - infra/tofu/kafka-topics.json
+      - infra/tofu/envs/**/main.tf
+      - infra/tofu/modules/shared/confluent/**
+      - infra/local/kafka/**
+      - infra/k8s/platform/lean/kafka.yaml
+      - java/services/*/src/main/resources/application.yml
+      - java/services/*/src/main/java/**/*Listener*.java
+      - go/services/*/config/*.yaml
+      - tools/ops/topics-check.sh
+      - tools/ops/topics_model.py
+      - tools/ops/dlq-topics.sh
+      - .github/workflows/kafka-topics.yml
+  push:
+    branches: [main]
+    paths:
+      - contracts/asyncapi/**
+      - infra/tofu/kafka-topics.json
+      - infra/tofu/envs/**/main.tf
+      - infra/local/kafka/**
+      - infra/k8s/platform/lean/kafka.yaml
+      - tools/ops/topics-check.sh
+      - tools/ops/topics_model.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  topics:
+    name: topics, producers, consumers, group ACLs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: bash tools/ops/topics-check.sh

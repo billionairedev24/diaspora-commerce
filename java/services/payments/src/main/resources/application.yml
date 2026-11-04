@@ -106,10 +106,34 @@ at:
     zone: ${PAYMENTS_ZONE:America/New_York}
     payout:
       minimum-minor: ${PAYOUT_MINIMUM_MINOR:2500}
+    # S321 gift cards. Codes are stored as HMACs under GIFT_CARD_CODE_KEY (blank: derived from the Stripe webhook
+    # secret). A customer may get max-failures codes wrong, a network address max-failures-per-address, per window;
+    # the send-date job emails due cards.
+    gift-cards:
+      code-key: ${GIFT_CARD_CODE_KEY:}
+      max-failures: ${GIFT_CARD_MAX_FAILURES:5}
+      max-failures-per-address: ${GIFT_CARD_MAX_FAILURES_PER_ADDRESS:20}
+      window: ${GIFT_CARD_ATTEMPT_WINDOW:15m}
+      delivery-batch: 50
+    # S322 referral program. The offer itself (rewards, minimum order, return window, caps, validity, on/off) is staff
+    # Settings, stored in the database; only the key of the abuse-check fingerprints is configuration. Delivery addresses
+    # are kept as HMACs under REFERRAL_SIGNAL_KEY (blank: derived from the Stripe webhook secret). The reward job runs
+    # every referral-interval (jobs.referral-interval, jobs.referral-batch).
+    referral:
+      signal-key: ${REFERRAL_SIGNAL_KEY:}
     # S226: AfroTransact Retail supplier payments (retail.payment.released) are due this many days after release
     # unless retail-service sends a due date.
     supplier-payments:
       terms-days: ${SUPPLIER_PAYMENT_TERMS_DAYS:30}
+    # The seller service's billing API, read with identity's payments-service client (scope seller:billing) to learn an
+    # organisation's plan before payments received its first seller.subscription.changed (plan rates of the fee
+    # schedule). Blank SELLER_URL = no fallback: such organisations pay category rates until the event arrives.
+    seller:
+      base-url: ${SELLER_URL:}
+      token-uri: ${AUTH_TOKEN_URL:${AUTH_ISSUER_URL:http://localhost:8100}/oauth2/token}
+      client-id: ${PAYMENTS_CLIENT_ID:payments-service}
+      client-secret: ${PAYMENTS_CLIENT_SECRET:}
+      timeout: ${SELLER_TIMEOUT:3s}
     stripe:
       # Keys only from the environment. No default here: every profile must provide them.
       secret-key: ${STRIPE_SECRET_KEY}
@@ -134,3 +158,5 @@ at:
       settlement-cron: ${SETTLEMENT_CRON:0 */15 * * * *}
       settlement-recheck: 1h
       reconciliation-cron: ${RECONCILIATION_CRON:0 10 3 * * *}
+      # Records negotiated rates that reached their end date (they stop applying at it anyway).
+      negotiated-rate-expiry-cron: ${NEGOTIATED_RATE_EXPIRY_CRON:0 */5 * * * *}

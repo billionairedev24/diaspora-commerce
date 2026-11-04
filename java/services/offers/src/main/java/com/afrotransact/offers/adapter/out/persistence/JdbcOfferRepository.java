@@ -161,6 +161,12 @@ class JdbcOfferRepository implements OfferRepository {
     }
 
     @Override
+    public long countActive(String sellerOrgId) {
+        return jdbc.sql("select count(*) from offer where seller_org = :org and status = 'ACTIVE'")
+                .param("org", sellerOrgId).query(Long.class).single();
+    }
+
+    @Override
     public boolean sellerSkuTaken(String sellerOrgId, String sellerSku, boolean fulfilledByAfroTransact) {
         return jdbc.sql("select count(*) from offer where seller_org = :org and seller_sku = :sku and" + CHANNEL
                         + "and" + OPEN)

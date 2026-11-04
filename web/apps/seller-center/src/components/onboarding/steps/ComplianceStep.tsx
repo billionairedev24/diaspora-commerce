@@ -1,25 +1,25 @@
 'use client';
 
-import { type OnboardingForm } from '@afrotransact/api-client';
+import { LEGAL_DOCUMENT_TITLES, type LegalDocumentKey, legalHref, type OnboardingForm, PROVIDER_AGREEMENTS, SELLER_AGREEMENTS, sellerQueries } from '@afrotransact/api-client';
 import { Checkbox, cx, Select, TextField } from '@afrotransact/ui';
 import { Check } from '@phosphor-icons/react/ssr';
+import { useQuery } from '@tanstack/react-query';
 import { useImperativeHandle } from 'react';
 
 import { sellerApi } from '@/lib/api';
 import {
-  BEAUTY_CATEGORIES,
   type ComplianceValues,
   complianceValues,
   fieldId,
-  FOOD_CATEGORIES,
   FOOD_PERMITS,
   offersServices,
-  PRODUCT_CATEGORIES,
+  requirementsOf,
   sellsProducts,
   SERVICES,
   toComplianceInput,
   validateCompliance
 } from '@/lib/onboarding-form';
+import { useStorefrontUrl } from '@/lib/runtime-config';
 
 import { Cell, DocumentField, FieldGrid, SectionTitle, STATE_OPTIONS, StepErrors, type StepProps, useStepForm } from '../WizardKit';
 
@@ -79,6 +79,27 @@ export function w9Signer(form: OnboardingForm): string {
   return control ? [control.firstName, control.lastName].filter(Boolean).join(' ') : (form.details.legalName ?? '');
 }
 
+/** The documents this application accepts, in reading order: the seller terms, the provider terms, or both. */
+export function agreementKeys(offering: OnboardingForm['business']['offering']): LegalDocumentKey[] {
+  const keys: LegalDocumentKey[] = [];
+  if (offering !== 'SERVICES') keys.push(...SELLER_AGREEMENTS);
+  if (offering === 'SERVICES' || offering === 'BOTH') keys.push(...PROVIDER_AGREEMENTS);
+  keys.push('seller-fees');
+  return [...new Set(keys)];
+}
+
+/** "Seller Terms, Payment Terms for Sellers and Providers and Data Processing Terms" as links to the legal center (new tab). */
+function DocumentLinks({ keys, base }: { keys: LegalDocumentKey[]; base: string }) {
+  return keys.map((k, i) => (
+    <span key={k}>
+      {i === 0 ? '' : i === keys.length - 1 ? ' and ' : ', '}
+      <a href={`${base}${legalHref(k)}`} target="_blank" rel="noopener noreferrer">
+        {LEGAL_DOCUMENT_TITLES[k]}
+      </a>
+    </span>
+  ));
+}
+
 /**
  * Step 7: "Catalog, permits & licences" (sellers: categories, the food permit, beauty labelling) or "Services &
  * licences" (providers: services and their licences, insurance), with the agreements and the W-9 certification.
@@ -90,18 +111,23 @@ export function ComplianceStep({ status, ref }: StepProps) {
   const f = useStepForm(() => complianceValues(form));
   const v = f.values;
   const signer = w9Signer(form);
+  const storefront = useStorefrontUrl();
+  // The departments to choose from are the catalog's, with what each asks for (a food permit, beauty labelling).
+  const departmentsQuery = useQuery({ ...sellerQueries.departments(sellerApi()), enabled: sellsProducts(offering) });
+  const departments = departmentsQuery.data ?? [];
 
   useImperativeHandle(ref, () => ({
     save: (mode) =>
       f.run(
         mode,
-        () => validateCompliance(f.values, offering),
-        () => sellerApi().saveOnboardingCompliance(toComplianceInput(f.values, offering, signer))
+        () => validateCompliance(f.values, offering, departments),
+        () => sellerApi().saveOnboardingCompliance(toComplianceInput(f.values, offering, signer, departments))
       )
   }));
 
-  const food = v.categories.some((c) => FOOD_CATEGORIES.has(c));
-  const beauty = v.categories.some((c) => BEAUTY_CATEGORIES.has(c));
+  const requires = requirementsOf(v.departments, departments);
+  const food = requires.has('FOOD_PERMIT');
+  const beauty = requires.has('BEAUTY_LABELLING');
   const setService = (i: number, p: Partial<ComplianceValues['services'][number]>, clear: string) =>
     f.patch({ services: v.services.map((s, j) => (j === i ? { ...s, ...p } : s)) }, [`services.${i}.${clear}`]);
 
@@ -110,25 +136,31 @@ export function ComplianceStep({ status, ref }: StepProps) {
       <StepErrors errors={f.errors} submitCount={f.submitCount} />
       {sellsProducts(offering) ? (
         <>
-          <Chips
-            id="categories"
-            title="What will you sell?"
-            options={PRODUCT_CATEGORIES}
-            selected={v.categories}
-            disabled={disabled}
-            error={f.errors.categories}
-            onToggle={(k) =>
-              f.patch(
-                {
-                  categories: v.categories.includes(k) ? v.categories.filter((x) => x !== k) : [...v.categories, k]
-                },
-                ['categories']
-              )
-            }
-          />
+          {departmentsQuery.isError ? (
+            <p role="alert" className="m-0 text-sm text-danger">
+              We could not load the departments right now. Try again in a minute.
+            </p>
+          ) : (
+            <Chips
+              id="departments"
+              title="What will you sell?"
+              options={departments.map((d) => ({ key: d.code, label: d.name }))}
+              selected={v.departments}
+              disabled={disabled || departmentsQuery.isPending}
+              error={f.errors.departments}
+              onToggle={(k) =>
+                f.patch(
+                  {
+                    departments: v.departments.includes(k) ? v.departments.filter((x) => x !== k) : [...v.departments, k]
+                  },
+                  ['departments']
+                )
+              }
+            />
+          )}
           {food ? (
             <section aria-label="Food permit" className="flex flex-col gap-2">
-              <SectionTitle hint="Groceries and prepared food need a valid permit before they can be listed.">Food permit</SectionTitle>
+              <SectionTitle hint="Some of the departments you chose need a valid permit before they can be listed.">Food permit</SectionTitle>
               <FieldGrid>
                 <Cell span={4}>
                   <Select
@@ -225,7 +257,7 @@ export function ComplianceStep({ status, ref }: StepProps) {
             }
           />
           {v.services.map((s, i) => (
-            <section key={s.serviceName} aria-label={`${s.serviceName} licence`} className="flex flex-col gap-1 rounded-md border border-border p-4">
+            <section key={s.serviceName} aria-label={`${s.serviceName} licence`} className="flex flex-col gap-1 rounded-lg bg-surface-sunken p-4 sm:p-5">
               <FieldGrid>
                 <Cell span={5}>
                   <TextField
@@ -286,10 +318,14 @@ export function ComplianceStep({ status, ref }: StepProps) {
           ) : null}
         </>
       ) : null}
-      <section aria-label="Agreements" className="flex flex-col gap-1.5 border-t border-border pt-3">
+      <section aria-label="Agreements" className="flex flex-col gap-1.5 pt-2">
         <Checkbox
           id={fieldId('agreeTerms')}
-          label="I agree to the AfroTransact Seller & Provider Agreement and fee schedule"
+          label={
+            <>
+              I agree to the <DocumentLinks keys={agreementKeys(offering)} base={storefront} />
+            </>
+          }
           checked={v.agreeTerms}
           onChange={(e) => f.patch({ agreeTerms: e.target.checked }, ['agreeTerms'])}
           error={f.errors.agreeTerms}
@@ -297,7 +333,11 @@ export function ComplianceStep({ status, ref }: StepProps) {
         />
         <Checkbox
           id={fieldId('agreePolicy')}
-          label="I will follow the Prohibited Items and Services Policy"
+          label={
+            <>
+              I will follow the <DocumentLinks keys={['prohibited-items', 'community-guidelines']} base={storefront} />
+            </>
+          }
           checked={v.agreePolicy}
           onChange={(e) => f.patch({ agreePolicy: e.target.checked }, ['agreePolicy'])}
           error={f.errors.agreePolicy}

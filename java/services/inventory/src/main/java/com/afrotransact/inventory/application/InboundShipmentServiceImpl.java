@@ -57,6 +57,7 @@ import org.springframework.transaction.annotation.Transactional;
 class InboundShipmentServiceImpl implements InboundShipmentService {
 
     static final String CONSUMER_RETAIL = "inventory-retail-shipments";
+    static final String CONSUMER_LISTINGS = "inventory-approved-listings";
     static final int MAX_LINES = 200;
     static final int MAX_CASE_PACK = 10_000;
     private static final Pattern PLAN_LOT_NO = Pattern.compile("[A-Z0-9][A-Z0-9._/-]{0,58}");
@@ -126,6 +127,37 @@ class InboundShipmentServiceImpl implements InboundShipmentService {
         inbounds.insert(plan);
         publish(InventoryEvents.INBOUND_CREATED, plan);
         return plan;
+    }
+
+    @Override
+    @Transactional
+    public Optional<InboundShipment> listingApproved(UUID eventId, InboundCommands.ApprovedListing l) {
+        if (!inbox.firstDelivery(CONSUMER_LISTINGS, eventId) || l.ownerOrg() == null || l.lines().isEmpty()) {
+            return Optional.empty();
+        }
+        List<InboundLine> lines;
+        try {
+            lines = planLines(l.lines(), l.ownerOrg());
+        } catch (InventoryRuleViolation ex) {
+            LOG.warn("No inbound plan for approved listing {} of {}: {} {}", l.productAtin(), l.ownerOrg(),
+                    ex.getMessage(), ex.fieldErrors());
+            return Optional.empty();
+        }
+        boolean planned = inbounds.search(new InboundShipmentRepository.InboundQuery(l.ownerOrg(), null, null,
+                InboundSource.FBA, lines.getFirst().sku(), 0, 5)).items().stream()
+                .anyMatch(s -> s.status() != InboundStatus.CANCELLED);
+        if (planned) {
+            return Optional.empty();
+        }
+        FcAssignment fc = assign(l.ownerOrg(), lines, null, null);
+        Instant now = Instant.now(clock);
+        InboundShipment plan = new InboundShipment(UUID.randomUUID(), inbounds.nextFbaNumber(), InboundSource.FBA,
+                null, l.ownerOrg(), fc.nodeId(), null, fc.reason(), "New listing " + l.productAtin(),
+                InboundStatus.WORKING, null, null, null, null, null, null, null, null, null, 0,
+                lines, List.of(), "system:listing-approved", now, null, null, now, 0);
+        inbounds.insert(plan);
+        publish(InventoryEvents.INBOUND_CREATED, plan);
+        return Optional.of(plan);
     }
 
     @Override
@@ -315,8 +347,8 @@ class InboundShipmentServiceImpl implements InboundShipmentService {
                         : asn.lotNo() != null ? asn.lotNo() : receiptRef;
                 LocalDate mfg = l.mfgDate() != null ? l.mfgDate() : asn.mfgDate();
                 LocalDate exp = l.expDate() != null ? l.expDate() : asn.expDate();
-                lines.add(new ReceiveCommand.Line(sku, lotNo, mfg, exp, l.qtyGood(), l.qtyDamaged(), l.bin(), 0,
-                        FBA_COST_CURRENCY, null, l.holdReason()));
+                lines.add(costed(s, l, new ReceiveCommand.Line(sku, lotNo, mfg, exp, l.qtyGood(), l.qtyDamaged(), l.bin(),
+                        0, FBA_COST_CURRENCY, null, l.holdReason()), i));
             }
             result = receiving.receive(new ReceiveCommand(receiptRef, s.nodeId(), s.ownerOrg(), s.number(), lines),
                     idempotencyKey);
@@ -675,6 +707,26 @@ class InboundShipmentServiceImpl implements InboundShipmentService {
     private static ExpectedBatch announced(InboundShipment s, String sku) {
         return s.lines().stream().filter(x -> x.sku().equals(sku)).findFirst().map(InboundLine::batch)
                 .orElse(ExpectedBatch.NONE);
+    }
+
+    /**
+     * The line with the cost the receiver entered. Seller units (FBA) carry none (they are not on AfroTransact's books);
+     * AfroTransact Retail units may be costed in the currency paid, at the receiver's rate or the table's.
+     */
+    private static ReceiveCommand.Line costed(InboundShipment s, InboundCommands.ReceiveLine l,
+                                              ReceiveCommand.Line zeroCost, int i) {
+        InboundCommands.ReceiveCost c = l.cost();
+        if (c == null) {
+            return zeroCost;
+        }
+        if (s.source() == InboundSource.FBA) {
+            throw new InventoryRuleViolation("inventory.fba-cost-not-allowed", "Seller units carry no cost on "
+                    + "AfroTransact's books", Map.of("lines[" + i + "].cost", "Not for FBA shipments"));
+        }
+        return new ReceiveCommand.Line(zeroCost.sku(), zeroCost.lotNo(), zeroCost.mfgDate(), zeroCost.expDate(),
+                zeroCost.qtyGood(), zeroCost.qtyDamaged(), zeroCost.bin(), c.unitMinor(),
+                c.currency() == null ? FBA_COST_CURRENCY : c.currency(), null, zeroCost.holdReason(), c.fxRateToUsd(),
+                c.fxRateDate(), null, c.components());
     }
 
     private String resolveSku(InboundShipment s, InboundCommands.ReceiveLine l, int i) {

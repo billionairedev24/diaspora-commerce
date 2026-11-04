@@ -14,6 +14,8 @@ export interface SellEntryInput {
   signedIn: boolean;
   /** Seller Center origin (SELLER_CENTER_URL), without a trailing slash. */
   sellerCenterUrl: string;
+  /** Already approved for this role (GET /v1/me back office active): Seller Center's dashboard, not onboarding. */
+  approved?: boolean;
 }
 
 /** Seller Center onboarding for the role: where the browser lands signed in. */
@@ -22,9 +24,9 @@ export function onboardingUrl(sellerCenterUrl: string, role: SellRole): string {
 }
 
 /** The hosted sign-in (or sign-up) start on Seller Center's origin that ends in its onboarding. */
-export function sellEntryUrl({ role, signedIn, sellerCenterUrl }: SellEntryInput): string {
+export function sellEntryUrl({ role, signedIn, sellerCenterUrl, approved = false }: SellEntryInput): string {
   const origin = sellerCenterUrl.replace(/\/+$/, '');
-  const q = new URLSearchParams({ returnTo: onboardingUrl(origin, role) });
+  const q = new URLSearchParams({ returnTo: signedIn && approved ? `${origin}/` : onboardingUrl(origin, role) });
   if (!signedIn) {
     q.set('prompt', 'create');
     q.set('intent', role === 'provider' ? 'provide' : 'sell');

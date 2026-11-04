@@ -62,6 +62,10 @@ func (f *fakeLabels) Document(context.Context, string) ([]byte, string, error) {
 	return []byte("^XA^XZ"), "application/x-zpl", nil
 }
 
+func (f *fakeLabels) DocumentByTracking(context.Context, domain.CarrierCode, string) ([]byte, string, error) {
+	return []byte("^XA^XZ"), "application/x-zpl", nil
+}
+
 func (f *fakeLabels) Void(context.Context, string) (app.LabelView, error) {
 	return app.LabelView{}, domain.ErrConflict
 }

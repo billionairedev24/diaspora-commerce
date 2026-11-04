@@ -136,7 +136,7 @@ describe('dispatch: seller pickups', () => {
     expect(drivers[4]).toHaveTextContent('straight line');
     await user.click(screen.getByRole('button', { name: 'Assign to this route' }));
     expect(await screen.findByText('Choose a route')).toBeInTheDocument();
-    await user.click(screen.getByLabelText('Assign to HOU Southwest · Ngozi (drv-ngozi)'));
+    await user.click(screen.getByLabelText('Assign to HOU Southwest · Ngozi (Ngozi Eze)'));
     await user.type(screen.getByLabelText(/Reason/), 'ok');
     await user.click(screen.getByRole('button', { name: 'Assign to this route' }));
     expect(await screen.findByText(/\(5 to 500 characters\)/)).toBeInTheDocument();
@@ -145,7 +145,9 @@ describe('dispatch: seller pickups', () => {
     await waitFor(() => expect(screen.getAllByTestId('pickup-row')).toHaveLength(2));
     const history = await screen.findAllByTestId('pickup-assignment');
     expect(history[0]).toHaveTextContent('Dispatch override');
-    expect(history[0]).toHaveTextContent('R-HOU-SW-07');
+    expect(history[0]).toHaveTextContent('HOU Southwest · Ngozi');
+    expect(history[0]).not.toHaveTextContent('R-HOU-SW-07');
+    expect(history[0]).not.toHaveTextContent('drv-ngozi');
   }, 30_000);
 
   it('is read-only without delivery:dispatch edit access', async () => {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -116,6 +117,15 @@ func departmentFor(ctx context.Context, catalog port.CatalogClient, categoryID s
 	return ""
 }
 
+func catalogImageURL(p port.CatalogProduct) string {
+	for _, im := range p.Images {
+		if u := strings.TrimSpace(im.URL); u != "" {
+			return u
+		}
+	}
+	return attr(p.Attributes, "imageUrl", "image", "thumbnail", "primaryImage")
+}
+
 func attr(attrs map[string]string, keys ...string) string {
 	for _, k := range keys {
 		for ak, v := range attrs {
@@ -154,6 +164,9 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 	if err != nil {
 		return domain.ProductDetail{}, mapErr("inventory", err)
 	}
+	// Inventory only holds warehouse stock (Fulfilled by AfroTransact, retail); a seller who ships their own orders
+	// declares the quantity on the offer. The offers service's buy box is the sellable quantity of every variant.
+	s.offerAvailability(ctx, skus, avail)
 	sel := p.Variants[0]
 	found := false
 	for _, v := range p.Variants {
@@ -208,7 +221,7 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 	if len(p.Variants) > 1 {
 		for _, v := range p.Variants {
 			variants = append(variants, domain.VariantOption{ATIN: v.ATIN, Label: firstNonEmpty(optionsLabel(v.Options), "Standard"),
-				Selected: v.ATIN == sel.ATIN, Available: avail[v.ATIN] > 0, PriceMinor: v.PriceMinor})
+				Selected: v.ATIN == sel.ATIN, Available: avail[v.ATIN] > 0, PriceMinor: v.PriceMinor, Options: optionsOrEmpty(v.Options)})
 		}
 	}
 	images := make([]domain.ProductImage, 0, max(1, len(p.Images)))
@@ -226,7 +239,7 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 			ATIN: productATIN, Title: p.Title, Brand: attr(p.Attributes, "brand"),
 			Community: attr(p.Attributes, "community", "communities", "cuisine"), Department: department, Unit: unit,
 			Origin: attr(p.Attributes, "origin", "countryOfOrigin", "country_of_origin"), Bullets: bulletsOf(p.Attributes),
-			Rating: 0, ReviewCount: 0, Images: images, Variants: variants,
+			Rating: p.Rating.Average, ReviewCount: p.Rating.Count, Images: images, Variants: variants,
 		},
 		BuyBox:         buyBox,
 		OtherOffers:    otherOffers,
@@ -234,7 +247,57 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 		SoldBy:         soldBy,
 		ReturnsPolicy:  returnsPolicy(fulfilment, department),
 		UnitPriceLabel: domain.Money(sel.PriceMinor) + " / " + unit,
+		SizeChart:      sizeChartOf(p.SizeChart),
 	}, nil
+}
+
+func optionsOrEmpty(o map[string]string) map[string]string {
+	if o == nil {
+		return map[string]string{}
+	}
+	return o
+}
+
+// sizeChartOf is the chart the product page shows, with its lists never null.
+func sizeChartOf(c *domain.ProductSizeChart) *domain.ProductSizeChart {
+	if c == nil {
+		return nil
+	}
+	out := *c
+	if out.Columns == nil {
+		out.Columns = []domain.SizeChartColumn{}
+	}
+	if out.Rows == nil {
+		out.Rows = []domain.SizeChartRow{}
+	}
+	return &out
+}
+
+// offerAvailability raises each variant's availability to its buy box quantity (seller-fulfilled stock lives on the
+// offer, not in inventory). Variants offers cannot answer keep the inventory figure.
+func (s *productServiceImpl) offerAvailability(ctx context.Context, atins []string, avail map[string]int) {
+	if s.offers == nil || len(atins) == 0 {
+		return
+	}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 8)
+	for _, atin := range atins {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			bb, err := s.offers.BuyBox(ctx, atin)
+			if err != nil || bb.BuyBox == nil {
+				return
+			}
+			mu.Lock()
+			avail[atin] = max(avail[atin], bb.BuyBox.AvailableQty)
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
 }
 
 // offerBuyBox reads the variant's buy box from offers; ok=false when offers is not wired or cannot answer (the page

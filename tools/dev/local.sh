@@ -3,7 +3,7 @@
 # profile, fixed ports from infra/local/PORTS.md), the three web apps against them; logs and PIDs under .local/.
 #
 #   tools/dev/local.sh up                      # infra + the default services + web apps, then prints every link
-#   PROD=1 tools/dev/local.sh up               # same, with the web apps as production builds (next build + start)
+#   DEV=1 tools/dev/local.sh up                # same, with Next dev servers (default: production builds, next build + start)
 #   tools/dev/local.sh up identity catalog     # only these services (plus infra and the web apps; WEB=0 skips them)
 #   tools/dev/local.sh status                  # what is running and healthy
 #   tools/dev/local.sh links                   # print every link again (apps, docs portal, MCP, API docs)
@@ -15,9 +15,11 @@
 #   tools/dev/local.sh device android customer # build + install the development build on a USB phone
 #   tools/dev/local.sh docs                    # only the developer portal (:3100) and Storybook (:6006)
 #   tools/dev/local.sh seed                    # demo data (tools/seed): sellers, products with photos, home content
+#   tools/dev/local.sh repair-orgs             # identity re-syncs every approved seller/provider org from seller now
+#   tools/dev/local.sh reindex [flags]         # rebuild the search index from catalog, offers and inventory (--dry-run, --since 48h …)
 #   tools/dev/local.sh down                    # stop everything (keeps data; `make reset` wipes the Docker volumes)
 #
-# Make targets: make up (= dev-up), make down, make dev-status, make dev-links, make dev-logs SERVICE=x,
+# Make targets: make up (= dev-up), make down, make dev-status, make dev-links, make dev-logs SERVICE=x, make repair-orgs,
 # make dev-restart SERVICE=x, make seed. Works with macOS's bash 3.2.
 #
 # `up` seeds the demo dataset when the catalog is empty (tools/seed/seed.py --if-empty; SEED=0 skips it).
@@ -59,24 +61,26 @@ BIN="$STATE/bin"
 COMPOSE_FILE="$ROOT/infra/local/docker-compose.yml"
 OVERRIDE="$STATE/compose.external-postgres.yml"
 
-INFRA_BASE="kafka kafka-init elasticsearch elasticsearch-init temporal minio minio-init mailpit openfga-migrate openfga"
+INFRA_BASE="kafka kafka-init elasticsearch elasticsearch-init temporal temporal-ui minio minio-init mailpit openfga-migrate openfga"
 # Monitoring (OBS=1, the default): collector, metrics, logs (host-log-shipper tails .local/logs), traces, Grafana.
 # Postgres / Valkey exporters are added only when this stack runs those containers.
 OBS_BASE="otel-collector prometheus alertmanager loki tempo grafana host-log-shipper elasticsearch-exporter kafka-exporter"
 
 # Everything the storefront (incl. services/bookings), checkout, pre-orders, AfroTransact Retail (1P), delivery dispatch,
-# returns and the staff console use. Identity first.
+# returns, the staff console and every AI chat (ai-gateway: Lola, the listing writer; needs OPENROUTER_API_KEY in
+# .local/secrets.env) use. Identity first.
 DEFAULT_SERVICES="identity catalog offers inventory payments orders delivery-runs content trust-ops tax-returns seller
-  bookings retail fulfilment mcp-server geo media cart notifications search indexer promise gateway-bff"
+  bookings retail fulfilment mcp-server ai-gateway geo media cart notifications search indexer promise gateway-bff
+  carrier-gateway"
 
 ALL_SERVICES="identity catalog offers inventory orders payments seller retail fulfilment bookings trust-ops tax-returns
-  content ai-gateway mcp-server delivery-runs gateway-bff search indexer cart promise geo storefront media
+  content ai-gateway mcp-server delivery-runs gateway-bff search indexer cart promise geo media
   notifications carrier-gateway authz-sync"
 
 # Web apps (Next.js dev servers) against the local BFF, no mocks. WEB=0 skips them.
 WEB_APPS="storefront seller-center staff-console"
-# Their ports: 3000 / 3001 / 3002, or STOREFRONT_PORT / SELLER_CENTER_PORT / STAFF_CONSOLE_PORT. When a port is taken
-# by something else (your Grafana, another dev server), `up` picks the next free one from 3010 and passes the apps'
+# Their ports: 3000 / 3010 / 3002, or STOREFRONT_PORT / SELLER_CENTER_PORT / STAFF_CONSOLE_PORT. When a port is taken
+# by something else (your Grafana, another dev server), `up` picks the next free one from 3020 and passes the apps'
 # addresses to identity (sign-in return URLs), gateway-bff and notifications. The choice is kept in .local/web-ports.
 WEB_PORTS_FILE="$STATE/web-ports"
 
@@ -145,7 +149,7 @@ port_of() {
     trust-ops) echo 8110 ;; tax-returns) echo 8111 ;; content) echo 8112 ;; ai-gateway) echo 8113 ;;
     mcp-server) echo 8114 ;; delivery-runs) echo 8115 ;;
     gateway-bff) echo 8200 ;; search) echo 8201 ;; indexer) echo 8202 ;; cart) echo 8203 ;; promise) echo 8204 ;;
-    geo) echo 8205 ;; storefront) echo 8206 ;; media) echo 8207 ;; notifications) echo 8208 ;;
+    geo) echo 8205 ;; media) echo 8207 ;; notifications) echo 8208 ;;
     carrier-gateway) echo 8209 ;; authz-sync) echo 8210 ;;
     *) echo "unknown service: $1 (see infra/local/PORTS.md)" >&2; exit 2 ;;
   esac
@@ -156,7 +160,7 @@ web_port_var() {
 }
 
 web_default_port() {
-  case "$1" in storefront) echo 3000 ;; seller-center) echo 3001 ;; staff-console) echo 3002 ;; esac
+  case "$1" in storefront) echo 3000 ;; seller-center) echo 3010 ;; staff-console) echo 3002 ;; esac
 }
 
 # The port an app uses: your *_PORT variable, else the one chosen earlier (.local/web-ports), else the default.
@@ -206,7 +210,7 @@ port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 resolve_web_ports() {
   local app var port taken="" before="" after="" svc
   if [[ -f "$WEB_PORTS_FILE" ]]; then before=$(grep -vE '^(DOCS|STORYBOOK)_PORT=' "$WEB_PORTS_FILE" || true)
-  else before=$(printf 'STOREFRONT_PORT=3000\nSELLER_CENTER_PORT=3001\nSTAFF_CONSOLE_PORT=3002'); fi
+  else before=$(printf 'STOREFRONT_PORT=3000\nSELLER_CENTER_PORT=3010\nSTAFF_CONSOLE_PORT=3002'); fi
   for app in $WEB_APPS; do
     var=$(web_port_var "$app")
     if [[ -n "${!var:-}" ]]; then port=${!var}
@@ -216,7 +220,7 @@ resolve_web_ports() {
       if running "web-$app"; then port=$(web_port_of "$app")
       elif port_open "$port"; then
         local want=$port
-        port=3010
+        port=3020
         while port_open "$port" || [[ " $taken " == *" $port "* ]]; do port=$((port + 1)); done
         echo "  ! localhost:$want is in use by another program: $app runs on localhost:$port instead" \
           "(set $var to choose)"
@@ -258,7 +262,7 @@ PSQL_MODE=""
 psql_su() {
   case "$PSQL_MODE" in
     tcp) psql -w -h localhost -p 5432 -U "${PG_SUPERUSER:-$(whoami)}" -v ON_ERROR_STOP=1 -qtA "$@" ;;
-    socket) psql -w -U "$(whoami)" -v ON_ERROR_STOP=1 -qtA "$@" ;;
+    socket) psql -w -p 5432 -U "$(whoami)" -v ON_ERROR_STOP=1 -qtA "$@" ;;
     sudo) sudo -u postgres psql -w -p 5432 -v ON_ERROR_STOP=1 -qtA "$@" ;;
   esac
 }
@@ -294,7 +298,10 @@ setup_host_postgres() {
     echo "  PG_EXTERNAL=0 POSTGRES_HOST_PORT=5433 make up  # use the Docker Postgres next to yours instead" >&2
     exit 1; }
   [[ "$(psql_su -d postgres -c "select count(*) from pg_available_extensions where name = 'postgis'")" == 1 ]] || {
-    echo "Your Postgres has no PostGIS (geo, fulfilment need it): brew install postgis, then re-run." >&2; exit 1; }
+    echo "Your Postgres on localhost:5432 (version $(psql_su -d postgres -c 'show server_version' 2>/dev/null), connected via $PSQL_MODE) has no PostGIS (geo, fulfilment need it)." >&2
+    echo "  brew install postgis (it must match that server's major version), restart Postgres, then re-run." >&2
+    echo "  Or: PG_EXTERNAL=0 POSTGRES_HOST_PORT=5433 make up  # the Docker Postgres, which ships PostGIS" >&2
+    exit 1; }
   local maxconn
   maxconn=$(psql_su -d postgres -c 'show max_connections')
   if ((maxconn < 200)); then
@@ -319,6 +326,12 @@ services:
     ports: !reset []
     environment:
       POSTGRES_SEEDS: 127.0.0.1
+  temporal-ui:
+    depends_on: !reset {}
+    network_mode: host
+    ports: !reset []
+    environment:
+      TEMPORAL_ADDRESS: 127.0.0.1:7233
   openfga-migrate:
     depends_on: !reset {}
     network_mode: host
@@ -363,6 +376,11 @@ infra_up() {
   command -v docker >/dev/null || { echo "Docker is required (Docker Desktop)." >&2; exit 1; }
   docker info >/dev/null 2>&1 || { echo "Docker is not running: start Docker Desktop first." >&2; exit 1; }
   local infra="$INFRA_BASE" waitfor="kafka elasticsearch temporal" i unhealthy=""
+  if [[ "${SEARCH_PROVIDER:-meilisearch}" == meilisearch ]]; then
+    # Meilisearch is the default engine (search and indexer read SEARCH_PROVIDER): lighter, one container. SEARCH_PROVIDER=elasticsearch keeps Elasticsearch.
+    echo "==> search engine: Meilisearch (SEARCH_PROVIDER=meilisearch)"
+    infra="${infra/elasticsearch elasticsearch-init/meilisearch}"; waitfor="${waitfor/elasticsearch/meilisearch}"
+  fi
   if [[ "$(external "${PG_EXTERNAL:-}" 5432 postgres)" == 1 ]]; then
     echo "==> using your Postgres on localhost:5432"
     setup_host_postgres
@@ -376,7 +394,8 @@ infra_up() {
     infra="valkey $infra"
   fi
   if [[ "${OBS:-1}" != 0 ]]; then
-    infra="$infra $OBS_BASE"
+    infra="$infra ${OBS_BASE}"
+    [[ "${SEARCH_PROVIDER:-meilisearch}" == meilisearch ]] && infra="${infra/elasticsearch-exporter/}"
     [[ "$infra" == "postgres "* ]] && infra="$infra postgres-exporter"
     [[ "$infra" == *"valkey "* ]] && infra="$infra redis-exporter"
     mkdir -p "$LOGS"
@@ -405,6 +424,10 @@ build() {
   mkdir -p "$BIN"
   if [[ -n "$java" ]]; then
     echo "==> building Java: ${java//services\//}"
+    # Maven copies resources but never deletes one that was renamed or removed, so a migration renumbered in git would
+    # live on in target/classes and Flyway would see two files with the same version: drop the copied migrations.
+    local s
+    for s in ${java//,/ }; do rm -rf "$ROOT/java/$s/target/classes/db/migration" 2>/dev/null || true; done
     (cd "$ROOT/java" && ./mvnw -q -B -DskipTests -pl "$java" -am package)
   fi
   for svc in $go; do
@@ -545,19 +568,47 @@ stop() {
   rm -f "$PIDS/$svc.pid" "$PIDS/$svc.sig" "$PIDS/$svc.mode" "$PIDS/$svc.env" "$PIDS/$svc.otel"
 }
 
-# PROD=1 (make up PROD=1): the web apps run as production builds (next build + next start, output in .next-prod so
-# the dev cache stays) instead of dev servers: real bundles, no dev overlay, production React. Rebuild after a change
-# with make up PROD=1 again: each run rebuilds the three apps, one at a time (a few minutes each).
-web_mode() { if [[ "${PROD:-0}" == 1 || "${WEB_MODE:-dev}" == prod ]]; then echo prod; else echo dev; fi; }
+# The web apps run as production builds by default (next build + next start, output in .next-prod so the dev cache
+# stays): real bundles, no dev overlay, production React. A build is skipped when nothing under the app, web/packages
+# or its config changed since it was made (REBUILD=1 forces one). DEV=1 (make up DEV=1; or PROD=0) runs Next dev
+# servers instead: hot reload, slow first page loads.
+web_mode() {
+  if [[ "${DEV:-0}" == 1 || "${PROD:-}" == 0 || "${WEB_MODE:-}" == dev ]]; then echo dev; else echo prod; fi
+}
+
+# node must actually start: after a brew upgrade a dylib it links (simdjson, icu, …) can be missing.
+node_ok() {
+  command -v node >/dev/null && node -e 0 >/dev/null 2>&1 && return 0
+  echo "  ✗ node does not start (a library it needs is missing after a Homebrew upgrade). Fix it, then make up again:" >&2
+  echo "      brew reinstall node@22   # or: brew reinstall simdjson" >&2
+  node -v 2>&1 | head -2 | sed 's/^/      /' >&2
+  return 1
+}
+
+# Is the production build of this app current: built from this source, for these addresses?
+web_build_fresh() {
+  local dir="$ROOT/web/apps/$1" id
+  id="$dir/.next-prod/BUILD_ID"
+  [[ "${REBUILD:-0}" != 1 && -f "$id" && "$(cat "$dir/.next-prod/.local-sig" 2>/dev/null)" == "$(env_sig)" ]] || return 1
+  [[ -z "$(find "$dir/src" "$dir/public" "$ROOT/web/packages" "$dir/package.json" "$dir"/next.config.* "$ROOT/web/pnpm-lock.yaml" \
+    \( -name node_modules -o -name .next -o -name .next-prod \) -prune -o -type f -newer "$id" -print -quit 2>/dev/null)" ]]
+}
+
+# True when node_modules is missing or older than pnpm-lock.yaml (a pull added or changed a dependency): the web and
+# mobile apps then install first instead of failing to build on a package that is not there.
+deps_stale() {
+  [[ ! -f "$ROOT/node_modules/.modules.yaml" || "$ROOT/pnpm-lock.yaml" -nt "$ROOT/node_modules/.modules.yaml" ]]
+}
 
 web_up() {
   local app name url port i mode
   if [[ "${WEB:-1}" == 0 ]]; then return 0; fi
   command -v pnpm >/dev/null || { echo "pnpm not found: web apps skipped (corepack enable; then make up again)." >&2; return 0; }
-  if [[ ! -x "$ROOT/web/apps/storefront/node_modules/.bin/next" ]]; then
+  if [[ ! -x "$ROOT/web/apps/storefront/node_modules/.bin/next" ]] || deps_stale; then
     echo "==> installing web dependencies (pnpm install)"
     (cd "$ROOT" && pnpm install --frozen-lockfile)
   fi
+  node_ok || return 0
   mode=$(web_mode)
   mkdir -p "$LOGS" "$PIDS"
   platform_env
@@ -576,10 +627,15 @@ web_up() {
       name="web-$app"
       if running "$name"; then stop "$name"; fi
       : >"$LOGS/$name.log"
-      echo "  … building $app"
-      if ! (cd "$ROOT/web/apps/$app" && NODE_ENV=production NEXT_DIST_DIR=.next-prod NEXT_TELEMETRY_DISABLED=1 \
-        NEXT_PUBLIC_API_MOCKS=0 BFF_ORIGIN=http://localhost:8200 ./node_modules/.bin/next build >>"$LOGS/$name.log" 2>&1); then
-        echo "  ✗ $app build failed; last log lines:" >&2; tail -n 25 "$LOGS/$name.log" >&2; continue
+      if web_build_fresh "$app"; then
+        echo "  · $app: build is current (REBUILD=1 to force)"
+      else
+        echo "  … building $app"
+        if ! (cd "$ROOT/web/apps/$app" && NODE_ENV=production NEXT_DIST_DIR=.next-prod NEXT_TELEMETRY_DISABLED=1 \
+          NEXT_PUBLIC_API_MOCKS=0 BFF_ORIGIN=http://localhost:8200 ./node_modules/.bin/next build >>"$LOGS/$name.log" 2>&1); then
+          echo "  ✗ $app build failed; last log lines:" >&2; tail -n 25 "$LOGS/$name.log" >&2; continue
+        fi
+        env_sig >"$ROOT/web/apps/$app/.next-prod/.local-sig"
       fi
       port=$(web_port_of "$app")
       (cd "$ROOT/web/apps/$app" || exit 1
@@ -727,7 +783,7 @@ links() {
   echo "  Mailpit (mail, SMS)  http://localhost:8025"
   echo "  MinIO console        http://localhost:9001          minioadmin / minioadmin"
   echo "  Elasticsearch        http://localhost:9200          OpenFGA  http://localhost:8091"
-  echo "  Kafka                localhost:9092                 Temporal localhost:7233"
+  echo "  Kafka                localhost:9092                 Temporal gRPC localhost:7233 · UI http://localhost:8088"
   echo "  Postgres             localhost:5432                 Valkey   localhost:6379"
   echo "Manage"
   echo "  make dev-status | make dev-logs SERVICE=orders (or web-storefront) | make dev-links | make down"
@@ -735,7 +791,7 @@ links() {
   secrets_summary
   echo "  Payments: without STRIPE_SECRET_KEY a local stand-in authorises every card like test card 4242 (no money moves)."
   echo "  For Stripe test mode put the keys in .local/secrets.env, and for webhooks:"
-  echo "  stripe listen --forward-to localhost:8105/v1/webhooks/stripe   (its whsec_… → STRIPE_WEBHOOK_SECRET)"
+  echo "  stripe listen --events <list in docs/engineering/secrets-and-configuration.md> --forward-to localhost:8105/v1/webhooks/stripe   (its whsec_… → STRIPE_WEBHOOK_SECRET)"
   echo "──────────────────────────────────────────────────────────────────────────────────────────────"
 }
 
@@ -752,6 +808,7 @@ docs_up() {
   local port i
   if [[ "${DOCS:-1}" == 0 || "${WEB:-1}" == 0 ]]; then return 0; fi
   command -v pnpm >/dev/null || return 0
+  node_ok || return 0
   if running docs-portal; then echo "  · docs portal already running"; return 0; fi
   port=$(docs_port)
   if [[ -z "${DOCS_PORT:-}" ]] && port_open "$port"; then
@@ -765,7 +822,9 @@ docs_up() {
   echo "==> starting the developer portal (Docusaurus; the first build takes a minute or two)"
   : >"$LOGS/docs-portal.log"
   (cd "$ROOT/docs/portal" || exit 1
-    node scripts/sync-contracts.mjs >>"$LOGS/docs-portal.log" 2>&1
+    if ! node scripts/sync-contracts.mjs >>"$LOGS/docs-portal.log" 2>&1; then
+      echo "  ✗ docs portal: contract sync failed, so the portal is not started; last log lines:" >&2; tail -n 15 "$LOGS/docs-portal.log" >&2; exit 0
+    fi
     nohup ./node_modules/.bin/docusaurus start --port "$port" --host localhost --no-open >>"$LOGS/docs-portal.log" 2>&1 &
     echo $! >"$PIDS/docs-portal.pid")
   for ((i = 0; i < 240; i += 3)); do
@@ -917,7 +976,7 @@ mobile_up() {
   local app name port i mocks host clear
   if [[ "${MOBILE:-1}" == 0 ]]; then return 0; fi
   command -v pnpm >/dev/null || return 0
-  if [[ ! -x "$ROOT/mobile/apps/customer/node_modules/.bin/expo" ]]; then
+  if [[ ! -x "$ROOT/mobile/apps/customer/node_modules/.bin/expo" ]] || deps_stale; then
     echo "==> installing mobile dependencies (pnpm install)"
     (cd "$ROOT" && pnpm install --frozen-lockfile)
   fi
@@ -964,7 +1023,7 @@ qr() {
 
 # Ports the phone reaches over USB with `adb reverse` (localhost mode on an Android device or emulator): Metro, the
 # web apps, identity, gateway-bff, bookings, fulfilment, media and MinIO.
-ADB_PORTS="8081 8082 3000 3001 3002 8100 8200 8109 8108 8207 9000"
+ADB_PORTS="8081 8082 3000 3010 3002 8100 8200 8109 8108 8207 9000"
 
 cmd_adb_reverse() {
   local p
@@ -1032,7 +1091,7 @@ cmd_apk() {
   if [[ -n "$java17" ]]; then export JAVA_HOME="$java17"; fi
   echo "==> building the standalone $app app for $host (release, JavaScript inside; first build: several minutes)"
   (cd "$ROOT/mobile/apps/$app" || exit 1
-    export CI=1 EXPO_NO_TELEMETRY=1 EXPO_NO_TYPESCRIPT_SETUP=1 EXPO_PUBLIC_APP_ENV=local EXPO_PUBLIC_MOCKS=0 \
+    export SENTRY_DISABLE_AUTO_UPLOAD=true CI=1 EXPO_NO_TELEMETRY=1 EXPO_NO_TYPESCRIPT_SETUP=1 EXPO_PUBLIC_APP_ENV=local EXPO_PUBLIC_MOCKS=0 \
       EXPO_PUBLIC_DEV_HOST="$host" EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY="${STRIPE_PUBLISHABLE_KEY:-}"
     # android/ is generated (git-ignored): --clean regenerates it so the local settings (plain HTTP to the LAN) apply.
     ./node_modules/.bin/expo prebuild --platform android --clean --no-install
@@ -1043,13 +1102,23 @@ cmd_apk() {
   out="$STATE/apk/afrotransact-$app.apk"
   cp "$built" "$out"
   echo "  ✓ $out (talks to http://$host; package com.afrotransact.$app.local)"
-  if command -v adb >/dev/null 2>&1 && adb devices | awk 'NR > 1 && $2 == "device"' | grep -q .; then
-    echo "==> installing on the connected phone"
-    adb install -r "$out"
-    echo "  ✓ installed: open \"$( [[ "$app" == customer ]] && echo AfroTransact || echo 'AfroTransact Delivery')\" on the phone"
-    return 0
+  # A phone on USB gets the app; an emulator alone does not stop the Wi-Fi download below (the phone is what you test on).
+  local serial=""
+  if command -v adb >/dev/null 2>&1; then
+    serial=$(adb devices | awk 'NR > 1 && $2 == "device" && $1 !~ /^emulator-/ {print $1; exit}')
+    if [[ -n "$serial" ]]; then
+      echo "==> installing on the phone $serial"
+      adb -s "$serial" install -r "$out"
+      echo "  ✓ installed: open \"$( [[ "$app" == customer ]] && echo AfroTransact || echo 'AfroTransact Delivery')\" on the phone"
+      return 0
+    fi
+    serial=$(adb devices | awk 'NR > 1 && $2 == "device" {print $1; exit}')
+    if [[ -n "$serial" ]]; then
+      echo "==> installing on the emulator $serial (no phone on USB; the Wi-Fi download for a phone follows)"
+      adb -s "$serial" install -r "$out" || true
+    fi
   fi
-  echo "==> no phone on USB: serving the APK on your Wi-Fi (Ctrl-C when the phone has it)"
+  echo "==> serving the APK on your Wi-Fi (Ctrl-C when the phone has it)"
   echo "  On the phone (same Wi-Fi), open:  http://$host:8765/afrotransact-$app.apk"
   echo "  Allow \"Install unknown apps\" for the browser when Android asks, then open the downloaded file."
   python3 -m http.server 8765 --bind 0.0.0.0 --directory "$STATE/apk"
@@ -1097,6 +1166,46 @@ seed_if_empty() {
     | grep -E '^(seed:|services up|image sources|  [✗!]|  [a-z ]{3,20} {2,}|  attribution)' || true
 }
 
+# `repair-orgs`: identity reconciles its copy of every approved or suspended seller/provider organisation with the
+# seller service now (what its job does on start-up and every 5 minutes): an approval whose event identity missed gets
+# its organisation, status and owner memberships. Needs identity and seller running. Uses the seller-service client
+# (SELLER_SERVICE_CLIENT_SECRET, local default), which holds orgs:manage. Signed-in people pick it up on their next
+# token refresh (Seller Center does it at once).
+cmd_repair_orgs() {
+  local issuer secret token res
+  load_secrets
+  platform_env
+  issuer="${AUTH_ISSUER_URL:-http://localhost:$(port_of identity)}"
+  secret="${SELLER_SERVICE_CLIENT_SECRET:-local-seller-secret}"
+  if ! healthy identity || ! healthy seller; then
+    echo "  ✗ identity and seller must be running (make up, or tools/dev/local.sh up identity seller)" >&2; exit 1
+  fi
+  token=$(curl -fsS -u "seller-service:$secret" -d grant_type=client_credentials -d scope=orgs:manage \
+    "$issuer/oauth2/token" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])') || {
+    echo "  ✗ no token from $issuer for the seller-service client (SELLER_SERVICE_CLIENT_SECRET?)" >&2; exit 1; }
+  res=$(curl -fsS -X POST -H "Authorization: Bearer $token" "http://localhost:$(port_of identity)/v1/internal/orgs/reconcile") || {
+    echo "  ✗ identity did not reconcile (is it built from this checkout? tools/dev/local.sh restart identity)" >&2; exit 1; }
+  echo "$res" | python3 -c 'import json,sys; print("  ✓ organisations checked: %(scanned)s, repaired: %(repaired)s, failed: %(failed)s" % json.load(sys.stdin))'
+}
+
+# `reindex`: rebuilds the product search index from the sources of truth (catalog, offers, inventory, seller), not from
+# Kafka: after switching the search engine, wiping the index (make reset) or when the topics expired. It is the
+# indexer's own `reindex` command, built next to the stack's binaries and run with the local configuration and the
+# values of .local/secrets.env (SEARCH_PROVIDER, MEILISEARCH_URL, ES_*), so it writes to the engine search reads from.
+# Arguments are the command's flags: tools/dev/local.sh reindex --dry-run
+cmd_reindex() {
+  local svc
+  mkdir -p "$STATE" "$BIN"
+  load_secrets
+  for svc in catalog offers inventory seller; do
+    healthy "$svc" || { echo "  ✗ $svc must be running (make up, or tools/dev/local.sh up $svc)" >&2; exit 1; }
+  done
+  echo "==> building the indexer's reindex command"
+  (cd "$ROOT/go/services/indexer" && go build -o "$BIN/indexer-reindex" ./cmd/indexer)
+  echo "==> reindex (search engine: ${SEARCH_PROVIDER:-meilisearch})"
+  (cd "$ROOT/go/services/indexer" && APP_ENV=local "$BIN/indexer-reindex" reindex "$@")
+}
+
 cmd_status() {
   local svc app state
   printf '%-18s %-6s %-9s %s\n' SERVICE PORT STATE URL
@@ -1137,6 +1246,10 @@ cmd_down() {
   fi
   # Leftovers this script no longer tracks (older runs): stop any of this repository's services still on their ports.
   for svc in $ALL_SERVICES; do free_port_for "$svc" >/dev/null 2>&1 || true; done
+  # An emulator that was killed rather than shut down leaves its crash handler behind, reparented to init. It then
+  # polls a crash database under /tmp that the system cleaner has since deleted, and logs the failure to whatever
+  # terminal it inherited — forever. Nothing owns it any more, so down takes it with the rest.
+  pkill -f 'Android/sdk/emulator/crashpad_handler' 2>/dev/null || true
   echo "==> stopping infrastructure (data kept; 'make reset' deletes it). Your own Postgres/Valkey keep running."
   # shellcheck disable=SC2086
   compose stop postgres valkey $INFRA_BASE $OBS_BASE postgres-exporter redis-exporter >/dev/null 2>&1 || true
@@ -1157,13 +1270,25 @@ case "${1:-}" in
   docs) mkdir -p "$LOGS" "$PIDS" "$STATE"; docs_up; storybook_up ;;
   logs) [[ -n "${2:-}" ]] || { echo "usage: $0 logs <service>" >&2; exit 2; }; tail -n 200 -f "$LOGS/$2.log" ;;
   seed) shift; python3 "$ROOT/tools/seed/seed.py" "$@" ;;
+  repair-orgs) cmd_repair_orgs ;;
+  reindex) shift; cmd_reindex "$@" ;;
   restart) [[ -n "${2:-}" ]] || { echo "usage: $0 restart <service>" >&2; exit 2; }
     load_secrets
+    # Keep the address the stack runs on: a service restarted without MOBILE_HOST while the rest runs in LAN mode would
+    # validate tokens against http://localhost:8100 and reject every phone's (iss = the LAN address): sign-in works,
+    # everything after it fails.
+    if [[ -z "${MOBILE_HOST:-}" && -f "$PIDS/identity.env" ]]; then
+      stack_host=$(cat "$PIDS/identity.env" 2>/dev/null || true)
+      if [[ -n "$stack_host" && "$stack_host" != localhost ]]; then
+        MOBILE_HOST="$stack_host"; export MOBILE_HOST
+        echo "  · the stack runs on $stack_host: restarting $2 with it (MOBILE_HOST=$stack_host)"
+      fi
+    fi
     platform_env
     stop "$2"; build "$2"; start "$2"; wait_healthy "$2" 240 ;;
   lan-env) cmd_lan_env ;;
   adb-reverse) cmd_adb_reverse ;;
   device) shift; cmd_device "$@" ;;
   apk) shift; cmd_apk "$@" ;;
-  *) sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

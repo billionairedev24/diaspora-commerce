@@ -96,6 +96,21 @@ class JdbcTaxTransactionRepository implements TaxTransactionRepository {
                 rs.getLong("refunded"), rs.getLong("net"))).list();
     }
 
+    @Override
+    public List<SalesInto> salesInto(YearMonth through, int months, String currency) {
+        return jdbc.sql("""
+                select jurisdiction, coalesce(sum(taxable_minor), 0) as gross,
+                       count(distinct order_id) filter (where kind = 'SALE') as orders
+                from tax_transaction
+                where period between :from and :to and currency = :cur and not voided
+                group by jurisdiction
+                """)
+                .param("from", Date.valueOf(through.minusMonths(months - 1L).atDay(1)))
+                .param("to", Date.valueOf(through.atDay(1))).param("cur", currency)
+                .query((rs, n) -> new SalesInto(rs.getString("jurisdiction"), rs.getLong("gross"), rs.getLong("orders")))
+                .list();
+    }
+
     private static TaxTransaction map(ResultSet rs, int rowNum) throws SQLException {
         return new TaxTransaction(rs.getObject("id", UUID.class),
                 TaxTransactionKind.valueOf(rs.getString("kind")), rs.getObject("order_id", UUID.class),

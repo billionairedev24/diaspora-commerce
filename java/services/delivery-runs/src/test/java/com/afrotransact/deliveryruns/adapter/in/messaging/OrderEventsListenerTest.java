@@ -1,11 +1,18 @@
 package com.afrotransact.deliveryruns.adapter.in.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.deliveryruns.application.AttributionService;
 import com.afrotransact.deliveryruns.application.OrderPlaced;
+import com.afrotransact.deliveryruns.application.PreorderProjectionService;
+import com.afrotransact.deliveryruns.application.RunProgressService;
 import com.afrotransact.deliveryruns.domain.PreorderFulfilment;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -51,11 +58,109 @@ class OrderEventsListenerTest {
     }
 
     @Test
+    void anOrderOnAStaffScheduledRunHoldsASlotAndIsNotProjectedIntoAWindow() {
+        String body = """
+                {"orderId": "o-run", "placedAt": "2026-10-07T16:30:00Z",
+                 "shipments": [
+                   {"shipmentId": "s-1", "sellerOrgId": "org-a", "fulfilmentType": "PREORDER",
+                    "windowId": "%s", "preorder": {"windowId": "%s", "source": "RUN"}, "fulfilment": "DOOR",
+                    "totalMinor": 3000, "shippingMinor": 799, "lines": [{"variantAtin": "EGU", "quantity": 2}]}]}
+                """.formatted(UUID.randomUUID(), UUID.randomUUID());
+        assertThat(OrderEventsListener.placed(UUID.randomUUID(), json.readTree(body))).isEmpty();
+    }
+
+    @Test
     void ordersWithoutPreorderPackagesAreIgnored() {
         String body = """
                 {"orderId": "o-1", "placedAt": "2026-10-07T16:30:00Z",
                  "shipments": [{"shipmentId": "s-1", "fulfilmentType": "SELLER_FULFILLED", "lines": []}]}
                 """;
         assertThat(OrderEventsListener.placed(UUID.randomUUID(), json.readTree(body))).isEmpty();
+    }
+
+    @Test
+    void everyLineKeepsItsOwnSellerAndFallsBackToThePackagesFirstSeller() {
+        UUID window = UUID.randomUUID();
+        String body = """
+                {"orderId": "o-9", "placedAt": "2026-10-07T16:30:00Z",
+                 "shipments": [
+                   {"shipmentId": "s-1", "sellerOrgId": "org-a", "sellerName": "Mama Tee", "fulfilmentType": "PREORDER",
+                    "windowId": "%s", "fulfilment": "DOOR", "totalMinor": 3000, "shippingMinor": 799,
+                    "lines": [
+                      {"variantAtin": "EGU", "title": "Egusi", "quantity": 2, "sellerOrgId": "org-a",
+                       "sellerName": "Mama Tee"},
+                      {"variantAtin": "PAL", "title": "Palm oil", "quantity": 1, "sellerOrgId": "org-b",
+                       "sellerName": "Lagos Oils"},
+                      {"variantAtin": "YAM", "title": "Yam", "quantity": 3}]}
+                 ]}
+                """.formatted(window);
+        OrderPlaced p = OrderEventsListener.placed(UUID.randomUUID(), json.readTree(body)).orElseThrow();
+        assertThat(p.packages().get(0).lines()).extracting(l -> l.sellerOrgId() + "/" + l.sellerName())
+                .containsExactly("org-a/Mama Tee", "org-b/Lagos Oils", "org-a/Mama Tee");
+    }
+
+    @Test
+    void preorderShipmentMovesAndDeliveriesDriveTheRunProgress() {
+        PreorderProjectionService projection = mock(PreorderProjectionService.class);
+        RunProgressService progress = mock(RunProgressService.class);
+        OrderEventsListener listener = new OrderEventsListener(projection, progress, mock(AttributionService.class),
+                json);
+        UUID e1 = UUID.randomUUID();
+        UUID e2 = UUID.randomUUID();
+        UUID e3 = UUID.randomUUID();
+
+        listener.handle("orders.shipment.status_changed", e1, json.readTree("""
+                {"orderId": "o-1", "shipmentId": "s-1", "fulfilmentType": "PREORDER", "from": "confirmed",
+                 "to": "picked_up", "occurredAt": "2026-10-23T14:05:00Z"}"""));
+        listener.handle("orders.shipment.delivered", e2, json.readTree("""
+                {"orderId": "o-1", "shipmentId": "s-1", "fulfilmentType": "PREORDER",
+                 "deliveredAt": "2026-10-24T18:30:00Z"}"""));
+        listener.handle("orders.shipment.cancelled", e3, json.readTree("""
+                {"orderId": "o-2", "shipmentId": "s-2", "cancelledAt": "2026-10-23T09:00:00Z"}"""));
+
+        verify(progress).onShipmentMoved(e1, "o-1", "s-1", "picked_up", Instant.parse("2026-10-23T14:05:00Z"));
+        verify(progress).onShipmentDelivered(e2, "o-1", "s-1", Instant.parse("2026-10-24T18:30:00Z"));
+        verify(progress).onShipmentCancelled(e3, "o-2", "s-2", Instant.parse("2026-10-23T09:00:00Z"));
+        verify(projection).onShipmentCancelled(e3, "o-2", "s-2", Instant.parse("2026-10-23T09:00:00Z"));
+    }
+
+    @Test
+    void anOrderPlacedWithAnAdvertorialCreativeIsAttributedWhateverItCarries() {
+        PreorderProjectionService projection = mock(PreorderProjectionService.class);
+        AttributionService attribution = mock(AttributionService.class);
+        OrderEventsListener listener = new OrderEventsListener(projection, mock(RunProgressService.class), attribution,
+                json);
+        listener.handle("orders.order.placed", UUID.randomUUID(), json.readTree("""
+                {"orderId": "o-7", "placedAt": "2026-10-23T09:00:00Z",
+                 "attribution": {"src": "page", "cr": "adv-0123456789abcdef0123456789abcdef"},
+                 "shipments": [{"shipmentId": "s-1", "fulfilmentType": "SELLER_FULFILLED", "lines": []}]}"""));
+        verify(attribution).orderPlaced("o-7", "adv-0123456789abcdef0123456789abcdef", "page",
+                Instant.parse("2026-10-23T09:00:00Z"));
+        verifyNoInteractions(projection);
+    }
+
+    @Test
+    void anOrderWithoutAttributionIsNotRecorded() {
+        AttributionService attribution = mock(AttributionService.class);
+        OrderEventsListener listener = new OrderEventsListener(mock(PreorderProjectionService.class),
+                mock(RunProgressService.class), attribution, json);
+        listener.handle("orders.order.placed", UUID.randomUUID(), json.readTree("""
+                {"orderId": "o-8", "placedAt": "2026-10-23T09:00:00Z", "shipments": []}"""));
+        verifyNoInteractions(attribution);
+    }
+
+    @Test
+    void shipmentsOfOtherOrdersThanPreordersNeverTouchARun() {
+        PreorderProjectionService projection = mock(PreorderProjectionService.class);
+        RunProgressService progress = mock(RunProgressService.class);
+        OrderEventsListener listener = new OrderEventsListener(projection, progress, mock(AttributionService.class),
+                json);
+        listener.handle("orders.shipment.status_changed", UUID.randomUUID(), json.readTree("""
+                {"orderId": "o-1", "shipmentId": "s-1", "fulfilmentType": "FBA_AFROTRANSACT", "to": "picked_up"}"""));
+        listener.handle("orders.shipment.delivered", UUID.randomUUID(), json.readTree("""
+                {"orderId": "o-1", "shipmentId": "s-1", "fulfilmentType": "SELLER_FULFILLED"}"""));
+        listener.handle("orders.shipment.delivered", UUID.randomUUID(), json.readTree("""
+                {"shipmentId": "s-1", "fulfilmentType": "PREORDER"}"""));
+        verifyNoInteractions(progress);
     }
 }

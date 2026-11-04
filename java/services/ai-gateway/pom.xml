@@ -20,7 +20,7 @@
         <wiremock.version>3.13.2</wiremock.version>
         <!-- Converge Spring AI / OpenAI SDK / OpenTelemetry transitive versions (enforcer dependencyConvergence). -->
         <victools.version>5.0.0</victools.version>
-        <okhttp.version>5.5.0</okhttp.version>
+        <okhttp.version>5.5.1</okhttp.version>
         <okio.version>3.18.2</okio.version>
         <swagger-annotations.version>2.2.55</swagger-annotations.version>
     </properties>

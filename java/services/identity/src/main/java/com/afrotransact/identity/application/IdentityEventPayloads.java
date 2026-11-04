@@ -9,10 +9,26 @@ public final class IdentityEventPayloads {
     private IdentityEventPayloads() {
     }
 
-    /** {@code identity.user.registered}. */
+    /**
+     * {@code identity.user.registered}.
+     *
+     * @param referralCode the referral code from the sign-up link or form, or null (S322)
+     * @param deviceHash   keyed hash of the sign-up browser's device cookie, or null; compared by the referral
+     *                     program's abuse checks, never an identifier a person can read back
+     * @param networkHash  keyed hash of the sign-up network (IPv4 /24 or IPv6 /64), or null
+     */
     public record UserRegistered(String userId, String email, String firstName, String lastName, String phone,
                                  String intent, List<String> roles, String method, boolean emailVerified,
-                                 boolean smsConsent, Instant registeredAt) {
+                                 boolean smsConsent, Instant registeredAt, String referralCode, String deviceHash,
+                                 String networkHash) {
+
+        /** A registration without referral signals (social sign-in, staff provisioning, test users). */
+        public UserRegistered(String userId, String email, String firstName, String lastName, String phone,
+                              String intent, List<String> roles, String method, boolean emailVerified,
+                              boolean smsConsent, Instant registeredAt) {
+            this(userId, email, firstName, lastName, phone, intent, roles, method, emailVerified, smsConsent,
+                    registeredAt, null, null, null);
+        }
     }
 
     /** {@code identity.user.email-verified}. */
@@ -34,6 +50,16 @@ public final class IdentityEventPayloads {
 
     /** Notification recipient block (notifications-service payload convention); one address is set. */
     public record Recipient(String id, String email, String phone) {
+    }
+
+    /** {@code identity.password-reset.federated}: sign in with the linked provider (display names) instead. */
+    public record PasswordResetFederated(Recipient recipient, String userId, String firstName, List<String> providers,
+                                         boolean transactional) {
+    }
+
+    /** {@code identity.password.changed}: method RESET; sessionsRevoked = apps and devices signed out. */
+    public record PasswordChanged(Recipient recipient, String userId, String firstName, String method,
+                                  Instant changedAt, int sessionsRevoked, boolean transactional) {
     }
 
     /**

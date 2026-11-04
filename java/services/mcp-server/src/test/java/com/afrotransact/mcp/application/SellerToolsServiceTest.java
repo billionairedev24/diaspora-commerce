@@ -62,10 +62,24 @@ class SellerToolsServiceTest {
     }
 
     @Test
+    void staffReadTheCategoryRequestQueueUnderTheTaxonomyPermission() {
+        StaffToolsService staff = new StaffToolsServiceImpl(guard, null, catalog, null, null, null, null);
+        catalog.next = Downstream.ok(List.of(Map.of("reference", "REQ-000041")));
+        assertThat(staff.categoryRequestsQueue(ADMIN, " approved ").status()).isEqualTo("OK");
+        assertThat(staff.categoryRequestsQueue(ADMIN, null).status()).isEqualTo("OK");
+        assertThat(catalog.calls).containsExactly("categoryRequests APPROVED", "categoryRequests null");
+        assertThat(guard.required).containsExactly(ToolCatalog.CATEGORY_REQUESTS_QUEUE, ToolCatalog.CATEGORY_REQUESTS_QUEUE);
+        assertThat(ToolCatalog.find(ToolCatalog.CATEGORY_REQUESTS_QUEUE).orElseThrow().requiredPermission())
+                .isEqualTo("catalog:taxonomy");
+        catalog.next = Downstream.of(Downstream.Status.FORBIDDEN);
+        assertThat(staff.categoryRequestsQueue(ADMIN, null).status()).isEqualTo("FORBIDDEN");
+    }
+
+    @Test
     void listsOrdersAndInventoryForTheOrganisation() {
         orders.next = Downstream.ok(List.of());
-        assertThat(tools.listMyOrders(SELLER, "SHIPPED", 1).status()).isEqualTo("OK");
-        assertThat(orders.calls).containsExactly("sellerOrders org_1 SHIPPED 1 25");
+        assertThat(tools.listMyOrders(SELLER, "READY", "cur-2").status()).isEqualTo("OK");
+        assertThat(orders.calls).containsExactly("sellerShipments ready cur-2 25");
 
         inventory.next = Downstream.ok(List.of());
         assertThat(tools.checkInventory(SELLER, " atgari0001 ", true).status()).isEqualTo("OK");
@@ -76,28 +90,49 @@ class SellerToolsServiceTest {
     @Test
     void updatesASellerFulfilledShipmentForwardOnly() {
         orders.order = Downstream.ok(Map.of("id", "o1", "shipments", List.of(
-                Map.of("id", "s1", "sellerOrgId", "org_1", "fulfilment", "SELLER", "status", "PACKED"),
-                Map.of("id", "s2", "sellerOrgId", "org_2", "fulfilment", "SELLER", "status", "PACKED"),
-                Map.of("id", "s3", "sellerOrgId", "org_1", "fulfilment", "AFROTRANSACT", "status", "PACKED"))));
-        orders.next = Downstream.ok(Map.of("status", "SHIPPED"));
+                Map.of("id", "s1", "sellerOrgId", "org_1", "fulfilmentType", "SELLER_FULFILLED",
+                        "deliveryMethod", "CARRIER", "status", "ready"),
+                Map.of("id", "s2", "sellerOrgId", "org_2", "fulfilmentType", "SELLER_FULFILLED",
+                        "deliveryMethod", "CARRIER", "status", "ready"),
+                Map.of("id", "s3", "sellerOrgId", "org_1", "fulfilmentType", "FBA_AFROTRANSACT",
+                        "deliveryMethod", "CARRIER", "status", "ready"),
+                Map.of("id", "s4", "sellerOrgId", "org_1", "fulfilmentType", "SELLER_FULFILLED",
+                        "deliveryMethod", "PICKUP", "status", "ready"),
+                Map.of("id", "s5", "sellerOrgId", "org_1", "fulfilmentType", "SELLER_FULFILLED",
+                        "deliveryMethod", "CARRIER", "status", "ready", "carrier", "ups", "trackingNumber", "1Z9"))));
+        orders.next = Downstream.ok(Map.of("status", "picked_up"));
 
-        ToolResult ok = tools.updateShipmentStatus(SELLER, "o1", "s1", "shipped", " UPS ", " 1Z999 ");
+        ToolResult ok = tools.updateShipmentStatus(SELLER, "o1", "s1", "shipped", " UPS ", " 1Z999 ", null);
         assertThat(ok.status()).isEqualTo("OK");
-        assertThat(orders.changes).containsExactly(Map.of("status", "SHIPPED", "carrier", "UPS",
-                "trackingNumber", "1Z999"));
+        assertThat(orders.calls).containsExactly("attachTracking s1 ups 1Z999");
+        assertThat(orders.changes).containsExactly(Map.of("to", "picked_up"));
 
-        assertThat(tools.updateShipmentStatus(SELLER, "o1", "s2", "SHIPPED", "UPS", "1Z").status())
+        orders.calls.clear();
+        orders.changes.clear();
+        assertThat(tools.updateShipmentStatus(SELLER, "o1", "s5", "SHIPPED", null, null, null).status())
+                .as("the label bought in Seller Center is already on the shipment").isEqualTo("OK");
+        assertThat(orders.calls).isEmpty();
+        assertThat(orders.changes).containsExactly(Map.of("to", "picked_up"));
+
+        assertThat(tools.updateShipmentStatus(SELLER, "o1", "s2", "SHIPPED", "UPS", "1Z", null).status())
                 .as("another seller's shipment").isEqualTo("NOT_FOUND");
-        assertThat(tools.updateShipmentStatus(SELLER, "o1", "missing", "SHIPPED", "UPS", "1Z").status())
+        assertThat(tools.updateShipmentStatus(SELLER, "o1", "missing", "SHIPPED", "UPS", "1Z", null).status())
                 .isEqualTo("NOT_FOUND");
-        ToolResult noTracking = tools.updateShipmentStatus(SELLER, "o1", "s1", "SHIPPED", null, "");
+        ToolResult noTracking = tools.updateShipmentStatus(SELLER, "o1", "s1", "SHIPPED", null, "", null);
         assertThat(noTracking.status()).isEqualTo("REJECTED");
         assertThat(asMap(noTracking.data())).containsEntry("code", "mcp.tracking-required");
-        assertThat(asMap(tools.updateShipmentStatus(SELLER, "o1", "s3", "SHIPPED", "UPS", "1Z").data()))
+        assertThat(asMap(tools.updateShipmentStatus(SELLER, "o1", "s3", "SHIPPED", "UPS", "1Z", null).data()))
                 .containsEntry("code", "mcp.not-seller-fulfilled");
 
+        orders.changes.clear();
+        assertThat(asMap(tools.updateShipmentStatus(SELLER, "o1", "s4", "DELIVERED", null, null, null).data()))
+                .containsEntry("code", "mcp.handover-code-required");
+        assertThat(tools.updateShipmentStatus(SELLER, "o1", "s4", "DELIVERED", null, null, " 0427 ").status())
+                .isEqualTo("OK");
+        assertThat(orders.changes).containsExactly(Map.of("to", "delivered", "handoverCode", "0427"));
+
         orders.order = Downstream.of(Downstream.Status.NOT_FOUND);
-        assertThat(tools.updateShipmentStatus(SELLER, "o9", "s1", "PACKED", null, null).status())
+        assertThat(tools.updateShipmentStatus(SELLER, "o9", "s1", "PACKED", null, null, null).status())
                 .isEqualTo("NOT_FOUND");
     }
 
@@ -149,6 +184,12 @@ class SellerToolsServiceTest {
         private final List<Map<String, Object>> bodies = new ArrayList<>();
 
         @Override
+        public Downstream categoryRequests(String status, String bearerToken) {
+            calls.add("categoryRequests " + status);
+            return next;
+        }
+
+        @Override
         public Downstream publicProduct(String atin, String bearerToken) {
             return next;
         }
@@ -189,16 +230,27 @@ class SellerToolsServiceTest {
         }
 
         @Override
-        public Downstream sellerOrders(String orgId, String status, int page, int size, String bearerToken) {
-            calls.add("sellerOrders " + orgId + " " + status + " " + page + " " + size);
+        public Downstream myOrders(String cursor, int limit, String bearerToken) {
             return next;
         }
 
         @Override
-        public Downstream updateShipmentStatus(String orderId, String shipmentId, Map<String, Object> change,
-                                               String bearerToken) {
-            changes.add(new HashMap<>(change));
+        public Downstream sellerShipments(String status, String cursor, int limit, String bearerToken) {
+            calls.add("sellerShipments " + status + " " + cursor + " " + limit);
             return next;
+        }
+
+        @Override
+        public Downstream transitionShipment(String shipmentId, Map<String, Object> body, String bearerToken) {
+            changes.add(new HashMap<>(body));
+            return next;
+        }
+
+        @Override
+        public Downstream attachTracking(String shipmentId, String carrier, String trackingNumber,
+                                         String bearerToken) {
+            calls.add("attachTracking " + shipmentId + " " + carrier + " " + trackingNumber);
+            return Downstream.ok(Map.of());
         }
     }
 

@@ -52,26 +52,55 @@ func TestAutoSectionsAndPaging(t *testing.T) {
 	}
 }
 
-func TestShipmentMovesFollowTheShipmentsNextActions(t *testing.T) {
+func TestShipmentStepsFollowEachShipmentsNextActionsAndNameThemAsActions(t *testing.T) {
 	o := jobj{"shipments": []any{
-		jobj{"label": "Shipment 1 of 2", "status": "packed", "nextActions": []any{"ready", "cancelled"}},
-		jobj{"label": "Shipment 2 of 2", "status": "in_transit", "nextActions": []any{"out_for_delivery", "delivered"}},
+		jobj{"id": "s1", "label": "Shipment 1 of 2", "status": "packed", "nextActions": []any{"ready", "cancelled"}},
+		jobj{"id": "s2", "label": "Shipment 2 of 2", "status": "in_transit", "nextActions": []any{"out_for_delivery", "delivered"}},
 	}}
-	got := shipmentMoves(o)
-	want := []string{"READY", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"}
+	got := shipmentSteps(o)
+	want := []domain.FieldOption{
+		{Value: "s1|READY", Label: "Shipment 1 of 2 · Mark ready"},
+		{Value: "s1|CANCELLED", Label: "Shipment 1 of 2 · Cancel the shipment"},
+		{Value: "s2|OUT_FOR_DELIVERY", Label: "Shipment 2 of 2 · Mark out for delivery"},
+		{Value: "s2|DELIVERED", Label: "Shipment 2 of 2 · Mark delivered"},
+	}
 	if len(got) != len(want) {
-		t.Fatalf("moves = %v, want %v", got, want)
+		t.Fatalf("steps = %v, want %v", got, want)
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("moves = %v, want %v", got, want)
+			t.Fatalf("steps = %v, want %v", got, want)
 		}
 	}
-	if all := shipmentMoves(jobj{"shipments": []any{jobj{"status": "placed"}}}); len(all) != len(shipmentLifecycle) {
-		t.Fatalf("without nextActions every move is offered, got %v", all)
+	if none := shipmentSteps(jobj{"shipments": []any{jobj{"status": "placed"}}}); len(none) != 0 {
+		t.Fatalf("without nextActions no steps are offered, got %v", none)
+	}
+	single := shipmentSteps(jobj{"shipments": []any{jobj{"id": "s1", "label": "Shipment 1 of 1", "nextActions": []any{"packed"}}}})
+	if len(single) != 1 || single[0].Label != "Mark packed" {
+		t.Fatalf("one shipment needs no shipment prefix, got %v", single)
 	}
 	form := ordersResource().actions[0].form(nil, staffCtx{}, o)
-	if form.Fields[0].Options[0].Label != "Shipment 1 of 2 · Packed → ready, cancelled" {
-		t.Fatalf("shipment option = %q", form.Fields[0].Options[0].Label)
+	if form.Fields[0].Key != "step" || len(form.Fields[0].Options) != 4 {
+		t.Fatalf("form = %+v", form.Fields)
+	}
+}
+
+func TestProofSummaryNamesTheHandoverAndTheEvidence(t *testing.T) {
+	cases := []struct {
+		proof jobj
+		want  string
+	}{
+		{jobj{"handoverMethod": "CUSTOMER", "photoAssetId": "a1"}, "handed to the customer, code checked, photo"},
+		{jobj{"handoverMethod": "SOMEONE_ELSE", "recipientName": "Ngozi", "relationship": "Neighbour", "photoAssetId": "a1", "signatureAssetId": "a2"}, "handed to Ngozi, neighbour, photo, signature"},
+		{jobj{"handoverMethod": "SAFE_PLACE", "safePlace": "Back porch", "photoAssetId": "a1"}, "left at back porch, photo"},
+		{jobj{"failureReason": "Nobody home"}, "driver: Nobody home"},
+	}
+	for _, c := range cases {
+		if got := proofSummary(jobj{"proof": c.proof}); got != c.want {
+			t.Errorf("proofSummary(%v) = %q, want %q", c.proof, got, c.want)
+		}
+	}
+	if got := proofSummary(jobj{"to": "delivered"}); got != "" {
+		t.Errorf("no proof, got %q", got)
 	}
 }

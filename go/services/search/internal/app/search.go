@@ -200,6 +200,7 @@ func filterNames(q domain.Query) []string {
 	add(len(q.Communities) > 0, "community")
 	add(q.Fulfilment != "", "fulfilment")
 	add(q.SellerKind != "", "sellerKind")
+	add(q.SellerID != "", "sellerId")
 	add(q.MinRating > 0, "minRating")
 	add(q.MinPrice > 0 || q.MaxPrice > 0, "price")
 	add(q.MaxDays > 0, "maxDays")

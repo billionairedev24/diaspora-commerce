@@ -2,11 +2,13 @@ package com.afrotransact.seller.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -17,6 +19,11 @@ class DefaultApplicationRulesTest {
 
     private static final LocalDate TODAY = LocalDate.of(2026, 10, 10);
     private static final RuleContext SELLER = new RuleContext(OrgKind.SELLER, Set.of("US"), TODAY);
+    /** The catalog's departments as seller-service reads them: compliance is data on the node. */
+    private static final RuleContext WITH_DEPARTMENTS = new RuleContext(OrgKind.SELLER, Set.of("US"), TODAY, Map.of(
+            "groceries", new Department("groceries", "Groceries", Set.of(Department.Requirement.FOOD_PERMIT)),
+            "beauty", new Department("beauty", "Beauty", Set.of(Department.Requirement.BEAUTY_LABELLING)),
+            "fashion", new Department("fashion", "Fashion", Set.of())));
     private static final RuleContext PROVIDER = new RuleContext(OrgKind.PROVIDER, Set.of("US"), TODAY);
     private static final Address ADDRESS = new Address("9800 Westheimer Rd", null, "Houston", "TX", "77042", "US");
 
@@ -30,6 +37,23 @@ class DefaultApplicationRulesTest {
                     assertThat(e.code()).isEqualTo("seller.country-not-live");
                     assertThat(e.country()).isEqualTo("CA");
                 });
+    }
+
+    @Test
+    void brandingForThePlainPageIsCheckedAndNormalised() {
+        BusinessSection.Branding good = new BusinessSection.Branding("  Home-cooked Nigerian meals  ", "#1A7F4B",
+                "https://cdn.example.com/logo.png");
+        Validated<BusinessSection> ok = rules.business(new BusinessSection(Offering.PRODUCTS, null, "US", "Ade's Kitchen",
+                null, null, null, good), SELLER, false);
+        assertThat(ok.errors()).isEmpty();
+        assertThat(ok.value().branding()).isEqualTo(new BusinessSection.Branding("Home-cooked Nigerian meals",
+                "#1a7f4b", "https://cdn.example.com/logo.png"));
+
+        Validated<BusinessSection> bad = rules.business(new BusinessSection(Offering.PRODUCTS, null, "US", null, null,
+                null, null, new BusinessSection.Branding("x".repeat(501), "green",
+                "http://insecure.example/logo.png")), SELLER, false);
+        assertThat(bad.errors()).containsKeys("business.branding.description", "business.branding.brandColor",
+                "business.branding.logoUrl");
     }
 
     @Test
@@ -128,23 +152,8 @@ class DefaultApplicationRulesTest {
     }
 
     @Test
-    void payoutRoutingChecksumAndMatchingAccountNumbers() {
-        PayoutInput ok = new PayoutInput("Ade Ade", "Checking", "Chase", "021000021", "000123456789", "000123456789",
-                null);
-        Validated<PayoutSection> v = rules.payouts(ok, null, true);
-        assertThat(v.errors()).isEmpty();
-        assertThat(v.value().accountLast4()).isEqualTo("6789");
-        assertThat(v.value().routingLast4()).isEqualTo("0021");
-        assertThat(v.value().accountType()).isEqualTo("checking");
-        PayoutInput bad = new PayoutInput("Ade", "checking", "Chase", "021000022", "000123456789", "000123456780",
-                null);
-        assertThat(rules.payouts(bad, null, false).errors())
-                .containsOnlyKeys("payouts.routingNumber", "payouts.accountNumberConfirmation");
-    }
-
-    @Test
     void planNeedsMatchingKindAndAValidCardForPaidPlans() {
-        Plan growth = new Plan("seller_growth", OrgKind.SELLER, "Seller Growth", null, 3900, 30, List.of(), 1);
+        Plan growth = Plan.standard("seller_growth", OrgKind.SELLER, "Seller Growth", null, 3900, 30, List.of(), 1);
         PlanSection expired = new PlanSection("seller_growth", Cadence.QUARTERLY, PaymentMethodKind.CARD, "pm_1",
                 "visa", "4242", 9, 2026);
         assertThat(rules.plan(expired, Optional.of(growth), ApplicationData.empty(), SELLER, true).errors())
@@ -175,12 +184,50 @@ class DefaultApplicationRulesTest {
 
         ComplianceSection food = new ComplianceSection(List.of("Groceries", "beauty"), null, false, List.of(), null,
                 false, null, null);
-        assertThat(rules.compliance(food, Offering.PRODUCTS, SELLER, true).errors()).containsOnlyKeys(
+        assertThat(rules.compliance(food, Offering.PRODUCTS, WITH_DEPARTMENTS, true).errors()).containsOnlyKeys(
                 "compliance.foodPermit", "compliance.beautyLabellingConfirmed", "compliance.agreementsAccepted",
                 "compliance.w9Certified");
         ComplianceSection complete = new ComplianceSection(List.of("groceries"), new ComplianceSection.FoodPermit(
                 "FE-1", "Harris County", TODAY.plusYears(1), "asset-permit", "COTTAGE_FOOD"), null, List.of(), null, true, true, "Ade");
-        assertThat(rules.compliance(complete, Offering.PRODUCTS, SELLER, true).errors()).isEmpty();
+        assertThat(rules.compliance(complete, Offering.PRODUCTS, WITH_DEPARTMENTS, true).errors()).isEmpty();
+        ComplianceSection unknown = new ComplianceSection(List.of("hardware"), null, null, List.of(), null, true, true,
+                "Ade");
+        assertThat(rules.compliance(unknown, Offering.PRODUCTS, WITH_DEPARTMENTS, true).errors())
+                .containsKey("compliance.departments");
+    }
+
+    @Test
+    void acceptedAgreementsAreRecordedWithTheShownVersionAndMustBeThoseTheApplicationRequires() {
+        List<ComplianceSection.AcceptedAgreement> seller = List.of(
+                new ComplianceSection.AcceptedAgreement("seller-terms", "2.4", null),
+                new ComplianceSection.AcceptedAgreement("payments-terms", "1.0", null),
+                new ComplianceSection.AcceptedAgreement("data-processing", "1.0", null));
+        ComplianceSection ok = new ComplianceSection(List.of("fashion"), null, null, List.of(), null, true, true, "Ade",
+                seller);
+        Validated<ComplianceSection> accepted = rules.compliance(ok, Offering.PRODUCTS, WITH_DEPARTMENTS, true);
+        assertThat(accepted.errors()).isEmpty();
+        assertThat(accepted.value().agreements()).extracting(ComplianceSection.AcceptedAgreement::key,
+                ComplianceSection.AcceptedAgreement::version, ComplianceSection.AcceptedAgreement::acceptedOn)
+                .containsExactly(
+                        tuple("seller-terms", "2.4", TODAY),
+                        tuple("payments-terms", "1.0", TODAY),
+                        tuple("data-processing", "1.0", TODAY));
+
+        // A provider accepts the provider terms, not the seller terms.
+        ComplianceSection wrong = new ComplianceSection(List.of(), null, null, List.of(), null, true, true, "Ama", seller);
+        assertThat(rules.compliance(wrong, Offering.SERVICES, PROVIDER, false).errors())
+                .containsKey("compliance.agreements[0].key");
+        // Missing documents and a malformed version are reported.
+        ComplianceSection partial = new ComplianceSection(List.of("clothing"), null, null, List.of(), null, true, true,
+                "Ade", List.of(new ComplianceSection.AcceptedAgreement("seller-terms", "v2", null)));
+        assertThat(rules.compliance(partial, Offering.PRODUCTS, SELLER, false).errors())
+                .containsKeys("compliance.agreements[0].version", "compliance.agreements");
+        // Nothing is recorded until the agreements are accepted, and a legacy caller that names none records none.
+        ComplianceSection unaccepted = new ComplianceSection(List.of("clothing"), null, null, List.of(), null, false, null,
+                null, seller);
+        assertThat(rules.compliance(unaccepted, Offering.PRODUCTS, SELLER, false).value().agreements()).isEmpty();
+        assertThat(rules.compliance(new ComplianceSection(List.of("clothing"), null, null, List.of(), null, true, true,
+                "Ade"), Offering.PRODUCTS, SELLER, true).value().agreements()).isEmpty();
     }
 
     @Test
@@ -196,18 +243,42 @@ class DefaultApplicationRulesTest {
     }
 
     @Test
-    void payoutsAreCompleteOnlyOnceStripeLinkedTheBankAccount() {
-        RuleContext ctx = SELLER;
-        ApplicationData prefilledHolder = ApplicationData.empty().withPayouts(new PayoutSection("Adaeze Okafor", null,
-                null, null, null, false));
-        assertThat(rules.completedSteps(prefilledHolder, Optional.empty(), ctx)).doesNotContain(OnboardingStep.PAYOUTS);
-        assertThat(rules.submission(prefilledHolder, Optional.empty(), ctx)).containsKey("payouts.externalAccount");
-        ApplicationData typedNotLinked = ApplicationData.empty().withPayouts(new PayoutSection("Adaeze Okafor",
-                "checking", "Chase", "0021", "6789", false));
-        assertThat(rules.completedSteps(typedNotLinked, Optional.empty(), ctx)).doesNotContain(OnboardingStep.PAYOUTS);
-        ApplicationData linked = ApplicationData.empty().withPayouts(new PayoutSection("Adaeze Okafor", "checking",
-                "Chase", "0021", "6789", true));
-        assertThat(rules.completedSteps(linked, Optional.empty(), ctx)).contains(OnboardingStep.PAYOUTS);
+    void payoutsAreCompleteOnlyOnceStripeHoldsAUsableBankAccountAndPayoutsCanRun() {
+        Instant now = Instant.parse("2026-10-10T12:00:00Z");
+        StripeVerification verified = new StripeVerification("acct_1", true, true, true, "verified", "verified",
+                List.of(), null, now);
+        PayoutSection bank = PayoutSection.fromStripe(new PayoutBank("ba_1", "STRIPE TEST BANK", "6789", "new"));
+        assertThat(DefaultApplicationRules.payoutErrors(null, null)).as("no Stripe account yet")
+                .containsOnlyKeys("payouts.externalAccount");
+        assertThat(DefaultApplicationRules.payoutErrors(null, verified)).as("Stripe holds no bank yet")
+                .containsOnlyKeys("payouts.externalAccount");
+        assertThat(DefaultApplicationRules.payoutErrors(new PayoutSection("Adaeze Okafor", null, null, null, null,
+                false), verified)).as("a prefilled holder name is not a payout account")
+                .containsOnlyKeys("payouts.externalAccount");
+        assertThat(DefaultApplicationRules.payoutErrors(bank, verified)).isEmpty();
+        PayoutSection failed = PayoutSection.fromStripe(new PayoutBank("ba_1", "STRIPE TEST BANK", "6789",
+                "errored"));
+        assertThat(failed.externalAccountLinked()).isFalse();
+        assertThat(DefaultApplicationRules.payoutErrors(failed, verified)).containsOnlyKeys("payouts.externalAccount");
+        StripeVerification bankDue = new StripeVerification("acct_1", true, true, false, "verified", "verified",
+                List.of("external_account"), "requirements.past_due", now);
+        assertThat(DefaultApplicationRules.payoutErrors(bank, bankDue)).containsOnlyKeys("payouts.externalAccount");
+        StripeVerification checking = new StripeVerification("acct_1", true, true, false, "pending", "pending",
+                List.of(), "requirements.pending_verification", now);
+        assertThat(DefaultApplicationRules.payoutErrors(bank, checking))
+                .as("payouts only waiting for Stripe's checks (and our manual schedule) are fine").isEmpty();
+        StripeVerification disabled = new StripeVerification("acct_1", true, true, false, "verified", "verified",
+                List.of(), "under_review", now);
+        assertThat(DefaultApplicationRules.payoutErrors(bank, disabled)).containsOnlyKeys("payouts.payoutsEnabled");
+
+        ApplicationData linked = ApplicationData.empty().withStripe(verified).withPayouts(bank);
+        assertThat(rules.completedSteps(linked, Optional.empty(), SELLER)).contains(OnboardingStep.PAYOUTS);
+        ApplicationData typedNotLinked = ApplicationData.empty().withStripe(verified).withPayouts(
+                new PayoutSection("Adaeze Okafor", "checking", "Chase", "0021", "6789", false));
+        assertThat(rules.completedSteps(typedNotLinked, Optional.empty(), SELLER))
+                .doesNotContain(OnboardingStep.PAYOUTS);
+        assertThat(rules.submission(ApplicationData.empty(), Optional.empty(), SELLER))
+                .containsKey("payouts.externalAccount");
     }
 
     @Test
@@ -232,14 +303,14 @@ class DefaultApplicationRulesTest {
     void foodPermitNeedsAKnownType() {
         ComplianceSection.FoodPermit noType = new ComplianceSection.FoodPermit("FE-1", null, TODAY.plusYears(1),
                 "asset-permit", null);
-        ComplianceSection c = new ComplianceSection(List.of("prepared_food"), noType, null, List.of(), null, true,
+        ComplianceSection c = new ComplianceSection(List.of("groceries"), noType, null, List.of(), null, true,
                 true, "Ade");
-        assertThat(rules.compliance(c, Offering.PRODUCTS, SELLER, true).errors())
+        assertThat(rules.compliance(c, Offering.PRODUCTS, WITH_DEPARTMENTS, true).errors())
                 .containsOnlyKeys("compliance.foodPermit.permitType");
         ComplianceSection.FoodPermit odd = new ComplianceSection.FoodPermit("FE-1", null, TODAY.plusYears(1),
                 "asset-permit", "LIQUOR");
         assertThat(rules.compliance(new ComplianceSection(List.of("groceries"), odd, null, List.of(), null, null, null,
-                null), Offering.PRODUCTS, SELLER, false).errors()).containsOnlyKeys("compliance.foodPermit.permitType");
+                null), Offering.PRODUCTS, WITH_DEPARTMENTS, false).errors()).containsOnlyKeys("compliance.foodPermit.permitType");
     }
 
     private static Owner owner(String name, int pct, boolean control) {

@@ -9,13 +9,23 @@ import java.util.Map;
  * @param deliveryFeeReversed AfroTransact Delivery pickup-delivery fee returned to the seller (customer-fault refunds
  *                            only, see {@link RefundFault}); 0 otherwise
  * @param preorderDeliveryFee the refunded shipping is a pre-order delivery fee (S272): debited from 4250, not 4200
+ * @param connectionFee       the line is a service booking: {@code commissionReversed} is connection fee given back
+ *                            (debited from 4050 Service connection fees, not 4000)
  */
 public record RefundLine(String lineId, String sellerOrg, String taxJurisdiction, boolean shippingToPlatform,
                          Money items, Money shipping, Money tax, Money commissionReversed, Money deliveryFeeReversed,
-                         boolean preorderDeliveryFee) {
+                         boolean preorderDeliveryFee, boolean connectionFee) {
 
     public RefundLine {
         deliveryFeeReversed = deliveryFeeReversed == null ? Money.zero(items.currency()) : deliveryFeeReversed;
+    }
+
+    /** A refund line of a product line. */
+    public RefundLine(String lineId, String sellerOrg, String taxJurisdiction, boolean shippingToPlatform,
+                      Money items, Money shipping, Money tax, Money commissionReversed, Money deliveryFeeReversed,
+                      boolean preorderDeliveryFee) {
+        this(lineId, sellerOrg, taxJurisdiction, shippingToPlatform, items, shipping, tax, commissionReversed,
+                deliveryFeeReversed, preorderDeliveryFee, false);
     }
 
     /** A refund line of a line that is not a pre-order. */
@@ -52,8 +62,8 @@ public record RefundLine(String lineId, String sellerOrg, String taxJurisdiction
     }
 
     /**
-     * Validates a line refund against what was captured and not yet refunded, and computes the commission to give
-     * back cumulatively (round(commission × itemsRefundedAfter / items) − already reversed) so a line refunded in
+     * Validates a line refund against what was captured and not yet refunded, and computes the commission (or, on a
+     * service line, the connection fee) to give back cumulatively (round(commission × itemsRefundedAfter / items) − already reversed) so a line refunded in
      * several parts returns exactly its commission. On AfroTransact Delivery lines the {@link RefundFault} decides the
      * delivery money: a customer-fault refund cannot give the delivery charge back
      * ({@code payments.delivery-charge-not-refundable}) and returns the seller's delivery fee the same cumulative way
@@ -93,7 +103,7 @@ public record RefundLine(String lineId, String sellerOrg, String taxJurisdiction
                     .minus(pl.deliveryFeeReversed());
         }
         return new RefundLine(pl.lineId(), l.sellerOrg(), l.taxJurisdiction(), pl.shippingToPlatform(), items,
-                shipping, tax, reversed, feeBack, l.fulfilment().shippingIsLocalDeliveryFee());
+                shipping, tax, reversed, feeBack, l.fulfilment().shippingIsLocalDeliveryFee(), l.isService());
     }
 
     /** round_half_up(amount × part / whole), 0 when nothing to share. */

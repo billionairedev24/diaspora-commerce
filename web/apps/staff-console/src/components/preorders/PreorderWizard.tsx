@@ -1,6 +1,7 @@
 'use client';
 
-import { staffPreorderKeys, staffPreorderQueries } from '@afrotransact/api-client';
+import { staffDeliveryFeeQueries, staffPreorderKeys, staffPreorderQueries } from '@afrotransact/api-client';
+import { type DeliveryFeeRule } from '@afrotransact/api-client/staff-delivery-fees';
 import {
   COMMS,
   CREATIVE_SLOTS,
@@ -21,7 +22,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { BreakEvenPanel } from '@/components/runs/WindowEconomics';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
+import { staffApi } from '@/lib/api';
 import { useStorefrontUrl } from '@/lib/runtime-config';
 
 import { AreaPicker } from './AreaPicker';
@@ -48,6 +52,8 @@ export interface WizardForm {
   showCount: boolean;
   budget: string;
   comms: PreorderWindowInput['comms'];
+  /** Minimum orders as typed; blank = the platform default for a new window, unchanged for an edit. */
+  minOrders: string;
 }
 
 const p2 = (n: number) => String(n).padStart(2, '0');
@@ -62,14 +68,14 @@ export function newForm(now = Date.now()): WizardForm {
   return {
     name: 'New pre-order', targets: [], opens: `${localDay(now + 10 * day)}T09:00`, closes: `${localDay(now + 22 * day)}T23:59`, delivers: localDay(now + 25 * day),
     ribbon: 'Pre-order is open', headline: '', smsCopy: 'AfroTransact: pre-order open. {link} Reply STOP to opt out', categories: ['Pantry', 'Spices'],
-    door: true, pickup: false, pickupPoint: '', doorFee: '', pickupFee: '', showCount: true, budget: '200', comms: COMMS.map((c) => c.kind)
+    door: true, pickup: false, pickupPoint: '', doorFee: '', pickupFee: '', showCount: true, budget: '200', comms: COMMS.map((c) => c.kind), minOrders: ''
   };
 }
 
 export const formOf = (w: PreorderWindow): WizardForm => ({
   name: w.name, targets: w.targets, opens: toLocalInput(w.opensAt), closes: toLocalInput(w.closesAt), delivers: w.deliversOn, ribbon: w.ribbon, headline: w.headline,
   smsCopy: w.smsCopy, categories: w.categories, door: w.door, pickup: w.pickup, pickupPoint: w.pickupPoint ?? '', doorFee: amountText(w.doorFeeOverride),
-  pickupFee: amountText(w.pickupFeeOverride), showCount: w.showCount, budget: String(Math.round(w.socialBudget / 100)), comms: w.comms
+  pickupFee: amountText(w.pickupFeeOverride), showCount: w.showCount, budget: String(Math.round(w.socialBudget / 100)), comms: w.comms, minOrders: String(w.minOrders)
 });
 
 /** The API body of a form; null + the message when an amount isn't one. */
@@ -79,23 +85,31 @@ export function inputOf(f: WizardForm): { input: PreorderWindowInput | null; err
   const budget = parseAmount(f.budget);
   if (Number.isNaN(door) || Number.isNaN(pickup)) return { input: null, error: 'Enter fee overrides as amounts like 7.99, or leave them blank for the platform default.' };
   if (Number.isNaN(budget)) return { input: null, error: 'Enter the social budget as an amount.' };
+  const minText = f.minOrders.trim();
+  const minOrders = minText === '' ? undefined : /^\d{1,6}$/.test(minText) ? Number(minText) : Number.NaN;
+  if (minOrders !== undefined && (Number.isNaN(minOrders) || minOrders > 100_000)) return { input: null, error: 'MIN_ORDERS' };
   return {
     error: null,
     input: {
       name: f.name.trim(), targets: f.targets.map((t) => t.key), opensAt: fromLocalInput(f.opens), closesAt: fromLocalInput(f.closes), deliversOn: f.delivers, ribbon: f.ribbon.trim(),
       headline: f.headline.trim(), smsCopy: f.smsCopy, categories: f.categories, door: f.door, pickup: f.pickup, pickupPoint: f.pickup && f.pickupPoint.trim() ? f.pickupPoint.trim() : null,
-      doorFeeOverride: door, pickupFeeOverride: pickup, showCount: f.showCount, socialBudget: budget ?? 0, comms: f.comms
+      doorFeeOverride: door, pickupFeeOverride: pickup, showCount: f.showCount, socialBudget: budget ?? 0, comms: f.comms,
+      ...(minOrders === undefined ? {} : { minOrders })
     }
   };
 }
 
 const STEPS = ['Details', 'Advertorials', 'Comms', 'Review'] as const;
 
-function Details({ f, set, payment, currency }: { f: WizardForm; set: (p: Partial<WizardForm>) => void; payment: PreorderPaymentSettings; currency: string }) {
+function Details({ f, set, payment, rules, currency }: { f: WizardForm; set: (p: Partial<WizardForm>) => void; payment: PreorderPaymentSettings; rules: DeliveryFeeRule[]; currency: string }) {
   const api = usePreordersApi();
+  const t = useT();
+  const defaultMin = useQuery(staffPreorderQueries.list(api, { status: 'all', page: 0 })).data?.defaultMinOrders ?? 10;
+  const minText = f.minOrders.trim();
+  const minBad = minText !== '' && !/^\d{1,6}$/.test(minText);
   const areas = useQuery(staffPreorderQueries.areas(api, { page: 0 }));
   const saved = (areas.data?.saved ?? []).filter((a) => !f.targets.some((t) => t.key === a.key));
-  const fees = effectiveFees({ doorFeeOverride: null, pickupFeeOverride: null }, payment, currency);
+  const fees = effectiveFees({ doorFeeOverride: null, pickupFeeOverride: null }, rules, currency);
   const add = (key: string, label?: string) => {
     if (f.targets.some((t) => t.key === key)) return;
     const [c, r, city] = key.split('/');
@@ -123,6 +137,21 @@ function Details({ f, set, payment, currency }: { f: WizardForm; set: (p: Partia
         <label className={labelClass}>
           Header ribbon text
           <input value={f.ribbon} onChange={(e) => set({ ribbon: e.currentTarget.value })} maxLength={80} className={controlClass} />
+        </label>
+        <label className={labelClass}>
+          {t('st.preorders.minOrders.label')}
+          <input
+            inputMode="numeric"
+            value={f.minOrders}
+            onChange={(e) => set({ minOrders: e.currentTarget.value })}
+            placeholder={t('st.preorders.minOrders.placeholder', { n: defaultMin })}
+            aria-invalid={minBad}
+            aria-describedby="min-orders-help"
+            className={controlClass}
+          />
+          <span id="min-orders-help" className={`text-xs font-normal ${minBad ? 'text-danger' : 'text-muted'}`}>
+            {minBad ? t('st.preorders.minOrders.invalid', { max: 100_000 }) : t('st.preorders.minOrders.help')}
+          </span>
         </label>
       </div>
       <div className="flex flex-col gap-2 rounded-md border border-border bg-ink-25 p-4">
@@ -204,7 +233,7 @@ function Details({ f, set, payment, currency }: { f: WizardForm; set: (p: Partia
         </label>
       </div>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-4 rounded-md border border-border p-4">
-        <span className="col-span-full text-xs text-muted">{`Fee overrides for this pre-order only (${currency}). Leave blank to use the platform default from Areas & settings.`}</span>
+        <span className="col-span-full text-xs text-muted">{`Fee overrides for this pre-order only (${currency}). Leave blank to use the Delivery fees rule (Settings, Money).`}</span>
         <label className={labelClass}>
           Door fee override
           <input inputMode="decimal" value={f.doorFee} onChange={(e) => set({ doorFee: e.currentTarget.value })} placeholder={`Default ${amountText(fees.door)}`} className={controlClass} />
@@ -220,6 +249,17 @@ function Details({ f, set, payment, currency }: { f: WizardForm; set: (p: Partia
           </label>
         ) : null}
       </div>
+      <BreakEvenPanel
+        form={{
+          targets: f.targets.map((x) => x.key),
+          door: f.door,
+          pickup: f.pickup,
+          doorFeeMinor: parseAmount(f.doorFee),
+          pickupFeeMinor: parseAmount(f.pickupFee),
+          minOrders: minText === '' || minBad ? null : Number(minText),
+          defaultMinOrders: defaultMin
+        }}
+      />
     </>
   );
 }
@@ -303,6 +343,7 @@ export function PreorderWizard({ id }: { id?: string }) {
 
 function WizardBody({ initial }: { initial: PreorderWindow | null }) {
   const api = usePreordersApi();
+  const t = useT();
   const qc = useQueryClient();
   const toast = useToast();
   const router = useRouter();
@@ -314,6 +355,7 @@ function WizardBody({ initial }: { initial: PreorderWindow | null }) {
   const saved = useQuery({ ...staffPreorderQueries.window(api, id ?? ''), enabled: !!id });
   const w = saved.data ?? null;
   const payment = settings.data?.payment ?? DEFAULT_PAYMENT;
+  const rules = useQuery(staffDeliveryFeeQueries.rules(staffApi().deliveryFees)).data?.items ?? [];
   const currency = currencyOfTargets(f.targets.map((t) => t.key));
   const hasHero = !!w?.creatives.some((c) => c.slot === 'HERO');
   const checks = preorderChecks({ ...f, targets: f.targets.map((t) => t.key), opensAt: fromLocalInput(f.opens), closesAt: fromLocalInput(f.closes), deliversOn: f.delivers }, hasHero);
@@ -323,7 +365,7 @@ function WizardBody({ initial }: { initial: PreorderWindow | null }) {
   /** Creates the draft or saves the edits (If-Match with the version on screen). */
   const persist = async (): Promise<PreorderWindow> => {
     const { input, error } = inputOf(f);
-    if (!input) throw new Error(error ?? 'Check the form');
+    if (!input) throw new Error(error === 'MIN_ORDERS' ? t('st.preorders.minOrders.invalid', { max: 100_000 }) : (error ?? 'Check the form'));
     const next = id && w ? await api.update(id, input, w.version) : await api.create(input);
     qc.setQueryData(staffPreorderKeys.window(next.id), next);
     void qc.invalidateQueries({ queryKey: staffPreorderKeys.lists() });
@@ -365,7 +407,7 @@ function WizardBody({ initial }: { initial: PreorderWindow | null }) {
     onError: (e) => toast.show(e instanceof Error && !('problem' in e) ? e.message : problemMessage(e), 'error')
   });
   const busy = go.isPending || saveDraft.isPending || publish.isPending;
-  const fees = effectiveFees({ doorFeeOverride: parseAmount(f.doorFee), pickupFeeOverride: parseAmount(f.pickupFee) }, { ...payment }, currency);
+  const fees = effectiveFees({ doorFeeOverride: parseAmount(f.doorFee), pickupFeeOverride: parseAmount(f.pickupFee) }, rules, currency);
   const validFees = !Number.isNaN(fees.door) && !Number.isNaN(fees.pickup);
   const summary: [string, string][] = [
     ['Where', f.targets.length ? (f.targets.length <= 3 ? f.targets.map((t) => t.label).join(' · ') : `${f.targets.slice(0, 2).map((t) => t.label).join(' · ')} + ${f.targets.length - 2} more`) : 'No area chosen'],
@@ -404,7 +446,7 @@ function WizardBody({ initial }: { initial: PreorderWindow | null }) {
         </ol>
       </div>
       <div className="flex flex-col gap-5 p-5">
-        {step === 0 ? <Details f={f} set={set} payment={payment} currency={currency} /> : null}
+        {step === 0 ? <Details f={f} set={set} payment={payment} rules={rules} currency={currency} /> : null}
         {step === 1 ? w ? <CreativesPanel w={w} canEdit /> : <Spinner /> : null}
         {step === 2 ? <Comms f={f} set={set} code={w?.code ?? null} /> : null}
         {step === 3 ? (

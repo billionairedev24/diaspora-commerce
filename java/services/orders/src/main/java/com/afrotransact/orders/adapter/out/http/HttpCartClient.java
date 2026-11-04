@@ -8,6 +8,7 @@ import java.util.Map;
 
 import com.afrotransact.orders.port.CartClient;
 import com.afrotransact.orders.port.ServiceTokenProvider;
+import com.afrotransact.platform.security.ActingAsActorResolver;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -32,6 +33,8 @@ class HttpCartClient implements CartClient {
                 .headers(h -> {
                     if (customerBearer != null && !customerBearer.isBlank()) {
                         h.setBearerAuth(customerBearer);
+                        // The shopper's token may carry their seller organisation: they still check out as themselves.
+                        h.set(ActingAsActorResolver.HEADER, ActingAsActorResolver.CUSTOMER);
                     }
                 })
                 .retrieve().body(JsonNode.class));

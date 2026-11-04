@@ -1,24 +1,28 @@
 env: prod
-replicas: 3
+replicas: 1
 autoscaling:
-  enabled: true
-  min: 3
-  max: 12
-  cpu: 70
+  enabled: false
 rollout:
-  enabled: true
+  enabled: false
 resources:
-  requests: {cpu: 500m, memory: 1Gi}
-  limits: {memory: 2Gi}
+  requests: {cpu: 100m, memory: 384Mi}
+  limits: {memory: 640Mi}
+monitoring:
+  serviceMonitor: false     # no in-cluster Prometheus on the lean footprint (docs/engineering/cloud-cost.md)
 telemetry:
   otlpEndpoint: otel-collector.observability:4318
   sampling: "0.1"
 tolerations: []
 extraEnv:
+  JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:MaxRAMPercentage=70 -Xss512k -XX:-UsePerfData -XX:ReservedCodeCacheSize=64m -XX:+ExitOnOutOfMemoryError"
+  SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
+  SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "0"
   SEARCH_URL: http://search:8080
   CATALOG_URL: http://catalog:8080
   OFFERS_URL: http://offers:8080
   PROMISE_URL: http://promise:8080
   ORDERS_URL: http://orders:8080
   BOOKINGS_URL: http://bookings:8080
+  CART_URL: http://cart:8080
+  RETURNS_URL: http://tax-returns:8080
   LOLA_SSE_TIMEOUT: 120s

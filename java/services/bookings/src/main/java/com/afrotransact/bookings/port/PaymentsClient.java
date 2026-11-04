@@ -42,7 +42,10 @@ public interface PaymentsClient {
     /** Service completed (or deposit forfeited): starts the settlement hold (kind SERVICE). Idempotent. */
     void serviceCompleted(String orderId, Instant completedAt);
 
-    /** Fees payments applies to the organisation for a category ({@code GET /v1/fee-schedules/effective}). */
+    /**
+     * The connection fee and card fees payments applies to the organisation's bookings of a service category
+     * ({@code GET /v1/fee-schedules/effective?kind=SERVICE}).
+     */
     EffectiveFees effectiveFees(String category, String orgId);
 
     /**
@@ -52,13 +55,17 @@ public interface PaymentsClient {
      * @param sellerOrg         the provider organisation receiving the net
      * @param shopperId         the customer's token subject (owner of the saved card)
      * @param saveForOffSession save the confirmed card for a later off-session balance charge
+     * @param category          the service's category: payments charges the provider's connection fee for it
+     *                          (lines are sent as kind SERVICE)
      */
     record CreateIntent(String orderId, String sellerOrg, long amountMinor, String currency, List<Line> lines,
-                        Map<String, String> metadata, Instant placedAt, String shopperId, boolean saveForOffSession) {
+                        Map<String, String> metadata, Instant placedAt, String shopperId, boolean saveForOffSession,
+                        String category) {
 
         public CreateIntent {
             lines = List.copyOf(lines);
             metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
+            category = category == null || category.isBlank() ? "services" : category;
         }
     }
 
@@ -92,12 +99,26 @@ public interface PaymentsClient {
     }
 
     /**
-     * Effective fees of an organisation and category.
+     * Effective fees of an organisation and service category.
      *
-     * @param commissionSource OVERRIDE, CATEGORY, DEFAULT or RETAIL
+     * @param commissionBps    the connection fee (payments' commissionBps for kind SERVICE)
+     * @param commissionSource OVERRIDE (negotiated), PLAN, CATEGORY, DEFAULT or RETAIL
      * @param version          fee-schedule version in force
+     * @param kind             SERVICE when payments priced a connection fee; null from a payments without
+     *                         connection fees (it ignores kind and answers the category's product commission)
      */
     record EffectiveFees(int commissionBps, String commissionSource, int cardPctBps, long cardFixedMinor,
-                         Integer version, String currency) {
+                         Integer version, String currency, String kind) {
+
+        /** Fees without a kind (configured fallbacks, older payments). */
+        public EffectiveFees(int commissionBps, String commissionSource, int cardPctBps, long cardFixedMinor,
+                             Integer version, String currency) {
+            this(commissionBps, commissionSource, cardPctBps, cardFixedMinor, version, currency, null);
+        }
+
+        /** payments answered for kind SERVICE (it knows connection fees). */
+        public boolean connectionFees() {
+            return "SERVICE".equals(kind);
+        }
     }
 }

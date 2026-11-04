@@ -111,11 +111,34 @@ export const VariantOptionSchema = z.object({
   label: z.string(),
   selected: z.boolean(),
   available: z.boolean(),
-  priceMinor: MinorSchema
+  priceMinor: MinorSchema,
+  /** The variant's value per dimension as the seller wrote it ({ Size: 'UK 12', Color: 'Indigo adire' }). */
+  options: z.record(z.string(), z.string()).default({})
 });
 export type VariantOption = z.infer<typeof VariantOptionSchema>;
 
+/** The seller's size chart of a sized product. Values are in `unitSystem`; `alternateValues` are the other unit, for a cm / in switch. */
+export const ProductSizeChartSchema = z.object({
+  name: z.string(),
+  unitSystem: z.enum(['CM', 'IN']),
+  alternateUnit: z.enum(['CM', 'IN']),
+  columns: z.array(z.object({ key: z.string(), label: z.string(), unit: z.enum(['CM', 'IN']) })),
+  rows: z.array(
+    z.object({
+      size: z.string(),
+      values: z.record(z.string(), z.object({ min: z.number(), max: z.number() })),
+      alternateValues: z.record(z.string(), z.object({ min: z.number(), max: z.number() }))
+    })
+  ),
+  /** The product's own fit note, else the chart's. */
+  fitNote: z.enum(['RUNS_SMALL', 'TRUE_TO_SIZE', 'RUNS_LARGE']).nullable(),
+  howToMeasure: z.string().nullable()
+});
+export type ProductSizeChart = z.infer<typeof ProductSizeChartSchema>;
+
 export const ProductDetailSchema = z.object({
+  /** Null for products that are not sized (only fashion product types carry a size chart). */
+  sizeChart: ProductSizeChartSchema.nullable().default(null),
   product: z.object({
     atin: AtinSchema,
     title: z.string(),

@@ -18,13 +18,19 @@ type StaffDashboardService interface {
 	Dashboard(ctx context.Context, c *domain.Caller, rangeDays int) (domain.StaffDashboard, error)
 }
 
-type staffDashboardImpl struct{ r *staffResolver }
+type staffDashboardImpl struct {
+	r     *staffResolver
+	cache *feedCache[staffFeed]
+}
+
+// staffFeed is one computed dashboard, kept for a minute (S195).
+type staffFeed struct{ d domain.StaffDashboard }
 
 var _ StaffDashboardService = (*staffDashboardImpl)(nil)
 
 // NewStaffDashboardService returns the dashboard use case.
 func NewStaffDashboardService(d StaffDeps) StaffDashboardService {
-	return &staffDashboardImpl{r: newStaffResolver(d)}
+	return &staffDashboardImpl{r: newStaffResolver(d), cache: newFeedCache[staffFeed]()}
 }
 
 // dashboardOrderPages caps how many order pages (100 each) the dashboard reads for one range.
@@ -51,6 +57,15 @@ func (s *staffDashboardImpl) Dashboard(ctx context.Context, c *domain.Caller, ra
 	if err != nil {
 		return domain.StaffDashboard{}, err
 	}
+	// One feed per staff member and range for a minute: the upstream answers depend on what they may read (S195).
+	f := s.cache.do(fmt.Sprintf("%s|%d", sc.me.ID, rangeDays), sc.now, func() staffFeed {
+		d, _ := s.build(ctx, sc, rangeDays)
+		return staffFeed{d: d}
+	})
+	return f.d, nil
+}
+
+func (s *staffDashboardImpl) build(ctx context.Context, sc staffCtx, rangeDays int) (domain.StaffDashboard, error) {
 	to := sc.now.UTC()
 	from := to.AddDate(0, 0, -rangeDays)
 	var (

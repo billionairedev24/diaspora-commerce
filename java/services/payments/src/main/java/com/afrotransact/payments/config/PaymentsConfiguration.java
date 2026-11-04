@@ -1,5 +1,6 @@
 package com.afrotransact.payments.config;
 
+import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -7,7 +8,10 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 import com.afrotransact.payments.adapter.out.localtest.LocalTestStripeGateway;
+import com.afrotransact.payments.adapter.out.persistence.HmacGiftCodeHasher;
+import com.afrotransact.payments.adapter.out.persistence.HmacSignalHasher;
 import com.afrotransact.payments.adapter.out.stripe.StripeJavaGateway;
+import com.afrotransact.payments.application.GiftCardSettings;
 import com.afrotransact.payments.application.PaymentsSettings;
 import com.afrotransact.payments.application.SupplierPaymentSettings;
 import com.afrotransact.payments.domain.DefaultLocalTestPaymentsPolicy;
@@ -20,6 +24,8 @@ import com.afrotransact.payments.domain.PaymentSplitter;
 import com.afrotransact.payments.domain.PayoutPolicy;
 import com.afrotransact.payments.domain.Reconciler;
 import com.afrotransact.payments.domain.RefundAllocator;
+import com.afrotransact.payments.port.GiftCodeHasher;
+import com.afrotransact.payments.port.SignalHasher;
 import com.afrotransact.payments.port.StripeGateway;
 import com.stripe.StripeClient;
 import org.springframework.beans.factory.annotation.Value;
@@ -66,6 +72,44 @@ class PaymentsConfiguration {
     SupplierPaymentSettings supplierPaymentSettings(
             @Value("${at.payments.supplier-payments.terms-days:30}") int termsDays) {
         return new SupplierPaymentSettings(termsDays);
+    }
+
+    /**
+     * Gift card redeem limits (S321): {@code at.payments.gift-cards.*}. A customer may get five codes wrong and a
+     * network address twenty in 15 minutes.
+     */
+    @Bean
+    GiftCardSettings giftCardSettings(
+            @Value("${at.payments.gift-cards.max-failures:5}") int maxFailures,
+            @Value("${at.payments.gift-cards.max-failures-per-address:20}") int maxFailuresAddress,
+            @Value("${at.payments.gift-cards.window:15m}") Duration window,
+            @Value("${at.payments.gift-cards.delivery-batch:50}") int deliveryBatch) {
+        return new GiftCardSettings(maxFailures, maxFailuresAddress, window, deliveryBatch);
+    }
+
+    /**
+     * Gift card codes are stored as HMACs under {@code GIFT_CARD_CODE_KEY}, a secret of the environment. Until it is
+     * set the key is derived from the Stripe webhook secret (which every environment has), so a missing variable never
+     * stops the service nor leaves a guessable key.
+     */
+    @Bean
+    GiftCodeHasher giftCodeHasher(@Value("${at.payments.gift-cards.code-key:}") String codeKey,
+                                  PaymentsProperties props) {
+        String key = codeKey == null || codeKey.isBlank()
+                ? "gift-card-code-key:" + props.stripe().webhookSecret() : codeKey;
+        return new HmacGiftCodeHasher(key);
+    }
+
+    /**
+     * Referral abuse-check fingerprints (S322) are stored as HMACs under {@code REFERRAL_SIGNAL_KEY}, derived from the
+     * Stripe webhook secret until it is set (same approach as the gift card key).
+     */
+    @Bean
+    SignalHasher signalHasher(@Value("${at.payments.referral.signal-key:}") String signalKey,
+                              PaymentsProperties props) {
+        String key = signalKey == null || signalKey.isBlank()
+                ? "referral-signal-key:" + props.stripe().webhookSecret() : signalKey;
+        return new HmacSignalHasher(key);
     }
 
     @Bean

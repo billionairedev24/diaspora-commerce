@@ -49,6 +49,16 @@ type Session struct {
 	ZIP         string    `json:"zip,omitempty"`
 	Tokens      *Tokens   `json:"tokens,omitempty"`
 	Profile     *Profile  `json:"profile,omitempty"`
+	// Audience is which sign-out policy applies (the web app the person signed in at); empty on sessions stored
+	// before the policy existed, which the service works out from the request and stamps.
+	Audience Audience `json:"audience,omitempty"`
+	// LastActivityAt is the last real user activity (not background polling), written at most every
+	// ActivityWriteInterval; zero on sessions stored before the policy existed.
+	LastActivityAt time.Time `json:"lastActivityAt,omitzero"`
+	// EndedReason and EndedAt remember why the person was signed out by policy (SESSION_IDLE_TIMEOUT or
+	// SESSION_ABSOLUTE_TIMEOUT), so GET /v1/me can say so even when a parallel request got the 401.
+	EndedReason string    `json:"endedReason,omitempty"`
+	EndedAt     time.Time `json:"endedAt,omitzero"`
 }
 
 // Authenticated reports whether a customer is signed in on this session.

@@ -12,6 +12,7 @@ import com.afrotransact.catalog.adapter.in.web.ProductDtos.ProductPageResponse;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.ProductResponse;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.RestoreRequest;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.TakedownRequest;
+import com.afrotransact.catalog.adapter.in.web.ProductDtos.UpdateProductRequest;
 import com.afrotransact.catalog.application.ListingModerationService;
 import com.afrotransact.catalog.application.PageView;
 import com.afrotransact.catalog.application.ProductService;
@@ -50,6 +51,17 @@ class ProductController {
     ResponseEntity<ProductResponse> create(@Valid @RequestBody CreateProductRequest body) {
         Product created = products.create(body.toCommand());
         return ResponseEntity.created(URI.create("/v1/products/" + created.id())).body(ProductResponse.of(created));
+    }
+
+    @Operation(operationId = "updateProduct", summary = "Edit a product (one-step form in edit mode)",
+            description = "Owner or staff. The whole content is validated again; variants are matched by sellerSku "
+                    + "(new SKUs get ATINs; a published listing keeps its category and variants). A rejected "
+                    + "listing goes back to review. Publishes catalog.product.updated, plus "
+                    + "catalog.product.terms_changed when prices, quantities or listing terms changed and "
+                    + "catalog.product.resubmitted when a rejected listing is resubmitted. 409 when version is stale.")
+    @PutMapping("/{id}")
+    ProductResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateProductRequest body) {
+        return ProductResponse.of(products.update(id, body.toCommand()));
     }
 
     @Operation(summary = "List products (own organisation; staff may filter by org)")

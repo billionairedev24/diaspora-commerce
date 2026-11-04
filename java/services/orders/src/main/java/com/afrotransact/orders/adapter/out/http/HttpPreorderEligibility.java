@@ -46,6 +46,12 @@ class HttpPreorderEligibility implements PreorderEligibility {
     @Override
     public Map<String, Line> eligibility(String country, String region, String city,
                                          Collection<String> variantAtins) {
+        return eligibility(country, region, city, variantAtins, 0);
+    }
+
+    @Override
+    public Map<String, Line> eligibility(String country, String region, String city,
+                                         Collection<String> variantAtins, int earlyAccessHours) {
         Map<String, Line> out = new LinkedHashMap<>();
         if (variantAtins.isEmpty()) {
             return out;
@@ -58,6 +64,9 @@ class HttpPreorderEligibility implements PreorderEligibility {
             }
             if (!blank(city)) {
                 u.queryParam("city", city);
+            }
+            if (earlyAccessHours > 0) {
+                u.queryParam("earlyAccessHours", earlyAccessHours);
             }
             return u.build();
         }).headers(h -> h.setBearerAuth(tokens.token())).retrieve().body(JsonNode.class));
@@ -113,7 +122,9 @@ class HttpPreorderEligibility implements PreorderEligibility {
                 instant(text(n, "closesAt", text(w, "closesAt", null))), bool(n, w, "door", true),
                 bool(n, w, "pickup", false), fee(n, fees, "door", DEFAULT_DOOR_FEE_MINOR),
                 fee(n, fees, "pickup", 0), text(n, "currency", text(w, "currency", text(fees, "currency", "USD"))),
-                methods, text(n, "pickupPointId", text(w, "pickupPointId", null)));
+                methods, text(n, "pickupPointId", text(w, "pickupPointId", null)),
+                HttpDeliveryFeeRules.snapshot(rule(n, w, "doorFeeRule")),
+                HttpDeliveryFeeRules.snapshot(rule(n, w, "pickupFeeRule")));
     }
 
     /** {@code <kind>FeeMinor}, else {@code <kind>Fee} in minor units (or an object with amountMinor / minor). */
@@ -140,6 +151,10 @@ class HttpPreorderEligibility implements PreorderEligibility {
             }
         }
         return fallback;
+    }
+
+    private static JsonNode rule(JsonNode n, JsonNode w, String field) {
+        return n.has(field) ? n.path(field) : w.path(field);
     }
 
     private static boolean bool(JsonNode n, JsonNode w, String field, boolean fallback) {

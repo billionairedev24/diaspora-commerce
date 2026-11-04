@@ -26,3 +26,4 @@
 .headGuest { background: var(--at-ink-200); }
 .headText { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
 .headSub { font-size: var(--at-text-xs); color: var(--at-color-text-muted); overflow-wrap: anywhere; }
+.memberBadge { align-self: flex-start; margin-top: var(--at-space-1); padding: 1px var(--at-space-2); border-radius: var(--at-radius-pill); background: var(--at-gold-100); color: var(--at-ink-1000); font-size: var(--at-text-xs); font-weight: var(--at-weight-bold); }

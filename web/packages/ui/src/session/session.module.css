@@ -1,0 +1,23 @@
+.countdown { display: flex; flex-direction: column; gap: var(--at-space-1); }
+.countdownLabel { font-size: var(--at-text-xs); color: var(--at-color-text-muted); text-transform: uppercase; letter-spacing: var(--at-tracking-caps); }
+.countdownValue { font-size: var(--at-text-4xl); font-weight: var(--at-weight-bold); font-variant-numeric: tabular-nums; line-height: var(--at-leading-tight); }
+.note { margin: 0; font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
+.error { margin: 0; font-size: var(--at-text-sm); color: var(--at-color-danger); }
+.actions { display: flex; flex-wrap: wrap; gap: var(--at-space-2); justify-content: flex-end; }
+
+/* The signed-out screen replaces the whole app: opaque, nothing of the signed-in page shows through. */
+.ended {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--at-z-dialog) + 2);
+  display: grid;
+  place-items: center;
+  padding: var(--at-space-6) var(--at-page-gutter, var(--at-space-4));
+  background: var(--at-color-canvas);
+  color: var(--at-color-text);
+  overflow-y: auto;
+}
+.ended:focus { outline: none; }
+.endedBody { display: flex; flex-direction: column; align-items: flex-start; gap: var(--at-space-4); width: min(480px, 100%); }
+.endedTitle { margin: 0; font-family: var(--at-font-display); font-size: var(--at-text-3xl); font-weight: var(--at-weight-bold); line-height: var(--at-leading-tight); }
+.endedText { margin: 0; font-size: var(--at-text-md); color: var(--at-color-text-muted); line-height: var(--at-leading-relaxed); }

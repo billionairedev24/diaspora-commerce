@@ -56,6 +56,20 @@ operations:
       review reason code (POST /v1/reviews/{bookingId}/reject), both with the trust-ops-service token (scope
       bookings:reviews:moderate). booking.review.approved / rejected close an item decided directly in bookings (and
       are no-ops for decisions made in trust-ops).
+  consumeTrustOpsProductReviewEvents:
+    action: receive
+    channel: {$ref: '#/channels/catalogProductReviewEvents'}
+    summary: >-
+      Consumer group trust-ops-service-product-reviews (inbox consumer trust-ops:product-reviews; other events are
+      ignored): catalog.review.submitted (status PENDING) and catalog.review.reported (a published review reported by a
+      customer or the seller) are queued for moderation as a PRODUCT_REVIEW item (one open item per review; a report on
+      a review that already has one is counted on it, a newer submission replaces it), with the listing SLA and an AI
+      triage hint with subjectType REVIEW when ai-gateway answers (fail-open). Allowing it publishes the review (POST
+      /v1/product-reviews/{id}/approve; a reported review simply stays public); removing it rejects a pending review
+      (POST /v1/product-reviews/{id}/reject) or takes a published one down (POST /v1/product-reviews/{id}/remove) with
+      a review reason code, both with the trust-ops-service token (scope catalog:moderate). catalog.review.published /
+      updated / rejected / removed / deleted close an open item decided or made moot elsewhere (no-ops for decisions
+      made in trust-ops).
   consumeTrustOpsOrderEvents:
     action: receive
     channel: {$ref: '#/channels/ordersOrderEvents'}
@@ -233,11 +247,14 @@ components:
         aiRiskLevel: {type: [string, 'null'], description: AI triage risk level when a hint was attached}
         itemType:
           type: string
-          enum: [NEW_LISTING, LIVE_LISTING, SERVICE_REVIEW]
+          enum: [NEW_LISTING, LIVE_LISTING, SERVICE_REVIEW, PRODUCT_REVIEW]
           description: >-
             NEW_LISTING = submission (APPROVED / REJECTED in catalog); LIVE_LISTING = reported or flagged live listing
             (APPROVED = kept live, REJECTED = taken down in catalog); SERVICE_REVIEW = customer review of a booking
-            (APPROVED = published, REJECTED = rejected in bookings; CLOSED = decided in bookings directly)
+            (APPROVED = published, REJECTED = rejected in bookings; CLOSED = decided in bookings directly);
+            PRODUCT_REVIEW = verified-purchase review of a product that failed the automatic checks or was reported
+            (APPROVED = published or kept public, REJECTED = rejected or removed in catalog; CLOSED = decided or made
+            moot in catalog directly)
         reportSource: {type: [string, 'null'], enum: [CUSTOMER_REPORT, STAFF, AUTOMATED, null]}
         reportReason: {type: [string, 'null'], description: Reason code of the first report or flag (live listings)}
         reports: {type: integer, description: Reports and flags counted on the item (0 for new listings and reviews)}

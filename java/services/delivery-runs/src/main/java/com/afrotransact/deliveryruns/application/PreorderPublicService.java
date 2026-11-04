@@ -2,7 +2,7 @@ package com.afrotransact.deliveryruns.application;
 
 import java.util.List;
 
-import com.afrotransact.deliveryruns.domain.Money;
+import com.afrotransact.deliveryruns.domain.FeeSnapshot;
 import com.afrotransact.deliveryruns.domain.PreorderResolver.Eligibility;
 import com.afrotransact.deliveryruns.domain.PreorderStatus;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
@@ -21,6 +21,13 @@ public interface PreorderPublicService {
     EligibilityResult eligibility(String country, String region, String city, List<String> atins);
 
     /**
+     * The same for a member with early access (S323): a window that opens within {@code earlyAccessHours} is OPEN for
+     * them, so checkout lets them order before everyone else.
+     */
+    EligibilityResult eligibility(String country, String region, String city, List<String> atins,
+                                  int earlyAccessHours);
+
+    /**
      * An open or upcoming window.
      *
      * @param window    the window
@@ -28,7 +35,7 @@ public interface PreorderPublicService {
      * @param doorFee   effective door fee (null without door delivery)
      * @param pickupFee effective pickup fee (null without pickup)
      */
-    record OpenWindow(PreorderWindow window, PreorderStatus stage, Money doorFee, Money pickupFee) {
+    record OpenWindow(PreorderWindow window, PreorderStatus stage, FeeSnapshot doorFee, FeeSnapshot pickupFee) {
     }
 
     /**

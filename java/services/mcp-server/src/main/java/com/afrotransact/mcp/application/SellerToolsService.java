@@ -7,10 +7,10 @@ public interface SellerToolsService {
 
     ToolResult productStatus(McpCaller caller, String productIdOrAtin);
 
-    ToolResult listMyOrders(McpCaller caller, String status, Integer page);
+    ToolResult listMyOrders(McpCaller caller, String status, String cursor);
 
     ToolResult updateShipmentStatus(McpCaller caller, String orderId, String shipmentId, String status, String carrier,
-                                    String trackingNumber);
+                                    String trackingNumber, String handoverCode);
 
     ToolResult checkInventory(McpCaller caller, String sku, Boolean lowStockOnly);
 

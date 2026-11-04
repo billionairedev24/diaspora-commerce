@@ -38,6 +38,9 @@ public interface ApplicationRepository {
 
     List<TimelineEntry> timeline(String applicationId);
 
+    /** The timeline entry a review decision with this Idempotency-Key wrote, if any. */
+    Optional<TimelineEntry> timelineEntry(String applicationId, String requestKey);
+
     void logAccess(DocumentAccess access);
 
     List<DocumentAccess> accessLog(String applicationId);

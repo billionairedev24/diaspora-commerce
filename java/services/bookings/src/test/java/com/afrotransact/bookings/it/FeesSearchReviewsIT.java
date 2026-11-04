@@ -29,12 +29,14 @@ class FeesSearchReviewsIT extends BookingsIntegrationTest {
 
     @Test
     void takeHomeAndEarningsUseThePaymentsFeeSchedule() {
+        // The connection fee of the service's category (kind SERVICE), not a product commission.
         PAYMENTS.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/fee-schedules/effective"))
-                .withQueryParam("category", WireMock.equalTo("services"))
+                .withQueryParam("kind", WireMock.equalTo("SERVICE"))
+                .withQueryParam("category", WireMock.equalTo("hair & beauty"))
                 .willReturn(WireMock.okJson("{\"feeScheduleId\":\"" + UUID.randomUUID() + "\",\"version\":7,"
-                        + "\"currency\":\"USD\",\"category\":\"services\",\"orgId\":\"{{request.query.orgId}}\","
+                        + "\"currency\":\"USD\",\"category\":\"hair & beauty\",\"orgId\":\"{{request.query.orgId}}\","
                         + "\"commissionBps\":800,\"commissionSource\":\"OVERRIDE\",\"cardPctBps\":300,"
-                        + "\"cardFixedMinor\":25}")));
+                        + "\"cardFixedMinor\":25,\"kind\":\"SERVICE\"}")));
         Setup s = provider(false);
         TestSupport.as(TestSupport.owner(s.org()));
         JsonNode service = ok(send("GET", "/v1/providers/" + s.org() + "/services/" + s.serviceId(), null, null));

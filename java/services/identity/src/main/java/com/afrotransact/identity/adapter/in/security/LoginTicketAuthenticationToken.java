@@ -3,6 +3,7 @@ package com.afrotransact.identity.adapter.in.security;
 import java.util.List;
 import java.util.Objects;
 
+import com.afrotransact.identity.application.RedeemedLoginTicket;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 
 /** Unauthenticated request to sign in with a first-party login ticket on the authorization endpoint. */
@@ -12,6 +13,7 @@ public final class LoginTicketAuthenticationToken extends AbstractAuthentication
 
     private final String clientId;
     private String ticket;
+    private transient RedeemedLoginTicket redeemed;
 
     public LoginTicketAuthenticationToken(String ticket, String clientId) {
         super(List.of());
@@ -26,6 +28,15 @@ public final class LoginTicketAuthenticationToken extends AbstractAuthentication
 
     public String clientId() {
         return clientId;
+    }
+
+    /** The redeemed ticket, set by the provider once it was burned (null before, or when it was refused). */
+    public RedeemedLoginTicket redeemed() {
+        return redeemed;
+    }
+
+    void redeemed(RedeemedLoginTicket redeemed) {
+        this.redeemed = redeemed;
     }
 
     @Override

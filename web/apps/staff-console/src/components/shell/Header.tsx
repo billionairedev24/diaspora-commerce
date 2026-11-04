@@ -49,7 +49,7 @@ export function Header({ session, menuButton }: { session: StaffSession | null; 
           ]}
           signOutLabel={t('st.header.signOut')}
           signOutIcon={<SignOut aria-hidden />}
-          onSignOut={() => void signOutEverywhere(storefrontUrl)}
+          onSignOut={() => void signOutEverywhere()}
         />
       ) : null}
     </header>

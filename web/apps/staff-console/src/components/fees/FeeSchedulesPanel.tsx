@@ -15,6 +15,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { dateTime, money } from '@/lib/format';
+import { sellerName } from '@/lib/names';
 import { exportDataset } from '@/lib/table-export';
 
 import { FeeEditor } from './FeeEditor';
@@ -100,7 +101,7 @@ function CurrentSchedule({ s }: { s: FeeScheduleView }) {
       </div>
       {s.overrides.length ? (
         <p className="m-0 text-sm text-muted">
-          Overrides: {s.overrides.map((o) => `${o.orgName ?? o.orgId} (${o.categoryLabel}) ${formatBps(o.commissionBps)}`).join(' · ')}
+          Overrides: {s.overrides.map((o) => `${sellerName(t, o.orgName)} (${o.categoryLabel}) ${formatBps(o.commissionBps)}`).join(' · ')}
         </p>
       ) : null}
       <p className="m-0 text-sm" data-testid="current-delivery-pricing">

@@ -44,6 +44,8 @@ type IngestConfig struct {
 	Contacts port.ContactInvalidator
 	// Audience pages pre-order audiences (delivery-runs); nil sends RecipientAudience rules to nobody.
 	Audience port.PreorderAudience
+	// Locations pages run-alert subscribers by location (delivery-runs); nil sends RecipientLocation rules to nobody.
+	Locations port.LocationAudience
 	// AudiencePageSize is the audience page size (default 500).
 	AudiencePageSize int
 }
@@ -266,6 +268,8 @@ func (h *ingestImpl) targets(ctx context.Context, rule EventRule, data map[strin
 		return out, nil
 	case RecipientAudience:
 		return h.audience(ctx, rule, str(data, rule.IDField), channels)
+	case RecipientLocation:
+		return h.locationAudience(ctx, rule, str(data, rule.IDField), channels)
 	case RecipientCustomers:
 		var out []target
 		seen := map[string]bool{}
@@ -278,6 +282,10 @@ func (h *ingestImpl) targets(ctx context.Context, rule EventRule, data map[strin
 			t, err := fill(ctx, h.cfg.Resolver, domain.Recipient{ID: id}, channels)
 			if err != nil {
 				return nil, err
+			}
+			// A pickup-point run gives each order its own handover code; templates may show the customer's own.
+			if code := str(o, "handoverCode"); code != "" {
+				t.extra = map[string]any{"handoverCode": code}
 			}
 			out = append(out, t)
 		}

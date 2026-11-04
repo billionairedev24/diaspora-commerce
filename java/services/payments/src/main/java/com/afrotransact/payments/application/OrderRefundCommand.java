@@ -11,10 +11,16 @@ import com.afrotransact.payments.domain.RefundFault;
  * @param fault       who caused it (AfroTransact Delivery lines, S255); null = SELLER
  */
 public record OrderRefundCommand(String orderId, List<String> lineIds, Long amountMinor, String reason,
-                                 RefundFault fault) {
+                                 RefundFault fault, boolean cardAsCredit, String chosenBy) {
 
     public OrderRefundCommand {
         lineIds = lineIds == null ? List.of() : List.copyOf(lineIds);
+    }
+
+    /** Back to what paid it, with the fault named. */
+    public OrderRefundCommand(String orderId, List<String> lineIds, Long amountMinor, String reason,
+                              RefundFault fault) {
+        this(orderId, lineIds, amountMinor, reason, fault, false, null);
     }
 
     /** A seller-fault refund. */

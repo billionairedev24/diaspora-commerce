@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.afrotransact.catalog.application.CategoryService;
+import com.afrotransact.catalog.application.CategoryService.ApprovalChoice;
 import com.afrotransact.catalog.application.CreateProductCommand;
 import com.afrotransact.catalog.application.ListingEnforcement;
 import com.afrotransact.catalog.application.ListingVisibilityService;
@@ -212,7 +213,7 @@ class CatalogFlowIT {
         CategoryNode women = categories.tree().stream()
                 .filter(n -> n.level() == CategoryLevel.CATEGORY && n.path().equals("Fashion › Women"))
                 .findFirst().orElseThrow();
-        categories.approve(request.id(), women.id(), "custom", "Approved for launch");
+        categories.approve(request.id(), new ApprovalChoice(women.id(), null, "top", null), "Approved for launch");
 
         Product moved = products.get(waiting.id());
         assertThat(moved.status()).isEqualTo(ProductStatus.IN_REVIEW);

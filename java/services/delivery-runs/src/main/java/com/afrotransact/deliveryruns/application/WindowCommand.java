@@ -17,10 +17,12 @@ import com.afrotransact.deliveryruns.domain.CommKind;
  * @param doorFeeOverrideMinor   null = platform door fee
  * @param pickupFeeOverrideMinor null = platform pickup fee
  * @param locationId             delivery-runs location of the closing run (null = matched by city)
+ * @param minOrders              fewest orders the window needs (null = the configured default on create, unchanged on
+ *                               edit; 0 = no minimum)
  */
 public record WindowCommand(String name, List<String> targets, Instant opensAt, Instant closesAt, LocalDate deliversOn,
                             String timeZone, String ribbon, String headline, String smsCopy, Set<String> categories,
                             Boolean door, Boolean pickup, String pickupPointId, String pickupAddress,
                             Boolean showCount, Long socialBudgetMinor, Set<CommKind> comms, Long doorFeeOverrideMinor,
-                            Long pickupFeeOverrideMinor, UUID locationId) {
+                            Long pickupFeeOverrideMinor, UUID locationId, Integer minOrders) {
 }

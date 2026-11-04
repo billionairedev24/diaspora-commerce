@@ -19,6 +19,8 @@ at:
     jobs:
       # Locally matured settlement holds are transferred within a minute (every 15 minutes elsewhere).
       settlement-cron: ${SETTLEMENT_CRON:0 * * * * *}
+      # A blocked transfer (for example no connected account yet) is checked again after a minute locally (1h elsewhere).
+      settlement-recheck: ${SETTLEMENT_RECHECK:1m}
 logging:
   level:
     com.afrotransact: DEBUG

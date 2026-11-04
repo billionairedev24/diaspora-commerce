@@ -22,7 +22,7 @@ export function AppText({ variant = 'body', color, style, ...rest }: TextProps &
   return <Text allowFontScaling maxFontSizeMultiplier={MAX_FONT_SCALE} {...rest} style={[typeRamp[variant], { color: color ?? c.text }, style]} />;
 }
 
-export type ButtonKind = 'primary' | 'dark' | 'outline' | 'danger' | 'ghost' | 'muted';
+export type ButtonKind = 'primary' | 'dark' | 'outline' | 'danger' | 'ghost' | 'muted' | 'onDark' | 'ghostOnDark';
 
 const KIND: Record<ButtonKind, { bg: string; fg: string; border: string }> = {
   primary: { bg: c.actionPrimary, fg: c.actionPrimaryText, border: c.actionPrimary },
@@ -30,7 +30,10 @@ const KIND: Record<ButtonKind, { bg: string; fg: string; border: string }> = {
   outline: { bg: c.surface, fg: c.text, border: c.borderStrong },
   danger: { bg: c.danger, fg: c.textInverse, border: c.danger },
   ghost: { bg: 'transparent', fg: c.text, border: 'transparent' },
-  muted: { bg: t.ink['100'], fg: c.text, border: t.ink['100'] }
+  muted: { bg: t.ink['100'], fg: c.text, border: t.ink['100'] },
+  /* On the black lock and setup screens. */
+  onDark: { bg: 'transparent', fg: c.textInverse, border: t.ink['500'] },
+  ghostOnDark: { bg: 'transparent', fg: c.textInverse, border: 'transparent' }
 };
 
 export interface ButtonProps {
@@ -61,7 +64,7 @@ export function Button({ label, onPress, kind = 'primary', icon: Icon, disabled,
       ]}
     >
       {loading ? <ActivityIndicator color={k.fg} /> : Icon ? <Icon size={20} color={k.fg} /> : null}
-      <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={[typeRamp.bodyStrong, { color: k.fg, textDecorationLine: kind === 'ghost' ? 'underline' : 'none' }]}>{label}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={[typeRamp.bodyStrong, { color: k.fg, textDecorationLine: kind === 'ghost' || kind === 'ghostOnDark' ? 'underline' : 'none' }]}>{label}</Text>
     </Pressable>
   );
 }

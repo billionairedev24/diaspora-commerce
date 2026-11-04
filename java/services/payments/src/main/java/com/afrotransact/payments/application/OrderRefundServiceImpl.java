@@ -47,7 +47,7 @@ class OrderRefundServiceImpl implements OrderRefundService {
         Optional<Refund> earlier = payments.findRefund(Fingerprint.id("refund", payment.id().toString(),
                 idempotencyKey));
         if (earlier.isPresent()) {
-            return new RefundResult(earlier.get(), payment, List.of(), true);
+            return new RefundResult(earlier.get(), payment, List.of(), List.of(), true);
         }
         List<PaymentLine> lines = new ArrayList<>();
         for (String lineId : new LinkedHashSet<>(cmd.lineIds())) {
@@ -58,7 +58,8 @@ class OrderRefundServiceImpl implements OrderRefundService {
         RefundCommand probe = new RefundCommand(List.of(), cmd.reason(), cmd.fault());
         List<RefundCommand.Line> refundLines = allocator.allocate(lines, amount, probe.faultOrDefault()).stream()
                 .map(s -> new RefundCommand.Line(s.lineId(), s.items(), s.shipping(), s.tax())).toList();
-        return paymentService.refund(payment.id(), new RefundCommand(refundLines, cmd.reason(), cmd.fault()),
+        return paymentService.refund(payment.id(), new RefundCommand(refundLines, cmd.reason(), cmd.fault(), cmd.cardAsCredit(),
+                cmd.chosenBy()),
                 idempotencyKey);
     }
 }

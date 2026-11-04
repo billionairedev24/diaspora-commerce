@@ -5,6 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { type ReactNode } from 'react';
 
 import { LolaProvider } from '@/components/shell/LolaLauncher';
+import { StorefrontSessionTimeout } from '@/components/shell/StorefrontSessionTimeout';
 import { type ConsentState } from '@/lib/consent/consent';
 import { ConsentProvider } from '@/lib/consent/ConsentProvider';
 
@@ -18,7 +19,9 @@ export function Providers({ children, consent = null, gpc = false }: { children:
       <ConsentProvider initial={consent} initialGpc={gpc}>
         <ToastProvider>
           <CartAnnouncer>
-            <LolaProvider>{children}</LolaProvider>
+            <LolaProvider>
+              <StorefrontSessionTimeout>{children}</StorefrontSessionTimeout>
+            </LolaProvider>
           </CartAnnouncer>
         </ToastProvider>
       </ConsentProvider>

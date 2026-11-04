@@ -16,7 +16,7 @@ import { dollarsText, milesText, parseDollars, parseMiles, rowId } from './money
    BFF's (deliveryPricing.customerCharge.baseMinor…). Leaving the section out of a version carries the latest live
    version's section over (payments' rule). Pure functions, tested in test/delivery.test.ts. */
 
-export type TariffMode = 'FLAT' | 'DISTANCE';
+export type TariffMode = 'FLAT' | 'DISTANCE' | 'PER_WEIGHT';
 
 export interface BandRow {
   rowId: string;
@@ -30,6 +30,7 @@ export interface TariffForm {
   flat: string;
   base: string;
   perMile: string;
+  perLb: string;
   min: string;
   max: string;
   bands: BandRow[];
@@ -64,12 +65,13 @@ const LAUNCH: DeliveryPricing = {
 const amount = (minor: number | null) => (minor === null ? '' : dollarsText(minor));
 
 export function tariffForm(t: DeliveryTariff | null): TariffForm {
-  if (!t) return { mode: 'FLAT', flat: '0.00', base: '', perMile: '', min: '', max: '', bands: [] };
+  if (!t) return { mode: 'FLAT', flat: '0.00', base: '', perMile: '', perLb: '', min: '', max: '', bands: [] };
   return {
     mode: t.mode,
     flat: amount(t.flatPerPackageMinor),
     base: amount(t.baseMinor),
     perMile: amount(t.perMileMinor),
+    perLb: amount(t.perLbMinor ?? null),
     min: amount(t.minMinor),
     max: amount(t.maxMinor),
     bands: t.bands.map((b) => ({ rowId: rowId(), from: milesText(b.fromMiles), to: milesText(b.toMiles), fee: dollarsText(b.feeMinor) }))
@@ -85,7 +87,7 @@ export function deliveryFormFrom(base: FeeScheduleView | null): DeliveryForm {
     radius: milesText(p.maxRadiusMiles),
     customer: tariffForm(p.customerCharge),
     seller: tariffForm(p.sellerFee),
-    overrides: p.sellerOverrides.map((o) => ({ rowId: rowId(), orgId: o.orgId, orgName: o.orgName ?? o.orgId, tariff: tariffForm(o.sellerFee) }))
+    overrides: p.sellerOverrides.map((o) => ({ rowId: rowId(), orgId: o.orgId, orgName: o.orgName ?? '', tariff: tariffForm(o.sellerFee) }))
   };
 }
 
@@ -99,6 +101,18 @@ function toTariff(f: TariffForm, key: string, errors: Record<string, string>, t:
   };
   if (f.mode === 'FLAT') {
     return { mode: 'FLAT', flatPerPackageMinor: money('flatPerPackageMinor', f.flat) ?? 0, baseMinor: null, perMileMinor: null, bands: [], minMinor: null, maxMinor: null };
+  }
+  if (f.mode === 'PER_WEIGHT') {
+    return {
+      mode: 'PER_WEIGHT',
+      flatPerPackageMinor: null,
+      baseMinor: money('baseMinor', f.base) ?? 0,
+      perMileMinor: null,
+      perLbMinor: money('perLbMinor', f.perLb) ?? 0,
+      bands: [],
+      minMinor: money('minMinor', f.min, true),
+      maxMinor: money('maxMinor', f.max, true)
+    };
   }
   const bands = f.bands.map((b, i) => {
     const from = parseMiles(b.from);

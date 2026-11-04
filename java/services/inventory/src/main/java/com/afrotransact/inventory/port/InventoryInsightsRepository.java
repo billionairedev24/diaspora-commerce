@@ -64,17 +64,38 @@ public interface InventoryInsightsRepository {
         }
     }
 
-    /** Units and landed value (lot unit cost × units) per lot status and currency. */
-    record StatusValue(String status, String currency, long units, long lots, long valueMinor) {
+    /**
+     * Units and landed value (lot unit cost × units) per lot status and currency the lots were paid in: the value in
+     * that currency and in US dollars (what totals and reports use).
+     *
+     * @param valueMinor    value in minor units of {@code currency}
+     * @param valueUsdMinor value in US cents, at the rates fixed when the lots were received
+     */
+    record StatusValue(String status, String currency, long units, long lots, long valueMinor, long valueUsdMinor) {
+    }
+
+    /** What a node holds that was paid in one currency: the amount in it and in US dollars. */
+    record CurrencyValue(String currency, long units, long valueMinor, long valueUsdMinor) {
     }
 
     /** Units and lots per expiry bucket (node-local days to expiry). */
     record ExpiryCount(ExpiryBucket bucket, long units, long lots) {
     }
 
-    /** Per node: lots, units, sellable and blocked units, landed value, reserved and inbound. */
+    /**
+     * Per node: lots, units, sellable and blocked units, landed value in US dollars (with the amounts in the currencies
+     * paid alongside), reserved and inbound.
+     *
+     * @param valueMinor value of the node's stock in US cents; {@code currency} is therefore always USD
+     * @param byCurrency the same stock split by the currency it was paid in
+     */
     record NodeFigures(String nodeId, String name, String kind, long lots, long units, long sellableUnits,
-                       long blockedUnits, long valueMinor, String currency, long reserved, long inbound) {
+                       long blockedUnits, long valueMinor, String currency, long reserved, long inbound,
+                       List<CurrencyValue> byCurrency) {
+
+        public NodeFigures {
+            byCurrency = List.copyOf(byCurrency);
+        }
     }
 
     /** Open inbound shipments and their expected / received units. */

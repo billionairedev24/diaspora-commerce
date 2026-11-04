@@ -26,6 +26,12 @@ public final class SellerEvents {
     public static final String LISTINGS_HIDDEN = "seller.listings.hidden";
     public static final String LISTINGS_RESTORED = "seller.listings.restored";
     public static final String SUBSCRIPTION_CHANGED = "seller.subscription.changed";
+    /** A reward or staff adjustment was applied at Stripe (at.seller-subscription.events); notifications tells the org. */
+    public static final String BILLING_GRANT_APPLIED = "seller.billing.grant_applied";
+    /** Staff approved or rejected a department request (at.seller-application.events, key = org id; audited by trust-ops). */
+    public static final String DEPARTMENT_REQUEST_DECIDED = "seller.department_request.decided";
+    /** Staff replaced an organisation's departments with a reason (at.seller-application.events, key = org id; audited by trust-ops). */
+    public static final String DEPARTMENTS_CHANGED = "seller.org.departments_changed";
     /** S255: an AfroTransact Delivery pickup location was enabled, changed, disabled or deleted (at.seller-org.events). */
     public static final String PICKUP_LOCATION_UPDATED = "seller.pickup_location.updated";
 

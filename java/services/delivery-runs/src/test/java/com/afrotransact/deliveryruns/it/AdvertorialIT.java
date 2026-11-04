@@ -1,0 +1,711 @@
+package com.afrotransact.deliveryruns.it;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import com.afrotransact.deliveryruns.application.AdvertorialLifecycle;
+import com.afrotransact.deliveryruns.application.AttributionService;
+import com.afrotransact.deliveryruns.application.ExtendCommand;
+import com.afrotransact.deliveryruns.application.LocationService;
+import com.afrotransact.deliveryruns.application.OrderPlaced;
+import com.afrotransact.deliveryruns.application.PreorderDecisionService;
+import com.afrotransact.deliveryruns.application.PreorderProjectionService;
+import com.afrotransact.deliveryruns.application.PreorderSchedulerService;
+import com.afrotransact.deliveryruns.application.PreorderWindowService;
+import com.afrotransact.deliveryruns.application.ReserveCommand;
+import com.afrotransact.deliveryruns.application.RunService;
+import com.afrotransact.deliveryruns.application.RunSlotService;
+import com.afrotransact.deliveryruns.application.WindowCommand;
+import com.afrotransact.deliveryruns.application.WindowView;
+import com.afrotransact.deliveryruns.domain.CommKind;
+import com.afrotransact.deliveryruns.domain.CreativeSlot;
+import com.afrotransact.deliveryruns.domain.CutoffPolicy;
+import com.afrotransact.deliveryruns.domain.DropMode;
+import com.afrotransact.deliveryruns.domain.PreorderFulfilment;
+import com.afrotransact.deliveryruns.domain.PreorderLine;
+import com.afrotransact.deliveryruns.domain.PreorderWindow;
+import com.afrotransact.deliveryruns.domain.Run;
+import com.afrotransact.platform.test.PostgresTestContainer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpMethod;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.web.client.RestClient;
+import org.testcontainers.postgresql.PostgreSQLContainer;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * S263 against real PostgreSQL: a published window or an announced run drafts its advertorial from the events this
+ * service publishes; visitors in the area see it with the closing countdown (and only while ordering is open); staff
+ * add A/B variants that split visitors by weight; it ends when the window closes or is cancelled; views, clicks and
+ * attributed orders are counted. Set {@code AT_IT_POSTGRES_URL} (jdbc:postgresql://…) to run without Docker.
+ */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
+    "at.events.relay-enabled=false", "spring.kafka.bootstrap-servers=localhost:1",
+    "at.delivery-runs.public-web-url=http://storefront.test", "at.delivery-runs.jobs.enabled=false",
+    "at.delivery-runs.geo.base-url=http://127.0.0.1:1"})
+@ActiveProfiles("local")
+@Import(ItSupport.class)
+class AdvertorialIT {
+
+    static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");
+    static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
+
+    static {
+        if (EXTERNAL_DB == null) {
+            POSTGRES.start();
+        }
+    }
+
+    private static final ZoneId CHICAGO = ZoneId.of("America/Chicago");
+
+    record Res(int status, JsonNode body, String etag) {
+    }
+
+    private final RestClient http;
+    private final JsonMapper json;
+    private final MutableClock clock;
+    private final FakeUpstreams upstreams;
+    private final PreorderWindowService windows;
+    private final PreorderDecisionService decisions;
+    private final PreorderProjectionService projection;
+    private final PreorderSchedulerService scheduler;
+    private final LocationService locations;
+    private final RunService runs;
+    private final RunSlotService slots;
+    private final AttributionService attribution;
+    private final AdvertorialLifecycle lifecycle;
+    private final JdbcClient jdbc;
+
+    @Autowired
+    AdvertorialIT(@LocalServerPort int port, JsonMapper json, MutableClock clock, FakeUpstreams upstreams,
+                  PreorderWindowService windows, PreorderDecisionService decisions,
+                  PreorderProjectionService projection, PreorderSchedulerService scheduler,
+                  LocationService locations, RunService runs, RunSlotService slots,
+                  AttributionService attribution, AdvertorialLifecycle lifecycle, JdbcClient jdbc) {
+        this.http = RestClient.builder().baseUrl("http://localhost:" + port).build();
+        this.json = json;
+        this.clock = clock;
+        this.upstreams = upstreams;
+        this.windows = windows;
+        this.decisions = decisions;
+        this.projection = projection;
+        this.scheduler = scheduler;
+        this.locations = locations;
+        this.runs = runs;
+        this.slots = slots;
+        this.attribution = attribution;
+        this.lifecycle = lifecycle;
+        this.jdbc = jdbc;
+    }
+
+    @DynamicPropertySource
+    static void datasource(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", () -> EXTERNAL_DB != null ? EXTERNAL_DB : POSTGRES.getJdbcUrl());
+        registry.add("spring.datasource.username", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_USER", "postgres") : POSTGRES.getUsername());
+        registry.add("spring.datasource.password", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_PASSWORD", "") : POSTGRES.getPassword());
+    }
+
+    @BeforeEach
+    void now() {
+        clock.set(Instant.now().truncatedTo(ChronoUnit.SECONDS));
+    }
+
+    @AfterEach
+    void resetActor() {
+        ItSupport.reset();
+    }
+
+    @Test
+    void aPublishedWindowDraftsItsAdvertorialAndVisitorsInItsAreaSeeItWithTheCountdown() {
+        Fixture f = fixture("Adv Window #1", "Plainview", 2);
+        String id = f.window.id().toString();
+
+        Res list = call(HttpMethod.GET, "/v1/advertorials?source=WINDOW&sourceId=" + id, null, null);
+        assertThat(list.body().path("items")).hasSize(1);
+        JsonNode a = list.body().path("items").get(0);
+        assertThat(a.path("variant").asString()).isEqualTo("A");
+        assertThat(a.path("generated").asBoolean()).isTrue();
+        assertThat(a.path("status").asString()).isEqualTo("LIVE");
+        assertThat(a.path("createdBy").asString()).isEqualTo("system");
+        assertThat(a.path("headline").asString()).isNotBlank();
+        assertThat(a.path("sourceCode").asString()).isEqualTo(f.window.code());
+        assertThat(a.path("serving").asBoolean()).as("the window is open").isTrue();
+
+        Res served = call(HttpMethod.GET, "/v1/public/advertorials?country=US&region=TX&city=" + f.city() + "&visitor=v-1",
+                null, null);
+        assertThat(served.status()).isEqualTo(200);
+        assertThat(served.body().path("items")).hasSize(1);
+        JsonNode s = served.body().path("items").get(0);
+        assertThat(s.path("id").asString()).isEqualTo(a.path("id").asString());
+        assertThat(s.path("source").asString()).isEqualTo("WINDOW");
+        assertThat(Instant.parse(s.path("countdownTarget").asString())).isEqualTo(f.closes);
+        assertThat(Instant.parse(s.path("expiresAt").asString())).isEqualTo(f.closes);
+        String creative = "adv-" + a.path("id").asString().replace("-", "");
+        String url = s.path("ctaUrl").asString();
+        assertThat(url).startsWith("http://storefront.test/pre-orders?src=page&cr=" + creative + "&po=" + f.window.code())
+                .contains("utm_medium=advertorial").contains("utm_campaign=preorder-" + f.window.code())
+                .contains("utm_content=" + creative);
+        assertThat(s.path("deliveryDisplay").asString()).isNotBlank();
+
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?country=US&region=TX&city=Lubbock", null, null)
+                .body().path("items")).as("another town").isEmpty();
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials", null, null).body().path("items")).isEmpty();
+    }
+
+    @Test
+    void variantsSplitVisitorsByWeightAndAVisitorKeepsTheirs() {
+        Fixture f = fixture("Adv Variants #2", "Plainview", 2);
+        String id = f.window.id().toString();
+        Res draft = call(HttpMethod.POST, "/v1/advertorials", Map.of("source", "WINDOW", "sourceId", id,
+                "weight", 1, "priority", 5, "headline", "Plainview, your order closes soon", "body", "Egusi, garri",
+                "ctaLabel", "Order now"), null);
+        assertThat(draft.status()).isEqualTo(201);
+        assertThat(draft.body().path("variant").asString()).as("the next free label").isEqualTo("B");
+        assertThat(draft.body().path("status").asString()).isEqualTo("DRAFT");
+        assertThat(draft.body().path("generated").asBoolean()).isFalse();
+        String b = draft.body().path("id").asString();
+
+        assertThat(servedVariants(f, 20)).as("a draft is not served").containsExactly("A");
+        Res live = call(HttpMethod.POST, "/v1/advertorials/" + b + "/publish", null, null);
+        assertThat(live.body().path("status").asString()).isEqualTo("LIVE");
+        Set<String> seen = servedVariants(f, 60);
+        assertThat(seen).as("equal weights reach both variants").containsExactlyInAnyOrder("A", "B");
+
+        String one = variantFor(f, "visitor-77");
+        for (int i = 0; i < 5; i++) {
+            assertThat(variantFor(f, "visitor-77")).as("a visitor keeps the variant they were given").isEqualTo(one);
+        }
+
+        Res paused = call(HttpMethod.POST, "/v1/advertorials/" + b + "/pause", null, null);
+        assertThat(paused.body().path("status").asString()).isEqualTo("PAUSED");
+        assertThat(servedVariants(f, 20)).containsExactly("A");
+        assertThat(call(HttpMethod.POST, "/v1/advertorials/" + b + "/pause", null, null).status()).isEqualTo(409);
+
+        Res taken = call(HttpMethod.POST, "/v1/advertorials", Map.of("source", "WINDOW", "sourceId", id, "variant",
+                "B", "headline", "Again", "ctaLabel", "Order"), null);
+        assertThat(taken.status()).isEqualTo(422);
+        assertThat(taken.body().path("code").asString()).isEqualTo("delivery-runs.advertorial-variant-taken");
+    }
+
+    @Test
+    void staffEditsWithAVersionAndGenerateIsIdempotent() {
+        Fixture f = fixture("Adv Edit #3", "Plainview", 2);
+        String id = f.window.id().toString();
+        Res again = call(HttpMethod.POST, "/v1/advertorials/generate", Map.of("source", "WINDOW", "sourceId", id),
+                null);
+        assertThat(again.status()).isEqualTo(200);
+        assertThat(call(HttpMethod.GET, "/v1/advertorials?source=WINDOW&sourceId=" + id, null, null).body()
+                .path("items")).as("still one generated advertorial").hasSize(1);
+        String a = again.body().path("id").asString();
+        long version = again.body().path("version").asLong();
+        assertThat(again.etag()).isEqualTo("\"" + version + "\"");
+
+        Map<String, Object> words = Map.of("headline", "Plainview, egusi is back", "body", "Order before Friday",
+                "ctaLabel", "Pre-order now", "priority", 9);
+        Res edited = call(HttpMethod.PUT, "/v1/advertorials/" + a, words, "\"" + version + "\"");
+        assertThat(edited.status()).isEqualTo(200);
+        assertThat(edited.body().path("headline").asString()).isEqualTo("Plainview, egusi is back");
+        assertThat(edited.body().path("generated").asBoolean()).as("staff took the words over").isFalse();
+        assertThat(edited.body().path("priority").asInt()).isEqualTo(9);
+
+        Res stale = call(HttpMethod.PUT, "/v1/advertorials/" + a, words, "\"" + version + "\"");
+        assertThat(stale.status()).isEqualTo(412);
+        assertThat(stale.body().path("code").asString()).isEqualTo("delivery-runs.version-mismatch");
+        assertThat(call(HttpMethod.PUT, "/v1/advertorials/" + a, Map.of("headline", " ", "ctaLabel", "x"), null)
+                .status()).isIn(400, 422);
+
+        // The window's edit re-drafts only advertorials that still follow it.
+        windows.update(f.window.id(), command("Adv Edit #3 renamed", "US/TX/" + f.city(), f.opens, f.closes,
+                "Plainview renamed headline"), windows.get(f.window.id()).window().version());
+        Res kept = call(HttpMethod.GET, "/v1/advertorials/" + a, null, null);
+        assertThat(kept.body().path("headline").asString()).isEqualTo("Plainview, egusi is back");
+
+        assertThat(call(HttpMethod.GET, "/v1/advertorials/" + UUID.randomUUID(), null, null).status())
+                .isEqualTo(404);
+        assertThat(call(HttpMethod.POST, "/v1/advertorials/generate", Map.of("source", "WINDOW", "sourceId",
+                UUID.randomUUID().toString()), null).status()).isEqualTo(404);
+    }
+
+    @Test
+    void viewsClicksAndOrdersAreCounted() {
+        Fixture f = fixture("Adv Results #4", "Plainview", 2);
+        String a = call(HttpMethod.GET, "/v1/advertorials?source=WINDOW&sourceId=" + f.window.id(), null, null)
+                .body().path("items").get(0).path("id").asString();
+        for (int i = 0; i < 4; i++) {
+            assertThat(event(a, "VIEW", "viewer-" + i).status()).isEqualTo(204);
+        }
+        event(a, "CLICK", "viewer-0");
+        assertThat(call(HttpMethod.POST, "/v1/public/advertorials/" + UUID.randomUUID() + "/events",
+                Map.of("type", "VIEW"), null).status()).isEqualTo(404);
+        assertThat(event(a, "LIKE", "viewer-0").status()).isEqualTo(400);
+
+        // Two orders came through the advertorial link (src=page&cr=adv-…), one by another route.
+        String creative = "adv-" + a.replace("-", "");
+        projection.onOrderPlaced(UUID.randomUUID(), placed(UUID.randomUUID().toString(), f.window.id(), clock
+                .instant(), "page", creative, f.window.code()));
+        projection.onOrderPlaced(UUID.randomUUID(), placed(UUID.randomUUID().toString(), f.window.id(), clock
+                .instant(), "page", creative, f.window.code()));
+        projection.onOrderPlaced(UUID.randomUUID(), placed(UUID.randomUUID().toString(), f.window.id(), clock
+                .instant(), "ig", "story", f.window.code()));
+
+        JsonNode r = call(HttpMethod.GET, "/v1/advertorials/" + a, null, null).body().path("results");
+        assertThat(r.path("views").asLong()).isEqualTo(4);
+        assertThat(r.path("clicks").asLong()).isEqualTo(1);
+        assertThat(r.path("ctrPct").asDouble()).isEqualTo(25.0);
+        assertThat(r.path("orders").asInt()).isEqualTo(2);
+    }
+
+    /**
+     * One rule for both sources: an order that came through the advertorial counts while it stands; a cancelled or
+     * refunded one is shown apart. The same three orders, one of them cancelled, give the same result for a window
+     * (tracking tag, cancelled pre-order) and a run (attribution, released slot); cancelling the run cancels the rest.
+     */
+    @Test
+    void windowAndRunOrdersAreCountedOnTheSameBasis() {
+        Fixture f = fixture("Adv Basis #8", "Plainview", 2);
+        String wa = call(HttpMethod.GET, "/v1/advertorials?source=WINDOW&sourceId=" + f.window.id(), null, null)
+                .body().path("items").get(0).path("id").asString();
+        String windowCreative = "adv-" + wa.replace("-", "");
+        List<String> windowOrders = List.of(UUID.randomUUID().toString(), UUID.randomUUID().toString(),
+                UUID.randomUUID().toString());
+        for (String order : windowOrders) {
+            projection.onOrderPlaced(UUID.randomUUID(), placed(order, f.window.id(), clock.instant(), "page",
+                    windowCreative, f.window.code()));
+        }
+        projection.onOrderPlaced(UUID.randomUUID(), placed(UUID.randomUUID().toString(), f.window.id(),
+                clock.instant(), "ig", "story", f.window.code()));
+        projection.onOrderCancelled(UUID.randomUUID(), windowOrders.get(0), clock.instant());
+
+        UUID location = locations.create(Fixtures.bastrop(Fixtures.slug("basis"), DropMode.DOORSTEP, null,
+                CutoffPolicy.CANCEL)).id();
+        Run run = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(3), 2));
+        runs.announce(run.id());
+        runs.open(run.id());
+        String ra = call(HttpMethod.GET, "/v1/advertorials?source=RUN&sourceId=" + run.id(), null, null).body()
+                .path("items").get(0).path("id").asString();
+        String runCreative = "adv-" + ra.replace("-", "");
+        List<String> runOrders = List.of("basis-" + UUID.randomUUID(), "basis-" + UUID.randomUUID(),
+                "basis-" + UUID.randomUUID());
+        for (String order : runOrders) {
+            slots.reserve(new ReserveCommand(run.id(), order, "cust-basis", 1, false));
+            attribution.orderPlaced(order, runCreative, "page", clock.instant());
+        }
+        slots.release(run.id(), runOrders.get(0));
+
+        assertThat(orders(wa)).as("window: two stand, one cancelled").containsExactly(2, 1);
+        assertThat(orders(ra)).as("run: the same rule").containsExactly(2, 1);
+
+        runs.cancel(run.id(), "Storm warning");
+        assertThat(orders(ra)).as("a cancelled run refunds its orders").containsExactly(0, 3);
+        projection.onOrderCancelled(UUID.randomUUID(), windowOrders.get(1), clock.instant());
+        projection.onOrderCancelled(UUID.randomUUID(), windowOrders.get(2), clock.instant());
+        assertThat(orders(wa)).as("window: all cancelled").containsExactly(0, 3);
+    }
+
+    @Test
+    void aZipAloneFindsTheOpenWindowOfTheTownItFallsIn() {
+        String town = "Zipton" + UUID.randomUUID().toString().replace("-", "").chars().limit(8)
+                .mapToObj(c -> String.valueOf((char) ('a' + Character.digit(c, 16)))).collect(Collectors.joining());
+        locations.create(Fixtures.town(Fixtures.slug("zipton"), town));
+        Instant opens = clock.instant().minus(Duration.ofDays(1));
+        Instant closes = clock.instant().plus(Duration.ofDays(2));
+        PreorderWindow w = publish("Adv Zip #10", "US/TX/" + town, opens, closes);
+        scheduler.process(w.id());
+
+        Res byZip = call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&visitor=zip-1&limit=10", null, null);
+        assertThat(byZip.status()).isEqualTo(200);
+        JsonNode s = null;
+        for (JsonNode item : byZip.body().path("items")) {
+            if (item.path("sourceId").asString().equals(w.id().toString())) {
+                s = item;
+            }
+        }
+        assertThat(s).as("a ZIP alone, no country, region or city").isNotNull();
+        assertThat(s.path("source").asString()).isEqualTo("WINDOW");
+        assertThat(s.path("place").asString()).as("the town the ZIP falls in").isEqualTo(town);
+        assertThat(s.path("code").asString()).isEqualTo(w.code());
+        assertThat(Instant.parse(s.path("countdownTarget").asString())).isEqualTo(closes);
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?zip=78701&limit=10", null, null).body().path("items"))
+                .as("Austin is outside the town's area").extracting(i -> i.path("sourceId").asString())
+                .doesNotContain(w.id().toString());
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&country=US&region=TX&city=" + town
+                + "&limit=10", null, null).body().path("items")).as("ZIP and place together: one card, not two")
+                .extracting(i -> i.path("sourceId").asString()).containsOnlyOnce(w.id().toString());
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?country=US&region=TX&city=" + town + "&limit=10",
+                null, null).body().path("items")).as("the session location alone still finds it")
+                .extracting(i -> i.path("sourceId").asString()).contains(w.id().toString());
+    }
+
+    @Test
+    void aZipFindsAWindowPlannedForTheLocationItFallsInEvenWhenItsTargetNamesAnotherCity() {
+        String town = "Plan" + UUID.randomUUID().toString().replace("-", "").chars().limit(8)
+                .mapToObj(c -> String.valueOf((char) ('a' + Character.digit(c, 16)))).collect(Collectors.joining());
+        UUID location = locations.create(Fixtures.town(Fixtures.slug("planned"), town)).id();
+        Instant opens = clock.instant().minus(Duration.ofDays(1));
+        Instant closes = clock.instant().plus(Duration.ofDays(2));
+        WindowView v = windows.create(command("Adv Planned #11", "US/TX/Elsewhere" + town.substring(4), opens, closes,
+                "Planned for the town", location));
+        WindowView withHero = windows.setCreative(v.window().id(), CreativeSlot.HERO, upstreams.image(1920, 640),
+                v.window().version());
+        PreorderWindow w = windows.publish(v.window().id(), withHero.window().version()).window();
+        scheduler.process(w.id());
+
+        List<String> ids = new ArrayList<>();
+        call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&limit=10", null, null).body().path("items")
+                .forEach(i -> ids.add(i.path("sourceId").asString()));
+        assertThat(ids).contains(w.id().toString());
+    }
+
+    @Test
+    void theSweeperEndsAWindowAdvertorialOnceTheWindowClosedWithoutAnyEvent() {
+        Fixture f = fixture("Adv Sweep Window #9", "Plainview", 1);
+        String a = advertorialOf("WINDOW", f.window.id());
+        assertThat(statusOf(a)).isEqualTo("LIVE");
+        lifecycle.sweep(1000);
+        assertThat(statusOf(a)).as("still open: nothing to end").isEqualTo("LIVE");
+
+        clock.set(f.closes.plusSeconds(60));
+        assertThat(lifecycle.sweep(1000)).isPositive();
+        assertThat(statusOf(a)).isEqualTo("ENDED");
+        assertThat(endedOf(a)).isEqualTo("SOURCE_CLOSED");
+        assertThat(lifecycle.sweep(1000)).as("idempotent: an ended one is not touched again").isZero();
+        assertThat(endedOf(a)).isEqualTo("SOURCE_CLOSED");
+    }
+
+    @Test
+    void theSweeperEndsARunAdvertorialPastCutoffAndExtendingTheRunBringsItBack() {
+        UUID location = locations.create(Fixtures.bastrop(Fixtures.slug("sweep"), DropMode.DOORSTEP, null,
+                CutoffPolicy.CANCEL)).id();
+        Run run = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(3), 2));
+        runs.announce(run.id());
+        String a = advertorialOf("RUN", run.id());
+        lifecycle.sweep(1000);
+        assertThat(statusOf(a)).as("an announced run is not over").isEqualTo("LIVE");
+        runs.open(run.id());
+
+        clock.set(run.terms().cutoffAt().plusSeconds(60));
+        assertThat(lifecycle.sweep(1000)).isPositive();
+        assertThat(statusOf(a)).as("past the cutoff, before the schedule job decided the run").isEqualTo("ENDED");
+        assertThat(endedOf(a)).isEqualTo("SOURCE_CLOSED");
+        assertThat(servedRunIds()).doesNotContain(run.id().toString());
+        assertThat(lifecycle.sweep(1000)).isZero();
+
+        runs.extend(run.id(), new ExtendCommand(clock.instant().plus(Duration.ofDays(1)), null, null, null,
+                "More time"));
+        assertThat(statusOf(a)).as("the run takes orders again, so does its advertorial").isEqualTo("LIVE");
+        assertThat(servedRunIds()).contains(run.id().toString());
+    }
+
+    @Test
+    void theSweeperEndsRunAdvertorialsOfACancelledOrCompletedRunWhoseEventWasMissed() {
+        UUID location = locations.create(Fixtures.bastrop(Fixtures.slug("sweep"), DropMode.DOORSTEP, null,
+                CutoffPolicy.CANCEL)).id();
+        Run cancelled = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(3), 2));
+        Run completed = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(4), 2));
+        Run closed = runs.create(Fixtures.run(location, clock.instant(), Duration.ofDays(5), 2));
+        for (Run r : List.of(cancelled, completed, closed)) {
+            runs.announce(r.id());
+            runs.open(r.id());
+        }
+        String c = advertorialOf("RUN", cancelled.id());
+        String d = advertorialOf("RUN", completed.id());
+        String x = advertorialOf("RUN", closed.id());
+
+        // As if the run events were never handled: the runs change in the database only.
+        jdbc.sql("update run set status = 'CANCELLED' where id = :id").param("id", cancelled.id()).update();
+        jdbc.sql("update run set status = 'COMPLETED' where id = :id").param("id", completed.id()).update();
+        assertThat(lifecycle.sweep(1000)).isGreaterThanOrEqualTo(2);
+        assertThat(statusOf(c)).isEqualTo("ENDED");
+        assertThat(endedOf(c)).isEqualTo("SOURCE_CLOSED");
+        assertThat(statusOf(d)).isEqualTo("ENDED");
+        assertThat(endedOf(d)).isEqualTo("SOURCE_CLOSED");
+        assertThat(statusOf(x)).as("an open run before its cutoff keeps its advertorial").isEqualTo("LIVE");
+        assertThat(lifecycle.sweep(1000)).isZero();
+    }
+
+    @Test
+    void onlyALiveServableAdvertorialCountsAndEachVisitorCountsOncePerWindow() {
+        Fixture f = fixture("Adv Gate #7", "Plainview", 2);
+        String a = call(HttpMethod.GET, "/v1/advertorials?source=WINDOW&sourceId=" + f.window.id(), null, null)
+                .body().path("items").get(0).path("id").asString();
+
+        assertThat(event(a, "VIEW", "v-1").status()).isEqualTo(204);
+        assertThat(event(a, "VIEW", "v-1").status()).as("the same visitor again: 204, not counted").isEqualTo(204);
+        assertThat(event(a, "VIEW", "v-2").status()).isEqualTo(204);
+        assertThat(event(a, "CLICK", "v-1").status()).isEqualTo(204);
+        assertThat(event(a, "CLICK", "v-1").status()).isEqualTo(204);
+        assertThat(results(a)).containsExactly(2L, 1L);
+
+        clock.set(clock.instant().plus(Duration.ofMinutes(31)));
+        event(a, "VIEW", "v-1");
+        assertThat(results(a)).as("a new window counts the visitor again").containsExactly(3L, 1L);
+
+        for (int i = 0; i < 60; i++) {
+            event(a, "VIEW", "flood-" + UUID.randomUUID());
+        }
+        assertThat(results(a)[0]).as("fresh visitor ids from one client stop at the client limit (30 a window, "
+                + "one of them was v-1's)").isEqualTo(3L + 29L);
+
+        // A draft, a paused and a scheduled-for-later variant never count; neither does a closed source.
+        String draft = call(HttpMethod.POST, "/v1/advertorials", Map.of("source", "WINDOW", "sourceId", f.window.id()
+                .toString(), "headline", "Draft", "ctaLabel", "Go"), null).body().path("id").asString();
+        assertThat(event(draft, "VIEW", "v-9").status()).isEqualTo(204);
+        assertThat(results(draft)).containsExactly(0L, 0L);
+        call(HttpMethod.POST, "/v1/advertorials/" + draft + "/publish", null, null);
+        call(HttpMethod.POST, "/v1/advertorials/" + draft + "/pause", null, null);
+        event(draft, "VIEW", "v-9");
+        assertThat(results(draft)).as("paused").containsExactly(0L, 0L);
+        String later = call(HttpMethod.POST, "/v1/advertorials", Map.of("source", "WINDOW", "sourceId", f.window.id()
+                .toString(), "headline", "Later", "ctaLabel", "Go", "startsAt", clock.instant().plus(Duration.ofHours(5))
+                .toString()), null).body().path("id").asString();
+        call(HttpMethod.POST, "/v1/advertorials/" + later + "/publish", null, null);
+        event(later, "VIEW", "v-9");
+        assertThat(results(later)).as("live but outside its schedule").containsExactly(0L, 0L);
+
+        long before = results(a)[0];
+        clock.set(f.closes.plusSeconds(60));
+        event(a, "VIEW", "v-late");
+        assertThat(results(a)[0]).as("the window closed").isEqualTo(before);
+        call(HttpMethod.POST, "/v1/advertorials/" + a + "/end", null, null);
+        clock.set(Instant.now().truncatedTo(ChronoUnit.SECONDS));
+        event(a, "CLICK", "v-new");
+        assertThat(results(a)[1]).as("ended").isEqualTo(1L);
+    }
+
+    @Test
+    void itEndsWhenTheWindowClosesOrIsCancelled() {
+        Fixture closing = fixture("Adv Close #5", "Plainview", 1);
+        clock.set(closing.closes.plusSeconds(60));
+        assertThat(scheduler.process(closing.window.id())).isPositive();
+        JsonNode closed = call(HttpMethod.GET, "/v1/advertorials?source=WINDOW&sourceId=" + closing.window.id(), null,
+                null).body().path("items").get(0);
+        assertThat(closed.path("status").asString()).isEqualTo("ENDED");
+        assertThat(closed.path("ended").asString()).isEqualTo("SOURCE_CLOSED");
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?country=US&region=TX&city=" + closing.city(), null, null)
+                .body().path("items")).extracting(i -> i.path("sourceId").asString())
+                .doesNotContain(closing.window.id().toString());
+        assertThat(call(HttpMethod.PUT, "/v1/advertorials/" + closed.path("id").asString(), Map.of("headline", "x",
+                "ctaLabel", "y"), null).status()).as("an ended advertorial cannot be edited").isEqualTo(409);
+        assertThat(call(HttpMethod.POST, "/v1/advertorials/generate", Map.of("source", "WINDOW", "sourceId",
+                closing.window.id().toString()), null).status()).as("nor generated again").isEqualTo(409);
+
+        clock.set(Instant.now().truncatedTo(ChronoUnit.SECONDS));
+        Fixture cancelled = fixture("Adv Cancel #6", "Plainview", 3);
+        assertThat(servedIds(cancelled)).contains(cancelled.window.id().toString());
+        decisions.cancel(cancelled.window.id(), "Seller stock fell through", null);
+        JsonNode ad = call(HttpMethod.GET, "/v1/advertorials?source=WINDOW&sourceId=" + cancelled.window.id(), null,
+                null).body().path("items").get(0);
+        assertThat(ad.path("status").asString()).isEqualTo("ENDED");
+        assertThat(ad.path("ended").asString()).isEqualTo("CANCELLED");
+        assertThat(servedIds(cancelled)).doesNotContain(cancelled.window.id().toString());
+    }
+
+    @Test
+    void anAnnouncedRunDraftsItsAdvertorialAndOnlyItsCoverageSeesItWhileItTakesOrders() {
+        UUID location = locations.create(Fixtures.bastrop(Fixtures.slug("bastrop"), DropMode.DOORSTEP, null,
+                CutoffPolicy.CANCEL)).id();
+        Instant now = clock.instant();
+        Run run = runs.create(Fixtures.run(location, now, Duration.ofDays(3), 2));
+        assertThat(call(HttpMethod.GET, "/v1/advertorials?source=RUN&sourceId=" + run.id(), null, null).body()
+                .path("items")).as("a draft run has none").isEmpty();
+
+        runs.announce(run.id());
+        runs.open(run.id());
+        JsonNode a = call(HttpMethod.GET, "/v1/advertorials?source=RUN&sourceId=" + run.id(), null, null).body()
+                .path("items").get(0);
+        assertThat(a.path("generated").asBoolean()).isTrue();
+        assertThat(a.path("headline").asString()).startsWith("AfroTransact delivery run to Bastrop");
+        assertThat(a.path("results").path("orders").asInt(-1)).as("no order came through it yet").isZero();
+
+        Res inside = call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&visitor=v1&limit=10", null, null);
+        JsonNode s = null;
+        for (JsonNode item : inside.body().path("items")) {
+            if (item.path("sourceId").asString().equals(run.id().toString())) {
+                s = item;
+            }
+        }
+        assertThat(s).as("the run's advertorial is served in its area").isNotNull();
+        assertThat(s.path("source").asString()).isEqualTo("RUN");
+        assertThat(s.path("place").asString()).isEqualTo("Bastrop");
+        assertThat(Instant.parse(s.path("countdownTarget").asString())).isEqualTo(run.terms().cutoffAt());
+        assertThat(s.path("ctaUrl").asString()).contains("/delivery-runs/").contains("utm_medium=advertorial")
+                .contains("utm_content=adv-").as("the order attribution the storefront keeps until checkout")
+                .contains("src=page&cr=adv-");
+        assertThat(s.path("featuredProducts")).as("none featured unless staff choose some").isEmpty();
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?zip=78701&limit=10", null, null).body().path("items"))
+                .as("Austin is outside the run's area").extracting(i -> i.path("sourceId").asString())
+                .doesNotContain(run.id().toString());
+
+        runs.extend(run.id(), new ExtendCommand(run.terms().cutoffAt().plus(Duration.ofDays(1)), null, null, null,
+                "More time"));
+        JsonNode after = call(HttpMethod.GET, "/v1/advertorials?source=RUN&sourceId=" + run.id(), null, null).body()
+                .path("items").get(0);
+        assertThat(after.path("body").asString()).contains("Order by");
+
+        runs.cancel(run.id(), "Storm warning");
+        JsonNode ended = call(HttpMethod.GET, "/v1/advertorials?source=RUN&sourceId=" + run.id(), null, null).body()
+                .path("items").get(0);
+        assertThat(ended.path("status").asString()).isEqualTo("ENDED");
+        assertThat(ended.path("ended").asString()).isEqualTo("CANCELLED");
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&limit=10", null, null).body().path("items"))
+                .extracting(i -> i.path("sourceId").asString()).doesNotContain(run.id().toString());
+    }
+
+    // ---- helpers -------------------------------------------------------------------------------------------------
+
+    private record Fixture(PreorderWindow window, Instant opens, Instant closes, String city) {
+    }
+
+    private Set<String> servedVariants(Fixture f, int visitors) {
+        Set<String> out = new HashSet<>();
+        for (int i = 0; i < visitors; i++) {
+            Res r = call(HttpMethod.GET, "/v1/public/advertorials?country=US&region=TX&city=" + f.city() + "&visitor=visitor-"
+                    + i, null, null);
+            for (JsonNode item : r.body().path("items")) {
+                if (item.path("sourceId").asString().equals(f.window.id().toString())) {
+                    out.add(item.path("variant").asString());
+                }
+            }
+        }
+        return out;
+    }
+
+    private String variantFor(Fixture f, String visitor) {
+        Res r = call(HttpMethod.GET, "/v1/public/advertorials?country=US&region=TX&city=" + f.city() + "&visitor="
+                + visitor, null, null);
+        return r.body().path("items").get(0).path("variant").asString();
+    }
+
+    private Res event(String advertorial, String type, String visitor) {
+        return call(HttpMethod.POST, "/v1/public/advertorials/" + advertorial + "/events",
+                Map.of("type", type, "visitor", visitor), null);
+    }
+
+    /** {views, clicks} of an advertorial as staff see them. */
+    private long[] results(String advertorial) {
+        JsonNode r = call(HttpMethod.GET, "/v1/advertorials/" + advertorial, null, null).body().path("results");
+        return new long[] {r.path("views").asLong(), r.path("clicks").asLong()};
+    }
+
+    private String advertorialOf(String source, UUID sourceId) {
+        return call(HttpMethod.GET, "/v1/advertorials?source=" + source + "&sourceId=" + sourceId, null, null).body()
+                .path("items").get(0).path("id").asString();
+    }
+
+    private String statusOf(String advertorial) {
+        return call(HttpMethod.GET, "/v1/advertorials/" + advertorial, null, null).body().path("status").asString();
+    }
+
+    private String endedOf(String advertorial) {
+        return call(HttpMethod.GET, "/v1/advertorials/" + advertorial, null, null).body().path("ended").asString();
+    }
+
+    private List<String> servedRunIds() {
+        List<String> out = new ArrayList<>();
+        call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&limit=10", null, null).body().path("items")
+                .forEach(i -> out.add(i.path("sourceId").asString()));
+        return out;
+    }
+
+    /** {orders, cancelledOrders} of an advertorial as staff see them. */
+    private int[] orders(String advertorial) {
+        JsonNode r = call(HttpMethod.GET, "/v1/advertorials/" + advertorial, null, null).body().path("results");
+        return new int[] {r.path("orders").asInt(-1), r.path("cancelledOrders").asInt(-1)};
+    }
+
+    private List<String> servedIds(Fixture f) {
+        List<String> out = new ArrayList<>();
+        call(HttpMethod.GET, "/v1/public/advertorials?country=US&region=TX&city=" + f.city() + "&limit=10", null, null)
+                .body().path("items").forEach(i -> out.add(i.path("sourceId").asString()));
+        return out;
+    }
+
+    /** An open Plainview window (publishing it drafts its advertorial) with {@code orders} projected orders. */
+    private Fixture fixture(String name, String prefix, int days) {
+        String city = prefix + UUID.randomUUID().toString().replace("-", "").chars().limit(8)
+                .mapToObj(c -> String.valueOf((char) ('a' + Character.digit(c, 16)))).collect(Collectors.joining());
+        Instant now = clock.instant();
+        Instant closes = now.plus(Duration.ofDays(days));
+        Instant opens = now.minus(Duration.ofDays(1));
+        PreorderWindow w = publish(name, "US/TX/" + city, opens, closes);
+        scheduler.process(w.id());
+        return new Fixture(w, opens, closes, city);
+    }
+
+    private static WindowCommand command(String name, String target, Instant opens, Instant closes, String headline) {
+        return command(name, target, opens, closes, headline, null);
+    }
+
+    private static WindowCommand command(String name, String target, Instant opens, Instant closes, String headline,
+                                         UUID locationId) {
+        LocalDate delivers = closes.plus(Duration.ofDays(2)).atZone(CHICAGO).toLocalDate();
+        return new WindowCommand(name, List.of(target), opens, closes, delivers, "America/Chicago",
+                name + " is open", headline, "AfroTransact: pre-order open", Set.of("Pantry", "Spices"), true, true,
+                null, null, true, 20_000L, Set.of(CommKind.ANNOUNCE), null, null, locationId, 0);
+    }
+
+    private PreorderWindow publish(String name, String target, Instant opens, Instant closes) {
+        WindowView v = windows.create(command(name, target, opens, closes, "Fresh egusi delivered"));
+        WindowView withHero = windows.setCreative(v.window().id(), CreativeSlot.HERO, upstreams.image(1920, 640),
+                v.window().version());
+        return windows.publish(v.window().id(), withHero.window().version()).window();
+    }
+
+    private static OrderPlaced placed(String orderId, UUID windowId, Instant at, String src, String creative,
+                                      String code) {
+        return new OrderPlaced(orderId, "AT-" + orderId.substring(0, 6), "cust-" + orderId.substring(0, 4), "USD", at,
+                "Shopper", "+1 806 555 0100", "shopper@example.test", "1 Main St", "Plainview", "TX", "79072", null,
+                src, creative, code, List.of(new OrderPlaced.Package("shp-" + orderId, "seller-1", windowId,
+                PreorderFulfilment.DOOR, 2799, 799, List.of(new PreorderLine("EGU", "Egusi", "seller-1", 2)))));
+    }
+
+    private Res call(HttpMethod method, String uri, Object body, String ifMatch) {
+        RestClient.RequestBodySpec spec = http.method(method).uri(uri);
+        if (ifMatch != null) {
+            spec = spec.header("If-Match", ifMatch);
+        }
+        if (body != null) {
+            spec = spec.contentType(MediaType.APPLICATION_JSON).body(json.writeValueAsString(body));
+        }
+        return spec.exchange((req, res) -> read(res.getStatusCode().value(), res.getBody().readAllBytes(),
+                res.getHeaders().getETag()));
+    }
+
+    private Res read(int status, byte[] bytes, String etag) throws IOException {
+        String text = new String(bytes, StandardCharsets.UTF_8);
+        JsonNode node;
+        try {
+            node = text.isBlank() ? json.createObjectNode() : json.readTree(text);
+        } catch (RuntimeException e) {
+            node = json.createObjectNode();
+        }
+        return new Res(status, node, etag);
+    }
+}

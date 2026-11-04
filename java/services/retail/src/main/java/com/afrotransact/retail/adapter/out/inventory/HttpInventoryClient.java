@@ -65,6 +65,11 @@ public class HttpInventoryClient implements InventoryClient {
             line.put("bin", l.bin());
             line.put("unitLandedCostMinor", l.unitLandedCostMinor());
             line.put("currency", l.currency());
+            if (l.fxRateToUsd() != null) {
+                line.put("fxRateToUsd", l.fxRateToUsd());
+                line.put("fxRateDate", l.fxRateDate() == null ? null : l.fxRateDate().toString());
+                line.put("unitCostUsdMinor", l.unitCostUsdMinor());
+            }
             line.put("shelfLifeDays", l.shelfLifeDays());
             if (l.holdReason() != null) {
                 line.put("holdReason", l.holdReason());
@@ -80,7 +85,8 @@ public class HttpInventoryClient implements InventoryClient {
         for (JsonNode lot : root.path("lots")) {
             lots.add(new InventoryLot(UUID.fromString(lot.path("id").asString()), lot.path("sku").asString(),
                     lot.path("lotNo").asString(), lot.path("nodeId").asString(null), lot.path("qtyOnHand").asInt(),
-                    lot.path("status").asString(), lot.path("unitLandedCostMinor").asLong()));
+                    lot.path("status").asString(), lot.path("unitCostUsdMinor").asLong(
+                            lot.path("unitLandedCostMinor").asLong())));
         }
         return new InventoryReceiptResult(root.path("receiptRef").asString(receipt.receiptRef()), lots,
                 root.path("replayed").asBoolean(false));

@@ -14,7 +14,7 @@ Search and/or indexing failing for the affected index (products-<market>).
 3. Disk watermarks (ElasticsearchDiskLow).
 
 ## Mitigate
-- Bring nodes back / free disk; if a primary is lost and no replica exists, restore from snapshot or rebuild the product index from the catalog (reindex job) and switch the alias.
+- Bring nodes back / free disk; if a primary is lost and no replica exists, restore from snapshot or rebuild the product index from the catalog with `indexer reindex` ([kafka-replay.md](kafka-replay.md) section 5.1: `make reindex-search`, `kubectl create job --from=cronjob/indexer-reindex`) and switch the alias.
 
 ## After the incident
 - Link the incident ticket to this runbook and update the steps if they were wrong or incomplete.

@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -93,5 +94,12 @@ class PlacementAdminController {
     @PostMapping("/placements/{id}/end")
     PlacementResponse end(@PathVariable String id) {
         return PlacementResponse.of(placements.end(id));
+    }
+
+    @Operation(summary = "Permanently delete a paid advert in draft or ended (advert:delete)")
+    @DeleteMapping("/placements/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void delete(@PathVariable String id) {
+        placements.delete(id);
     }
 }

@@ -23,6 +23,8 @@
 .control:disabled { background: var(--at-color-surface-muted); color: var(--at-color-text-muted); }
 .control::placeholder { color: var(--at-color-text-subtle); }
 select.control { padding: 0 var(--at-space-2); cursor: pointer; }
+/* A textarea grows with its rows and pads its text; the single-line control height would pin the text to the top edge. */
+textarea.control { height: auto; min-height: calc(var(--at-size-control) * 2); padding: var(--at-space-2) var(--at-space-3); line-height: var(--at-leading-normal, 1.5); resize: vertical; }
 
 .withAddon { position: relative; display: flex; }
 .withAddon .control { padding-right: 52px; }

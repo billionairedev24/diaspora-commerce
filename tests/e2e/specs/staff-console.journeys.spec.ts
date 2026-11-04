@@ -57,11 +57,11 @@ test.describe('staff console · fee schedules', () => {
     const lagosRate = (await existing.count()) > 0 && (await existing.first().inputValue()) === '9.75' ? '9.50' : '9.75';
     const lagosOverride = page.getByRole('button', { name: 'Remove the override for Lagos Threads' });
     while ((await lagosOverride.count()) > 0) await lagosOverride.first().click();
-    const search = page.getByRole('searchbox');
+    const search = page.getByPlaceholder('Search by name');
     await search.fill('retail');
-    await expect(page.getByRole('button', { name: /AfroTransact Retail/ })).toBeDisabled();
+    await expect(page.locator('[role="listbox"] [role="option"]', { hasText: 'AfroTransact Retail' })).toBeDisabled();
     await search.fill('Lagos');
-    await page.getByRole('button', { name: /Lagos Threads/ }).click();
+    await page.locator('[role="listbox"] [role="option"]', { hasText: 'Lagos Threads' }).click();
     await page.getByLabel('Category for Lagos Threads').selectOption('fashion');
     await page.getByLabel('Commission for Lagos Threads (%)').fill(lagosRate);
     await page.getByLabel(/Note explaining the change/).fill(note);

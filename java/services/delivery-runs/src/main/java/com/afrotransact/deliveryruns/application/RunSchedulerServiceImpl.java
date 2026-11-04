@@ -102,10 +102,10 @@ class RunSchedulerServiceImpl implements RunSchedulerService {
         Run cutOff = run.cutOff(now);
         CutoffDecision decision = policy.decide(cutOff, now);
         switch (decision.outcome()) {
-            case CONFIRM -> lifecycle.confirm(location, cutOff, previous, now);
+            case CONFIRM -> lifecycle.confirm(location, cutOff, previous, now, RunDecision.system(null));
             case EXTEND -> lifecycle.extended(location, cutOff.extendByPolicy(now), previous, run.terms().cutoffAt(),
-                    decision.reason());
-            case CANCEL -> lifecycle.cancel(location, cutOff, decision.reason(), now);
+                    RunDecision.system(decision.reason()), now);
+            case CANCEL -> lifecycle.cancel(location, cutOff, RunDecision.system(decision.reason()), now);
             default -> throw new IllegalStateException("Unknown outcome " + decision.outcome());
         }
         LOG.info("Run {} cut off with {} of {} orders: {}", runId, run.reservedOrders(), run.terms().minOrders(),

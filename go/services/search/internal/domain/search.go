@@ -26,6 +26,7 @@ type Query struct {
 	Communities []string
 	Fulfilment  string // AFROTRANSACT | SELLER
 	SellerKind  string // PLATFORM | SELLER
+	SellerID    string // one seller's products (a business's public page)
 	MinRating   float64
 	MinPrice    int64
 	MaxPrice    int64

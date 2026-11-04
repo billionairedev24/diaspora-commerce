@@ -1,16 +1,25 @@
 package com.afrotransact.seller.config;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Set;
 
+import com.afrotransact.seller.adapter.out.billing.RruleBillingScheduler;
+import com.afrotransact.seller.adapter.out.catalog.HttpDepartmentDirectory;
 import com.afrotransact.seller.adapter.out.crypto.AesGcmFieldCipher;
 import com.afrotransact.seller.adapter.out.geo.HttpGeoClient;
-import com.afrotransact.seller.adapter.out.localtest.LocalTestStripeBilling;
+import com.afrotransact.seller.port.DepartmentDirectory;
+import org.springframework.beans.factory.annotation.Value;
+import com.afrotransact.seller.adapter.out.localtest.LocalTestPlanPayments;
 import com.afrotransact.seller.adapter.out.localtest.LocalTestStripeConnect;
 import com.afrotransact.seller.adapter.out.media.HttpMediaClient;
+import com.afrotransact.seller.adapter.out.payments.DisabledEarningsWithholding;
+import com.afrotransact.seller.adapter.out.payments.HttpConnectedAccountRegistry;
+import com.afrotransact.seller.adapter.out.payments.HttpEarningsWithholding;
+import com.afrotransact.seller.adapter.out.payments.NoOpConnectedAccountRegistry;
 import com.afrotransact.seller.adapter.out.phone.LibPhoneNumbers;
-import com.afrotransact.seller.adapter.out.stripe.StripeBillingAdapter;
 import com.afrotransact.seller.adapter.out.stripe.StripeConnectAdapter;
+import com.afrotransact.seller.adapter.out.stripe.StripePlanPaymentsAdapter;
 import com.afrotransact.seller.adapter.out.stripe.StripeWebhookAdapter;
 import com.afrotransact.seller.adapter.out.usage.HttpAdSpendSource;
 import com.afrotransact.seller.adapter.out.usage.HttpAiUsageSource;
@@ -22,12 +31,15 @@ import com.afrotransact.seller.domain.DefaultApplicationRules;
 import com.afrotransact.seller.domain.DefaultLocalTestStripePolicy;
 import com.afrotransact.seller.domain.LocalTestStripePolicy;
 import com.afrotransact.seller.domain.PhoneNumbers;
+import com.afrotransact.seller.port.ConnectedAccountRegistry;
 import com.afrotransact.seller.port.AdSpendSource;
 import com.afrotransact.seller.port.AiUsageSource;
+import com.afrotransact.seller.port.BillingScheduler;
+import com.afrotransact.seller.port.EarningsWithholdingGateway;
 import com.afrotransact.seller.port.FieldCipher;
 import com.afrotransact.seller.port.MediaClient;
 import com.afrotransact.seller.port.StorageUsageSource;
-import com.afrotransact.seller.port.StripeBillingGateway;
+import com.afrotransact.seller.port.PlanPaymentsGateway;
 import com.afrotransact.seller.port.StripeConnectGateway;
 import com.afrotransact.seller.port.StripeWebhookParser;
 import com.stripe.StripeClient;
@@ -61,9 +73,21 @@ class SellerConfiguration {
     }
 
     @Bean
+    BillingScheduler billingScheduler() {
+        return new RruleBillingScheduler();
+    }
+
+    @Bean
     SellerSettings sellerSettings(SellerProperties props) {
         return new SellerSettings(Set.copyOf(props.liveCountries()), props.stripe().sessionComponents(),
                 props.retailOrgId(), props.geo().pickupMaxRadiusMiles());
+    }
+
+    @Bean
+    DepartmentDirectory departmentDirectory(@Value("${at.seller.catalog.base-url:http://localhost:8101}") String baseUrl,
+                                            @Value("${at.seller.catalog.timeout:3s}") Duration timeout,
+                                            @Value("${at.seller.catalog.departments-ttl:60s}") Duration ttl, Clock clock) {
+        return new HttpDepartmentDirectory(baseUrl, timeout, ttl, clock);
     }
 
     @Bean
@@ -108,14 +132,14 @@ class SellerConfiguration {
         return new StripeConnectAdapter(client, mapper);
     }
 
-    /** Stripe Billing, or the local stand-in under the same rule as Connect. */
+    /** Plan-fee payments (plain Stripe Payments), or the local stand-in under the same rule as Connect. */
     @Bean
-    StripeBillingGateway stripeBillingGateway(StripeClient client, JsonMapper mapper, SellerProperties props,
-                                              LocalTestStripePolicy policy, Environment env, Clock clock) {
+    PlanPaymentsGateway planPaymentsGateway(StripeClient client, SellerProperties props, LocalTestStripePolicy policy,
+                                            Environment env) {
         if (useLocalTest(policy, props.stripe(), activeProfiles(env))) {
-            return new LocalTestStripeBilling(clock);
+            return new LocalTestPlanPayments();
         }
-        return new StripeBillingAdapter(client, mapper);
+        return new StripePlanPaymentsAdapter(client);
     }
 
     /**
@@ -169,6 +193,26 @@ class SellerConfiguration {
     @Bean
     AiUsageSource aiUsageSource(SellerProperties props, ServiceTokens tokens) {
         return new HttpAiUsageSource(props.metering().aiUrl(), props.metering().timeout(), tokens);
+    }
+
+    @Bean
+    ConnectedAccountRegistry connectedAccountRegistry(SellerProperties props, ServiceTokens tokens) {
+        SellerProperties.Billing b = props.billing();
+        if (b.paymentsUrl() == null || b.paymentsUrl().isBlank()) {
+            return new NoOpConnectedAccountRegistry();
+        }
+        return new HttpConnectedAccountRegistry(b.paymentsUrl(), b.timeout(), tokens);
+    }
+
+    /** Collection of plan fees from earnings: off by default (at.seller.billing.collect-from-earnings). */
+    @Bean
+    EarningsWithholdingGateway earningsWithholding(SellerProperties props, ServiceTokens tokens) {
+        SellerProperties.Billing b = props.billing();
+        if (!b.collectFromEarnings()) {
+            return new DisabledEarningsWithholding();
+        }
+        LOG.info("Plan fees may be collected from earnings (payments at {})", b.paymentsUrl());
+        return new HttpEarningsWithholding(b.paymentsUrl(), b.timeout(), tokens);
     }
 
     @Bean

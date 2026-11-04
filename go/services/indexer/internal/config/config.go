@@ -17,6 +17,12 @@ type Config struct {
 		Group   string   `yaml:"group" env:"KAFKA_GROUP"`
 		Topics  []string `yaml:"topics" env:"KAFKA_TOPICS"`
 	} `yaml:"kafka"`
+	// SearchProvider selects the engine: "elasticsearch" (default) or "meilisearch". Search-service must use the same one.
+	SearchProvider string `yaml:"searchProvider" env:"SEARCH_PROVIDER"`
+	Meilisearch    struct {
+		URL    string `yaml:"url" env:"MEILISEARCH_URL"`
+		APIKey string `yaml:"apiKey" env:"MEILISEARCH_API_KEY"`
+	} `yaml:"meilisearch"`
 	Elasticsearch struct {
 		URLs     []string `yaml:"urls" env:"ES_URLS"`
 		Username string   `yaml:"username" env:"ES_USERNAME"`
@@ -57,6 +63,16 @@ type Config struct {
 		BackfillInterval time.Duration `yaml:"backfillInterval" env:"EMBEDDINGS_BACKFILL_INTERVAL"`
 		BackfillBatch    int           `yaml:"backfillBatch" env:"EMBEDDINGS_BACKFILL_BATCH"`
 	} `yaml:"embeddings"`
+	// Reindex configures `indexer reindex`, which rebuilds the product index from the sources of truth (catalog's search
+	// export with the indexer-service client, scope Scopes; offers' and inventory's public reads for buy boxes and stock).
+	Reindex struct {
+		OffersURL    string   `yaml:"offersUrl" env:"OFFERS_URL"`
+		InventoryURL string   `yaml:"inventoryUrl" env:"INVENTORY_URL"`
+		Scopes       []string `yaml:"scopes" env:"REINDEX_SCOPES"`
+		// Batch is the products per catalog page and Concurrency how many are projected at once (flags override).
+		Batch       int `yaml:"batch" env:"REINDEX_BATCH"`
+		Concurrency int `yaml:"concurrency" env:"REINDEX_CONCURRENCY"`
+	} `yaml:"reindex"`
 	Retry struct {
 		Attempts  int `yaml:"attempts" env:"RETRY_ATTEMPTS"`
 		BackoffMs int `yaml:"backoffMs" env:"RETRY_BACKOFF_MS"`

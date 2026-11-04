@@ -58,6 +58,7 @@ type bkBooking struct {
 		DepositMinor    int64  `json:"depositMinor"`
 		Currency        string `json:"currency"`
 		MemberName      string `json:"memberName"`
+		Category        string `json:"category"`
 	} `json:"service"`
 	Status           string     `json:"status"`
 	StartAt          time.Time  `json:"startAt"`
@@ -99,7 +100,11 @@ func (b bkBooking) card() domain.BookingCard {
 		m := b.Service.MemberName
 		practitioner = &m
 	}
-	return domain.BookingCard{ID: b.ID, Reference: b.Reference, CustomerName: b.Customer.Name, ServiceName: b.Service.Name,
+	var category *string
+	if c := strings.TrimSpace(b.Service.Category); c != "" {
+		category = &c
+	}
+	return domain.BookingCard{ID: b.ID, Reference: b.Reference, CustomerName: b.Customer.Name, ServiceName: b.Service.Name, ServiceCategory: category,
 		StartAt: b.StartAt, EndAt: b.EndAt, DurationMinutes: b.Service.DurationMinutes, Status: b.Status,
 		PriceMinor: b.Service.PriceMinor, DepositMinor: b.Service.DepositMinor, Currency: strings.ToUpper(b.Service.Currency),
 		DepositState: depositState(b), Note: note, Practitioner: practitioner, ExpiresAt: b.RequestExpiresAt,

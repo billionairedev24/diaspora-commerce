@@ -1,5 +1,6 @@
 package com.afrotransact.payments.port;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,6 +15,12 @@ public interface PaymentRepository {
     /** Inserts the payment and its lines; false when the order already has a (primary) payment, or an off-session
      *  charge with the same id exists. */
     boolean claim(Payment payment);
+
+    /**
+     * Records the one-way choice to refund the card part as credit (who, why, when). Call with the payment locked; it
+     * touches nothing else of the row, so it never races with the payment's own version.
+     */
+    void markCardRefundsAsCredit(UUID paymentId, String by, String reason, Instant at);
 
     Optional<Payment> findById(UUID id);
 

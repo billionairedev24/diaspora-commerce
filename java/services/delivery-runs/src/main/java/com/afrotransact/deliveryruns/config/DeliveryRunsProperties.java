@@ -37,7 +37,7 @@ public record DeliveryRunsProperties(String publicWebUrl, String locationPath, D
         nextRunSearchLimit = nextRunSearchLimit == null ? 5 : nextRunSearchLimit;
         origin = origin == null ? new Origin(null, null) : origin;
         geo = geo == null ? new Geo(null, null, null, null, null, null) : geo;
-        economics = economics == null ? new Economics(null, null, null, null, null, null, null) : economics;
+        economics = economics == null ? new Economics(null, null, null, null, null, null, null, null) : economics;
         jobs = jobs == null ? new Jobs(null, null, null) : jobs;
         media = media == null ? new Upstream("http://localhost:8207", null) : media.orDefault("http://localhost:8207");
         orders = orders == null ? new Upstream("http://localhost:8104", null)
@@ -46,7 +46,7 @@ public record DeliveryRunsProperties(String publicWebUrl, String locationPath, D
                 : catalog.orDefault("http://localhost:8101");
         search = search == null ? new Upstream("http://localhost:8201", null)
                 : search.orDefault("http://localhost:8201");
-        preorders = preorders == null ? new Preorders(null, null, null, null, null) : preorders;
+        preorders = preorders == null ? new Preorders(null, null, null, null, null, null) : preorders;
     }
 
     /**
@@ -74,9 +74,10 @@ public record DeliveryRunsProperties(String publicWebUrl, String locationPath, D
      * @param retentionDays projected orders are deleted this many days after delivery
      * @param seedDemoAreas seed the design's demo coverage areas (local profile only)
      * @param supportPhone  "Missed it? Call …" number
+     * @param defaultMinOrders minimum order count a new window starts with (staff change it per window; 0 = none)
      */
     public record Preorders(String pagePath, List<String> metroCities, Integer retentionDays, Boolean seedDemoAreas,
-                            String supportPhone) {
+                            String supportPhone, Integer defaultMinOrders) {
 
         public Preorders {
             pagePath = pagePath == null || pagePath.isBlank() ? "/pre-orders" : pagePath;
@@ -84,6 +85,7 @@ public record DeliveryRunsProperties(String publicWebUrl, String locationPath, D
             retentionDays = retentionDays == null ? 90 : retentionDays;
             seedDemoAreas = seedDemoAreas != null && seedDemoAreas;
             supportPhone = supportPhone == null ? "+1 (833) 555-0199" : supportPhone;
+            defaultMinOrders = defaultMinOrders == null ? 10 : Math.max(0, defaultMinOrders);
         }
     }
 
@@ -120,7 +122,7 @@ public record DeliveryRunsProperties(String publicWebUrl, String locationPath, D
     /** Driver cost model (see {@code EconomicsSettings}). */
     public record Economics(Long driverCostPerHourMinor, Long driverCostPerMileMinor, Double collectionMinutes,
                             Double perStopMinutes, Double pickupPointStopMinutes, Double handoverMinutesPerOrder,
-                            Boolean roundTrip) {
+                            Boolean roundTrip, Long platformFeePerOrderMinor) {
 
         public Economics {
             driverCostPerHourMinor = driverCostPerHourMinor == null ? 2500L : driverCostPerHourMinor;
@@ -130,6 +132,7 @@ public record DeliveryRunsProperties(String publicWebUrl, String locationPath, D
             pickupPointStopMinutes = pickupPointStopMinutes == null ? 30.0 : pickupPointStopMinutes;
             handoverMinutesPerOrder = handoverMinutesPerOrder == null ? 1.0 : handoverMinutesPerOrder;
             roundTrip = roundTrip == null || roundTrip;
+            platformFeePerOrderMinor = platformFeePerOrderMinor == null ? 0L : platformFeePerOrderMinor;
         }
     }
 

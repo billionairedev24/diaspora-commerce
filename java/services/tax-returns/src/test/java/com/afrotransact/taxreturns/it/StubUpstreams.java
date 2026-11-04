@@ -77,7 +77,9 @@ class StubUpstreams {
         Map<String, ProductFacts.Facts> known = Map.of(
                 "ATJOLLOF01", new ProductFacts.Facts("ATJOLLOF01", "pantry", true),
                 "ATDRESS001", new ProductFacts.Facts("ATDRESS001", "dresses", false),
-                "ATPILLOW01", new ProductFacts.Facts("ATPILLOW01", "home-decor", false));
+                "ATPILLOW01", new ProductFacts.Facts("ATPILLOW01", "home-decor", false),
+                // TaxLedgerIT quote line 2: a packaged food whose seller answered the tax question
+                "AT2", new ProductFacts.Facts("AT2", "grocery", false, Map.of("tax_class", "Packaged, shelf-stable")));
         return atins -> {
             Map<String, ProductFacts.Facts> out = new ConcurrentHashMap<>();
             for (String a : atins) {

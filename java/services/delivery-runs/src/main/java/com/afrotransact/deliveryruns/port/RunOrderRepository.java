@@ -1,5 +1,6 @@
 package com.afrotransact.deliveryruns.port;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,6 +23,15 @@ public interface RunOrderRepository {
 
     /** Slots of a run, optionally by status, in reservation order. */
     List<RunOrder> findByRun(UUID runId, RunOrderStatus status);
+
+    /** Slots of these runs, whatever their status, in reservation order (no runs: none). */
+    List<RunOrder> findByRuns(Collection<UUID> runIds);
+
+    /**
+     * The order's slot payments events speak of: its active slot, else its most recent one (a cancelled or released
+     * slot can still be refunded).
+     */
+    Optional<RunOrder> findCurrentByOrderId(String orderId);
 
     /** Active slots of a run, in reservation order. */
     List<RunOrder> findActiveByRun(UUID runId);

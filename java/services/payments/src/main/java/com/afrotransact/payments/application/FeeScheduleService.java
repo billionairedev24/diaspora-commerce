@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import com.afrotransact.payments.domain.DeliveryQuote;
 import com.afrotransact.payments.domain.EffectiveFees;
+import com.afrotransact.payments.domain.FeeKind;
 import com.afrotransact.payments.domain.FeeSchedule;
 
 /** "Fees & commissions": versioned commission per category, card fee and FBA fee with effective dates. */
@@ -19,11 +20,26 @@ public interface FeeScheduleService {
     FeeSchedule activeAt(Instant at);
 
     /**
-     * Fees payments applies to {@code orgId} in {@code category} under the version in force at {@code at} (null =
-     * now): commission (seller override, category or default; none for AfroTransact Retail), card-fee estimate and
-     * FBA fee. Readable by calling services (payments:service) and staff.
+     * Product fees payments applies to {@code orgId} in {@code category} under the version in force at {@code at}
+     * (null = now). Readable by calling services (payments:service, payments:fees.read) and staff.
      */
-    EffectiveFees effective(String category, String orgId, Instant at);
+    default EffectiveFees effective(String category, String orgId, Instant at) {
+        return effective(FeeKind.PRODUCT, category, orgId, at);
+    }
+
+    /**
+     * The commission (PRODUCT) or connection fee (SERVICE) payments applies to {@code orgId} in {@code category} at
+     * {@code at} (null = now), first match wins: an active negotiated rate (category, then {@code *}), the
+     * organisation's plan rate, the category rate, the default. AfroTransact Retail pays none. Plus the card-fee
+     * estimate and the FBA fee (products only).
+     */
+    EffectiveFees effective(FeeKind kind, String category, String orgId, Instant at);
+
+    /**
+     * Every rate {@code orgId} pays on {@code kind} lines at {@code at} (null = now), with the source of each and the
+     * organisation's negotiated rates: staff fee readers and services, or the organisation's members who see payouts.
+     */
+    RateCard rateCard(String orgId, FeeKind kind, Instant at);
 
     /**
      * Prices one AfroTransact Delivery trip (S255) under the version in force at {@code at} (null = now): the

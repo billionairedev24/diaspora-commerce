@@ -25,9 +25,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Listing moderation", description = "Queue of listings and booking reviews awaiting a human decision, "
-        + "with SLA timers, assignment, AI triage hints, allow / remove with reason codes and escalation "
-        + "(catalog:moderate; deciding a review also needs bookings:reviews:moderate)")
+@Tag(name = "Listing moderation", description = "Queue of listings, booking reviews and product reviews awaiting a "
+        + "human decision, with SLA timers, assignment, AI triage hints, allow / remove with reason codes and "
+        + "escalation (catalog:moderate; deciding a booking review also needs bookings:reviews:moderate)")
 @RestController
 class ModerationController {
 
@@ -40,7 +40,8 @@ class ModerationController {
     @Operation(summary = "Moderation queue, soonest due first (default: open items of both types)",
             description = "type=NEW_LISTING: submissions awaiting review; type=LIVE_LISTING: reported or flagged "
                     + "live listings (catalog.product.flagged); type=SERVICE_REVIEW: customer reviews of bookings "
-                    + "(booking.review.submitted).")
+                    + "(booking.review.submitted); type=PRODUCT_REVIEW: verified-purchase product reviews that "
+                    + "failed the automatic checks or were reported (catalog.review.submitted | reported).")
     @GetMapping("/v1/moderation/items")
     PageResponse<ModerationItemResponse> queue(@RequestParam(required = false) ModerationStatus status,
                                                @RequestParam(required = false) String assignee,
@@ -60,7 +61,7 @@ class ModerationController {
 
     @Operation(summary = "Reason codes for removing an item",
             description = "Listing codes by default (and for type=NEW_LISTING or LIVE_LISTING); review codes for "
-                    + "type=SERVICE_REVIEW. OTHER fits both and needs a note.")
+                    + "type=SERVICE_REVIEW or PRODUCT_REVIEW. OTHER fits both and needs a note.")
     @GetMapping("/v1/moderation/reason-codes")
     List<ReasonCodeResponse> reasonCodes(@RequestParam(required = false) ModerationItemType type) {
         ModerationItemType kind = type == null ? ModerationItemType.NEW_LISTING : type;
@@ -83,8 +84,9 @@ class ModerationController {
     @Operation(summary = "Allow, then close the item (audited)",
             description = "NEW_LISTING: approves the product in catalog. LIVE_LISTING: keeps the listing live and "
                     + "dismisses the reports (no catalog call). SERVICE_REVIEW: publishes the review in bookings "
-                    + "(POST /v1/reviews/{bookingId}/approve). If the owning service refuses, the item stays open "
-                    + "(409).")
+                    + "(POST /v1/reviews/{bookingId}/approve). PRODUCT_REVIEW: publishes a pending review in catalog "
+                    + "(POST /v1/product-reviews/{id}/approve); a reported review stays public and the reports are "
+                    + "dismissed (no catalog call). If the owning service refuses, the item stays open (409).")
     @PostMapping("/v1/moderation/items/{id}/approve")
     ModerationItemResponse approve(@PathVariable UUID id, @Valid @RequestBody(required = false) ApproveRequest body) {
         return ModerationItemResponse.of(moderation.approve(id, body == null ? null : body.note()));
@@ -93,8 +95,10 @@ class ModerationController {
     @Operation(summary = "Remove with a reason code, then close the item (audited)",
             description = "NEW_LISTING: rejects the product in catalog. LIVE_LISTING: takes the live listing down in "
                     + "catalog (POST /v1/products/{id}/takedown). SERVICE_REVIEW: rejects the review in bookings "
-                    + "(POST /v1/reviews/{bookingId}/reject; review reason codes). If the owning service refuses, the "
-                    + "item stays open (409).")
+                    + "(POST /v1/reviews/{bookingId}/reject; review reason codes). PRODUCT_REVIEW: rejects a pending "
+                    + "review in catalog (POST /v1/product-reviews/{id}/reject) or takes a reported one down "
+                    + "(POST /v1/product-reviews/{id}/remove). If the owning service refuses, the item stays open "
+                    + "(409).")
     @PostMapping("/v1/moderation/items/{id}/reject")
     ModerationItemResponse reject(@PathVariable UUID id, @Valid @RequestBody RejectRequest body) {
         return ModerationItemResponse.of(moderation.reject(id, body.reasonCode(), body.note()));

@@ -2,7 +2,11 @@ package com.afrotransact.inventory.config;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 
+import com.afrotransact.inventory.domain.UsdConversion;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -17,11 +21,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param catalog              catalog-service (AT-FN unit labels, label rendering; S257)
  * @param carrierGateway       carrier-gateway (inbound labels and tracking; S257)
  * @param auth                 client-credentials token of inventory-service for those calls
+ * @param costCurrencies       currencies stock may be sourced and received in (USD is always accepted); default
+ *                             USD, MXN, NGN, GHS, CAD, EUR, GBP, ZAR, KES and XOF (ADR 0005 §7)
  */
 @ConfigurationProperties(prefix = "at.inventory")
 public record InventoryProperties(String retailOrgId, Duration reservationTtl, Integer fefoMinRemainingDays,
                                   ShelfLife shelfLife, Jobs jobs, Storage storage, Endpoint catalog,
-                                  Endpoint carrierGateway, Auth auth) {
+                                  Endpoint carrierGateway, Auth auth, List<String> costCurrencies) {
 
     public InventoryProperties {
         retailOrgId = retailOrgId == null ? "org_afrotransact_retail" : retailOrgId;
@@ -33,6 +39,27 @@ public record InventoryProperties(String retailOrgId, Duration reservationTtl, I
         catalog = catalog == null ? new Endpoint("http://localhost:8101", null) : catalog;
         carrierGateway = carrierGateway == null ? new Endpoint("http://localhost:8209", null) : carrierGateway;
         auth = auth == null ? new Auth(null, null, null, null) : auth;
+        costCurrencies = normalise(costCurrencies);
+    }
+
+    /** Currencies accepted when the list is not configured. */
+    public static final List<String> DEFAULT_COST_CURRENCIES = List.of("USD", "MXN", "NGN", "GHS", "CAD", "EUR", "GBP",
+            "ZAR", "KES", "XOF");
+
+    private static List<String> normalise(List<String> configured) {
+        List<String> source = configured == null || configured.isEmpty() ? DEFAULT_COST_CURRENCIES : configured;
+        List<String> codes = source.stream().map(c -> c.trim().toUpperCase(Locale.ROOT)).filter(c -> !c.isEmpty())
+                .distinct().toList();
+        codes.stream().filter(c -> !UsdConversion.isCurrency(c)).findFirst().ifPresent(bad -> {
+            throw new IllegalArgumentException("at.inventory.cost-currencies: " + bad + " is not an ISO 4217 code");
+        });
+        if (codes.contains("USD")) {
+            return codes;
+        }
+        List<String> withUsd = new ArrayList<>();
+        withUsd.add("USD");
+        withUsd.addAll(codes);
+        return List.copyOf(withUsd);
     }
 
     /** A downstream service. */

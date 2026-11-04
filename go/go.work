@@ -14,5 +14,5 @@ use (
 	./services/notifications
 	./services/promise
 	./services/search
-	./services/storefront
+	../tools/ops/kafka-replay
 )

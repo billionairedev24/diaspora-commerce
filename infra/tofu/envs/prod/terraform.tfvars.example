@@ -1,0 +1,47 @@
+# Copy to terraform.tfvars and commit it: non-secret values only (credentials come from OIDC / env vars).
+# ---- the one switch -------------------------------------------------------------------------------
+cloud  = "gcp" # aws | gcp | azure. The lean profile is cheapest on gcp (free-tier zonal control plane).
+region = "us-east4" # MUST be where Layerbase runs: virginia = gcp us-east4 | aws us-east-1 | azure eastus (docs/engineering/cloud-cost.md)
+layerbase_region = "virginia" # virginia | oregon (Layerbase Dedicated 16 GB is Virginia only)
+
+# ---- identity of the account/project/subscription (only the selected cloud's line matters) ----------
+gcp_project_id        = "afrotransact-prod"
+# azure_subscription_id = "00000000-0000-0000-0000-000000000000"
+# azure_tenant_id       = "00000000-0000-0000-0000-000000000000"
+# ovh_service_name       = "<public cloud project id>"   # ovh (credentials: OVH_APPLICATION_KEY / _SECRET / OVH_CONSUMER_KEY)
+# ovh_endpoint           = "ovh-eu"                      # ovh-eu | ovh-ca | ovh-us
+
+# ---- network & access --------------------------------------------------------------------------------
+cidr_block  = "10.40.0.0/16"
+web_domain  = "afrotransact.com"
+admin_cidrs = [] # e.g. ["203.0.113.0/24"] office/VPN egress; empty = API reachable with auth only
+# cluster_admins = ["arn:aws:iam::123456789012:role/platform-admins"]   # aws
+# cluster_admins = ["group:platform@afrotransact.com"]                  # gcp
+# cluster_admins = ["<entra-group-object-id>"]                          # azure
+
+# ---- tags --------------------------------------------------------------------------------------------
+owner       = "platform"
+cost_center = "engineering"
+
+# ---- GitHub OIDC: only one env per AWS account / GCP project creates the shared provider/pool ---------
+create_github_oidc_provider = false
+# github_oidc_provider_ref  = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com" # or pool id "github"
+
+# ---- SaaS (same on every cloud) ----------------------------------------------------------------------
+# Lean profile: all three off. Search is Meilisearch on Layerbase; Kafka and Temporal run in the cluster
+# (infra/k8s/platform/lean). Turn them on only when you outgrow one node (docs/engineering/cloud-cost.md).
+enable_elastic   = false # needs EC_API_KEY
+enable_confluent = false # needs CONFLUENT_CLOUD_API_KEY / CONFLUENT_CLOUD_API_SECRET
+enable_temporal  = false # needs TEMPORAL_CLOUD_API_KEY; namespace afrotransact-<env>
+# temporal_region             = "aws-us-east-1"   # default <cloud>-<region>; required for azure
+# temporal_accepted_client_ca = "LS0tLS1CRUdJTi..." # base64 PEM of the worker client CA (mTLS); empty = API keys
+
+# ---- cost (S182): monthly budget amount per env is in sizing.tf ---------------------------------------
+budget_notification_emails = [] # e.g. ["platform-alerts@afrotransact.com", "finance@afrotransact.com"]
+budget_shared_account      = false # true when environments share an AWS account / GCP project
+# gcp_billing_account      = "01ABCD-23EF45-6789AB"   # gcp: required for the budget
+
+# ---- OVHcloud only: where Elastic / Confluent / Temporal Cloud run (they are not offered on OVHcloud) -------
+# saas_cloud  = "gcp"            # aws | gcp | azure
+# saas_region = "europe-west1"   # region of saas_cloud closest to the OVH region
+# temporal_region = "aws-eu-west-1"

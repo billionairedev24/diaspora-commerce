@@ -1,13 +1,16 @@
 /* Product page (design: PRODUCT): pinned back/share header; details scroll; add-to-cart bar pinned at the bottom. */
-import { formatMoney } from '@afrotransact/api-client';
+import { formatMoney, pickerDimensions, selectedSize } from '@afrotransact/api-client';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowUUpLeftIcon as ArrowUUpLeft, CalendarCheckIcon as CalendarCheck, CaretLeftIcon as CaretLeft, ExportIcon as Export, LightningIcon as Lightning, PackageIcon as Package, PlusIcon as Plus, ShoppingCartIcon as ShoppingCart } from 'phosphor-react-native';
+import { useState } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
 
 import { useAddresses, useProduct } from '@/api/queries';
 import { env } from '@/config/env';
 import { useQuantity } from '@/features/shop/cartHooks';
-import { ProductImage, QtyStepper } from '@/features/shop/components';
+import { ProductGallery, QtyStepper } from '@/features/shop/components';
+import { OptionChips, SizeGuideSheet } from '@/features/shop/SizeGuide';
+import { useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { AppText, Button, IconButton, Loading } from '@/ui/primitives';
 import { Screen } from '@/ui/Screen';
@@ -15,12 +18,14 @@ import { Screen } from '@/ui/Screen';
 export default function ProductScreen() {
   const { atin } = useLocalSearchParams<{ atin: string }>();
   const router = useRouter();
+  const tr = useT();
   const product = useProduct(atin ?? '');
   const addresses = useAddresses();
   const d = product.data;
   const offer = d?.buyBox ?? null;
   const { qty, setQty } = useQuantity(atin ?? '', offer?.offerId ?? '');
   const def = addresses.data?.find((a) => a.isDefault);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   const header = (
     <View style={styles.header}>
@@ -29,6 +34,9 @@ export default function ProductScreen() {
     </View>
   );
   if (!d) return <Screen header={header}>{product.isError ? <AppText>We couldn’t load this product.</AppText> : <Loading />}</Screen>;
+
+  const dimensions = pickerDimensions(d.product.variants);
+  const openVariant = (a: string) => router.replace({ pathname: '/product/[atin]', params: { atin: a } });
 
   const footer = !offer ? (
     <Button kind="muted" label="Currently unavailable" onPress={() => undefined} disabled />
@@ -43,12 +51,17 @@ export default function ProductScreen() {
 
   return (
     <Screen header={header} footer={footer}>
-      <ProductImage title={d.product.title} height={240} />
+      <ProductGallery title={d.product.title} images={d.product.images} height={260} />
       <View style={{ gap: 4 }}>
         <AppText variant="small" color={c.link}>{d.soldBy}</AppText>
         <AppText variant="title" accessibilityRole="header">{d.product.title}</AppText>
         <AppText variant="small" color={c.textMuted}>★ {d.product.rating} · {d.product.reviewCount.toLocaleString('en-US')} reviews</AppText>
       </View>
+      {dimensions.length > 0 ? <OptionChips dimensions={dimensions} onPick={openVariant} onOpenGuide={d.sizeChart ? () => setGuideOpen(true) : undefined} /> : null}
+      {d.sizeChart && dimensions.length === 0 ? <Button kind="ghost" label={tr('cu.sizeGuide.open')} onPress={() => setGuideOpen(true)} /> : null}
+      {d.sizeChart ? (
+        <SizeGuideSheet visible={guideOpen} onClose={() => setGuideOpen(false)} chart={d.sizeChart} size={selectedSize(d.product.variants)} variants={d.product.variants} onPick={openVariant} />
+      ) : null}
       {offer ? (
         <View style={styles.price}>
           <AppText variant="display">{formatMoney(offer.priceMinor, offer.currency)}</AppText>

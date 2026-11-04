@@ -30,7 +30,7 @@ spec:
   - name: afrotransact-services
     rules:
     - alert: ServiceDown
-      expr: up{service=~"identity|catalog|offers|inventory|orders|payments|seller|retail|fulfilment|bookings|trust-ops|tax-returns|content|ai-gateway|mcp-server|gateway-bff|search|indexer|cart|promise|geo|storefront|media|notifications|carrier-gateway"}
+      expr: up{service=~"identity|catalog|offers|inventory|orders|payments|seller|retail|fulfilment|bookings|trust-ops|tax-returns|content|ai-gateway|mcp-server|gateway-bff|search|indexer|cart|promise|geo|media|notifications|carrier-gateway"}
         == 0
       for: 2m
       labels:

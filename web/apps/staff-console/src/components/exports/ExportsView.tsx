@@ -1,6 +1,6 @@
 'use client';
 
-import { type ExportJob, staffQueries } from '@afrotransact/api-client';
+import { type ExportJob, pollWhile, staffQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -24,7 +24,7 @@ export function ExportsView() {
   const t = useT();
   const qc = useQueryClient();
   const state = useTableState({ searchParams: useSearchParams(), defaultSort: [{ id: 'createdAt', desc: true }] });
-  const q = useQuery({ ...staffQueries.exports(staffApi()), refetchInterval: (query) => (busy(query.state.data?.items) ? 3000 : false) });
+  const q = useQuery(staffQueries.exports(staffApi(), pollWhile(3000, (d) => busy(d?.items))));
   const columns = useMemo<ColumnDef<ExportJob>[]>(
     () => [
       {

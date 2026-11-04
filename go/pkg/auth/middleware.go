@@ -10,11 +10,13 @@ import (
 // Middleware authenticates requests. With a nil verifier (local profile) every request runs as LocalSuperAdmin, except
 // customers, drivers and organisation members sending their token, who act as themselves (LocalActor).
 // When optional is true, anonymous requests pass through without an actor (public reads such as search).
+// A person's request with ActingAsHeader "CUSTOMER" (storefront, customer app) acts as a shopper (ActingAs).
 func Middleware(v Verifier, optional bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if v == nil {
-				next.ServeHTTP(w, r.WithContext(WithActor(r.Context(), LocalActor(r.Header.Get("Authorization")))))
+				actor := ActingAs(LocalActor(r.Header.Get("Authorization")), r.Header.Get(ActingAsHeader))
+				next.ServeHTTP(w, r.WithContext(WithActor(r.Context(), actor)))
 				return
 			}
 			h := r.Header.Get("Authorization")
@@ -32,7 +34,7 @@ func Middleware(v Verifier, optional bool) func(http.Handler) http.Handler {
 				problem.Write(w, r, problem.New(http.StatusUnauthorized, "auth.unauthenticated", "Invalid or expired token"))
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(WithActor(r.Context(), actor)))
+			next.ServeHTTP(w, r.WithContext(WithActor(r.Context(), ActingAs(actor, r.Header.Get(ActingAsHeader)))))
 		})
 	}
 }

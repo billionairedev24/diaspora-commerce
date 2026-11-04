@@ -28,13 +28,14 @@ func ordersResource() *staffResource {
 	}
 	return &staffResource{
 		key: "orders", module: "orders", title: "Orders", statusKey: "status", exportable: true, searchPlaceholder: "Order number (AT-…)",
-		columns: []domain.Column{col("orderNumber", "Order", "mono", 13), col("customer", "Customer", "strong", 18), col("sellers", "Sellers", "text", 20),
+		columns: []domain.Column{col("orderNumber", "Order", "mono", 13), col("customerName", "Customer", "strong", 18), col("sellers", "Sellers", "text", 20),
 			col("totalMinor", "Total", "money", 11), col("placedAt", "Placed", "datetime", 16), col("shipTo", "Ship to", "text", 12), col("status", "Status", "status", 10)},
 		facets: domain.StaffFacets("PENDING_PAYMENT", "PLACED", "PARTIALLY_SHIPPED", "COMPLETED", "CANCELLED"),
 		cells: func(o jobj) map[string]any {
-			return map[string]any{"customer": cellValue(firstNonEmpty(jstr(o, "shippingAddress.fullName"), jstr(o, "customerId"))), "sellers": cellValue(sellers(o))}
+			return map[string]any{"sellers": cellValue(sellers(o))}
 		},
-		idOf: func(o jobj) string { return jstr(o, "orderNumber") },
+		names: []nameRef{customerRef("customerId").orFrom("shippingAddress.fullName"), sellerRef("sellerOrgId").inList("shipments").named("sellerName")},
+		idOf:  func(o jobj) string { return jstr(o, "orderNumber") },
 		list: func(ctx context.Context, sc staffCtx, q staffQuery) (staffList, error) {
 			v := url.Values{"limit": {strconv.Itoa(q.Size)}}
 			if q.Status != "" {
@@ -52,13 +53,20 @@ func ordersResource() *staffResource {
 			}
 			return jpage(raw), nil
 		},
-		get:     getByPath("/v1/orders/", upOrders),
+		get: func(ctx context.Context, sc staffCtx, id string) (jobj, error) {
+			o, err := getByPath("/v1/orders/", upOrders)(ctx, sc, id)
+			if err != nil {
+				return nil, err
+			}
+			enrichStaffProof(ctx, sc.up.Proof, o)
+			return o, nil
+		},
 		titleOf: func(o jobj) string { return "Order " + jstr(o, "orderNumber") },
 		subtitleOf: func(o jobj) string {
-			return strings.Trim(firstNonEmpty(jstr(o, "shippingAddress.fullName"), jstr(o, "customerId"))+" · "+jstr(o, "shipTo"), " ·")
+			return strings.Trim(jstr(o, "customerName")+" · "+jstr(o, "shipTo"), " ·")
 		},
 		sections: func(o jobj) []domain.DetailSection {
-			return autoSections(o, "status", "shipments")
+			return append(autoSections(o, "status", "shipments"), proofSections(o)...)
 		},
 		tables: func(o jobj) []domain.DetailTable {
 			lines := []jobj{}
@@ -83,66 +91,165 @@ func ordersResource() *staffResource {
 					if r := jstr(t, "reason"); r != "" {
 						text += " — " + r
 					}
+					if p := proofSummary(t); p != "" {
+						text += " (" + p + ")"
+					}
 					out = append(out, domain.ActivityEntry{At: timeOf(t, "at"), Actor: firstNonEmpty(jstr(t, "source"), jstr(t, "actorType")), Text: text})
 				}
 			}
 			return out
 		},
 		links: func(o jobj) []domain.RecordLink {
-			return []domain.RecordLink{{Label: "Open in customer support", Href: "/support?customer=" + url.QueryEscape(jstr(o, "customerId"))}}
+			links := []domain.RecordLink{{Label: "Open in customer support", Href: "/support?customer=" + url.QueryEscape(jstr(o, "customerId"))}}
+			// An AfroTransact driver takes it from the dock: assign one in Delivery dispatch, then the driver app does the rest
+			// (scan at pickup, the route, proof of delivery).
+			for _, sh := range objs(o, "shipments") {
+				st := strings.ToUpper(jstr(sh, "status"))
+				if strings.EqualFold(jstr(sh, "deliveryMethod"), domain.AfroTransactDelivery) && (st == "READY" || st == "PACKED") {
+					links = append(links, domain.RecordLink{Label: "Assign a driver", Href: "/dispatch?tab=pickups"})
+					break
+				}
+			}
+			return links
 		},
+		// The steps people take every day are one tap each ("Mark packed", "Mark ready"); the form below is for the rare
+		// ones: cancel, a failed delivery, handing over a pickup order with the customer's code.
+		actionsFor: shipmentNextStepActions,
 		actions: []staffAction{
-			{key: "shipment-status", label: "Update shipment status", tone: "primary", permission: "orders:manage", also: []string{"orders:update-status"},
+			{key: "shipment-status", label: "More options", tone: "neutral", permission: "orders:manage", also: []string{"orders:update-status"},
 				form: func(_ context.Context, _ staffCtx, o jobj) *domain.Form {
-					opts := []domain.FieldOption{}
-					for _, s := range objs(o, "shipments") {
-						label := jstr(s, "label") + " · " + domain.Humanize(jstr(s, "status"))
-						if next := strs(s, "nextActions"); len(next) > 0 {
-							label += " → " + strings.ToLower(domain.Humanize(strings.ToUpper(strings.Join(next, ", "))))
-						}
-						opts = append(opts, domain.FieldOption{Value: firstNonEmpty(jstr(s, "shipmentId"), jstr(s, "id")), Label: label})
-					}
-					return &domain.Form{Title: "Move a shipment to another status", SubmitLabel: "Update", Fields: []domain.FormField{
-						withOptions(ff("shipmentId", "Shipment", "select", true), opts),
-						withOptions(ff("to", "New status", "select", true), domain.StaffOptions(shipmentMoves(o)...)),
-						withMax(ff("reason", "Reason", "text", false), 500)}}
+					return &domain.Form{Title: "What happened to the shipment?", SubmitLabel: "Save", Fields: []domain.FormField{
+						withOptions(ff("step", "Next step", "select", true), shipmentSteps(o)),
+						withMax(ff("reason", "Reason or note", "text", false), 500),
+						withPattern(ff("handoverCode", "Customer's code (handing over a pickup order)", "text", false), `^\d{4}$`, "The 4-digit code the customer shows. Without it, say why in the reason.")}}
 				},
 				when: func(_ staffCtx, o jobj) string {
 					if len(objs(o, "shipments")) == 0 {
 						return "This order has no shipments."
 					}
+					if len(shipmentSteps(o)) == 0 {
+						return "No shipment steps are available for your role on this order."
+					}
 					return ""
 				},
 				run: func(ctx context.Context, sc staffCtx, _ jobj, v jobj) error {
-					return sc.post(ctx, sc.up.Orders, "/v1/shipments/"+url.PathEscape(vs(v, "shipmentId"))+"/transitions", omitEmpty(jobj{"to": vs(v, "to"), "reason": vs(v, "reason")}), nil)
+					shipmentID, to, ok := strings.Cut(vs(v, "step"), "|")
+					if !ok || shipmentID == "" || to == "" {
+						return domain.ValidationProblem(map[string]string{"step": "Choose the next step"})
+					}
+					code := strings.TrimSpace(vs(v, "handoverCode"))
+					if code != "" && !domain.IsHandoverCode(code) {
+						return domain.ValidationProblem(map[string]string{"handoverCode": "Enter the 4 digits"})
+					}
+					if reasonRequired(to) && strings.TrimSpace(vs(v, "reason")) == "" && !(to == "DELIVERED" && code != "") {
+						return domain.ValidationProblem(map[string]string{"reason": "Say why (required to " + strings.ToLower(shipmentStepVerbs[to]) + ")"})
+					}
+					return sc.post(ctx, sc.up.Orders, "/v1/shipments/"+url.PathEscape(shipmentID)+"/transitions", omitEmpty(jobj{"to": to, "reason": vs(v, "reason"), "handoverCode": code}), nil)
 				}},
 		},
 	}
 }
 
-// shipmentLifecycle is the order of the shipment statuses staff may move a shipment to (orders-service state machine).
-var shipmentLifecycle = []string{"CONFIRMED", "PACKED", "READY", "PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED",
-	"DELIVERY_FAILED", "RETURNED", "CANCELLED"}
+// driverSteps are the steps an AfroTransact driver takes in the driver app (scan at pickup, route, proof of delivery), so
+// staff do not tap them for an AfroTransact Delivery shipment.
+var driverSteps = map[string]bool{"PICKED_UP": true, "IN_TRANSIT": true, "OUT_FOR_DELIVERY": true, "DELIVERED": true}
 
-// shipmentMoves lists the statuses the order's shipments can move to next, from each shipment's nextActions (orders-service
-// applies the state machine for the caller: staff move AfroTransact-fulfilled packages through every step, but only
-// confirm delivery, record a failure, return or cancel a seller's). Without nextActions every staff move is offered and
-// orders-service refuses the ones that do not apply.
-func shipmentMoves(o jobj) []string {
-	next := map[string]bool{}
-	for _, s := range objs(o, "shipments") {
+// shipmentNextStepActions gives each shipment its one next step as a single button, with no form. A step that needs a
+// reason or the customer's code (delivered), exceptions (cancel, failed, returned) and the driver's own steps are left out.
+func shipmentNextStepActions(o jobj) []staffAction {
+	ships := objs(o, "shipments")
+	out := []staffAction{}
+	for _, s := range ships {
+		id := firstNonEmpty(jstr(s, "shipmentId"), jstr(s, "id"))
+		next := map[string]bool{}
 		for _, a := range strs(s, "nextActions") {
 			next[strings.ToUpper(a)] = true
 		}
-	}
-	out := []string{}
-	for _, v := range shipmentLifecycle {
-		if next[v] {
-			out = append(out, v)
+		driverOwned := strings.EqualFold(jstr(s, "deliveryMethod"), domain.AfroTransactDelivery)
+		for _, step := range shipmentLifecycle {
+			if !next[step] || reasonRequired(step) || step == "RETURNED" || (driverOwned && driverSteps[step]) {
+				continue
+			}
+			label := shipmentStepVerbs[step]
+			if len(ships) > 1 {
+				label += " · " + jstr(s, "label")
+			}
+			shipmentID, to := id, step
+			out = append(out, staffAction{
+				key: "step:" + shipmentID + ":" + to, label: label, tone: "primary", permission: "orders:manage", also: []string{"orders:update-status"},
+				run: func(ctx context.Context, sc staffCtx, _ jobj, _ jobj) error {
+					return sc.post(ctx, sc.up.Orders, "/v1/shipments/"+url.PathEscape(shipmentID)+"/transitions", jobj{"to": to}, nil)
+				}})
+			break // one next step per shipment
+		}
+		if hint := driverHint(jstr(s, "status"), driverOwned); hint != "" {
+			label := "Waiting for the driver"
+			if len(ships) > 1 {
+				label += " · " + jstr(s, "label")
+			}
+			// A button that cannot be pressed: it says who moves this shipment next and where.
+			out = append(out, staffAction{key: "driver:" + id, label: label, tone: "neutral", permission: "orders:manage", also: []string{"orders:update-status"},
+				when: func(staffCtx, jobj) string { return hint },
+				run:  func(context.Context, staffCtx, jobj, jobj) error { return nil }})
 		}
 	}
-	if len(out) == 0 {
-		return shipmentLifecycle
+	return out
+}
+
+// driverHint says what happens next to an AfroTransact Delivery shipment that is with the driver side of the flow.
+func driverHint(status string, driverOwned bool) string {
+	if !driverOwned {
+		return ""
+	}
+	switch strings.ToUpper(status) {
+	case "READY":
+		return "Assign a driver in Delivery dispatch. The driver scans the packages at pickup in the driver app, which marks it picked up."
+	case "PICKED_UP", "IN_TRANSIT":
+		return "With the driver. It becomes out for delivery when the driver starts the route in the driver app."
+	case "OUT_FOR_DELIVERY":
+		return "Out with the driver. It becomes delivered when the driver records proof in the driver app (the customer's code, a signature or a photo). To confirm it yourself, use More options and give a reason."
+	}
+	return ""
+}
+
+// shipmentLifecycle is the order of the steps staff may take on a shipment (orders-service state machine).
+var shipmentLifecycle = []string{"CONFIRMED", "PACKED", "READY", "PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED",
+	"DELIVERY_FAILED", "RETURNED", "CANCELLED"}
+
+// shipmentStepVerbs names each step as the action a person takes, not the status it leaves behind.
+var shipmentStepVerbs = map[string]string{
+	"CONFIRMED": "Confirm", "PACKED": "Mark packed", "READY": "Mark ready", "PICKED_UP": "Mark picked up",
+	"IN_TRANSIT": "Mark in transit", "OUT_FOR_DELIVERY": "Mark out for delivery", "DELIVERED": "Mark delivered",
+	"DELIVERY_FAILED": "Record a failed delivery", "RETURNED": "Mark returned", "CANCELLED": "Cancel the shipment",
+}
+
+// reasonRequired: the steps orders-service wants a reason for (a cancellation, a failure, a delivery confirmed by hand).
+func reasonRequired(to string) bool {
+	return to == "CANCELLED" || to == "DELIVERY_FAILED" || to == "DELIVERED"
+}
+
+// shipmentSteps lists, for each shipment, the steps the caller may take on it next (the shipment's own nextActions:
+// orders-service applies the state machine for the caller), one choice per shipment and step, as "<shipment> · <step>".
+// The value is "<shipmentId>|<STATUS>".
+func shipmentSteps(o jobj) []domain.FieldOption {
+	out := []domain.FieldOption{}
+	multi := len(objs(o, "shipments")) > 1
+	for _, s := range objs(o, "shipments") {
+		next := map[string]bool{}
+		for _, a := range strs(s, "nextActions") {
+			next[strings.ToUpper(a)] = true
+		}
+		id := firstNonEmpty(jstr(s, "shipmentId"), jstr(s, "id"))
+		for _, step := range shipmentLifecycle {
+			if !next[step] {
+				continue
+			}
+			label := shipmentStepVerbs[step]
+			if multi {
+				label = jstr(s, "label") + " · " + label
+			}
+			out = append(out, domain.FieldOption{Value: id + "|" + step, Label: label})
+		}
 	}
 	return out
 }
@@ -157,7 +264,7 @@ func productsResource() *staffResource {
 	}
 	return &staffResource{
 		key: "products", module: "catalog", title: "Products", statusKey: "status", exportable: true, searchPlaceholder: "Title or ATIN",
-		columns: []domain.Column{col("atin", "ATIN", "mono", 15), col("title", "Product", "strong", 30), col("ownerOrgId", "Seller", "text", 20),
+		columns: []domain.Column{col("atin", "ATIN", "mono", 15), col("title", "Product", "strong", 30), col("ownerOrgName", "Seller", "text", 20),
 			col("productType", "Type", "text", 15), col("status", "Status", "status", 20)},
 		facets: domain.StaffFacets("IN_REVIEW", "PENDING_CATEGORY_APPROVAL", "LIVE", "PAUSED", "REJECTED", "TAKEN_DOWN"),
 		list: listPaged("/v1/products", upCatalog, func(q staffQuery, v url.Values) {
@@ -166,11 +273,26 @@ func productsResource() *staffResource {
 			}
 		}),
 		get:        getByPath("/v1/products/", upCatalog),
+		names:      []nameRef{sellerRef("ownerOrgId")},
 		titleOf:    func(o jobj) string { return jstr(o, "title") },
-		subtitleOf: func(o jobj) string { return jstr(o, "atin") + " · " + jstr(o, "ownerOrgId") },
-		sections:   func(o jobj) []domain.DetailSection { return autoSections(o, "status", "variants", "images") },
+		subtitleOf: func(o jobj) string { return jstr(o, "atin") + " · " + jstr(o, "ownerOrgName") },
+		sections: func(o jobj) []domain.DetailSection {
+			secs := autoSections(o, "status", "variants", "images")
+			// What the shopper sees first: the listing's photos (reviewers cannot judge a listing without them).
+			photos := domain.DetailSection{Title: "Photos", Fields: []domain.DetailField{}}
+			for i, img := range objs(o, "images") {
+				if u := jstr(img, "url"); strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://") {
+					photos.Fields = append(photos.Fields, domain.DetailField{Label: "Photo " + strconv.Itoa(i+1), Value: u, Kind: "image"})
+				}
+			}
+			if len(photos.Fields) > 0 {
+				secs = append([]domain.DetailSection{photos}, secs...)
+			}
+			return secs
+		},
 		tables: func(o jobj) []domain.DetailTable {
-			return []domain.DetailTable{tableOf("Variants", objs(o, "variants"), []domain.Column{col("atin", "ATIN", "mono", 30), col("sku", "SKU", "mono", 30), col("status", "Status", "status", 40)}, "atin")}
+			return []domain.DetailTable{tableOf("Variants", objs(o, "variants"), []domain.Column{col("atin", "ATIN", "mono", 22), col("sellerSku", "SKU", "mono", 22),
+				col("priceMinor", "Price", "money", 16), col("quantity", "In stock", "number", 14)}, "atin")}
 		},
 		actions: []staffAction{
 			{key: "approve", label: "Approve", tone: "primary", permission: "catalog:moderate", confirm: "Approve this product and make it live?", when: inState("IN_REVIEW"),
@@ -199,24 +321,29 @@ func moderationResource() *staffResource {
 	}
 	return &staffResource{
 		key: "moderation", module: "catalog", title: "Moderation queue", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("title", "Listing", "strong", 28), col("sellerOrgId", "Seller", "text", 16), col("type", "Type", "text", 14),
-			col("priority", "Priority", "text", 10), col("sla.dueAt", "Due", "datetime", 14), col("assignee", "Assignee", "text", 8), col("status", "Status", "status", 10)},
-		facets:     domain.StaffFacets("PENDING", "ESCALATED", "APPROVED", "REJECTED", "CLOSED"),
-		list:       listPaged("/v1/moderation/items", upTrustOps, nil),
-		get:        getByPath("/v1/moderation/items/", upTrustOps),
+		columns: []domain.Column{col("title", "Item", "strong", 28), col("sellerOrgName", "Seller", "text", 16), col("type", "Type", "text", 14),
+			col("priority", "Priority", "text", 10), col("sla.dueAt", "Due", "datetime", 14), col("assigneeName", "Assignee", "text", 12), col("status", "Status", "status", 10)},
+		facets: domain.StaffFacets("PENDING", "ESCALATED", "APPROVED", "REJECTED", "CLOSED"),
+		list:   liftedList(listPaged("/v1/moderation/items", upTrustOps, nil)),
+		get:    liftedGet(getByPath("/v1/moderation/items/", upTrustOps)),
+		// Reviews (booking and product) show their author by name: liftReviewAuthor puts the id where the console resolves it.
+		names: []nameRef{sellerRef("sellerOrgId"), customerRef("customerId"), personRef("assignee", "Assignee"), personRef("decidedBy", "Decided by")},
+		sections: func(o jobj) []domain.DetailSection {
+			if jstr(o, "review.reviewerName") != "" {
+				return reviewItemSections(o)
+			}
+			return autoSections(o, "status")
+		},
 		titleOf:    func(o jobj) string { return jstr(o, "title") },
 		subtitleOf: func(o jobj) string { return domain.Humanize(jstr(o, "type")) + " · " + jstr(o, "atin") },
 		actions: []staffAction{
 			{key: "assign", label: "Assign to me", tone: "neutral", permission: "catalog:moderate", confirm: "Take this item?", when: inState("PENDING", "ESCALATED"),
 				run: act("/assign", func(jobj) jobj { return jobj{} })},
-			{key: "approve", label: "Allow", tone: "primary", permission: "catalog:moderate", level: domain.LevelApprove, form: noteForm("Allow the listing", "Allow", false), when: inState("PENDING", "ESCALATED"),
+			{key: "approve", label: "Allow", tone: "primary", permission: "catalog:moderate", level: domain.LevelApprove, form: moderationNoteForm, when: inState("PENDING", "ESCALATED"),
 				run: act("/approve", func(v jobj) jobj { return omitEmpty(jobj{"note": vs(v, "note")}) })},
 			{key: "reject", label: "Remove", tone: "danger", permission: "catalog:moderate", level: domain.LevelApprove, when: inState("PENDING", "ESCALATED"),
-				form: func(context.Context, staffCtx, jobj) *domain.Form {
-					return &domain.Form{Title: "Remove the listing", SubmitLabel: "Remove", Fields: []domain.FormField{
-						withOptions(ff("reasonCode", "Reason", "select", true), moderationReasonCodes), withMax(ff("note", "Note", "textarea", false), 1000)}}
-				},
-				run: act("/reject", func(v jobj) jobj { return omitEmpty(jobj{"reasonCode": vs(v, "reasonCode"), "note": vs(v, "note")}) })},
+				form: moderationRemoveForm,
+				run:  act("/reject", func(v jobj) jobj { return omitEmpty(jobj{"reasonCode": vs(v, "reasonCode"), "note": vs(v, "note")}) })},
 			{key: "escalate", label: "Escalate", tone: "neutral", permission: "catalog:moderate", form: reasonForm("Escalate to senior review", "Escalate"), when: inState("PENDING"),
 				run: act("/escalate", func(v jobj) jobj { return jobj{"reason": vs(v, "reason")} })},
 		},
@@ -233,9 +360,18 @@ func inventoryResource() *staffResource {
 	}
 	return &staffResource{
 		key: "inventory", module: "inventory", title: "Lots", statusKey: "status", exportable: true, searchPlaceholder: "SKU",
-		columns: []domain.Column{col("sku", "SKU", "mono", 14), col("lotNo", "Lot", "mono", 16), col("nodeId", "Centre", "text", 13), col("qtyOnHand", "On hand", "number", 10),
-			col("qtyReserved", "Reserved", "number", 10), col("qtyAvailable", "Available", "number", 10), col("expDate", "Expires", "date", 13), col("status", "Status", "status", 14)},
+		columns: []domain.Column{col("sku", "SKU", "mono", 12), col("lotNo", "Lot", "mono", 13), col("nodeId", "Centre", "text", 10), col("qtyOnHand", "On hand", "number", 8),
+			col("qtyReserved", "Reserved", "number", 8), col("qtyAvailable", "Available", "number", 8), col("costPaid", "Unit cost paid", "text", 13),
+			col("unitCostUsdMinor", "Unit cost (USD)", "money", 10), col("expDate", "Expires", "date", 10), col("status", "Status", "status", 8)},
 		facets: domain.StaffFacets("SELLABLE", "QUARANTINED", "DAMAGED", "EXPIRED"),
+		// Stock is received in the currency actually paid; the table shows it with the rate and the USD value alongside.
+		cells: func(o jobj) map[string]any {
+			paid := formatPaid(int64(num(o, "unitLandedCostMinor")), jstr(o, "currency"))
+			if jstr(o, "currency") != "USD" {
+				paid += " @ " + jstr(o, "fxRateToUsd")
+			}
+			return map[string]any{"costPaid": paid}
+		},
 		list: listPaged("/v1/lots", upInventory, func(q staffQuery, v url.Values) {
 			if q.Q != "" {
 				v.Set("sku", strings.ToUpper(q.Q))
@@ -280,6 +416,7 @@ func purchaseOrdersResource() *staffResource {
 		facets:     domain.StaffFacets("DRAFT", "PENDING_APPROVAL", "APPROVED", "SENT", "CONFIRMED", "RECEIVED", "CLOSED", "CANCELLED"),
 		list:       listPaged("/v1/purchase-orders", upRetail, nil),
 		get:        getByPath("/v1/purchase-orders/", upRetail),
+		names:      []nameRef{personRef("createdBy", "Created by"), personRef("approvedBy", "Approved by"), personRef("by", "By").inList("history")},
 		titleOf:    func(o jobj) string { return jstr(o, "number") + " · " + jstr(o, "supplierCode") },
 		subtitleOf: func(o jobj) string { return jstr(o, "incoterm") + " → " + jstr(o, "destinationNodeId") },
 		version:    func(o jobj) string { return jstr(o, "version") },
@@ -295,7 +432,7 @@ func purchaseOrdersResource() *staffResource {
 				if n := jstr(h, "note"); n != "" {
 					text += " — " + n
 				}
-				out = append(out, domain.ActivityEntry{At: timeOf(h, "at"), Actor: jstr(h, "by"), Text: text})
+				out = append(out, domain.ActivityEntry{At: timeOf(h, "at"), Actor: jstr(h, "byName"), Text: text})
 			}
 			return out
 		},
@@ -313,12 +450,13 @@ func purchaseOrdersResource() *staffResource {
 func routesResource() *staffResource {
 	return &staffResource{
 		key: "routes", module: "dispatch", title: "Routes", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("name", "Route", "mono", 16), col("zone", "Zone", "text", 14), col("window", "Window", "text", 12), col("driverId", "Driver", "strong", 16),
+		columns: []domain.Column{col("name", "Route", "mono", 16), col("zone", "Zone", "text", 14), col("window", "Window", "text", 12), col("driverName", "Driver", "strong", 16),
 			col("stopCount", "Stops", "number", 8), col("serviceDate", "Date", "date", 12), col("status", "Status", "status", 22)},
 		cells:      func(o jobj) map[string]any { return map[string]any{"stopCount": float64(len(objs(o, "stops")))} },
 		facets:     domain.StaffFacets("PLANNED", "ASSIGNED", "IN_PROGRESS", "COMPLETED", "CANCELLED"),
 		list:       listLimited("/v1/dispatch/routes", upFulfilment),
 		get:        getByPath("/v1/dispatch/routes/", upFulfilment),
+		names:      []nameRef{driverRef("driverId")},
 		create:     buildRoutesCreate(),
 		titleOf:    func(o jobj) string { return "Route " + firstNonEmpty(jstr(o, "name"), jstr(o, "id")) },
 		subtitleOf: func(o jobj) string { return jstr(o, "zone") + " · " + jstr(o, "window") },
@@ -333,7 +471,7 @@ func routesResource() *staffResource {
 		actions: []staffAction{
 			{key: "assign", label: "Assign driver", tone: "primary", permission: "delivery:dispatch", when: inState("PLANNED", "ASSIGNED"),
 				form: func(context.Context, staffCtx, jobj) *domain.Form {
-					return &domain.Form{Title: "Assign a driver", SubmitLabel: "Assign", Fields: []domain.FormField{withMax(ff("driverId", "Driver id", "text", true), 64), withMax(ff("vehicleId", "Vehicle", "text", false), 40)}}
+					return &domain.Form{Title: "Assign a driver", SubmitLabel: "Assign", Fields: []domain.FormField{withLookup(withMax(ff("driverId", "Driver", "text", true), 64), lookupDrivers), withMax(ff("vehicleId", "Vehicle", "text", false), 40)}}
 				},
 				run: func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {
 					return sc.post(ctx, sc.up.Fulfilment, "/v1/dispatch/routes/"+url.PathEscape(jstr(o, "id"))+"/assign", omitEmpty(jobj{"driverId": vs(v, "driverId"), "vehicleId": vs(v, "vehicleId")}), nil)
@@ -344,4 +482,55 @@ func routesResource() *staffResource {
 				}},
 		},
 	}
+}
+
+// proofSummary is the driver's proof of delivery on a timeline entry in one line: how it was handed over, to whom or
+// where, and which evidence was captured ("handed to the customer, code checked, photo"). Empty when there is none.
+func proofSummary(t jobj) string {
+	if jstr(t, "proof.handoverMethod") == "" && jstr(t, "proof.failureReason") == "" && jstr(t, "proof.photoAssetId") == "" {
+		return ""
+	}
+	parts := []string{}
+	switch jstr(t, "proof.handoverMethod") {
+	case "CUSTOMER":
+		parts = append(parts, "handed to the customer, code checked")
+	case "SOMEONE_ELSE":
+		who := jstr(t, "proof.recipientName")
+		if rel := jstr(t, "proof.relationship"); rel != "" {
+			who += ", " + strings.ToLower(rel)
+		}
+		parts = append(parts, "handed to "+firstNonEmpty(strings.TrimSpace(who), "someone else"))
+	case "SAFE_PLACE":
+		parts = append(parts, "left at "+firstNonEmpty(strings.ToLower(jstr(t, "proof.safePlace")), "a safe place"))
+	}
+	if r := jstr(t, "proof.failureReason"); r != "" {
+		parts = append(parts, "driver: "+r)
+	}
+	if jstr(t, "proof.photoAssetId") != "" {
+		parts = append(parts, "photo")
+	}
+	if jstr(t, "proof.signatureAssetId") != "" {
+		parts = append(parts, "signature")
+	}
+	return strings.Join(parts, ", ")
+}
+
+// moderationNoteForm asks for the optional note of "Allow"; the title says what is allowed.
+func moderationNoteForm(ctx context.Context, sc staffCtx, o jobj) *domain.Form {
+	title := "Allow the listing"
+	if strings.HasSuffix(jstr(o, "type"), "_REVIEW") {
+		title = "Allow the review"
+	}
+	return noteForm(title, "Allow", false)(ctx, sc, o)
+}
+
+// moderationRemoveForm asks why an item is removed: listing codes for listings, review codes for reviews (trust-ops
+// refuses a code that does not fit the kind of item).
+func moderationRemoveForm(_ context.Context, _ staffCtx, o jobj) *domain.Form {
+	title, codes := "Remove the listing", moderationReasonCodes
+	if strings.HasSuffix(jstr(o, "type"), "_REVIEW") {
+		title, codes = "Remove the review", reviewReasonCodes
+	}
+	return &domain.Form{Title: title, SubmitLabel: "Remove", Fields: []domain.FormField{
+		withOptions(ff("reasonCode", "Reason", "select", true), codes), withMax(ff("note", "Note", "textarea", false), 1000)}}
 }

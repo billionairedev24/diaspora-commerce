@@ -8,9 +8,10 @@ import { ResourceTable } from '@/components/resources/ResourceTable';
 import { useT } from '@/i18n/t';
 
 import { PickupsPanel } from './PickupsPanel';
+import { RunsPanel } from './RunsPanel';
 
 /**
- * Delivery dispatch: routes (with the route builder), the shipments waiting for a route, seller pickups (S255), the
+ * Delivery dispatch: routes (with the route builder), the shipments waiting for a route, delivery runs of closed pre-order windows (S264), seller pickups (S255), the
  * customer pickup points (AfroTransact counters and lockers checkout offers for platform-fulfilled items), and what
  * the driver app raises: SOS alerts, vehicle defects that block a route, and the driver event log (S281).
  */
@@ -29,6 +30,7 @@ export function DispatchView() {
         items={[
           { value: 'routes', label: t('st.pickups.routesTab'), content: <ResourceTable resource="routes" urlPrefix="routes" /> },
           { value: 'shipments', label: t('st.dispatch.shipmentsTab'), content: <ResourceTable resource="dispatch-shipments" urlPrefix="shipments" /> },
+          { value: 'runs', label: t('st.dispatch.runsTab'), content: <RunsPanel /> },
           { value: 'pickups', label: t('st.pickups.tab'), content: <PickupsPanel /> },
           { value: 'pickup-points', label: t('st.dispatch.pickupPointsTab'), content: <ResourceTable resource="pickup-locations" urlPrefix="pickup-points" /> },
           { value: 'sos', label: t('st.dispatch.sosTab'), content: <ResourceTable resource="sos-alerts" urlPrefix="sos" /> },

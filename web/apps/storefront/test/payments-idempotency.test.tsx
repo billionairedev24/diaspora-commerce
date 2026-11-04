@@ -132,7 +132,7 @@ describe('pay-now page of a late pre-order add', () => {
     open(MOCK_PAY_LINK.token);
     expect(await screen.findByRole('heading', { name: 'Complete your pre-order payment' })).toBeInTheDocument();
     await waitFor(() => expect(stripe.payment()).toBeDefined());
-    expect(stripe.payment()?.options).toMatchObject({ mode: 'payment', amount: 4297, currency: 'usd', captureMethod: 'manual' });
+    expect(stripe.payment()?.options).toMatchObject({ mode: 'payment', amount: 4297, currency: 'usd', captureMethod: 'automatic_async' });
     expect(stripe.express()).toBeDefined();
     const el = await screen.findByTestId('stripe-payment-element');
     await waitFor(() => expect(el).toHaveAttribute('aria-busy', 'false'));

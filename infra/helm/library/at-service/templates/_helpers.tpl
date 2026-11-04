@@ -70,13 +70,20 @@ azure.workload.identity/client-id: {{ required "workloadIdentity.azure.clientId 
 - name: APP_ENV
   value: {{ .Values.env | quote }}
 {{- if eq .Values.service.runtime "java" }}
+{{- /* A service's extraEnv.SPRING_PROFILES_ACTIVE (e.g. "uat,temporal-cloud") replaces the environment profile. */}}
+{{- if not (hasKey (.Values.extraEnv | default dict) "SPRING_PROFILES_ACTIVE") }}
 - name: SPRING_PROFILES_ACTIVE
   value: {{ .Values.env | quote }}
+{{- end }}
 - name: OTEL_EXPORTER_OTLP_ENDPOINT
   value: {{ printf "http://%s" .Values.telemetry.otlpEndpoint | quote }}
 {{- else }}
 - name: OTEL_EXPORTER_OTLP_ENDPOINT_HOST
   value: {{ .Values.telemetry.otlpEndpoint | quote }}
+{{- if and (include "at-service.goMemLimit" .) (not (hasKey (.Values.extraEnv | default dict) "GOMEMLIMIT")) }}
+- name: GOMEMLIMIT
+  value: {{ include "at-service.goMemLimit" . | quote }}
+{{- end }}
 {{- end }}
 - name: PORT
   value: {{ .Values.service.port | quote }}
@@ -94,13 +101,15 @@ Environment-wide public URLs, derived from global.domain (set once per environme
 infra/argocd/envs/<env>/platform-values.yaml) so no service hard-codes a host:
   PLATFORM_ENV       .Values.env                      always
   PLATFORM_DOMAIN    <domain>                         dev.afrotransact.com | uat.afrotransact.com | afrotransact.com
-  PUBLIC_WEB_URL     https://<domain>                 storefront
+  PUBLIC_WEB_URL     https://www.<domain>             storefront (global.storefrontHost: www, the default; the apex 301-redirects to it)
+                     https://<domain>                 storefront (global.storefrontHost: apex, explicit opt-out)
   SELLER_CENTER_URL  https://seller.<domain>          Seller Center & Provider Hub
   STAFF_CONSOLE_URL  https://admin.<domain>           staff console
   API_BASE_URL       https://api.<domain>             gateway-bff (public API)
   AUTH_ISSUER_URL    https://auth.<domain>            identity (OIDC issuer; token endpoint = <issuer>/oauth2/token)
   MEDIA_PUBLIC_URL   https://media.<domain>           public media CDN (R2 custom domain)
-Host names match infra/cloudflare (local.hosts). global.urls.<NAME> overrides one derived value for the whole
+Host names match infra/cloudflare (local.hosts). global.storefrontHost (www | apex, default www) is the one
+switch for the customer storefront's canonical host; every other app keeps its sub-domain. global.urls.<NAME> overrides one derived value for the whole
 environment; a service's own extraEnv.<NAME> wins over both (the derived entry is then not rendered, so a name
 never appears twice). Without global.domain (plain `helm template` in CI) only PLATFORM_ENV is rendered and
 services fall back to their config/<env>.yaml / application-<env>.yml values.
@@ -109,13 +118,17 @@ services fall back to their config/<env>.yaml / application-<env>.yml values.
 {{- $g := .Values.global | default dict -}}
 {{- $extra := .Values.extraEnv | default dict -}}
 {{- $domain := trim (toString ($g.domain | default "")) -}}
+{{- $storefrontHost := trim (toString ($g.storefrontHost | default "www")) -}}
+{{- if not (has $storefrontHost (list "apex" "www")) -}}
+{{- fail (printf "at-service: global.storefrontHost %q must be www or apex" $storefrontHost) -}}
+{{- end -}}
 {{- $vars := dict "PLATFORM_ENV" (toString .Values.env) -}}
 {{- if $domain -}}
 {{- if not (regexMatch "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$" $domain) -}}
 {{- fail (printf "at-service: global.domain %q must be a bare lower-case host name such as dev.afrotransact.com (no scheme, port or path)" $domain) -}}
 {{- end -}}
 {{- $_ := set $vars "PLATFORM_DOMAIN" $domain -}}
-{{- $_ := set $vars "PUBLIC_WEB_URL" (printf "https://%s" $domain) -}}
+{{- $_ := set $vars "PUBLIC_WEB_URL" (ternary (printf "https://www.%s" $domain) (printf "https://%s" $domain) (eq $storefrontHost "www")) -}}
 {{- $_ := set $vars "SELLER_CENTER_URL" (printf "https://seller.%s" $domain) -}}
 {{- $_ := set $vars "STAFF_CONSOLE_URL" (printf "https://admin.%s" $domain) -}}
 {{- $_ := set $vars "API_BASE_URL" (printf "https://api.%s" $domain) -}}
@@ -130,5 +143,19 @@ services fall back to their config/<env>.yaml / application-<env>.yml values.
 - name: {{ $k }}
   value: {{ get $vars $k | quote }}
 {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Go soft memory limit: 90% of the container's memory limit (Mi or Gi), so the garbage collector works harder before the
+kernel OOM-kills the pod. Empty when the limit is not a whole number of Mi/Gi (then GOMEMLIMIT is simply not set).
+*/}}
+{{- define "at-service.goMemLimit" -}}
+{{- $limits := (.Values.resources | default dict).limits | default dict -}}
+{{- $m := toString ($limits.memory | default "") -}}
+{{- if regexMatch "^[0-9]+(Mi|Gi)$" $m -}}
+{{- $n := int64 (regexFind "^[0-9]+" $m) -}}
+{{- if hasSuffix "Gi" $m }}{{ $n = mul $n 1024 }}{{ end -}}
+{{- printf "%dMiB" (div (mul $n 90) 100) -}}
 {{- end -}}
 {{- end -}}

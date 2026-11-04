@@ -59,8 +59,10 @@ shopper's Stripe Customer for a later off-session balance charge.
 
 Money moves inside the booking's database transaction: if payments refuses or is down, nothing changes
 (`409 bookings.payment-rejected` / `502 bookings.payments-unavailable`) and the same request can be retried.
-Commission is charged by payments per captured line and returned on refunds, so it applies only to what the
-customer paid. Calls use the client-credentials client `bookings-service` (scope `payments:service`). Late
+The **connection fee** (the providers' percentage, separate from product commission; ledger 4050) is charged by
+payments per captured line (deposit, balance, a kept deposit or no-show amount) and returned on refunds when the fee
+schedule says so, so it applies only to what the customer paid; a booking cancelled before any capture pays none
+(docs/engineering/commission-and-connection-fees.md). Lines carry `kind: SERVICE` and the offering's service category. Calls use the client-credentials client `bookings-service` (scope `payments:service`). Late
 provider-cancellation fees travel in `booking.cancelled` (`providerFeeMinor`); payments records them and debits the
 provider's connected account.
 
@@ -113,9 +115,11 @@ and were migrated as `APPROVED`. Public lists show the reviewer as first name + 
 
 ### Fees
 
-Take-home and earnings use `GET /v1/fee-schedules/effective?category=services&orgId=<provider>` (commission with its
-source — seller override, category, default, AfroTransact Retail — card fee estimate and fee-schedule version), cached
-per organisation for `FEES_CACHE_TTL` (5 min). While payments cannot answer, the configured
+Take-home and earnings use `GET /v1/fee-schedules/effective?kind=SERVICE&category=<service category>&orgId=<provider>`
+(the connection fee with its source — negotiated, plan, category, default, AfroTransact Retail — card fee estimate and
+fee-schedule version), cached per organisation and category for `FEES_CACHE_TTL` (5 min). Against a payments service
+without connection fees (its answer has no `kind`) bookings asks for the `services` commission as before and sends
+`services` as the line category. While payments cannot answer, the configured
 `SERVICES_COMMISSION_BPS` / `CARD_PCT_BPS` / `CARD_FIXED_MINOR` apply (logged as a warning, retried after 30 s); the
 service's `takeHome.feeSource` then reads `CONFIG`.
 

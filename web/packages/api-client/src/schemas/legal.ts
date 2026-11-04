@@ -10,8 +10,74 @@ export const LEGAL_DOCUMENT_KEYS = [
   'seller-terms',
   'prohibited-items',
   'accessibility',
-  'sms-terms'
+  'sms-terms',
+  'gift-card-terms',
+  'store-credit-terms',
+  'membership-terms',
+  'referral-terms',
+  'preorder-delivery-terms',
+  'community-guidelines',
+  'ip-policy',
+  'provider-terms',
+  'payments-terms',
+  'subprocessors',
+  'data-processing',
+  'seller-fees'
 ] as const;
+/** How the legal center index groups the documents (every document is in exactly one group, in reading order). */
+export const LEGAL_GROUPS = [
+  { id: 'customers', documents: ['conditions-of-use', 'returns', 'preorder-delivery-terms', 'membership-terms', 'referral-terms'] },
+  { id: 'payments', documents: ['gift-card-terms', 'store-credit-terms', 'payments-terms', 'seller-fees'] },
+  { id: 'sellers', documents: ['seller-terms', 'provider-terms', 'data-processing'] },
+  { id: 'privacy', documents: ['privacy', 'cookies', 'privacy-choices', 'sms-terms', 'subprocessors'] },
+  { id: 'policies', documents: ['community-guidelines', 'ip-policy', 'prohibited-items', 'accessibility'] }
+] as const satisfies ReadonlyArray<{ id: string; documents: readonly (typeof LEGAL_DOCUMENT_KEYS)[number][] }>;
+export type LegalGroupId = (typeof LEGAL_GROUPS)[number]['id'];
+
+/** English section titles of the legal center (the storefront translates them; the staff console shows these). */
+export const LEGAL_GROUP_TITLES: Readonly<Record<LegalGroupId, string>> = {
+  customers: 'Customers',
+  payments: 'Payments and money',
+  sellers: 'Sellers and providers',
+  privacy: 'Privacy and cookies',
+  policies: 'Policies'
+};
+
+/** The legal center section of a document key (empty for an unknown key). */
+export function legalGroupTitle(key: string): string {
+  const group = LEGAL_GROUPS.find((g) => (g.documents as readonly string[]).includes(key));
+  return group ? LEGAL_GROUP_TITLES[group.id] : '';
+}
+
+/** Documents a seller accepts (with the version shown) in onboarding; a provider accepts PROVIDER_AGREEMENTS instead. */
+export const SELLER_AGREEMENTS = ['seller-terms', 'payments-terms', 'data-processing'] as const;
+export const PROVIDER_AGREEMENTS = ['provider-terms', 'payments-terms', 'data-processing'] as const;
+
+/** English titles (content-service LegalDocumentType): for apps without a catalogue, such as Seller Center and the staff console. */
+export const LEGAL_DOCUMENT_TITLES = {
+  'conditions-of-use': 'Conditions of Use',
+  privacy: 'Privacy Notice',
+  cookies: 'Cookie Notice',
+  'privacy-choices': 'Your Privacy Choices',
+  returns: 'Returns & Refunds',
+  'seller-terms': 'Seller Terms',
+  'prohibited-items': 'Prohibited & Restricted Items',
+  accessibility: 'Accessibility Statement',
+  'sms-terms': 'SMS & Notification Terms',
+  'gift-card-terms': 'Gift Card Terms',
+  'store-credit-terms': 'Store Credit Terms',
+  'membership-terms': 'Plus Membership Terms',
+  'referral-terms': 'Referral Program Terms',
+  'preorder-delivery-terms': 'Pre-order and Delivery Run Terms',
+  'community-guidelines': 'Community Guidelines',
+  'ip-policy': 'Intellectual Property and Copyright Policy',
+  'provider-terms': 'Service Provider Terms',
+  'payments-terms': 'Payment Terms for Sellers and Providers',
+  subprocessors: 'Sub-processors and Service Providers',
+  'data-processing': 'Data Processing Terms',
+  'seller-fees': 'Seller Fees Summary'
+} as const satisfies Record<(typeof LEGAL_DOCUMENT_KEYS)[number], string>;
+
 export const LegalDocumentKeySchema = z.enum(LEGAL_DOCUMENT_KEYS);
 export type LegalDocumentKey = z.infer<typeof LegalDocumentKeySchema>;
 
@@ -26,7 +92,42 @@ export const LEGAL_DOCUMENT_ALIASES: Readonly<Record<string, LegalDocumentKey>> 
   'seller-agreement': 'seller-terms',
   prohibited: 'prohibited-items',
   sms: 'sms-terms',
-  'cookie-policy': 'cookies'
+  'cookie-policy': 'cookies',
+  'cookie-notice': 'cookies',
+  'privacy-notice': 'privacy',
+  'privacy-policy': 'privacy',
+  'returns-policy': 'returns',
+  refunds: 'returns',
+  'accessibility-statement': 'accessibility',
+  'sms-notification-terms': 'sms-terms',
+  'gift-card': 'gift-card-terms',
+  'gift-cards': 'gift-card-terms',
+  'giftcard-terms': 'gift-card-terms',
+  'store-credit': 'store-credit-terms',
+  membership: 'membership-terms',
+  'member-terms': 'membership-terms',
+  referral: 'referral-terms',
+  referrals: 'referral-terms',
+  preorder: 'preorder-delivery-terms',
+  'pre-order': 'preorder-delivery-terms',
+  'preorder-terms': 'preorder-delivery-terms',
+  'delivery-terms': 'preorder-delivery-terms',
+  guidelines: 'community-guidelines',
+  community: 'community-guidelines',
+  ip: 'ip-policy',
+  copyright: 'ip-policy',
+  dmca: 'ip-policy',
+  provider: 'provider-terms',
+  providers: 'provider-terms',
+  'provider-agreement': 'provider-terms',
+  payments: 'payments-terms',
+  'payment-terms': 'payments-terms',
+  'sub-processors': 'subprocessors',
+  dpa: 'data-processing',
+  'data-processing-addendum': 'data-processing',
+  fees: 'seller-fees',
+  'fee-schedule': 'seller-fees',
+  'seller-fee-schedule': 'seller-fees'
 };
 
 export const isLegalDocumentKey = (v: string): v is LegalDocumentKey => (LEGAL_DOCUMENT_KEYS as readonly string[]).includes(v);
@@ -39,6 +140,20 @@ export function legalDocumentKeyOf(slug: string): LegalDocumentKey | null {
 
 /** Storefront path of a document (relative; prefix PUBLIC_WEB_URL for other apps). */
 export const legalHref = (key: LegalDocumentKey): string => `/legal/${key}`;
+
+export const LegalSummarySchema = z.object({
+  key: LegalDocumentKeySchema,
+  title: z.string(),
+  version: z.string(),
+  effectiveDate: z.string(),
+  href: z.string(),
+  draftBanner: z.boolean()
+});
+export type LegalSummary = z.infer<typeof LegalSummarySchema>;
+
+/** The legal center index: the current version of every published document. */
+export const LegalIndexSchema = z.object({ documents: z.array(LegalSummarySchema) });
+export type LegalIndex = z.infer<typeof LegalIndexSchema>;
 
 export const LegalVersionRefSchema = z.object({
   version: z.string(),

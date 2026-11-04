@@ -7,6 +7,7 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.deliveryruns.domain.AreaKind;
@@ -15,13 +16,16 @@ import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.LocationDetails;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
+import com.afrotransact.deliveryruns.domain.Run;
 import com.afrotransact.deliveryruns.domain.RunArea;
+import com.afrotransact.deliveryruns.domain.RunStatus;
 import com.afrotransact.deliveryruns.port.DuplicateEntryException;
 import com.afrotransact.deliveryruns.port.GeoZoneRegistry;
 import com.afrotransact.deliveryruns.port.LocationRepository;
 import com.afrotransact.deliveryruns.port.RunRepository;
 import com.afrotransact.deliveryruns.port.SubscriberCounts;
 import com.afrotransact.deliveryruns.port.SubscriptionRepository;
+import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.NotFoundException;
@@ -34,20 +38,29 @@ class LocationServiceImpl implements LocationService {
     private static final long DEFAULT_FEE_MINOR = 799;
     private static final int DEFAULT_MIN_ORDERS = 10;
     private static final int DEFAULT_EXTEND_DAYS = 7;
+    private static final int MAX_REASON = 500;
+    /** Runs that shoppers have ordered on or that are on the road: the location cannot go off while they exist. */
+    private static final Set<RunStatus> LIVE = Set.of(RunStatus.ANNOUNCED, RunStatus.OPEN, RunStatus.EXTENDED,
+            RunStatus.CUT_OFF, RunStatus.CONFIRMED, RunStatus.COLLECTING, RunStatus.OUT_FOR_DELIVERY);
 
     private final LocationRepository locations;
     private final RunRepository runs;
     private final SubscriptionRepository subscriptions;
     private final GeoZoneRegistry zones;
+    private final DeliveryRunsEventPublisher events;
+    private final LocationReports reports;
     private final PermissionChecker permissions;
     private final Clock clock;
 
     LocationServiceImpl(LocationRepository locations, RunRepository runs, SubscriptionRepository subscriptions,
-                        GeoZoneRegistry zones, PermissionChecker permissions, Clock clock) {
+                        GeoZoneRegistry zones, DeliveryRunsEventPublisher events, LocationReports reports,
+                        PermissionChecker permissions, Clock clock) {
+        this.reports = reports;
         this.locations = locations;
         this.runs = runs;
         this.subscriptions = subscriptions;
         this.zones = zones;
+        this.events = events;
         this.permissions = permissions;
         this.clock = clock;
     }
@@ -55,9 +68,12 @@ class LocationServiceImpl implements LocationService {
     @Override
     @Transactional
     public Location create(LocationCommand command) {
-        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Actor actor = permissions.require(DeliveryRunsPermissions.MANAGE);
         try {
-            return locations.insert(Location.create(UUID.randomUUID(), details(command), Instant.now(clock)));
+            Instant now = Instant.now(clock);
+            Location created = locations.insert(Location.create(UUID.randomUUID(), details(command, null), now));
+            events.locationChanged("CREATED", created, actor.subject(), null, now);
+            return created;
         } catch (DuplicateEntryException e) {
             throw new ConflictException("delivery-runs.slug-taken", "Another location uses slug " + command.slug());
         }
@@ -66,10 +82,13 @@ class LocationServiceImpl implements LocationService {
     @Override
     @Transactional
     public Location update(UUID id, LocationCommand command) {
-        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Actor actor = permissions.require(DeliveryRunsPermissions.MANAGE);
         Location current = find(id);
         try {
-            return locations.update(current.update(details(command), Instant.now(clock)));
+            Instant now = Instant.now(clock);
+            Location updated = locations.update(current.update(details(command, current.active()), now));
+            events.locationChanged("UPDATED", updated, actor.subject(), null, now);
+            return updated;
         } catch (DuplicateEntryException e) {
             throw new ConflictException("delivery-runs.slug-taken", "Another location uses slug " + command.slug());
         }
@@ -92,9 +111,41 @@ class LocationServiceImpl implements LocationService {
     @Override
     @Transactional
     public Location deactivate(UUID id) {
-        permissions.require(DeliveryRunsPermissions.MANAGE);
+        return deactivate(id, null);
+    }
+
+    @Override
+    @Transactional
+    public Location deactivate(UUID id, String reason) {
+        Actor actor = permissions.require(DeliveryRunsPermissions.MANAGE);
         Location current = find(id);
-        return current.active() ? locations.update(current.deactivate(Instant.now(clock))) : current;
+        if (!current.active()) {
+            return current;
+        }
+        int live = runs.find(id, LIVE, 1000).size();
+        if (live > 0) {
+            throw new ConflictException("delivery-runs.location-has-live-runs", current.name() + " has " + live
+                    + (live == 1 ? " run" : " runs") + " that announced, take orders or are on the road. Cancel or "
+                    + "finish them first");
+        }
+        Instant now = Instant.now(clock);
+        Location off = locations.update(current.deactivate(now));
+        events.locationChanged("DEACTIVATED", off, actor.subject(), reasonOf(reason), now);
+        return off;
+    }
+
+    @Override
+    @Transactional
+    public Location activate(UUID id, String reason) {
+        Actor actor = permissions.require(DeliveryRunsPermissions.MANAGE);
+        Location current = find(id);
+        if (current.active()) {
+            return current;
+        }
+        Instant now = Instant.now(clock);
+        Location on = locations.update(current.activate(now));
+        events.locationChanged("ACTIVATED", on, actor.subject(), reasonOf(reason), now);
+        return on;
     }
 
     @Override
@@ -106,7 +157,19 @@ class LocationServiceImpl implements LocationService {
         SubscriberCounts subscribers = counts.isEmpty() ? new SubscriberCounts(id, 0, 0, 0, Map.of())
                 : counts.getFirst();
         Instant since = Instant.now(clock).minus(366, ChronoUnit.DAYS);
-        return new LocationHistory(location, runs.find(id, null, 100), subscribers, subscriptions.growth(id, since));
+        List<Run> history = runs.find(id, null, 100);
+        return new LocationHistory(location, reports.runs(location, history),
+                reports.windows(location, LocationReports.ids(history)), subscribers, subscriptions.growth(id, since),
+                subscriptions.netGrowth(id, since));
+    }
+
+    private static String reasonOf(String reason) {
+        String r = reason == null ? "" : reason.trim();
+        if (r.length() > MAX_REASON) {
+            throw new RuleViolation("delivery-runs.invalid-reason", "The reason is at most " + MAX_REASON
+                    + " characters");
+        }
+        return r.isEmpty() ? null : r;
     }
 
     private Location find(UUID id) {
@@ -114,7 +177,8 @@ class LocationServiceImpl implements LocationService {
                 "Location not found"));
     }
 
-    private LocationDetails details(LocationCommand c) {
+    /** {@code keepActive}: an edit never switches a location on or off (that is activate / deactivate, audited). */
+    private LocationDetails details(LocationCommand c, Boolean keepActive) {
         if (c.centerLat() == null || c.centerLng() == null) {
             throw new RuleViolation("delivery-runs.invalid-area", "The area needs a centre point (lat, lng)");
         }
@@ -139,7 +203,7 @@ class LocationServiceImpl implements LocationService {
                 new Capacity(c.defaultCapacityOrders(), c.defaultCapacityPackages()), c.dropMode(), c.pickupPoint(),
                 c.whatsappInviteUrl(), c.socialLinks(), c.defaultCutoffPolicy(),
                 c.defaultExtendDays() == null ? DEFAULT_EXTEND_DAYS : c.defaultExtendDays(),
-                c.active() == null || c.active());
+                keepActive != null ? keepActive : c.active() == null || c.active());
     }
 
     private static ZoneId zone(String id) {

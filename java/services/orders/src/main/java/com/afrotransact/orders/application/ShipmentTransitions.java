@@ -143,6 +143,12 @@ class ShipmentTransitions {
         if ((handedOver || pickupReady) && !after.captured()) {
             followUps.enqueue(task("capture:" + after.id(), FollowUpRepository.Kind.CAPTURE, order, after, now));
         }
+        if ((handedOver || pickupReady) && after.preorderShipment()) {
+            // Pre-orders are captured when placed, so their capture task is long done: the units that inventory held
+            // for the lines leave the shelf now, when the package does.
+            followUps.enqueue(task("commit-stock:" + after.id(), FollowUpRepository.Kind.COMMIT_STOCK, order, after,
+                    now));
+        }
         if (to == ShipmentStatus.DELIVERED && order.shipments().stream().filter(Shipment::live)
                 .allMatch(s -> s.status() == ShipmentStatus.DELIVERED || s.status() == ShipmentStatus.RETURNED)) {
             followUps.enqueue(task("settle:" + order.id(), FollowUpRepository.Kind.SETTLE, order, null, now));

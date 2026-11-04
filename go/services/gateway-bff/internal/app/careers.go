@@ -18,9 +18,9 @@ type CareersService interface {
 	CompleteResume(ctx context.Context, c *domain.Caller, assetID string) (domain.ResumeAsset, error)
 }
 
-// ResumePurpose is the media purpose used for résumés: private storage that accepts PDF. (Media has no dedicated
-// careers purpose yet; kyc-document is the private, PDF-capable one.)
-const ResumePurpose = "kyc-document"
+// ResumePurpose is the media purpose used for résumés: private storage, PDF only, ≤ 5 MB; media accepts the BFF's
+// client-credentials token (guests) and signed-in applicants' own tokens for it.
+const ResumePurpose = "career-resume"
 
 type careersServiceImpl struct {
 	media  port.MediaClient

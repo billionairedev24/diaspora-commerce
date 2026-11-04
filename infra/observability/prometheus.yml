@@ -78,8 +78,6 @@ scrape_configs:
         labels: {service: promise}
       - targets: [host.docker.internal:8205]
         labels: {service: geo}
-      - targets: [host.docker.internal:8206]
-        labels: {service: storefront}
       - targets: [host.docker.internal:8207]
         labels: {service: media}
       - targets: [host.docker.internal:8208]

@@ -30,7 +30,7 @@ func TestEveryEnvironmentLoads(t *testing.T) {
 		if c.Upstreams.Catalog.URL != "http://catalog.override" || c.Upstreams.Search.Timeout != 2*time.Second || c.Upstreams.Promise.Timeout != 800*time.Millisecond {
 			t.Fatalf("%s: upstreams = %+v", env, c.Upstreams)
 		}
-		if len(c.Web.Origins) == 0 || c.OIDC.ClientID != "gateway-bff" || c.Session.IdleTTL != 720*time.Hour || c.Cache.ReferenceTTL != 10*time.Minute {
+		if len(c.Web.Origins) == 0 || c.OIDC.ClientID != "gateway-bff" || c.Session.IdleTTL != 2208*time.Hour || c.Cache.ReferenceTTL != 10*time.Minute {
 			t.Fatalf("%s: %+v", env, c)
 		}
 		if env != "local" && (!c.Session.CookieSecure || c.DocsEnabled && env == "prod") {
@@ -48,14 +48,14 @@ func TestEveryEnvironmentLoads(t *testing.T) {
 // Each environment's YAML derives the web origins, storefront origin, issuer and callback from its own hosts.
 func TestPlatformURLsPerEnvironment(t *testing.T) {
 	cases := map[string]struct{ web, seller, staff, issuer, redirect string }{
-		"local": {"http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:8100",
+		"local": {"http://localhost:3000", "http://localhost:3010", "http://localhost:3002", "http://localhost:8100",
 			"http://localhost:3000/api/bff/v1/auth/oidc/callback"},
-		"dev": {"https://dev.afrotransact.com", "https://seller.dev.afrotransact.com", "https://admin.dev.afrotransact.com",
-			"https://auth.dev.afrotransact.com", "https://dev.afrotransact.com/api/bff/v1/auth/oidc/callback"},
-		"uat": {"https://uat.afrotransact.com", "https://seller.uat.afrotransact.com", "https://admin.uat.afrotransact.com",
-			"https://auth.uat.afrotransact.com", "https://uat.afrotransact.com/api/bff/v1/auth/oidc/callback"},
-		"prod": {"https://afrotransact.com", "https://seller.afrotransact.com", "https://admin.afrotransact.com",
-			"https://auth.afrotransact.com", "https://afrotransact.com/api/bff/v1/auth/oidc/callback"},
+		"dev": {"https://www.dev.afrotransact.com", "https://seller.dev.afrotransact.com", "https://admin.dev.afrotransact.com",
+			"https://auth.dev.afrotransact.com", "https://www.dev.afrotransact.com/api/bff/v1/auth/oidc/callback"},
+		"uat": {"https://www.uat.afrotransact.com", "https://seller.uat.afrotransact.com", "https://admin.uat.afrotransact.com",
+			"https://auth.uat.afrotransact.com", "https://www.uat.afrotransact.com/api/bff/v1/auth/oidc/callback"},
+		"prod": {"https://www.afrotransact.com", "https://seller.afrotransact.com", "https://admin.afrotransact.com",
+			"https://auth.afrotransact.com", "https://www.afrotransact.com/api/bff/v1/auth/oidc/callback"},
 	}
 	for env, want := range cases {
 		c := load(t, env, nil)
@@ -89,6 +89,11 @@ func TestPlatformEnvOverrides(t *testing.T) {
 		c.OIDC.RedirectURI != "https://shop.example.test/api/bff/v1/auth/oidc/callback" ||
 		!slices.Equal(c.Web.Origins, []string{"https://shop.example.test", "https://seller.example.test", "https://admin.example.test"}) {
 		t.Fatalf("platform env not applied: %+v %+v", c.Web, c.OIDC)
+	}
+	// The apps' signed-out landings (identity's post-logout redirect URIs) follow the same variables.
+	if apps := c.AppOrigins(); apps[config.AppStorefront] != "https://shop.example.test" ||
+		apps[config.AppSellerCenter] != "https://seller.example.test" || apps[config.AppStaffConsole] != "https://admin.example.test" {
+		t.Fatalf("app origins = %v", apps)
 	}
 
 	c = load(t, "dev", map[string]string{

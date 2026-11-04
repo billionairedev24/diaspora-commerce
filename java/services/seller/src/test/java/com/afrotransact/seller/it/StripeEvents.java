@@ -27,23 +27,13 @@ final class StripeEvents {
                 + (disabledReason == null ? "null" : "\"" + disabledReason + "\"") + "}}";
     }
 
-    static String subscription(String id, String customer, String status, String lookupKey, long periodEnd) {
-        return "{\"id\":\"" + id + "\",\"object\":\"subscription\",\"customer\":\"" + customer + "\",\"status\":\""
-                + status + "\",\"cancel_at_period_end\":false,\"trial_end\":null,\"items\":{\"object\":\"list\","
-                + "\"data\":[{\"id\":\"si_hook\",\"object\":\"subscription_item\",\"current_period_start\":"
-                + (periodEnd - 30L * 86400) + ",\"current_period_end\":" + periodEnd + ",\"price\":{\"id\":\"price_x\","
-                + "\"object\":\"price\",\"lookup_key\":\"" + lookupKey + "\"}}]}}";
-    }
-
-    static String invoice(String id, String customer, String status, long amount, int attempts, Long nextAttempt) {
-        long now = System.currentTimeMillis() / 1000;
-        return "{\"id\":\"" + id + "\",\"object\":\"invoice\",\"customer\":\"" + customer + "\",\"number\":\"INV-"
-                + id + "\",\"status\":\"" + status + "\",\"billing_reason\":\"subscription_cycle\",\"amount_due\":"
-                + amount + ",\"amount_paid\":" + ("paid".equals(status) ? amount : 0) + ",\"currency\":\"usd\","
-                + "\"period_start\":" + (now - 30L * 86400) + ",\"period_end\":" + now + ",\"attempt_count\":"
-                + attempts + ",\"next_payment_attempt\":" + (nextAttempt == null ? "null" : nextAttempt)
-                + ",\"hosted_invoice_url\":\"https://invoice.stripe.com/i/" + id + "\",\"invoice_pdf\":"
-                + "\"https://pay.stripe.com/invoice/" + id + "/pdf\",\"created\":" + now + "}";
+    /** payment_intent.succeeded / payment_intent.payment_failed of a plan fee. */
+    static String planPayment(String intentId, String invoiceId, String error) {
+        return "{\"id\":\"" + intentId + "\",\"object\":\"payment_intent\",\"status\":\""
+                + (error == null ? "succeeded" : "requires_payment_method") + "\",\"metadata\":{\"purpose\":"
+                + "\"plan_fee\",\"invoice_id\":\"" + invoiceId + "\"}"
+                + (error == null ? "" : ",\"last_payment_error\":{\"code\":\"account_closed\",\"message\":\""
+                + error + "\"}") + "}";
     }
 
     private static String arr(List<String> values) {

@@ -1,8 +1,10 @@
 package com.afrotransact.retail.domain;
 
 /**
- * GTIN-12 (UPC-A) numbers issued from AfroTransact Retail's GS1 company prefix: prefix + item reference + check digit.
- * The design's prefix is {@code 86001} with six-digit item references (e.g. 86001 200061 → 860012000616).
+ * GTIN-12 (UPC-A) numbers issued from a prefix: prefix + item reference + check digit. The default prefix {@code 04000} is
+ * GS1's internal-use range (UPC-A numbers starting 04), so issued numbers can never clash with a manufacturer's real barcode
+ * but are only meaningful inside AfroTransact; use a licensed GS1 company prefix if items are sold on other channels. Six-digit
+ * item references (e.g. 04000 200061 → 040002000615).
  */
 public final class Gtin {
 

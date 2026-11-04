@@ -1,4 +1,5 @@
-# Production: reference pages off (published on developers.afrotransact.com), sampled traces, Temporal Cloud (mTLS).
+# Production: reference pages off (published on developers.afrotransact.com), sampled traces. Temporal is the
+# in-cluster server by default (no TLS, private to the namespace); add the `temporal-cloud` profile for Temporal Cloud mTLS.
 spring:
   datasource:
     hikari:
@@ -6,9 +7,6 @@ spring:
   temporal:
     connection:
       target: ${TEMPORAL_TARGET}
-      mtls:
-        cert-chain: ${TEMPORAL_TLS_CERT}
-        key: ${TEMPORAL_TLS_KEY}
     namespace: ${TEMPORAL_NAMESPACE:afrotransact-prod}
 at:
   security:

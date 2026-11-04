@@ -56,6 +56,20 @@ type AssetRepository interface {
 	Ping(ctx context.Context) error
 }
 
+// LibraryRepository persists the image library flag and serves the library's lists and SKU lookups (S310).
+type LibraryRepository interface {
+	// ListLibrary returns an organisation's completed library images (READY, FLAGGED, REJECTED; newest first) and
+	// how many match in total.
+	ListLibrary(ctx context.Context, org string, q domain.LibraryQuery) ([]domain.Asset, int, error)
+	// LookupLibrary returns the organisation's usable library images (READY or FLAGGED, newest first) whose SKU is
+	// one of skus (upper case) or whose file name is one of fileNames (case-insensitive).
+	LookupLibrary(ctx context.Context, org string, skus, fileNames []string) ([]domain.Asset, error)
+	// RemoveFromLibrary clears an asset's library flag (the file stays: listings may use it).
+	RemoveFromLibrary(ctx context.Context, id string) error
+	// RenameLibraryImage renames an asset's fileName and recalculates library_sku and library_slot.
+	RenameLibraryImage(ctx context.Context, id, newFileName string, sku, slot *string) error
+}
+
 // ProcessedImage is an image after metadata stripping, with what moderation needs.
 type ProcessedImage struct {
 	// Data is the image without EXIF / XMP / IPTC / text metadata (the original bytes when there was none).
@@ -85,4 +99,19 @@ type LinkSigner interface {
 	Sign(assetID string, expires time.Time) (string, error)
 	// Verify checks the token's signature and returns the asset id and expiry; expiry is checked by the caller.
 	Verify(token string) (assetID string, expires time.Time, err error)
+}
+
+// FetchedFile is a file downloaded from a URL: its bytes and the content type the server declared.
+type FetchedFile struct {
+	Data        []byte
+	ContentType string
+	// FileName is the last path segment of the final URL (after redirects); may be empty.
+	FileName string
+}
+
+// URLFetcher downloads public files for imports (images of bulk product uploads). Implementations refuse non-https
+// URLs and private, loopback and link-local addresses (SSRF), follow a few https redirects, time out and stop
+// reading after maxBytes (domain.ErrRejected for every refusal caused by the URL or the file).
+type URLFetcher interface {
+	Fetch(ctx context.Context, rawURL string, maxBytes int64) (FetchedFile, error)
 }

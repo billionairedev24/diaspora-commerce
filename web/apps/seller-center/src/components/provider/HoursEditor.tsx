@@ -1,7 +1,7 @@
 'use client';
 
 import { type Availability, AvailabilityFormSchema, type BookingRules, sellerKeys, sellerQueries, type Weekday } from '@afrotransact/api-client';
-import { Button, Checkbox, IconButton, TextField, useToast } from '@afrotransact/ui';
+import { Alert, Button, Checkbox, IconButton, TextField, useToast } from '@afrotransact/ui';
 import { Plus, X } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -68,9 +68,11 @@ export function HoursEditor() {
     <ModulePage module="hours">
       <p className="m-0 text-sm text-muted">Times are in {form.timezone}.</p>
       {errors.length ? (
-        <ul role="alert" className="m-0 flex list-none flex-col gap-1 rounded-md border border-red-100 bg-danger-bg p-3 text-sm">
-          {errors.map((e) => <li key={e}>{e}</li>)}
-        </ul>
+        <Alert variant="danger">
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            {errors.map((e) => <li key={e}>{e}</li>)}
+          </ul>
+        </Alert>
       ) : null}
       <fieldset disabled={!editable} className="m-0 grid items-start gap-4 border-0 p-0 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <Card title="Weekly hours">

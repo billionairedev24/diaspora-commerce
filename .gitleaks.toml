@@ -69,13 +69,17 @@ regexes = [
 description = "Test fixtures: obviously fake keys used by unit/integration tests"
 condition = "AND"
 paths = [
-  '''(_test\.go|/src/test/|/testkit/|/test/|\.test\.tsx?|\.spec\.tsx?|/e2e/|/mocks/|/fixtures?/)''',
+  '''(_test\.go|_fixtures\.go|/src/test/|/testkit/|/test/|\.test\.tsx?|\.spec\.tsx?|/e2e/|/mocks/|/fixtures?/)''',
 ]
 regexes = [
   '''^sk_test_[a-z_]+$''',                 # Stripe-shaped placeholder, not a real test-mode key
   '''0123456789abcdef''',                  # hex counting sequences used as signing keys in tests
   '''^integration-test-''',
   '''^Plantain-Jollof-2026$''',            # test customer password
+  '''^Suya-Spice-Market-2027$''',          # password-reset test: the new password the test sets
+  '''^tok_12345678$''',                    # Places autocomplete session token in fixtures
+  '''^(final-7-fedcba9876543210|adj-0123456789|wo-1-abcdefgh)$''',   # Idempotency-Key values in handler tests
+  '''^1\.vbkms0\.Fh2nQ8l5XyZr0aB3cD4eFg$''',   # fake pre-order link token in notification fixtures
 ]
 
 [[allowlists]]

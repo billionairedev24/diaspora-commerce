@@ -20,6 +20,12 @@ public final class IdentityPermissions {
     /** Use the driver app (needed to register a driver-app push token). */
     public static final String DELIVERY_OPERATE = "delivery:operate";
 
+    /** Identity admin console: OAuth clients, sessions and tokens, signing keys, token inspector, auth settings. */
+    public static final String IDENTITY_ADMIN = "identity:admin";
+
+    /** The effective sign-out policy per audience, for the gateway-bff (service client). */
+    public static final String SESSIONS_POLICY_READ = "sessions:policy.read";
+
     private IdentityPermissions() {
     }
 }

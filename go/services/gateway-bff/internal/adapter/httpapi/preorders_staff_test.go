@@ -46,6 +46,7 @@ type fakeDeliveryRuns struct {
 	mu       sync.Mutex
 	ifMatch  map[string]string
 	idemKeys map[string]string
+	queries  map[string]string
 	paths    []string
 }
 
@@ -83,6 +84,30 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"id": "ast-9", "status": "READY"})
 		return
 	}
+	if p == "/v1/search" {
+		q := r.URL.Query().Get("q")
+		f.record(r)
+		if strings.Contains(q, "down") {
+			problemDetail(w, 503, "search.unavailable", "Search is down")
+			return
+		}
+		hits := []any{
+			map[string]any{"atin": "ATSHEA0001", "title": "Shea butter, raw", "sellerName": "Accra Naturals", "imageUrl": "https://cdn.example/shea.jpg", "priceMinor": 1299, "inStock": true},
+			map[string]any{"atin": "ATGARI0001", "title": "Garri, white", "sellerName": "AfroTransact Retail", "imageUrl": "http://insecure.example/g.jpg", "priceMinor": 899, "inStock": true},
+			map[string]any{"title": "No code"}}
+		writeJ(w, 200, map[string]any{"hits": hits, "total": 3, "page": 0, "size": 8, "facets": map[string]any{}})
+		return
+	}
+	if strings.HasPrefix(p, "/v1/delivery-fees") {
+		f.deliveryFees(w, r)
+		return
+	}
+	if strings.HasPrefix(p, "/v1/economics-settings") || strings.HasPrefix(p, "/v1/locations") || strings.HasPrefix(p, "/v1/runs") ||
+		strings.HasPrefix(p, "/v1/advertorials") || p == "/v1/preorders/economics-preview" ||
+		strings.HasPrefix(p, "/v1/preorders/") && strings.HasSuffix(p, "/economics") {
+		f.runEconomics(w, r)
+		return
+	}
 	if !strings.HasPrefix(p, "/v1/preorder") && !strings.HasPrefix(p, "/v1/places/") {
 		f.fakePlatform.ServeHTTP(w, r)
 		return
@@ -98,7 +123,7 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"doorFeeOverride": nil, "pickupFeeOverride": nil, "effectiveDoorFee": 799, "effectivePickupFee": 0, "currency": "USD", "version": 3,
 		"creatives": map[string]any{"HERO": map[string]any{"assetId": "ast-1", "width": 1920, "height": 640}}}
 	settings := map[string]any{"enabled": true, "fallback": "SHIP", "placements": map[string]any{"ribbon": true}, "version": 2,
-		"payment": map[string]any{"doorFee": map[string]any{"USD": 799, "CAD": 999}, "pickupFee": map[string]any{"USD": 0, "CAD": 0}, "pickupWindow": "10am–2pm",
+		"payment": map[string]any{"pickupWindow": "10am–2pm",
 			"allowedMethods": []string{"CARD", "WALLET"}, "lateAdd": map[string]any{"savedCard": true, "paymentLink": true, "linkExpiryHours": 24},
 			"missedDelivery": map[string]any{"offerRefund": true, "offerNewDate": true}}}
 	switch {
@@ -124,7 +149,7 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		problemDetail(w, 422, "delivery-runs.publish-checks-failed", "2 checks to fix")
 	case strings.HasSuffix(p, "/orders"):
 		writeJ(w, 200, []any{map[string]any{"orderId": "ord-1", "number": "LBK-1001", "customerName": "Amara Nwosu", "status": "PAID", "channel": "INSTAGRAM",
-			"total": 2598, "placedAt": "2026-10-01T15:00:00Z"},
+			"total": 2598, "placedAt": "2026-10-01T15:00:00Z", "refundStatus": "REFUNDED"},
 			map[string]any{"orderId": "ord-2", "number": "LBK-1002", "customerName": "Bola Ade", "status": "LATE_ADD", "channel": "WHATSAPP", "total": 1299,
 				"placedAt": "2026-10-02T15:00:00Z"}})
 	case strings.HasSuffix(p, "/products"):
@@ -137,6 +162,31 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "number,customer,status\nLBK-1001,Amara Nwosu,PAID\n")
 	case strings.HasSuffix(p, "/late-orders"):
 		writeJ(w, 201, map[string]any{"orderId": "ord-90", "number": "LBK-L90", "status": "LATE_ADD"})
+	case strings.HasSuffix(p, "/decisions") && r.Method == http.MethodGet:
+		writeJ(w, 200, []any{
+			map[string]any{"id": "dec-1", "kind": "AWAITING", "reason": "Closed with 7 of 10 orders", "actor": "system", "orders": 7, "minimum": 10, "at": "2026-10-23T05:00:00Z"},
+			map[string]any{"id": "dec-2", "kind": "CANCEL", "reason": "Not enough orders to make the trip", "actor": "stf-21", "orders": 7, "minimum": 10, "at": "2026-10-23T09:30:00Z"}})
+	case strings.HasSuffix(p, "/refunds") && r.Method == http.MethodGet:
+		writeJ(w, 200, map[string]any{"total": 7, "pending": 2, "refunded": 4, "voided": 0, "failed": 1, "done": false})
+	case r.Method == http.MethodPost && (strings.HasSuffix(p, "/decision") || strings.HasSuffix(p, "/cancel") || strings.HasSuffix(p, "/close-early")):
+		if strings.Contains(p, "win-gone") {
+			problemDetail(w, 409, "delivery-runs.invalid-transition", "Cannot move from DELIVERED to CANCELLED")
+			return
+		}
+		out := map[string]any{}
+		for k, v := range window {
+			out[k] = v
+		}
+		switch {
+		case strings.HasSuffix(p, "/close-early"):
+			out["status"] = "OPEN"
+		case strings.HasSuffix(p, "/cancel") || body["decision"] == "CANCEL":
+			out["status"], out["outcome"] = "CANCELLED", "CANCELLED"
+		default:
+			out["status"], out["outcome"] = "CLOSED", "PROCEEDED"
+		}
+		out["minOrders"], out["orderCount"] = 10, 7
+		writeJ(w, 200, out)
 	case strings.HasPrefix(p, "/v1/preorders/"):
 		writeJ(w, 200, window)
 	case p == "/v1/preorder-settings":
@@ -156,7 +206,7 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func preorderStaffBFF(t *testing.T) (*fakeDeliveryRuns, func(token, method, path string, body any, headers ...string) *httptest.ResponseRecorder) {
 	t.Helper()
-	f := &fakeDeliveryRuns{fakePlatform: &fakePlatform{}, ifMatch: map[string]string{}, idemKeys: map[string]string{}}
+	f := &fakeDeliveryRuns{fakePlatform: &fakePlatform{}, ifMatch: map[string]string{}, idemKeys: map[string]string{}, queries: map[string]string{}}
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
 	metrics := httpclient.NewMetrics(prometheus.NewRegistry())
@@ -168,7 +218,7 @@ func preorderStaffBFF(t *testing.T) (*fakeDeliveryRuns, func(token, method, path
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := app.StaffDeps{Up: port.StaffUpstreams{Identity: up("identity"), DeliveryRuns: up("delivery-runs"), Media: up("media"), Geo: up("geo")},
+	d := app.StaffDeps{Up: port.StaffUpstreams{Identity: up("identity"), DeliveryRuns: up("delivery-runs"), Media: up("media"), Geo: up("geo"), Search: up("search")},
 		Matrix: upstreams.NewOrgAccess(httpclient.New(httpclient.Options{Name: "identity", BaseURL: srv.URL, Metrics: metrics, Transport: http.DefaultTransport})),
 		Jobs:   exportfiles.NewMemoryJobs(), Blobs: files, Renderer: exportfiles.NewRenderer(), Log: log, Background: func(fn func()) { fn() }}
 	staff := httpapi.StaffServices{Shell: app.NewStaffShellService(d), Records: app.NewStaffRecordsService(d), Dashboard: app.NewStaffDashboardService(d),
@@ -443,15 +493,15 @@ func TestStaffPreordersConformance(t *testing.T) {
 	do("cs", "POST", "/v1/staff/preorders/uploads", map[string]any{"fileName": "hero.jpg", "contentType": "image/jpeg", "size": 1}, 403)
 
 	// Settings (incl. payment): FULL only for changes.
-	if s := jsonOf(t, do("ops", "GET", "/v1/staff/preorders/settings", nil, 200)); s["payment"].(map[string]any)["doorFee"].(map[string]any)["USD"] != float64(799) {
+	if s := jsonOf(t, do("ops", "GET", "/v1/staff/preorders/settings", nil, 200)); s["payment"].(map[string]any)["pickupWindow"] != "10am–2pm" {
 		t.Fatalf("settings = %v", s)
 	}
-	update := map[string]any{"enabled": true, "fallback": "WAITLIST", "payment": map[string]any{"doorFee": map[string]any{"USD": 899}, "allowedMethods": []string{"CARD", "ACH"}}}
+	update := map[string]any{"enabled": true, "fallback": "WAITLIST", "payment": map[string]any{"pickupWindow": "9am–1pm", "allowedMethods": []string{"CARD", "ACH"}}}
 	do("ops", "PUT", "/v1/staff/preorders/settings", update, 403)
 	if etag := do("marketing", "PUT", "/v1/staff/preorders/settings", update, 200, "If-Match", `"2"`).Header().Get("ETag"); etag != `"2"` {
 		t.Fatalf("settings ETag = %q", etag)
 	}
-	if b := f.bodies["PUT /v1/preorder-settings"]; b["payment"].(map[string]any)["doorFee"].(map[string]any)["USD"] != float64(899) {
+	if b := f.bodies["PUT /v1/preorder-settings"]; b["payment"].(map[string]any)["pickupWindow"] != "9am–1pm" {
 		t.Fatalf("settings body = %v", b)
 	}
 

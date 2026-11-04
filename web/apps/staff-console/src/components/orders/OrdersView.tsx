@@ -17,9 +17,9 @@ export const ORDERS_GUIDE_PATH = '/docs/architecture/orders-and-shipments';
 
 const STEPS: { title: string; who: string; what: string; screen: [string, string] }[] = [
   { title: 'Checkout', who: 'Customer', what: 'The cart splits into packages per seller and fulfilment. The card is authorised, not charged, and AfroTransact stock is reserved.', screen: ['Orders', '/orders'] },
-  { title: 'Pick and pack', who: 'FC staff, or the seller for its own packages', what: 'Confirmed → packed (label and tracking) → ready at the dock. Only the seller packs seller-fulfilled packages.', screen: ['Orders › Update shipment status', '/orders'] },
-  { title: 'Hand over', who: 'Carrier or AfroTransact driver', what: 'Picked up → in transit → out for delivery. The shipment’s money is captured when it is picked up.', screen: ['Delivery dispatch', '/dispatch'] },
-  { title: 'Deliver', who: 'Driver (photo, code) or carrier', what: 'Delivered starts the seller’s 7-day settlement hold. Failed attempts are retried or returned.', screen: ['Delivery dispatch', '/dispatch'] },
+  { title: 'Pick and pack', who: 'FC staff, or the seller for its own packages', what: 'Open the order and tap its one next step: Mark packed, then Mark ready. Only the seller packs seller-fulfilled packages.', screen: ['Orders › the order’s next-step button', '/orders'] },
+  { title: 'Hand over', who: 'Carrier or AfroTransact driver', what: 'Assign a driver in Delivery dispatch; the driver scans the packages at the dock and starts the route in the driver app, which moves the shipment to picked up and out for delivery. The shipment’s money is captured when it is picked up.', screen: ['Delivery dispatch', '/dispatch'] },
+  { title: 'Deliver', who: 'Driver (photo, code) or carrier', what: 'The driver records proof in the app (customer’s code or signature, photo, safe place), which marks it delivered and shows on the order. Delivered starts the seller’s 7-day settlement hold. Failed attempts are retried or returned.', screen: ['Delivery dispatch', '/dispatch'] },
   { title: 'Returns and claims', who: 'Customer, then Trust & support', what: 'A return is approved, collected or dropped off, inspected and refunded. A-to-z claims are decided after the seller’s response.', screen: ['Disputes & returns', '/disputes'] },
   { title: 'Payout', who: 'Seller, then Finance', what: 'Matured holds are transferred to the seller’s Stripe account. The seller requests a payout and Finance approves it.', screen: ['Payouts', '/payouts'] }
 ];

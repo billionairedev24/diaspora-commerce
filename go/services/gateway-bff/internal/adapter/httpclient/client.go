@@ -21,6 +21,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/httpserver"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
@@ -37,6 +39,9 @@ type Request struct {
 	JSON any
 	// Form is sent as application/x-www-form-urlencoded (OAuth token endpoint).
 	Form url.Values
+	// Body is sent as-is with ContentType (multipart uploads relayed to catalog, S308).
+	Body        []byte
+	ContentType string
 	// Bearer is relayed as Authorization: Bearer (never logged).
 	Bearer string
 	// BasicUser/BasicPassword authenticate a confidential OAuth client.
@@ -348,6 +353,9 @@ func (c *clientImpl) build(ctx context.Context, method string, req Request) (*ht
 		}
 		body = bytes.NewReader(b)
 		contentType = "application/json"
+	case req.Body != nil:
+		body = bytes.NewReader(req.Body)
+		contentType = req.ContentType
 	}
 	hreq, err := http.NewRequestWithContext(ctx, method, u, body)
 	if err != nil {
@@ -358,16 +366,23 @@ func (c *clientImpl) build(ctx context.Context, method string, req Request) (*ht
 			hreq.Header.Add(k, v)
 		}
 	}
-	hreq.Header.Set("Accept", "application/json, application/problem+json")
+	if hreq.Header.Get("Accept") == "" {
+		hreq.Header.Set("Accept", "application/json, application/problem+json")
+	}
 	if contentType != "" {
 		hreq.Header.Set("Content-Type", contentType)
 	}
 	if req.Bearer != "" {
 		hreq.Header.Set("Authorization", "Bearer "+req.Bearer)
+		if port.IsShopper(ctx) {
+			// Storefront and customer app: the person shops as themselves, whatever organisations they belong to.
+			hreq.Header.Set(auth.ActingAsHeader, auth.ActingAsCustomer)
+		}
 	}
 	if req.BasicUser != "" {
 		hreq.SetBasicAuth(url.QueryEscape(req.BasicUser), url.QueryEscape(req.BasicPassword))
 	}
+	httpserver.PropagateCorrelation(ctx, hreq.Header)
 	return hreq, nil
 }
 

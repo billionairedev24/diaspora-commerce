@@ -157,7 +157,7 @@ class ReservationServiceImpl implements ReservationService {
         reservations.insertLines(reservation);
         writer.flush(changes);
         events.publish(InventoryEvents.RESERVATION_HELD, InventoryEvents.AGGREGATE_RESERVATION, cmd.orderId(),
-                ReservationEventPayload.of(reservation, List.of(), null));
+                ReservationEventPayload.of(reservation, List.of(), 0, null));
         metrics.reservationOutcome("held");
         return new ReservationResult(reservation, false);
     }
@@ -202,7 +202,7 @@ class ReservationServiceImpl implements ReservationService {
         writer.flush(changes);
         CommitResult result = CommitResult.of(stored, false);
         events.publish(InventoryEvents.RESERVATION_COMMITTED, InventoryEvents.AGGREGATE_RESERVATION, orderId,
-                ReservationEventPayload.of(stored, result.cogs(), null));
+                ReservationEventPayload.of(stored, result.cogs(), result.cogsUsdMinor(), null));
         metrics.reservationOutcome("committed");
         return result;
     }
@@ -228,7 +228,8 @@ class ReservationServiceImpl implements ReservationService {
         List<ReservationLine> shipped = stored.lines().stream().filter(l -> l.inAny(wanted)).toList();
         CommitResult result = CommitResult.ofLines(stored, shipped, false);
         events.publish(InventoryEvents.RESERVATION_GROUP_COMMITTED, InventoryEvents.AGGREGATE_RESERVATION, orderId,
-                ReservationEventPayload.ofGroups(stored, shipped, wanted, result.cogs(), null));
+                ReservationEventPayload.ofGroups(stored, shipped, wanted, result.cogs(),
+                        result.cogsUsdMinor(), null));
         metrics.reservationOutcome("group_committed");
         return result;
     }
@@ -251,7 +252,7 @@ class ReservationServiceImpl implements ReservationService {
         writer.flush(changes);
         events.publish(InventoryEvents.RESERVATION_GROUP_RELEASED, InventoryEvents.AGGREGATE_RESERVATION, orderId,
                 ReservationEventPayload.ofGroups(stored, stored.lines().stream().filter(l -> l.inAny(wanted)).toList(),
-                        wanted, List.of(), why));
+                        wanted, List.of(), 0, why));
         metrics.reservationOutcome("group_released");
         return stored;
     }
@@ -339,7 +340,7 @@ class ReservationServiceImpl implements ReservationService {
         writer.flush(changes);
         for (Reservation r : stored) {
             events.publish(InventoryEvents.RESERVATION_RELEASED, InventoryEvents.AGGREGATE_RESERVATION, r.orderId(),
-                    ReservationEventPayload.of(r, List.of(), reason));
+                    ReservationEventPayload.of(r, List.of(), 0, reason));
         }
         return stored;
     }

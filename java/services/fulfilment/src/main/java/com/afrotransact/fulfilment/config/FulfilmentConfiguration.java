@@ -2,9 +2,13 @@ package com.afrotransact.fulfilment.config;
 
 import java.time.Duration;
 import java.time.ZoneId;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import com.afrotransact.fulfilment.application.NearestDriverSettings;
+import com.afrotransact.fulfilment.application.RunDispatchSettings;
 
+import com.afrotransact.fulfilment.domain.CapacityRunRoutePlanner;
 import com.afrotransact.fulfilment.domain.DefaultInspectionPolicy;
 import com.afrotransact.fulfilment.domain.DefaultPickupPolicy;
 import com.afrotransact.fulfilment.domain.DefaultProofOfDeliveryPolicy;
@@ -15,6 +19,7 @@ import com.afrotransact.fulfilment.domain.PickupPolicy;
 import com.afrotransact.fulfilment.domain.ProofOfDeliveryPolicy;
 import com.afrotransact.fulfilment.domain.ReattemptPolicy;
 import com.afrotransact.fulfilment.domain.RoutePlanner;
+import com.afrotransact.fulfilment.domain.RunRoutePlanner;
 import com.afrotransact.fulfilment.domain.SequencePolicy;
 import com.afrotransact.fulfilment.domain.ZoneRoutePlanner;
 import org.springframework.beans.factory.annotation.Value;
@@ -65,5 +70,19 @@ class FulfilmentConfiguration {
     @Bean
     RoutePlanner routePlanner() {
         return new ZoneRoutePlanner();
+    }
+
+    @Bean
+    RunRoutePlanner runRoutePlanner() {
+        return new CapacityRunRoutePlanner();
+    }
+
+    @Bean
+    RunDispatchSettings runDispatchSettings(
+            @Value("${at.fulfilment.runs.depot-node:${at.fulfilment.default-node:}}") String depotNode,
+            @Value("${at.fulfilment.runs.route-capacity:40}") int routeCapacity,
+            @Value("${at.fulfilment.runs.depot-sellers:}") List<String> depotSellers) {
+        return new RunDispatchSettings(depotNode, routeCapacity, depotSellers.stream().map(String::trim)
+                .filter(s -> !s.isEmpty()).collect(Collectors.toSet()));
     }
 }

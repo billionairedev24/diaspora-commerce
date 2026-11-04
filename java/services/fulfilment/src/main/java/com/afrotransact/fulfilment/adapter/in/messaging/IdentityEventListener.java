@@ -7,10 +7,9 @@ import java.util.UUID;
 
 import com.afrotransact.fulfilment.application.DriverAccessService;
 import com.afrotransact.fulfilment.application.IdentityAccessChange;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -27,7 +26,6 @@ class IdentityEventListener {
             "identity.permission.granted", "identity.permission.revoked", "identity.user.disabled",
             "identity.user.enabled");
 
-    private static final Logger LOG = LoggerFactory.getLogger(IdentityEventListener.class);
 
     private final DriverAccessService drivers;
     private final JsonMapper json;
@@ -52,16 +50,13 @@ class IdentityEventListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            LOG.warn("Skipping {} at {}-{}@{}: missing or invalid event-id header", type, rec.topic(),
-                    rec.partition(), rec.offset());
-            return;
+            throw MalformedEvent.missingEventId(type, rec);
         }
         AccessMessage m;
         try {
             m = json.readValue(rec.value(), AccessMessage.class);
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed {} event {}: {}", type, eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of(type, ex);
         }
         if (m == null || m.userId() == null) {
             return;

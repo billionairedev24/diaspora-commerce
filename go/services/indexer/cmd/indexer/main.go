@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/elastic/go-elasticsearch/v9"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"golang.org/x/sync/errgroup"
@@ -24,7 +23,6 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/telemetry"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/catalog"
-	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/elastic"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/embedder"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/sellers"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/app"
@@ -35,43 +33,55 @@ import (
 const serviceName = "indexer"
 
 func main() {
+	// `indexer reindex` rebuilds the index from the sources of truth and exits (reindex.go); without a subcommand
+	// the process is the Kafka consumer.
+	if len(os.Args) > 1 && os.Args[1] == reindexCommand {
+		if err := runReindex(os.Args[2:]); err != nil {
+			slog.Error("reindex failed", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(); err != nil {
 		slog.Error("indexer exited", "error", err)
 		os.Exit(1)
 	}
 }
 
+// loadConfig reads config/<APP_ENV>.yaml with the environment overrides (shared by the consumer and the reindex).
+func loadConfig() (config.Config, string, error) {
+	loader := pkgconfig.NewLoader(indexer.Files)
+	var cfg config.Config
+	if err := loader.Load(&cfg); err != nil {
+		return config.Config{}, "", fmt.Errorf("load config: %w", err)
+	}
+	cfg.Resolve(loader.Env())
+	return cfg, loader.Env(), nil
+}
+
 func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	loader := pkgconfig.NewLoader(indexer.Files)
-	var cfg config.Config
-	if err := loader.Load(&cfg); err != nil {
-		return fmt.Errorf("load config: %w", err)
+	cfg, env, err := loadConfig()
+	if err != nil {
+		return err
 	}
-	cfg.Resolve(loader.Env())
-	log := logging.New(serviceName, loader.Env())
+	log := logging.New(serviceName, env)
 	slog.SetDefault(log)
 
-	shutdownTracing, err := telemetry.Setup(ctx, serviceName, loader.Env(), cfg.Telemetry.OTLPEndpoint, cfg.Telemetry.SampleRatio)
+	shutdownTracing, err := telemetry.Setup(ctx, serviceName, env, cfg.Telemetry.OTLPEndpoint, cfg.Telemetry.SampleRatio)
 	if err != nil {
 		return fmt.Errorf("tracing: %w", err)
 	}
 	defer func() { _ = shutdownTracing(context.WithoutCancel(ctx)) }()
 
-	esOpts := []elasticsearch.Option{elasticsearch.WithAddresses(cfg.Elasticsearch.URLs...), elasticsearch.WithRetry(3)}
-	switch {
-	case cfg.Elasticsearch.APIKey != "":
-		esOpts = append(esOpts, elasticsearch.WithAPIKey(cfg.Elasticsearch.APIKey))
-	case cfg.Elasticsearch.Username != "":
-		esOpts = append(esOpts, elasticsearch.WithBasicAuth(cfg.Elasticsearch.Username, cfg.Elasticsearch.Password))
-	}
-	es, err := elasticsearch.New(esOpts...)
+	be, err := newBackend(cfg)
 	if err != nil {
-		return fmt.Errorf("elasticsearch client: %w", err)
+		return err
 	}
-	if err := elastic.NewIndexAdmin(es, cfg.SynonymsSet).EnsureIndex(ctx, cfg.Market); err != nil {
+	log.Info("search engine", "provider", be.name)
+	if err := be.ensureIndex(ctx, cfg.Market); err != nil {
 		return fmt.Errorf("ensure index: %w", err)
 	}
 
@@ -82,7 +92,7 @@ func run() error {
 	}, []string{"type", "outcome"})
 	registry.MustRegister(processed)
 
-	index := elastic.NewIndex(es, cfg.Elasticsearch.Refresh)
+	index := be.index
 	httpClient := &http.Client{Timeout: 5 * time.Second}
 	directory := newSellerDirectory(cfg, httpClient, log)
 	// S213: warm seller names before consuming, so a restart never changes indexed seller names.
@@ -121,7 +131,7 @@ func run() error {
 	}
 	srv := httpserver.New(httpserver.Options{
 		Name: "Indexer", Addr: ":" + strconv.Itoa(cfg.Port), OpenAPI: openapi, DocsOn: cfg.DocsEnabled,
-		Checks: []httpserver.ReadinessCheck{readiness{index: index}}, Logger: log, Registry: registry,
+		Checks: []httpserver.ReadinessCheck{readiness{index: index, engine: be.name}}, Logger: log, Registry: registry,
 	})
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -227,9 +237,12 @@ func (c counting) Handle(ctx context.Context, e events.Envelope) error {
 	return nil
 }
 
-type readiness struct{ index port.ProductIndex }
+type readiness struct {
+	index  port.ProductIndex
+	engine string
+}
 
-func (readiness) Name() string { return "elasticsearch" }
+func (r readiness) Name() string { return r.engine }
 
 func (r readiness) Check(ctx context.Context) error {
 	if err := r.index.Ping(ctx); err != nil {

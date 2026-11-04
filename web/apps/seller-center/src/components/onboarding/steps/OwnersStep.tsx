@@ -55,7 +55,7 @@ export function OwnersStep({ status, ref }: StepProps) {
           disabled
         });
         return (
-          <section key={i} aria-label={`Person ${i + 1}`} className="flex flex-col gap-1 rounded-md border border-border p-4">
+          <section key={i} aria-label={`Person ${i + 1}`} className="flex flex-col gap-1 rounded-lg bg-surface-sunken p-4 sm:p-5">
             <div className="flex items-center justify-between">
               <strong className="text-sm">Person {i + 1}</strong>
               {owners.length > 1 && !disabled ? (

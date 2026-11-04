@@ -75,4 +75,13 @@ class StripeMockContractIT {
         assertThat(intent.clientSecret()).isNotBlank();
         assertThat(gateway.cancel(intent.id(), "o-3:cancel").id()).isNotBlank();
     }
+
+    /** The wallet listing (saved methods read from Stripe): customer retrieve plus its payment methods, paged. */
+    @Test
+    void readingACustomersSavedMethodsIsAValidStripeRequest() {
+        StripeGateway.CustomerWalletSnapshot wallet = gateway.customerWallet("cus_123");
+
+        assertThat(wallet.authoritative()).isTrue();
+        assertThat(wallet.methods()).allSatisfy(pm -> assertThat(pm.id()).startsWith("pm_"));
+    }
 }

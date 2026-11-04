@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { beforeEach, describe, expect, expectTypeOf, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import {
   createStaffApiClient,
@@ -28,9 +28,27 @@ import {
   type RecordDetail,
   type ResourceKey,
   type ResourcePage,
+  type RunExtendInput,
+  type RunScheduleInput,
   type ShipFromLocation,
+  type StaffBillingGrantPage,
+  type StaffBillingOrgSearch,
+  type StaffBillingPanel,
+  type StaffBillingReasonCode,
+  type StaffBillingSettings,
+  type StaffCreatePlanInput,
   type StaffDashboard,
+  type StaffPlan,
+  type StaffPlanFeeCollection,
+  type StaffPlanMigrationPreview,
+  type StaffPlanMigrationResult,
+  type StaffPlanPrices,
+  type StaffRewardPreview,
+  type StaffRewardRule,
+  type StaffRewardRuleInput,
   type StaffSession,
+  type StaffTrialCampaign,
+  type StaffTrialCampaignInput,
   type SupportActionResult
 } from '../src';
 import { type components } from '../src/generated/gateway-bff-staff';
@@ -62,6 +80,8 @@ describe('Staff Zod schemas stay aligned with contracts/openapi/gateway-bff-staf
     expectTypeOf<FeesOverview>().toExtend<S['FeesOverview']>();
     expectTypeOf<FeeScheduleView>().toExtend<S['FeeScheduleView']>();
     expectTypeOf<FeeOrgSearch>().toExtend<S['FeeOrgSearch']>();
+    expectTypeOf<RunScheduleInput>().toExtend<S['StaffRunRequest']>();
+    expectTypeOf<RunExtendInput>().toExtend<S['StaffRunExtendRequest']>();
     expectTypeOf<DeliveryQuote>().toExtend<S['DeliveryQuote']>();
     expectTypeOf<PickupList>().toExtend<S['PickupList']>();
     expectTypeOf<DriverSuggestions>().toExtend<S['DriverSuggestions']>();
@@ -73,6 +93,24 @@ describe('Staff Zod schemas stay aligned with contracts/openapi/gateway-bff-staf
     expectTypeOf<NotificationPreview>().toExtend<S['NotificationPreview']>();
     expectTypeOf<NotificationTemplateVersion>().toExtend<S['NotificationTemplateVersion']>();
     expectTypeOf<NotificationTestSendResult>().toExtend<S['NotificationTestSendResult']>();
+    // Plans & billing (S292–S297)
+    expectTypeOf<StaffPlan>().toExtend<S['StaffPlan']>();
+    expectTypeOf<StaffPlanPrices>().toExtend<S['StaffPlanPrices']>();
+    expectTypeOf<StaffCreatePlanInput>().toExtend<S['StaffCreatePlanRequest']>();
+    expectTypeOf<StaffPlanMigrationPreview>().toExtend<S['StaffPlanMigrationPreview']>();
+    expectTypeOf<StaffPlanMigrationResult>().toExtend<S['StaffPlanMigrationResult']>();
+    expectTypeOf<StaffTrialCampaign>().toExtend<S['StaffTrialCampaign']>();
+    expectTypeOf<StaffTrialCampaignInput>().toExtend<S['StaffTrialCampaignRequest']>();
+    expectTypeOf<StaffRewardRule>().toExtend<S['StaffRewardRule']>();
+    expectTypeOf<StaffRewardRuleInput>().toExtend<S['StaffRewardRuleRequest']>();
+    expectTypeOf<StaffRewardPreview>().toExtend<S['StaffRewardPreview']>();
+    expectTypeOf<StaffBillingGrantPage>().toExtend<S['StaffBillingGrantPage']>();
+    expectTypeOf<StaffBillingReasonCode>().toExtend<S['StaffBillingReasonCode']>();
+    expectTypeOf<StaffBillingOrgSearch>().toExtend<S['StaffBillingOrgSearch']>();
+    expectTypeOf<StaffBillingPanel>().toExtend<S['StaffBillingPanel']>();
+    // How sellers pay their plan (S298)
+    expectTypeOf<StaffPlanFeeCollection>().toExtend<S['StaffPlanFeeCollection']>();
+    expectTypeOf<StaffBillingSettings>().toExtend<S['StaffBillingSettings']>();
   });
 
   it('generated file carries the do-not-edit banner', () => {
@@ -83,7 +121,14 @@ describe('Staff Zod schemas stay aligned with contracts/openapi/gateway-bff-staf
 
 describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
   beforeEach(() => {
+    // The seed is dated; the handlers read the clock, so the clock is pinned next to it (windows are relative to "now").
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-10T15:30:00Z'));
     resetStaffDb(new Date('2026-10-10T15:00:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('filters the sidebar by role and lands on the dashboard', async () => {
@@ -123,7 +168,7 @@ describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
   it('serves every table with columns and server-side paging', async () => {
     const api = client();
     const keys: ResourceKey[] = ['users', 'roles', 'applications', 'orders', 'products', 'moderation', 'claims', 'returns', 'payouts', 'inventory', 'purchase-orders', 'routes',
-      'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates', 'pickup-locations'];
+      'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates', 'coupons', 'pickup-locations'];
     for (const key of keys) {
       const page = await api.listResource(key, { page: 0, size: 5 });
       expect(page.columns.length).toBeGreaterThan(0);
@@ -356,11 +401,82 @@ describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
     const created = await editor.createNotificationTemplateVersion('order.confirmed', {
       locale: 'en', channel: 'sms', category: 'transactional', bodyText: 'AfroTransact: order {{.orderNumber}} ({{.total}}) is confirmed. Reply STOP to opt out.'
     });
-    expect(created).toMatchObject({ version: 3, channel: 'sms', createdBy: 'stf-1' });
+    expect(created).toMatchObject({ version: 3, channel: 'sms', createdBy: 'Ifeoma Okafor' });
     expect((await editor.getNotificationTemplate('order.confirmed')).variants.find((v) => v.channel === 'sms')?.latestVersion).toBe(3);
 
     expect(await editor.testSendNotificationTemplate('order.confirmed', { channel: 'email', data: detail.sample.data })).toMatchObject({ to: 'ifeoma@afrotransact.com', channel: 'email' });
     await expect(editor.testSendNotificationTemplate('order.confirmed', { channel: 'push', data: {} })).rejects.toSatisfy((e) => isApiError(e) && e.status === 422 && !!e.fieldErrors.channel);
     await expect(support.testSendNotificationTemplate('order.confirmed', { channel: 'email', data: detail.sample.data })).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
+  });
+
+  it('runs Plans & billing: catalogue versions, campaigns, rule preview, audited idempotent adjustments (S292–S297)', async () => {
+    const finance = client('platform.finance').plans;
+    expect(moduleKeys(await client('platform.finance').getSession())).toContain('plans');
+    const auditorSession = await client('platform.auditor').getSession();
+    expect(auditorSession.navGroups.flatMap((g) => g.modules).find((m) => m.key === 'plans')?.level).toBe('VIEW');
+    expect(moduleKeys(await client('platform.marketing').getSession())).not.toContain('plans');
+
+    const plans = await finance.plans();
+    expect(plans.map((p) => p.code)).toEqual(['seller_essentials', 'seller_growth', 'seller_pro', 'provider_solo', 'provider_studio', 'provider_business']);
+    const growth = plans[1];
+    if (!growth) throw new Error('seeded');
+    await expect(finance.updatePlan('seller_growth', { name: 'Growth', features: [], visibility: 'PUBLIC' }, growth.rowVersion + 1)).rejects.toSatisfy((e) => isApiError(e) && e.status === 409);
+    const draft = await finance.saveDraft('seller_growth', { monthlyCents: 4500, quarterlyCents: 12800, annualCents: 45000, trialDays: 30 });
+    expect(draft.versions[0]).toMatchObject({ version: 2, status: 'DRAFT' });
+    const published = await finance.publish('seller_growth');
+    expect(published).toMatchObject({ currentVersion: 2, monthlyCents: 4500 });
+    expect(published.versions.find((v) => v.version === 1)?.status).toBe('SUPERSEDED');
+    expect((await finance.migrationPreview('seller_growth')).rows[0]).toMatchObject({ fromCents: 3900, toCents: 4500 });
+    expect(plans.find((x) => x.code === 'seller_growth')?.entitlements).toMatchObject({ listings: 1000, aiListingWriter: true, lolaTier: 'GROWTH' });
+
+    await expect(finance.createCampaign({ name: 'No code', trialDays: 30, eligiblePlans: [] })).rejects.toSatisfy((e) => isApiError(e) && !!e.fieldErrors.signupFrom);
+    expect(await finance.createCampaign({ name: 'Pro 45', promoCode: 'pro45', trialDays: 45, eligiblePlans: ['seller_pro'] })).toMatchObject({ promoCode: 'PRO45', status: 'ACTIVE' });
+
+    const rule = { name: 'Ten orders', metric: 'COMPLETED_ORDERS' as const, threshold: 10, rewardType: 'CREDIT' as const, creditCents: 2500, eligiblePlans: [] };
+    const preview = await finance.previewRule(rule);
+    expect(preview).toMatchObject({ evaluated: 4, qualifying: 2, pending: 0 });
+    expect((await finance.createRule(rule)).rewardLabel).toBe('$25 credit');
+
+    // S299: low-sales relief - decided once at window end, so sellers in their window are pending (with their sales so far).
+    const relief = { name: 'Low-sales relief', kind: 'SELLER' as const, metric: 'GROSS_SALES' as const, threshold: 100000, comparison: 'LESS_THAN' as const,
+      windowAnchor: 'SUBSCRIPTION_START' as const, withinDaysOfApproval: 30, rewardType: 'FREE_DAYS' as const, freeDays: 30, eligiblePlans: ['seller_growth'] };
+    const reliefPreview = await finance.previewRule(relief);
+    expect(reliefPreview).toMatchObject({ qualifying: 0, pending: 1 });
+    expect(reliefPreview.rows[0]).toMatchObject({ orgId: 'org-mama-put', status: 'PENDING', value: 32000 });
+    expect(reliefPreview.rows[0]?.checkAt).toBeTruthy();
+    const saved = await finance.createRule(relief);
+    expect(saved).toMatchObject({ comparison: 'LESS_THAN', windowAnchor: 'SUBSCRIPTION_START', checkAtWindowEnd: true, checkLeadHours: 24,
+      conditionLabel: 'less than $1,000 in sales in the first 30 days of the subscription' });
+    await expect(finance.createRule({ ...relief, withinDaysOfApproval: null })).rejects.toSatisfy((e) => isApiError(e) && !!e.fieldErrors.withinDaysOfApproval);
+
+    const org = (await finance.searchOrgs('ade')).items[0]?.orgId ?? '';
+    await expect(finance.credit(org, 2500, { reasonCode: 'OTHER' }, 'k-1')).rejects.toSatisfy((e) => isApiError(e) && !!e.fieldErrors.note);
+    const credit = await finance.credit(org, 2500, { reasonCode: 'GOODWILL' }, 'k-2');
+    expect(await finance.credit(org, 2500, { reasonCode: 'GOODWILL' }, 'k-2')).toMatchObject({ id: credit.id });
+    const panel = await finance.panel(org);
+    expect(panel.billing?.creditBalanceCents).toBe(2500);
+    const open = panel.invoices.find((i) => i.status === 'open');
+    if (!open) throw new Error('seeded open invoice');
+    expect(await finance.waiveInvoice(org, open.id, { reasonCode: 'BILLING_ERROR' }, 'k-3')).toMatchObject({ type: 'WAIVE_INVOICE' });
+    expect((await finance.grants({ orgId: org, type: 'CREDIT', page: 0, size: 25 })).total).toBe(1);
+
+    // How the seller pays its plan (S298): a staff override needs a reason; the default for new sellers.
+    expect(panel.planFeeCollection).toMatchObject({ mode: 'EARNINGS_FIRST', source: 'DEFAULT', available: true });
+    expect(panel.invoices.find((i) => i.paidFromSalesCents > 0)).toMatchObject({ paidFromSalesCents: 2500, paidByCardCents: 1400 });
+    expect(panel.collections[0]).toMatchObject({ status: 'CREDITED', withheldCents: 2500 });
+    await expect(finance.overridePlanFeeCollection(org, 'CARD', { reasonCode: '' })).rejects.toSatisfy((e) => isApiError(e) && !!e.fieldErrors.reasonCode);
+    const overridden = await finance.overridePlanFeeCollection(org, 'CARD', { reasonCode: 'SELLER_REQUEST', note: 'Books plan fees on the card' });
+    expect(overridden).toMatchObject({ mode: 'CARD', source: 'STAFF' });
+    expect(overridden.history[0]).toMatchObject({ previous: 'EARNINGS_FIRST', reasonCode: 'SELLER_REQUEST', note: 'Books plan fees on the card' });
+    expect(await finance.billingSettings()).toMatchObject({ earningsCollectionEnabled: true, planFeeCollectionDefault: 'CARD' });
+    expect(await finance.updateBillingSettings('EARNINGS_FIRST')).toMatchObject({ planFeeCollectionDefault: 'EARNINGS_FIRST' });
+
+    const auditor = client('platform.auditor').plans;
+    await expect(auditor.panel(org)).resolves.toMatchObject({ orgId: org });
+    await expect(auditor.billingSettings()).resolves.toMatchObject({ planFeeCollectionDefault: 'EARNINGS_FIRST' });
+    await expect(auditor.updateBillingSettings('CARD')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
+    await expect(auditor.overridePlanFeeCollection(org, 'EARNINGS_FIRST', { reasonCode: 'GOODWILL' })).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
+    await expect(auditor.freeDays(org, 5, { reasonCode: 'GOODWILL' }, 'k-4')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
+    await expect(auditor.publish('seller_pro')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
   });
 });

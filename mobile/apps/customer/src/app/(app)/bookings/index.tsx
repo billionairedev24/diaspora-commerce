@@ -8,11 +8,13 @@ import { formatWhen, isActive } from '@/domain/bookings';
 import { statusTone } from '@/features/bookings/statusTone';
 import { c, sp, t } from '@/theme';
 import { AppText, Card, Empty, Loading } from '@/ui/primitives';
+import { ErrorView, refreshControl, useRefresh } from '@/ui/QueryStates';
 import { Screen, SubHeader } from '@/ui/Screen';
 
 export default function Bookings() {
   const router = useRouter();
   const mine = useMyBookings();
+  const refresh = useRefresh(mine);
   return (
     <Screen header={<SubHeader title="Your bookings" />} body="fixed">
       <FlatList
@@ -20,7 +22,8 @@ export default function Bookings() {
         keyExtractor={(b) => b.id ?? ''}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={mine.isLoading ? <Loading /> : <Empty icon={CalendarBlank} title="No bookings yet" action={{ label: 'Find a pro', onPress: () => router.push('/services') }} />}
+        refreshControl={refreshControl(refresh)}
+        ListEmptyComponent={mine.isPending ? <Loading /> : mine.isError ? <ErrorView error={mine.error} onRetry={() => void mine.refetch()} retrying={mine.isFetching} /> : <Empty icon={CalendarBlank} title="No bookings yet" action={{ label: 'Find a pro', onPress: () => router.push('/services') }} />}
         renderItem={({ item: b }) => {
           const tone = statusTone(b.status);
           return (

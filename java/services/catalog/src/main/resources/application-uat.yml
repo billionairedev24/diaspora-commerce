@@ -7,6 +7,13 @@ at:
       enforce: ${FGA_ENFORCE:false}
       # In-cluster OpenFGA (infra/k8s/platform/openfga); FGA_API_TOKEN comes from the service's secret.
       api-url: ${FGA_API_URL:http://openfga.openfga.svc:8080}
+  catalog:
+    media:
+      # In-cluster service name of media-service (Helm chart `media`, port 8080).
+      base-url: ${MEDIA_URL:http://media:8080}
+    oauth:
+      # identity's catalog-service client secret, only from the environment (secret store).
+      client-secret: ${CATALOG_CLIENT_SECRET:}
   api-docs:
     enabled: true
 spring:

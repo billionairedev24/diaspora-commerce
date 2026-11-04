@@ -1,5 +1,5 @@
 import { type Icon as PhosphorIcon } from 'phosphor-react-native';
-import { type ReactNode } from 'react';
+import { type ReactNode, type Ref } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -92,19 +92,21 @@ export function Card({ children, style, onPress, selected, accessibilityLabel }:
   );
 }
 
-export function Field({ label, error, hint, style, ...input }: TextInputProps & { label: string; error?: string; hint?: string; style?: StyleProp<TextStyle> }) {
+/** `invalid` marks the box without a message of its own (a wrong password also marks the email; the message sits under the password). */
+export function Field({ label, error, invalid, hint, style, inputRef, ...input }: TextInputProps & { label: string; error?: string; invalid?: boolean; hint?: string; style?: StyleProp<TextStyle>; inputRef?: Ref<TextInput> }) {
   return (
     <View style={{ gap: sp['1'] }}>
       <AppText variant="small" color={c.textMuted} style={{ fontWeight: t.fontWeight.semibold }}>
         {label}
       </AppText>
       <TextInput
+        ref={inputRef}
         placeholderTextColor={c.textSubtle}
         accessibilityLabel={label}
         accessibilityHint={error ?? hint}
         maxFontSizeMultiplier={MAX_FONT_SCALE}
         {...input}
-        style={[styles.input, error ? { borderColor: c.danger } : null, style]}
+        style={[styles.input, error || invalid ? { borderColor: c.danger, borderWidth: 2 } : null, style]}
       />
       {error ? <AppText variant="caption" color={c.danger} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</AppText> : hint ? <AppText variant="caption" color={c.textMuted}>{hint}</AppText> : null}
     </View>

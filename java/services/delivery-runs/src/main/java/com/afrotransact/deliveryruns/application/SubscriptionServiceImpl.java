@@ -14,6 +14,7 @@ import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
 import com.afrotransact.deliveryruns.domain.Subscription;
 import com.afrotransact.deliveryruns.domain.SubscriptionStatus;
+import com.afrotransact.deliveryruns.domain.UtmTags;
 import com.afrotransact.deliveryruns.port.LocationRepository;
 import com.afrotransact.deliveryruns.port.SubscriberCounts;
 import com.afrotransact.deliveryruns.port.SubscriptionRepository;
@@ -29,6 +30,7 @@ class SubscriptionServiceImpl implements SubscriptionService {
 
     private final SubscriptionRepository subscriptions;
     private final LocationRepository locations;
+    private final AttributionService attribution;
     private final DeliveryRunsEventPublisher events;
     private final SecretTokens tokens;
     private final RunLinks links;
@@ -38,11 +40,13 @@ class SubscriptionServiceImpl implements SubscriptionService {
     private final Clock clock;
 
     SubscriptionServiceImpl(SubscriptionRepository subscriptions, LocationRepository locations,
-                            DeliveryRunsEventPublisher events, SecretTokens tokens, RunLinks links,
+                            AttributionService attribution, DeliveryRunsEventPublisher events, SecretTokens tokens,
+                            RunLinks links,
                             DeliveryRunsSettings settings, ActorResolver actors, PermissionChecker permissions,
                             Clock clock) {
         this.subscriptions = subscriptions;
         this.locations = locations;
+        this.attribution = attribution;
         this.events = events;
         this.tokens = tokens;
         this.links = links;
@@ -55,6 +59,13 @@ class SubscriptionServiceImpl implements SubscriptionService {
     @Override
     @Transactional
     public Subscription subscribeMine(UUID locationId, Set<Channel> channels, String source) {
+        return subscribeMine(locationId, channels, source, null, null);
+    }
+
+    @Override
+    @Transactional
+    public Subscription subscribeMine(UUID locationId, Set<Channel> channels, String source, UtmTags utm,
+                                      UUID runId) {
         Actor actor = actors.current();
         Location location = activeLocation(locationId);
         Instant now = Instant.now(clock);
@@ -64,6 +75,7 @@ class SubscriptionServiceImpl implements SubscriptionService {
                     actor.subject(), channels, source, tokens.next(), now));
             events.subscription(DeliveryRunsEvents.SUBSCRIPTION_CREATED, location, created, channels,
                     source(source), null);
+            attribution.signupRequested(created.id(), locationId, runId, utm, true);
             return created;
         }
         Subscription before = existing.get();
@@ -71,6 +83,9 @@ class SubscriptionServiceImpl implements SubscriptionService {
         added.addAll(channels == null ? Set.of() : channels);
         added.removeAll(before.activeChannels());
         Subscription after = subscriptions.update(before.grant(channels, source, now));
+        if (before.activeChannels().isEmpty() && !after.activeChannels().isEmpty()) {
+            attribution.signupRequested(after.id(), locationId, runId, utm, true);
+        }
         if (!added.isEmpty()) {
             events.subscription(DeliveryRunsEvents.SUBSCRIPTION_CREATED, location, after, added, source(source), null);
         }
@@ -96,6 +111,12 @@ class SubscriptionServiceImpl implements SubscriptionService {
     @Override
     @Transactional
     public void subscribeEmail(UUID locationId, String email, String source) {
+        subscribeEmail(locationId, email, source, null, null);
+    }
+
+    @Override
+    @Transactional
+    public void subscribeEmail(UUID locationId, String email, String source, UtmTags utm, UUID runId) {
         Location location = activeLocation(locationId);
         String address = Subscription.normaliseEmail(email);
         Instant now = Instant.now(clock);
@@ -111,6 +132,7 @@ class SubscriptionServiceImpl implements SubscriptionService {
         } else {
             saved = subscriptions.update(existing.get().requestConfirmation(tokens.hash(token), expires, source, now));
         }
+        attribution.signupRequested(saved.id(), locationId, runId, utm, false);
         events.subscription(DeliveryRunsEvents.SUBSCRIPTION_CREATED, location, saved, EnumSet.of(Channel.EMAIL),
                 source(source), token);
     }
@@ -123,6 +145,7 @@ class SubscriptionServiceImpl implements SubscriptionService {
             return s;
         }
         Subscription confirmed = subscriptions.update(s.confirm(Instant.now(clock)));
+        attribution.signupActivated(confirmed.id(), confirmed.locationId());
         events.subscription(DeliveryRunsEvents.SUBSCRIPTION_CONFIRMED, location(confirmed.locationId()), confirmed,
                 confirmed.activeChannels(), "double-opt-in", null);
         return confirmed;

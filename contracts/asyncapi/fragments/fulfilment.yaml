@@ -16,6 +16,7 @@ channels:
       fulfilmentTaskPacked: {$ref: '#/components/messages/fulfilmentTaskPacked'}
       fulfilmentTaskReady: {$ref: '#/components/messages/fulfilmentTaskReady'}
       fulfilmentTaskCancelled: {$ref: '#/components/messages/fulfilmentTaskCancelled'}
+      fulfilmentRunPlanned: {$ref: '#/components/messages/fulfilmentRunPlanned'}
       fulfilmentRoutePlanned: {$ref: '#/components/messages/fulfilmentRoutePlanned'}
       fulfilmentRouteAssigned: {$ref: '#/components/messages/fulfilmentRouteAssigned'}
       fulfilmentRouteStarted: {$ref: '#/components/messages/fulfilmentRouteStarted'}
@@ -51,6 +52,19 @@ operations:
       fulfilment.pickup.auto_assigned / dispatch_assigned (S255, key shipment id): a seller pickup (AfroTransact
       Delivery from the seller's store) joined the nearest available driver's route, or dispatch moved it with a
       logged reason.
+      fulfilment.run.planned (S264, key = delivery-runs run id): a delivery run's routes were planned.
+  receiveFulfilmentDeliveryRunsEvents:
+    action: receive
+    channel: {$ref: '#/channels/deliveryRunsEvents'}
+    summary: >-
+      fulfilment-service (consumer group fulfilment-service, inbox-deduplicated) plans delivery runs (S264):
+      delivery-runs.run.confirmed (a closed pre-order window's paid orders) fetches GET /v1/service/runs/{id}/dispatch
+      (scope delivery-runs:read) and turns the shipments of the run's orders into routes: one route per capacity
+      chunk (RUN_ROUTE_CAPACITY bags), a pickup stop per seller before the drops, doorstep drops ordered by road distance
+      from the hub (geo POST /v1/distance/batch) or one drop per order at the community pickup point (each needing the
+      customer's handover code). The shipments are confirmed in orders-service. When delivery-runs cannot be reached
+      the run is kept PENDING with the reason and staff plan it from the console. delivery-runs.run.cancelled cancels
+      the routes that have not started. Other run events are ignored.
   receiveFulfilmentOrderEvents:
     action: receive
     channel: {$ref: '#/channels/ordersOrderEvents'}
@@ -58,6 +72,8 @@ operations:
       fulfilment-service (consumer group fulfilment-service, inbox-deduplicated) handles orders.order.placed: a pick /
       pack task per FBA_AFROTRANSACT or RETAIL_1P shipment (node from inventory's reservation), and an entry in the
       dispatch pool per AFROTRANSACT_DELIVERY shipment (FC load-out or seller pickup), each with one ATS package label.
+      PREORDER shipments (door or pickup point, S264) wait for their run instead: they are kept out of the zone builder
+      and the seller-pickup screens, and their lines (each with its own sellerOrgId) become one labelled bag per seller.
       A seller pickup with a pickup position (shipments[].pickup, S255) goes to the nearest available driver's route
       at once (fulfilment.pickup.auto_assigned); otherwise it waits for the zone route builder.
       orders.shipment.cancelled cancels the task and takes the shipment off a route that has not started. Other order
@@ -103,6 +119,11 @@ components:
       title: Task cancelled after orders.shipment.cancelled
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/FulfilmentTaskEvent'}
+    fulfilmentRunPlanned:
+      name: fulfilment.run.planned
+      title: A delivery run's routes were planned (S264; key = run id). Planning again publishes it again for the new routes.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentRunPlanned'}
     fulfilmentRoutePlanned:
       name: fulfilment.route.planned
       title: Route created by hand or by the zone route builder
@@ -273,6 +294,18 @@ components:
         status: {type: string, enum: [PICK_PENDING, PICKING, PICK_EXCEPTION, PICKED, PACKED, READY, CANCELLED]}
         packageLabel: {type: [string, 'null'], pattern: '^ATS[0-9A-Z]{9}$'}
         reason: {type: [string, 'null'], description: short-pick or cancellation reason}
+        at: {type: string, format: date-time}
+    FulfilmentRunPlanned:
+      type: object
+      required: [runId, town, serviceDate, dropMode, routes, orders, shipments, at]
+      properties:
+        runId: {type: string, description: delivery-runs run id}
+        town: {type: string, examples: [Bastrop]}
+        serviceDate: {type: string, format: date}
+        dropMode: {type: string, enum: [DOORSTEP, PICKUP_POINT]}
+        routes: {type: integer, description: Routes planned now (more than one when the run is split by capacity)}
+        orders: {type: integer}
+        shipments: {type: integer}
         at: {type: string, format: date-time}
     FulfilmentRouteEvent:
       type: object

@@ -1,0 +1,16 @@
+appId: com.afrotransact.customer.local
+---
+- runFlow: 01-browse.yaml
+- tapOn: "Add to cart.*"
+- tapOn: "Go to cart"
+- assertVisible: "Checkout.*"
+- tapOn: "Checkout.*"
+- assertVisible: "Place order.*"
+- scrollUntilVisible:
+    element: "Place order.*"
+- tapOn: "Place order.*"
+# Orders over $100 ask for the passcode.
+- tapOn:
+    text: "1"
+    optional: true
+- assertVisible: "Order placed|Track package|Delivery code.*"

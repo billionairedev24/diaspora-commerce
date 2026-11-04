@@ -1,0 +1,7 @@
+# The ApplicationSets for the lean single-node profile (prod): same services, a smaller platform layer.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - services.yaml
+  - platform-charts.yaml
+  - platform-manifests.yaml

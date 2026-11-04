@@ -91,11 +91,12 @@ type RailPlacement struct {
 
 // Placements is what content resolves for a market/ZIP.
 type Placements struct {
-	Announcements []Announcement  `json:"announcements"`
-	Hero          []HeroSlide     `json:"hero"`
-	Tiles         []Tile          `json:"tiles"`
-	Banners       []Banner        `json:"banners"`
-	Rails         []RailPlacement `json:"rails"`
+	Announcements     []Announcement  `json:"announcements"`
+	Hero              []HeroSlide     `json:"hero"`
+	Tiles             []Tile          `json:"tiles"`
+	Banners           []Banner        `json:"banners"`
+	Rails             []RailPlacement `json:"rails"`
+	CheckoutCrossSell []RailPlacement `json:"-"`
 }
 
 // SiteConfig is published site configuration, passed through as content serves it (contract schema SiteConfig).

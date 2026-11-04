@@ -47,12 +47,19 @@ type Config struct {
 		NotFoundTTL  time.Duration `yaml:"notFoundTtl"`
 		CacheMax     int           `yaml:"cacheMaxEntries"`
 	} `yaml:"identity"`
-	// DeliveryRuns serves pre-order audiences (GET /v1/service/preorders/{id}/audience) with the identity client's
-	// credentials (scope delivery-runs:audience.read). Disabled: announcement, reminder and last call reach nobody.
+	// DeliveryRuns serves pre-order and location audiences (GET /v1/service/preorders/{id}/audience and
+	// /v1/service/locations/{id}/audience) with the identity client's credentials (scope
+	// delivery-runs:audience.read). Disabled: announcement, reminder and last call reach nobody.
 	DeliveryRuns struct {
 		Enabled bool          `yaml:"enabled" env:"DELIVERY_RUNS_ENABLED"`
 		BaseURL string        `yaml:"baseUrl" env:"DELIVERY_RUNS_URL"`
 		Timeout time.Duration `yaml:"timeout" env:"DELIVERY_RUNS_TIMEOUT"`
+		// WhatsApp sends run announcements (open, cutoff reminder) as WhatsApp templates to members who opted in on
+		// WhatsApp. Off by default: the templates (run.opened / run.cutoff_reminder, channel chat) must be approved
+		// in Meta Business Manager first, and WHATSAPP_TOKEN + WHATSAPP_PHONE_NUMBER_ID set.
+		WhatsApp struct {
+			Enabled bool `yaml:"enabled" env:"DELIVERY_RUNS_WHATSAPP_ENABLED"`
+		} `yaml:"whatsapp"`
 	} `yaml:"deliveryRuns"`
 	// Links are the public base URLs templates link to: the shared PUBLIC_WEB_URL and SELLER_CENTER_URL. Provider
 	// Hub is served by the Seller Center app, so ProviderHub defaults to SellerCenter (PROVIDER_HUB_URL overrides).

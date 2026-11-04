@@ -4,7 +4,7 @@ import { type FulfilmentKind, isApiError, type ListingRow, sellerKeys, type Sell
 import { Button, buttonClassName, Select, Sheet, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
@@ -24,12 +24,28 @@ function OfferFulfilment({ offer, locations, editable }: { offer: SellerOffer; l
   const [choice, setChoice] = useState<FulfilmentKind>(offer.fulfilment);
   const [location, setLocation] = useState(offer.shipFromLocationId ?? locations[0]?.id ?? '');
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setChoice(offer.fulfilment);
+    if (offer.shipFromLocationId) setLocation(offer.shipFromLocationId);
+  }, [offer.fulfilment, offer.shipFromLocationId]);
+
   const save = useMutation({
     mutationFn: () => sellerApi().setOfferFulfilment(offer.offerId, { fulfilment: choice, shipFromLocationId: choice === 'AFROTRANSACT_DELIVERY' ? location || null : null }),
     onSuccess: (o) => {
       setErrors({});
+      setChoice(o.fulfilment);
+      if (o.shipFromLocationId) setLocation(o.shipFromLocationId);
       toast.show(t('sc.ff.saved', { sku: o.sellerSku }));
+      qc.setQueriesData<{ items: ListingRow[]; total: number }>({ queryKey: sellerKeys.listings(orgId) }, (old) => {
+        if (!old || !old.items) return old;
+        return {
+          ...old,
+          items: old.items.map((row) => (row.productId === offer.productId ? { ...row, fulfilment: o.fulfilment } : row))
+        };
+      });
       void qc.invalidateQueries({ queryKey: sellerKeys.listings(orgId) });
+      void qc.invalidateQueries({ queryKey: sellerKeys.offers(orgId, offer.productId) });
     },
     onError: (e) => setErrors(isApiError(e) && Object.keys(e.fieldErrors).length ? e.fieldErrors : { form: problemMessage(e) })
   });
@@ -52,7 +68,7 @@ function OfferFulfilment({ offer, locations, editable }: { offer: SellerOffer; l
         <legend className="mb-1 text-sm">{t('sc.ff.legend', { sku: offer.sellerSku })}</legend>
         {CHOICES.map((c) => (
           <div key={c} className="flex items-start gap-2 text-sm">
-            <input type="radio" id={`${name}-${c}`} name={name} value={c} checked={choice === c} onChange={() => setChoice(c)} className="mt-1" aria-describedby={`${name}-${c}-hint`} />
+            <input type="radio" id={`${name}-${c}`} name={name} value={c} checked={choice === c} onChange={() => setChoice(c)} className="mt-1 shrink-0" aria-describedby={`${name}-${c}-hint`} />
             <span>
               <label htmlFor={`${name}-${c}`} className="cursor-pointer font-semibold">
                 {t(`sc.ff.choice.${c}`)}

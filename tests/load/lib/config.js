@@ -5,7 +5,9 @@
 //   TOKEN        bearer access token (customer)             optional for search, required for checkout
 //   TOKENS       comma-separated bearer tokens, one per VU (checkout at concurrency: one cart per customer)
 //   SESSION      BFF session id, sent as the at_session cookie (alternative to TOKEN for web-style sessions)
-//   SCENARIO     smoke | load | stress | flash (checkout only)      (default smoke)
+//   SCENARIO     smoke | load | stress | soak | flash (checkout only) (default smoke)
+//   SOAK_RATE    soak arrival rate (iterations/s)                     (default RATE / 2)
+//   SOAK_DURATION soak length                                         (default 2h; use 4h to 8h before a release)
 //   ITERATIONS   checkout smoke iterations                           (default 3)
 //   RATE         target arrival rate (iterations/s) for load         (default 50 search, 5 checkout)
 //   DURATION     steady-state duration for load                      (default 5m)
@@ -43,6 +45,13 @@ export function scenarios(exec, { rate, duration = __ENV.DURATION || '5m', smoke
       executor: 'ramping-arrival-rate', exec, startRate: 1, timeUnit: '1s', preAllocatedVUs: Math.min(50, MAX_VUS), maxVUs: MAX_VUS,
       stages: [{ target: r, duration: __ENV.RAMP || '1m' }, { target: r, duration }, { target: 0, duration: '30s' }]
     },
+    // Soak: a steady, moderate rate (about half the load rate by default) held for hours to expose leaks, pool and
+    // connection exhaustion, queue and lag build-up, disk growth and slow degradation that a 5-minute run never sees.
+    // Watch the dashboards while it runs (see README 'Soak test'); the thresholds only catch gross failures.
+    soak: {
+      executor: 'constant-arrival-rate', exec, rate: Math.max(1, Math.round(Number(__ENV.SOAK_RATE || r / 2))), timeUnit: '1s',
+      duration: __ENV.SOAK_DURATION || '2h', preAllocatedVUs: Math.min(50, MAX_VUS), maxVUs: MAX_VUS
+    },
     stress: {
       executor: 'ramping-arrival-rate', exec, startRate: 1, timeUnit: '1s', preAllocatedVUs: Math.min(100, MAX_VUS), maxVUs: MAX_VUS * 2,
       stages: [
@@ -51,7 +60,7 @@ export function scenarios(exec, { rate, duration = __ENV.DURATION || '5m', smoke
       ]
     }
   };
-  if (!all[SCENARIO]) throw new Error(`unknown SCENARIO=${SCENARIO} (smoke | load | stress)`);
+  if (!all[SCENARIO]) throw new Error(`unknown SCENARIO=${SCENARIO} (smoke | load | stress | soak)`);
   return { [SCENARIO]: all[SCENARIO] };
 }
 

@@ -4,10 +4,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 import com.afrotransact.bookings.application.PaymentEventIngest;
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -25,8 +24,6 @@ import tools.jackson.databind.json.JsonMapper;
         matchIfMissing = true)
 public class PaymentEventsListener {
 
-    private static final Logger LOG = LoggerFactory.getLogger(PaymentEventsListener.class);
-
     private final PaymentEventIngest ingest;
     private final JsonMapper json;
 
@@ -38,19 +35,18 @@ public class PaymentEventsListener {
     @KafkaListener(topics = "${at.bookings.payment-events.topic:at.payment.events}",
             groupId = "${spring.kafka.consumer.group-id:bookings-service}")
     public void onMessage(ConsumerRecord<String, String> record) {
-        String eventId = header(record, "event-id");
         String type = header(record, "event-type");
-        if (eventId == null || type == null || !type.startsWith("payments.intent.")) {
+        if (type == null || !type.startsWith("payments.intent.")) {
             return;
         }
+        UUID eventId = eventId(record, type);
         JsonNode payload;
         try {
             payload = json.readTree(record.value());
         } catch (RuntimeException e) {
-            LOG.warn("Unreadable payment event {} skipped: {}", eventId, e.getMessage());
-            return;
+            throw MalformedEvent.of(type, e);
         }
-        ingest.handle(UUID.fromString(eventId), type, new PaymentEventIngest.IntentEvent(
+        ingest.handle(eventId, type, new PaymentEventIngest.IntentEvent(
                 payload.path("orderId").asString(record.key()), uuid(payload, "paymentId"),
                 payload.path("status").asString(null), payload.path("failureMessage").asString(null),
                 uuid(payload, "parentPaymentId"), payload.path("offSession").asBoolean(false)));
@@ -59,6 +55,18 @@ public class PaymentEventsListener {
     private static UUID uuid(JsonNode payload, String field) {
         String value = payload.path(field).asString("");
         return value.isEmpty() ? null : UUID.fromString(value);
+    }
+
+    private static UUID eventId(ConsumerRecord<String, String> record, String type) {
+        String raw = header(record, "event-id");
+        if (raw != null) {
+            try {
+                return UUID.fromString(raw);
+            } catch (IllegalArgumentException ex) {
+                throw MalformedEvent.missingEventId(type, record);
+            }
+        }
+        throw MalformedEvent.missingEventId(type, record);
     }
 
     private static String header(ConsumerRecord<String, String> record, String name) {

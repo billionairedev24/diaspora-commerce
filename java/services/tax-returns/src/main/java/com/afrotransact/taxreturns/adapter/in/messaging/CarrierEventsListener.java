@@ -3,11 +3,10 @@ package com.afrotransact.taxreturns.adapter.in.messaging;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.afrotransact.taxreturns.application.CarrierScan;
 import com.afrotransact.taxreturns.application.ReturnService;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -23,7 +22,6 @@ class CarrierEventsListener {
 
     static final String TRACKING_UPDATED = "carrier.tracking.updated";
 
-    private static final Logger LOG = LoggerFactory.getLogger(CarrierEventsListener.class);
 
     private final ReturnService returns;
     private final JsonMapper json;
@@ -42,14 +40,13 @@ class CarrierEventsListener {
         }
         Optional<UUID> eventId = EventHeaders.eventId(rec);
         if (eventId.isEmpty()) {
-            return;
+            throw MalformedEvent.missingEventId(TRACKING_UPDATED, rec);
         }
         JsonNode n;
         try {
             n = json.readTree(rec.value());
         } catch (JacksonException | IllegalArgumentException ex) {
-            LOG.warn("Skipping malformed carrier.tracking.updated {}: {}", eventId.get(), ex.getMessage());
-            return;
+            throw MalformedEvent.of("carrier.tracking.updated", ex);
         }
         String reference = Json.text(n, "reference");
         String tracking = Json.text(n, "trackingNumber");

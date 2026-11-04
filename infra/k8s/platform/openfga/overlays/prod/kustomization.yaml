@@ -1,16 +1,17 @@
-# prod: three replicas across zones, more datastore connections, 10% of traces (base default).
+# prod (lean, one node): one replica, small datastore pool (Layerbase Postgres has a connection cap), 10% of traces.
+# Back to three replicas across zones with the HA profile: replicas 3, minAvailable 2, MAX_OPEN_CONNS 60.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources: [../../base]
 patches:
   - target: {kind: Deployment, name: openfga}
     patch: |-
-      - {op: replace, path: /spec/replicas, value: 3}
+      - {op: replace, path: /spec/replicas, value: 1}
       - op: replace
         path: /spec/template/spec/containers/0/resources
-        value: {requests: {cpu: "1", memory: 256Mi}, limits: {memory: 1Gi}}
+        value: {requests: {cpu: 50m, memory: 96Mi}, limits: {memory: 256Mi}}
       - {op: test, path: /spec/template/spec/containers/0/env/2/name, value: OPENFGA_DATASTORE_MAX_OPEN_CONNS}
-      - {op: replace, path: /spec/template/spec/containers/0/env/2/value, value: "60"}
+      - {op: replace, path: /spec/template/spec/containers/0/env/2/value, value: "5"}
   - target: {kind: PodDisruptionBudget, name: openfga}
     patch: |-
-      - {op: replace, path: /spec/minAvailable, value: 2}
+      - {op: replace, path: /spec/minAvailable, value: 0}

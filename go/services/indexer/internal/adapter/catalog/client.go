@@ -26,7 +26,8 @@ type clientImpl struct {
 
 var _ port.CatalogReader = (*clientImpl)(nil)
 
-// NewClient caches GET {baseURL}/v1/categories and refreshes on TTL expiry or unknown ids.
+// NewClient caches GET {baseURL}/v1/categories?includeRetired=true and refreshes on TTL expiry or unknown ids.
+// Retired nodes are included: they still name the products that keep them.
 func NewClient(baseURL string, httpClient *http.Client) port.CatalogReader {
 	return &clientImpl{baseURL: strings.TrimSuffix(baseURL, "/"), http: httpClient, ttl: 5 * time.Minute,
 		byID: map[string]domain.Category{}}
@@ -60,7 +61,7 @@ type node struct {
 }
 
 func (c *clientImpl) refresh(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/categories", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/categories?includeRetired=true", nil)
 	if err != nil {
 		return fmt.Errorf("categories request: %w", err)
 	}

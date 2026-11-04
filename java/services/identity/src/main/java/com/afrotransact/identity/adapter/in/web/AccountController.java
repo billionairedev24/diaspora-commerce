@@ -11,6 +11,7 @@ import com.afrotransact.identity.application.SignUpResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -35,11 +36,11 @@ class AccountController {
                     + "same email) the account starts verified, joins the organisation and no code is sent.")
     @PostMapping("/v1/accounts")
     @ResponseStatus(HttpStatus.CREATED)
-    SignUpResponse signUp(@Valid @RequestBody SignUpRequest body) {
+    SignUpResponse signUp(@Valid @RequestBody SignUpRequest body, HttpServletRequest request) {
         SignUpResult r = accounts.signUp(new SignUpCommand(body.firstName(), body.lastName(), body.email(),
                 body.phone(), body.phoneRegion(), body.password(), body.confirmPassword(),
                 Boolean.TRUE.equals(body.termsAccepted()), Boolean.TRUE.equals(body.smsConsent()), body.intent(),
-                body.invitationToken()));
+                body.invitationToken(), body.referralCode(), null, request.getRemoteAddr()));
         return new SignUpResponse(r.userId(), r.email(), r.verificationRequired(), r.codeExpiresAt());
     }
 

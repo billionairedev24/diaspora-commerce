@@ -21,11 +21,23 @@ import java.util.Objects;
  * @param productType     catalog product type (tax category, return windows)
  * @param localTaxJurisdiction local jurisdiction of the tax quote, e.g. US-TX-770 (null when none)
  * @param shippingTaxMinor part of {@code taxMinor} charged on the shipment's shipping (on its first line)
+ * @param sellerOrgId     seller organisation of the line (a community pre-order package mixes lines of several
+ *                        sellers; null for orders placed before it was kept)
+ * @param sellerName      seller display name snapshot (null when unknown)
  */
 public record OrderLine(String id, int lineNo, String variantAtin, String productAtin, String title, String imageUrl,
                         int quantity, long unitPriceMinor, long taxMinor, long discountMinor, String category,
                         boolean perishable, String taxJurisdiction, String productType, String localTaxJurisdiction,
-                        long shippingTaxMinor) {
+                        long shippingTaxMinor, String sellerOrgId, String sellerName) {
+
+    /** A line without its seller (tests, orders placed before it was kept). */
+    public OrderLine(String id, int lineNo, String variantAtin, String productAtin, String title, String imageUrl,
+                     int quantity, long unitPriceMinor, long taxMinor, long discountMinor, String category,
+                     boolean perishable, String taxJurisdiction, String productType, String localTaxJurisdiction,
+                     long shippingTaxMinor) {
+        this(id, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, taxMinor, discountMinor,
+                category, perishable, taxJurisdiction, productType, localTaxJurisdiction, shippingTaxMinor, null, null);
+    }
 
     /** A line without product type, local jurisdiction or shipping tax (orders placed before they were kept). */
     public OrderLine(String id, int lineNo, String variantAtin, String productAtin, String title, String imageUrl,

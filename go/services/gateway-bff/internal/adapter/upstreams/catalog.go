@@ -34,6 +34,7 @@ func (s *searchImpl) Search(ctx context.Context, p port.SearchParams) (port.Sear
 	set("community", p.Community)
 	set("fulfilment", p.Fulfilment)
 	set("sellerKind", p.SellerKind)
+	set("sellerId", p.SellerID)
 	set("sort", p.Sort)
 	if p.MinRating != nil {
 		q.Set("minRating", strconv.FormatFloat(*p.MinRating, 'f', -1, 64))

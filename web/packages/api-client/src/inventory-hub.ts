@@ -62,6 +62,7 @@ export const InboundShipmentSchema = z.object({
   source: z.enum(['FBA', 'RETAIL_ASN']).default('FBA'),
   externalRef: str,
   ownerOrg: str,
+  ownerOrgName: str,
   nodeId: z.string(),
   assignmentReason: str,
   name: str,
@@ -93,12 +94,19 @@ export type InboundShipmentPage = z.infer<typeof InboundShipmentPageSchema>;
 export const LotStatusSchema = z.enum(['SELLABLE', 'QUARANTINE', 'EXPIRED', 'WRITTEN_OFF', 'DAMAGED']);
 export type LotStatus = z.infer<typeof LotStatusSchema>;
 
+/** Unit cost by what it is made of, in the lot's currency (minor units); the four add up to the unit cost. */
+export const CostComponentsSchema = z.object({ goodsMinor: int.default(0), freightMinor: int.default(0), dutyMinor: int.default(0), otherMinor: int.default(0) });
+export type CostComponents = z.infer<typeof CostComponentsSchema>;
+
+export const LotRateSourceSchema = z.enum(['BASE', 'ENTERED', 'TABLE']);
+
 export const LotSchema = z.object({
   id: z.string(),
   sku: z.string(),
   lotNo: z.string(),
   nodeId: z.string(),
   ownerOrg: str,
+  ownerOrgName: str,
   bin: str,
   qtyOnHand: int,
   qtyReserved: int.default(0),
@@ -106,8 +114,16 @@ export const LotSchema = z.object({
   mfgDate: date,
   expDate: date,
   receivedAt: str,
+  /** Unit landed cost in minor units of `currency`, the currency the lot was paid in. */
   unitLandedCostMinor: int.default(0),
   currency: z.string().default('USD'),
+  /** US dollars per 1 unit of `currency` when the lot was received (ADR 0005 §7). */
+  fxRateToUsd: z.number().default(1),
+  fxRateDate: date,
+  fxRateSource: LotRateSourceSchema.default('BASE'),
+  /** Unit landed cost in US cents, fixed at receiving: what valuation, COGS and margin use. */
+  unitCostUsdMinor: int.default(0),
+  costComponents: CostComponentsSchema.nullish(),
   status: LotStatusSchema,
   reason: str,
   markdownFlag: z.enum(['NONE', 'WITHIN_60', 'WITHIN_30']).default('NONE'),
@@ -126,6 +142,7 @@ export const MovementSchema = z.object({
   sku: z.string(),
   nodeId: z.string(),
   ownerOrg: str,
+  ownerOrgName: str,
   lotId: str,
   lotNo: str,
   qty: int,
@@ -140,7 +157,7 @@ export const LotTraceSchema = z.object({
   lot: LotSchema,
   movements: z.array(MovementSchema).default([]),
   relatedLots: z.array(LotSchema).default([]),
-  orders: z.array(z.object({ orderId: z.string(), qty: int.nullish(), status: str, at: str }).loose()).default([])
+  orders: z.array(z.object({ orderId: z.string(), orderNumber: str, qty: int.nullish(), status: str, at: str }).loose()).default([])
 });
 export type LotTrace = z.infer<typeof LotTraceSchema>;
 
@@ -186,6 +203,7 @@ export const CycleCountSchema = z.object({
   sku: str,
   binPrefix: str,
   ownerOrg: str,
+  ownerOrgName: str,
   blind: z.boolean().default(false),
   status: z.enum(['OPEN', 'COUNTED', 'POSTED', 'CANCELLED']),
   note: str,
@@ -203,10 +221,15 @@ export const CycleCountSchema = z.object({
 export type CycleCount = z.infer<typeof CycleCountSchema>;
 export const CycleCountPageSchema = pageOf(CycleCountSchema);
 
+/** What stock paid in one currency is worth: the amount in it and in US dollars. */
+export const CurrencyValueSchema = z.object({ currency: z.string(), units: int, valueMinor: int, valueUsdMinor: int });
+export type CurrencyValue = z.infer<typeof CurrencyValueSchema>;
+
 export const OverviewSchema = z.object({
-  byStatus: z.array(z.object({ status: z.string(), currency: z.string(), units: int, lots: int, valueMinor: int })).default([]),
+  /** Per lot status and currency paid: `valueMinor` in that currency, `valueUsdMinor` in US cents (what totals use). */
+  byStatus: z.array(z.object({ status: z.string(), currency: z.string(), units: int, lots: int, valueMinor: int, valueUsdMinor: int.default(0) })).default([]),
   expiry: z.array(z.object({ bucket: z.string(), units: int, lots: int })).default([]),
-  nodes: z.array(z.object({ nodeId: z.string(), name: str, lots: int, units: int, sellableUnits: int, blockedUnits: int, valueMinor: int, currency: str, reserved: int, inbound: int }).loose()).default([]),
+  nodes: z.array(z.object({ nodeId: z.string(), name: str, lots: int, units: int, sellableUnits: int, blockedUnits: int, valueMinor: int, currency: str, reserved: int, inbound: int, byCurrency: z.array(CurrencyValueSchema).default([]) }).loose()).default([]),
   inbound: z.object({ openShipments: int, expectedUnits: int, receivedUnits: int, withDiscrepancies: int }).nullish(),
   reservations: z.object({ held: int, heldUnits: int }).nullish(),
   alerts: z.array(z.object({ type: z.string(), severity: str, sku: str, nodeId: str, lotId: str, lotNo: str, shipmentId: str, qty: int.nullish(), date: date, message: z.string() })).default([])
@@ -262,6 +285,8 @@ export const SupplierSchema = z.object({
   paymentTerms: str,
   leadTimeDays: int.default(0),
   status: z.string(),
+  statusReason: str,
+  contacts: z.array(z.object({ name: z.string(), role: str, email: str, phone: str })).default([]),
   canReceivePurchaseOrders: z.boolean().default(true),
   scorecard: z.object({ receipts: int, onTimePercent: z.number().nullish(), defectPercent: z.number().nullish() }).loose().nullish(),
   version: z.number().int().default(0)
@@ -366,9 +391,19 @@ export const RetailShipmentSchema = z.object({
   cartons: z.array(z.object({ sscc: z.string(), asnLineNo: int, qty: int }).loose()).default([]),
   documents: z.array(z.object({ name: z.string(), status: z.string(), reference: str }).loose()).default([]),
   milestones: z.array(z.object({ stage: z.string(), at: z.string(), by: str })).default([]),
+  /** Associated costs of the shipment (freight, duty ...), spread over the received units as landed cost. */
+  charges: z.array(z.object({ type: z.string(), amountMinor: int, currency: z.string(), basis: str, reference: str })).default([]),
   version: z.number().int().default(0)
 });
 export type RetailShipment = z.infer<typeof RetailShipmentSchema>;
+/** A landed-cost charge on an inbound shipment; the basis (value, weight, quantity) defaults by type. */
+export interface ShipmentChargeInput {
+  type: 'FREIGHT' | 'INSURANCE' | 'DUTY' | 'BROKERAGE' | 'DRAYAGE' | 'FEES' | 'RECEIVING';
+  amountMinor: number;
+  currency: string;
+  basis?: 'VALUE' | 'WEIGHT' | 'QUANTITY';
+  reference?: string;
+}
 export const RetailShipmentPageSchema = pageOf(RetailShipmentSchema);
 
 export const ReceiptLineSchema = z.object({
@@ -467,6 +502,15 @@ export interface InboundPlanInput {
   lines: InboundPlanLineInput[];
   boxes?: { contents: { sku: string; qty: number }[]; weightLb?: number }[];
 }
+/** What the units cost, in the currency actually paid; the rate defaults to the staff-managed table's latest one. */
+export interface ReceiveCostInput {
+  unitLandedCostMinor: number;
+  currency: string;
+  /** US dollars per 1 unit of `currency` (up to 10 decimals); omit to use the rates table. */
+  fxRateToUsd?: number;
+  fxRateDate?: string;
+  costComponents?: CostComponents;
+}
 export interface ReceiveLineInput {
   sku?: string;
   unitLabel?: string;
@@ -477,6 +521,8 @@ export interface ReceiveLineInput {
   expDate?: string;
   bin?: string;
   holdReason?: string;
+  /** AfroTransact-owned stock only: seller FBA units carry no cost. */
+  cost?: ReceiveCostInput;
 }
 export interface CountEntryInput {
   lineNo: number;
@@ -516,6 +562,7 @@ export interface SupplierInput {
   currency: string;
   paymentTerms?: string;
   leadTimeDays: number;
+  contacts?: { name: string; role?: string; email?: string; phone?: string }[];
 }
 export interface ReceiptCountLineInput {
   lineNo: number;
@@ -668,6 +715,55 @@ export function inboundStep(s: Pick<InboundShipment, 'status' | 'shippedAt' | 'e
   }
 }
 
+/* ── Cost currencies and exchange rates (ADR 0005 §7) ────── */
+
+/** A currency stock can be received in; customers always pay in USD. */
+export const CostCurrencySchema = z.object({ code: z.string(), name: z.string(), minorUnits: int, base: z.boolean().default(false) });
+export type CostCurrency = z.infer<typeof CostCurrencySchema>;
+export const CostCurrencyListSchema = z.object({ items: z.array(CostCurrencySchema) });
+
+/** The rate suggested at receiving for a currency: the latest on or before the day. */
+export const SuggestedRateSchema = z.object({ currency: z.string(), rateDate: z.string(), rateToUsd: z.number() }).loose();
+export type SuggestedRate = z.infer<typeof SuggestedRateSchema>;
+export const SuggestedRateListSchema = z.object({ items: z.array(SuggestedRateSchema) });
+
+/** Minor-unit digits of a currency (2 for USD, MXN and NGN; 0 for XOF). */
+export function minorDigits(currency: string): number {
+  try {
+    return new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 2;
+  } catch {
+    return 2;
+  }
+}
+
+/**
+ * `minor` minor units of `currency` in US cents at `rateToUsd` (US dollars per unit), rounded half-even to the cent exactly
+ * like inventory-service, in integer arithmetic so the total on the form is the value the lot is stored with.
+ * Null when the rate is not a positive decimal.
+ */
+export function usdMinorOf(minor: number, currency: string, rateToUsd: string | number): number | null {
+  const text = typeof rateToUsd === 'number' ? rateToUsd.toFixed(10).replace(/0+$/, '').replace(/\.$/, '') : rateToUsd.trim();
+  const m = /^(\d+)(?:\.(\d{1,10}))?$/.exec(text);
+  if (!m || !Number.isSafeInteger(minor) || minor < 0) return null;
+  const fraction = m[2] ?? '';
+  const mantissa = BigInt(`${m[1]}${fraction}`);
+  if (mantissa === 0n) return null;
+  // cents = minor / 10^digits × rate × 10^2 = minor × mantissa × 10^(2 − digits) / 10^fraction
+  const shift = 2 - minorDigits(currency);
+  const numerator = BigInt(minor) * mantissa * (shift > 0 ? 10n ** BigInt(shift) : 1n);
+  const denominator = 10n ** BigInt(fraction.length) * (shift < 0 ? 10n ** BigInt(-shift) : 1n);
+  const quotient = numerator / denominator;
+  const twice = (numerator % denominator) * 2n;
+  const up = twice > denominator || (twice === denominator && quotient % 2n === 1n);
+  return Number(up ? quotient + 1n : quotient);
+}
+
+/** The USD total of a receipt line: units × the unit cost's USD value (as the lots are valued). */
+export function lineUsdTotal(units: number, unitCostMinor: number, currency: string, rateToUsd: string | number): number | null {
+  const unit = usdMinorOf(unitCostMinor, currency, rateToUsd);
+  return unit === null ? null : unit * units;
+}
+
 /* ── API ─────────────────────────────────────────────────── */
 
 const ifMatch = (version?: number) => (version === undefined ? undefined : { 'If-Match': `"${version}"` });
@@ -710,6 +806,9 @@ export function createInventoryHubApi(request: Requester, options: ApiClientOpti
     flow: (signal?: AbortSignal): Promise<InventoryFlow> => request(`${I}/flow`, InventoryFlowSchema, { signal }),
     trace: (q: { atin?: string; sku?: string }, signal?: AbortSignal): Promise<InventoryTrace> => request(`${I}/trace`, InventoryTraceSchema, { query: qs(q), signal }),
     overview: (nodeId?: string, signal?: AbortSignal): Promise<InventoryOverview> => request(`${I}/overview`, OverviewSchema, { query: qs({ nodeId }), signal }),
+    currencies: (signal?: AbortSignal): Promise<CostCurrency[]> => request(`${I}/currencies`, CostCurrencyListSchema, { signal }).then((r) => r.items),
+    currentRates: (asOf?: string, signal?: AbortSignal): Promise<SuggestedRate[]> =>
+      request(`${I}/exchange-rates/current`, SuggestedRateListSchema, { query: qs({ asOf }), signal }).then((r) => r.items),
     receive: (id: string, lines: ReceiveLineInput[], key: string, boxesReceived?: string[]): Promise<InboundReceiptResult> =>
       request(`${I}/inbound/${enc(id)}/receipts`, ReceiptResultSchema, { method: 'POST', body: { lines, boxesReceived }, headers: idem(key) }),
     close: (id: string): Promise<InboundShipment> => request(`${I}/inbound/${enc(id)}/close`, InboundShipmentSchema, { method: 'POST' }),
@@ -746,6 +845,8 @@ export function createInventoryHubApi(request: Requester, options: ApiClientOpti
         request(`${R}/items/${enc(id)}/listing`, RetailItemSchema, { method: 'POST', body: { status }, headers: ifMatch(version) }),
       createItem: (body: RetailItemInput, key?: string): Promise<RetailItem> => request(`${R}/items`, RetailItemSchema, { method: 'POST', body, headers: idem(key) }),
       createSupplier: (body: SupplierInput): Promise<Supplier> => request(`${R}/suppliers`, SupplierSchema, { method: 'POST', body }),
+      updateSupplier: (id: string, body: SupplierInput, version?: number): Promise<Supplier> =>
+        request(`${R}/suppliers/${enc(id)}`, SupplierSchema, { method: 'PUT', body, headers: ifMatch(version) }),
       setSupplierStatus: (id: string, status: 'APPROVED' | 'ON_WATCH' | 'INACTIVE', reason?: string): Promise<Supplier> =>
         request(`${R}/suppliers/${enc(id)}/status`, SupplierSchema, { method: 'POST', body: { status, reason } }),
       purchaseOrders: (q: { status?: string; page: number; size: number }, signal?: AbortSignal) => request(`${R}/purchase-orders`, PurchaseOrderPageSchema, { query: qs(q), signal }),
@@ -759,6 +860,8 @@ export function createInventoryHubApi(request: Requester, options: ApiClientOpti
       shipments: (poId: string, signal?: AbortSignal) => request(`${R}/shipments`, RetailShipmentPageSchema, { query: qs({ poId, size: 200 }), signal }),
       bookShipment: (body: { poId: string; mode: string; carrier?: string; trackingRef?: string; etd?: string; eta?: string; lines?: { poLineNo: number; qty: number; lotNo?: string; mfgDate?: string; expDate?: string }[] }) =>
         request(`${R}/shipments`, RetailShipmentSchema, { method: 'POST', body }),
+      setShipmentCharges: (id: string, charges: ShipmentChargeInput[], version?: number) =>
+        request(`${R}/shipments/${enc(id)}/charges`, RetailShipmentSchema, { method: 'PUT', body: { charges }, headers: ifMatch(version) }),
       advanceShipment: (id: string, version?: number) => request(`${R}/shipments/${enc(id)}/advance`, RetailShipmentSchema, { method: 'POST', headers: ifMatch(version) }),
       setDocument: (id: string, name: string, status: ShipmentDocumentStatus, reference?: string) =>
         request(`${R}/shipments/${enc(id)}/documents`, RetailShipmentSchema, { method: 'POST', body: { name, status, ...(reference ? { reference } : {}) } }),
@@ -799,6 +902,8 @@ export const inventoryHubKeys = {
   flow: () => [...inventoryHubKeys.all, 'flow'] as const,
   trace: (q: { atin?: string; sku?: string }) => [...inventoryHubKeys.all, 'trace', q] as const,
   overview: (nodeId?: string) => [...inventoryHubKeys.all, 'overview', nodeId ?? ''] as const,
+  currencies: () => [...inventoryHubKeys.all, 'currencies'] as const,
+  rates: (asOf?: string) => [...inventoryHubKeys.all, 'rates', asOf ?? ''] as const,
   nodes: () => [...inventoryHubKeys.all, 'nodes'] as const,
   inbound: () => [...inventoryHubKeys.all, 'inbound'] as const,
   inboundPage: (q: object) => [...inventoryHubKeys.inbound(), 'page', q] as const,
@@ -835,6 +940,9 @@ export const inventoryHubQueries = {
   trace: (api: InventoryHubApi, q: { atin?: string; sku?: string }) =>
     queryOptions({ queryKey: inventoryHubKeys.trace(q), queryFn: ({ signal }) => api.trace(q, signal), enabled: Boolean(q.atin || q.sku), staleTime: 5_000 }),
   overview: (api: InventoryHubApi, nodeId?: string) => queryOptions({ queryKey: inventoryHubKeys.overview(nodeId), queryFn: ({ signal }) => api.overview(nodeId, signal), staleTime: 15_000 }),
+  currencies: (api: InventoryHubApi) => queryOptions({ queryKey: inventoryHubKeys.currencies(), queryFn: ({ signal }) => api.currencies(signal), staleTime: 300_000 }),
+  /** The suggested rate per currency for receiving (the latest on or before `asOf`, default today). */
+  currentRates: (api: InventoryHubApi, asOf?: string) => queryOptions({ queryKey: inventoryHubKeys.rates(asOf), queryFn: ({ signal }) => api.currentRates(asOf, signal), staleTime: 30_000 }),
   nodes: (api: Pick<InvRoutes, 'nodes'>) => queryOptions({ queryKey: inventoryHubKeys.nodes(), queryFn: ({ signal }) => api.nodes(signal), staleTime: 300_000 }),
   inbound: (api: Pick<InvRoutes, 'inbound'>, q: Parameters<InvRoutes['inbound']>[0]) =>
     queryOptions({ queryKey: inventoryHubKeys.inboundPage(q), queryFn: ({ signal }) => api.inbound(q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),

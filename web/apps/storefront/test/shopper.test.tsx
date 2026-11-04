@@ -59,6 +59,7 @@ describe('account pages (mock BFF)', () => {
     expect(await screen.findAllByTestId('address-card')).toHaveLength(2);
     await user.click(screen.getByRole('button', { name: /Add address/ }));
     const dialog = await screen.findByRole('dialog');
+    await user.clear(within(dialog).getByLabelText(/Full name/));
     await user.click(within(dialog).getByRole('button', { name: 'Add address' }));
     // Under the field and in the error summary, which links to the field (S194).
     expect(within(dialog).getByRole('link', { name: 'Enter the full name' })).toHaveAttribute('href', '#addr-name');
@@ -107,7 +108,12 @@ describe('checkout (mock BFF + mock Stripe)', () => {
     expect(within(pkg).getAllByTestId('checkout-item')).toHaveLength(1);
     expect(within(pkg).getByTestId('checkout-item')).toHaveTextContent(/Qty 2/);
     expect(screen.getAllByTestId('checkout-payment')).toHaveLength(3);
+    // With methods on file the form stays closed until the shopper asks for a different one.
+    expect(screen.getByTestId('checkout-new-method')).not.toBeVisible();
+    await user.click(screen.getByRole('radio', { name: /Use a different payment method/ }));
     expect(screen.getByTestId('checkout-new-method')).toBeVisible();
+    await user.click(within(screen.getAllByTestId('checkout-payment')[0] as HTMLElement).getByRole('radio'));
+    expect(screen.getByTestId('checkout-new-method')).not.toBeVisible();
     expect(screen.queryByRole('group', { name: 'Express checkout' })).not.toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: /Use a new payment method/ })).not.toBeInTheDocument();
     expect(screen.getAllByRole('img', { name: 'Powered by Stripe' }).length).toBeGreaterThan(0);
@@ -124,6 +130,18 @@ describe('checkout (mock BFF + mock Stripe)', () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/orders\?placed=AT-2026-/)), { timeout: 5000 });
     const orders = await api.getOrderPage();
     expect(orders.items[0]?.shipments[0]?.deliveryCode).toMatch(/^\d{4}$/);
+  });
+
+  it('links the Conditions of Use, Privacy Notice and Returns & Refunds next to the order button', async () => {
+    const api = await signInDemo();
+    const jollof = await api.getProduct('AT000000P2');
+    await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 1 });
+    renderWithProviders(<CheckoutView />);
+    await screen.findByTestId('checkout-package');
+    expect(screen.getByRole('link', { name: 'Conditions of Use' })).toHaveAttribute('href', '/legal/conditions-of-use');
+    expect(screen.getByRole('link', { name: 'Privacy Notice' })).toHaveAttribute('href', '/legal/privacy');
+    expect(screen.getByRole('link', { name: 'Returns & Refunds' })).toHaveAttribute('href', '/legal/returns');
+    expect(screen.queryByTestId('preorder-terms-note')).not.toBeInTheDocument();
   });
 
   it('picks up at an AfroTransact pickup point: no shipping charge, and the order names the point', async () => {

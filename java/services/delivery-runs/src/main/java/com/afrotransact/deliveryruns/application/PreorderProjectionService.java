@@ -3,6 +3,8 @@ package com.afrotransact.deliveryruns.application;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.afrotransact.deliveryruns.domain.RefundStatus;
+
 /**
  * Keeps the pre-order orders projection from orders-service events (consumer {@code delivery-runs-preorders},
  * de-duplicated on event id through the platform inbox). Each call is one transaction.
@@ -19,4 +21,10 @@ public interface PreorderProjectionService {
 
     /** {@code orders.order.cancelled} of a placed order: the pre-order is cancelled. */
     void onOrderCancelled(UUID eventId, String orderId, Instant at);
+
+    /**
+     * {@code orders.preorder.refund_settled} (REFUNDED or VOIDED) and {@code orders.preorder.refund_failed} (FAILED):
+     * the refund progress of a cancelled pre-order. A settled refund is never moved back by a late event.
+     */
+    void onRefund(UUID eventId, String orderId, RefundStatus status, Long amountMinor, String error, Instant at);
 }

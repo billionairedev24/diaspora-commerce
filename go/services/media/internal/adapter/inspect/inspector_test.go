@@ -95,6 +95,8 @@ func TestInspectsSpreadsheetsAndCSV(t *testing.T) {
 		{"csv", []byte("\xef\xbb\xbfsku,qty,price\nGARI-2LB,12,8.99\n"), "text/csv", "text/csv"},
 		{"text not declared as csv", []byte("sku,qty\n"), "application/pdf", "text/plain; charset=utf-8"},
 		{"html declared as csv", []byte("<html><body>x</body></html>"), "text/csv", "text/html; charset=utf-8"},
+		{"heic photo", append([]byte("\x00\x00\x00\x18ftypheic\x00\x00\x00\x00"), make([]byte, 64)...), "image/heic", "image/heic"},
+		{"mp4 is not heic", append([]byte("\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00"), make([]byte, 64)...), "image/heic", "video/mp4"},
 		{"binary declared as csv", []byte{0x00, 0x01, 0x02, 0xff, 0xfe, 0x00}, "text/csv", "application/octet-stream"},
 	}
 	for _, c := range cases {

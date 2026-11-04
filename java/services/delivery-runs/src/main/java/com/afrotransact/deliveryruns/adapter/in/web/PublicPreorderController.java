@@ -55,12 +55,15 @@ class PublicPreorderController {
             description = "atins: comma-separated or repeated (1–100). A product is pre-order where pre-order is on, "
                     + "its catalog category is in the window's categories and it is not flagged shipsNow (catalog "
                     + "flags preorderEligible / shipsNow). Returns the effective fees orders-service charges for "
-                    + "the PREORDER package. 502 when catalog is unavailable.")
+                    + "the PREORDER package. earlyAccessHours (S323, a member's early access): a window opening "
+                    + "within that time is reported OPEN. 502 when catalog is unavailable.")
     @GetMapping("/v1/service/preorders/eligibility")
     EligibilityResponse eligibility(@RequestParam String country, @RequestParam String region,
                                     @RequestParam(required = false) String city,
-                                    @RequestParam List<String> atins) {
-        return EligibilityResponse.of(preorders.eligibility(country, region, city, atins));
+                                    @RequestParam List<String> atins,
+                                    @RequestParam(defaultValue = "0") int earlyAccessHours) {
+        return EligibilityResponse.of(preorders.eligibility(country, region, city, atins,
+                Math.max(0, Math.min(earlyAccessHours, 720))));
     }
 
     @Operation(summary = "A pre-order window's audience on a channel (delivery-runs:audience.read, notifications)",

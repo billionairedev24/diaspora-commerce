@@ -28,6 +28,10 @@ public final class IdentityEvents {
     public static final String INVITATION_REVOKED = "identity.invitation.revoked";
     /** Key = the accepting user's id. */
     public static final String INVITATION_ACCEPTED = "identity.invitation.accepted";
+    /** S300: a reset was asked for an account without a password (social sign-in only); key = user id. */
+    public static final String PASSWORD_RESET_FEDERATED = "identity.password-reset.federated";
+    /** S300: the password was reset with a code and every session revoked; key = user id. */
+    public static final String PASSWORD_CHANGED = "identity.password.changed";
 
     private IdentityEvents() {
     }

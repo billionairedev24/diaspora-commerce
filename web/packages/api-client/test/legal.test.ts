@@ -5,8 +5,12 @@ import {
   type ConsentRecord,
   type CookiePolicy,
   createApiClient,
+  LEGAL_DOCUMENT_ALIASES,
   LEGAL_DOCUMENT_KEYS,
+  LEGAL_DOCUMENT_TITLES,
+  LEGAL_GROUPS,
   legalDocumentKeyOf,
+  legalGroupTitle,
   legalKeys,
   type LegalPage,
   type PrivacyRequestReceipt
@@ -41,9 +45,46 @@ describe('legal document keys', () => {
     expect(legalDocumentKeyOf('nope')).toBeNull();
     expect(legalKeys.document('privacy', 'fr')).toEqual(['legal', 'document', 'privacy', 'fr', 'current']);
   });
+
+  it('knows the twenty-one documents and the new keys and their short links', () => {
+    expect(LEGAL_DOCUMENT_KEYS).toHaveLength(21);
+    expect(new Set(LEGAL_DOCUMENT_KEYS).size).toBe(21);
+    expect(legalDocumentKeyOf('gift-cards')).toBe('gift-card-terms');
+    expect(legalDocumentKeyOf('DPA')).toBe('data-processing');
+    expect(legalDocumentKeyOf('fees')).toBe('seller-fees');
+    expect(legalDocumentKeyOf('Pre-Order')).toBe('preorder-delivery-terms');
+  });
+
+  it('every alias points at a real document and never shadows a canonical key', () => {
+    for (const [alias, key] of Object.entries(LEGAL_DOCUMENT_ALIASES)) {
+      expect(LEGAL_DOCUMENT_KEYS).toContain(key);
+      expect(LEGAL_DOCUMENT_KEYS).not.toContain(alias);
+    }
+  });
+
+  it('has an English title and a section for every document', () => {
+    expect(Object.keys(LEGAL_DOCUMENT_TITLES).sort()).toEqual([...LEGAL_DOCUMENT_KEYS].sort());
+    expect(legalGroupTitle('seller-fees')).toBe('Payments and money');
+    expect(legalGroupTitle('privacy')).toBe('Privacy and cookies');
+    expect(legalGroupTitle('nope')).toBe('');
+    for (const key of LEGAL_DOCUMENT_KEYS) expect(legalGroupTitle(key), key).not.toBe('');
+  });
+
+  it('groups the index into the five sections with every document exactly once', () => {
+    expect(LEGAL_GROUPS.map((g) => g.id)).toEqual(['customers', 'payments', 'sellers', 'privacy', 'policies']);
+    const all: string[] = LEGAL_GROUPS.flatMap((g) => [...g.documents]);
+    expect(all).toHaveLength(LEGAL_DOCUMENT_KEYS.length);
+    expect([...all].sort()).toEqual([...LEGAL_DOCUMENT_KEYS].sort());
+  });
 });
 
 describe('mock BFF: legal & privacy center', () => {
+  it('lists every document in the legal center index', async () => {
+    const index = await api.getLegalIndex();
+    expect(index.documents.map((d) => d.key)).toEqual([...LEGAL_DOCUMENT_KEYS]);
+    expect(index.documents.every((d) => d.href === `/legal/${d.key}` && d.version !== '')).toBe(true);
+  });
+
   it('serves every document with an outline, versions and filled-in contacts', async () => {
     for (const key of LEGAL_DOCUMENT_KEYS) {
       const page = await api.getLegalDocument(key, { locale: 'fr' });

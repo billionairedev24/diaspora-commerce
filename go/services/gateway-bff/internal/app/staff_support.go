@@ -114,6 +114,20 @@ func (s *staffSupportImpl) Customer(ctx context.Context, c *domain.Caller, id st
 	}
 	var orders []jobj
 	run(func() {
+		// What the membership gives: payments answers for any customer; a customer without one is "not a member".
+		var e jobj
+		if err := sc.get(ctx, sc.up.Payments, "/v1/memberships/customers/"+url.PathEscape(id)+"/entitlements", nil, &e); err != nil {
+			miss("membership")
+			return
+		}
+		if boolean(e, "member") {
+			mu.Lock()
+			defer mu.Unlock()
+			out.Membership = &domain.SupportMembership{TierName: firstNonEmpty(jstr(e, "tierName"), jstr(e, "tierCode")), Status: jstr(e, "status"),
+				PrioritySupport: boolean(e, "prioritySupport")}
+		}
+	})
+	run(func() {
 		var page jobj
 		if err := sc.get(ctx, sc.up.Orders, "/v1/admin/orders", url.Values{"customer": {id}, "limit": {"20"}}, &page); err != nil {
 			miss("orders")
@@ -152,8 +166,10 @@ func (s *staffSupportImpl) Customer(ctx context.Context, c *domain.Caller, id st
 			miss("audit log")
 			return
 		}
-		for _, e := range objs(page, "items") {
-			out.Audit = append(out.Audit, domain.AuditLine{At: timeOf(e, "occurredAt"), Actor: jstr(e, "actorId"), Action: jstr(e, "action"), Summary: jstr(e, "summary")})
+		entries := objs(page, "items")
+		nameAll(ctx, sc, entries, personRef("actorId", "Actor"))
+		for _, e := range entries {
+			out.Audit = append(out.Audit, domain.AuditLine{At: timeOf(e, "occurredAt"), Actor: jstr(e, "actorName"), Action: jstr(e, "action"), Summary: jstr(e, "summary")})
 		}
 	})
 	wg.Wait()

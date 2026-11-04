@@ -176,10 +176,19 @@ func ParseCellTime(s string) (time.Time, bool) {
 // MatchesSearch reports whether every search term is found in one of the row's cells (as the table shows them) or
 // in its id.
 func MatchesSearch(cols []Column, id string, cells map[string]any, terms []string) bool {
+	return MatchesSearchIn(cols, Row{ID: id, Cells: cells}, terms)
+}
+
+// MatchesSearchIn is MatchesSearch for a row that also hides text from the table (Row.Search: the ids behind names).
+func MatchesSearchIn(cols []Column, row Row, terms []string) bool {
 	if len(terms) == 0 {
 		return true
 	}
+	id, cells := row.ID, row.Cells
 	texts := []string{strings.ToLower(id)}
+	for _, h := range row.Search {
+		texts = append(texts, strings.ToLower(h))
+	}
 	for _, c := range cols {
 		texts = append(texts, CellTexts(c.Kind, cells[c.Key])...)
 	}
@@ -304,7 +313,7 @@ func FilterRows(rows []Row, cols []Column, terms []string, ids []string) []Row {
 		if want != nil && !want[r.ID] {
 			continue
 		}
-		if MatchesSearch(cols, r.ID, r.Cells, terms) {
+		if MatchesSearchIn(cols, r, terms) {
 			out = append(out, r)
 		}
 	}

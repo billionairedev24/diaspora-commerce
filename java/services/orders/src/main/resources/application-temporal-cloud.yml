@@ -1,0 +1,7 @@
+# Add to SPRING_PROFILES_ACTIVE (after the environment profile) to run checkout workflows on Temporal Cloud (mTLS).
+spring:
+  temporal:
+    connection:
+      mtls:
+        cert-chain: ${TEMPORAL_TLS_CERT}
+        key: ${TEMPORAL_TLS_KEY}

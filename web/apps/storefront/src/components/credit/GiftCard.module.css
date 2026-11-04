@@ -1,0 +1,44 @@
+/* Buy a gift card: the form on one side, a live preview of the email on the other. Flat, tokens only, logical properties. */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 22rem); gap: var(--at-space-8) var(--at-space-10); align-items: start; }
+.formCol { display: flex; flex-direction: column; gap: var(--at-space-6); min-width: 0; max-inline-size: 40rem; }
+.previewCol { position: sticky; inset-block-start: var(--at-space-4); min-width: 0; display: flex; flex-direction: column; gap: var(--at-space-2); }
+
+.chips { display: flex; flex-wrap: wrap; gap: var(--at-space-2); margin: 0; padding: 0; border: 0; }
+.chip { display: inline-flex; align-items: center; justify-content: center; min-block-size: var(--at-size-touch); min-inline-size: 5rem; padding: 0 var(--at-space-4); border: 1px solid var(--at-color-border-strong); border-radius: var(--at-radius-sm); background: var(--at-color-surface); color: var(--at-color-text); font: inherit; font-weight: var(--at-weight-semibold); cursor: pointer; }
+.chip[aria-pressed='true'] { border-color: var(--at-color-action-secondary); box-shadow: inset 0 0 0 1px var(--at-color-action-secondary); background: var(--at-color-surface-muted); }
+.chip:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: 2px; }
+@media (hover: hover) {
+  .chip:hover { background: var(--at-color-surface-hover); }
+}
+
+.radios { display: flex; flex-direction: column; gap: var(--at-space-1); margin: 0; padding: 0; border: 0; }
+.legend { padding: 0; margin-block-end: var(--at-space-1); font-size: var(--at-text-md); font-weight: var(--at-weight-semibold); }
+.radio { display: flex; gap: var(--at-space-2); align-items: center; min-block-size: var(--at-size-touch); font-size: var(--at-text-base); cursor: pointer; }
+.radio input { inline-size: 18px; block-size: 18px; accent-color: var(--at-color-action-secondary); }
+
+.textareaLabel { font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); }
+.textarea { inline-size: 100%; min-block-size: 6rem; padding: var(--at-space-2) var(--at-space-3); border: 1px solid var(--at-color-border-strong); border-radius: var(--at-radius-sm); background: var(--at-color-surface); color: var(--at-color-text); font: inherit; line-height: var(--at-leading-normal); resize: vertical; }
+.textarea:focus { outline: none; border-color: var(--at-color-focus); box-shadow: var(--at-shadow-focus); }
+.counter { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); text-align: end; }
+
+.fine { margin: 0; font-size: var(--at-text-sm); line-height: var(--at-leading-normal); color: var(--at-color-text-muted); }
+.fine + .fine { margin-block-start: var(--at-space-2); }
+.fine a { color: var(--at-color-link); }
+
+/* The email as the recipient sees it */
+.mail { display: flex; flex-direction: column; gap: var(--at-space-3); padding: var(--at-space-5); background: var(--at-color-surface-sunken); border-radius: var(--at-radius-sm); min-width: 0; }
+.mailMeta { display: flex; flex-direction: column; gap: 2px; padding-block-end: var(--at-space-3); border-block-end: 1px solid var(--at-color-border); font-size: var(--at-text-sm); color: var(--at-color-text-muted); overflow-wrap: anywhere; }
+.mailSubject { font-size: var(--at-text-md); font-weight: var(--at-weight-semibold); color: var(--at-color-text); }
+.mailAmount { margin: 0; font-family: var(--at-font-display); font-size: var(--at-text-4xl); font-weight: var(--at-weight-bold); line-height: var(--at-leading-tight); font-variant-numeric: tabular-nums; }
+.mailText { margin: 0; font-size: var(--at-text-md); line-height: var(--at-leading-normal); overflow-wrap: anywhere; }
+.mailNote { margin: 0; padding-inline-start: var(--at-space-3); border-inline-start: 3px solid var(--at-color-border-strong); font-size: var(--at-text-md); font-style: italic; line-height: var(--at-leading-normal); overflow-wrap: anywhere; white-space: pre-wrap; }
+.mailNoteEmpty { color: var(--at-color-text-subtle); }
+.mailCodeLabel { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+.mailCode { margin: 0; font-family: var(--at-font-mono); font-size: var(--at-text-lg); font-weight: var(--at-weight-bold); letter-spacing: 0.08em; }
+.mailButton { align-self: flex-start; padding: var(--at-space-2) var(--at-space-4); border-radius: var(--at-radius-pill); background: var(--at-color-action-primary); color: var(--at-color-action-primary-text); font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); }
+.mailFoot { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); line-height: var(--at-leading-normal); }
+
+@media (max-width: 899px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .previewCol { position: static; }
+}

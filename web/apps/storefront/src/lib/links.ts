@@ -9,6 +9,8 @@ export interface LoginHints {
   loginHint?: string;
   /** Organisation invitation token: the new account joins the organisation without an email code. */
   invitation?: string;
+  /** A friend's referral code (S322): identity's sign-up page shows it filled in. */
+  referral?: string;
 }
 
 function loginHref(returnTo: string | undefined, prompt: 'create' | undefined, hints: LoginHints = {}): string {
@@ -17,6 +19,7 @@ function loginHref(returnTo: string | undefined, prompt: 'create' | undefined, h
   if (prompt) q.set('prompt', prompt);
   if (hints.loginHint) q.set('login_hint', hints.loginHint);
   if (hints.invitation) q.set('invitation', hints.invitation);
+  if (hints.referral) q.set('referral', hints.referral);
   const qs = q.toString();
   return qs ? `${LOGIN_START_PATH}?${qs}` : LOGIN_START_PATH;
 }
@@ -29,6 +32,23 @@ export const signInHref = (returnTo?: string, hints?: LoginHints): string => log
 
 /** "Create account": identity's hosted sign-up page (OIDC prompt=create), then back to `returnTo` signed in. */
 export const signUpHref = (returnTo?: string, hints?: LoginHints): string => loginHref(returnTo, 'create', hints);
+
+/** What a referral code is made of: letters, digits and dashes (the BFF and identity check the same). */
+const REFERRAL_CODE = /^[A-Za-z0-9-]{4,20}$/;
+
+/**
+ * Where a friend's share link /r/<code> goes (S322): identity's hosted sign-up with the code filled in; a value that is
+ * not shaped like a code goes to the plain sign-up.
+ */
+export function referralSignUpHref(raw: string): string {
+  let code = raw;
+  try {
+    code = decodeURIComponent(raw);
+  } catch {
+    return signUpHref('/');
+  }
+  return REFERRAL_CODE.test(code) ? signUpHref('/', { referral: code }) : signUpHref('/');
+}
 
 /** Only same-site relative paths are allowed as post-login destinations. */
 export function safeReturnTo(value: string | null | undefined): string {

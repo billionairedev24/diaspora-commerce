@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import com.afrotransact.taxreturns.application.LiabilityReport;
 import com.afrotransact.taxreturns.application.TaxQuoteCommand;
+import com.afrotransact.taxreturns.application.TaxRatesImportResult;
 import com.afrotransact.taxreturns.domain.tax.LiabilityRow;
 import com.afrotransact.taxreturns.domain.tax.LocalTaxRate;
 import com.afrotransact.taxreturns.domain.tax.StateTaxRule;
@@ -40,7 +41,7 @@ final class TaxDtos {
     record QuoteLine(@Size(max = 80) String lineId, @Size(max = 40) String atin, @Size(max = 80) String sellerOrgId,
                      @Schema(description = "GENERAL | GROCERY | PREPARED_FOOD; when absent productType decides")
                      @Size(max = 30) String taxCategory,
-                     @Schema(description = "catalog product type (mapped by at.taxreturns.tax.category-by-product-type)")
+                     @Schema(description = "catalog product type; the tax code comes from the classification rules (and the product's answers)")
                      @Size(max = 80) String productType, @Min(1) int quantity, @Min(0) long unitPriceMinor,
                      @Min(0) long discountMinor, @Min(0) long shippingMinor) {
     }
@@ -62,12 +63,14 @@ final class TaxDtos {
                              @Schema(description = "Combined rate applied (fraction, 0.0825 = 8.25 %)") BigDecimal rate,
                              long taxMinor, String jurisdiction, String localJurisdiction, String collectedBy,
                              @Schema(description = "Part of taxMinor charged on the line's shipping")
-                             long shippingTaxMinor) {
+                             long shippingTaxMinor,
+                             @Schema(description = "Tax code of ours the line was taxed under (GENERAL_GOODS, CLOTHING ...)")
+                             String taxCode) {
 
         static QuoteLineResponse of(TaxLineResult r) {
             return new QuoteLineResponse(r.lineId(), r.sellerOrgId(), r.category().name(), r.taxableMinor(), r.rate(),
                     r.taxMinor(), r.jurisdiction(), r.localJurisdiction(), r.collectedBy().name(),
-                    r.shippingTaxMinor());
+                    r.shippingTaxMinor(), r.taxCode());
         }
     }
 
@@ -113,6 +116,18 @@ final class TaxDtos {
 
     @Schema(name = "TaxRateTable")
     record RatesResponse(List<StateRuleDto> states, List<LocalRateDto> locals) {
+    }
+
+    @Schema(name = "TaxRatesImportRequest", description = "CSV text: header kind,country,state,name,... (see staff console template)")
+    record ImportRequest(@NotBlank String csv) {
+    }
+
+    @Schema(name = "TaxRatesImportResult")
+    record ImportResponse(int statesUpserted, int localsUpserted, List<String> warnings) {
+
+        static ImportResponse of(TaxRatesImportResult r) {
+            return new ImportResponse(r.statesUpserted(), r.localsUpserted(), r.warnings());
+        }
     }
 
     @Schema(name = "LiabilityRow")

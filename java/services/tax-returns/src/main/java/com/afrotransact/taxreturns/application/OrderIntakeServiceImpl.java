@@ -32,13 +32,16 @@ class OrderIntakeServiceImpl implements OrderIntakeService {
 
     private final OrderSnapshotRepository snapshots;
     private final ProductFacts productFacts;
+    private final TaxLineTagger tagger;
     private final TaxLedger ledger;
     private final InboxDeduplicator inbox;
     private final TransactionOperations tx;
     private final OrderLookup lookup;
 
     OrderIntakeServiceImpl(OrderSnapshotRepository snapshots, ProductFacts productFacts, TaxLedger ledger,
-                           InboxDeduplicator inbox, TransactionOperations tx, OrderLookup lookup) {
+                           InboxDeduplicator inbox, TransactionOperations tx, OrderLookup lookup,
+                           TaxLineTagger tagger) {
+        this.tagger = tagger;
         this.lookup = lookup;
         this.snapshots = snapshots;
         this.productFacts = productFacts;
@@ -50,12 +53,14 @@ class OrderIntakeServiceImpl implements OrderIntakeService {
     @Override
     public boolean onOrderPlaced(UUID eventId, OrderPlaced e) {
         PlacedOrder order = snapshot(e, facts(e));
+        Map<String, ProductFacts.Facts> answers = answersOf(order);
         Boolean handled = tx.execute(status -> {
             if (!inbox.firstDelivery(ORDERS_CONSUMER, eventId)) {
                 return false;
             }
             if (snapshots.insert(order)) {
                 int lines = ledger.recordSale(order);
+                tagger.tag(order, answers);
                 LOG.info("Order {} recorded: {} shipments, {} tax lines ({})", order.orderNumber(),
                         order.shipments().size(), lines, order.shipTo().stateJurisdiction());
             }
@@ -115,6 +120,19 @@ class OrderIntakeServiceImpl implements OrderIntakeService {
             LOG.warn("Order {}: ship-to address not available from orders ({} {})", order.orderNumber(),
                     ex.status(), ex.getMessage());
             return Optional.empty();
+        }
+    }
+
+    /** The product answers (cached) that decide each line's tax code; unavailable ones classify by default. */
+    private Map<String, ProductFacts.Facts> answersOf(PlacedOrder order) {
+        List<String> atins = order.shipments().stream().flatMap(s -> s.lines().stream())
+                .map(PlacedOrder.Line::atin).filter(a -> a != null).distinct().toList();
+        try {
+            return atins.isEmpty() ? Map.of() : productFacts.lookup(atins);
+        } catch (RuntimeException ex) {
+            LOG.warn("Product answers unavailable for order {}: {}; lines classified by default",
+                    order.orderNumber(), ex.getMessage());
+            return Map.of();
         }
     }
 

@@ -2,13 +2,14 @@
 
 import { sellerKeys, sellerQueries, type StockPosition, type StockReason } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Dialog, Select, Tabs, TextField, useToast } from '@afrotransact/ui';
+import { AlertAction, Button, Dialog, PageStack, Select, StatStrip, Tabs, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useRef, useState } from 'react';
 
 import { ModulePage } from '@/components/ui/ModulePage';
+import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage } from '@/components/ui/States';
 import { sellerApi } from '@/lib/api';
 import { idempotencyKey } from '@/lib/format';
@@ -87,13 +88,31 @@ function StockView({ adjusting: open, setAdjusting: setOpen }: { adjusting: bool
   });
   const t = q.data?.totals;
   return (
-    <>
+    <PageStack>
+      {t && t.lowStockSkus > 0 ? (
+        <Notice
+          tone="warning"
+          title={`${t.lowStockSkus} SKU${t.lowStockSkus === 1 ? ' is' : 's are'} running low on stock.`}
+          action={<AlertAction onClick={() => router.replace('/inventory?tab=send')}>Create inbound plan</AlertAction>}
+        >
+          Send stock to AfroTransact or adjust counted quantities to avoid stockouts on the storefront.
+        </Notice>
+      ) : null}
+      {t && t.inbound > 0 ? (
+        <Notice tone="info" title={`${t.inbound} unit${t.inbound === 1 ? ' is' : 's are'} currently inbound.`}>
+          Track arriving shipments in the “Send to AfroTransact” tab.
+        </Notice>
+      ) : null}
       {t ? (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,160px),1fr))] gap-3">
-          {[['Available', t.available], ['Reserved', t.reserved], ['Inbound', t.inbound], ['Low-stock SKUs', t.lowStockSkus]].map(([k, v]) => (
-            <div key={k} className="flex flex-col rounded-md border border-border p-4"><span className="text-xs font-semibold text-muted">{k}</span><strong className="text-2xl">{v}</strong></div>
-          ))}
-        </div>
+        <StatStrip
+          label="Stock summary"
+          items={[
+            { id: 'available', label: 'Available', value: t.available },
+            { id: 'reserved', label: 'Reserved', value: t.reserved },
+            { id: 'inbound', label: 'Inbound', value: t.inbound },
+            { id: 'low', label: 'Low-stock SKUs', value: t.lowStockSkus, tone: t.lowStockSkus > 0 ? 'attention' : 'neutral', onSelect: t.lowStockSkus > 0 ? () => state.setSearchInput('low stock') : undefined }
+          ]}
+        />
       ) : null}
       <DataTable<StockPosition> id="seller.inventory" label="Stock by warehouse" columns={columns} data={q.data?.positions ?? []} getRowId={(p) => `${p.sku}@${p.nodeId}`}
         rowLabel={(p) => `${p.sku} at ${p.nodeId}`} state={state} mode="client" loading={q.isPending} fetching={q.isFetching}
@@ -116,6 +135,6 @@ function StockView({ adjusting: open, setAdjusting: setOpen }: { adjusting: bool
           <Button type="submit" loading={adjust.isPending}>Save quantity</Button>
         </form>
       </Dialog>
-    </>
+    </PageStack>
   );
 }

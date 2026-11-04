@@ -24,8 +24,21 @@ const zoned = (o: Intl.DateTimeFormatOptions): Intl.DateTimeFormatOptions => {
 };
 const dateText = (d: Date, o: Intl.DateTimeFormatOptions) => formatDateParts(d, tag, zoned(o), prefs.dateFormat ?? 'AUTO');
 
+/** Amounts are minor units of their currency: 2 digits for USD, MXN and NGN, none for XOF. */
 export function money(minor: number, currency = 'USD'): string {
-  return new Intl.NumberFormat(numTag(), { style: 'currency', currency }).format(minor / 100);
+  // Dollars read as "$"; every other currency by its code ("MXN 120.00"), so pesos are never mistaken for dollars.
+  const format = new Intl.NumberFormat(numTag(), { style: 'currency', currency, currencyDisplay: currency === 'USD' ? 'symbol' : 'code' });
+  return format.format(minor / 10 ** (format.resolvedOptions().maximumFractionDigits ?? 2));
+}
+
+/** Major units of a currency typed by people ("120.50") → minor units of that currency; NaN when not an amount. */
+export function toMinorIn(v: string, currency: string): number {
+  const digits = new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 2;
+  const t = v.trim();
+  if (!/^\d+(\.\d+)?$/.test(t)) return Number.NaN;
+  const [whole = '0', fraction = ''] = t.split('.');
+  if (fraction.length > digits) return Number.NaN;
+  return Number(whole) * 10 ** digits + Number(fraction.padEnd(digits, '0') || '0');
 }
 
 export function dollars(major: number): string {
@@ -48,6 +61,17 @@ export function dateTime(iso: string | null | undefined): string {
 
 export function percent(rate: number): string {
   return `${(rate * 100).toLocaleString(numTag(), { maximumFractionDigits: 3 })} %`;
+}
+
+/** A whole number with the active locale's separators (searches, clicks). */
+export function count(n: number): string {
+  return new Intl.NumberFormat(numTag(), { maximumFractionDigits: 0 }).format(n);
+}
+
+/** A 0–1 share as a percentage with at most one decimal ("12.5%"; shares under 0.1% read "<0.1%"). */
+export function share(rate: number): string {
+  const f = new Intl.NumberFormat(numTag(), { style: 'percent', maximumFractionDigits: 1 });
+  return rate > 0 && rate < 0.001 ? `<${f.format(0.001)}` : f.format(rate);
 }
 
 /** "AWAITING_FINAL_APPROVAL" → "Awaiting final approval". */

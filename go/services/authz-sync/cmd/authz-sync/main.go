@@ -25,6 +25,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/authz-sync/internal/adapter/openfga"
 	"github.com/billionairedev24/diaspora-commerce/go/services/authz-sync/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/authz-sync/internal/config"
+	"github.com/billionairedev24/diaspora-commerce/go/services/authz-sync/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/authz-sync/internal/port"
 )
 
@@ -59,6 +60,9 @@ func run() error {
 	fga := openfga.NewClient(cfg.OpenFGA.APIURL, cfg.OpenFGA.APIToken, cfg.OpenFGA.StoreID,
 		&http.Client{Timeout: cfg.OpenFGA.Timeout})
 	if err := provision(ctx, fga, cfg, log); err != nil {
+		return err
+	}
+	if err := seedServiceClients(ctx, fga, cfg, log); err != nil {
 		return err
 	}
 
@@ -141,6 +145,19 @@ func provisionOnce(ctx context.Context, fga openfga.Client, cfg config.Config, l
 		return fmt.Errorf("model: %w", err)
 	}
 	log.Info("openfga model", "id", id, "written", written)
+	return nil
+}
+
+// seedServiceClients writes the platform `service` tuples of the first-party service clients (S266).
+func seedServiceClients(ctx context.Context, store port.TupleStore, cfg config.Config, log *slog.Logger) error {
+	change := domain.ServiceClientChange(cfg.ServiceClients)
+	if change.Empty() {
+		return nil
+	}
+	if err := store.Write(ctx, change); err != nil {
+		return fmt.Errorf("seed service clients: %w", err)
+	}
+	log.Info("service client tuples seeded", "clients", len(change.Writes))
 	return nil
 }
 

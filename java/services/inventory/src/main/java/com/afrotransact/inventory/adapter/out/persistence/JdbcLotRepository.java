@@ -14,9 +14,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.inventory.domain.CostComponents;
+import com.afrotransact.inventory.domain.ExchangeRate;
 import com.afrotransact.inventory.domain.Lot;
+import com.afrotransact.inventory.domain.LotCost;
 import com.afrotransact.inventory.domain.LotStatus;
 import com.afrotransact.inventory.domain.MarkdownFlag;
+import com.afrotransact.inventory.domain.RateSource;
 import com.afrotransact.inventory.domain.StockLevels;
 import com.afrotransact.inventory.port.LotRepository;
 import com.afrotransact.inventory.port.Page;
@@ -29,7 +33,9 @@ class JdbcLotRepository implements LotRepository {
 
     private static final String SELECT = """
             select id, sku, lot_no, node_id, owner_org, bin, qty_on_hand, qty_reserved, mfg_date, exp_date,
-                   received_at, unit_landed_cost_minor, currency, status, reason, markdown_flag, receipt_ref, version
+                   received_at, unit_landed_cost_minor, currency, fx_rate_to_usd, fx_rate_date, fx_rate_source,
+                   unit_cost_usd_minor, cost_goods_minor, cost_freight_minor, cost_duty_minor, cost_other_minor,
+                   status, reason, markdown_flag, receipt_ref, version
             from lot
             """;
     private static final String FEFO = " order by exp_date nulls last, received_at, lot_no";
@@ -44,10 +50,13 @@ class JdbcLotRepository implements LotRepository {
     public void insert(Lot l) {
         jdbc.sql("""
                 insert into lot (id, sku, lot_no, node_id, owner_org, bin, qty_on_hand, qty_reserved, mfg_date,
-                                 exp_date, received_at, unit_landed_cost_minor, currency, status, reason,
+                                 exp_date, received_at, unit_landed_cost_minor, currency, fx_rate_to_usd,
+                                 fx_rate_date, fx_rate_source, unit_cost_usd_minor, cost_goods_minor,
+                                 cost_freight_minor, cost_duty_minor, cost_other_minor, status, reason,
                                  markdown_flag, receipt_ref, version, updated_at)
                 values (:id, :sku, :lotNo, :node, :owner, :bin, :onHand, :reserved, :mfg, :exp, :receivedAt, :cost,
-                        :currency, :status, :reason, :markdown, :receiptRef, 0, :receivedAt)
+                        :currency, :rate, :rateDate, :rateSource, :costUsd, :goods, :freight, :duty, :other,
+                        :status, :reason, :markdown, :receiptRef, 0, :receivedAt)
                 """)
                 .params(params(l))
                 .update();
@@ -236,8 +245,17 @@ class JdbcLotRepository implements LotRepository {
         m.put("mfg", l.mfgDate() == null ? null : Date.valueOf(l.mfgDate()));
         m.put("exp", l.expDate() == null ? null : Date.valueOf(l.expDate()));
         m.put("receivedAt", Timestamp.from(l.receivedAt()));
-        m.put("cost", l.unitLandedCostMinor());
-        m.put("currency", l.currency());
+        LotCost c = l.cost();
+        m.put("cost", c.unitMinor());
+        m.put("currency", c.currency());
+        m.put("rate", c.rateToUsd());
+        m.put("rateDate", Date.valueOf(c.rateDate()));
+        m.put("rateSource", c.rateSource().name());
+        m.put("costUsd", c.unitUsdMinor());
+        m.put("goods", c.components().goodsMinor());
+        m.put("freight", c.components().freightMinor());
+        m.put("duty", c.components().dutyMinor());
+        m.put("other", c.components().otherMinor());
         m.put("status", l.status().name());
         m.put("reason", l.reason());
         m.put("markdown", l.markdownFlag().name());
@@ -248,11 +266,15 @@ class JdbcLotRepository implements LotRepository {
     static Lot map(ResultSet rs, int row) throws SQLException {
         Date mfg = rs.getDate("mfg_date");
         Date exp = rs.getDate("exp_date");
+        LotCost cost = new LotCost(rs.getLong("unit_landed_cost_minor"), rs.getString("currency"),
+                ExchangeRate.tidy(rs.getBigDecimal("fx_rate_to_usd")), rs.getDate("fx_rate_date").toLocalDate(),
+                RateSource.valueOf(rs.getString("fx_rate_source")), rs.getLong("unit_cost_usd_minor"),
+                new CostComponents(rs.getLong("cost_goods_minor"), rs.getLong("cost_freight_minor"),
+                        rs.getLong("cost_duty_minor"), rs.getLong("cost_other_minor")));
         return new Lot(rs.getObject("id", UUID.class), rs.getString("sku"), rs.getString("lot_no"),
                 rs.getString("node_id"), rs.getString("owner_org"), rs.getString("bin"), rs.getInt("qty_on_hand"),
                 rs.getInt("qty_reserved"), mfg == null ? null : mfg.toLocalDate(), exp == null ? null : exp.toLocalDate(),
-                rs.getTimestamp("received_at").toInstant(), rs.getLong("unit_landed_cost_minor"),
-                rs.getString("currency"), LotStatus.valueOf(rs.getString("status")), rs.getString("reason"),
+                rs.getTimestamp("received_at").toInstant(), cost, LotStatus.valueOf(rs.getString("status")), rs.getString("reason"),
                 MarkdownFlag.valueOf(rs.getString("markdown_flag")), rs.getString("receipt_ref"),
                 rs.getLong("version"));
     }

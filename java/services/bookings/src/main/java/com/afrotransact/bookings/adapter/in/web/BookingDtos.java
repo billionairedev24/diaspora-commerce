@@ -66,12 +66,14 @@ final class BookingDtos {
     @Schema(name = "BookedService", description = "The service as booked (later price changes don't apply)")
     record BookedServiceDto(UUID serviceId, String name, int durationMinutes, long priceMinor, long depositMinor,
                             long balanceMinor, String currency, List<String> addOns, String mode,
-                            String providerName, String memberName) {
+                            String providerName, String memberName,
+                            @Schema(description = "The service's category (selects payments' connection fee); "
+                                    + "'services' for bookings made before it was recorded") String category) {
 
         static BookedServiceDto of(BookedService s) {
             return new BookedServiceDto(s.serviceId(), s.name(), s.durationMinutes(), s.priceMinor(),
                     s.depositMinor(), s.balanceMinor(), s.currency(), s.addOns().stream().map(a -> a.name()).toList(),
-                    s.mode().name(), s.providerName(), s.memberName());
+                    s.mode().name(), s.providerName(), s.memberName(), s.category());
         }
     }
 
@@ -217,7 +219,10 @@ final class BookingDtos {
 
     @Schema(name = "BookingEarnings")
     record EarningsRowDto(UUID bookingId, String reference, String customer, Instant startAt, String serviceName,
-                          String status, long heldMinor, long collectedMinor, int commissionBps, long commissionMinor,
+                          String status, long heldMinor, long collectedMinor,
+                          @Schema(description = "AfroTransact's connection fee rate (payments, kind SERVICE)")
+                          int commissionBps,
+                          @Schema(description = "Connection fee on what was collected") long commissionMinor,
                           long cardFeesMinor, long providerFeeMinor, long netMinor, long balanceDueMinor) {
 
         static EarningsRowDto of(EarningsView.Row r) {

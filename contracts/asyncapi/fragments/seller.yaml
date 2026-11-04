@@ -11,6 +11,8 @@ channels:
       sellerApplicationInfoRequested: {$ref: '#/components/messages/sellerApplicationInfoRequested'}
       sellerApplicationApproved: {$ref: '#/components/messages/sellerApplicationApproved'}
       sellerApplicationRejected: {$ref: '#/components/messages/sellerApplicationRejected'}
+      sellerDepartmentRequestDecided: {$ref: '#/components/messages/sellerDepartmentRequestDecided'}
+      sellerOrgDepartmentsChanged: {$ref: '#/components/messages/sellerOrgDepartmentsChanged'}
   sellerOrgEvents:
     address: at.seller-org.events
     description: Seller and provider organisations (key = org id).
@@ -32,9 +34,10 @@ channels:
       sellerListingsRestored: {$ref: '#/components/messages/sellerListingsRestored'}
   sellerSubscriptionEvents:
     address: at.seller-subscription.events
-    description: Plan subscriptions on Stripe Billing (key = org id).
+    description: Plan subscriptions on Stripe Billing, and the rewards and staff adjustments applied to them (key = org id).
     messages:
       sellerSubscriptionChanged: {$ref: '#/components/messages/sellerSubscriptionChanged'}
+      sellerBillingGrantApplied: {$ref: '#/components/messages/sellerBillingGrantApplied'}
 operations:
   publishSellerApplicationEvents:
     action: send
@@ -42,7 +45,8 @@ operations:
     summary: >-
       seller-service publishes application lifecycle events via its transactional outbox. notifications-service
       tells the applicant (submitted, info requested with the requested items, approved, rejected); staff-console
-      badges count flagged applications.
+      badges count flagged applications. seller.department_request.decided and seller.org.departments_changed (key = org
+      id) record staff decisions on the catalog departments an organisation may sell in; trust-ops audits both.
   publishSellerOrgEvents:
     action: send
     channel: {$ref: '#/channels/sellerOrgEvents'}
@@ -81,7 +85,28 @@ operations:
   publishSellerSubscriptionEvents:
     action: send
     channel: {$ref: '#/channels/sellerSubscriptionEvents'}
-    summary: Plan changes, trials and dunning; identity / feature limits and finance consume them.
+    summary: >-
+      Plan changes, trials, dunning and staff migrations to a new plan version (change MIGRATED); identity / feature
+      limits and finance consume them. seller.billing.grant_applied (S296-S297): a reward rule or a staff adjustment
+      (credit, free days, discount, waived invoice, trial change) was applied at Stripe; notifications-service emails
+      the organisation's owners (seller.billing.reward_earned / seller.billing.credit_granted).
+  receiveSellerRewardMetrics:
+    action: receive
+    channel: {$ref: '#/channels/ordersOrderEvents'}
+    summary: >-
+      S296: seller-service (consumer group seller-service, inbox consumer seller.reward-metrics) counts
+      orders.shipment.delivered per sellerOrgId (gross sales in USD cents, completed orders) for reward rules, then
+      evaluates the organisation's live rules on those metrics.
+  receiveSellerRewardBookings:
+    action: receive
+    channel: {$ref: '#/channels/bookingsEvents'}
+    summary: S296 reward rules count booking.completed per orgId (completed bookings, providers).
+  receiveSellerRewardListings:
+    action: receive
+    channel: {$ref: '#/channels/offersEvents'}
+    summary: >-
+      S296 reward rules track offers.offer.created / updated / withdrawn per sellerOrgId: a listing is active while
+      the offer is ACTIVE and its product live.
 components:
   messages:
     sellerApplicationSubmitted:
@@ -157,10 +182,25 @@ components:
       title: Show listings again (charges re-enabled, or seller reinstated while no compliance hold hides them)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/SellerEnforcement'}
+    sellerDepartmentRequestDecided:
+      name: seller.department_request.decided
+      title: Staff approved or rejected a seller's department request (audit - who, what, why; key = org id)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerDepartmentRequestDecided'}
+    sellerOrgDepartmentsChanged:
+      name: seller.org.departments_changed
+      title: Staff replaced the departments an organisation may sell in, with a reason (audit; key = org id)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerOrgDepartmentsChanged'}
     sellerSubscriptionChanged:
       name: seller.subscription.changed
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/SellerSubscriptionChanged'}
+    sellerBillingGrantApplied:
+      name: seller.billing.grant_applied
+      title: A reward or staff billing adjustment was applied at Stripe
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerBillingGrantApplied'}
   schemas:
     SellerPickupLocationUpdated:
       type: object
@@ -288,12 +328,35 @@ components:
         note: {type: [string, 'null'], description: 'For suspensions: "[REASON_CODE] note"'}
         pastDue: {type: array, items: {type: string}}
         occurredAt: {type: string, format: date-time}
+    SellerDepartmentRequestDecided:
+      type: object
+      required: [requestId, orgId, departmentCode, decision, actorId, occurredAt]
+      properties:
+        requestId: {type: string, format: uuid}
+        orgId: {type: string}
+        departmentCode: {type: string, description: Catalog department node code}
+        decision: {type: string, enum: [APPROVED, REJECTED]}
+        actorId: {type: string, description: The staff member who decided}
+        reason: {type: [string, 'null'], description: The decision note; always present for a rejection (the seller reads it)}
+        occurredAt: {type: string, format: date-time}
+    SellerOrgDepartmentsChanged:
+      type: object
+      required: [orgId, before, after, added, removed, actorId, reason, occurredAt]
+      properties:
+        orgId: {type: string}
+        before: {type: array, items: {type: string}}
+        after: {type: array, items: {type: string}}
+        added: {type: array, items: {type: string}}
+        removed: {type: array, items: {type: string}}
+        actorId: {type: string, description: The staff member who changed the set}
+        reason: {type: string, minLength: 10}
+        occurredAt: {type: string, format: date-time}
     SellerSubscriptionChanged:
       type: object
       required: [orgId, change, planCode, status, occurredAt]
       properties:
         orgId: {type: string}
-        change: {type: string, enum: [ACTIVATED, UPGRADED, CHANGE_SCHEDULED, CHANGE_CANCELLED, CHANGE_APPLIED, CANCEL_SCHEDULED, RESUMED, STATUS_CHANGED, PAYMENT_FAILED, PAYMENT_SUCCEEDED]}
+        change: {type: string, enum: [ACTIVATED, UPGRADED, CHANGE_SCHEDULED, CHANGE_CANCELLED, CHANGE_APPLIED, CANCEL_SCHEDULED, RESUMED, STATUS_CHANGED, PAYMENT_FAILED, PAYMENT_SUCCEEDED, MIGRATED]}
         planCode: {type: string, examples: [seller_growth]}
         cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
         status: {type: string, enum: [PENDING_ACTIVATION, TRIALING, ACTIVE, PAST_DUE, UNPAID, INCOMPLETE, PAUSED, CANCELED]}
@@ -306,4 +369,20 @@ components:
         currentPeriodEnd: {type: [string, 'null'], format: date-time}
         cancelAtPeriodEnd: {type: boolean}
         dunning: {type: string, enum: [NONE, RETRYING, FINAL_ATTEMPT_FAILED]}
+        occurredAt: {type: string, format: date-time}
+    SellerBillingGrantApplied:
+      type: object
+      required: [orgId, grantId, source, type, summary, occurredAt]
+      properties:
+        orgId: {type: string}
+        grantId: {type: string, format: uuid}
+        source: {type: string, enum: [RULE, MANUAL]}
+        type: {type: string, enum: [FREE_DAYS, CREDIT, PERCENT_OFF, WAIVE_INVOICE, TRIAL_END]}
+        summary: {type: string, examples: ['1 month free', '$25 credit', '20% off your next 3 invoices']}
+        reason: {type: [string, 'null'], description: The reward rule's name (RULE grants)}
+        creditCents: {type: [integer, 'null'], format: int64}
+        freeDays: {type: [integer, 'null']}
+        percentOff: {type: [number, 'null']}
+        durationInvoices: {type: [integer, 'null']}
+        trialEndsAt: {type: [string, 'null'], format: date-time, description: The subscription's trial end afterwards}
         occurredAt: {type: string, format: date-time}

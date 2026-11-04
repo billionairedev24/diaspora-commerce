@@ -19,7 +19,7 @@ public enum ModerationReasonCode {
     ABUSIVE("Abusive, hateful or harassing language", Applies.REVIEWS),
     PERSONAL_INFORMATION("Shares personal information", Applies.REVIEWS),
     SPAM("Spam or advertising", Applies.REVIEWS),
-    OFF_TOPIC("Not about the booked service", Applies.REVIEWS),
+    OFF_TOPIC("Not about the booked service or the product", Applies.REVIEWS),
     CONFLICT_OF_INTEREST("Conflict of interest (written by or for the provider)", Applies.REVIEWS),
     OTHER("Other (see note)", Applies.ALL);
 
@@ -44,6 +44,6 @@ public enum ModerationReasonCode {
 
     /** Whether this code can remove an item of {@code type}. */
     public boolean appliesTo(ModerationItemType type) {
-        return applies == Applies.ALL || (applies == Applies.REVIEWS) == (type == ModerationItemType.SERVICE_REVIEW);
+        return applies == Applies.ALL || (applies == Applies.REVIEWS) == type.review();
     }
 }

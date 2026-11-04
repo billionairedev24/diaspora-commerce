@@ -128,6 +128,8 @@ type entry struct {
 	Allowed     []string         `json:"allowedMethods"`
 	PickupWin   string           `json:"pickupWindow"`
 	TimeZone    string           `json:"timeZone"`
+	DoorRule    *domain.FeeRule  `json:"doorFeeRule"`
+	PickupRule  *domain.FeeRule  `json:"pickupFeeRule"`
 	Window      *json.RawMessage `json:"window"`
 }
 
@@ -169,23 +171,31 @@ func (en entry) line() (domain.PreorderLine, string, bool) {
 	}
 	if en.Window != nil {
 		var w struct {
-			ID         string   `json:"id"`
-			Code       string   `json:"code"`
-			Name       string   `json:"name"`
-			Stage      string   `json:"stage"`
-			DeliversOn string   `json:"deliversOn"`
-			ClosesAt   string   `json:"closesAt"`
-			OpensAt    string   `json:"opensAt"`
-			Door       *bool    `json:"door"`
-			Pickup     *bool    `json:"pickup"`
-			DoorFee    *float64 `json:"doorFee"`
-			PickupFee  *float64 `json:"pickupFee"`
-			Currency   string   `json:"currency"`
-			Allowed    []string `json:"allowedMethods"`
-			PickupWin  string   `json:"pickupWindow"`
-			TimeZone   string   `json:"timeZone"`
+			ID         string          `json:"id"`
+			Code       string          `json:"code"`
+			Name       string          `json:"name"`
+			Stage      string          `json:"stage"`
+			DeliversOn string          `json:"deliversOn"`
+			ClosesAt   string          `json:"closesAt"`
+			OpensAt    string          `json:"opensAt"`
+			Door       *bool           `json:"door"`
+			Pickup     *bool           `json:"pickup"`
+			DoorFee    *float64        `json:"doorFee"`
+			PickupFee  *float64        `json:"pickupFee"`
+			Currency   string          `json:"currency"`
+			Allowed    []string        `json:"allowedMethods"`
+			PickupWin  string          `json:"pickupWindow"`
+			TimeZone   string          `json:"timeZone"`
+			DoorRule   *domain.FeeRule `json:"doorFeeRule"`
+			PickupRule *domain.FeeRule `json:"pickupFeeRule"`
 		}
 		if err := json.Unmarshal(*en.Window, &w); err == nil {
+			if en.DoorRule == nil {
+				en.DoorRule = w.DoorRule
+			}
+			if en.PickupRule == nil {
+				en.PickupRule = w.PickupRule
+			}
 			en.WindowID = first(en.WindowID, w.ID)
 			en.WindowCode = first(en.WindowCode, w.Code)
 			en.WindowName = first(en.WindowName, w.Name)
@@ -220,6 +230,7 @@ func (en entry) line() (domain.PreorderLine, string, bool) {
 		Pickup: en.Pickup != nil && *en.Pickup, DoorFeeMinor: minor(en.DoorFeeM, en.DoorFee, DefaultDoorFeeMinor),
 		PickupFeeMinor: minor(en.PickupFeeM, en.PickupFee, DefaultPickupFeeMinor), Currency: first(en.Currency, "USD"),
 		AllowedMethods: en.Allowed, PickupWindow: en.PickupWin, TimeZone: en.TimeZone,
+		DoorFeeRule: en.DoorRule, PickupFeeRule: en.PickupRule,
 	}, atin, true
 }
 

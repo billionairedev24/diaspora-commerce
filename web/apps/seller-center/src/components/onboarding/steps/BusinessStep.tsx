@@ -1,13 +1,14 @@
 'use client';
 
 import { type OnboardingEntityType, type OnboardingOffering } from '@afrotransact/api-client';
-import { PhoneInput, TextField } from '@afrotransact/ui';
+import { Field, fieldStyles, PhoneInput, TextField } from '@afrotransact/ui';
 import { useImperativeHandle } from 'react';
 
 import { sellerApi } from '@/lib/api';
 import { businessValues, ENTITY_TYPES, fieldId, isPrefilled, OFFERINGS, toBusinessInput, validateBusiness } from '@/lib/onboarding-form';
 
 import { Cell, ChoiceCards, FieldGrid, FromAccount, Optional, StepErrors, type StepProps, useStepForm } from '../WizardKit';
+import { LogoField } from './LogoField';
 
 /** Step 1 "Your business": what you offer, how you're organised, and how shoppers and our team reach you. */
 export function BusinessStep({ status, ref }: StepProps) {
@@ -57,7 +58,7 @@ export function BusinessStep({ status, ref }: StepProps) {
             id={fieldId('storeName')}
             label={
               <>
-                {kind === 'PROVIDER' ? 'Business display name' : 'Store or business display name'}
+                Business name
                 {tag('storeName')}
               </>
             }
@@ -95,23 +96,49 @@ export function BusinessStep({ status, ref }: StepProps) {
             disabled={disabled}
           />
         </Cell>
-        <Cell span={6}>
-          <TextField
-            id={fieldId('website')}
-            type="url"
+        <Cell span={12}>
+          <Field
+            id={fieldId('description')}
             label={
               <>
-                Website
+                What you {kind === 'PROVIDER' ? 'offer' : 'sell'}
                 <Optional />
               </>
             }
-            placeholder="https://"
-            autoComplete="url"
-            value={v.website}
-            onChange={(e) => f.patch({ website: e.target.value }, ['website'])}
-            error={f.errors.website}
+            help="A few sentences. We make a simple page for your business from this and your brand, and give it to Stripe as your website."
+            error={f.errors.description}
+          >
+            {(a11y) => (
+              <textarea
+                {...a11y}
+                className={fieldStyles.control}
+                rows={3}
+                maxLength={500}
+                value={v.description}
+                onChange={(e) => f.patch({ description: e.target.value }, ['description'])}
+                disabled={disabled}
+              />
+            )}
+          </Field>
+        </Cell>
+        <Cell span={6}>
+          <TextField
+            id={fieldId('brandColor')}
+            label={
+              <>
+                Brand colour
+                <Optional />
+              </>
+            }
+            placeholder="#rrggbb"
+            value={v.brandColor}
+            onChange={(e) => f.patch({ brandColor: e.target.value }, ['brandColor'])}
+            error={f.errors.brandColor}
             disabled={disabled}
           />
+        </Cell>
+        <Cell span={12}>
+          <LogoField value={v.logoUrl} onChange={(logoUrl) => f.patch({ logoUrl }, ['logoUrl'])} disabled={disabled} />
         </Cell>
       </FieldGrid>
       {f.failure ? (

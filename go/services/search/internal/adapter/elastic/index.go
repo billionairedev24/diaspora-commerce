@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"unicode"
 
 	"github.com/elastic/go-elasticsearch/v9"
 
@@ -220,7 +219,7 @@ func (i *indexImpl) Suggest(ctx context.Context, market, prefix string, limit in
 		if len(out.Products) < limit {
 			out.Products = append(out.Products, toHit(h.Source))
 		}
-		phrase := completePhrase(h.Source.Title, words+1)
+		phrase := domain.CompletePhrase(h.Source.Title, words+1)
 		if phrase == "" || seen[phrase] || len(out.Phrases) >= limit {
 			continue
 		}
@@ -295,18 +294,4 @@ func toHit(s source) domain.Hit {
 		Currency: s.Currency, Rating: s.Rating, ReviewCount: s.ReviewCount, InStock: s.InStock,
 		AvailableQty: s.AvailableQty, DeliveryDays: s.DeliveryDays, ImageURL: s.ImageURL, OfferCount: s.OfferCount,
 		SellerID: s.SellerID, Department: s.Department, VariantATINs: s.VariantATINs}
-}
-
-// completePhrase lowercases a title and keeps its first n words, e.g. "Jollof Seasoning Blend, 8 oz" → "jollof seasoning".
-func completePhrase(title string, n int) string {
-	fields := strings.FieldsFunc(strings.ToLower(title), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '\''
-	})
-	if len(fields) == 0 {
-		return ""
-	}
-	if n > len(fields) {
-		n = len(fields)
-	}
-	return strings.Join(fields[:n], " ")
 }

@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.port.AddressBook;
+import com.afrotransact.platform.security.ActingAsActorResolver;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -27,6 +28,8 @@ class HttpAddressBook implements AddressBook {
                 .headers(h -> {
                     if (customerBearer != null && !customerBearer.isBlank()) {
                         h.setBearerAuth(customerBearer);
+                        // The shopper's token may carry their seller organisation: they still check out as themselves.
+                        h.set(ActingAsActorResolver.HEADER, ActingAsActorResolver.CUSTOMER);
                     }
                 })
                 .retrieve().body(JsonNode.class));

@@ -227,6 +227,8 @@
 .cartHeadIcon { font-size: 18px; color: var(--at-gold-500); flex: none; }
 .cartHeadCd { margin-left: auto; color: var(--at-ink-300); }
 .cartHeadCd .mono { color: var(--at-gold-500); }
+.runNote { display: grid; gap: var(--at-space-1); margin: 0; padding: var(--at-space-3) var(--at-space-4); background: var(--at-ink-100); border: 1px solid var(--at-color-border); border-top: 0; font-size: var(--at-text-sm); }
+.runNote p { margin: 0; }
 .nowHead { display: flex; align-items: center; gap: var(--at-space-2); margin: var(--at-space-4) 0 0; padding: var(--at-space-3) var(--at-space-4); background: var(--at-ink-100); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md) var(--at-radius-md) 0 0; font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); }
 .preorderPackage { border: 1px solid var(--at-color-border); border-top: 0; border-radius: 0 0 var(--at-radius-md) var(--at-radius-md); padding: 0 var(--at-space-3) var(--at-space-3); }
 .fulfilGroup { border: 0; margin: var(--at-space-3) 0 0; padding: 0; min-width: 0; }

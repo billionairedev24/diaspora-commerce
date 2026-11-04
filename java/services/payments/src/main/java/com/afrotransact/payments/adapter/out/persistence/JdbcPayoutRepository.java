@@ -86,7 +86,7 @@ class JdbcPayoutRepository implements PayoutRepository {
         StringBuilder sql = new StringBuilder("select * from payout_request where 1 = 1");
         status.ifPresent(s -> sql.append(" and status = :status"));
         orgId.ifPresent(o -> sql.append(" and org_id = :org"));
-        sql.append(" order by requested_at, id limit :limit");
+        sql.append(" order by requested_at desc, id limit :limit");
         JdbcClient.StatementSpec spec = jdbc.sql(sql.toString()).param("limit", limit);
         if (status.isPresent()) {
             spec = spec.param("status", status.get().name());

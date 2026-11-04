@@ -5,6 +5,9 @@ at:
   seller:
     # POST /v1/orgs: staff provision approved demo organisations (tools/seed). Never on in uat or prod.
     provisioning-enabled: true
+    # S298 kill switch: plan fees may be paid from earnings (on in dev; Helm values-dev sets it too).
+    billing:
+      collect-from-earnings: ${COLLECT_PLAN_FEES_FROM_EARNINGS:true}
 management:
   tracing:
     sampling:

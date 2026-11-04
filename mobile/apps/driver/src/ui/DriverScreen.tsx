@@ -3,7 +3,7 @@
 import { useRouter } from 'expo-router';
 import { CaretLeftIcon as CaretLeft, CarProfileIcon as CarProfile, CircleNotchIcon as CircleNotch, CloudCheckIcon as CloudCheck, CloudSlashIcon as CloudSlash, FirstAidIcon as FirstAid, ShieldWarningIcon as ShieldWarning, WrenchIcon as Wrench } from 'phosphor-react-native';
 import { type ReactNode, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { syncStatus } from '@/domain/outbox';
@@ -74,10 +74,12 @@ export interface DriverScreenProps {
   footer?: ReactNode;
   body?: 'scroll' | 'fixed';
   inTabs?: boolean;
+  /** Pull-to-refresh for the scroll body. */
+  refresh?: { refreshing: boolean; onRefresh: () => void };
   children: ReactNode;
 }
 
-export function DriverScreen({ title, back, footer, body = 'scroll', inTabs = false, children }: DriverScreenProps) {
+export function DriverScreen({ title, back, footer, body = 'scroll', inTabs = false, refresh, children }: DriverScreenProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { sync, phase } = useDriver();
@@ -100,7 +102,8 @@ export function DriverScreen({ title, back, footer, body = 'scroll', inTabs = fa
         {phase === 'ready' ? <><SosButton /><SyncPill /></> : null}
       </View>
       {body === 'scroll' ? (
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.content, { paddingBottom: footer ? sp['4'] : bottom + sp['6'] }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.content, { paddingBottom: footer ? sp['4'] : bottom + sp['6'] }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
+          refreshControl={refresh ? <RefreshControl refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} tintColor={c.text} colors={[c.text]} /> : undefined}>
           {children}
         </ScrollView>
       ) : (

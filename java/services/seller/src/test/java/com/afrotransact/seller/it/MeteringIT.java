@@ -2,28 +2,37 @@ package com.afrotransact.seller.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.sql.Date;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.Map;
 
+import com.afrotransact.seller.application.BillingService;
 import com.afrotransact.seller.application.SellerPermissions;
 import com.afrotransact.seller.domain.Cadence;
+import com.afrotransact.seller.domain.UsageMeter;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import tools.jackson.databind.JsonNode;
 
 /**
  * S206: daily usage from inventory (FBA storage), content (ads spend) and ai-gateway (AI credits) — WireMock plays
- * the three services and Stripe — aggregated per org and day, reported to Stripe meters idempotently, re-runnable per
- * period, on usage statements and on invoices.
+ * the three services — aggregated per org and day, re-runnable per period, on usage statements, and billed on the
+ * seller's next plan invoice (usage that settled is billed once; usage that dropped afterwards is credited).
  */
 class MeteringIT extends SellerIntegrationTest {
 
-    private static final String METER_EVENTS = "/v1/billing/meter_events";
+    private BillingService billing;
+
+    @BeforeEach
+    void wire(@Autowired BillingService billingService) {
+        this.billing = billingService;
+    }
 
     @Test
-    void usageIsMeteredIdempotentlyAndReRunnablePerPeriod() {
+    void usageIsMeteredIdempotentlyReRunnablePerPeriodAndBilledOnTheNextInvoice() {
         String paidOwner = unique("meter-paid");
         String paid = approvedSeller(paidOwner, "seller_growth", Cadence.MONTHLY);
         String freeOwner = unique("meter-free");
@@ -46,69 +55,64 @@ class MeteringIT extends SellerIntegrationTest {
         assertThat(post("/v1/billing/usage/runs", Map.of("from", d2.toString(), "to", today.plusDays(1).toString()))
                 .status()).isEqualTo(422);
 
-        int before = StripeStub.bodies(STRIPE, "POST", METER_EVENTS).size();
         Response first = post("/v1/billing/usage/runs", Map.of("from", d1.toString(), "to", d2.toString()));
         assertThat(first.status()).as(first.body().toString()).isEqualTo(200);
         assertThat(first.body().path("rowsChanged").asInt()).isEqualTo(5);
-        assertThat(first.body().path("reported").asInt()).isEqualTo(4);
-        assertThat(first.body().path("pending").asInt()).isEqualTo(1); // the free org has no Stripe customer
-        assertThat(first.body().path("status").asString()).isEqualTo("PARTIAL");
-        List<String> sent = StripeStub.bodies(STRIPE, "POST", METER_EVENTS);
-        assertThat(sent).hasSize(before + 4);
-        assertThat(newest(sent, before)).anySatisfy(b -> assertThat(b)
-                .contains("event_name=fba_storage_cubic_feet_days", "identifier=" + paid + ":fba_storage:" + d1 + ":r1",
-                        "payload[value]=1235"))
-                .anySatisfy(b -> assertThat(b).contains("event_name=ads_spend_cents", "payload[value]=450"))
-                .anySatisfy(b -> assertThat(b).contains("event_name=ai_credits", "payload[value]=7"))
-                .allSatisfy(b -> assertThat(b).doesNotContain(free).doesNotContain("org_unknown_meter"));
-        // The paid subscription gets the three metered prices once, so its invoices carry the usage lines.
-        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/subscription_items").stream()
-                .filter(b -> b.contains("metered_lookup_key")).count()).isGreaterThanOrEqualTo(3);
-        assertThat(jdbc.sql("select count(*) from metered_subscription_item where org_id = :o").param("o", paid)
-                .query(Long.class).single()).isEqualTo(3);
+        assertThat(first.body().path("pending").asInt()).as("waiting for the next plan invoice").isEqualTo(5);
+        assertThat(first.body().path("status").asString()).isEqualTo("COMPLETED");
 
-        // Re-running the same period sends nothing new.
+        // Re-running the same period changes nothing.
         Response again = post("/v1/billing/usage/runs", Map.of("from", d1.toString(), "to", d2.toString()));
         assertThat(again.body().path("rowsChanged").asInt()).isZero();
-        assertThat(again.body().path("reported").asInt()).isZero();
-        assertThat(StripeStub.bodies(STRIPE, "POST", METER_EVENTS)).hasSize(before + 4);
+        assertThat(again.body().path("pending").asInt()).isEqualTo(5);
 
-        // Late usage: only the difference is reported, under the next identifier revision.
-        storage(item("ownerOrg", paid, d1, "cubicFeet", "12.345"), item("ownerOrg", paid, d2, "cubicFeet", "11.5"));
-        Response late = post("/v1/billing/usage/runs", Map.of("from", d1.toString(), "to", d2.toString()));
-        assertThat(late.body().path("reported").asInt()).isEqualTo(1);
-        assertThat(newest(StripeStub.bodies(STRIPE, "POST", METER_EVENTS), before + 4)).singleElement()
-                .satisfies(b -> assertThat(b).contains("identifier=" + paid + ":fba_storage:" + d2 + ":r2",
-                        "payload[value]=150"));
-
-        // A source that is down leaves its meter as it was; usage that dropped is flagged for a credit, never negative.
+        // A source that is down leaves its meter as it was.
         STRIPE.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/ads/spend")).willReturn(WireMock.serverError()));
-        storage(item("ownerOrg", paid, d1, "cubicFeet", "12"), item("ownerOrg", paid, d2, "cubicFeet", "11.5"));
         Response partial = post("/v1/billing/usage/runs", Map.of("from", d1.toString(), "to", d2.toString()));
         assertThat(partial.body().path("failedSources").toString()).contains("ADS");
-        assertThat(partial.body().path("corrections").asInt()).isEqualTo(1);
         assertThat(partial.body().path("status").asString()).isEqualTo("PARTIAL");
-        assertThat(StripeStub.bodies(STRIPE, "POST", METER_EVENTS)).hasSize(before + 5);
-        assertThat(get("/v1/billing/usage/runs").body().size()).isGreaterThanOrEqualTo(4);
+        source("/v1/ads/spend", item("sellerOrgId", paid, d2, "spendMinor", "450", "currency", "\"USD\""));
 
         // Usage statement for owner and finance; other organisations' members are refused.
         TestActors.as(TestActors.member(unique("fin"), paid, "seller.finance"));
         Response statement = get("/v1/orgs/" + paid + "/billing/usage?from=" + d1 + "&to=" + d2);
         assertThat(statement.status()).as(statement.body().toString()).isEqualTo(200);
         JsonNode fba = meter(statement.body(), "FBA_STORAGE");
-        assertThat(fba.path("quantity").decimalValue()).isEqualByComparingTo("23.50");
-        assertThat(fba.path("reportedQuantity").decimalValue()).isEqualByComparingTo("23.85");
+        assertThat(fba.path("quantity").decimalValue()).isEqualByComparingTo("22.35");
+        assertThat(fba.path("reportedQuantity").decimalValue()).isEqualByComparingTo("0");
         assertThat(fba.path("unit").asString()).isEqualTo("cubic-foot-day");
-        assertThat(fba.path("days").get(0).path("status").asString()).isEqualTo("CORRECTION");
+        assertThat(fba.path("days").get(0).path("status").asString()).isEqualTo("PENDING");
         JsonNode adsLine = meter(statement.body(), "ADS_SPEND");
         assertThat(adsLine.path("quantity").decimalValue()).isEqualByComparingTo("4.50");
         assertThat(adsLine.path("estimatedAmountCents").asLong()).isEqualTo(450);
         assertThat(meter(statement.body(), "AI_CREDITS").path("estimatedAmountCents").asLong()).isEqualTo(7);
-        assertThat(statement.body().path("estimatedTotalCents").asLong()).isPositive();
-        TestActors.as(TestActors.applicant(paidOwner));
-        assertThat(get("/v1/orgs/" + paid + "/billing/usage").status()).isEqualTo(200);
         TestActors.as(TestActors.member(unique("mkt"), paid, "seller.marketing"));
         assertThat(get("/v1/orgs/" + paid + "/billing/usage").status()).isEqualTo(403);
+
+        // The next plan invoice bills the settled days (up to two days ago) once, as metered lines.
+        jdbc.sql("update subscription set trial_ends_at = null, current_period_end = now() - interval '1 hour', "
+                + "anchor_date = now() - interval '1 hour' where org_id = :o").param("o", paid).update();
+        billing.renewDueSubscriptions();
+        TestActors.as(TestActors.applicant(paidOwner));
+        JsonNode invoice = get("/v1/orgs/" + paid + "/billing/invoices").body().get(0);
+        assertThat(invoice.path("lines").valueStream().map(l -> l.path("meter").asString(null)).filter(m -> m != null))
+                .containsExactlyInAnyOrder("FBA_STORAGE", "AI_CREDITS");
+        long expectedUsage = UsageMeter.FBA_STORAGE.estimatedCents(1235) + UsageMeter.AI_CREDITS.estimatedCents(7);
+        assertThat(invoice.path("meteredAmountCents").asLong()).isEqualTo(expectedUsage);
+        assertThat(invoice.path("amountDueCents").asLong()).isEqualTo(3900 + expectedUsage);
+        assertThat(jdbc.sql("select reported_quantity from usage_daily where org_id = :o and meter = 'FBA_STORAGE' "
+                + "and day = :d").param("o", paid).param("d", Date.valueOf(d1)).query(Long.class).single())
+                .isEqualTo(1235);
+        assertThat(jdbc.sql("select reported_quantity from usage_daily where org_id = :o and meter = 'FBA_STORAGE' "
+                + "and day = :d").param("o", paid).param("d", Date.valueOf(d2)).query(Long.class).single())
+                .as("yesterday has not settled yet").isZero();
+
+        // Usage that dropped after it was billed is flagged for a credit, never a negative meter.
+        storage(item("ownerOrg", paid, d1, "cubicFeet", "12"), item("ownerOrg", paid, d2, "cubicFeet", "10"));
+        TestActors.as(TestActors.staff("finance-ops", SellerPermissions.USAGE));
+        Response dropped = post("/v1/billing/usage/runs", Map.of("from", d1.toString(), "to", d2.toString()));
+        assertThat(dropped.body().path("corrections").asInt()).isEqualTo(1);
+        assertThat(get("/v1/billing/usage/runs").body().size()).isGreaterThanOrEqualTo(4);
         TestActors.as(TestActors.applicant(freeOwner));
         Response freeStatement = get("/v1/orgs/" + free + "/billing/usage?from=" + d1 + "&to=" + d2);
         assertThat(meter(freeStatement.body(), "AI_CREDITS").path("days").get(0).path("status").asString())
@@ -116,9 +120,8 @@ class MeteringIT extends SellerIntegrationTest {
     }
 
     /**
-     * AfroTransact Retail is the merchant of record, not a marketplace seller: even when seller-service knows the org
-     * and it has a Stripe customer, its storage, ads and AI usage is never stored, metered or reported; it can't be
-     * put on a plan and can't be suspended.
+     * AfroTransact Retail is the merchant of record, not a marketplace seller: even when seller-service knows the org,
+     * its storage, ads and AI usage is never stored or billed; it can't be put on a plan and can't be suspended.
      */
     @Test
     void afroTransactRetailIsNeverMetered() {
@@ -131,8 +134,8 @@ class MeteringIT extends SellerIntegrationTest {
                 on conflict (id) do nothing
                 """).param("id", retail).update();
         jdbc.sql("""
-                insert into subscription (org_id, plan_code, cadence, status, stripe_customer_id, updated_at)
-                values (:id, 'seller_growth', 'MONTHLY', 'ACTIVE', 'cus_retail_meter_it', now())
+                insert into subscription (org_id, plan_code, cadence, status, updated_at)
+                values (:id, 'seller_growth', 'MONTHLY', 'ACTIVE', now())
                 on conflict (org_id) do nothing
                 """).param("id", retail).update();
         // Days of their own, so the other test's runs never touch these rows.
@@ -146,18 +149,11 @@ class MeteringIT extends SellerIntegrationTest {
                 "5"));
 
         TestActors.as(TestActors.staff("finance-ops", SellerPermissions.USAGE));
-        int before = StripeStub.bodies(STRIPE, "POST", METER_EVENTS).size();
         Response run = post("/v1/billing/usage/runs", Map.of("from", d1.toString(), "to", d2.toString()));
         assertThat(run.status()).as(run.body().toString()).isEqualTo(200);
         assertThat(run.body().path("rowsChanged").asInt()).isEqualTo(3);
-        assertThat(run.body().path("reported").asInt()).isEqualTo(3);
-        assertThat(run.body().path("pending").asInt()).isZero();
-        List<String> sent = newest(StripeStub.bodies(STRIPE, "POST", METER_EVENTS), before);
-        assertThat(sent).hasSize(3).allSatisfy(b -> assertThat(b).contains("identifier=" + paid)
-                .doesNotContain(retail).doesNotContain("cus_retail_meter_it"));
+        assertThat(run.body().path("pending").asInt()).isEqualTo(3);
         assertThat(jdbc.sql("select count(*) from usage_daily where org_id = :o").param("o", retail)
-                .query(Long.class).single()).isZero();
-        assertThat(jdbc.sql("select count(*) from metered_subscription_item where org_id = :o").param("o", retail)
                 .query(Long.class).single()).isZero();
         JsonNode statement = get("/v1/orgs/" + retail + "/billing/usage?from=" + d1 + "&to=" + d2).body();
         assertThat(statement.path("estimatedTotalCents").asLong()).isZero();
@@ -175,39 +171,6 @@ class MeteringIT extends SellerIntegrationTest {
         assertThat(suspend.text("/code")).isEqualTo("seller.retail-exempt");
         assertThat(jdbc.sql("select status from organisation where id = :o").param("o", retail).query(String.class)
                 .single()).isEqualTo("APPROVED");
-    }
-
-    @Test
-    void invoicesShowMeteredLines() {
-        String owner = unique("meter-inv");
-        String org = approvedSeller(owner, "seller_growth", Cadence.MONTHLY);
-        String customer = jdbc.sql("select stripe_customer_id from subscription where org_id = :o").param("o", org)
-                .query(String.class).single();
-        String invoiceId = "in_" + unique("m").replace("-", "");
-        long now = System.currentTimeMillis() / 1000;
-        String invoice = StripeEvents.invoice(invoiceId, customer, "paid", 3900 + 1235, 1, null)
-                .replace(",\"created\":", ",\"lines\":{\"object\":\"list\",\"data\":["
-                        + "{\"id\":\"il_1\",\"object\":\"line_item\",\"description\":\"Seller Growth\",\"amount\":3900,"
-                        + "\"quantity\":1,\"price\":{\"id\":\"price_p\",\"lookup_key\":\"seller_growth_monthly\"}},"
-                        + "{\"id\":\"il_2\",\"object\":\"line_item\",\"description\":\"FBA storage\",\"amount\":1235,"
-                        + "\"quantity\":4258,\"price\":{\"id\":\"price_m\",\"lookup_key\":\"metered_fba_storage\"},"
-                        + "\"period\":{\"start\":" + (now - 86400) + ",\"end\":" + now + "}}]},\"created\":");
-        String event = StripeEvents.event(unique("evt"), "invoice.paid", now, null, invoice);
-        assertThat(webhook("/v1/webhooks/stripe-billing", event, sign(event, BILLING_SECRET)).text("/outcome"))
-                .isEqualTo("applied");
-
-        TestActors.as(TestActors.applicant(owner));
-        JsonNode inv = get("/v1/orgs/" + org + "/billing/invoices").body().get(0);
-        assertThat(inv.path("lines").size()).isEqualTo(2);
-        assertThat(inv.path("lines").get(1).path("metered").asBoolean()).isTrue();
-        assertThat(inv.path("lines").get(1).path("meter").asString()).isEqualTo("FBA_STORAGE");
-        assertThat(inv.path("lines").get(0).path("metered").asBoolean()).isFalse();
-        assertThat(inv.path("meteredAmountCents").asLong()).isEqualTo(1235);
-    }
-
-    /** WireMock lists requests newest first: the ones after the first {@code before}. */
-    private static List<String> newest(List<String> all, int before) {
-        return all.subList(0, all.size() - before);
     }
 
     private static JsonNode meter(JsonNode statement, String meter) {

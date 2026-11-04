@@ -7,22 +7,32 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { useT } from '@/i18n/t';
 import { humanize, money } from '@/lib/format';
 
 import { useHub } from './shared';
 
 /** Overview: value and units by lot status, what is inbound, per-FC figures and what needs attention. */
 export function OverviewPanel() {
+  const t = useT();
   const api = useHub();
   const q = useQuery(inventoryHubQueries.overview(api));
   if (q.isPending) return <Spinner />;
   if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   const o = q.data;
-  const by = (s: string) => o.byStatus.find((x) => x.status === s);
+  // Stock is received in the currency paid and valued in US dollars: totals are USD, the amounts paid sit alongside.
+  const rows = (...statuses: string[]) => o.byStatus.filter((x) => statuses.includes(x.status));
+  const usd = (...statuses: string[]) => money(rows(...statuses).reduce((a, x) => a + x.valueUsdMinor, 0));
+  const units = (...statuses: string[]) => rows(...statuses).reduce((a, x) => a + x.units, 0);
+  const lotCount = (...statuses: string[]) => rows(...statuses).reduce((a, x) => a + x.lots, 0);
+  const paid = (...statuses: string[]) => {
+    const foreign = rows(...statuses).filter((x) => x.currency !== 'USD' && x.units > 0);
+    return foreign.length ? ` · ${t('st.overview.paidIn', { list: foreign.map((x) => money(x.valueMinor, x.currency)).join(', ') })}` : '';
+  };
   const kpis: [string, string, string][] = [
-    ['Sellable stock', money(by('SELLABLE')?.valueMinor ?? 0), `${by('SELLABLE')?.units ?? 0} units · ${by('SELLABLE')?.lots ?? 0} lots`],
-    ['Quarantine & damaged', money((by('QUARANTINE')?.valueMinor ?? 0) + (by('DAMAGED')?.valueMinor ?? 0)), `${(by('QUARANTINE')?.units ?? 0) + (by('DAMAGED')?.units ?? 0)} units held`],
-    ['Expired (to write off)', money(by('EXPIRED')?.valueMinor ?? 0), `${by('EXPIRED')?.units ?? 0} units`],
+    ['Sellable stock', usd('SELLABLE'), `${units('SELLABLE')} units · ${lotCount('SELLABLE')} lots${paid('SELLABLE')}`],
+    ['Quarantine & damaged', usd('QUARANTINE', 'DAMAGED'), `${units('QUARANTINE', 'DAMAGED')} units held${paid('QUARANTINE', 'DAMAGED')}`],
+    ['Expired (to write off)', usd('EXPIRED'), `${units('EXPIRED')} units${paid('EXPIRED')}`],
     ['Inbound', String(o.inbound?.openShipments ?? 0), `${o.inbound?.expectedUnits ?? 0} units expected · ${o.inbound?.withDiscrepancies ?? 0} with discrepancies`],
     ['Held by checkouts', String(o.reservations?.heldUnits ?? 0), `${o.reservations?.held ?? 0} reservations`]
   ];
@@ -42,7 +52,7 @@ export function OverviewPanel() {
           <table className="at-table w-full text-sm" aria-label="Fulfilment centres">
             <thead className="bg-surface-muted text-left text-xs text-muted">
               <tr>
-                {['FC', 'Lots', 'Units', 'Sellable', 'Held', 'Reserved', 'Inbound', 'Value'].map((h) => (
+                {['FC', 'Lots', 'Units', 'Sellable', 'Held', 'Reserved', 'Inbound', t('st.overview.valueUsd')].map((h) => (
                   <th key={h} scope="col" className="px-3 py-2">{h}</th>
                 ))}
               </tr>
@@ -57,7 +67,12 @@ export function OverviewPanel() {
                   <td className="px-3 py-2">{n.blockedUnits}</td>
                   <td className="px-3 py-2">{n.reserved}</td>
                   <td className="px-3 py-2">{n.inbound}</td>
-                  <td className="px-3 py-2">{money(n.valueMinor, n.currency ?? 'USD')}</td>
+                  <td className="px-3 py-2">
+                    {money(n.valueMinor, n.currency ?? 'USD')}
+                    {n.byCurrency.some((c) => c.currency !== 'USD') ? (
+                      <span className="block text-xs text-muted">{n.byCurrency.map((c) => money(c.valueMinor, c.currency)).join(' + ')}</span>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -71,8 +86,8 @@ export function OverviewPanel() {
             <li key={`${a.type}-${a.lotId ?? a.shipmentId ?? i}`} className="flex flex-wrap items-center gap-2 text-sm">
               <StatusPill tone={a.severity === 'HIGH' ? 'bad' : 'warn'}>{humanize(a.type)}</StatusPill>
               <span className="flex-1">{a.message}</span>
-              {a.lotId ? <Link className="text-link" href={`/inventory?tab=stock&lot=${a.lotId}`}>Open lot</Link> : null}
-              {a.shipmentId ? <Link className="text-link" href={`/inventory?tab=inbound&id=${a.shipmentId}`}>Open shipment</Link> : null}
+              {a.lotId ? <Link className="inline-flex text-link pointer-coarse:min-h-11 pointer-coarse:items-center" href={`/inventory?tab=stock&lot=${a.lotId}`}>Open lot</Link> : null}
+              {a.shipmentId ? <Link className="inline-flex text-link pointer-coarse:min-h-11 pointer-coarse:items-center" href={`/inventory?tab=inbound&id=${a.shipmentId}`}>Open shipment</Link> : null}
             </li>
           ))}
         </ul>

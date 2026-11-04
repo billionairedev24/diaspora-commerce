@@ -5,8 +5,10 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.deliveryruns.adapter.in.web.RunDtos.CancelRequest;
+import com.afrotransact.deliveryruns.adapter.in.web.RunDtos.ConfirmRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.RunDtos.EconomicsPreviewRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.RunDtos.ExtendRequest;
+import com.afrotransact.deliveryruns.adapter.in.web.RunDtos.RunActionResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.RunDtos.RunOrderResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.RunDtos.RunRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.RunDtos.RunResponse;
@@ -98,10 +100,19 @@ class RunController {
         return RunResponse.of(runs.cancel(id, body.reason()));
     }
 
-    @Operation(summary = "Confirm now whatever the minimum (closes ordering if still open; delivery-runs.run.confirmed)")
+    @Operation(summary = "Confirm now whatever the minimum (closes ordering if still open; delivery-runs.run.confirmed)",
+            description = "Below the minimum the body's reason is required (422 delivery-runs.reason-required) and the "
+                    + "override is logged with who and why.")
     @PostMapping("/v1/runs/{id}/confirm")
-    RunResponse confirm(@PathVariable UUID id) {
-        return RunResponse.of(runs.confirm(id));
+    RunResponse confirm(@PathVariable UUID id, @Valid @RequestBody(required = false) ConfirmRequest body) {
+        return RunResponse.of(runs.confirm(id, body == null ? null : body.reason()));
+    }
+
+    @Operation(summary = "What was decided about the run: extensions, confirmations, cancellation (delivery-runs:read)",
+            description = "Oldest first; each entry has who, when and why (system for the cutoff job).")
+    @GetMapping("/v1/runs/{id}/log")
+    List<RunActionResponse> log(@PathVariable UUID id) {
+        return runs.actions(id).stream().map(RunActionResponse::of).toList();
     }
 
     @Operation(summary = "CONFIRMED → COLLECTING (seller sweep started)")

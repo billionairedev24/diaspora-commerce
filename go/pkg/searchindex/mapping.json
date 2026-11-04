@@ -69,6 +69,7 @@
       "brand":         { "type": "text", "analyzer": "product_index", "search_analyzer": "product_search",
                          "fields": { "raw": { "type": "keyword", "normalizer": "lower" } } },
       "description":   { "type": "text", "analyzer": "product_index", "search_analyzer": "product_search" },
+      "keywords":      { "type": "text", "analyzer": "product_index", "search_analyzer": "product_search" },
       "department":    { "type": "keyword" },
       "category_path": { "type": "keyword",
                          "fields": { "text": { "type": "text", "analyzer": "product_index", "search_analyzer": "product_search" } } },
@@ -93,6 +94,7 @@
       "status":        { "type": "keyword" },
       "embedding":     { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" },
       "version":       { "type": "long" },
+      "rating_version": { "type": "long" },
       "updated_at":    { "type": "date" }
     }
   }

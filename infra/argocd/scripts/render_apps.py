@@ -9,7 +9,7 @@ For every environment (infra/argocd/envs/<env>):
   3. runs kubeconform on the rendered charts, the generated Applications, the env kustomizations and the
      platform kustomize layers (CRDs validated through the datreeio CRDs-catalog when reachable, otherwise skipped).
 
-  python3 infra/argocd/scripts/render_apps.py [--env dev] [--out DIR] [--cloud aws|gcp|azure]
+  python3 infra/argocd/scripts/render_apps.py [--env dev] [--out DIR] [--cloud aws|gcp|azure|ovh]
 
 --cloud renders the services with the commented cloud example of platform-values.yaml switched on, to prove the
 workload-identity / registry wiring composes for that cloud too.
@@ -148,7 +148,7 @@ def cloud_example(pv_file, cloud):
     """Return platform-values text with the commented example block for `cloud` enabled."""
     lines = pv_file.read_text().splitlines()
     out, active = [], False
-    header = {"aws": "AWS (EKS)", "gcp": "GCP (GKE)", "azure": "Azure (AKS)"}[cloud]
+    header = {"aws": "AWS (EKS)", "gcp": "GCP (GKE)", "azure": "Azure (AKS)", "ovh": "OVHcloud (MKS)"}[cloud]
     for ln in lines:
         if ln.startswith("# ----") and "(" in ln:
             active = header in ln
@@ -167,7 +167,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--env", choices=ENVS, action="append")
     ap.add_argument("--out", default=None)
-    ap.add_argument("--cloud", choices=["aws", "gcp", "azure"])
+    ap.add_argument("--cloud", choices=["aws", "gcp", "azure", "ovh"])
     ap.add_argument("--no-crd-schemas", action="store_true")
     args = ap.parse_args()
     envs = args.env or ENVS
@@ -242,7 +242,7 @@ def main():
             failures += 1
 
     # Platform kustomize layers (env-independent + per-env overlays).
-    layers = ["namespaces", "observability", "policies"] + [f"secret-stores/{c}" for c in ["aws", "gcp", "azure", "none"]] + \
+    layers = ["namespaces", "observability", "policies"] + [f"secret-stores/{c}" for c in ["aws", "gcp", "azure", "ovh", "none"]] + \
              [f"{layer}/overlays/{e}" for layer in ["edge", "elasticsearch", "openfga", "previews"] for e in envs]
     pdir = out / "platform"
     pdir.mkdir(exist_ok=True)

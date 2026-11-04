@@ -44,6 +44,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux, optionalAuth, requiredAuth f
 	mux.Handle("POST /v1/return-labels", req(app.PermLabel, h.buyReturnLabel))
 	mux.Handle("GET /v1/labels/{id}", req(app.PermLabel, h.getLabel))
 	mux.Handle("GET /v1/labels/{id}/document", req(app.PermLabel, h.labelDocument))
+	mux.Handle("GET /v1/labels/by-tracking/{carrier}/{trackingNumber}/document", req(app.PermLabel, h.labelDocumentByTracking))
 	mux.Handle("POST /v1/labels/{id}/void", req(app.PermVoid, h.voidLabel))
 	mux.Handle("GET /v1/tracking/{carrier}/{trackingNumber}", req(app.PermRate, h.track))
 	mux.Handle("POST /v1/tracking", req(app.PermLabel, h.registerTracking))
@@ -168,6 +169,23 @@ func (h *handlersImpl) getLabel(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) labelDocument(w http.ResponseWriter, r *http.Request) {
 	data, ct, err := h.svc.Labels.Document(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = w.Write(data) // #nosec G705 -- label bytes from our object store, served as PDF/ZPL with nosniff
+}
+
+func (h *handlersImpl) labelDocumentByTracking(w http.ResponseWriter, r *http.Request) {
+	c, err := domain.ParseCarrier(r.PathValue("carrier"))
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	data, ct, err := h.svc.Labels.DocumentByTracking(r.Context(), c, r.PathValue("trackingNumber"))
 	if err != nil {
 		writeErr(w, r, err)
 		return

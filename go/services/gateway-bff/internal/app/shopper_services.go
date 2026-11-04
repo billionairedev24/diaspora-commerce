@@ -21,7 +21,7 @@ type ServicesService interface {
 	Days(ctx context.Context, id string, q port.SlotQuery) ([]domain.AvailableDay, error)
 	Slots(ctx context.Context, id string, q port.SlotQuery) ([]domain.AvailableSlot, error)
 	Quote(ctx context.Context, id string, q port.SlotQuery) (domain.BookingQuote, error)
-	Provider(ctx context.Context, orgID, slug string) (domain.ProviderPage, error)
+	Provider(ctx context.Context, orgID string) (domain.ProviderPage, error)
 	Book(ctx context.Context, c *domain.Caller, key string, req domain.BookingRequest) (domain.BookingCreated, error)
 	Mine(ctx context.Context, c *domain.Caller) ([]domain.CustomerBooking, error)
 	Booking(ctx context.Context, c *domain.Caller, id string) (domain.CustomerBooking, error)
@@ -199,9 +199,8 @@ func (s *servicesServiceImpl) Quote(ctx context.Context, id string, q port.SlotQ
 	return out, wrapBk(err)
 }
 
-// Provider merges the bookings profile with the published storefront page. The storefront serves pages by slug
-// only: without a slug the BFF tries the organisation id, and a missing page simply means no design.
-func (s *servicesServiceImpl) Provider(ctx context.Context, orgID, slug string) (domain.ProviderPage, error) {
+// Provider is the bookings profile and services of a provider.
+func (s *servicesServiceImpl) Provider(ctx context.Context, orgID string) (domain.ProviderPage, error) {
 	p, err := s.d.Bookings.Provider(ctx, orgID)
 	if err != nil {
 		return domain.ProviderPage{}, bookingsErr(err)
@@ -211,45 +210,6 @@ func (s *servicesServiceImpl) Provider(ctx context.Context, orgID, slug string) 
 	for _, sv := range p.Services {
 		out.Services = append(out.Services, toService(sv))
 	}
-	if s.d.Pages == nil {
-		return out, nil
-	}
-	page, err := s.d.Pages.Published(ctx, firstNonEmpty(slug, orgID))
-	if err != nil {
-		return out, nil //nolint:nilerr // no published page (or storefront down): the plain profile still renders
-	}
-	if page.Kind != "" && page.Kind != "PROVIDER" || page.OrgID != "" && page.OrgID != p.OrgID {
-		return out, nil
-	}
-	d := &domain.ProviderDesign{Slug: page.Slug, Tagline: page.Tagline, Layout: "CLASSIC", Header: "BAND", ButtonShape: "ROUNDED",
-		Tokens: map[string]string{}, Social: []domain.ProviderSocialLink{}, Gallery: []domain.ProviderGalleryItem{}, Featured: []domain.ProviderFeature{}}
-	if page.Provider != nil {
-		d.Layout = firstNonEmpty(page.Provider.Layout, d.Layout)
-		d.Header = firstNonEmpty(page.Provider.Header, d.Header)
-		d.ButtonShape = firstNonEmpty(page.Provider.ButtonShape, d.ButtonShape)
-		d.CoverURL = optStr(page.Provider.CoverURL)
-	}
-	for k, v := range page.Tokens {
-		if strings.HasPrefix(k, "--") {
-			d.Tokens[k] = v
-		}
-	}
-	for _, l := range page.Social {
-		if l.Status == "" || l.Status == "APPROVED" {
-			d.Social = append(d.Social, domain.ProviderSocialLink{Network: l.Network, URL: l.URL})
-		}
-	}
-	for _, g := range page.Gallery {
-		if g.URL != "" {
-			d.Gallery = append(d.Gallery, domain.ProviderGalleryItem{URL: g.URL, Caption: g.Caption})
-		}
-	}
-	for _, f := range page.Featured {
-		if f.Published == nil || *f.Published {
-			d.Featured = append(d.Featured, domain.ProviderFeature{ID: f.ID, Headline: f.Headline, Body: f.Body, URL: optStr(f.URL), ServiceID: optStr(f.ServiceID)})
-		}
-	}
-	out.Design = d
 	return out, nil
 }
 

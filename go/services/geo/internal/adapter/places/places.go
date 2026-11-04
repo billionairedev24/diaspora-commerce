@@ -135,23 +135,27 @@ func kindOf(types []string) domain.AddressKind {
 	return domain.KindAny
 }
 
+type addressComponent struct {
+	LongText  string   `json:"longText"`
+	ShortText string   `json:"shortText"`
+	Types     []string `json:"types"`
+}
+
 type placeDetails struct {
-	AddressComponents []struct {
-		LongText  string   `json:"longText"`
-		ShortText string   `json:"shortText"`
-		Types     []string `json:"types"`
-	} `json:"addressComponents"`
-	Location struct {
+	FormattedAddress  string             `json:"formattedAddress"`
+	AddressComponents []addressComponent `json:"addressComponents"`
+	Location          struct {
 		Latitude  float64 `json:"latitude"`
 		Longitude float64 `json:"longitude"`
 	} `json:"location"`
 }
 
+// detailsFieldMask asks Place Details (New) for the Essentials fields only (address components, formatted address,
+// location): the cheapest Place Details SKU, and the one that ends an autocomplete session.
+const detailsFieldMask = "addressComponents,formattedAddress,location"
+
 func (p *placesImpl) Resolve(ctx context.Context, id, session string) (domain.Address, error) {
-	placeID := id
-	if len(id) > 2 && id[:2] == "g:" {
-		placeID = id[2:]
-	}
+	placeID := strings.TrimPrefix(id, "g:")
 	u := p.base + "/places/" + url.PathEscape(placeID)
 	if session != "" {
 		// Closes the autocomplete session: the keystrokes and this details call are billed as one session.
@@ -162,36 +166,79 @@ func (p *placesImpl) Resolve(ctx context.Context, id, session string) (domain.Ad
 		return domain.Address{}, fmt.Errorf("request: %w", err)
 	}
 	req.Header.Set("X-Goog-Api-Key", p.key)
-	req.Header.Set("X-Goog-FieldMask", "addressComponents,location")
+	req.Header.Set("X-Goog-FieldMask", detailsFieldMask)
 	var d placeDetails
 	if err := p.do(req, &d); err != nil {
 		return domain.Address{}, err
 	}
-	var a domain.Address
-	var number, route string
-	for _, c := range d.AddressComponents {
+	a := addressOf(d.AddressComponents, d.FormattedAddress)
+	a.Lat, a.Lon = d.Location.Latitude, d.Location.Longitude
+	return a, nil
+}
+
+// cityTypes are the components that can name the city, best first: locality (most of the world), postal_town (UK,
+// Sweden), sublocality (New York boroughs: Brooklyn, Queens), then smaller units Google uses where there is no
+// locality (unincorporated US areas, some African and Caribbean addresses).
+var cityTypes = []string{"locality", "postal_town", "sublocality_level_1", "sublocality", "administrative_area_level_3",
+	"neighborhood", "administrative_area_level_2"}
+
+// addressOf maps Place Details (New) address components to a postal address: street number + route as line 1
+// (premise or the first part of the formatted address when there is no street), subpremise as line 2, the city from
+// the best of cityTypes, the first-level administrative area's short name (TX, ON, Lagos) as the state, the postal
+// code and the country's ISO code.
+func addressOf(components []addressComponent, formatted string) domain.Address {
+	long, short := map[string]string{}, map[string]string{}
+	for _, c := range components {
 		for _, t := range c.Types {
-			switch t {
-			case "street_number":
-				number = c.LongText
-			case "route":
-				route = c.ShortText
-			case "subpremise":
-				a.Line2 = c.LongText
-			case "locality", "postal_town":
-				a.City = c.LongText
-			case "administrative_area_level_1":
-				a.State = c.ShortText
-			case "postal_code":
-				a.PostalCode = c.LongText
-			case "country":
-				a.Country = c.ShortText
+			if _, seen := long[t]; !seen {
+				long[t], short[t] = strings.TrimSpace(c.LongText), strings.TrimSpace(c.ShortText)
 			}
 		}
 	}
-	a.Line1 = joinNonEmpty(number, route)
-	a.Lat, a.Lon = d.Location.Latitude, d.Location.Longitude
-	return a, nil
+	var a domain.Address
+	route := firstNonEmpty(short["route"], long["route"])
+	a.Line1 = joinNonEmpty(long["street_number"], route)
+	if a.Line1 == "" {
+		a.Line1 = firstNonEmpty(long["premise"], long["establishment"], strings.TrimSpace(strings.Split(formatted, ",")[0]))
+	}
+	if sub := long["subpremise"]; sub != "" {
+		a.Line2 = sub
+		if isUnitNumber(sub) {
+			a.Line2 = "#" + sub
+		}
+	}
+	for _, t := range cityTypes {
+		if v := long[t]; v != "" {
+			a.City = v
+			break
+		}
+	}
+	a.State = firstNonEmpty(short["administrative_area_level_1"], long["administrative_area_level_1"])
+	a.PostalCode = long["postal_code"]
+	a.Country = strings.ToUpper(short["country"])
+	return a
+}
+
+// isUnitNumber is a bare unit such as "4B" or "210" (Google drops the "Apt"/"Suite" word): shown as "#4B".
+func isUnitNumber(s string) bool {
+	if s == "" || len(s) > 8 {
+		return false
+	}
+	for _, r := range s {
+		if !(r >= '0' && r <= '9' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r == '-') {
+			return false
+		}
+	}
+	return strings.ContainsAny(s, "0123456789")
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func (p *placesImpl) do(req *http.Request, out any) error {

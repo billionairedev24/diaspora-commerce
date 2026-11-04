@@ -1,6 +1,6 @@
 'use client';
 
-import { accountQueries, type Offer, productQueries } from '@afrotransact/api-client';
+import { accountQueries, type Offer, pickerDimensions, productQueries, selectedSize } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, CheckCircle, FulfilmentBadge, ImagePlaceholder, MapPin, Price, QuantityStepper, Sparkle, Stars } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { PdpPreorderBanner, PdpPreorderBox, PdpStandardDelivery } from '@/components/preorder/PdpPreorder';
+import { ProductReviews } from '@/components/reviews/ProductReviews';
 import { DeliverToDialog } from '@/components/shell/DeliverToDialog';
 import { LolaSheet } from '@/components/shell/LolaSheet';
 import { useT } from '@/i18n/t';
@@ -19,6 +20,7 @@ import { productHref } from '@/lib/links';
 import { useAvailability } from '@/lib/preorder/useAvailability';
 
 import styles from './Product.module.css';
+import { SizeGuide, VariantChips } from './SizeGuide';
 import { StockAlertForm } from './StockAlertForm';
 
 function OfferCartControl({ offer, title, label }: { offer: Offer; title: string; label: string }) {
@@ -68,6 +70,7 @@ export function ProductView({ atin }: { atin: string }) {
   const line = bb ? lineForOffer(cart, bb.offerId) : undefined;
   const inCart = line?.quantity ?? 0;
   const max = bb ? Math.min(bb.availableQty, 99) : 0;
+  const dimensions = pickerDimensions(p.variants);
   const images = p.images.length ? p.images : [{ url: null, alt: p.title }];
   const current = images[img] ?? images[0];
 
@@ -109,7 +112,9 @@ export function ProductView({ atin }: { atin: string }) {
           <span className={styles.store}>
             <Link href={`/s?q=${encodeURIComponent(p.brand)}`}>{t('pdp.visitStore', { brand: p.brand })}</Link>
           </span>
-          <Stars rating={p.rating} showValue reviewCount={p.reviewCount} reviewsLabel={(c) => t('pdp.ratings', { count: c })} ratingLabel={(r) => t('card.rating', { rating: r })} locale={fmt.tag} />
+          {p.reviewCount > 0 && (
+            <Stars rating={p.rating} showValue reviewCount={p.reviewCount} reviewsLabel={(c) => t('pdp.ratings', { count: c })} ratingLabel={(r) => t('card.rating', { rating: r })} locale={fmt.tag} />
+          )}
           <hr className={styles.rule} />
           {bb && (
             <>
@@ -134,7 +139,20 @@ export function ProductView({ atin }: { atin: string }) {
             <dt>{t('pdp.brand')}</dt>
             <dd>{p.brand}</dd>
           </dl>
-          {p.variants.length > 1 && (
+          {(p.variants.length <= 1 || dimensions.length === 0) && data.sizeChart && (
+            <div>
+              <SizeGuide chart={data.sizeChart} size={selectedSize(p.variants)} variants={p.variants} onPickVariant={(a) => router.replace(productHref(a))} />
+            </div>
+          )}
+          {p.variants.length > 1 && dimensions.length > 0 && (
+            <nav aria-label={t('pdp.variants')}>
+              <VariantChips
+                dimensions={dimensions}
+                sizeGuide={data.sizeChart ? <SizeGuide chart={data.sizeChart} size={selectedSize(p.variants)} variants={p.variants} onPickVariant={(a) => router.replace(productHref(a))} /> : null}
+              />
+            </nav>
+          )}
+          {p.variants.length > 1 && dimensions.length === 0 && (
             <nav aria-label={t('pdp.variants')}>
               <strong style={{ fontSize: 'var(--at-text-sm)' }}>{t('pdp.variants')}</strong>
               <ul className={styles.variants} style={{ marginTop: 8 }}>
@@ -284,6 +302,7 @@ export function ProductView({ atin }: { atin: string }) {
         </aside>
       </div>
       {pre && <PdpPreorderBanner live={pre} />}
+      <ProductReviews atin={p.atin} title={p.title} />
       <DeliverToDialog open={locOpen} onOpenChange={setLocOpen} />
       <LolaSheet open={lolaOpen} onOpenChange={setLolaOpen} />
     </div>

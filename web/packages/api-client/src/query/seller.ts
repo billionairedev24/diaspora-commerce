@@ -1,6 +1,9 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
-import { type ListingsQuery, type SellerApiClient, type SellerOrdersQuery } from '../seller-client';
+import { BACKGROUND } from '../http';
+import { type BrandScope, type Cadence, type ImageLibraryQuery, type ProductImport } from '../schemas/seller';
+import { type ImportRowsQuery, type ListingsQuery, type SellerApiClient, type SellerOrdersQuery, type SizeChartsQuery } from '../seller-client';
+import { pollingOf,type PollRule } from './polling';
 
 /* TanStack Query key factories for the Seller Center & Provider Hub. Everything hangs off ['seller', orgId] so
    switching organisation (org switcher) or signing out invalidates a whole family at once. */
@@ -13,22 +16,50 @@ export const sellerKeys = {
   onboardingPlans: (orgId: string) => [...sellerKeys.onboarding(orgId), 'plans'] as const,
   compliance: (orgId: string) => [...sellerKeys.org(orgId), 'compliance'] as const,
   dashboard: (orgId: string, rangeDays: number) => [...sellerKeys.org(orgId), 'dashboard', rangeDays] as const,
+  assistant: (orgId: string) => [...sellerKeys.org(orgId), 'assistant'] as const,
   orders: (orgId: string) => [...sellerKeys.org(orgId), 'orders'] as const,
   exports: (orgId: string) => [...sellerKeys.org(orgId), 'exports'] as const,
   exportJob: (orgId: string, id: string) => [...sellerKeys.exports(orgId), id] as const,
   orderPage: (orgId: string, q: SellerOrdersQuery) => [...sellerKeys.orders(orgId), 'page', q] as const,
   order: (orgId: string, orderNumber: string) => [...sellerKeys.orders(orgId), 'detail', orderNumber] as const,
   shipFrom: (orgId: string) => [...sellerKeys.org(orgId), 'ship-from'] as const,
+  runPickups: (orgId: string) => [...sellerKeys.org(orgId), 'run-pickups'] as const,
+  runPickup: (orgId: string, runId: string) => [...sellerKeys.runPickups(orgId), runId] as const,
+  businessPage: (orgId: string) => [...sellerKeys.org(orgId), 'business-page'] as const,
   listings: (orgId: string) => [...sellerKeys.org(orgId), 'listings'] as const,
   offers: (orgId: string, productId: string) => [...sellerKeys.listings(orgId), 'offers', productId] as const,
   listingPage: (orgId: string, q: ListingsQuery) => [...sellerKeys.listings(orgId), 'page', q] as const,
-  categories: () => [...sellerKeys.all, 'catalog', 'categories'] as const,
+  /** The tree is the organisation's own: only the departments it may sell in. */
+  categories: (orgId: string) => [...sellerKeys.org(orgId), 'catalog', 'categories'] as const,
+  /** Which departments the organisation may sell in, whether any sells sized goods, its requests. */
+  scope: (orgId: string) => [...sellerKeys.org(orgId), 'catalog-scope'] as const,
+  /** The catalog's departments onboarding offers. */
+  departments: () => [...sellerKeys.all, 'catalog', 'departments'] as const,
   productType: (code: string) => [...sellerKeys.all, 'catalog', 'product-type', code] as const,
+  product: (orgId: string, productId: string) => [...sellerKeys.listings(orgId), 'product', productId] as const,
+  productDrafts: (orgId: string) => [...sellerKeys.org(orgId), 'product-drafts'] as const,
+  productDraft: (orgId: string, id: string) => [...sellerKeys.productDrafts(orgId), id] as const,
+  listingContext: (orgId: string) => [...sellerKeys.org(orgId), 'listing-context'] as const,
+  imports: (orgId: string) => [...sellerKeys.org(orgId), 'imports'] as const,
+  importPage: (orgId: string, page: number, size: number) => [...sellerKeys.imports(orgId), 'page', page, size] as const,
+  importJob: (orgId: string, id: string) => [...sellerKeys.imports(orgId), 'detail', id] as const,
+  importRows: (orgId: string, id: string, q: ImportRowsQuery) => [...sellerKeys.importJob(orgId, id), 'rows', q] as const,
+  sizeCharts: (orgId: string) => [...sellerKeys.org(orgId), 'size-charts'] as const,
+  sizeChartPage: (orgId: string, q: SizeChartsQuery) => [...sellerKeys.sizeCharts(orgId), 'page', q] as const,
+  sizeChart: (orgId: string, id: string) => [...sellerKeys.sizeCharts(orgId), 'detail', id] as const,
+  sizeChartSuggestions: (scope: { productTypeId?: string; productType?: string }) =>
+    [...sellerKeys.all, 'catalog', 'size-chart-suggestions', scope.productTypeId ?? '', scope.productType ?? ''] as const,
+  imageLibrary: (orgId: string) => [...sellerKeys.org(orgId), 'image-library'] as const,
+  imageLibraryPage: (orgId: string, q: ImageLibraryQuery) => [...sellerKeys.imageLibrary(orgId), q] as const,
+  brands: (orgId: string, scope: BrandScope, q: string) => [...sellerKeys.org(orgId), 'brands', scope.category ?? '', scope.productType ?? '', q] as const,
   categoryRequests: (orgId: string) => [...sellerKeys.org(orgId), 'category-requests'] as const,
   inventory: (orgId: string, lowStock: boolean) => [...sellerKeys.org(orgId), 'inventory', lowStock] as const,
   payouts: (orgId: string) => [...sellerKeys.org(orgId), 'payouts'] as const,
+  taxStatement: (orgId: string, month: string) => [...sellerKeys.org(orgId), 'tax-statement', month] as const,
   fees: (orgId: string) => [...sellerKeys.org(orgId), 'fees'] as const,
   billing: (orgId: string) => [...sellerKeys.org(orgId), 'billing'] as const,
+  billingRewards: (orgId: string) => [...sellerKeys.billing(orgId), 'rewards'] as const,
+  planChangePreview: (orgId: string, planCode: string, cadence: string) => [...sellerKeys.billing(orgId), 'preview', planCode, cadence] as const,
   team: (orgId: string) => [...sellerKeys.org(orgId), 'team'] as const,
   calendar: (orgId: string, from: string, to: string) => [...sellerKeys.org(orgId), 'calendar', from, to] as const,
   calendars: (orgId: string) => [...sellerKeys.org(orgId), 'calendar'] as const,
@@ -37,14 +68,32 @@ export const sellerKeys = {
   services: (orgId: string) => [...sellerKeys.org(orgId), 'services'] as const,
   policy: (orgId: string) => [...sellerKeys.org(orgId), 'policy'] as const,
   earnings: (orgId: string, from?: string, to?: string) => [...sellerKeys.org(orgId), 'earnings', from ?? '', to ?? ''] as const,
-  publicPage: (orgId: string) => [...sellerKeys.org(orgId), 'public-page'] as const
+  coupons: (orgId: string) => [...sellerKeys.org(orgId), 'coupons'] as const,
+  reviews: (orgId: string) => [...sellerKeys.org(orgId), 'reviews'] as const,
+  reviewList: (orgId: string, unanswered: boolean, page: number) => [...sellerKeys.reviews(orgId), { unanswered, page }] as const,
+  returns: (orgId: string, status?: string) => [...sellerKeys.org(orgId), 'returns', status ?? ''] as const,
+  disputes: (orgId: string, status?: string) => [...sellerKeys.org(orgId), 'disputes', status ?? ''] as const
 };
 
 const MINUTE = 60_000;
 
+/** Combines TanStack's abort signal with a wall-clock timeout (Seller Center session). */
+function sessionSignal(signal: AbortSignal, timeoutMs?: number): AbortSignal {
+  if (!timeoutMs || (typeof AbortSignal.any !== 'function' && typeof AbortSignal.timeout !== 'function')) {
+    return signal;
+  }
+  return AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
+}
+
 /** queryOptions for every seller screen (same keys, fetchers and stale times on server and client). */
 export const sellerQueries = {
-  session: (api: SellerApiClient) => queryOptions({ queryKey: sellerKeys.session(), queryFn: ({ signal }) => api.getSession(signal), staleTime: MINUTE }),
+  session: (api: SellerApiClient, opts?: { timeoutMs?: number }) =>
+    queryOptions({
+      queryKey: sellerKeys.session(),
+      queryFn: ({ signal }) => api.getSession(sessionSignal(signal, opts?.timeoutMs)),
+      staleTime: MINUTE,
+      refetchOnWindowFocus: false
+    }),
   onboarding: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.onboarding(orgId), queryFn: ({ signal }) => api.getOnboarding(signal), staleTime: MINUTE }),
   onboardingPlans: (api: SellerApiClient, orgId: string) =>
@@ -61,21 +110,80 @@ export const sellerQueries = {
     queryOptions({ queryKey: sellerKeys.order(orgId, orderNumber), queryFn: ({ signal }) => api.getOrder(orderNumber, signal), staleTime: 15_000 }),
   offers: (api: SellerApiClient, orgId: string, productId: string) =>
     queryOptions({ queryKey: sellerKeys.offers(orgId, productId), queryFn: ({ signal }) => api.listOffers(productId, signal), staleTime: 30_000 }),
+  businessPage: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.businessPage(orgId), queryFn: ({ signal }) => api.getBusinessPage(signal), staleTime: MINUTE }),
+  runPickups: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.runPickups(orgId), queryFn: ({ signal }) => api.listRunPickups(signal, BACKGROUND), staleTime: 30_000, refetchInterval: 60_000 }),
+  runPickup: (api: SellerApiClient, orgId: string, runId: string) =>
+    queryOptions({ queryKey: sellerKeys.runPickup(orgId, runId), queryFn: ({ signal }) => api.getRunPickup(runId, signal, BACKGROUND), staleTime: 30_000, refetchInterval: 60_000 }),
   shipFrom: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.shipFrom(orgId), queryFn: ({ signal }) => api.listShipFrom(signal), staleTime: 5 * MINUTE }),
   listings: (api: SellerApiClient, orgId: string, q: ListingsQuery) =>
     queryOptions({ queryKey: sellerKeys.listingPage(orgId, q), queryFn: ({ signal }) => api.listListings(q, signal), placeholderData: keepPreviousData, staleTime: 30_000 }),
-  categories: (api: SellerApiClient) =>
-    queryOptions({ queryKey: sellerKeys.categories(), queryFn: ({ signal }) => api.getCategoryTree(signal), staleTime: 30 * MINUTE }),
+  categories: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.categories(orgId), queryFn: ({ signal }) => api.getCategoryTree(signal), staleTime: 5 * MINUTE }),
+  scope: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.scope(orgId), queryFn: ({ signal }) => api.getCatalogScope(signal), staleTime: MINUTE }),
+  departments: (api: SellerApiClient) =>
+    queryOptions({ queryKey: sellerKeys.departments(), queryFn: ({ signal }) => api.listDepartments(signal), staleTime: 30 * MINUTE }),
   productType: (api: SellerApiClient, code: string) =>
     queryOptions({ queryKey: sellerKeys.productType(code), queryFn: ({ signal }) => api.getProductType(code, signal), staleTime: 30 * MINUTE, enabled: code !== '' }),
+  product: (api: SellerApiClient, orgId: string, productId: string) =>
+    queryOptions({ queryKey: sellerKeys.product(orgId, productId), queryFn: ({ signal }) => api.getProduct(productId, signal), staleTime: 0, enabled: productId !== '' }),
+  productDrafts: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.productDrafts(orgId), queryFn: ({ signal }) => api.listProductDrafts(signal), staleTime: 15_000 }),
+  productDraft: (api: SellerApiClient, orgId: string, id: string) =>
+    queryOptions({ queryKey: sellerKeys.productDraft(orgId, id), queryFn: ({ signal }) => api.getProductDraft(id, signal), staleTime: 0, enabled: id !== '' }),
+  listingContext: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.listingContext(orgId), queryFn: ({ signal }) => api.getListingContext(signal), staleTime: 5 * MINUTE }),
+  imports: (api: SellerApiClient, orgId: string, page: number, size: number) =>
+    queryOptions({ queryKey: sellerKeys.importPage(orgId, page, size), queryFn: ({ signal }) => api.listImports(page, size, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
+  /** `poll`: refresh by itself while the import runs (a background poll, so it never counts as the person being active). */
+  importJob: (api: SellerApiClient, orgId: string, id: string, poll?: PollRule<ProductImport>) =>
+    queryOptions({ queryKey: sellerKeys.importJob(orgId, id), queryFn: ({ signal }) => api.getImport(id, signal, poll ? BACKGROUND : undefined), staleTime: 0, ...pollingOf(poll) }),
+  importRows: (api: SellerApiClient, orgId: string, id: string, q: ImportRowsQuery) =>
+    queryOptions({ queryKey: sellerKeys.importRows(orgId, id, q), queryFn: ({ signal }) => api.listImportRows(id, q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
+  sizeCharts: (api: SellerApiClient, orgId: string, q: SizeChartsQuery) =>
+    queryOptions({ queryKey: sellerKeys.sizeChartPage(orgId, q), queryFn: ({ signal }) => api.listSizeCharts(q, signal), placeholderData: keepPreviousData, staleTime: 15_000 }),
+  sizeChart: (api: SellerApiClient, orgId: string, id: string) =>
+    queryOptions({ queryKey: sellerKeys.sizeChart(orgId, id), queryFn: ({ signal }) => api.getSizeChart(id, signal), staleTime: 0, enabled: id !== '' }),
+  /** What a category suggests (sizes, measurement columns); `enabled` only once a category or product type is chosen. */
+  sizeChartSuggestions: (api: SellerApiClient, scope: { productTypeId?: string; productType?: string }) =>
+    queryOptions({
+      queryKey: sellerKeys.sizeChartSuggestions(scope),
+      queryFn: ({ signal }) => api.getSizeChartSuggestions(scope, signal),
+      enabled: Boolean(scope.productTypeId || scope.productType),
+      staleTime: 30 * MINUTE
+    }),
+  imageLibrary: (api: SellerApiClient, orgId: string, q: ImageLibraryQuery) =>
+    queryOptions({ queryKey: sellerKeys.imageLibraryPage(orgId, q), queryFn: ({ signal }) => api.listImageLibrary(q, signal), placeholderData: keepPreviousData, staleTime: 5_000 }),
+  /** The brands of a category; `enabled` only once a category is chosen. */
+  brands: (api: SellerApiClient, orgId: string, scope: BrandScope, q: string) =>
+    queryOptions({
+      queryKey: sellerKeys.brands(orgId, scope, q),
+      queryFn: ({ signal }) => api.listBrands(scope, q, signal),
+      enabled: Boolean(scope.category || scope.productType),
+      placeholderData: keepPreviousData,
+      staleTime: 60_000
+    }),
   categoryRequests: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.categoryRequests(orgId), queryFn: ({ signal }) => api.listCategoryRequests(signal), staleTime: MINUTE }),
   inventory: (api: SellerApiClient, orgId: string, lowStock: boolean) =>
     queryOptions({ queryKey: sellerKeys.inventory(orgId, lowStock), queryFn: ({ signal }) => api.getInventory(lowStock, signal), staleTime: 30_000 }),
   payouts: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.payouts(orgId), queryFn: ({ signal }) => api.getPayouts(signal), staleTime: MINUTE }),
+  taxStatement: (api: SellerApiClient, orgId: string, month: string) =>
+    queryOptions({ queryKey: sellerKeys.taxStatement(orgId, month), queryFn: ({ signal }) => api.getTaxStatement(month, signal), staleTime: MINUTE }),
   fees: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.fees(orgId), queryFn: ({ signal }) => api.getFees(signal), staleTime: 5 * MINUTE }),
   billing: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.billing(orgId), queryFn: ({ signal }) => api.getBilling(signal), staleTime: MINUTE }),
+  billingRewards: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.billingRewards(orgId), queryFn: ({ signal }) => api.getBillingRewards(signal), staleTime: MINUTE }),
+  planChangePreview: (api: SellerApiClient, orgId: string, planCode: string, cadence: Cadence) =>
+    queryOptions({
+      queryKey: sellerKeys.planChangePreview(orgId, planCode, cadence),
+      queryFn: ({ signal }) => api.previewPlanChange(planCode, cadence, signal),
+      enabled: Boolean(planCode),
+      staleTime: 30_000
+    }),
   team: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.team(orgId), queryFn: ({ signal }) => api.getTeam(signal), staleTime: MINUTE }),
   calendar: (api: SellerApiClient, orgId: string, from: string, to: string) =>
     queryOptions({ queryKey: sellerKeys.calendar(orgId, from, to), queryFn: ({ signal }) => api.getCalendar(from, to, signal), placeholderData: keepPreviousData, staleTime: 15_000 }),
@@ -87,6 +195,12 @@ export const sellerQueries = {
     queryOptions({ queryKey: sellerKeys.policy(orgId), queryFn: ({ signal }) => api.getCancellationPolicy(signal), staleTime: MINUTE }),
   earnings: (api: SellerApiClient, orgId: string, from?: string, to?: string) =>
     queryOptions({ queryKey: sellerKeys.earnings(orgId, from, to), queryFn: ({ signal }) => api.getEarnings(from, to, signal), staleTime: MINUTE }),
-  publicPage: (api: SellerApiClient, orgId: string) =>
-    queryOptions({ queryKey: sellerKeys.publicPage(orgId), queryFn: ({ signal }) => api.getPublicPage(signal), staleTime: MINUTE })
+  reviews: (api: SellerApiClient, orgId: string, unanswered: boolean, page: number) =>
+    queryOptions({ queryKey: sellerKeys.reviewList(orgId, unanswered, page), queryFn: ({ signal }) => api.listReviews({ unanswered, page, size: 20 }, signal), staleTime: MINUTE }),
+  coupons: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.coupons(orgId), queryFn: ({ signal }) => api.listCoupons(signal), staleTime: MINUTE }),
+  returns: (api: SellerApiClient, orgId: string, status?: string) =>
+    queryOptions({ queryKey: sellerKeys.returns(orgId, status), queryFn: ({ signal }) => api.listReturns(status, signal), staleTime: MINUTE }),
+  disputes: (api: SellerApiClient, orgId: string, status?: string) =>
+    queryOptions({ queryKey: sellerKeys.disputes(orgId, status), queryFn: ({ signal }) => api.listDisputes(status, signal), staleTime: MINUTE })
 };
