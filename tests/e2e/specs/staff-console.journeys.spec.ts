@@ -77,6 +77,7 @@ test.describe('staff console · fee schedules', () => {
 
     const row = page.getByRole('table', { name: 'Fee schedule versions' }).getByRole('row', { name: new RegExp(`E2E ${run}`) });
     await expect(row).toContainText('Scheduled');
-    await expect(row.getByRole('button', { name: /^Cancel v/ })).toBeVisible();
+    await row.getByRole('button', { name: /^Actions for v/ }).click();
+    await expect(page.getByRole('menuitem', { name: 'Cancel version' })).toBeVisible();
   });
 });
