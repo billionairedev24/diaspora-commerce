@@ -38,12 +38,16 @@
 
 .action { flex: none; align-self: center; }
 
+/* A plain link or button passed as the action is restyled too, so a pill never lands in an alert. */
 .link,
 .action :is(a, button) {
   display: inline-flex;
   align-items: center;
   min-block-size: 24px;
   padding: 0;
+  block-size: auto;
+  border-radius: 0;
+  box-shadow: none;
   border: 0;
   background: none;
   color: var(--alert-text);
@@ -54,7 +58,7 @@
   cursor: pointer;
 }
 
-/* A plain link or button passed as the action is restyled too, so a pill never lands in an alert. */
+
 @media (hover: hover) {
   .link:hover,
   .action :is(a, button):hover { color: var(--alert-text); text-decoration-thickness: 2px; }
