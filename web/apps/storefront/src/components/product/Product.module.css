@@ -47,6 +47,7 @@
 .boxFacts dd { margin: 0; }
 .sellerName { color: var(--at-color-link); }
 .notify { display: flex; flex-direction: column; gap: var(--at-space-2); }
+.notifyDone { margin: 0; font-size: var(--at-text-sm); color: var(--at-color-success, var(--at-color-text)); font-weight: 600; }
 .sparkle { color: var(--at-gold-700); }
 .notFound { padding: var(--at-space-10) 0; }
 
