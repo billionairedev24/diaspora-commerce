@@ -30,8 +30,8 @@ const choose = async (file: File) => fireEvent.change(await screen.findByTestId(
 
 describe('size chart import', () => {
   it('checks the file without saving, reads it row by row, then imports the charts', async () => {
-    await renderScreen(<SizeChartImportView />);
-    expect(await screen.findByRole('heading', { level: 1, name: 'Import size charts' })).toBeInTheDocument();
+    await renderScreen(<SizeChartImportView onBack={() => undefined} />);
+    expect(await screen.findByRole('button', { name: 'Back to my size charts' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Check the file' })).toBeDisabled();
     await choose(csv(`${HEADER}\n${GOOD.split('\n').slice(1).join('\n')}\n${UPDATE}`));
     fireEvent.click(screen.getByRole('button', { name: 'Check the file' }));
@@ -51,7 +51,7 @@ describe('size chart import', () => {
     fireEvent.click(report.getByRole('button', { name: 'Import 2 charts' }));
     expect(await screen.findByText('Imported 2 size charts')).toBeInTheDocument();
     expect(await report.findByRole('heading', { name: 'Imported charts.csv' })).toBeInTheDocument();
-    expect(report.getByRole('link', { name: 'View my size charts' })).toHaveAttribute('href', '/listings/size-charts');
+    expect(report.getByRole('button', { name: 'View my size charts' })).toBeInTheDocument();
     const wedding = (await mockApi().listSizeCharts({ q: 'Wedding' })).items[0];
     expect(wedding).toMatchObject({ name: 'Wedding guest dresses', unitSystem: 'CM', fitNote: 'RUNS_SMALL' });
     expect(wedding?.rows.map((r) => r.size)).toEqual(['S', 'M']);
@@ -61,7 +61,7 @@ describe('size chart import', () => {
   });
 
   it('names each bad cell, saves a chart whole or not at all, and still imports the others', async () => {
-    await renderScreen(<SizeChartImportView />);
+    await renderScreen(<SizeChartImportView onBack={() => undefined} />);
     const bad = [HEADER, 'Good chart,cm,S,84-87,66-69,,', 'Good chart,,M,88-92,70-74,,', 'Broken chart,cm,S,abc,66-69,,', 'Broken chart,,M,95-90,70-74,Roomy,'].join('\n');
     await choose(csv(bad, 'broken.csv'));
     fireEvent.click(screen.getByRole('button', { name: 'Check the file' }));
@@ -90,7 +90,7 @@ describe('size chart import', () => {
   });
 
   it('refuses a file it cannot read before sending it, and explains a header that is missing', async () => {
-    await renderScreen(<SizeChartImportView />);
+    await renderScreen(<SizeChartImportView onBack={() => undefined} />);
     await choose(new File(['x'], 'charts.xls'));
     expect(await screen.findByTestId('chart-file-error')).toHaveTextContent('save the file as .xlsx');
     expect(screen.getByRole('button', { name: 'Check the file' })).toBeDisabled();
@@ -102,7 +102,7 @@ describe('size chart import', () => {
   });
 
   it('says there is nothing to import when every chart is already saved like this', async () => {
-    await renderScreen(<SizeChartImportView />);
+    await renderScreen(<SizeChartImportView onBack={() => undefined} />);
     await mockApi().importSizeCharts(csv(GOOD));
     await choose(csv(GOOD, 'same.csv'));
     fireEvent.click(screen.getByRole('button', { name: 'Check the file' }));

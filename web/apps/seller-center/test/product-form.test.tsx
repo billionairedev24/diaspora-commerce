@@ -1,7 +1,7 @@
 import { File as NodeFile } from 'node:buffer';
 
 import { type AttributeDef } from '@afrotransact/api-client';
-import { getSellerDb, resetSellerDb, SIZE_CHART_IDS } from '@afrotransact/api-client/mocks/seller';
+import { getSellerDb, resetSellerDb } from '@afrotransact/api-client/mocks/seller';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -412,17 +412,41 @@ describe('size guide section', () => {
     const panel = await kaftan();
     expect(sectionTitles()).toEqual(['Basics', 'Photos', 'Price & stock', 'Details', 'Variants', 'Size guide', 'Shipping & fulfilment']);
     expect(await within(panel).findByRole('link', { name: /Size chart/ })).toHaveTextContent('Choose a size chart');
-    const select = screen.getByLabelText('Size chart');
-    expect(within(select).getByRole('option', { name: 'Kaftans and shirts' })).toBeInTheDocument();
-    // Only this category's charts (and the ones for any category) are offered.
-    expect(within(select).queryByRole('option', { name: 'Leather sandals' })).not.toBeInTheDocument();
+    const group = screen.getByRole('radiogroup', { name: /Size chart/ });
+    expect(await within(group).findByRole('radio', { name: 'Kaftans and shirts' })).toBeInTheDocument();
+    // Only this category's charts (and the ones for any category) are offered, and "No size chart" is not an answer where one is required.
+    expect(within(group).queryByRole('radio', { name: 'Leather sandals' })).not.toBeInTheDocument();
+    expect(within(group).queryByRole('radio', { name: 'No size chart' })).not.toBeInTheDocument();
+  });
+
+  it('offers "No size chart" only where the category does not require one', async () => {
+    await renderScreen(<ProductForm />);
+    await chooseCategory('dresses', /Dresses/);
+    const group = await screen.findByRole('radiogroup', { name: /Size chart/ });
+    expect(within(group).getByRole('radio', { name: 'No size chart' })).toBeChecked();
+  });
+
+  it('is not shown for a category without sizes', async () => {
+    await renderScreen(<ProductForm />);
+    await chooseCategory('spices', /Spices & seasonings/);
+    await screen.findByRole('heading', { level: 3, name: 'Food information' });
+    expect(screen.queryByRole('radiogroup', { name: /Size chart/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 2, name: 'Size guide' })).not.toBeInTheDocument();
+  });
+
+  it('manages the library from inside the picker: a sheet with the charts table and the import', async () => {
+    await kaftan();
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage charts' }));
+    const sheet = within(await screen.findByRole('dialog', { name: 'My size charts' }));
+    await sheet.findByText('Kaftans and shirts');
+    expect(sheet.getByRole('button', { name: 'Import charts' })).toBeInTheDocument();
+    fireEvent.click(sheet.getByRole('button', { name: 'Import charts' }));
+    expect(await screen.findByRole('dialog', { name: 'Import size charts' })).toBeInTheDocument();
   });
 
   it('shows the table the shopper reads, in cm or in, and the fit note', async () => {
     const panel = await kaftan();
-    const select = await screen.findByLabelText('Size chart');
-    await waitFor(() => expect(within(select).getByRole('option', { name: 'Kaftans and shirts' })).toBeInTheDocument());
-    fireEvent.change(select, { target: { value: SIZE_CHART_IDS.mensTops } });
+    fireEvent.click(await screen.findByRole('radio', { name: 'Kaftans and shirts' }));
     const table = await screen.findByRole('table', { name: 'Size chart Kaftans and shirts' });
     expect(within(table).getByRole('row', { name: /^S 35–37/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'cm' }));
@@ -447,7 +471,7 @@ describe('size guide section', () => {
 
   it('writes a new chart without leaving the form and links it to the product', async () => {
     await kaftan();
-    fireEvent.click(await screen.findByRole('button', { name: 'Write a new size chart' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create a new chart' }));
     const ed = within(await screen.findByTestId('size-chart-editor'));
     expect(ed.getByText('men’s kaftans & shirts')).toBeInTheDocument();
     await waitFor(() => expect(ed.getByLabelText('Measurement 1')).toHaveValue('Chest'));
@@ -458,8 +482,7 @@ describe('size guide section', () => {
     fireEvent.change(ed.getByLabelText('Sleeve length of size S'), { target: { value: '25' } });
     fireEvent.click(ed.getByRole('button', { name: 'Create chart' }));
     await waitFor(() => expect(screen.queryByTestId('size-chart-editor')).not.toBeInTheDocument());
-    const select = screen.getByLabelText('Size chart') as HTMLSelectElement;
-    await waitFor(() => expect(select.selectedOptions[0]?.textContent).toBe('My kaftans'));
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'My kaftans' })).toBeChecked());
     expect(await screen.findByRole('table', { name: 'Size chart My kaftans' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit this chart' })).toBeInTheDocument();
   });
@@ -472,9 +495,7 @@ describe('size guide section', () => {
     fireEvent.change(within(own).getByLabelText('Add your own size'), { target: { value: '4XL' } });
     fireEvent.click(within(own).getByRole('button', { name: 'Add' }));
     fireEvent.click(within(screen.getByRole('group', { name: 'Color' })).getByRole('button', { name: 'Gold' }));
-    const select = await screen.findByLabelText('Size chart');
-    await waitFor(() => expect(within(select).getByRole('option', { name: 'Kaftans and shirts' })).toBeInTheDocument());
-    fireEvent.change(select, { target: { value: SIZE_CHART_IDS.mensTops } });
+    fireEvent.click(await screen.findByRole('radio', { name: 'Kaftans and shirts' }));
     expect(await within(panel).findByText(/“Kaftans and shirts” has no row for 4XL/)).toBeInTheDocument();
   });
 });

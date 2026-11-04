@@ -3,7 +3,7 @@
 import { type ListingRow, sellerKeys, sellerQueries } from '@afrotransact/api-client';
 import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
 import { Badge, Button, buttonClassName, InlineEdit, RowName, Tabs, useToast } from '@afrotransact/ui';
-import { Eye, FileArrowUp, ImagesSquare, Pause, PencilSimple, Play, Plus, Ruler, Stack, Truck } from '@phosphor-icons/react/ssr';
+import { Eye, FileArrowUp, ImagesSquare, Pause, PencilSimple, Play, Plus, Stack, Truck } from '@phosphor-icons/react/ssr';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
@@ -17,7 +17,6 @@ import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { idempotencyKey, money, shortDate } from '@/lib/format';
 import { useStorefrontUrl } from '@/lib/runtime-config';
-import { useShowSizeCharts } from '@/lib/seller-scope';
 import { useSeller } from '@/lib/session';
 import { exportTable, pollExport, runForEach } from '@/lib/table-export';
 
@@ -40,7 +39,6 @@ export function ListingsView() {
   const params = useSearchParams();
   const { orgId, can, has } = useSeller();
   const editable = can('listings');
-  const showSizeCharts = useShowSizeCharts();
   const api = sellerApi();
   const tab = editable && params.get('tab') === 'drafts' ? 'drafts' : 'listings';
   // The tab's count comes from the API total (a page of one row is enough to read it).
@@ -53,11 +51,6 @@ export function ListingsView() {
           {has('imageLibrary') ? (
             <Link href="/listings/images" className={buttonClassName({ variant: 'neutral' })}>
               <ImagesSquare size={18} aria-hidden /> {t('sc.listings.images')}
-            </Link>
-          ) : null}
-          {showSizeCharts ? (
-            <Link href="/listings/size-charts" className={buttonClassName({ variant: 'neutral' })}>
-              <Ruler size={18} aria-hidden /> {t('sc.listings.sizeCharts')}
             </Link>
           ) : null}
           {has('bulkUpload') ? (

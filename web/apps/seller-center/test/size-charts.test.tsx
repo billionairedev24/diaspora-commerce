@@ -2,7 +2,7 @@ import { resetSellerDb,SIZE_CHART_IDS } from '@afrotransact/api-client/mocks/sel
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { SizeChartsView } from '@/components/size-charts/SizeChartsView';
+import { SizeChartsManager } from '@/components/size-charts/SizeChartsManager';
 
 import { mockApi } from './mock-api';
 import { renderScreen } from './render';
@@ -11,15 +11,17 @@ import { nav } from './setup';
 
 beforeEach(() => {
   resetSellerDb(new Date('2026-10-10T15:00:00Z'));
-  nav.pathname = '/listings/size-charts';
+  nav.pathname = '/listings/new';
 });
 
+/** The close button of the sheet on top (the editor opens over the charts sheet). */
+const closeTop = () => fireEvent.click(within(screen.getAllByRole('dialog').at(-1) as HTMLElement).getByRole('button', { name: 'Close' }));
 const editor = () => screen.findByTestId('size-chart-editor');
 
-describe('My size charts', () => {
+describe('Manage charts', () => {
   it('lists the organisation’s charts with what they hold, and hides retired ones until asked', async () => {
-    await renderScreen(<SizeChartsView />);
-    expect(await screen.findByRole('heading', { level: 1, name: 'My size charts' })).toBeInTheDocument();
+    await renderScreen(<SizeChartsManager open onClose={() => undefined} />);
+    expect(await screen.findByRole('dialog', { name: 'My size charts' })).toBeInTheDocument();
     const table = await screen.findByRole('table', { name: 'My size charts' });
     await within(table).findByText('Adire dresses');
     expect(within(table).getByText('Kaftans and shirts')).toBeInTheDocument();
@@ -35,7 +37,7 @@ describe('My size charts', () => {
   });
 
   it('writes a new chart from what the category suggests, with the table the shopper reads beside it', async () => {
-    await renderScreen(<SizeChartsView />);
+    await renderScreen(<SizeChartsManager open onClose={() => undefined} />);
     fireEvent.click(await screen.findByRole('button', { name: 'New size chart' }));
     const ed = within(await editor());
     fireEvent.change(ed.getByLabelText('Made for'), { target: { value: 'pt-dresses' } });
@@ -69,7 +71,7 @@ describe('My size charts', () => {
   });
 
   it('shows the server’s answer on the field it names (a name already used)', async () => {
-    await renderScreen(<SizeChartsView />);
+    await renderScreen(<SizeChartsManager open onClose={() => undefined} />);
     fireEvent.click(await screen.findByRole('button', { name: 'New size chart' }));
     const ed = within(await editor());
     fireEvent.change(ed.getByLabelText('Chart name'), { target: { value: 'adire dresses' } });
@@ -82,7 +84,7 @@ describe('My size charts', () => {
   });
 
   it('edits a chart and saves it, and asks before closing with unsaved changes', async () => {
-    await renderScreen(<SizeChartsView />);
+    await renderScreen(<SizeChartsManager open onClose={() => undefined} />);
     await chooseRowAction('Kaftans and shirts', 'Edit');
     const ed = within(await editor());
     expect(ed.getByText('1 product uses this chart.')).toBeInTheDocument();
@@ -90,7 +92,7 @@ describe('My size charts', () => {
     expect(ed.getByLabelText('Chest of size S')).toHaveValue('35–37');
 
     fireEvent.change(ed.getByLabelText('Chest of size S'), { target: { value: '36-38' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    closeTop();
     expect(await screen.findByRole('heading', { name: 'Discard your changes?' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Discard your changes?' })).not.toBeInTheDocument());
@@ -104,23 +106,23 @@ describe('My size charts', () => {
   });
 
   it('leaves without asking when nothing changed, and discards on request', async () => {
-    await renderScreen(<SizeChartsView />);
+    await renderScreen(<SizeChartsManager open onClose={() => undefined} />);
     await chooseRowAction('Leather sandals', 'Edit');
     await editor();
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    closeTop();
     await waitFor(() => expect(screen.queryByTestId('size-chart-editor')).not.toBeInTheDocument());
 
     await chooseRowAction('Leather sandals', 'Edit');
     const ed = within(await editor());
     fireEvent.change(ed.getByLabelText('Chart name'), { target: { value: 'Sandals' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    closeTop();
     fireEvent.click(await screen.findByRole('button', { name: 'Discard changes' }));
     await waitFor(() => expect(screen.queryByTestId('size-chart-editor')).not.toBeInTheDocument());
     expect((await mockApi().getSizeChart(SIZE_CHART_IDS.shoes)).name).toBe('Leather sandals');
   });
 
   it('keeps the row of a size that products still sell, and offers to load the latest version after a conflict', async () => {
-    await renderScreen(<SizeChartsView />);
+    await renderScreen(<SizeChartsManager open onClose={() => undefined} />);
     await chooseRowAction('Kaftans and shirts', 'Edit');
     const ed = within(await editor());
     // Someone else saves first.
@@ -135,7 +137,7 @@ describe('My size charts', () => {
   });
 
   it('duplicates a chart and retires one after a confirmation that says how many products use it', async () => {
-    await renderScreen(<SizeChartsView />);
+    await renderScreen(<SizeChartsManager open onClose={() => undefined} />);
     await chooseRowAction('Adire dresses', 'Duplicate');
     expect(await screen.findByText('Created “Adire dresses (copy)”')).toBeInTheDocument();
     expect(await screen.findByText('Adire dresses (copy)')).toBeInTheDocument();

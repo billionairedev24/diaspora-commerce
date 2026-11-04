@@ -1,11 +1,11 @@
-import { MOCK_FASHION_ORG, MOCK_FOOD_ORG, resetSellerDb, SELLER_ORG } from '@afrotransact/api-client/mocks/seller';
+import { getSellerDb, MOCK_FASHION_ORG, MOCK_FOOD_ORG, MOCK_ORG_DEPARTMENTS, resetSellerDb, SELLER_ORG } from '@afrotransact/api-client/mocks/seller';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { DepartmentsSettings } from '@/components/account/DepartmentsSettings';
 import { BulkUploadView } from '@/components/listings/bulk/BulkUploadView';
+import { ProductForm } from '@/components/listings/ProductForm';
 import { PortalShell } from '@/components/shell/PortalShell';
-import { SizeChartsGate } from '@/components/size-charts/SizeChartsGate';
-import { SizeChartsView } from '@/components/size-charts/SizeChartsView';
 
 import { asRole, mockApi } from './mock-api';
 import { renderScreen, renderWithProviders } from './render';
@@ -23,38 +23,79 @@ const sidebarHrefs = async () => {
   return [...sidebar.querySelectorAll('a')].map((a) => a.getAttribute('href'));
 };
 
-describe('the sidebar follows the departments the store sells in', () => {
-  it('a fashion store gets Size charts under Listings', async () => {
+describe('size charts are a step of the product form, not a page', () => {
+  it('the sidebar never lists Size charts, whatever the store sells', async () => {
     await mockApi().setActiveOrg(MOCK_FASHION_ORG);
     renderWithProviders(<PortalShell><p>body</p></PortalShell>);
-    await waitFor(async () => expect(await sidebarHrefs()).toContain('/listings/size-charts'));
-  });
-
-  it('a store that only sells food does not see Size charts at all', async () => {
-    await mockApi().setActiveOrg(MOCK_FOOD_ORG);
-    renderWithProviders(<PortalShell><p>body</p></PortalShell>);
-    expect(await sidebarHrefs()).toContain('/listings');
-    // Let the scope arrive, then look again.
+    await waitFor(async () => expect(await sidebarHrefs()).toContain('/listings'));
     await mockApi().getCatalogScope();
     await new Promise((r) => setTimeout(r, 60));
     expect(await sidebarHrefs()).not.toContain('/listings/size-charts');
   });
+
+  it('the size guide step appears only for a category with sizes', async () => {
+    await mockApi().setActiveOrg(MOCK_FASHION_ORG);
+    await renderScreen(<ProductForm />);
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Category' }), { target: { value: 'kaftans' } });
+    fireEvent.click(await screen.findByRole('option', { name: /Kaftans & shirts/ }));
+    expect(await screen.findByRole('radiogroup', { name: /Size chart/ })).toBeInTheDocument();
+  });
 });
 
-describe('opening Size charts by its address', () => {
-  it('explains, calmly and with the way forward, why a food-only store has nothing there', async () => {
-    await mockApi().setActiveOrg(MOCK_FOOD_ORG);
-    await renderScreen(<SizeChartsGate><SizeChartsView /></SizeChartsGate>);
-    expect(await screen.findByText('Size charts are for clothing and shoes')).toBeInTheDocument();
-    expect(screen.getByText(/Your store does not sell in a department with sized goods/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Need another department? Request it' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'New size chart' })).not.toBeInTheDocument();
+describe('Departments in the product form', () => {
+  it('always ends the category list with a row to request a department', async () => {
+    await mockApi().setActiveOrg(MOCK_FASHION_ORG);
+    await renderScreen(<ProductForm />);
+    const box = await screen.findByRole('combobox', { name: 'Category' });
+    fireEvent.focus(box);
+    const rows = await screen.findAllByRole('option');
+    expect(rows.at(-1)).toHaveTextContent('Don’t see your category? Request a department');
+    fireEvent.change(box, { target: { value: 'kaftans' } });
+    const typed = await screen.findAllByRole('option');
+    expect(typed.at(-1)).toHaveTextContent('Request a department');
+    fireEvent.click(typed.at(-1) as HTMLElement);
+    expect(await screen.findByRole('dialog', { name: 'Request another department' })).toBeInTheDocument();
   });
 
-  it('opens as usual for a store with sized goods', async () => {
+  it('is the main action when the store has no department yet', async () => {
+    await mockApi().setActiveOrg(MOCK_FOOD_ORG);
+    const saved = MOCK_ORG_DEPARTMENTS[MOCK_FOOD_ORG];
+    MOCK_ORG_DEPARTMENTS[MOCK_FOOD_ORG] = [];
+    try {
+      await renderScreen(<ProductForm />);
+      expect(await screen.findByText(/Your store has no department yet/)).toBeInTheDocument();
+      expect(screen.queryByRole('combobox', { name: 'Category' })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Request a department' }));
+      expect(await screen.findByRole('dialog', { name: 'Request another department' })).toBeInTheDocument();
+    } finally {
+      MOCK_ORG_DEPARTMENTS[MOCK_FOOD_ORG] = saved ?? [];
+    }
+  });
+
+  it('says plainly that the departments could not be checked, and retries', async () => {
+    getSellerDb().scopeUnavailable = true;
+    await renderScreen(<ProductForm />);
+    expect(await screen.findByText('We couldn’t check which departments you sell in')).toBeInTheDocument();
+    expect(screen.queryByText('Loading the product form…')).not.toBeInTheDocument();
+    getSellerDb().scopeUnavailable = false;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('combobox', { name: 'Category' })).toBeInTheDocument();
+  });
+});
+
+describe('Settings › Departments', () => {
+  it('lists approved, pending and declined departments and lets the seller request another', async () => {
     await mockApi().setActiveOrg(MOCK_FASHION_ORG);
-    await renderScreen(<SizeChartsGate><SizeChartsView /></SizeChartsGate>);
-    expect(await screen.findByRole('button', { name: 'New size chart' })).toBeInTheDocument();
+    await mockApi().requestDepartment({ departmentCode: 'groceries' });
+    getSellerDb().departmentRequests[MOCK_FASHION_ORG]?.push({ departmentCode: 'books', departmentName: 'Books', status: 'REJECTED', needs: [] });
+    await renderScreen(<DepartmentsSettings />);
+    const section = within(await screen.findByRole('region', { name: 'Departments' }));
+    const rowOf = (name: string) => section.getByText(name).closest('li') as HTMLElement;
+    await waitFor(() => expect(within(rowOf('Fashion')).getByText('Approved')).toBeInTheDocument());
+    expect(within(rowOf('Groceries')).getByText('Pending')).toBeInTheDocument();
+    expect(within(rowOf('Books')).getByText('Declined')).toBeInTheDocument();
+    fireEvent.click(section.getByRole('button', { name: 'Request a department' }));
+    expect(await screen.findByRole('dialog', { name: 'Request another department' })).toBeInTheDocument();
   });
 });
 

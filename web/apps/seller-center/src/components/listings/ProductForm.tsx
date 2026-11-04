@@ -1,13 +1,14 @@
 'use client';
 
 import { type ApiError, type AttributeDef, isApiError, type ListingRow, type ProductTypeSchema, sellerKeys, type SellerProductDetail, sellerQueries } from '@afrotransact/api-client';
-import { Button, Checkbox, ChipGroup, Select, TextField, useToast } from '@afrotransact/ui';
+import { Alert, AlertAction, Button, Checkbox, ChipGroup, Select, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { type FocusEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { SizeChartEditor } from '@/components/size-charts/SizeChartEditor';
+import { SizeChartsManager } from '@/components/size-charts/SizeChartsManager';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
@@ -98,6 +99,7 @@ export function ProductForm({ productId }: { productId?: string }) {
   const chartQ = useQuery({ ...sellerQueries.sizeChart(api, orgId, s.sizeChartId), enabled: sized && s.sizeChartId !== '' });
   const chart = sized && s.sizeChartId && chartQ.data?.id === s.sizeChartId ? chartQ.data : undefined;
   const [chartSheet, setChartSheet] = useState<'new' | 'edit' | null>(null);
+  const [manageCharts, setManageCharts] = useState(false);
   const chartState = !sized || !s.sizeChartId ? 'none' : chart ? 'ready' : chartQ.isError ? 'error' : 'loading';
 
   // Load the listing (edit) or the draft once, when what it needs has arrived.
@@ -254,6 +256,13 @@ export function ProductForm({ productId }: { productId?: string }) {
 
   if (editing && detail.isError) return <ErrorState error={detail.error} onRetry={() => void detail.refetch()} />;
   if (draftParam && savedDraft.isError) return <ErrorState error={savedDraft.error} onRetry={() => void savedDraft.refetch()} />;
+  if (tree.isError && !tree.data) {
+    return (
+      <Alert variant="danger" title={t('sc.pf.categoriesFailed')} action={<AlertAction onClick={() => void tree.refetch()}>{t('sc.pf.categoriesRetry')}</AlertAction>}>
+        {t('sc.pf.categoriesFailedBody')}
+      </Alert>
+    );
+  }
   if (!ready || !tree.data) return <Spinner label={t('sc.pf.loading')} />;
 
 
@@ -415,12 +424,7 @@ export function ProductForm({ productId }: { productId?: string }) {
           {type && sections.includes('sizeGuide') ? (
             <FormSection {...section('sizeGuide')} hint={t('sc.pf.s.sizeGuideHint')}>
               <SizeGuideSection s={s} type={type} patch={patch} charts={(chartsQ.data?.items ?? []).filter((c) => !c.retired)} chart={chart} chartState={chartState} error={err(fieldId.sizeChart)}
-                actions={editableCharts ? (
-                  <>
-                    <Button size="sm" variant="neutral" onClick={() => setChartSheet('new')}>{t('sc.pf.sizeChart.create')}</Button>
-                    {chart && !chart.retired ? <Button size="sm" variant="neutral" onClick={() => setChartSheet('edit')}>{t('sc.pf.sizeChart.edit')}</Button> : null}
-                  </>
-                ) : null} />
+                editable={editableCharts} onCreate={() => setChartSheet('new')} onEdit={() => setChartSheet('edit')} onManage={() => setManageCharts(true)} />
             </FormSection>
           ) : null}
 
@@ -486,6 +490,7 @@ export function ProductForm({ productId }: { productId?: string }) {
           ) : null}
           <button type="submit" className="at-visually-hidden" tabIndex={-1}>{primaryLabel}</button>
         </form>
+        {type?.traits.sizing ? <SizeChartsManager open={manageCharts} onClose={() => setManageCharts(false)} /> : null}
         {type?.traits.sizing ? (
           <SizeChartEditor open={chartSheet !== null} chart={chartSheet === 'edit' ? (chart ?? null) : null} scope={{ productType: type.code, label: type.label }} selling={soldSizes(s, type)}
             onClose={() => setChartSheet(null)}

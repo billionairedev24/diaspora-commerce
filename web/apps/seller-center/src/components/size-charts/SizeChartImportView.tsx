@@ -1,17 +1,15 @@
 'use client';
 
 import { sellerKeys, sellerQueries, type SizeChartImportReport, type SpreadsheetFormat } from '@afrotransact/api-client';
-import { Badge, Button, buttonClassName, Checkbox, ChipGroup, cx, Select, useToast } from '@afrotransact/ui';
+import { Badge, Button, Checkbox, ChipGroup, cx, Select, useToast } from '@afrotransact/ui';
 import { CheckCircle, DownloadSimple, FileArrowUp, FileCsv, MicrosoftExcelLogo } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import Link from 'next/link';
 import { type DragEvent, useMemo, useState } from 'react';
 
 import { DEFAULT_LIMITS, fileProblem } from '@/components/listings/bulk/bulk-model';
 import { leavesOf } from '@/components/listings/form-model';
 import { RequestDepartmentLink } from '@/components/listings/RequestDepartment';
 import { Notice } from '@/components/ui/Notice';
-import { PageHeader } from '@/components/ui/PageHeader';
 import { problemMessage } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
@@ -26,7 +24,7 @@ const SHOWN_ROWS = 200;
 
 /** Bulk size chart upload: download the template, fill one row per size, check the file (a dry run that saves nothing), read what it would do row by row,
     then import. A chart is saved whole or not at all; the same name updates the chart, so uploading the same file again changes nothing. */
-export function SizeChartImportView() {
+export function SizeChartImportView({ onBack }: { onBack: () => void }) {
   const api = sellerApi();
   const t = useT();
   const qc = useQueryClient();
@@ -84,12 +82,12 @@ export function SizeChartImportView() {
   const failed = report ? failedCharts(report) : [];
 
   return (
-    <>
-      <PageHeader title={t('sc.szi.title')} description={t('sc.szi.description')}
-        actions={<Link href="/listings/size-charts" className="text-sm">{t('sc.szi.back')}</Link>} />
+    <div className="flex flex-col gap-4 pb-4">
+      <p className="m-0 text-sm text-muted">{t('sc.szi.description')}</p>
+      <Button variant="neutral" size="sm" onClick={onBack} className="self-start">{t('sc.szi.back')}</Button>
       {!editable ? <Notice tone="info" icon="eye" title={t('sc.modulePage.readOnly')}>{t('sc.sz.readOnly')}</Notice> : null}
-      <div className="grid items-start gap-4 lg:grid-cols-2">
-        <section aria-labelledby="szi-step1" className="flex flex-col gap-3 rounded-md border border-border bg-surface p-4 sm:p-5">
+      <div className="flex flex-col gap-6">
+        <section aria-labelledby="szi-step1" className="flex flex-col gap-3">
           <h2 id="szi-step1" className="m-0 text-lg font-semibold">{t('sc.szi.step1')}</h2>
           <p className="m-0 text-sm text-muted">{t('sc.szi.step1Hint')}</p>
           <Select label={t('sc.szi.category')} value={category} onChange={(e) => setCategory(e.target.value)}
@@ -107,7 +105,7 @@ export function SizeChartImportView() {
           </ul>
         </section>
 
-        <section aria-labelledby="szi-step2" className="flex flex-col gap-3 rounded-md border border-border bg-surface p-4 sm:p-5">
+        <section aria-labelledby="szi-step2" className="flex flex-col gap-3">
           <h2 id="szi-step2" className="m-0 text-lg font-semibold">{t('sc.szi.step2')}</h2>
           <label onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={onDrop}
             className={cx('flex min-h-32 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border-2 border-dashed p-4 text-center text-sm',
@@ -129,11 +127,11 @@ export function SizeChartImportView() {
       </div>
 
       {report && sum ? (
-        <section aria-labelledby="szi-report" className="flex flex-col gap-4 rounded-md border border-border bg-surface p-4 sm:p-5" data-testid="chart-report">
+        <section aria-labelledby="szi-report" className="flex flex-col gap-4 border-t border-border pt-4" data-testid="chart-report">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 id="szi-report" className="m-0 text-lg font-semibold">{stage === 'imported' ? t('sc.szi.reportDone', { file: report.fileName }) : t('sc.szi.reportCheck', { file: report.fileName })}</h2>
             {stage === 'imported' ? (
-              <Link href="/listings/size-charts" className={buttonClassName({ variant: 'primary' })}><CheckCircle size={18} aria-hidden /> {t('sc.szi.viewCharts')}</Link>
+              <Button variant="primary" onClick={onBack}><CheckCircle size={18} aria-hidden /> {t('sc.szi.viewCharts')}</Button>
             ) : (
               <Button variant="primary" disabled={sum.importable === 0 || !editable} loading={run.isPending && run.variables === false} onClick={() => run.mutate(false)}>
                 {t('sc.szi.import', { count: sum.importable })}
@@ -223,6 +221,6 @@ export function SizeChartImportView() {
           </div>
         </section>
       ) : null}
-    </>
+    </div>
   );
 }

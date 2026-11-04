@@ -15,8 +15,6 @@ export interface SellerScopeView {
   /** AfroTransact Retail: every department. */
   exempt: boolean;
   departments: SellerCatalogScope['departments'];
-  /** An allowed department has a product type with sizes: Size charts makes sense. */
-  hasSizing: boolean;
   requests: SellerCatalogScope['requests'];
   /** Codes of departments with a request waiting for review. */
   pendingCodes: string[];
@@ -37,18 +35,10 @@ export function useSellerScopeOf(orgId: string | null | undefined, enabled: bool
     isError: q.isError,
     exempt: scope?.exempt ?? false,
     departments: scope?.departments ?? [],
-    hasSizing: scope?.hasSizing ?? false,
     requests: scope?.requests ?? [],
     pendingCodes: (scope?.requests ?? []).filter((r) => r.status === 'PENDING').map((r) => r.departmentCode),
     allows: (code) => scope?.exempt === true || (scope?.departments ?? []).some((d) => d.code === code)
   };
-}
-
-/** Whether Size charts applies to the active organisation (same rule as the sidebar; fails closed while loading or on error). */
-export function useShowSizeCharts(): boolean {
-  const { isProvider } = useSeller();
-  const scope = useSellerScope();
-  return isProvider || scope.exempt || scope.hasSizing;
 }
 
 /** The active organisation's scope (inside the portal shell). A service-provider organisation has none. */

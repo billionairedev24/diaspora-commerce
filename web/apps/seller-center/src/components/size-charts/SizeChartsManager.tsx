@@ -2,17 +2,14 @@
 
 import { sellerKeys, sellerQueries,type SizeChart } from '@afrotransact/api-client';
 import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
-import { Badge, Button, buttonClassName, Checkbox, Dialog, RowName, useToast } from '@afrotransact/ui';
+import { Badge, Button, Checkbox, ConfirmDelete, RowName, Sheet, useToast } from '@afrotransact/ui';
 import { Archive,Copy, FileArrowUp, PencilSimple, Plus } from '@phosphor-icons/react/ssr';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
 import { leavesOf } from '@/components/listings/form-model';
 import { Notice } from '@/components/ui/Notice';
-import { PageHeader } from '@/components/ui/PageHeader';
 import { ErrorState, problemMessage } from '@/components/ui/States';
 import { type MessageKey, useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
@@ -20,17 +17,29 @@ import { shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
 import { SizeChartEditor } from './SizeChartEditor';
+import { SizeChartImportView } from './SizeChartImportView';
 
-/** My size charts: the charts the organisation writes once and links to many products. Server-driven table (search, pages), new / edit in a side sheet,
-    duplicate, retire (a retired chart stays on the products that show it but can no longer be linked), and the bulk import. */
-export function SizeChartsView() {
+/** "Manage charts", opened from the size-guide picker of the product form: the charts the organisation writes once and links to many products.
+    Server-driven table (search, pages), new / edit in a second sheet, duplicate, retire (a retired chart stays on the products that show it but can
+    no longer be linked; the confirmation says how many products use it), and the bulk import. */
+export function SizeChartsManager({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const t = useT();
+  const [importing, setImporting] = useState(false);
+  return (
+    <Sheet open={open} onOpenChange={(o) => { if (!o) { setImporting(false); onClose(); } }} title={importing ? t('sc.szi.title') : t('sc.sz.title')} closeLabel={t('sc.sz.close')}>
+      {importing ? <SizeChartImportView onBack={() => setImporting(false)} /> : <ChartsTable onImport={() => setImporting(true)} />}
+    </Sheet>
+  );
+}
+
+function ChartsTable({ onImport }: { onImport: () => void }) {
   const api = sellerApi();
   const t = useT();
   const qc = useQueryClient();
   const toast = useToast();
   const { orgId, can, has } = useSeller();
   const editable = can('listings');
-  const state = useTableState({ searchParams: useSearchParams() });
+  const state = useTableState({ syncUrl: false });
   const [withRetired, setWithRetired] = useState(false);
   const [editing, setEditing] = useState<SizeChart | 'new' | null>(null);
   const [retiring, setRetiring] = useState<SizeChart | null>(null);
@@ -96,21 +105,14 @@ export function SizeChartsView() {
   );
 
   return (
-    <>
-      <PageHeader
-        title={t('sc.sz.title')}
-        description={t('sc.sz.description')}
-        actions={editable ? (
-          <>
-            {has('bulkUpload') ? (
-              <Link href="/listings/size-charts/import" className={buttonClassName({ variant: 'neutral' })}>
-                <FileArrowUp size={18} aria-hidden /> {t('sc.sz.import')}
-              </Link>
-            ) : null}
-            <Button variant="primary" onClick={() => setEditing('new')}><Plus size={18} aria-hidden /> {t('sc.sz.new')}</Button>
-          </>
-        ) : null}
-      />
+    <div className="flex flex-col gap-4 pb-4">
+      <p className="m-0 text-sm text-muted">{t('sc.sz.description')}</p>
+      {editable ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="primary" onClick={() => setEditing('new')}><Plus size={18} aria-hidden /> {t('sc.sz.new')}</Button>
+          {has('bulkUpload') ? <Button variant="neutral" onClick={onImport}><FileArrowUp size={18} aria-hidden /> {t('sc.sz.import')}</Button> : null}
+        </div>
+      ) : null}
       {!editable ? <Notice tone="info" icon="eye" title={t('sc.modulePage.readOnly')}>{t('sc.sz.readOnly')}</Notice> : null}
       <DataTable<SizeChart>
         id="seller.size-charts"
@@ -131,13 +133,9 @@ export function SizeChartsView() {
         toolbar={<Checkbox label={t('sc.sz.showRetired')} checked={withRetired} onChange={(e) => setWithRetired(e.target.checked)} />}
       />
       <SizeChartEditor open={editing !== null} chart={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={() => setEditing(null)} />
-      <Dialog open={retiring !== null} onOpenChange={(o) => { if (!o) setRetiring(null); }} title={t('sc.sz.retireTitle', { name: retiring?.name ?? '' })} width={440}
-        description={retiring && retiring.productCount > 0 ? t('sc.sz.retireUsed', { count: retiring.productCount }) : t('sc.sz.retireUnused')} closeLabel={t('sc.sz.close')}>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="neutral" onClick={() => setRetiring(null)}>{t('sc.sz.cancel')}</Button>
-          <Button variant="primary" loading={retire.isPending} onClick={() => retiring && retire.mutate(retiring)}>{t('sc.sz.retireConfirm')}</Button>
-        </div>
-      </Dialog>
-    </>
+      <ConfirmDelete open={retiring !== null} onOpenChange={(o) => { if (!o) setRetiring(null); }} title={t('sc.sz.retireTitle', { name: retiring?.name ?? '' })}
+        description={retiring && retiring.productCount > 0 ? t('sc.sz.retireUsed', { count: retiring.productCount }) : t('sc.sz.retireUnused')}
+        verb={t('sc.sz.retireConfirm')} cancelLabel={t('sc.sz.cancel')} closeLabel={t('sc.sz.close')} pending={retire.isPending} onConfirm={() => { if (retiring) retire.mutate(retiring); }} />
+    </div>
   );
 }
