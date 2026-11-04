@@ -1,7 +1,7 @@
 'use client';
 
 import { definitiveFailure, type FieldValue, isApiError, type OneTimeSecret, type RecordAction, type RecordDetail, type ResourceKey, type StaffForm, staffKeys, staffQueries } from '@afrotransact/api-client';
-import { Button, Dialog, Sheet, SheetTableScroll, useToast } from '@afrotransact/ui';
+import { Button, Dialog, DialogActions, Sheet, SheetTableScroll, useToast } from '@afrotransact/ui';
 import { Check, Copy, LockSimple, PencilSimple } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -28,7 +28,7 @@ const isAlreadyDone = (e: unknown): boolean => isApiError(e) && e.status === 409
  * Copies one identifier (an ID field of the sheet). People read names; the id is there for the rare time one is quoted
  * to a developer or pasted into a ticket, so it is one tap away and never the headline.
  */
-function CopyId({ value, label }: { value: string; label: string }) {
+export function CopyId({ value, label }: { value: string; label: string }) {
   const t = useT();
   const [copied, setCopied] = useState(false);
   const copy = async () => {
@@ -53,7 +53,7 @@ function CopyId({ value, label }: { value: string; label: string }) {
   );
 }
 
-function Details({ record }: { record: RecordDetail }) {
+export function Details({ record }: { record: RecordDetail }) {
   return (
     <>
       {record.sections.map((s) => (
@@ -371,14 +371,14 @@ export function RecordSheet({ resource, id, onClose, sharedOpen = false, extra }
                 {formError}
               </Notice>
             ) : null}
-            <div className="flex justify-end gap-2">
+            <DialogActions>
               <Button variant="neutral" onClick={() => setPending(null)}>
                 Cancel
               </Button>
               <Button loading={act.isPending} onClick={() => runAction(pending.action, {})}>
                 {pending.action.label}
               </Button>
-            </div>
+            </DialogActions>
           </div>
         ) : null}
       </Dialog>

@@ -1,7 +1,7 @@
 'use client';
 
 import { type FieldValue, type FormField, type StaffForm, validateStaffForm } from '@afrotransact/api-client';
-import { Button, Checkbox, Field, fieldStyles, Select, TextField } from '@afrotransact/ui';
+import { Button, Checkbox, DialogActions, Field, fieldStyles, Select, TextField } from '@afrotransact/ui';
 import { type FormEvent, Fragment, useState } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
@@ -164,7 +164,7 @@ export function FormFields({
           {error}
         </Notice>
       ) : null}
-      <div className="flex justify-end gap-2 pt-1">
+      <DialogActions className="pt-1">
         {onCancel ? (
           <Button variant="neutral" onClick={onCancel}>
             Cancel
@@ -173,7 +173,7 @@ export function FormFields({
         <Button type="submit" loading={busy} disabled={unchanged}>
           {form.submitLabel}
         </Button>
-      </div>
+      </DialogActions>
     </form>
   );
 }
