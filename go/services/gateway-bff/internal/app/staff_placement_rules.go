@@ -38,7 +38,7 @@ var tileRuleOptions = []domain.FieldOption{
 // tileDepartments are the storefront's department bar entries a rule can be scoped to.
 var tileDepartments = []domain.FieldOption{
 	{Value: "Groceries", Label: "Groceries"}, {Value: "Fashion", Label: "Fashion"}, {Value: "Beauty", Label: "Beauty"},
-	{Value: "Home & Art", Label: "Home & Art"}, {Value: "Books", Label: "Books"}, {Value: "Health", Label: "Health"}, {Value: "Party", Label: "Party"},
+	{Value: "Home & Art", Label: "Home & Art"}, {Value: "Books", Label: "Books"}, {Value: "Health", Label: "Health"}, {Value: "Event & party", Label: "Event & party"},
 }
 
 func cellKey(n int, field string) string { return fmt.Sprintf("cell%d_%s", n, field) }

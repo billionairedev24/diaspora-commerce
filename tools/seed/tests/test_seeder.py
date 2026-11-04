@@ -90,6 +90,42 @@ class PlacementTest(unittest.TestCase):
         self.assertEqual([p["status"] for p in store], ["ENDED", "ENDED", "LIVE"], "a changed payload replaces it")
 
 
+class TileRuleTest(unittest.TestCase):
+    def test_step_content_seeds_rule_tiles_without_images_and_ends_the_per_category_tile(self):
+        s = seeder()
+        content = s.svc["content"]
+        store = [{"id": "plc_old", "name": "Shop by department \u00b7 demo seed", "status": "LIVE", "payload": {"cells": []}}]
+        content.on("GET", "/v1/placements", lambda *a: [dict(p) for p in store])
+
+        def create(path, body, kw):
+            store.append({"id": f"plc_{len(store)}", "name": body["name"], "status": "DRAFT", "slot": body["slot"],
+                          "payload": body["payload"]})
+            return store[-1]
+
+        def transition(path, body, kw):
+            pid, action = path.split("/")[3], path.split("/")[4]
+            p = next(x for x in store if x["id"] == pid)
+            p["status"] = {"submit": "IN_REVIEW", "approve": "LIVE", "end": "ENDED"}[action]
+            return p
+
+        content.on("POST", "/v1/placements", create)
+        content.on("POST", "/v1/placements/*", transition)
+        for t in D.TILE_RULES:
+            cells = [{"source": dict(rule)} for rule in t["rules"]]
+            s._ensure_placement("home_tiles", t["name"], dict(t["payload"], cells=cells), t["priority"], t["replaces"])
+        s._end_replaced_placements(D.RETIRED_PLACEMENTS)
+
+        rule_tiles = [p for p in store if p.get("slot") == "home_tiles" and p["status"] == "LIVE"]
+        self.assertEqual(len(rule_tiles), len(D.TILE_RULES))
+        for p in rule_tiles:
+            for cell in p["payload"]["cells"]:
+                self.assertEqual(set(cell), {"source"}, "no pinned label, link or image: the product supplies them")
+        top = next(p for p in rule_tiles if p["name"].startswith("Top rated"))
+        self.assertEqual([c["source"]["department"] for c in top["payload"]["cells"]], ["Groceries", "Fashion", "Beauty", "Home & Art"])
+        self.assertEqual(top["payload"]["cells"][0]["source"], {"kind": "search", "sort": "rating", "department": "Groceries"})
+        self.assertEqual(next(p for p in store if p["id"] == "plc_old")["status"], "ENDED")
+
+
 class OffersAndStockTest(unittest.TestCase):
     def setUp(self):
         self.s = seeder()

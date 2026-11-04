@@ -492,12 +492,6 @@ TILES = [
                ("Ghanaian", "/communities/ghanaian", "tile-ghanaian", ["waakye", "ghanaian food", "kenkey"]),
                ("Ethiopian", "/communities/ethiopian", "tile-ethiopian", ["injera", "ethiopian food", "doro wat"]),
                ("Jamaican", "/communities/jamaican", "tile-jamaican", ["ackee and saltfish", "jamaican food", "rice and peas"])]},
-    {"replaces": None, "name": "Shop by department", "priority": 9,
-     "payload": {"title": "Shop by department", "cta": "See everything", "href": "/s"},
-     "cells": [("Groceries", "/s?dept=Groceries", "tile-groceries", ["african market", "spice market", "market stall"]),
-               ("Fashion", "/s?dept=Fashion", "tile-fashion", ["african fashion", "wax print dress", "ankara fashion"]),
-               ("Beauty", "/s?dept=Beauty", "tile-beauty", ["shea butter cosmetics", "natural cosmetics", "skin care products"]),
-               ("Home & Art", "/s?dept=Home+%26+Art", "tile-home", ["african art", "woven baskets", "african sculpture"])]},
     {"replaces": None, "name": "More kitchens to discover", "priority": 8,
      "payload": {"title": "More kitchens to discover", "cta": "See all communities", "href": "/communities"},
      "cells": [("Indian", "/communities/indian", "tile-indian", ["indian thali", "biryani", "indian food"]),
@@ -505,6 +499,34 @@ TILES = [
                ("Kenyan", "/communities/kenyan", "tile-kenyan", ["ugali", "kenyan food", "nyama choma"]),
                ("Caribbean", "/communities/jamaican", "tile-caribbean", ["caribbean food", "plantain", "callaloo"])]},
 ]
+
+# Product-driven tiles: every cell is a rule the gateway resolves to the best in-stock product with a real photo (image,
+# title and link come from the product, nothing is pinned per category). `source` is the same shape as a rail's.
+def _rule(sort: str, department: str | None = None, kind: str = "search") -> dict:
+    src: dict = {"kind": kind}
+    if kind == "search":
+        src["sort"] = sort
+    if department:
+        src["department"] = department
+    return src
+
+
+_DEPARTMENTS = ("Groceries", "Fashion", "Beauty", "Home & Art")
+
+TILE_RULES = [
+    {"replaces": None, "name": "Top rated by department", "priority": 9,
+     "payload": {"title": "Top rated by department", "cta": "See everything", "href": "/s"},
+     "rules": [_rule("rating", d) for d in _DEPARTMENTS]},
+    {"replaces": None, "name": "New in the shop", "priority": 7,
+     "payload": {"title": "New in the shop", "cta": "See what is new", "href": "/s?sort=newest"},
+     "rules": [_rule("newest", d) for d in _DEPARTMENTS]},
+    {"replaces": None, "name": "Get it tomorrow", "priority": 6,
+     "payload": {"title": "Get it tomorrow", "cta": "See fast delivery", "href": "/s?fulfilment=afrotransact"},
+     "rules": [_rule("", kind="fulfilled-fastest") for _ in range(4)]},
+]
+
+# Seeded placements an earlier run made that the rules above replace (their fixed per-category images are dropped).
+RETIRED_PLACEMENTS = ["Shop by department"]
 
 BANNERS = [
     {"replaces": "plc_banner_kente", "name": "Bonwire kente banner", "priority": 10,

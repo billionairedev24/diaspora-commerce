@@ -1620,7 +1620,7 @@ function tileRules() {
   ];
 }
 function tileDepartments() {
-  return ['Groceries', 'Fashion', 'Beauty', 'Home & Art', 'Books', 'Health', 'Party'].map((d) => ({ value: d, label: d }));
+  return ['Groceries', 'Fashion', 'Beauty', 'Home & Art', 'Books', 'Health', 'Event & party'].map((d) => ({ value: d, label: d }));
 }
 
 /** The four tile cells' fields (shown for home tiles only) and the hero window fields (hero carousel only). */

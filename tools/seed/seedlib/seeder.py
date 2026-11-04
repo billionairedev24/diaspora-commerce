@@ -603,6 +603,14 @@ class Seeder:
                 self.svc["content"].post(f"/v1/placements/{p['id']}/end")
                 self.report.add("placements", "superseded (ended)")
 
+    def _end_replaced_placements(self, names: list[str]) -> None:
+        """Ends the live seeded placements an earlier run made under these names (replaced by rule-based ones)."""
+        replaced = {f"{n} · demo seed" for n in names}
+        for p in self._placements():
+            if p.get("name") in replaced and p.get("status") in ("LIVE", "SCHEDULED"):
+                self.svc["content"].post(f"/v1/placements/{p['id']}/end")
+                self.report.add("placements", "replaced (ended)")
+
     def _live_payload(self, name: str) -> dict[str, Any]:
         """Payload of the LIVE seeded placement `name` (keeps its images when this run finds none)."""
         seeded = f"{name} · demo seed"
@@ -628,6 +636,10 @@ class Seeder:
                 url = self._upload_campaign_image(key, queries, orientation="square") or before.get(label)
                 cells.append({"label": label, "href": href, "imageUrl": url})
             self._ensure_placement("home_tiles", t["name"], dict(t["payload"], cells=cells), t["priority"], t["replaces"])
+        for t in D.TILE_RULES:
+            cells = [{"source": dict(rule)} for rule in t["rules"]]
+            self._ensure_placement("home_tiles", t["name"], dict(t["payload"], cells=cells), t["priority"], t["replaces"])
+        self._end_replaced_placements(D.RETIRED_PLACEMENTS)
         for b in D.BANNERS:
             key, queries = b["image"]
             url = self._upload_campaign_image(key, queries) or self._live_payload(b["name"]).get("imageUrl")

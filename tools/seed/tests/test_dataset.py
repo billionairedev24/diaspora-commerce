@@ -161,19 +161,36 @@ class DatasetTest(unittest.TestCase):
                 self.assertIn(k, keys)
                 self.assertEqual(next(p.seller for p in D.PRODUCTS if p.key == k), ad["seller"],
                                  "advertisers promote products whose buy box they hold")
-        names = [x["name"] for x in D.HEROES + D.TILES + D.BANNERS + D.RAILS + D.CATEGORY_BANNERS]
+        names = [x["name"] for x in D.HEROES + D.TILES + D.TILE_RULES + D.BANNERS + D.RAILS + D.CATEGORY_BANNERS]
         self.assertEqual(len(names), len(set(names)))
         self.assertLessEqual(len(D.HEROES), 6)
         self.assertLessEqual(len(D.RAILS) + 1, 6, "home_product_row holds 6 (one comes from the migration)")
         for t in D.TILES:
             self.assertLessEqual(len(t["cells"]), 4)
+        # home_tiles holds 8: the community tiles, the product-driven tiles and the one the migration seeds.
+        self.assertLessEqual(len(D.TILES) + len(D.TILE_RULES) + 1, 8)
+        seeded_departments = {p.path.split(" › ")[0] for p in D.PRODUCTS}
+        for t in D.TILE_RULES:
+            self.assertTrue(2 <= len(t["rules"]) <= 4, "a tile with fewer than two resolved cells is not shown")
+            self.assertLessEqual(len(t["payload"]["title"]), 60)
+            for r in t["rules"]:
+                self.assertIn(r["kind"], ("search", "department-bestsellers", "fulfilled-fastest"))
+                self.assertNotIn("imageUrl", r, "rule cells take their image from the product, never a pinned one")
+                if r.get("department"):
+                    self.assertIn(r["department"], seeded_departments, "a rule on a department with no products shows nothing")
+                if r["kind"] == "search":
+                    self.assertIn(r["sort"], ("rating", "newest", "relevance", "price_asc", "price_desc"))
+        # Enough distinct products for every cell (the page never repeats a product).
+        self.assertGreaterEqual(len(D.PRODUCTS), 4 * len(D.TILE_RULES))
+        self.assertIn("Shop by department", D.RETIRED_PLACEMENTS)
+        self.assertNotIn("Shop by department", [t["name"] for t in D.TILES])
         for h in D.HEROES:
             self.assertLessEqual(len(h["payload"]["title"]), 60)
             self.assertIn(h["payload"]["label"], ("AfroTransact", "Sponsored"))
         departments = {path.split(" › ")[0] for path in PATHS}
         for c in D.CATEGORY_BANNERS:
             self.assertIn(c["category"], departments)
-        for hrefs in [x["payload"].get("href") for x in D.HEROES + D.TILES + D.BANNERS + D.RAILS + D.CATEGORY_BANNERS]:
+        for hrefs in [x["payload"].get("href") for x in D.HEROES + D.TILES + D.TILE_RULES + D.BANNERS + D.RAILS + D.CATEGORY_BANNERS]:
             self.assertTrue(hrefs.startswith("/"), hrefs)
             self.assertNotIn("/search", hrefs, "the storefront's search page is /s")
 
