@@ -188,6 +188,7 @@ func orderSections(o jobj) []domain.DetailSection {
 	addr := func(key string) string { return strings.TrimSpace(jstr(o, "shippingAddress."+key)) }
 	cityLine := strings.TrimSpace(strings.Join(slices.DeleteFunc([]string{addr("city"), strings.TrimSpace(addr("state") + " " + addr("postalCode"))}, func(s string) bool { return s == "" }), ", "))
 	street := strings.Join(slices.DeleteFunc([]string{addr("line1"), addr("line2"), cityLine}, func(s string) bool { return s == "" }), ", ")
+	group("Order", domain.DetailField{Label: "Placed", Value: jstr(o, "placedAt"), Kind: "datetime"})
 	group("Customer",
 		text("Name", firstNonEmpty(jstr(o, "customerName"), addr("fullName"))),
 		text("Ship to", firstNonEmpty(street, jstr(o, "shipTo"))),

@@ -72,7 +72,7 @@ func TestFinishedShipmentOffersNothing(t *testing.T) {
 
 func TestOrderSectionsHideEmptyFactsAndKeepIdsApart(t *testing.T) {
 	o := jobj{"id": "0f0f0f0f-0000-4000-8000-000000000001", "paymentId": "pay-1", "status": "in_progress", "channel": "SITE_DIRECT", "customerName": "Amara Nwosu",
-		"itemsMinor": float64(2000), "shippingMinor": float64(599), "taxMinor": float64(165), "discountMinor": float64(0), "totalMinor": float64(2764),
+		"itemsMinor": float64(2000), "shippingMinor": float64(599), "taxMinor": float64(165), "discountMinor": float64(0), "totalMinor": float64(2764), "placedAt": "2026-11-01T10:00:00Z",
 		"shipTo":          "Houston, TX",
 		"shippingAddress": map[string]any{"fullName": "Amara Nwosu", "city": "Houston", "state": "TX", "postalCode": "77042", "phone": "+17135550100", "line1": ""},
 		"shipments":       []any{map[string]any{"captured": true}, map[string]any{"captured": false}}}
@@ -89,10 +89,10 @@ func TestOrderSectionsHideEmptyFactsAndKeepIdsApart(t *testing.T) {
 			}
 		}
 	}
-	if strings.Join(titles, "|") != "Customer|Payment|Technical details" {
+	if strings.Join(titles, "|") != "Order|Customer|Payment|Technical details" {
 		t.Fatalf("sections %v", titles)
 	}
-	for _, f := range secs[1].Fields {
+	for _, f := range secs[2].Fields {
 		if f.Label == "Status" && f.Value != "Captured for 1 of 2 shipments" {
 			t.Fatalf("payment status %q", f.Value)
 		}

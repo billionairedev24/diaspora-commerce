@@ -47,7 +47,7 @@ describe('staff order sheet (mock BFF, same shape as the Go one)', () => {
   it('groups the facts, hides empty ones and keeps ids under technical details', async () => {
     const sheet = await as('platform.super_admin').getRecord('orders', ORDER);
     const titles = sheet.sections.map((s) => s.title);
-    expect(titles.slice(0, 2)).toEqual(['Customer', 'Payment']);
+    expect(titles.slice(0, 3)).toEqual(['Order', 'Customer', 'Payment']);
     expect(titles.at(-1)).toBe('Technical details');
     for (const s of sheet.sections) {
       expect(s.fields.every((f) => f.value.trim() !== '' && f.value !== '—')).toBe(true);

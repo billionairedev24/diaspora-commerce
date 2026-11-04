@@ -222,6 +222,7 @@ export function orderSections(r: MockRecord): DetailSection[] {
           ? 'Captured'
           : `Captured for ${captured} of ${lines.length} shipments`;
   const groups: [string, DetailField[]][] = [
+    ['Order', [fieldOf('Placed', s(f.placedAt), 'datetime')]],
     ['Customer', [fieldOf('Name', s(f.customer)), fieldOf('Ship to', s(f.shipTo)), fieldOf('Phone', s(f.customerPhone))]],
     [
       'Payment',
