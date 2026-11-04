@@ -1,4 +1,11 @@
-import { type FieldValue, type StaffForm } from '../schemas/staff';
+import { type FieldValue, type FormField, type StaffForm } from '../schemas/staff';
+
+/** Whether a field is hidden by its `showWhen` for the values entered so far. */
+export function isFieldHidden(f: FormField, values: Record<string, FieldValue | string | boolean | string[] | undefined>): boolean {
+  if (!f.showWhen) return false;
+  const have = values[f.showWhen.key];
+  return typeof have !== 'string' || !f.showWhen.in.includes(have);
+}
 
 /**
  * Validates submitted values against a staff console form (required, number range, length, pattern, email, date and
@@ -8,6 +15,7 @@ import { type FieldValue, type StaffForm } from '../schemas/staff';
 export function validateStaffForm(form: StaffForm, values: Record<string, FieldValue>): Record<string, string> {
   const errors: Record<string, string> = {};
   form.fields.forEach((f) => {
+    if (isFieldHidden(f, values)) return;
     const v = values[f.key];
     const empty = v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
     if (empty) {

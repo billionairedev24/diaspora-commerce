@@ -53,8 +53,37 @@ export interface paths {
         /**
          * Home page placements for the session's deliver-to location
          * @description Announcement bar, hero carousel, tiles, sponsored banners and product rails. Nothing is hard-coded in clients.
+         *
+         *     Hero slides outside their optional startsAt/endsAt window are left out. A tile cell is either a fixed image and link
+         *     or a rule that content stores (a `source`, see content's TileCellSource) which the BFF resolves to the best eligible
+         *     product: the cell then carries that product's photo, title and /p/{atin} link. Eligible means in stock with a real
+         *     photograph (never a placeholder or icon); the same rule applies to every product rail. A rule with nothing eligible
+         *     drops its cell, and a tile left with fewer than two rule cells is dropped. Signed-in shoppers with past orders get a
+         *     leading "Based on your orders" rail (id `based-on-orders`), absent when there is nothing to show.
          */
         get: operations["getHome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/home/recently-viewed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Product cards for the products this browser viewed last
+         * @description The storefront remembers viewed ATINs in the browser (nothing is stored server side) and asks for their cards here.
+         *     Order is kept (most recent first); unknown, unavailable, out-of-stock and photo-less products are dropped. The
+         *     storefront hides the rail when `items` is empty.
+         */
+        get: operations["getRecentlyViewed"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3597,6 +3626,16 @@ export interface components {
             /** @description "AfroTransact" or "Sponsored" */
             label: string;
             imageUrl: string | null;
+            /**
+             * Format: date-time
+             * @description Present only when the slide is scheduled to start (it is already active when served)
+             */
+            startsAt?: string;
+            /**
+             * Format: date-time
+             * @description Present only when the slide is scheduled to end
+             */
+            endsAt?: string;
         };
         Tile: {
             id: string;
@@ -3604,9 +3643,14 @@ export interface components {
             cta: string;
             href: string;
             cells: {
+                /** @description The product title for a rule cell */
                 label: string;
+                /** @description /p/{atin} for a rule cell */
                 href: string;
+                /** @description A real product photograph for a rule cell */
                 imageUrl: string | null;
+                /** @description The product a rule cell resolved to; absent on fixed-image cells */
+                atin?: string;
             }[];
         };
         Banner: {
@@ -5651,6 +5695,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Home"];
+                };
+            };
+        };
+    };
+    getRecentlyViewed: {
+        parameters: {
+            query: {
+                /** @description Comma separated ATINs, most recent first; at most 12 are used. */
+                atins: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ProductSummary"][];
+                    };
                 };
             };
         };

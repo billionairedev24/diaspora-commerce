@@ -7113,6 +7113,12 @@ export interface components {
             value?: components["schemas"]["FieldValue"];
             /** @description The group the field belongs to; the form shows a heading when it changes from one field to the next (the referral program's two reward sections) */
             section?: string;
+            showWhen?: components["schemas"]["FieldCondition"];
+        };
+        /** @description Shows a field only while another field of the form holds one of the listed values (the placement form's tile and hero fields appear for their slot). A hidden field is neither sent nor validated. */
+        FieldCondition: {
+            key: string;
+            in: string[];
         };
         Form: {
             title: string;

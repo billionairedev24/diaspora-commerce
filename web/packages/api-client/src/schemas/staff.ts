@@ -116,6 +116,10 @@ export const LookupResultSchema = z.object({ kind: LookupKindSchema, items: z.ar
 export type LookupResult = z.infer<typeof LookupResultSchema>;
 export type LookupHit = LookupResult['items'][number];
 
+/** Shows a field only while another field of the form holds one of `in`; a hidden field is neither sent nor validated. */
+export const FieldConditionSchema = z.object({ key: z.string(), in: z.array(z.string()) });
+export type FieldCondition = z.infer<typeof FieldConditionSchema>;
+
 export const FormFieldSchema = z.object({
   key: z.string(),
   label: z.string(),
@@ -132,7 +136,8 @@ export const FormFieldSchema = z.object({
   placeholder: z.string().optional(),
   value: FieldValueSchema.optional(),
   /** The group the field belongs to: the form shows a heading when it changes from one field to the next. */
-  section: z.string().optional()
+  section: z.string().optional(),
+  showWhen: FieldConditionSchema.optional()
 });
 export type FormField = z.infer<typeof FormFieldSchema>;
 export const StaffFormSchema = z.object({ title: z.string(), submitLabel: z.string(), intro: z.string().optional(), fields: z.array(FormFieldSchema), changeKeys: z.array(z.string()).optional() });

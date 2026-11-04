@@ -24,6 +24,9 @@ import (
 type SiteService interface {
 	SiteConfig(ctx context.Context) (domain.SiteConfig, error)
 	Home(ctx context.Context, c *domain.Caller) (domain.Home, error)
+	// RecentlyViewed resolves browser-remembered ATINs (most recent first) into eligible product cards; the storefront
+	// hides the rail when the result is empty.
+	RecentlyViewed(ctx context.Context, atins []string) ([]domain.ProductSummary, error)
 	CheckoutCrossSell(ctx context.Context, c *domain.Caller) (*domain.Rail, error)
 	Subscribe(ctx context.Context, email string) (string, error)
 	Jobs(ctx context.Context) ([]domain.Job, error)
@@ -52,7 +55,9 @@ type SiteDeps struct {
 	Catalog   port.CatalogClient
 	Inventory port.InventoryClient
 	// Offers (optional) adds offer counts, lowest prices and the buy box winner to rail cards.
-	Offers    port.StorefrontOffersClient
+	Offers port.StorefrontOffersClient
+	// Orders (optional) feeds the signed-in "Based on your orders" rail.
+	Orders    port.OrdersClient
 	Location  LocationService
 	Estimator domain.Estimator
 	Sellers   SellerDirectory
@@ -165,6 +170,8 @@ func (s *siteServiceImpl) Home(ctx context.Context, c *domain.Caller) (domain.Ho
 	}
 	rails := make([]*domain.Rail, len(pl.Rails))
 	var wg sync.WaitGroup
+	var personal *domain.Rail
+	wg.Go(func() { personal = s.basedOnOrders(ctx, c) })
 	for i, r := range pl.Rails {
 		wg.Go(func() {
 			items, err := s.railItems(ctx, r.Source)
@@ -177,19 +184,23 @@ func (s *siteServiceImpl) Home(ctx context.Context, c *domain.Caller) (domain.Ho
 			}
 		})
 	}
+	tiles := pl.Tiles
+	for i := range tiles {
+		if len(tiles[i].Cells) > 4 {
+			tiles[i].Cells = tiles[i].Cells[:4]
+		}
+	}
+	wg.Go(func() { tiles = s.resolveTiles(ctx, tiles) })
 	wg.Wait()
-	home := domain.Home{Announcements: orEmpty(pl.Announcements), Hero: orEmpty(pl.Hero), Tiles: orEmpty(pl.Tiles),
+	home := domain.Home{Announcements: orEmpty(pl.Announcements), Hero: activeHero(pl.Hero, s.d.Clock.now()), Tiles: orEmpty(tiles),
 		Banners: orEmpty(pl.Banners), Rails: []domain.Rail{}, DeliverTo: loc}
+	if personal != nil {
+		home.Rails = append(home.Rails, *personal)
+	}
 	for _, r := range rails {
 		if r != nil {
 			home.Rails = append(home.Rails, *r)
 		}
-	}
-	for i := range home.Tiles {
-		if len(home.Tiles[i].Cells) > 4 {
-			home.Tiles[i].Cells = home.Tiles[i].Cells[:4]
-		}
-		home.Tiles[i].Cells = orEmpty(home.Tiles[i].Cells)
 	}
 	return home, nil
 }
@@ -224,9 +235,9 @@ func (s *siteServiceImpl) railItems(ctx context.Context, src domain.RailSource) 
 	}
 	now := s.d.Clock.now()
 	if src.Kind == "atins" {
-		return s.byATIN(ctx, src.ATINs, limit, now), nil
+		return eligibleOnly(s.byATIN(ctx, src.ATINs, limit, now)), nil
 	}
-	p := port.SearchParams{Q: src.Query, Market: s.d.Market, Department: src.Department, Sort: src.Sort, Size: limit, InStock: true, NoTrack: true}
+	p := port.SearchParams{Q: src.Query, Market: s.d.Market, Department: src.Department, Sort: src.Sort, Size: min(limit*2, 48), InStock: true, NoTrack: true}
 	switch src.Kind {
 	case "fulfilled-fastest":
 		p.Fulfilment = domain.FulfilledByAfroTransact
@@ -250,9 +261,12 @@ func (s *siteServiceImpl) railItems(ctx context.Context, src domain.RailSource) 
 			continue
 		}
 		for _, h := range res.Hits {
-			if !seen[h.ATIN] && len(out) < limit {
-				seen[h.ATIN] = true
-				out = append(out, summaryFromHit(h, s.d.Estimator, now))
+			if seen[h.ATIN] || len(out) >= limit {
+				continue
+			}
+			seen[h.ATIN] = true
+			if card := summaryFromHit(h, s.d.Estimator, now); eligibleCard(card) {
+				out = append(out, card)
 			}
 		}
 	}

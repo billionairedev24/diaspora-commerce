@@ -147,7 +147,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 			AppOrigins: map[string]string{"storefront": WebOrigin, "seller-center": SellerCenterOrigin, "staff-console": StaffConsoleOrigin},
 			BFFPath:    "/api/bff", Applications: sellerDeps.Sellers, OrgSync: sellerDeps.Orgs, Clock: clock.Now, Log: log}),
 		Native: app.NewNativeAuthService(upstreams.NewNativeSignIn(identityClient, upstreams.NewServiceTokens(identityClient, clientCreds)), app.NativeAuthOptions{}),
-		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Location: location,
+		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Orders: orders, Location: location,
 			Estimator: estimator, Sellers: sellers, Market: "us", Clock: clock.Now, Log: log}),
 		Location: location,
 		Search: app.NewSearchService(search, storefrontOffers, location, estimator, "us", clock.Now,

@@ -168,7 +168,7 @@ func run() error {
 			Scopes: cfg.OIDC.Scopes, WebOrigin: cfg.Web.PublicOrigin, Applications: sellerDeps.Sellers, OrgSync: sellerDeps.Orgs, Log: log}),
 		Native: app.NewNativeAuthService(upstreams.NewNativeSignIn(identityClient, serviceTokens), app.NativeAuthOptions{}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory,
-			Offers: storefrontOffers, Location: location, Estimator: estimator, Sellers: sellers, Market: cfg.Market, Log: log}),
+			Offers: storefrontOffers, Orders: orders, Location: location, Estimator: estimator, Sellers: sellers, Market: cfg.Market, Log: log}),
 		Location: location,
 		Search: app.NewSearchService(search, storefrontOffers, location, estimator, cfg.Market, nil,
 			app.WithServices(upstreams.NewCustomerBookings(client("bookings", up.Bookings)))),

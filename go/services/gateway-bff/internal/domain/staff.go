@@ -359,6 +359,24 @@ type FormField struct {
 	// Section names the group the field belongs to: the form shows a heading when it changes from one field to the next
 	// (the referral program's two reward sections).
 	Section string `json:"section,omitempty"`
+	// ShowWhen shows the field only while another field of the form holds one of the listed values (the placement form's
+	// tile and hero fields appear for their slot). A hidden field is neither sent nor validated.
+	ShowWhen *FieldCondition `json:"showWhen,omitempty"`
+}
+
+// FieldCondition is a FormField's visibility rule: the field named Key holds one of In.
+type FieldCondition struct {
+	Key string   `json:"key"`
+	In  []string `json:"in"`
+}
+
+// Hidden reports whether the field is not shown for the submitted values.
+func (f FormField) Hidden(values map[string]any) bool {
+	if f.ShowWhen == nil {
+		return false
+	}
+	have, _ := values[f.ShowWhen.Key].(string)
+	return !slices.Contains(f.ShowWhen.In, have)
 }
 
 // LookupHit is one match of a picker: the id the form sends, the name staff read and a second line.
@@ -600,6 +618,9 @@ func StaffOptions(values ...string) []FieldOption {
 func ValidateForm(f Form, values map[string]any) map[string]string {
 	errs := map[string]string{}
 	for _, fd := range f.Fields {
+		if fd.Hidden(values) {
+			continue
+		}
 		v, present := values[fd.Key]
 		if !present || v == nil || v == "" || isEmptyList(v) {
 			if fd.Required && fd.Type != "toggle" {

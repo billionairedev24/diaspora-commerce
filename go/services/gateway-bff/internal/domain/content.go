@@ -23,13 +23,19 @@ type HeroSlide struct {
 	Href     string  `json:"href"`
 	Label    string  `json:"label"`
 	ImageURL *string `json:"imageUrl"`
+	// StartsAt and EndsAt (RFC 3339, both optional) bound when the slide is shown; the BFF drops slides outside the window.
+	StartsAt *string `json:"startsAt,omitempty"`
+	EndsAt   *string `json:"endsAt,omitempty"`
 }
 
-// TileCell is one cell of a home tile.
+// TileCell is one cell of a home tile: a fixed image and link, or a rule (Source) the BFF resolves to a product, which
+// supplies the image, title and link. Source never reaches the storefront; ATIN says which product a rule picked.
 type TileCell struct {
-	Label    string  `json:"label"`
-	Href     string  `json:"href"`
-	ImageURL *string `json:"imageUrl"`
+	Label    string      `json:"label"`
+	Href     string      `json:"href"`
+	ImageURL *string     `json:"imageUrl"`
+	Source   *RailSource `json:"source,omitempty"`
+	ATIN     string      `json:"atin,omitempty"`
 }
 
 // Tile is a home grid tile with up to four cells.
@@ -71,7 +77,8 @@ type Home struct {
 	DeliverTo     DeliveryLocation `json:"deliverTo"`
 }
 
-// RailSource says how a placement rail is filled: a search (query/department/fulfilment, sorted), or explicit ATINs.
+// RailSource says how a placement rail (or a rule-based tile cell) is filled: a search (query/department/fulfilment,
+// sorted), or explicit ATINs.
 type RailSource struct {
 	Kind       string   `json:"kind"` // search | department-bestsellers | fulfilled-fastest | atins
 	Query      string   `json:"query,omitempty"`

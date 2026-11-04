@@ -92,4 +92,4 @@ export { randomUuid } from './uuid';
 export { ALL_CATEGORIES, type FeeDraftRules, normalizeFeeCategory, validateDeliveryDraft, validateFeeDraft } from './validation/fee-draft';
 export { evaluatePassword, isPasswordAcceptable, PASSWORD_MIN_LENGTH, type PasswordContext, type PasswordRule } from './validation/password';
 export { type CountryCode, type CountryOption, countryOptions, flagOf, formatPhoneAsYouType, isCountryCode, isValidMobile, isValidPhoneE164, splitE164, toE164 } from './validation/phone';
-export { validateStaffForm } from './validation/staff-form';
+export { isFieldHidden, validateStaffForm } from './validation/staff-form';

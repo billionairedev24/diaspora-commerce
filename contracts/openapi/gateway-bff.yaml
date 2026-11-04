@@ -169,13 +169,43 @@ paths:
       operationId: getHome
       security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Home page placements for the session's deliver-to location
-      description: Announcement bar, hero carousel, tiles, sponsored banners and product rails. Nothing is hard-coded in clients.
+      description: |
+        Announcement bar, hero carousel, tiles, sponsored banners and product rails. Nothing is hard-coded in clients.
+
+        Hero slides outside their optional startsAt/endsAt window are left out. A tile cell is either a fixed image and link
+        or a rule that content stores (a `source`, see content's TileCellSource) which the BFF resolves to the best eligible
+        product: the cell then carries that product's photo, title and /p/{atin} link. Eligible means in stock with a real
+        photograph (never a placeholder or icon); the same rule applies to every product rail. A rule with nothing eligible
+        drops its cell, and a tile left with fewer than two rule cells is dropped. Signed-in shoppers with past orders get a
+        leading "Based on your orders" rail (id `based-on-orders`), absent when there is nothing to show.
       responses:
         '200':
           description: Placements
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Home'}
+  /v1/home/recently-viewed:
+    get:
+      tags: [Site]
+      operationId: getRecentlyViewed
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Product cards for the products this browser viewed last
+      description: |
+        The storefront remembers viewed ATINs in the browser (nothing is stored server side) and asks for their cards here.
+        Order is kept (most recent first); unknown, unavailable, out-of-stock and photo-less products are dropped. The
+        storefront hides the rail when `items` is empty.
+      parameters:
+        - {name: atins, in: query, required: true, description: 'Comma separated ATINs, most recent first; at most 12 are used.', schema: {type: string}}
+      responses:
+        '200':
+          description: Cards
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/ProductSummary'}}
   /v1/newsletter/subscriptions:
     post:
       tags: [Site]
@@ -4338,6 +4368,9 @@ components:
         href: {type: string}
         label: {type: string, description: '"AfroTransact" or "Sponsored"'}
         imageUrl: {type: [string, 'null']}
+        startsAt: {type: string, format: date-time, description: Present only when the slide is scheduled to start
+          (it is already active when served)}
+        endsAt: {type: string, format: date-time, description: Present only when the slide is scheduled to end}
     Tile:
       type: object
       required: [id, title, cta, href, cells]
@@ -4353,9 +4386,10 @@ components:
             type: object
             required: [label, href, imageUrl]
             properties:
-              label: {type: string}
-              href: {type: string}
-              imageUrl: {type: [string, 'null']}
+              label: {type: string, description: The product title for a rule cell}
+              href: {type: string, description: '/p/{atin} for a rule cell'}
+              imageUrl: {type: [string, 'null'], description: A real product photograph for a rule cell}
+              atin: {type: string, description: The product a rule cell resolved to; absent on fixed-image cells}
     Banner:
       type: object
       required: [id, slot, advertiser, title, sub, cta, href, imageUrl]

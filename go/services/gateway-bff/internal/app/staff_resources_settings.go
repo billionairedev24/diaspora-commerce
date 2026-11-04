@@ -345,14 +345,27 @@ func placementsResource(key string) *staffResource {
 		return p
 	}
 	slots := domain.StaffOptions("hero_carousel", "display_banner", "home_tiles", "home_product_row", "announcement_bar")
-	baseFields := func(o jobj) []domain.FormField {
-		return []domain.FormField{
+	baseFields := func(o jobj, create bool) []domain.FormField {
+		fields := []domain.FormField{
 			withValue(withMax(ff("name", "Name", "text", true), 120), jstr(o, "name")),
 			withValue(withMax(ff("text", "Text or headline", "text", true), 140), headline(o)),
 			withValue(withPattern(ff("href", "Link", "text", false), `^/`, "A storefront path starting with /"), jstr(o, "payload.href")),
 			withValue(ff("startsAt", "Starts", "datetime", true), jstr(o, "schedule.startsAt")),
 			withValue(ff("endsAt", "Ends", "datetime", false), jstr(o, "schedule.endsAt")),
 		}
+		switch slot := jstr(o, "slot"); {
+		case create:
+			cta := onlyFor(withValue(withMax(ff("cta", "Button text", "text", false), 40), ""), slotHomeTiles, true)
+			fields = append(fields, cta)
+			fields = append(fields, heroFields(o, true)...)
+			fields = append(fields, tileFields(o, true)...)
+		case slot == slotHomeTiles:
+			fields = append(fields, withValue(withMax(ff("cta", "Button text", "text", false), 40), jstr(o, "payload.cta")))
+			fields = append(fields, tileFields(o, false)...)
+		case slot == slotHeroCarousel:
+			fields = append(fields, heroFields(o, false)...)
+		}
+		return fields
 	}
 	return &staffResource{
 		key: key, module: "marketing", title: title, statusKey: "status", exportable: true,
@@ -387,11 +400,15 @@ func placementsResource(key string) *staffResource {
 		actions: placementStaffActions(key, act),
 		edit: &staffEdit{permission: "content:placements.edit",
 			form: func(o jobj) domain.Form {
-				return domain.Form{Title: "Edit draft", SubmitLabel: "Save draft", Fields: baseFields(o)}
+				return domain.Form{Title: "Edit draft", SubmitLabel: "Save draft", Fields: baseFields(o, false)}
 			},
 			save: func(ctx context.Context, sc staffCtx, o jobj, v jobj, _ string) error {
 				schedule := omitEmpty(jobj{"startsAt": vs(v, "startsAt"), "endsAt": vs(v, "endsAt")})
-				body := jobj{"slot": jstr(o, "slot"), "name": vs(v, "name"), "payload": payloadOf(jstr(o, "slot"), v, o), "schedule": schedule,
+				payload := payloadOf(jstr(o, "slot"), v, o)
+				if errs := applySlotFields(jstr(o, "slot"), v, payload); len(errs) > 0 {
+					return domain.ValidationProblem(errs)
+				}
+				body := jobj{"slot": jstr(o, "slot"), "name": vs(v, "name"), "payload": payload, "schedule": schedule,
 					"priority": int(num(o, "priority")), "paid": boolean(o, "paid"), "expectedVersion": int64(num(o, "version"))}
 				for _, k := range []string{"targeting", "frequencyCap"} {
 					if val, ok := o[k]; ok && val != nil {
@@ -405,7 +422,7 @@ func placementsResource(key string) *staffResource {
 			}},
 		create: &staffCreate{permission: "content:placements.edit",
 			form: func(context.Context, staffCtx) domain.Form {
-				fields := baseFields(jobj{})
+				fields := baseFields(jobj{}, !announcements)
 				if !announcements {
 					fields = append([]domain.FormField{withOptions(ff("slot", "Slot", "select", true), slots)}, fields...)
 					fields = append(fields, withMax(ff("advertiser", "Advertiser (paid ads)", "text", false), 80))
@@ -421,7 +438,11 @@ func placementsResource(key string) *staffResource {
 				if !announcements {
 					slot = vs(v, "slot")
 				}
-				body := jobj{"slot": slot, "name": vs(v, "name"), "payload": payloadOf(slot, v, nil),
+				payload := payloadOf(slot, v, nil)
+				if errs := applySlotFields(slot, v, payload); len(errs) > 0 {
+					return "", domain.ValidationProblem(errs)
+				}
+				body := jobj{"slot": slot, "name": vs(v, "name"), "payload": payload,
 					"schedule": omitEmpty(jobj{"startsAt": vs(v, "startsAt"), "endsAt": vs(v, "endsAt")}), "priority": 10,
 					"paid": vs(v, "advertiser") != "", "targeting": jobj{"markets": []string{"us"}}}
 				if a := vs(v, "advertiser"); a != "" {

@@ -346,6 +346,23 @@ func TestPendingUpstreamsAnswer503(t *testing.T) {
 	}
 }
 
+func TestRecentlyViewedCards(t *testing.T) {
+	_, b := setup(t, testkit.Options{Content: true})
+	// Order is kept, duplicates collapse, and out-of-stock (garri), unknown and malformed ids are dropped.
+	r := b.do("GET", "/v1/home/recently-viewed?atins=ATSHEA0001,ATGARI0001,ATJOLLOF01,ATSHEA0001,ATNOPE0000,bad", nil)
+	mustStatus(t, r, 200)
+	items := r.json(t)["items"].([]any)
+	if len(items) != 2 || items[0].(map[string]any)["atin"] != "ATSHEA0001" || items[1].(map[string]any)["atin"] != "ATJOLLOF01" {
+		t.Fatalf("items = %v", items)
+	}
+	// Nothing remembered: an empty list (the storefront hides the rail), not an error.
+	r = b.do("GET", "/v1/home/recently-viewed", nil)
+	mustStatus(t, r, 200)
+	if items := r.json(t)["items"].([]any); len(items) != 0 {
+		t.Fatalf("items = %v", items)
+	}
+}
+
 func TestContentBackedScreens(t *testing.T) {
 	bff, b := setup(t, testkit.Options{Content: true})
 	r := b.do("GET", "/v1/site-config", nil)
@@ -374,8 +391,9 @@ func TestContentBackedScreens(t *testing.T) {
 		home["banners"].([]any)[0].(map[string]any)["slot"] != "home-mid" || len(rails) != 2 || rails[0].(map[string]any)["title"] != "Pantry staples" {
 		t.Fatalf("home = %v", home)
 	}
-	if items := rails[0].(map[string]any)["items"].([]any); len(items) != 2 {
-		t.Fatalf("OR rail should merge jollof and garri hits: %v", items)
+	// Both terms are searched, but the garri hit is out of stock: rails only show in-stock products with a real photo.
+	if items := rails[0].(map[string]any)["items"].([]any); len(items) != 1 || items[0].(map[string]any)["atin"] != "ATJOLLOF01" {
+		t.Fatalf("OR rail should keep only the in-stock jollof hit: %v", items)
 	}
 	if picked := rails[1].(map[string]any)["items"].([]any); len(picked) != 1 || picked[0].(map[string]any)["offerId"] != "ATSHEAV001" {
 		t.Fatalf("atin rail = %v", picked)

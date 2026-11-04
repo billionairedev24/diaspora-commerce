@@ -7854,6 +7854,14 @@ components:
         placeholder: {type: string}
         value: {$ref: '#/components/schemas/FieldValue'}
         section: {type: string, description: 'The group the field belongs to; the form shows a heading when it changes from one field to the next (the referral program''s two reward sections)'}
+        showWhen: {$ref: '#/components/schemas/FieldCondition'}
+    FieldCondition:
+      type: object
+      description: Shows a field only while another field of the form holds one of the listed values (the placement form's tile and hero fields appear for their slot). A hidden field is neither sent nor validated.
+      required: [key, in]
+      properties:
+        key: {type: string}
+        in: {type: array, items: {type: string}}
     Form:
       type: object
       required: [title, submitLabel, fields]

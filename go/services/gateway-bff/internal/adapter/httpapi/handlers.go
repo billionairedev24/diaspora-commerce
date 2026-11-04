@@ -127,6 +127,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	// Site & content
 	route("GET /v1/site-config", h.siteConfig)
 	route("GET /v1/home", h.home)
+	route("GET /v1/home/recently-viewed", h.recentlyViewed)
 	route("POST /v1/newsletter/subscriptions", lookup(h.newsletter))
 	// Legal & privacy center
 	route("GET /v1/legal", h.legalIndex)
@@ -277,6 +278,12 @@ func (h *handlersImpl) siteConfig(w http.ResponseWriter, r *http.Request) {
 func (h *handlersImpl) home(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Site.Home(r.Context(), callerFrom(r.Context()))
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// recentlyViewed resolves the ATINs the browser remembers (comma separated, most recent first) into product cards.
+func (h *handlersImpl) recentlyViewed(w http.ResponseWriter, r *http.Request) {
+	items, err := h.s.Site.RecentlyViewed(r.Context(), strings.Split(r.URL.Query().Get("atins"), ","))
+	h.reply(w, r, http.StatusOK, map[string]any{"items": items}, err)
 }
 
 func (h *handlersImpl) newsletter(w http.ResponseWriter, r *http.Request) {

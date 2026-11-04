@@ -3885,6 +3885,45 @@ components:
         payloadSchema:
           type: object
           description: JSON Schema 2020-12
+    HeroCarouselPayload:
+      type: object
+      description: Payload of a hero_carousel placement. startsAt/endsAt are optional per-slide bounds (RFC 3339); outside the
+        window the gateway does not return the slide. They sit in the payload so a campaign can carry its own dates next to
+        the placement's review/schedule window.
+      required: [theme, kicker, title, sub, cta, href, label]
+      properties:
+        theme: {type: string, enum: [ink, gold, green, sand]}
+        kicker: {type: string, maxLength: 40}
+        title: {type: string, maxLength: 60}
+        sub: {type: string, maxLength: 160}
+        cta: {type: string, maxLength: 40}
+        href: {type: string, maxLength: 300}
+        label: {type: string, enum: [AfroTransact, Sponsored]}
+        imageUrl: {type: [string, 'null'], maxLength: 500}
+        imageAlt: {type: string, maxLength: 160}
+        startsAt: {type: [string, 'null'], format: date-time}
+        endsAt: {type: [string, 'null'], format: date-time}
+    TileCellSource:
+      type: object
+      description: A rule that picks the product shown in a home tile cell (the same shape as a product rail's source). The
+        gateway resolves it to the best product that is in stock and has a real photograph, and fills the cell's image,
+        title and link from it. A product appears in one cell of the page only.
+      required: [kind]
+      properties:
+        kind: {type: string, enum: [search, department-bestsellers, fulfilled-fastest, atins]}
+        query: {type: string, maxLength: 120}
+        department: {type: string, maxLength: 60, description: 'Top-level department, e.g. Fashion'}
+        sort: {type: string, enum: [relevance, rating, newest, price_asc, price_desc], description: 'rating = top rated, newest = new in'}
+        atins: {type: array, maxItems: 24, items: {type: string}}
+        limit: {type: integer, minimum: 1, maximum: 24}
+    HomeTileCell:
+      type: object
+      description: A cell of a home_tiles placement. Give either label + href (+ imageUrl) for a fixed cell, or a source rule.
+      properties:
+        label: {type: string, maxLength: 40}
+        href: {type: string, maxLength: 300}
+        imageUrl: {type: [string, 'null'], maxLength: 500}
+        source: {$ref: '#/components/schemas/TileCellSource'}
     SiteConfig:
       type: object
       description: Public site configuration (visible socials only)

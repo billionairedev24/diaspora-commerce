@@ -12,6 +12,7 @@ const (
 	SortPriceDesc = "price_desc"
 	SortRating    = "rating"
 	SortFastest   = "fastest"
+	SortNewest    = "newest"
 )
 
 // DefaultSearchSize is the BFF's default page size.
