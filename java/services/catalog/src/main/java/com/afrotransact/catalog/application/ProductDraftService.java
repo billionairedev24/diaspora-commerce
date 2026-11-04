@@ -3,6 +3,8 @@ package com.afrotransact.catalog.application;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.catalog.domain.DraftListItem;
+import com.afrotransact.catalog.domain.DraftSortField;
 import com.afrotransact.catalog.domain.SavedDraft;
 
 /**
@@ -14,6 +16,13 @@ public interface ProductDraftService {
 
     /** The organisation's drafts, most recently saved first (at most 100). */
     List<SavedDraft> list();
+
+    /**
+     * One page of the organisation's drafts for the drafts table: {@code text} searches title and category path,
+     * {@code newOnly} leaves out the unsaved edits of existing products. {@code size} is capped at 100.
+     */
+    PageView<DraftListItem> search(String text, boolean newOnly, DraftSortField sort, boolean descending, int page,
+                                   int size);
 
     SavedDraft get(UUID id);
 

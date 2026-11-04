@@ -3,6 +3,7 @@ package com.afrotransact.catalog.adapter.in.web;
 import java.time.Instant;
 import java.util.UUID;
 
+import com.afrotransact.catalog.domain.DraftListItem;
 import com.afrotransact.catalog.domain.SavedDraft;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
@@ -30,10 +31,13 @@ final class DraftDtos {
     }
 
     @Schema(name = "ProductDraftSummary")
-    record DraftSummary(UUID id, UUID productId, String title, String categoryPath, Instant updatedAt, long version) {
+    record DraftSummary(UUID id, UUID productId, String title, String categoryPath, Instant updatedAt, long version,
+                        @Schema(description = "How many of the five basics (category, title, a photo, a price, a "
+                                + "description) the draft still lacks; 0 = ready to review") int todo) {
 
-        static DraftSummary of(SavedDraft d) {
-            return new DraftSummary(d.id(), d.productId(), d.title(), d.categoryPath(), d.updatedAt(), d.version());
+        static DraftSummary of(DraftListItem d) {
+            return new DraftSummary(d.id(), d.productId(), d.title(), d.categoryPath(), d.updatedAt(), d.version(),
+                    d.todo());
         }
     }
 

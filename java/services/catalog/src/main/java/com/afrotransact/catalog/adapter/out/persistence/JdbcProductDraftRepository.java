@@ -4,9 +4,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.catalog.domain.DraftListItem;
 import com.afrotransact.catalog.domain.SavedDraft;
 import com.afrotransact.catalog.port.ProductDraftRepository;
 import com.afrotransact.platform.web.error.ConflictException;
@@ -20,6 +22,23 @@ class JdbcProductDraftRepository implements ProductDraftRepository {
             select id, owner_org, created_by, product_id, title, category_path, payload::text as payload, created_at,
                    updated_at, version
             from product_draft
+            """;
+
+    /**
+     * How many of the five basics the saved payload lacks (see {@link DraftListItem#CHECKS}): a category (or a
+     * requested one), a title, a photo, a price (single offer or any variant row) and a 40-character description.
+     */
+    private static final String TODO = """
+            (case when coalesce(payload->>'categoryId', '') = '' and coalesce(payload#>>'{request,id}', '') = ''
+                  then 1 else 0 end
+             + case when btrim(coalesce(title, '')) = '' then 1 else 0 end
+             + case when jsonb_typeof(payload->'images') is distinct from 'array'
+                         or jsonb_array_length(payload->'images') = 0 then 1 else 0 end
+             + case when coalesce(payload#>>'{single,price}', '') = ''
+                         and not exists (select 1 from jsonb_each(case when jsonb_typeof(payload->'rows') = 'object'
+                                                                       then payload->'rows' else '{}'::jsonb end) r
+                                         where coalesce(r.value->>'price', '') <> '') then 1 else 0 end
+             + case when length(btrim(coalesce(payload->>'description', ''))) < 40 then 1 else 0 end)
             """;
 
     private final JdbcClient jdbc;
@@ -70,6 +89,35 @@ class JdbcProductDraftRepository implements ProductDraftRepository {
     public List<SavedDraft> findByOwnerOrg(String orgId, int limit) {
         return jdbc.sql(SELECT + " where owner_org = :org order by updated_at desc limit :limit")
                 .param("org", orgId).param("limit", limit).query(JdbcProductDraftRepository::map).list();
+    }
+
+    @Override
+    public DraftPage search(DraftQuery q) {
+        String text = q.text() == null ? "" : q.text().strip().toLowerCase(Locale.ROOT);
+        String where = " where owner_org = :org"
+                + (q.newOnly() ? " and product_id is null" : "")
+                + (text.isEmpty() ? "" : " and (lower(title) like :text escape '!'"
+                        + " or lower(coalesce(category_path, '')) like :text escape '!')");
+        String direction = q.descending() ? " desc" : " asc";
+        String order = switch (q.sort()) {
+            case TITLE -> "lower(title)";
+            case CATEGORY -> "lower(coalesce(category_path, ''))";
+            case UPDATED_AT -> "updated_at";
+        } + direction + ", id";
+        JdbcClient.StatementSpec count = jdbc.sql("select count(*) from product_draft" + where).param("org", q.orgId());
+        JdbcClient.StatementSpec rows = jdbc.sql("select id, product_id, title, category_path, updated_at, version, "
+                + TODO + " as todo from product_draft" + where + " order by " + order + " limit :limit offset :offset")
+                .param("org", q.orgId()).param("limit", q.size()).param("offset", (long) q.page() * q.size());
+        if (!text.isEmpty()) {
+            String pattern = "%" + text.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+            count = count.param("text", pattern);
+            rows = rows.param("text", pattern);
+        }
+        long total = count.query(Long.class).single();
+        List<DraftListItem> items = rows.query((rs, n) -> new DraftListItem(rs.getObject("id", UUID.class),
+                rs.getObject("product_id", UUID.class), rs.getString("title"), rs.getString("category_path"),
+                rs.getTimestamp("updated_at").toInstant(), rs.getLong("version"), rs.getInt("todo"))).list();
+        return new DraftPage(items, total, q.page(), q.size());
     }
 
     @Override

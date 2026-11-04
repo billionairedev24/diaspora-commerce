@@ -7,10 +7,14 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
+import com.afrotransact.catalog.domain.DraftListItem;
+import com.afrotransact.catalog.domain.DraftSortField;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.SavedDraft;
 import com.afrotransact.catalog.port.ProductDraftRepository;
+import com.afrotransact.catalog.port.ProductDraftRepository.DraftPage;
+import com.afrotransact.catalog.port.ProductDraftRepository.DraftQuery;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PermissionChecker;
@@ -49,6 +53,16 @@ class ProductDraftServiceImpl implements ProductDraftService {
     @Transactional(readOnly = true)
     public List<SavedDraft> list() {
         return drafts.findByOwnerOrg(owner().orgId(), LIST_LIMIT);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageView<DraftListItem> search(String text, boolean newOnly, DraftSortField sort, boolean descending,
+                                          int page, int size) {
+        DraftPage p = drafts.search(new DraftQuery(owner().orgId(), text, newOnly,
+                sort == null ? DraftSortField.UPDATED_AT : sort, descending, Math.max(0, page),
+                Math.min(Math.max(1, size), LIST_LIMIT)));
+        return new PageView<>(p.items(), p.total(), p.page(), p.size());
     }
 
     @Override
