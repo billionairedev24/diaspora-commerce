@@ -76,8 +76,29 @@ organisation's department requests.
   `POST /v1/department-requests/{id}/decision` `{approve, note}`: approving adds the department at once.
   `PUT /v1/orgs/{orgId}/catalog-scope/departments` `{departments, reason}` replaces an organisation's set (reason of at
   least 10 characters, department codes checked against the catalog).
-  These are API only for now; there is no screen in the staff console's organisations page yet (no BFF route either).
+  A rejection needs a note (3+ characters), which the seller reads. Both decisions are audited: seller-service publishes
+  `seller.department_request.decided` and `seller.org.departments_changed` (who, what changed, why) on
+  `at.seller-application.events` and trust-ops copies them into the audit log. `GET /v1/department-requests/{id}` reads one
+  request. The decided queue lists the newest decisions first (at most 200 per status).
+  The staff console has a screen for all of this, see below.
 * **Demo data**: `POST /v1/orgs` (provisioning, local and dev only) accepts `departments` and adds them on every call.
+
+## Staff console
+
+Module **Department requests** (key `deptRequests`, Partners group, `/department-requests`). No new permission: its level
+derives from the seller service's own (`applications:review` = VIEW, `applications:approve` = EDIT), so it is hidden
+without them. The pending count is its nav badge (`GET /v1/staff/session`).
+
+| BFF route (`gateway-bff-staff.yaml`, tag Department requests) | Does |
+|---|---|
+| `GET /v1/staff/department-requests` | Pending / Decided (`status=PENDING|DECIDED|APPROVED|REJECTED`), filters `department`, `organisation`, `from`, `to`, `sort`, `page`, `size`; joins organisation, department and people names |
+| `GET /v1/staff/department-requests/{id}` | One request: compliance prompts with `satisfied` (from the request's `needs`; null for a rejected one), the organisation's current departments by name |
+| `POST .../{id}/approve` `{note?}`, `POST .../{id}/reject` `{reason}` | Decide (reason required, 3-500 characters); a request already decided is `409 ALREADY_DONE` |
+| `GET/PUT /v1/staff/organisations/{orgId}/departments` | An organisation's departments and the catalog to choose from; the override needs a reason (10+), a real change and catalog codes |
+
+The decision is one person's (the application review's two-step maker-checker is not used for department decisions in
+seller-service). The Organisations sheet shows a **Departments** section with **Edit** (multi-select, required reason,
+Save disabled when unchanged). Screens show names only; department codes travel in the API but are never printed.
 
 ## Seller Center
 

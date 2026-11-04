@@ -4,6 +4,7 @@ import { type StaffModuleKey } from '@afrotransact/api-client';
 
 import { CatalogView } from '@/components/catalog/CatalogView';
 import { DashboardView } from '@/components/dashboard/DashboardView';
+import { DepartmentRequestsView } from '@/components/departments/DepartmentRequestsView';
 import { DispatchView } from '@/components/dispatch/DispatchView';
 import { ExportsView } from '@/components/exports/ExportsView';
 import { FeesView } from '@/components/fees/FeesView';
@@ -31,6 +32,8 @@ export function ModuleScreen({ module }: { module: StaffModuleKey }) {
       return <ExportsView />;
     case 'catalog':
       return <CatalogView />;
+    case 'deptRequests':
+      return <DepartmentRequestsView />;
     case 'support':
       return <SupportView />;
     case 'fees':
