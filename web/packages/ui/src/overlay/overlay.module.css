@@ -1,4 +1,6 @@
 .overlay { position: fixed; inset: 0; background: var(--at-color-overlay); z-index: var(--at-z-dialog); }
+/* A modal sheet's overlay sits just under the sheet (drawer layer), never over it, or the sheet is dimmed and cannot be used. */
+.sheetOverlay { z-index: calc(var(--at-z-drawer) - 1); }
 
 .dialog {
   position: fixed;

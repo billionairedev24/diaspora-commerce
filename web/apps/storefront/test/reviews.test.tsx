@@ -56,12 +56,14 @@ describe('ratings section of the product page (mock BFF)', () => {
     expect(screen.queryByRole('button', { name: 'Write a review' })).not.toBeInTheDocument();
   });
 
-  it('shows no write link and no explanation to a shopper who did not receive the item', async () => {
+  it('shows no reviews section at all when there are none and the shopper did not receive the item', async () => {
     await signInDemo();
     renderWithProviders(<ProductReviews atin={RICE} title="Rice" />);
-    await waitFor(() => expect(screen.getByTestId('product-reviews')).toBeInTheDocument());
+    await new Promise((r) => setTimeout(r, 400)); // let the reviews and eligibility queries settle
+    // No reviews and not a buyer: the whole section is absent (no heading, no "0 reviews", no explanation).
+    expect(screen.queryByTestId('product-reviews')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Write a review' })).not.toBeInTheDocument();
-    expect(screen.queryByText(/only customers who received/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/reviews/i)).not.toBeInTheDocument();
   });
 });
 

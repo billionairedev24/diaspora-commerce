@@ -154,12 +154,25 @@ export function ProductReviews({ atin, title }: { atin: string; title: string })
     setStars(n);
     setPage(0);
   };
+  const hasReviews = (data?.rating.count ?? 0) > 0 || (data?.total ?? 0) > 0;
+  const canWrite = signedIn && mine.data?.eligible === true;
+  // Reviews are shown only when there are some. With none, a shopper who received the item sees just the way to write
+  // one; everyone else sees nothing (no heading, no "0 reviews", no explanation of who may review).
+  if (list.isPending || (!list.isError && !hasReviews && !canWrite && !own)) return null;
+  if (!list.isError && !hasReviews && !own) {
+    return (
+      <section className={styles.section} id="reviews" data-testid="product-reviews">
+        <div className={styles.summary}>
+          <Button variant="neutral" onClick={() => setWriting(true)}>{t('rev.write')}</Button>
+        </div>
+        {writing && <ReviewSheet atin={atin} title={title} open={writing} onOpenChange={setWriting} />}
+      </section>
+    );
+  }
   return (
     <section className={styles.section} aria-labelledby="reviews-title" id="reviews" data-testid="product-reviews">
       <div className={styles.summary}>
         <h2 className={styles.h2} id="reviews-title">{t('rev.title')}</h2>
-        {list.isPending && <Skeleton height={160} />}
-        {data && data.rating.count === 0 && <p className={styles.muted}>{t('rev.none')}</p>}
         {data && data.rating.count > 0 && (
           <>
             <div className={styles.average}>
@@ -170,7 +183,7 @@ export function ProductReviews({ atin, title }: { atin: string; title: string })
             <Breakdown rating={data.rating} stars={stars} onPick={pick} />
           </>
         )}
-        {signedIn && mine.data?.eligible && (
+        {canWrite && (
           <Button variant="neutral" onClick={() => setWriting(true)}>{t('rev.write')}</Button>
         )}
       </div>
