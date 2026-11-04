@@ -197,8 +197,10 @@ describe('product form v2 (S309): wide cards of sections with proper dropdowns',
     fireEvent.change(await screen.findByLabelText('Product title'), { target: { value: 'Zobo leaves, dried' } });
     await waitFor(() => expect(getSellerDb().drafts).toHaveLength(1), { timeout: 4000 });
     expect(nav.replace).toHaveBeenCalledWith(expect.stringMatching(/^\/listings\/new\?draft=draft-\d+$/), { scroll: false });
+    nav.search = new URLSearchParams('tab=drafts');
     await renderScreen(<ListingsView />);
     expect(await screen.findByRole('link', { name: 'Zobo leaves, dried' })).toHaveAttribute('href', expect.stringContaining('/listings/new?draft='));
+    nav.search = new URLSearchParams();
   });
 });
 

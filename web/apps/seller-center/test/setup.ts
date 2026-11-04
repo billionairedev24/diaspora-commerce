@@ -20,12 +20,12 @@ afterEach(() => {
   }
 });
 
-export const nav = { pathname: '/', push: vi.fn(), replace: vi.fn() };
+export const nav = { pathname: '/', search: new URLSearchParams(), push: vi.fn(), replace: vi.fn() };
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: nav.push, replace: nav.replace, refresh: vi.fn(), back: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => nav.pathname,
-  useSearchParams: () => new URLSearchParams()
+  useSearchParams: () => nav.search
 }));
 
 // Every screen talks to the in-process seller MSW runtime (the same handlers `pnpm dev:mocks` serves).

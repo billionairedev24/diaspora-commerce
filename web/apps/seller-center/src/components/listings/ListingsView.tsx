@@ -1,124 +1,48 @@
 'use client';
 
 import { type ListingRow, sellerKeys, sellerQueries } from '@afrotransact/api-client';
-import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Badge, Button, buttonClassName, useToast } from '@afrotransact/ui';
-import { FileArrowUp, ImagesSquare, PencilSimple, Plus, Ruler, Trash } from '@phosphor-icons/react/ssr';
+import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
+import { Badge, Button, buttonClassName, InlineEdit, RowName, Tabs, useToast } from '@afrotransact/ui';
+import { Eye, FileArrowUp, ImagesSquare, Pause, PencilSimple, Play, Plus, Ruler, Stack, Truck } from '@phosphor-icons/react/ssr';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { ModulePage } from '@/components/ui/ModulePage';
 import { ErrorState, problemMessage } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
-import { dateTime, money, shortDate } from '@/lib/format';
+import { idempotencyKey, money, shortDate } from '@/lib/format';
+import { useStorefrontUrl } from '@/lib/runtime-config';
 import { useSeller } from '@/lib/session';
 import { exportTable, pollExport, runForEach } from '@/lib/table-export';
 
+import { DraftsTable } from './DraftsTable';
+import { priceMinor } from './form-model';
 import { FulfilmentSheet } from './FulfilmentSheet';
 import { QuickStockSheet } from './QuickStockSheet';
+import { useSavePrice } from './useSavePrice';
 
-/** Listings: server-driven table (one search over every column, sort, pages, selection, exports) with pause/resume
-    (one row or many), edit, autosaved drafts of the one-step form, "Add a product" and "Bulk upload". */
+const MAX_STOCK = 100_000;
+/** Statuses that read as news next to the name; a live listing needs no chip there (the Status column says it). */
+const ATTENTION = new Set(['IN_REVIEW', 'REJECTED', 'TAKEN_DOWN', 'PENDING_CATEGORY_APPROVAL', 'PAUSED']);
+
+/** Listings: two server-driven tables on tabs, "Listings" (search, sort, pages, selection, exports, click-to-edit price
+    and stock, a "⋯" menu per row) and "Drafts" (autosaved forms waiting to be finished). */
 export function ListingsView() {
-  const api = sellerApi();
   const t = useT();
-  const qc = useQueryClient();
-  const [fulfilment, setFulfilment] = useState<ListingRow | null>(null);
-  const [stockOf, setStockOf] = useState<ListingRow | null>(null);
-  const toast = useToast();
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
   const { orgId, can, has } = useSeller();
   const editable = can('listings');
-  const state = useTableState({ searchParams: useSearchParams() });
-  const q = useQuery({
-    ...sellerQueries.listings(api, orgId, { q: state.q || undefined, sort: state.sort, page: state.pagination.pageIndex, size: state.pagination.pageSize }),
-    placeholderData: keepPreviousData
-  });
-  const toggle = useMutation({
-    mutationFn: (r: ListingRow) => api.setListingActive(r.productId, r.status !== 'LIVE'),
-    onSuccess: (r) => {
-      void qc.invalidateQueries({ queryKey: sellerKeys.listings(orgId) });
-      toast.show(r.status === 'LIVE' ? 'Listing is live again' : 'Listing paused');
-    },
-    onError: (e) => toast.show(problemMessage(e), 'error')
-  });
-  const drafts = useQuery({ ...sellerQueries.productDrafts(api, orgId), enabled: editable });
-  const discard = useMutation({
-    mutationFn: (id: string) => api.deleteProductDraft(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: sellerKeys.productDrafts(orgId) });
-      toast.show(t('sc.listings.draftDiscarded'));
-    },
-    onError: (e) => toast.show(problemMessage(e), 'error')
-  });
-  const newDrafts = (drafts.data?.items ?? []).filter((d) => !d.productId);
-  const columns = useMemo<ColumnDef<ListingRow>[]>(
-    () => [
-      {
-        id: 'title', accessorFn: (r) => r.title, header: 'Product', size: 320, meta: { kind: 'strong' },
-        cell: ({ row }) => (
-          <span className="flex flex-col">
-            <strong className="font-semibold">{row.original.title}</strong>
-            {row.original.moderationNote ? <span className="text-xs text-danger">{row.original.moderationNote}</span> : null}
-          </span>
-        )
-      },
-      { id: 'atin', accessorFn: (r) => r.atin ?? undefined, header: 'ATIN', size: 130, meta: { kind: 'mono' }, cell: ({ row }) => <span className="font-mono text-xs">{row.original.atin ?? '—'}</span> },
-      { id: 'sku', accessorFn: (r) => r.sku, header: 'SKU', size: 150, meta: { kind: 'mono' }, cell: ({ row }) => <span className="font-mono text-xs">{row.original.sku}{row.original.variantCount > 1 ? ` +${row.original.variantCount - 1}` : ''}</span> },
-      { id: 'variantCount', accessorFn: (r) => r.variantCount, header: 'Variants', size: 90, meta: { kind: 'number', align: 'end' } },
-      { id: 'priceMinor', accessorFn: (r) => r.priceMinor, header: 'Price', size: 100, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.priceMinor, row.original.currency) },
-      { id: 'stock', accessorFn: (r) => r.stock, header: 'Stock', size: 80, meta: { kind: 'number', align: 'end' }, cell: ({ row }) => {
-          const low = row.original.stock <= 5;
-          return editable && row.original.atin ? (
-            <button type="button" className={`link-button inline-flex items-center gap-1 border-0 bg-transparent p-0 hover:underline ${low ? 'font-semibold text-danger' : 'text-text'}`} onClick={() => setStockOf(row.original)} aria-label={t('sc.stock.buttonAria', { title: row.original.title })}>
-              {row.original.stock} <PencilSimple size={12} aria-hidden />
-            </button>
-          ) : (
-            <span className={low ? 'font-semibold text-danger' : undefined}>{row.original.stock}</span>
-          );
-        } },
-      {
-        id: 'fulfilment', accessorFn: (r) => t(`sc.ff.${r.fulfilment}`), header: 'Fulfilment', size: 140,
-        cell: ({ row }) => (
-          <span className="flex flex-col items-start gap-1">
-            <Badge tone={row.original.fulfilment === 'SELLER' ? 'seller' : 'fulfilled'}>{t(`sc.ff.${row.original.fulfilment}`)}</Badge>
-            {row.original.atin ? (
-              <button type="button" className="link-button p-0 text-xs text-link hover:underline" onClick={() => setFulfilment(row.original)} aria-label={t('sc.ff.buttonAria', { title: row.original.title })}>
-                {t('sc.ff.button')}
-              </button>
-            ) : null}
-          </span>
-        )
-      },
-      { id: 'status', accessorFn: (r) => r.statusLabel, header: 'Status', size: 140, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.statusLabel}</StatusPill> },
-      {
-        id: 'updatedAt', accessorFn: (r) => r.updatedAt, header: 'Updated', size: 120, meta: { kind: 'datetime' }, cell: ({ row }) => shortDate(row.original.updatedAt)
-      },
-      {
-        id: 'action', header: () => <span className="at-visually-hidden">Action</span>, size: 180, enableSorting: false, meta: { export: false, label: 'Action' },
-        cell: ({ row }) =>
-          editable ? (
-            <span className="flex flex-wrap items-center gap-2">
-              {row.original.status !== 'TAKEN_DOWN' ? (
-                <Link href={`/listings/${encodeURIComponent(row.original.productId)}/edit`} className={buttonClassName({ variant: 'neutral', size: 'sm' })} aria-label={t('sc.listings.editAria', { title: row.original.title })}>
-                  <PencilSimple size={14} aria-hidden /> {t('sc.listings.edit')}
-                </Link>
-              ) : null}
-              {row.original.status === 'LIVE' || row.original.status === 'PAUSED' ? (
-                <Button size="sm" variant="neutral" disabled={toggle.isPending} onClick={() => toggle.mutate(row.original)}>
-                  {row.original.status === 'LIVE' ? 'Pause' : 'Resume'}
-                </Button>
-              ) : null}
-            </span>
-          ) : null
-      }
-    ],
-    [editable, toggle, t]
-  );
+  const api = sellerApi();
+  const tab = editable && params.get('tab') === 'drafts' ? 'drafts' : 'listings';
+  // The tab's count comes from the API total (a page of one row is enough to read it).
+  const draftCount = useQuery({ ...sellerQueries.productDraftPage(api, orgId, { kind: 'new', page: 0, size: 1 }), enabled: editable });
   return (
     <ModulePage
       module="listings"
@@ -138,44 +62,203 @@ export function ListingsView() {
             </Link>
           ) : null}
           <Link href="/listings/new" className={buttonClassName({ variant: 'primary' })}>
-            <Plus size={18} aria-hidden /> Add a product
+            <Plus size={18} aria-hidden /> {t('sc.listings.add')}
           </Link>
         </>
       ) : null}
     >
-      {newDrafts.length ? (
-        <section aria-labelledby="listing-drafts" className="flex flex-col gap-2 rounded-md border border-border bg-surface p-3">
-          <h2 id="listing-drafts" className="m-0 text-md font-semibold">{t('sc.listings.drafts', { count: newDrafts.length })}</h2>
-          <ul className="m-0 flex list-none flex-col gap-1 p-0">
-            {newDrafts.slice(0, 5).map((d) => (
-              <li key={d.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" data-testid="draft-row">
-                <Link href={`/listings/new?draft=${encodeURIComponent(d.id)}`} className="font-semibold">{d.title || t('sc.listings.untitled')}</Link>
-                <span className="text-xs text-muted">{d.categoryPath ? `${d.categoryPath} · ` : ''}{t('sc.listings.draftSaved', { time: dateTime(d.updatedAt) })}</span>
-                <button type="button" className="ml-auto inline-flex items-center gap-1 border-0 bg-transparent p-0 text-xs text-danger" disabled={discard.isPending} onClick={() => discard.mutate(d.id)}
-                  aria-label={t('sc.listings.discardAria', { title: d.title || t('sc.listings.untitled') })}>
-                  <Trash size={14} aria-hidden /> {t('sc.listings.discard')}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      {editable ? (
+        <Tabs
+          label={t('sc.listings.tabs')}
+          value={tab}
+          onValueChange={(v) => router.replace(v === 'drafts' ? `${pathname}?tab=drafts` : pathname, { scroll: false })}
+          items={[
+            { value: 'listings', label: t('sc.listings.tab.listings'), content: tab === 'listings' ? <ListingsTable /> : null },
+            {
+              value: 'drafts',
+              label: draftCount.data ? t('sc.listings.tab.drafts', { count: draftCount.data.total.toLocaleString() }) : t('sc.listings.tab.drafts', { count: '…' }),
+              content: tab === 'drafts' ? <DraftsTable /> : null
+            }
+          ]}
+        />
+      ) : (
+        <ListingsTable />
+      )}
+    </ModulePage>
+  );
+}
+
+function ListingsTable() {
+  const api = sellerApi();
+  const t = useT();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const storefront = useStorefrontUrl();
+  const savePrice = useSavePrice();
+  const router = useRouter();
+  // The router object is not guaranteed stable; the columns must be, or open menus would close on every render.
+  const routerRef = useRef(router);
+  routerRef.current = router;
+  const go = useCallback((href: string) => routerRef.current.push(href), []);
+  const { orgId, can } = useSeller();
+  const editable = can('listings');
+  const [fulfilment, setFulfilment] = useState<ListingRow | null>(null);
+  const [stockOf, setStockOf] = useState<ListingRow | null>(null);
+  const state = useTableState({ searchParams: useSearchParams() });
+  const q = useQuery({
+    ...sellerQueries.listings(api, orgId, { q: state.q || undefined, sort: state.sort, page: state.pagination.pageIndex, size: state.pagination.pageSize }),
+    placeholderData: keepPreviousData
+  });
+  const refresh = () => void qc.invalidateQueries({ queryKey: sellerKeys.listings(orgId) });
+  const toggle = useMutation({
+    mutationFn: (r: ListingRow) => api.setListingActive(r.productId, r.status !== 'LIVE'),
+    onSuccess: (r) => {
+      refresh();
+      toast.show(t(r.status === 'LIVE' ? 'sc.listings.toast.resumed' : 'sc.listings.toast.paused'));
+    },
+    onError: (e) => toast.show(problemMessage(e), 'error')
+  });
+  const saveStock = async (row: ListingRow, quantity: number) => {
+    const a = await api.adjustStock({ sku: row.sku, quantity, reason: 'STOCK_TAKE' }, idempotencyKey());
+    toast.show(t('sc.stock.saved', { sku: a.sku, quantity: a.quantity }));
+    refresh();
+    void qc.invalidateQueries({ queryKey: sellerKeys.org(orgId) });
+  };
+  const columns = useMemo<ColumnDef<ListingRow>[]>(
+    () => [
+      {
+        id: 'title', accessorFn: (r) => r.title, header: t('sc.listings.col.product'), size: 320, meta: { kind: 'strong', label: t('sc.listings.col.product') },
+        cell: ({ row }) => {
+          const r = row.original;
+          return (
+            <RowName
+              href={editable && r.status !== 'TAKEN_DOWN' ? `/listings/${encodeURIComponent(r.productId)}/edit` : undefined}
+              linkAs={Link}
+              badge={ATTENTION.has(r.status) ? <StatusPill tone={toneOf(r.status)}>{r.statusLabel}</StatusPill> : null}
+              meta={
+                <>
+                  {r.atin ? <span className="font-mono">{r.atin}</span> : null}
+                  {r.moderationNote ? <span className="block text-danger">{r.moderationNote}</span> : null}
+                </>
+              }
+            >
+              {r.title}
+            </RowName>
+          );
+        }
+      },
+      {
+        id: 'sku', accessorFn: (r) => r.sku, header: t('sc.listings.col.sku'), size: 150, meta: { kind: 'mono', label: t('sc.listings.col.sku') },
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.sku}{row.original.variantCount > 1 ? ` +${row.original.variantCount - 1}` : ''}</span>
+      },
+      {
+        id: 'priceMinor', accessorFn: (r) => r.priceMinor, header: t('sc.listings.col.price'), size: 120, meta: { kind: 'money', align: 'end', label: t('sc.listings.col.price') },
+        cell: ({ row }) => {
+          const r = row.original;
+          const shown = r.variantCount > 1 ? t('sc.listings.pricesFrom', { price: money(r.priceMinor, r.currency) }) : money(r.priceMinor, r.currency);
+          // One offer, a listing that can still be edited: click to change the price right here.
+          if (!editable || r.variantCount !== 1 || r.status === 'TAKEN_DOWN') return shown;
+          return (
+            <InlineEdit
+              value={(r.priceMinor / 100).toFixed(2)}
+              label={t('sc.listings.editPriceOf', { title: r.title })}
+              saveLabel={t('sc.rows.save')}
+              cancelLabel={t('sc.rows.cancel')}
+              inputMode="decimal"
+              validate={(v) => (priceMinor(v) === null ? t('sc.listings.price.invalid') : undefined)}
+              onSave={async (v) => {
+                const minor = priceMinor(v) ?? 0;
+                try {
+                  await savePrice(r, minor);
+                } catch (e) {
+                  throw new Error(problemMessage(e));
+                }
+                toast.show(t('sc.listings.price.saved', { title: r.title, price: money(minor, r.currency) }));
+              }}
+            >
+              {shown}
+            </InlineEdit>
+          );
+        }
+      },
+      {
+        id: 'stock', accessorFn: (r) => r.stock, header: t('sc.listings.col.stock'), size: 100, meta: { kind: 'number', align: 'end', label: t('sc.listings.col.stock') },
+        cell: ({ row }) => {
+          const r = row.original;
+          const low = r.stock <= 5;
+          const shown = <span className={low ? 'font-semibold text-danger' : undefined}>{r.stock}</span>;
+          // One seller-held offer: click to count it. Several variants go through "Update stock by variant"; AfroTransact-held stock lives in Inventory.
+          if (!editable || r.variantCount !== 1 || r.fulfilment !== 'SELLER' || !r.atin || r.status === 'TAKEN_DOWN') return shown;
+          return (
+            <InlineEdit
+              value={String(r.stock)}
+              label={t('sc.listings.editStockOf', { title: r.title })}
+              saveLabel={t('sc.rows.save')}
+              cancelLabel={t('sc.rows.cancel')}
+              inputMode="numeric"
+              width={7}
+              validate={(v) => (/^\d+$/.test(v) && Number(v) <= MAX_STOCK ? undefined : t('sc.stock.invalid', { max: MAX_STOCK.toLocaleString() }))}
+              onSave={async (v) => {
+                try {
+                  await saveStock(r, Number(v));
+                } catch (e) {
+                  throw new Error(problemMessage(e));
+                }
+              }}
+            >
+              {shown}
+            </InlineEdit>
+          );
+        }
+      },
+      {
+        id: 'fulfilment', accessorFn: (r) => t(`sc.ff.${r.fulfilment}`), header: t('sc.listings.col.fulfilment'), size: 140, meta: { label: t('sc.listings.col.fulfilment') },
+        cell: ({ row }) => <Badge tone={row.original.fulfilment === 'SELLER' ? 'seller' : 'fulfilled'}>{t(`sc.ff.${row.original.fulfilment}`)}</Badge>
+      },
+      {
+        id: 'status', accessorFn: (r) => r.statusLabel, header: t('sc.listings.col.status'), size: 140, meta: { kind: 'status', label: t('sc.listings.col.status') },
+        cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.statusLabel}</StatusPill>
+      },
+      { id: 'updatedAt', accessorFn: (r) => r.updatedAt, header: t('sc.listings.col.updated'), size: 120, meta: { kind: 'datetime', label: t('sc.listings.col.updated') }, cell: ({ row }) => shortDate(row.original.updatedAt) },
+      rowActionsColumn<ListingRow>({
+        header: t('sc.rows.actionsHeader'),
+        name: (r) => r.title,
+        label: (r) => t('sc.rows.actionsFor', { name: r.title }),
+        items: (r) => [
+          editable && { label: t('sc.listings.edit'), icon: <PencilSimple size={16} aria-hidden />, onSelect: () => go(`/listings/${encodeURIComponent(r.productId)}/edit`), disabled: r.status === 'TAKEN_DOWN' ? t('sc.listings.a.takenDown') : false },
+          r.status === 'LIVE' && !!r.atin && { label: t('sc.listings.a.view'), icon: <Eye size={16} aria-hidden />, href: `${storefront.replace(/\/+$/, '')}/p/${encodeURIComponent(r.atin)}`, external: true },
+          editable && (r.status === 'LIVE' || r.status === 'PAUSED') && {
+            label: t(r.status === 'LIVE' ? 'sc.listings.a.pause' : 'sc.listings.a.resume'),
+            icon: r.status === 'LIVE' ? <Pause size={16} aria-hidden /> : <Play size={16} aria-hidden />,
+            onSelect: () => toggle.mutate(r)
+          },
+          editable && !!r.atin && r.variantCount > 1 && r.fulfilment === 'SELLER' && { label: t('sc.listings.a.stock'), icon: <Stack size={16} aria-hidden />, onSelect: () => setStockOf(r) },
+          editable && !!r.atin && { label: t('sc.listings.a.fulfilment'), icon: <Truck size={16} aria-hidden />, onSelect: () => setFulfilment(r) }
+        ]
+      })
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the mutation objects change every render; their callbacks read the latest values
+    [editable, t, storefront, savePrice, go]
+  );
+  return (
+    <>
       <DataTable<ListingRow>
         id="seller.listings"
-        label="Listings"
+        label={t('sc.listings.tab.listings')}
         columns={columns}
         data={q.data?.items ?? []}
         getRowId={(r) => r.productId}
         rowLabel={(r) => r.title}
+        onRowClick={editable ? (r) => (r.status === 'TAKEN_DOWN' ? undefined : go(`/listings/${encodeURIComponent(r.productId)}/edit`)) : undefined}
         state={state}
         total={q.data?.total ?? null}
         loading={q.isPending}
         fetching={q.isFetching}
         partial={q.data?.partial}
         error={q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : undefined}
-        searchPlaceholder="Search title, SKU, ATIN, price, status…"
-        empty="No listings yet — add your first product."
-        noMatches="No listings match."
+        searchPlaceholder={t('sc.listings.search')}
+        empty={t('sc.listings.empty')}
+        noMatches={t('sc.listings.noMatches')}
         onExport={(req) => exportTable('listings', req)}
         pollExport={pollExport}
         bulkActions={
@@ -183,17 +266,17 @@ export function ListingsView() {
             ? (rows, clear) => {
                 const run = async (active: boolean) => {
                   const r = await runForEach(rows.filter((x) => x.status === (active ? 'PAUSED' : 'LIVE')), (x) => api.setListingActive(x.productId, active), active ? 'resumed' : 'paused', problemMessage);
-                  void qc.invalidateQueries({ queryKey: sellerKeys.listings(orgId) });
+                  refresh();
                   toast.show(r.text, r.tone);
                   clear();
                 };
                 return (
                   <>
                     <Button size="sm" variant="neutral" onClick={() => void run(false)} disabled={!rows.some((x) => x.status === 'LIVE')}>
-                      Pause live
+                      {t('sc.listings.bulk.pause')}
                     </Button>
                     <Button size="sm" variant="neutral" onClick={() => void run(true)} disabled={!rows.some((x) => x.status === 'PAUSED')}>
-                      Resume paused
+                      {t('sc.listings.bulk.resume')}
                     </Button>
                   </>
                 );
@@ -203,6 +286,6 @@ export function ListingsView() {
       />
       <FulfilmentSheet listing={fulfilment} onClose={() => setFulfilment(null)} />
       <QuickStockSheet listing={stockOf} onClose={() => setStockOf(null)} />
-    </ModulePage>
+    </>
   );
 }
