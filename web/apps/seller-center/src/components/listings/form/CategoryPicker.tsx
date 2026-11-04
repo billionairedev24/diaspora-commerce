@@ -6,7 +6,7 @@ import { HourglassMedium, LockSimple } from '@phosphor-icons/react/ssr';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
-import { RequestDepartmentLink } from '@/components/listings/RequestDepartment';
+import { RequestDepartmentButton, RequestDepartmentDialog, useCanRequestDepartment } from '@/components/listings/RequestDepartment';
 import { problemMessage } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
@@ -34,6 +34,8 @@ export function CategoryPicker({ tree, s, locked, error, onChoose }: Props) {
   const leaves = useMemo(() => leavesOf(tree), [tree]);
   const [use, setUse] = useState<CategoryUse>(() => readUse());
   const [reqOpen, setReqOpen] = useState(false);
+  const [deptOpen, setDeptOpen] = useState(false);
+  const canRequestDepartment = useCanRequestDepartment();
   const [req, setReq] = useState({ parentPath: '', name: '', exampleProduct: '', detailsNeeded: '' });
   const [reqErr, setReqErr] = useState<Record<string, string>>({});
   const request = useMutation({
@@ -72,6 +74,16 @@ export function CategoryPicker({ tree, s, locked, error, onChoose }: Props) {
     writeUse(next);
   };
 
+  // A store with no department yet has nothing to pick: asking for one is the way forward.
+  if (!leaves.length && !s.request && canRequestDepartment) {
+    return (
+      <div id={fieldId.category} className="flex flex-col items-start gap-2">
+        <p className="m-0 text-sm text-muted">{t('sc.pf.category.noDepartments')}</p>
+        <RequestDepartmentButton />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <Combobox
@@ -93,13 +105,14 @@ export function CategoryPicker({ tree, s, locked, error, onChoose }: Props) {
         onChange={(v) => { if (v !== REQUESTED) choose(v); }}
         onCreate={(text) => { setReq((r) => ({ ...r, name: text })); setReqOpen(true); }}
         createLabel={(text) => t('sc.pf.category.requestNamed', { name: text })}
+        footerAction={canRequestDepartment ? { label: t('sc.scope.requestRow'), onSelect: () => setDeptOpen(true) } : undefined}
       />
+      {deptOpen ? <RequestDepartmentDialog onClose={() => setDeptOpen(false)} /> : null}
       {s.request ? (
         <p className="m-0 flex items-center gap-2 text-xs text-muted">
           <HourglassMedium size={16} aria-hidden /> {t('sc.pf.category.requested', { reference: s.request.reference })}
         </p>
       ) : null}
-      <RequestDepartmentLink />
       {reqOpen ? (
         <form
           className="flex flex-col gap-1 rounded-sm bg-surface-muted p-3"

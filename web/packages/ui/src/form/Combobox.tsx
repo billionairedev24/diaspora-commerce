@@ -48,12 +48,14 @@ export interface ComboboxProps {
   resultsLabel?: (count: number) => string;
   /** Accessible name of the list. */
   listLabel?: string;
+  /** A row that always closes the list, whatever is typed ("Don’t see it? Request it"): it runs an action instead of choosing a value. */
+  footerAction?: { label: string; onSelect: () => void };
 }
 
 const fold = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
 interface Row {
-  kind: 'option' | 'create' | 'heading';
+  kind: 'option' | 'create' | 'heading' | 'footer';
   key: string;
   option?: ComboboxOption;
   text: string;
@@ -66,7 +68,7 @@ interface Row {
  */
 export function Combobox({
   label, options, value, onChange, recent = [], popular = [], onCreate, createLabel = (t) => `Add “${t}”`, clearable = false, placeholder, error, help, id, name, disabled,
-  limit = 50, recentLabel = 'Recent', popularLabel = 'Popular', allLabel = 'All', emptyLabel = 'No matches', resultsLabel = (n) => `${n} results`, listLabel
+  limit = 50, recentLabel = 'Recent', popularLabel = 'Popular', allLabel = 'All', emptyLabel = 'No matches', resultsLabel = (n) => `${n} results`, listLabel, footerAction
 }: ComboboxProps) {
   const auto = useId().replace(/:/g, '');
   const listId = `cb${auto}-list`;
@@ -79,7 +81,7 @@ export function Combobox({
   const chosen = options.find((o) => o.value === value);
   const shownText = editing ? query : (chosen?.text ?? chosen?.label ?? value);
 
-  const rows = useMemo<Row[]>(() => {
+  const baseRows = useMemo<Row[]>(() => {
     const q = query.trim();
     const out: Row[] = [];
     const add = (o: ComboboxOption) => out.push({ kind: 'option', key: `o-${o.value}`, option: o, text: o.label });
@@ -123,9 +125,11 @@ export function Combobox({
     }
     return out;
   }, [options, query, editing, recent, popular, onCreate, limit, recentLabel, popularLabel, allLabel]);
+  const rows = useMemo<Row[]>(() => (footerAction ? [...baseRows, { kind: 'footer', key: 'footer', text: footerAction.label }] : baseRows), [baseRows, footerAction]);
 
   const selectable = rows.flatMap((r, i) => (r.kind === 'heading' ? [] : [i]));
   const count = selectable.length;
+  const resultCount = rows.filter((r) => r.kind === 'option' || r.kind === 'create').length;
   const activeRow = open && count ? selectable[Math.min(active, count - 1)] : undefined;
   const optionId = (i: number) => `cb${auto}-o${i}`;
 
@@ -136,7 +140,8 @@ export function Combobox({
   };
   const choose = (row: Row | undefined) => {
     if (!row) return;
-    if (row.kind === 'create') onCreate?.(row.text);
+    if (row.kind === 'footer') footerAction?.onSelect();
+    else if (row.kind === 'create') onCreate?.(row.text);
     else if (row.option) onChange(row.option.value);
     close();
   };
@@ -236,12 +241,14 @@ export function Combobox({
                     role="option"
                     aria-selected={r.option ? r.option.value === value : false}
                     data-active={i === activeRow}
-                    className={styles.option}
+                    className={r.kind === 'footer' ? `${styles.option} ${styles.footer}` : styles.option}
                     onMouseDown={(e) => e.preventDefault()}
                     onMouseEnter={() => setActive(selectable.indexOf(i))}
                     onClick={() => choose(r)}
                   >
-                    {r.kind === 'create' ? (
+                    {r.kind === 'footer' ? (
+                      <span className={`${styles.label} ${styles.create}`}>{r.text}</span>
+                    ) : r.kind === 'create' ? (
                       <span className={`${styles.label} ${styles.create}`}>{createLabel(r.text)}</span>
                     ) : (
                       <>
@@ -252,10 +259,10 @@ export function Combobox({
                   </li>
                 )
               )}
-              {count === 0 ? <li role="presentation" className={styles.empty}>{emptyLabel}</li> : null}
+              {resultCount === 0 ? <li role="presentation" className={styles.empty}>{emptyLabel}</li> : null}
             </ul>
           ) : null}
-          <span role="status" aria-live="polite" className="at-visually-hidden">{open && editing ? resultsLabel(count) : ''}</span>
+          <span role="status" aria-live="polite" className="at-visually-hidden">{open && editing ? resultsLabel(resultCount) : ''}</span>
         </div>
       )}
     </Field>

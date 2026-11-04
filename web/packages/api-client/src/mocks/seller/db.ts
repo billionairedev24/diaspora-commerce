@@ -65,6 +65,8 @@ export interface MockSellerDb {
   categoryRequests: CategoryRequest[];
   /** Requests to sell in another department, per organisation (newest first). */
   departmentRequests: Record<string, SellerDepartmentRequest[]>;
+  /** Tests and demos: catalog cannot work out the departments (GET seller/catalog/categories answers 503 catalog.scope-unavailable). */
+  scopeUnavailable: boolean;
   /** Brands this organisation typed in: pending review, visible to it only, scoped to a department. */
   pendingBrands: { id: string; name: string; departmentId: string }[];
   payouts: Payout[];
@@ -539,6 +541,7 @@ function freshDb(now: Date): MockSellerDb {
     listings: seedListings(now),
     pendingBrands: [],
     departmentRequests: {},
+    scopeUnavailable: false,
     categoryRequests: [{ id: 'cr-1', reference: 'REQ-4821', path: 'Fashion › Women › Bridal aso-ebi sets', status: 'PENDING_REVIEW', decisionNote: null, createdAt: iso(new Date(now.getTime() - 2 * DAY)) }],
     payouts: [
       { id: 'po_77012', amountMinor: 93210, currency: 'USD', status: 'PAID', requestedAt: iso(new Date(now.getTime() - 7 * DAY)), holdReason: null, failureMessage: null },

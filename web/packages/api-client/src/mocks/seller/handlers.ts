@@ -1697,7 +1697,10 @@ export const sellerHandlers = [
       return importView(imp);
     }, 202)
   ),
-  http.get(`${W}/catalog/categories`, route((ctx) => scopedTree(ctx))),
+  http.get(`${W}/catalog/categories`, route((ctx) => {
+    if (ctx.db.scopeUnavailable) throw new SellerProblem(503, 'catalog.scope-unavailable', 'Service unavailable', 'We could not work out which departments this store sells in.');
+    return scopedTree(ctx);
+  })),
   http.get(`${W}/catalog-scope`, route((ctx) => catalogScope(ctx))),
   http.get(`${W}/departments`, route(() => MOCK_DEPARTMENTS.map((d) => ({ code: d.code, name: d.name, requires: d.requires })))),
   http.post(

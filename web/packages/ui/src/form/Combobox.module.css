@@ -25,6 +25,7 @@
 .option[aria-selected='true'] .label { font-weight: var(--at-weight-semibold); }
 .label { overflow-wrap: anywhere; }
 .description { font-size: var(--at-text-xs); color: var(--at-color-text-muted); overflow-wrap: anywhere; }
+.footer { border-top: 1px solid var(--at-color-border); }
 .create { color: var(--at-color-link); font-weight: var(--at-weight-semibold); }
 .empty { padding: var(--at-space-2) var(--at-space-3); font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
 .caret { position: absolute; right: var(--at-space-3); top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--at-color-text-muted); }

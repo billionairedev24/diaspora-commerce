@@ -21,12 +21,32 @@ const NEEDS_KEY: Record<DepartmentRequirement, 'sc.scope.needsFood' | 'sc.scope.
  * department the organisation cannot sell in yet, add a note, send. Staff approve; what the department asks for (a food
  * permit, beauty labelling) is said in the answer. Nothing is shown to organisations that already have every department.
  */
+/** Whether the member may ask for another department (a provider organisation and Retail have none to ask for; a read-only role cannot). */
+export function useCanRequestDepartment(): boolean {
+  const { exempt } = useSellerScope();
+  const { can, isProvider } = useSeller();
+  return !exempt && !isProvider && can('listings');
+}
+
+/** The same request as a button ("Request a department"): the main action when the store has no departments, and in the settings. */
+export function RequestDepartmentButton({ variant = 'primary' }: { variant?: 'primary' | 'neutral' }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const allowed = useCanRequestDepartment();
+  if (!allowed) return null;
+  return (
+    <>
+      <Button variant={variant} onClick={() => setOpen(true)}>{t('sc.scope.requestButton')}</Button>
+      {open ? <RequestDepartmentDialog onClose={() => setOpen(false)} /> : null}
+    </>
+  );
+}
+
 export function RequestDepartmentLink({ className }: { className?: string }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const { exempt } = useSellerScope();
-  const { can, isProvider } = useSeller();
-  if (exempt || isProvider || !can('listings')) return null;
+  const allowed = useCanRequestDepartment();
+  if (!allowed) return null;
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className={className ?? 'w-fit cursor-pointer border-0 bg-transparent p-0 text-xs text-muted underline hover:text-text'}>
