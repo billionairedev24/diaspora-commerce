@@ -59,6 +59,7 @@ var StaffNav = []StaffNavGroupDef{
 		{"orgs", "orgs", "Sellers & providers", "Every seller and service-provider organisation on the marketplace, plus Stripe Connect compliance."},
 		{"apps", "apps", "Applications", "Seller and service-provider onboarding queue. Every application goes through two people: a reviewer, then a different approver."},
 		{"support", "", "Customer support", "Lola hand-offs, customer lookup, refunds within your limit, notifications and shipments."},
+		{DepartmentRequestsModule, "", "Department requests", "Sellers ask to sell in another catalog department. Approve or reject each request, with the reason the seller reads."},
 		{"rbac", "rbac", "Users & roles", "Who can do what in every back office. Role changes are audited."},
 	}},
 	{"finance", "Finance", []StaffModule{
@@ -135,6 +136,17 @@ func (a StaffAccess) Level(module string) string {
 		case a.CanAny(PermPlansManage, PermBillingAdjust):
 			return LevelEdit
 		case a.CanAny(PermSellerBilling, "billing:usage"):
+			return LevelView
+		default:
+			return LevelNone
+		}
+	case DepartmentRequestsModule:
+		// Derived from the seller service's own permissions (identity's matrix has no column for it): the same ones
+		// that guard application review and approval.
+		switch {
+		case a.Can(PermApplicationsApprove):
+			return LevelEdit
+		case a.Can(PermApplicationsReview):
 			return LevelView
 		default:
 			return LevelNone

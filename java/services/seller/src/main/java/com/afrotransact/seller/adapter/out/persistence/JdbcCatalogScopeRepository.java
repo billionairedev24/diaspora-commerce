@@ -90,7 +90,8 @@ class JdbcCatalogScopeRepository implements CatalogScopeRepository {
 
     @Override
     public List<DepartmentRequest> queue(DepartmentRequestStatus status, int limit) {
-        return jdbc.sql("select * from department_request where status = :status order by created_at limit :limit")
+        String order = status == DepartmentRequestStatus.PENDING ? "created_at" : "decided_at desc, created_at desc";
+        return jdbc.sql("select * from department_request where status = :status order by " + order + " limit :limit")
                 .param("status", status.name()).param("limit", limit).query(JdbcCatalogScopeRepository::request)
                 .list();
     }

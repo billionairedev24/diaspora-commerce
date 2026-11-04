@@ -31,6 +31,25 @@ Notes on approve, flag and send-back are internal. Only the message on *Return t
 shown to the applicant. Staff names are never shown to applicants.
 :::
 
+## Department requests
+
+A seller can only sell in the catalog departments recorded for its organisation. When a seller asks for another one
+(*Need another department? Request it* in Seller Center), the request appears under **Partners, Department requests**
+(you see it with the `applications:review` permission; deciding needs `applications:approve`: Super Admin, Operations
+Manager and Trust & Safety). The number of requests waiting is the badge on the sidebar entry.
+
+- **Pending** and **Decided** tabs; filter by department, by organisation name (the search box) and by the days the
+  request was made. Click a row to open it.
+- The request shows who asked, the seller's note, the organisation's current departments and what the department asks
+  for (a food permit, beauty labelling) with whether the organisation's compliance data already has it.
+- **Approve** (optional note) adds the department at once. **Reject** needs a reason; the seller reads it.
+- One person decides; unlike applications there is no second approver. Every decision is audited (who, what, why).
+
+To change an organisation's departments yourself, open it under **Partners, Sellers & providers**: the **Departments**
+section lists them by name, and **Edit** (with `applications:approve`) lets you choose from the catalog's departments.
+A reason of at least 10 characters is required and the button stays off until something changed. Live products in a
+department you remove stay live, but their category cannot be changed.
+
 ## Review moderation
 
 Reviews that failed the automatic checks, and reviews customers or sellers reported, appear in **Catalog, Moderation queue**

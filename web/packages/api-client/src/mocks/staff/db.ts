@@ -6,6 +6,7 @@ import { type ActivityEntry, type ResourceKey } from '../../schemas/staff';
 import { HELP_ARTICLES } from '../fixtures/help';
 import { COOKIE_CATEGORIES, COOKIE_TABLE } from '../fixtures/legal';
 import { MOCK_STOREFRONT_URL, type MockContentState, seedContent } from './content-pages';
+import { MOCK_DEPARTMENT_ORGS, type MockDepartmentsState, seedDepartments } from './departments';
 import { type MockDispatch, seedDispatch } from './dispatch';
 import { seedExchangeRates } from './exchange-rates';
 import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
@@ -59,6 +60,8 @@ export interface MockStaffDb {
   preorders: MockPreorderState;
   /** content's draft markets: countries → states → cities (Markets & locations). */
   markets: MockMarketsState;
+  /** seller's department requests and organisations' departments (Department requests). */
+  departments: MockDepartmentsState;
   /** search's synonym rules (Search analytics). */
   search: MockSearchState;
   /** content's legal and help authoring: versions, revisions and working drafts (Settings → Published pages). */
@@ -674,7 +677,7 @@ function seed(now: Date): MockStaffDb {
     lolaUsed: 0,
     user: { id: 'stf-1', firstName: 'Ifeoma', lastName: 'Okafor', email: 'ifeoma@afrotransact.com' },
     records: {
-      users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, 'category-requests': seedCategoryRequests(now), moderation, 'product-reviews': productReviews, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
+      users, roles, applications, organisations: MOCK_DEPARTMENT_ORGS.map((o, i) => rec(o.id, { name: o.name, kind: 'SELLER', plan: o.exempt ? 'Platform' : pick(['STARTER', 'GROWTH', 'PRO']), createdAt: ago(60 + i * 20), status: 'APPROVED' })), 'connect-accounts': [], orders, products, 'category-requests': seedCategoryRequests(now), moderation, 'product-reviews': productReviews, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'careers-jobs': careers, 'cookie-definitions': cookieDefinitions, 'privacy-requests': privacyRequests, announcements, placements,
       'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, recoveries, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
@@ -689,6 +692,7 @@ function seed(now: Date): MockStaffDb {
     templates: { rows: seedTemplateRows(), samples: seedTemplateSamples() },
     preorders: seedPreorders(now),
     markets: seedMarkets(),
+    departments: seedDepartments(now),
     search: seedSearch(),
     content: seedContent(now, helpArticles.map((r) => ({ slug: r.id, title: String(r.fields.title), summary: String(r.fields.summary), topic: String(r.fields.topic), status: String(r.fields.status), body: String(r.fields.sections), updatedAt: String(r.fields.updatedAt) }))),
     taxonomy: seedTaxonomy(),
@@ -704,6 +708,7 @@ export function getStaffDb(): MockStaffDb {
   // A database seeded before pre-orders existed (dev server kept across reloads) gets them on first use.
   g[KEY].preorders ??= seedPreorders(g[KEY].now);
   g[KEY].markets ??= seedMarkets();
+  g[KEY].departments ??= seedDepartments(g[KEY].now);
   g[KEY].search ??= seedSearch();
   g[KEY].content ??= seedContent(g[KEY].now, []);
   g[KEY].taxonomy ??= seedTaxonomy();

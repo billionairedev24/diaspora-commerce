@@ -18,8 +18,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
+import com.afrotransact.platform.web.error.NotFoundException;
 import com.afrotransact.seller.domain.ApplicationData;
 import com.afrotransact.seller.domain.CatalogScope;
 import com.afrotransact.seller.domain.ComplianceSection;
@@ -46,8 +48,9 @@ class CatalogScopeServiceImplTest {
     private final OrganisationRepository orgs = mock(OrganisationRepository.class);
     private final DepartmentDirectory directory = mock(DepartmentDirectory.class);
     private final AccessGuard access = mock(AccessGuard.class);
+    private final DomainEventPublisher events = mock(DomainEventPublisher.class);
     private final CatalogScopeServiceImpl service = new CatalogScopeServiceImpl(scopes, applications, orgs, directory,
-            access, new SellerSettings(Set.of("US"), List.of(), "org_retail"), Clock.fixed(NOW, ZoneOffset.UTC));
+            access, new SellerSettings(Set.of("US"), List.of(), "org_retail"), Clock.fixed(NOW, ZoneOffset.UTC), events);
 
     private final Actor member = new Actor("user_1", PrincipalType.SELLER_MEMBER, Optional.of("org_1"), Set.of("seller.owner"),
             Set.of());
@@ -132,6 +135,40 @@ class CatalogScopeServiceImplTest {
     }
 
     @Test
+    void everyDecisionIsAuditedWithWhoWhatAndWhy() {
+        UUID id = UUID.randomUUID();
+        when(scopes.findRequest(id)).thenReturn(Optional.of(new DepartmentRequest(id, "org_1", "groceries", null,
+                DepartmentRequestStatus.PENDING, "user_1", NOW, null, null, null, Set.of())));
+        when(scopes.update(any())).thenAnswer(i -> i.getArgument(0));
+        service.decide(id, false, "  Upload your food permit first ");
+        verify(events).publish(eq(SellerEvents.DEPARTMENT_REQUEST_DECIDED), eq(SellerEvents.AGGREGATE_APPLICATION),
+                eq("org_1"), eq(new DepartmentRequestDecidedPayload(id, "org_1", "groceries", "REJECTED", "staff_1",
+                        "Upload your food permit first", NOW)));
+    }
+
+    @Test
+    void staffReadOneRequestAndAnUnknownOneIsNotFound() {
+        UUID id = UUID.randomUUID();
+        when(scopes.findRequest(id)).thenReturn(Optional.of(new DepartmentRequest(id, "org_1", "groceries", "spices",
+                DepartmentRequestStatus.PENDING, "user_1", NOW, null, null, null, Set.of())));
+        when(applications.findByOrg("org_1")).thenReturn(Optional.empty());
+        assertThat(service.request(id).needs()).containsExactly(Department.Requirement.FOOD_PERMIT);
+        assertThatThrownBy(() -> service.request(UUID.randomUUID()))
+                .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void aRejectionNeedsAReasonTheSellerCanRead() {
+        UUID id = UUID.randomUUID();
+        when(scopes.findRequest(id)).thenReturn(Optional.of(new DepartmentRequest(id, "org_1", "groceries", null,
+                DepartmentRequestStatus.PENDING, "user_1", NOW, null, null, null, Set.of())));
+        assertThatThrownBy(() -> service.decide(id, false, "  ")).isInstanceOf(SellerRuleViolation.class);
+        assertThatThrownBy(() -> service.decide(id, false, null)).isInstanceOf(SellerRuleViolation.class);
+        verify(scopes, never()).update(any());
+        verify(events, never()).publish(any(), any(), any(), any());
+    }
+
+    @Test
     void staffChangeTheSetOnlyWithAReasonAndFromTheCatalogsDepartments() {
         assertThatThrownBy(() -> service.setDepartments("org_1", Set.of("fashion"), "short"))
                 .isInstanceOf(SellerRuleViolation.class);
@@ -141,6 +178,9 @@ class CatalogScopeServiceImplTest {
         when(scopes.requestsOf("org_1")).thenReturn(List.of());
         CatalogScope scope = service.setDepartments("org_1", Set.of("fashion"), "Confirmed by phone call");
         verify(scopes).replace("org_1", Set.of("fashion"), "STAFF", "staff_1", NOW);
+        verify(events).publish(eq(SellerEvents.DEPARTMENTS_CHANGED), eq(SellerEvents.AGGREGATE_APPLICATION), eq("org_1"),
+                eq(new DepartmentsChangedPayload("org_1", List.of("fashion"), List.of("fashion"), List.of(), List.of(),
+                        "staff_1", "Confirmed by phone call", NOW)));
         assertThat(scope.departments()).containsExactly("fashion");
         assertThatThrownBy(() -> service.setDepartments("org_retail", Set.of(), "Retail sells everything"))
                 .isInstanceOf(SellerStateConflict.class);

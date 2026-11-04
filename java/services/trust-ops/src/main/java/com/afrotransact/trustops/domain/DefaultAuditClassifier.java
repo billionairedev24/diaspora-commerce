@@ -1,8 +1,11 @@
 package com.afrotransact.trustops.domain;
 
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Mapping for the audit-worthy events in contracts/asyncapi/events.yaml: identity role and permission grants,
@@ -47,6 +50,12 @@ public final class DefaultAuditClassifier implements AuditClassifier {
             case "mcp.tool.invoked" -> Optional.of(new AuditFacts(s(p, "subject"), "AI_AGENT", eventType, "MCP_TOOL",
                     s(p, "tool"), s(p, "orgId"), "MCP " + s(p, "toolset") + " tool " + s(p, "tool") + " via "
                     + s(p, "clientId") + ": " + s(p, "outcome")));
+            case "seller.department_request.decided" -> Optional.of(new AuditFacts(s(p, "actorId"), "STAFF", eventType,
+                    "DEPARTMENT_REQUEST", first(s(p, "requestId"), key), first(s(p, "orgId"), key),
+                    ("APPROVED".equals(s(p, "decision")) ? "Approved" : "Rejected") + " the request to sell in "
+                    + label(s(p, "departmentCode")) + reason(p)));
+            case "seller.org.departments_changed" -> Optional.of(new AuditFacts(s(p, "actorId"), "STAFF", eventType,
+                    "ORG", first(s(p, "orgId"), key), first(s(p, "orgId"), key), departmentsSummary(p)));
             case "orders.shipment.status_changed", "orders.shipment.cancelled" -> override(eventType, p);
             case "preorder.window.paused", "preorder.window.resumed" -> Optional.of(new AuditFacts(
                     first(s(p, "actorId"), "system"), "STAFF", eventType, "PREORDER_WINDOW", first(s(p, "windowId"), key),
@@ -85,6 +94,27 @@ public final class DefaultAuditClassifier implements AuditClassifier {
             default -> "Edited";
         };
         return verb + " delivery location " + s(p, "name") + reason(p);
+    }
+
+    /** "home-art" read as "Home art" (department codes are catalog node codes; the audit entry has no names). */
+    private static String label(String code) {
+        if (code == null || code.isBlank()) {
+            return "a department";
+        }
+        String text = code.replace('-', ' ').replace('_', ' ').trim();
+        return text.substring(0, 1).toUpperCase(Locale.ROOT) + text.substring(1);
+    }
+
+    private static String labels(Object codes) {
+        if (!(codes instanceof List<?> list) || list.isEmpty()) {
+            return "none";
+        }
+        return list.stream().map(c -> label(String.valueOf(c))).collect(Collectors.joining(", "));
+    }
+
+    private static String departmentsSummary(Map<String, Object> p) {
+        return "Departments set to " + labels(p.get("after")) + " (added " + labels(p.get("added")) + "; removed "
+                + labels(p.get("removed")) + ")" + reason(p);
     }
 
     private static String verb(String eventType) {

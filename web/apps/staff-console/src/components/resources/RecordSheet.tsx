@@ -5,7 +5,7 @@ import { Button, Dialog, Sheet, SheetTableScroll, useToast } from '@afrotransact
 import { Check, Copy, LockSimple, PencilSimple } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
@@ -144,7 +144,7 @@ function Details({ record }: { record: RecordDetail }) {
  * client, every action button disabled while one is in flight. When the BFF answers ALREADY_DONE the current state is
  * shown as information and the record and its table are refreshed.
  */
-export function RecordSheet({ resource, id, onClose, sharedOpen = false }: { resource: ResourceKey; id: string | null; onClose: () => void; sharedOpen?: boolean }) {
+export function RecordSheet({ resource, id, onClose, sharedOpen = false, extra }: { resource: ResourceKey; id: string | null; onClose: () => void; sharedOpen?: boolean; extra?: ReactNode }) {
   const api = staffApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -295,6 +295,7 @@ export function RecordSheet({ resource, id, onClose, sharedOpen = false }: { res
             </ul>
           ) : null}
           <Details record={record} />
+          {extra}
           <section aria-label="Activity" className="flex flex-col gap-2">
             <h3 className="m-0 text-sm font-bold">Activity</h3>
             {record.activity.length ? (

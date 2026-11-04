@@ -1244,12 +1244,33 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/DepartmentRequest'
+  /v1/department-requests/{id}:
+    get:
+      tags:
+      - Catalog scope
+      summary: 'Staff: one department request (applications:review)'
+      description: needs lists the evidence the organisation still has to provide; it is empty for a rejected request.
+      operationId: departmentRequest
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DepartmentRequest'
   /v1/department-requests/{id}/decision:
     post:
       tags:
       - Catalog scope
       summary: 'Staff: approve or reject a department request (applications:approve)'
-      description: Approving adds the department to the organisation's set at once.
+      description: 'A rejection needs a note (3+ characters): the seller reads it. Approving adds the department to the organisation''s set at once.'
       operationId: decide
       parameters:
       - name: id

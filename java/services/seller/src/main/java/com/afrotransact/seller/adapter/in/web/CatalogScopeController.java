@@ -80,8 +80,17 @@ class CatalogScopeController {
         return scopes.queue(status).stream().map(DepartmentRequestResponse::of).toList();
     }
 
+    @Operation(summary = "Staff: one department request (applications:review)",
+            description = "needs lists the evidence the organisation still has to provide; it is empty for a rejected "
+                    + "request.")
+    @GetMapping("/v1/department-requests/{id}")
+    DepartmentRequestResponse departmentRequest(@PathVariable UUID id) {
+        return DepartmentRequestResponse.of(scopes.request(id));
+    }
+
     @Operation(summary = "Staff: approve or reject a department request (applications:approve)",
-            description = "Approving adds the department to the organisation's set at once.")
+            description = "A rejection needs a note (3+ characters): the seller reads it. "
+                    + "Approving adds the department to the organisation's set at once.")
     @PostMapping("/v1/department-requests/{id}/decision")
     DepartmentRequestResponse decide(@PathVariable UUID id, @Valid @RequestBody Decision body) {
         return DepartmentRequestResponse.of(scopes.decide(id, body.approve(), body.note()));

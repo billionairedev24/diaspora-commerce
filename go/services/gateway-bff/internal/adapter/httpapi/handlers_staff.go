@@ -51,6 +51,8 @@ type StaffServices struct {
 	// ContentPages serves Settings → Published pages (index, preview data, drafts, publication and rollback of legal
 	// documents and help pages); routes are registered when it is set.
 	ContentPages app.StaffContentPagesService
+	// Departments serves Department requests and an organisation's departments; routes are registered when it is set.
+	Departments app.StaffDepartmentsService
 	// Assistant is Lola in the staff console (read-only); routes are registered when it is set.
 	Assistant app.StaffAssistantService
 	// Files serves exports kept by the BFF itself (nil when exports live in media).
@@ -126,6 +128,9 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	}
 	if s.Markets != nil {
 		h.registerStaffMarkets(route)
+	}
+	if s.Departments != nil {
+		h.registerStaffDepartments(route)
 	}
 	if s.Search != nil {
 		h.registerStaffSearch(route)

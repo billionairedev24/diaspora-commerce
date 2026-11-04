@@ -42,6 +42,9 @@ public interface CatalogScopeService {
     /** Staff: approve (the department joins the set) or reject a request. */
     DepartmentRequest decide(UUID requestId, boolean approve, String note);
 
-    /** Staff: requests waiting (or decided), oldest first. */
+    /** Staff: requests waiting (oldest first) or decided (newest decision first), at most {@link #QUEUE_LIMIT}. */
     List<DepartmentRequest> queue(DepartmentRequestStatus status);
+
+    /** Staff: one request (404 when there is none). */
+    DepartmentRequest request(UUID requestId);
 }
