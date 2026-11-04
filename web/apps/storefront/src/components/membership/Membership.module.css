@@ -34,7 +34,6 @@
 
 /* Manage page */
 .notice { margin: 0; padding-inline-start: var(--at-space-3); border-inline-start: 3px solid var(--at-color-border-strong); font-size: var(--at-text-md); line-height: var(--at-leading-normal); }
-.alert { margin: 0; padding-inline-start: var(--at-space-3); border-inline-start: 3px solid var(--at-color-warning); font-size: var(--at-text-md); line-height: var(--at-leading-normal); }
 .rule { margin: 0; font-size: var(--at-text-md); line-height: var(--at-leading-normal); }
 .buttons { display: flex; flex-wrap: wrap; gap: var(--at-space-2) var(--at-space-4); align-items: center; }
 .stack { display: flex; flex-direction: column; gap: var(--at-space-3); max-inline-size: 46rem; }
