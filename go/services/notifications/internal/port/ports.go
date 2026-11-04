@@ -188,18 +188,26 @@ type ContactInvalidator interface {
 	Forget(userID string)
 }
 
-// StockAlertStore persists back-in-stock subscriptions.
+// StockAlertStore persists back-in-stock subscriptions: a signed-in shopper's alerts are keyed by (user, atin), a
+// guest's (no UserID) by (email, atin).
 type StockAlertStore interface {
-	// Subscribe stores an active alert for (user, atin). It returns created=false when an active alert already
-	// exists (left unchanged); a previously notified alert is re-armed and counts as created.
-	Subscribe(ctx context.Context, a domain.StockAlert) (domain.StockAlert, bool, error)
+	// Subscribe stores an active alert for (user, atin), or (email, atin) for a guest. It returns created=false when
+	// an active alert already exists (left unchanged); a previously notified alert is re-armed and counts as created.
+	// A new or re-armed alert fails with domain.ErrAlertLimit when the owner (user, else email) already has maxOpen
+	// active alerts.
+	Subscribe(ctx context.Context, a domain.StockAlert, maxOpen int) (domain.StockAlert, bool, error)
 	// Unsubscribe deletes the user's alert for atin (domain.ErrNotFound when there is none).
 	Unsubscribe(ctx context.Context, userID, atin string) error
+	// DeleteByID deletes one alert of any owner; an alert that is already gone is not an error.
+	DeleteByID(ctx context.Context, id string) error
 	// ListByUser returns the user's alerts, newest first.
 	ListByUser(ctx context.Context, userID string) ([]domain.StockAlert, error)
 	// ClaimForRestock marks up to limit active alerts for atin as notified by eventID and returns them. Alerts
 	// already claimed by the same eventID are returned again, so a redelivered event can finish its work.
 	ClaimForRestock(ctx context.Context, atin, eventID string, limit int) ([]domain.StockAlert, error)
+	// Purge deletes alerts that were never sent and were created before openBefore, and alerts that were sent before
+	// notifiedBefore. It returns how many rows went.
+	Purge(ctx context.Context, openBefore, notifiedBefore time.Time) (int64, error)
 }
 
 // BrandSource serves the brand snapshot every email layout renders: footer socials, WhatsApp community link, app

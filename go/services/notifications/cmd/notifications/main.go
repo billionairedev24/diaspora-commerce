@@ -159,7 +159,9 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("template samples: %w", err)
 	}
-	stockAlerts := app.NewStockAlerts(postgres.NewStockAlertStore(pool), notifier, resolver, links, log)
+	stockAlerts := app.NewStockAlerts(postgres.NewStockAlertStore(pool), notifier, resolver, links, unsub, log,
+		app.WithStockAlertLimits(app.StockAlertLimits{MaxOpen: cfg.StockAlerts.MaxOpen,
+			OpenLifetime: cfg.StockAlerts.OpenLifetime, SentKeep: cfg.StockAlerts.SentKeep}))
 	ingest := app.NewIngest(notifier, app.IngestConfig{Resolver: resolver, Links: links, StockAlerts: stockAlerts,
 		Contacts: contactCache, Audience: preorderAudience(cfg, local, log)}, log)
 
@@ -197,6 +199,7 @@ func run() error {
 	if cfg.Dispatcher.Enabled {
 		wg.Go(func() { _ = dispatcher.Run(ctx) })
 	}
+	wg.Go(func() { purgeStockAlerts(ctx, stockAlerts, cfg.StockAlerts.PurgeEvery, log) })
 	if cfg.Kafka.Enabled {
 		wg.Go(func() { consume(ctx, cfg.Kafka.Brokers, app.TopicAddresses(topics), ingest, log) })
 	}
@@ -315,6 +318,34 @@ func verifiers(cfg config.Config) (webhooksig.Verifier, webhooksig.Verifier, web
 		sg = v
 	}
 	return tw, rs, sg, nil
+}
+
+// purgeStockAlerts deletes back-in-stock alerts past their retention (open ones after openLifetime, sent ones after
+// sentKeep) at start-up and then every interval (default hourly).
+func purgeStockAlerts(ctx context.Context, alerts app.StockAlerts, every time.Duration, log *slog.Logger) {
+	if every <= 0 {
+		every = time.Hour
+	}
+	run := func() {
+		n, err := alerts.Purge(ctx)
+		switch {
+		case err != nil && ctx.Err() == nil:
+			log.ErrorContext(ctx, "stock alert purge failed", "error", err)
+		case n > 0:
+			log.InfoContext(ctx, "stock alerts purged", "deleted", n)
+		}
+	}
+	run()
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			run()
+		}
+	}
 }
 
 // consume runs the Kafka consumer group. When a handler fails the consumer is closed and recreated so the group

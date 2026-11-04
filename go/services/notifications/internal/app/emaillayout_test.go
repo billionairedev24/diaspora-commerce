@@ -120,7 +120,11 @@ func TestEveryEmailRendersOnTheBrandedLayout(t *testing.T) {
 			check(!adSectionRe.MatchString(h), "advertorial in an email the policy does not allow")
 		}
 		check(strings.Contains(out.Text, "Help Center: https://afrotransact.com/help"), "text part without the footer")
-		golden := filepath.Join(dir, tpl.Key+".html")
+		name := tpl.Key + ".html"
+		if tpl.Locale != "en" { // en keeps the plain key; other locales are <key>.<locale>.html
+			name = tpl.Key + "." + tpl.Locale + ".html"
+		}
+		golden := filepath.Join(dir, name)
 		if *updateGolden {
 			if err := os.WriteFile(golden, []byte(h), 0o644); err != nil {
 				t.Fatal(err)

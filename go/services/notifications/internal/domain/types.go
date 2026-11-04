@@ -144,6 +144,9 @@ type Request struct {
 	Attachments    []AttachmentRef `json:"attachments,omitempty"`
 	IdempotencyKey string          `json:"-"`
 	EventID        string          `json:"-"`
+	// Headers are extra email headers set by trusted producers (List-Unsubscribe of an alert). Never read from the
+	// wire.
+	Headers map[string]string `json:"-"`
 }
 
 // ErrInvalidRequest is returned for malformed requests.

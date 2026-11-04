@@ -2,8 +2,10 @@ package postgres_test
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -29,8 +31,46 @@ const defaultImage = "imresamu/postgis:17-3.5.4-alpine3.22"
 
 var discard = slog.New(slog.NewTextHandler(io.Discard, nil))
 
+// startLocalPostgres is the Docker-free path: NOTIFICATIONS_TEST_DSN names a server (any PostgreSQL 14+ superuser DSN,
+// e.g. postgres://postgres@localhost:5432/postgres?sslmode=disable). The test gets a throwaway database on it,
+// dropped afterwards. Returns nil when the variable is unset.
+func startLocalPostgres(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	admin := os.Getenv("NOTIFICATIONS_TEST_DSN")
+	if admin == "" {
+		return nil
+	}
+	ctx := context.Background()
+	adminPool, err := pgxpool.New(ctx, admin)
+	if err != nil {
+		t.Fatalf("NOTIFICATIONS_TEST_DSN: %v", err)
+	}
+	t.Cleanup(adminPool.Close)
+	name := "notif_test_" + hex.EncodeToString(uuid.NewSHA1(uuid.NameSpaceURL, []byte(t.Name()+time.Now().String())).NodeID())
+	if _, err := adminPool.Exec(ctx, "CREATE DATABASE "+name); err != nil {
+		t.Fatalf("create database: %v", err)
+	}
+	t.Cleanup(func() { _, _ = adminPool.Exec(context.Background(), "DROP DATABASE IF EXISTS "+name+" WITH (FORCE)") })
+	cfg := adminPool.Config().ConnConfig
+	dsn := fmt.Sprintf("postgres://%s@%s:%d/%s?sslmode=disable", cfg.User, cfg.Host, cfg.Port, name)
+	pool, err := postgres.Open(ctx, dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	for range 2 { // idempotent
+		if err := postgres.Migrate(ctx, pool); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return pool
+}
+
 func startPostgres(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	if pool := startLocalPostgres(t); pool != nil {
+		return pool
+	}
 	testdocker.Require(t)
 	image := os.Getenv("NOTIFICATIONS_TEST_PG_IMAGE")
 	if image == "" {

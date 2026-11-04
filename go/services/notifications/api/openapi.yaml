@@ -22,7 +22,8 @@ info:
 
     Permissions: `notifications:read` (log, templates, preview), `notifications:send` (internal callers),
     `notifications:manage` (replay, suppressions, any recipient's preferences),
-    `notifications:templates:write` (new template versions, test-send — Marketing or Ops edit rights).
+    `notifications:templates:write` (new template versions, test-send — Marketing or Ops edit rights),
+    `notifications:stock-alerts.guest` (service clients only: subscribe an email address to a back-in-stock alert).
   contact:
     name: AfroTransact Platform
     url: https://developers.afrotransact.com
@@ -45,7 +46,7 @@ tags:
   - name: Preferences
     description: Channel × category preferences, TCPA SMS consent, suppressions and one-click unsubscribe.
   - name: Stock alerts
-    description: Back-in-stock alerts for shoppers (S211). The shopper's own bearer token identifies the subscriber.
+    description: Back-in-stock alerts (S211). A signed-in shopper's own bearer token identifies the subscriber; a visitor without an account is subscribed by email through the gateway-bff's service token, and every alert email carries a signed one-click unsubscribe link.
   - name: Webhooks
     description: Provider callbacks, authenticated by signature (not bearer tokens).
 paths:
@@ -394,6 +395,11 @@ paths:
         '400': {$ref: '#/components/responses/Problem'}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+        '422':
+          description: The shopper already has the maximum number of open alerts (50 by default)
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
     get:
       security: [{bearer: []}]
       tags: [Stock alerts]
@@ -411,6 +417,85 @@ paths:
                   items: {type: array, items: {$ref: '#/components/schemas/StockAlert'}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+  /v1/stock-alerts/guest:
+    post:
+      security: [{bearer: []}]
+      tags: [Stock alerts]
+      operationId: subscribeGuestStockAlert
+      summary: Tell this email address when the variant is back in stock (no account)
+      description: |
+        Service-to-service only: needs a client-credentials token with the scope `notifications:stock-alerts.guest`
+        (held by the gateway-bff; shoppers and other services get 403). The BFF validates and rate-limits the visitor
+        first; this service validates again and stores the alert for the address.
+
+        One alert per (email, variant ATIN). The answer is always `201 {atin, status: subscribed}` and never says
+        whether the address was new, already subscribed or at its cap of open alerts (50 by default), and never echoes
+        the address. Nothing is sent at subscription time. Stored: the address (lower-cased), ATIN, market, locale,
+        the catalog product title and the creation time. Open alerts are purged after 180 days, sent ones after 14.
+
+        When `inventory.availability.changed` reports units for the SKU, every subscriber, guest or signed in, gets one
+        email in the `locale` they subscribed with. Each email carries a signed one-click link
+        (`GET/POST /v1/stock-alerts/unsubscribe`) that removes that alert.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GuestStockAlertInput'}
+      responses:
+        '201':
+          description: Subscribed (also when it already was, or the address is at its cap)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GuestStockAlertAccepted'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+  /v1/stock-alerts/unsubscribe:
+    parameters:
+      - {name: t, in: query, required: true, schema: {type: string}, description: "Signed token from the back-in-stock email (names one alert; carries no address)"}
+    get:
+      tags: [Stock alerts]
+      operationId: stockAlertUnsubscribePage
+      summary: Confirmation page of a back-in-stock email's link (never removes anything, so link scanners cannot trigger it)
+      description: HTML in the browser's language (en, fr, es, ar, yo; right-to-left for Arabic). 400 with an HTML page when the link is invalid or expired.
+      security: []
+      responses:
+        '200':
+          description: HTML page with a confirm button
+          content:
+            text/html: {schema: {type: string}}
+        '400':
+          description: The link is invalid or expired (HTML page)
+          content:
+            text/html: {schema: {type: string}}
+    post:
+      tags: [Stock alerts]
+      operationId: stockAlertUnsubscribe
+      summary: Remove the alert the link names (RFC 8058 one-click, no login)
+      description: |
+        Mail clients POST `List-Unsubscribe=One-Click` to the `List-Unsubscribe` URL; the page's button posts the same
+        form. The signed token is the credential and names exactly one alert, never an account or other alerts, so the
+        call removes only that alert. An alert that is already gone is still 200. The token is valid for a year from
+        the day the email was sent.
+      security: []
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                List-Unsubscribe: {type: string, const: One-Click}
+      responses:
+        '200':
+          description: Removed (an HTML confirmation page when the client accepts text/html)
+          content:
+            text/html: {schema: {type: string}}
+        '400':
+          description: The link is invalid or expired
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+            text/html: {schema: {type: string}}
   /v1/stock-alerts/{atin}:
     parameters:
       - {name: atin, in: path, required: true, schema: {$ref: '#/components/schemas/Atin'}}
@@ -889,6 +974,25 @@ components:
         market: {type: string, default: us}
         locale: {type: string, default: en}
         productTitle: {type: string, maxLength: 300, description: "Shown in the alert; the BFF has it from catalog"}
+    GuestStockAlertInput:
+      type: object
+      required: [atin, email]
+      properties:
+        atin: {$ref: '#/components/schemas/Atin'}
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          description: "A plain address (no display name, quotes, IP literal or non-ASCII characters), validated and lower-cased here."
+        market: {type: string, pattern: '^[a-z]{2}$', default: us, description: "Anything else is stored as us"}
+        locale: {type: string, maxLength: 12, default: en, description: "The shopper's language at subscription time (the BFF sends one of en, fr, es, ar, yo); a malformed tag is stored as en"}
+        productTitle: {type: string, maxLength: 300, description: "From the catalog, never from the visitor"}
+    GuestStockAlertAccepted:
+      type: object
+      required: [atin, status]
+      properties:
+        atin: {$ref: '#/components/schemas/Atin'}
+        status: {type: string, const: subscribed}
     StockAlert:
       type: object
       required: [id, atin, status, market, locale, createdAt]
