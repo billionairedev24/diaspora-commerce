@@ -122,13 +122,30 @@ func (k *sellerListingImpl) Update(ctx context.Context, bearer, productID string
 	return p, err
 }
 
-func (k *sellerListingImpl) Drafts(ctx context.Context, bearer string) ([]port.CatalogDraft, error) {
-	res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/product-drafts", Bearer: bearer}, nil)
+func (k *sellerListingImpl) Drafts(ctx context.Context, bearer string, q port.DraftsQuery) ([]port.CatalogDraft, int64, error) {
+	query := url.Values{"page": {strconv.Itoa(q.Page)}, "size": {strconv.Itoa(q.Size)}}
+	if q.Q != "" {
+		query.Set("q", q.Q)
+	}
+	if q.Kind != "" {
+		query.Set("kind", q.Kind)
+	}
+	if q.Sort != "" {
+		query.Set("sort", q.Sort)
+	}
+	res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/product-drafts", Query: query, Bearer: bearer}, nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	items, _, err := itemsOf[port.CatalogDraft](res.Body)
-	return items, err
+	if err != nil {
+		return nil, 0, err
+	}
+	total, perr := strconv.ParseInt(res.Header.Get("X-Total-Count"), 10, 64)
+	if perr != nil {
+		total = int64(q.Page*q.Size + len(items))
+	}
+	return items, total, nil
 }
 
 func draftPath(id string) string { return "/v1/product-drafts/" + url.PathEscape(id) }

@@ -19,6 +19,13 @@ type CatalogDraft struct {
 	Payload      json.RawMessage `json:"payload"`
 	UpdatedAt    time.Time       `json:"updatedAt"`
 	Version      int64           `json:"version"`
+	Todo         int             `json:"todo"`
+}
+
+// DraftsQuery is the drafts table's query: search, kind (all | new), one sort key, page and size.
+type DraftsQuery struct {
+	Q, Kind, Sort string
+	Page, Size    int
 }
 
 // CatalogImport is catalog's ProductImport.
@@ -106,7 +113,8 @@ type SellerListingClient interface {
 	Update(ctx context.Context, bearer, productID string, d domain.ProductDraft, shipFrom *CatalogShipFrom) (CatalogOwnProduct, error)
 	// CreateFull is POST /v1/products with the listing details and the resolved ship-from.
 	CreateFull(ctx context.Context, bearer string, d domain.ProductDraft, shipFrom *CatalogShipFrom) (CatalogOwnProduct, error)
-	Drafts(ctx context.Context, bearer string) ([]CatalogDraft, error)
+	// Drafts is one page of GET /v1/product-drafts and the total from X-Total-Count.
+	Drafts(ctx context.Context, bearer string, q DraftsQuery) ([]CatalogDraft, int64, error)
 	Draft(ctx context.Context, bearer, id string) (CatalogDraft, error)
 	CreateDraft(ctx context.Context, bearer string, in domain.SaveProductDraftRequest) (CatalogDraft, error)
 	SaveDraft(ctx context.Context, bearer, id string, in domain.SaveProductDraftRequest) (CatalogDraft, error)

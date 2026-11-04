@@ -1089,12 +1089,21 @@ paths:
       tags: [Listings]
       operationId: listProductDrafts
       security: [{sessionCookie: []}]
-      summary: The organisation's saved product drafts, most recently saved first
-      description: catalog `GET /v1/product-drafts`.
+      summary: The organisation's saved product drafts (server-driven table), most recently saved first
+      description: |
+        catalog `GET /v1/product-drafts` (search, order and page happen in the catalog's database; the total comes from its
+        `X-Total-Count`). `kind=new` leaves out the unsaved edits of existing listings: that is the Drafts table.
+      parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 120}, description: Search over title and category path}
+        - {name: kind, in: query, schema: {type: string, enum: [all, new], default: all}}
+        - {$ref: '#/components/parameters/Sort'}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
       responses:
         '200': {description: Drafts, content: {application/json: {schema: {$ref: '#/components/schemas/ProductDraftList'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
     post:
@@ -4546,7 +4555,7 @@ components:
         updatedAt: {type: string, format: date-time}
     ProductDraftSummary:
       type: object
-      required: [id, productId, title, categoryPath, updatedAt, version]
+      required: [id, productId, title, categoryPath, updatedAt, version, todo]
       properties:
         id: {type: string}
         productId: {type: [string, 'null'], description: The listing being edited; null for a new product}
@@ -4554,11 +4563,15 @@ components:
         categoryPath: {type: [string, 'null']}
         updatedAt: {type: string, format: date-time}
         version: {type: integer}
+        todo: {type: integer, minimum: 0, description: 'How many of the five basics (category, title, a photo, a price, a description) the draft still lacks; 0 = ready to review'}
     ProductDraftList:
       type: object
-      required: [items]
+      required: [items, total, page, size]
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/ProductDraftSummary'}}
+        total: {type: integer, description: "Drafts matching q and kind, in all pages"}
+        page: {type: integer}
+        size: {type: integer}
     SavedProductDraft:
       allOf:
         - {$ref: '#/components/schemas/ProductDraftSummary'}

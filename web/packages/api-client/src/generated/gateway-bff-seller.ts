@@ -1033,8 +1033,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The organisation's saved product drafts, most recently saved first
-         * @description catalog `GET /v1/product-drafts`.
+         * The organisation's saved product drafts (server-driven table), most recently saved first
+         * @description catalog `GET /v1/product-drafts` (search, order and page happen in the catalog's database; the total comes from its
+         *     `X-Total-Count`). `kind=new` leaves out the unsaved edits of existing listings: that is the Drafts table.
          */
         get: operations["listProductDrafts"];
         put?: never;
@@ -4325,9 +4326,15 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             version: number;
+            /** @description How many of the five basics (category, title, a photo, a price, a description) the draft still lacks; 0 = ready to review */
+            todo: number;
         };
         ProductDraftList: {
             items: components["schemas"]["ProductDraftSummary"][];
+            /** @description Drafts matching q and kind, in all pages */
+            total: number;
+            page: number;
+            size: number;
         };
         SavedProductDraft: components["schemas"]["ProductDraftSummary"] & {
             /** @description The form's input as saved (need not be valid) */
@@ -7247,7 +7254,18 @@ export interface operations {
     };
     listProductDrafts: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Search over title and category path */
+                q?: string;
+                kind?: "all" | "new";
+                /**
+                 * @description Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
+                 *     3). Empty cells sort last in both directions.
+                 */
+                sort?: components["parameters"]["Sort"];
+                page?: number;
+                size?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -7265,6 +7283,7 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

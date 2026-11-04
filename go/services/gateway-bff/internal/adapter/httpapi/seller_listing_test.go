@@ -95,9 +95,21 @@ func exerciseSellerListing(t *testing.T, bff *testkit.BFF, b *browser) {
 	}
 	mustStatus(t, b.do("PUT", "/v1/seller/product-drafts/"+id, map[string]any{"version": 0, "payload": map[string]any{}}), 409)
 	mustStatus(t, b.do("PUT", "/v1/seller/product-drafts/"+id, map[string]any{"payload": map[string]any{}}), 422)
-	if r := b.do("GET", "/v1/seller/product-drafts", nil); r.status != 200 || len(r.json(t)["items"].([]any)) != 1 {
+	if r := b.do("GET", "/v1/seller/product-drafts", nil); r.status != 200 || len(r.json(t)["items"].([]any)) != 1 || r.json(t)["total"] != float64(1) {
 		t.Fatalf("drafts = %d %s", r.status, r.body)
 	}
+	// The drafts table: total from the catalog, search, page and size; bad queries are 422.
+	mustStatus(t, b.do("POST", "/v1/seller/product-drafts", map[string]any{"title": "Kente stole", "payload": map[string]any{"title": "Kente stole"}}), 201)
+	if r := b.do("GET", "/v1/seller/product-drafts?size=1&page=1&sort=title,asc&kind=new", nil); r.status != 200 || r.json(t)["total"] != float64(2) ||
+		len(r.json(t)["items"].([]any)) != 1 || r.json(t)["page"] != float64(1) || r.json(t)["size"] != float64(1) {
+		t.Fatalf("drafts page = %d %s", r.status, r.body)
+	}
+	if r := b.do("GET", "/v1/seller/product-drafts?q=kente", nil); r.status != 200 || r.json(t)["total"] != float64(1) {
+		t.Fatalf("drafts search = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("GET", "/v1/seller/product-drafts?sort=payload,asc", nil), 422)
+	mustStatus(t, b.do("GET", "/v1/seller/product-drafts?kind=old", nil), 422)
+	mustStatus(t, b.do("GET", "/v1/seller/product-drafts?size=500", nil), 422)
 	if r := b.do("GET", "/v1/seller/product-drafts/"+id, nil); r.status != 200 || r.json(t)["payload"].(map[string]any)["title"] != "Ofada rice" {
 		t.Fatalf("draft = %d %s", r.status, r.body)
 	}

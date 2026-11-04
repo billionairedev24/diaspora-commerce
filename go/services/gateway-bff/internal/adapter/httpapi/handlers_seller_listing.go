@@ -29,7 +29,22 @@ func (h *handlersImpl) updateProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlersImpl) productDrafts(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.SellerListing.Drafts(r.Context(), callerFrom(r.Context()))
+	page, err := intQuery(r, "page", 0)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	size, err := intQuery(r, "size", 25)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	q := r.URL.Query()
+	sort := ""
+	if keys := q["sort"]; len(keys) > 0 {
+		sort = keys[0]
+	}
+	v, err := h.s.SellerListing.Drafts(r.Context(), callerFrom(r.Context()), port.DraftsQuery{Q: strings.TrimSpace(q.Get("q")), Kind: q.Get("kind"), Sort: sort, Page: page, Size: size})
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
