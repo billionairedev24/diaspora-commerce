@@ -90,7 +90,7 @@ export function QueriesPanel({ kind, window, onAddSynonym, registerExport }: { k
         enableSorting: false,
         meta: { label: t('st.search.col.action'), export: false },
         cell: ({ row }) => (
-          <Button variant="neutral" size="sm" aria-label={t('st.search.synonym.addFor', { query: row.original.query })} onClick={() => onAddSynonym(row.original.query)}>
+          <Button variant="link" size="sm" aria-label={t('st.search.synonym.addFor', { query: row.original.query })} onClick={() => onAddSynonym(row.original.query)}>
             {t('st.search.synonym.add')}
           </Button>
         )

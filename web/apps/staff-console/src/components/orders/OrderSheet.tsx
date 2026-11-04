@@ -1,11 +1,10 @@
 'use client';
 
 import { type DetailField, type DetailSection, type RecordDetail, staffKeys, staffQueries } from '@afrotransact/api-client';
-import { IconButton, Menu, MenuItem, MenuSeparator, Sheet, useToast } from '@afrotransact/ui';
-import { ArrowSquareOut, Copy, DotsThree, Headset, Truck } from '@phosphor-icons/react/ssr';
+import { type RowActionItem, RowActions, Sheet, useToast } from '@afrotransact/ui';
+import { Copy, Headset, Truck } from '@phosphor-icons/react/ssr';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import { type ReactNode } from 'react';
 
 import { fieldText } from '@/components/resources/cells';
 import { CopyId, Details } from '@/components/resources/RecordSheet';
@@ -100,41 +99,19 @@ export function OrderSheet({ id, onClose }: { id: string | null; onClose: () => 
   const links = (record?.links ?? []).map((l) => ({ ...l, label: l.href.startsWith('/support') ? t('st.order.openSupport') : l.href.startsWith('/dispatch') ? t('st.order.assignDriver') : l.label }));
 
   const title = t('st.order.title', { number: record?.id ?? id ?? '' });
-  const header: ReactNode = (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
-      <span className="min-w-0 flex-1 truncate text-base font-bold">{title}</span>
-      {record ? (
-        <Menu
-          label={t('st.order.actions')}
-          trigger={
-            <IconButton label={t('st.order.actions')} onDark>
-              <DotsThree size={22} weight="bold" aria-hidden />
-            </IconButton>
-          }
-          width={260}
-        >
-          <MenuItem icon={<Copy size={16} aria-hidden />} onSelect={() => void copyNumber()}>
-            {t('st.order.copyNumber')}
-          </MenuItem>
-          {links.length ? <MenuSeparator /> : null}
-          {links.map((l) =>
-            l.external ? (
-              <MenuItem key={l.href} href={l.href} external icon={<ArrowSquareOut size={16} aria-hidden />}>
-                {l.label}
-              </MenuItem>
-            ) : (
-              <MenuItem key={l.href} icon={l.href.startsWith('/dispatch') ? <Truck size={16} aria-hidden /> : <Headset size={16} aria-hidden />} onSelect={() => router.push(l.href)}>
-                {l.label}
-              </MenuItem>
-            )
-          )}
-        </Menu>
-      ) : null}
-    </div>
-  );
+  /** The order-level actions that exist today; destructive ones (none yet) would follow a separator and a confirmation. */
+  const actions: RowActionItem[] = [
+    { label: t('st.order.copyNumber'), icon: <Copy size={16} aria-hidden />, onSelect: () => void copyNumber() },
+    ...(links.length ? (['separator'] as const) : []),
+    ...links.map((l): RowActionItem =>
+      l.external
+        ? { label: l.label, href: l.href, external: true }
+        : { label: l.label, icon: l.href.startsWith('/dispatch') ? <Truck size={16} aria-hidden /> : <Headset size={16} aria-hidden />, onSelect: () => router.push(l.href) }
+    )
+  ];
 
   return (
-    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={title} description={record?.subtitle} header={header} closeLabel={t('st.order.confirm.close')}>
+    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={title} description={record?.subtitle} closeLabel={t('st.order.confirm.close')}>
       {q.isPending ? <Spinner /> : null}
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {record ? (
@@ -143,6 +120,7 @@ export function OrderSheet({ id, onClose }: { id: string | null; onClose: () => 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {record.status ? <StatusPill tone={record.tone}>{shipmentStatusLabel(t, record.status)}</StatusPill> : null}
               {total ? <strong className="ml-auto text-lg tabular-nums">{fieldText('money', total)}</strong> : null}
+              <RowActions name={record.id} label={t('st.order.actions')} items={actions} width={260} />
             </div>
             <p className="m-0 text-sm text-muted">{[customer, placed ? t('st.order.placedOn', { date: dateTime(placed) }) : ''].filter(Boolean).join(' · ')}</p>
           </div>

@@ -1,8 +1,8 @@
 'use client';
 
 import { sellerKeys, sellerQueries,type SizeChart } from '@afrotransact/api-client';
-import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Badge, Button, buttonClassName, Checkbox, Dialog, useToast } from '@afrotransact/ui';
+import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
+import { Badge, Button, buttonClassName, Checkbox, Dialog, RowName, useToast } from '@afrotransact/ui';
 import { Archive,Copy, FileArrowUp, PencilSimple, Plus } from '@phosphor-icons/react/ssr';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -68,10 +68,9 @@ export function SizeChartsView() {
       {
         id: 'name', accessorFn: (c) => c.name, header: t('sc.sz.col.name'), size: 240, enableSorting: false, meta: { kind: 'strong' },
         cell: ({ row }) => (
-          <span className="flex flex-wrap items-center gap-2">
-            <strong className="font-semibold">{row.original.name}</strong>
-            {row.original.retired ? <Badge tone="neutral">{t('sc.sz.retired')}</Badge> : null}
-          </span>
+          <RowName onClick={editable && !row.original.retired ? () => setEditing(row.original) : undefined} badge={row.original.retired ? <Badge tone="neutral">{t('sc.sz.retired')}</Badge> : null}>
+            {row.original.name}
+          </RowName>
         )
       },
       { id: 'madeFor', accessorFn: (c) => typeName(c.productTypeCode), header: t('sc.sz.col.madeFor'), size: 170, enableSorting: false },
@@ -82,27 +81,16 @@ export function SizeChartsView() {
       { id: 'fit', accessorFn: (c) => (c.fitNote ? t(`sc.pf.fit.${c.fitNote}` as MessageKey) : ''), header: t('sc.pf.field.fitNote'), size: 130, enableSorting: false },
       { id: 'productCount', accessorFn: (c) => c.productCount, header: t('sc.sz.col.products'), size: 90, enableSorting: false, meta: { kind: 'number', align: 'end' } },
       { id: 'updatedAt', accessorFn: (c) => c.updatedAt, header: t('sc.sz.col.updated'), size: 120, enableSorting: false, meta: { kind: 'datetime' }, cell: ({ row }) => shortDate(row.original.updatedAt) },
-      {
-        id: 'action', header: () => <span className="at-visually-hidden">{t('sc.sz.col.actions')}</span>, size: 300, enableSorting: false, meta: { export: false, label: t('sc.sz.col.actions') },
-        cell: ({ row }) =>
-          editable ? (
-            <span className="flex flex-wrap items-center gap-2">
-              {row.original.retired ? null : (
-                <Button size="sm" variant="neutral" aria-label={t('sc.sz.editAria', { name: row.original.name })} onClick={() => setEditing(row.original)}>
-                  <PencilSimple size={14} aria-hidden /> {t('sc.sz.edit')}
-                </Button>
-              )}
-              <Button size="sm" variant="neutral" aria-label={t('sc.sz.duplicateAria', { name: row.original.name })} disabled={duplicate.isPending} onClick={() => duplicate.mutate(row.original)}>
-                <Copy size={14} aria-hidden /> {t('sc.sz.duplicate')}
-              </Button>
-              {row.original.retired ? null : (
-                <Button size="sm" variant="neutral" aria-label={t('sc.sz.retireAria', { name: row.original.name })} onClick={() => setRetiring(row.original)}>
-                  <Archive size={14} aria-hidden /> {t('sc.sz.retire')}
-                </Button>
-              )}
-            </span>
-          ) : null
-      }
+      rowActionsColumn<SizeChart>({
+        header: t('sc.sz.col.actions'),
+        name: (c) => c.name,
+        label: (c) => t('sc.rows.actionsFor', { name: c.name }),
+        items: (c) => [
+          editable && !c.retired && { label: t('sc.sz.edit'), icon: <PencilSimple size={16} aria-hidden />, onSelect: () => setEditing(c) },
+          editable && { label: t('sc.sz.duplicate'), icon: <Copy size={16} aria-hidden />, disabled: duplicate.isPending, onSelect: () => duplicate.mutate(c) },
+          editable && !c.retired && { label: t('sc.sz.retire'), icon: <Archive size={16} aria-hidden />, danger: true, onSelect: () => setRetiring(c) }
+        ]
+      })
     ],
     [editable, duplicate, t, typeName]
   );

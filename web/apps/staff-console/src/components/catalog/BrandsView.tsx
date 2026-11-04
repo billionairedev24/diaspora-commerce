@@ -1,7 +1,7 @@
 'use client';
 
 import { type BrandStatus, type StaffBrand, staffTaxonomyQueries } from '@afrotransact/api-client';
-import { DataTable, useTableState } from '@afrotransact/data-table';
+import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
 import { Button } from '@afrotransact/ui';
 import { Plus } from '@phosphor-icons/react/ssr';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
@@ -73,18 +73,12 @@ export function BrandsView() {
         }
       },
       { id: 'requested', header: t('st.brand.col.requested'), accessorFn: (b) => when(b.createdAt), enableSorting: false, size: 170 },
-      {
-        id: 'actions',
-        header: '',
-        enableSorting: false,
-        size: 120,
-        cell: ({ row }) =>
-          canEdit && row.original.status === 'PENDING' ? (
-            <Button size="sm" variant="secondary" onClick={() => setTarget({ brand: row.original, mode: 'approve' })} aria-label={t('st.brand.approveNamed', { name: row.original.name })}>
-              {t('st.brand.approve.submit')}
-            </Button>
-          ) : null
-      }
+      rowActionsColumn<StaffBrand>({
+        header: t('st.rows.actionsHeader'),
+        name: (b) => b.name,
+        label: (b) => t('st.rows.actionsFor', { name: b.name }),
+        items: (b) => [canEdit && b.status === 'PENDING' && { label: t('st.brand.approve.submit'), onSelect: () => setTarget({ brand: b, mode: 'approve' }) }]
+      })
     ],
     [t, canEdit]
   );

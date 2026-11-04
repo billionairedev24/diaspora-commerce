@@ -311,10 +311,11 @@ func TestProductDetail(t *testing.T) {
 	if r.header.Get("Retry-After") == "" || r.json(t)["type"] != "https://developers.afrotransact.com/problems/bff.upstream-unavailable" {
 		t.Fatalf("unavailable problem = %v %s", r.header, r.body)
 	}
-	// Stock alerts: product and email checks first; notifications needs the shopper's own token (guests sign in).
+	// Stock alerts: product and email checks first; a guest is subscribed with the BFF's service token (no sign-in), here
+	// the notifications upstream is not configured.
 	mustStatus(t, b.do("POST", "/v1/products/ATNOPE0000/stock-alerts", map[string]any{"email": "a@example.com"}), 404)
 	mustStatus(t, b.do("POST", "/v1/products/ATGARI0001/stock-alerts", map[string]any{}), 422)
-	mustStatus(t, b.do("POST", "/v1/products/ATGARI0001/stock-alerts", map[string]any{"email": "a@example.com"}), 401)
+	mustStatus(t, b.do("POST", "/v1/products/ATGARI0001/stock-alerts", map[string]any{"email": "a@example.com"}), 503)
 }
 
 func TestPendingUpstreamsAnswer503(t *testing.T) {

@@ -70,6 +70,7 @@ export { ChipGroup, type ChipGroupProps } from './form/ChipGroup';
 export { Combobox, type ComboboxOption, type ComboboxProps } from './form/Combobox';
 export { ErrorSummary, type ErrorSummaryItem, type ErrorSummaryProps } from './form/ErrorSummary';
 export { Field, type FieldProps, type FieldRenderProps, fieldStyles } from './form/Field';
+export { InlineEdit, type InlineEditProps } from './form/InlineEdit';
 export { PasswordField, type PasswordFieldProps, type PasswordRuleView } from './form/PasswordField';
 export { formatNational, phoneCountries, type PhoneCountry, PhoneInput, type PhoneInputProps } from './form/PhoneInput';
 export { PhoneNumberField, type PhoneNumberFieldProps, splitE164 as splitPhoneE164, toE164Number } from './form/PhoneNumberField';
@@ -80,6 +81,7 @@ export { SheetTableScroll, type SheetTableScrollProps } from './layout/SheetTabl
 export { type StatItem, StatStrip, type StatStripProps, type StatTone } from './layout/StatStrip';
 export { Dialog, DialogActions, type DialogProps, Sheet, type SheetProps } from './overlay/Dialog';
 export { Menu, MenuGroup, MenuItem, type MenuItemProps, type MenuProps, MenuSeparator } from './overlay/Menu';
+export { ConfirmDelete, type ConfirmDeleteProps, type RowAction, type RowActionItem, RowActions, type RowActionsProps, RowName, type RowNameProps } from './overlay/RowActions';
 export { type TabItem, Tabs, type TabsProps } from './overlay/Tabs';
 export { type ToastAction, type ToastMessage, ToastProvider, useToast } from './overlay/Toast';
 export { QR_QUIET_ZONE, QrCodeImage, type QrCodeImageProps, type QrMatrix, qrMatrix, qrPath } from './security/QrCodeImage';

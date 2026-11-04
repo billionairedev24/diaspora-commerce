@@ -1,0 +1,58 @@
+.value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--at-space-1);
+  min-height: var(--at-size-control-sm);
+  padding: 0 var(--at-space-1);
+  margin-inline: calc(-1 * var(--at-space-1));
+  border: 0;
+  border-radius: var(--at-radius-sm);
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: text;
+  text-decoration: underline dotted var(--at-color-border-strong);
+  text-underline-offset: 4px;
+}
+.pencil { color: var(--at-color-text-muted); opacity: 0; transition: opacity var(--at-duration-fast) var(--at-ease); }
+@media (hover: hover) {
+  .value:hover { background: var(--at-color-surface-hover); }
+  .value:hover .pencil { opacity: 1; }
+}
+.value:focus-visible .pencil { opacity: 1; }
+/* Touch screens have no hover: keep the pencil visible so the cell reads as editable. */
+@media (hover: none) {
+  .pencil { opacity: 0.7; }
+}
+
+.editor { display: flex; flex-direction: column; gap: var(--at-space-1); align-items: flex-start; }
+.row { display: inline-flex; align-items: center; gap: var(--at-space-1); }
+.input {
+  height: var(--at-size-control-sm);
+  padding: 0 var(--at-space-2);
+  border: 1px solid var(--at-color-border-strong);
+  border-radius: var(--at-radius-sm);
+  background: var(--at-color-surface);
+  font: inherit;
+  font-size: var(--at-text-sm);
+  color: var(--at-color-text);
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.input[aria-invalid='true'] { border-color: var(--at-color-danger); }
+.iconButton {
+  display: inline-grid;
+  place-items: center;
+  width: var(--at-size-control-sm);
+  height: var(--at-size-control-sm);
+  border: 0;
+  border-radius: var(--at-radius-pill);
+  background: none;
+  color: var(--at-color-text);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .iconButton:hover:not(:disabled) { background: var(--at-color-surface-hover); }
+}
+.iconButton:disabled { opacity: 0.45; cursor: not-allowed; }
+.error { font-size: var(--at-text-xs); color: var(--at-color-danger); text-align: start; }

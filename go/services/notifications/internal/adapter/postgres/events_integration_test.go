@@ -154,15 +154,15 @@ func stockAlerts(t *testing.T, pool *pgxpool.Pool) {
 	ctx := context.Background()
 	store := postgres.NewStockAlertStore(pool)
 	a, created, err := store.Subscribe(ctx, domain.StockAlert{UserID: "s-1", Atin: "ATSTCK0001", Email: "s1@example.com",
-		Market: "us", Locale: "en", ProductTitle: "Palm oil 1L"})
+		Market: "us", Locale: "en", ProductTitle: "Palm oil 1L"}, 50)
 	if err != nil || !created || a.Status != domain.StockAlertActive || a.ProductTitle != "Palm oil 1L" {
 		t.Fatalf("%+v %v %v", a, created, err)
 	}
-	again, created, err := store.Subscribe(ctx, domain.StockAlert{UserID: "s-1", Atin: "ATSTCK0001", Market: "us", Locale: "en"})
+	again, created, err := store.Subscribe(ctx, domain.StockAlert{UserID: "s-1", Atin: "ATSTCK0001", Market: "us", Locale: "en"}, 50)
 	if err != nil || created || again.ID != a.ID {
 		t.Fatalf("subscribe once: %+v %v %v", again, created, err)
 	}
-	if _, _, err := store.Subscribe(ctx, domain.StockAlert{UserID: "s-2", Atin: "ATSTCK0001", Market: "us", Locale: "en"}); err != nil {
+	if _, _, err := store.Subscribe(ctx, domain.StockAlert{UserID: "s-2", Atin: "ATSTCK0001", Market: "us", Locale: "en"}, 50); err != nil {
 		t.Fatal(err)
 	}
 	claimed, err := store.ClaimForRestock(ctx, "ATSTCK0001", "inv-a", 10)
@@ -175,7 +175,7 @@ func stockAlerts(t *testing.T, pool *pgxpool.Pool) {
 		t.Fatalf("same event re-claims, a new event finds none: %d %d", len(redelivered), len(other))
 	}
 	// Re-arm after a notification keeps the stored email when none is given.
-	rearmed, created, err := store.Subscribe(ctx, domain.StockAlert{UserID: "s-1", Atin: "ATSTCK0001", Market: "ca", Locale: "fr"})
+	rearmed, created, err := store.Subscribe(ctx, domain.StockAlert{UserID: "s-1", Atin: "ATSTCK0001", Market: "ca", Locale: "fr"}, 50)
 	if err != nil || !created || rearmed.Status != domain.StockAlertActive || rearmed.Email != "s1@example.com" || rearmed.Market != "ca" {
 		t.Fatalf("%+v %v %v", rearmed, created, err)
 	}
@@ -192,7 +192,8 @@ func stockAlerts(t *testing.T, pool *pgxpool.Pool) {
 
 	// End to end: restock event → back-in-stock email rendered from the seeded template, once.
 	e := newEnv(t, pool)
-	sa := app.NewStockAlerts(store, e.notifier, identityStub{}, app.Links{Storefront: "https://afrotransact.com"}, discard)
+	unsub := app.NewUnsubscriber("https://n.test", "", []byte("k"))
+	sa := app.NewStockAlerts(store, e.notifier, identityStub{}, app.Links{Storefront: "https://afrotransact.com"}, unsub, discard)
 	if _, _, err := sa.Subscribe(ctx, domain.StockAlert{UserID: "s-3", Atin: "ATSTCK0002", ProductTitle: "Ogbono 500g"}); err != nil {
 		t.Fatal(err)
 	}
@@ -205,8 +206,93 @@ func stockAlerts(t *testing.T, pool *pgxpool.Pool) {
 		}
 	}
 	rows, _ := e.store.List(ctx, domain.ListFilter{Recipient: "s-3@example.com", Limit: 10})
-	if len(rows) != 1 || rows[0].Subject != "It's back: Ogbono 500g" || !strings.Contains(rows[0].BodyText, "https://afrotransact.com/p/ATSTCK0002") {
+	if len(rows) != 1 || rows[0].Subject != "It's back: Ogbono 500g" || !strings.Contains(rows[0].BodyText, "https://afrotransact.com/p/ATSTCK0002") ||
+		!strings.Contains(rows[0].BodyText, "https://n.test/v1/stock-alerts/unsubscribe?t=") || rows[0].Headers["List-Unsubscribe-Post"] == "" {
 		t.Fatalf("%+v", rows)
+	}
+	guestStockAlerts(t, pool, store, sa, ing, e)
+}
+
+// guestStockAlerts covers visitors without an account against real SQL: one alert per (email, atin) whatever the case
+// of the address, the open-alert cap, restock → localised email with an unsubscribe link, removal by that link, purge.
+func guestStockAlerts(t *testing.T, pool *pgxpool.Pool, store port.StockAlertStore, sa app.StockAlerts, ing app.Ingest, e *env) {
+	t.Helper()
+	ctx := context.Background()
+	guest := func(email, atin, locale string) domain.StockAlert {
+		return domain.StockAlert{Email: email, Atin: atin, Market: "us", Locale: locale, ProductTitle: "Shea butter 200g"}
+	}
+	for _, email := range []string{"Guest@Example.com", "guest@example.com", " GUEST@example.COM"} {
+		if err := sa.SubscribeGuest(ctx, guest(email, "ATGST00001", "fr")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM stock_alert WHERE email = 'guest@example.com' AND user_id IS NULL`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("one guest alert per (email, atin): %d %v", n, err)
+	}
+	// Direct inserts bypass the service's normalisation: the schema still refuses a second row and an owner-less one.
+	if _, err := pool.Exec(ctx, `INSERT INTO stock_alert (id, atin, email) VALUES (gen_random_uuid(), 'ATGST00001', 'guest@example.com')`); err == nil {
+		t.Fatal("unique (email, atin) for guests")
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO stock_alert (id, atin) VALUES (gen_random_uuid(), 'ATGST00009')`); err == nil {
+		t.Fatal("an alert needs a user or an email")
+	}
+	// Cap: 3 open alerts per address.
+	for _, atin := range []string{"ATGST00002", "ATGST00003", "ATGST00004", "ATGST00005"} {
+		_, _, err := store.Subscribe(ctx, guest("capped@example.com", atin, "en"), 3)
+		if atin == "ATGST00005" && !errors.Is(err, domain.ErrAlertLimit) || atin != "ATGST00005" && err != nil {
+			t.Fatalf("%s: %v", atin, err)
+		}
+	}
+	// Restock: one localised email, once, with the link; the alert is then closed.
+	raw, _ := json.Marshal(map[string]any{"sku": "ATGST00001", "nodeId": "HOU-FC", "ownerOrg": "retail", "available": 9,
+		"onHand": 9, "reserved": 0, "version": 1})
+	for range 2 {
+		if err := ing.Handle(ctx, events.Envelope{ID: "inv-guest", Type: app.AvailabilityChangedType, Payload: raw}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, _ := e.store.List(ctx, domain.ListFilter{Recipient: "guest@example.com", Limit: 10})
+	if len(rows) != 1 || rows[0].Locale != "fr" || rows[0].Subject != "C'est de retour : Shea butter 200g" ||
+		!strings.Contains(rows[0].BodyText, "Arrêter cette alerte : https://n.test/v1/stock-alerts/unsubscribe?t=") {
+		t.Fatalf("%+v", rows)
+	}
+	link := rows[0].Headers["List-Unsubscribe"]
+	token := link[strings.Index(link, "?t=")+3 : strings.Index(link, ">")]
+	var sent *time.Time
+	if err := pool.QueryRow(ctx, `SELECT notified_at FROM stock_alert WHERE email = 'guest@example.com'`).Scan(&sent); err != nil || sent == nil {
+		t.Fatalf("closed after sending: %v %v", sent, err)
+	}
+	// Subscribing again re-arms the closed alert instead of failing on the unique index.
+	if err := sa.SubscribeGuest(ctx, guest("guest@example.com", "ATGST00001", "es")); err != nil {
+		t.Fatal(err)
+	}
+	// The link removes that alert, for anyone holding it, and twice is fine.
+	for range 2 {
+		if err := sa.UnsubscribeByToken(ctx, token); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM stock_alert WHERE email = 'guest@example.com'`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("removed by link: %d %v", n, err)
+	}
+	// Purge: open alerts older than 180 days and sent ones older than 14 go; others stay.
+	if _, err := pool.Exec(ctx, `INSERT INTO stock_alert (id, atin, email, created_at) VALUES
+		(gen_random_uuid(), 'ATPRG00001', 'purge@example.com', now() - interval '181 days'),
+		(gen_random_uuid(), 'ATPRG00002', 'purge@example.com', now() - interval '179 days')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO stock_alert (id, atin, email, notified_at) VALUES
+		(gen_random_uuid(), 'ATPRG00003', 'purge@example.com', now() - interval '15 days'),
+		(gen_random_uuid(), 'ATPRG00004', 'purge@example.com', now() - interval '2 days')`); err != nil {
+		t.Fatal(err)
+	}
+	gone, err := sa.Purge(ctx)
+	if err != nil || gone != 2 {
+		t.Fatalf("purged %d: %v", gone, err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM stock_alert WHERE email = 'purge@example.com'`).Scan(&n); err != nil || n != 2 {
+		t.Fatalf("kept %d: %v", n, err)
 	}
 }
 

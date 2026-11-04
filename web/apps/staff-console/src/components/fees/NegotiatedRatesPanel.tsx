@@ -14,7 +14,7 @@ import {
   staffFeeRateQueries,
   staffQueries
 } from '@afrotransact/api-client';
-import { DataTable, useTableState } from '@afrotransact/data-table';
+import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -192,8 +192,12 @@ export function NegotiatedRatesPanel({ org }: { org?: { orgId: string; name: str
         </span>
       ) },
     { id: 'createdAt', accessorFn: (r) => r.createdAt, header: t('st.rates.col.created'), size: 150, meta: { kind: 'datetime' }, cell: ({ row }) => dateTime(row.original.createdAt) },
-    { id: 'actions', header: () => <span className="at-visually-hidden">{t('st.rates.col.actions')}</span>, size: 90, enableSorting: false, meta: { export: false, label: t('st.rates.col.actions') },
-      cell: ({ row }) => (row.original.canEnd ? <Button size="sm" variant="link" onClick={() => setEnding(row.original)}>{t('st.rates.end')}</Button> : null) }
+    rowActionsColumn<NegotiatedRate>({
+      header: t('st.rates.col.actions'),
+      name: (r) => `${sellerName(t, r.orgName)} ${r.amountMinor === null ? formatBps(r.rateBps) : money(r.amountMinor)}`,
+      label: (r) => t('st.rows.actionsFor', { name: `${sellerName(t, r.orgName)} ${r.amountMinor === null ? formatBps(r.rateBps) : money(r.amountMinor)}` }),
+      items: (r) => [r.canEnd && { label: t('st.rates.end'), danger: true, onSelect: () => setEnding(r) }]
+    })
   ], [t, org]);
   return (
     <>

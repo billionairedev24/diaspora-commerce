@@ -16,7 +16,7 @@ type SellerListingService interface {
 	Product(ctx context.Context, c *domain.Caller, productID string) (domain.SellerProductDetail, error)
 	Submit(ctx context.Context, c *domain.Caller, d domain.ProductDraft) (domain.ListingRow, error)
 	Update(ctx context.Context, c *domain.Caller, productID string, d domain.ProductDraft) (domain.ListingRow, error)
-	Drafts(ctx context.Context, c *domain.Caller) (domain.ProductDraftList, error)
+	Drafts(ctx context.Context, c *domain.Caller, q port.DraftsQuery) (domain.ProductDraftList, error)
 	Draft(ctx context.Context, c *domain.Caller, id string) (domain.SavedProductDraft, error)
 	CreateDraft(ctx context.Context, c *domain.Caller, in domain.SaveProductDraftRequest) (domain.SavedProductDraft, error)
 	SaveDraft(ctx context.Context, c *domain.Caller, id string, in domain.SaveProductDraftRequest) (domain.SavedProductDraft, error)
@@ -270,7 +270,7 @@ func (s *sellerListingImpl) detailOf(ctx context.Context, c *domain.Caller, p po
 
 func draftSummaryOf(d port.CatalogDraft) domain.ProductDraftSummary {
 	return domain.ProductDraftSummary{ID: d.ID, ProductID: strPtr(d.ProductID), Title: d.Title, CategoryPath: strPtr(d.CategoryPath),
-		UpdatedAt: d.UpdatedAt, Version: d.Version}
+		UpdatedAt: d.UpdatedAt, Version: d.Version, Todo: d.Todo}
 }
 
 func savedDraftOf(d port.CatalogDraft) domain.SavedProductDraft {
@@ -281,7 +281,7 @@ func savedDraftOf(d port.CatalogDraft) domain.SavedProductDraft {
 	return domain.SavedProductDraft{ProductDraftSummary: draftSummaryOf(d), Payload: payload}
 }
 
-func (s *sellerListingImpl) Drafts(ctx context.Context, c *domain.Caller) (domain.ProductDraftList, error) {
+func (s *sellerListingImpl) Drafts(ctx context.Context, c *domain.Caller, q port.DraftsQuery) (domain.ProductDraftList, error) {
 	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
 		return domain.ProductDraftList{}, err
 	}
@@ -289,11 +289,29 @@ func (s *sellerListingImpl) Drafts(ctx context.Context, c *domain.Caller) (domai
 	if err != nil {
 		return domain.ProductDraftList{}, err
 	}
-	list, err := l.Drafts(ctx, c.BearerToken)
+	if len(q.Q) > domain.MaxSearchLength {
+		return domain.ProductDraftList{}, domain.ValidationProblem(map[string]string{"q": "The search text is too long"})
+	}
+	if q.Kind != "" && q.Kind != "all" && q.Kind != "new" {
+		return domain.ProductDraftList{}, domain.ValidationProblem(map[string]string{"kind": "Must be all or new"})
+	}
+	if q.Size < 1 || q.Size > 100 || q.Page < 0 {
+		return domain.ProductDraftList{}, domain.ValidationProblem(map[string]string{"size": "Page must be 0 or more and size 1 to 100"})
+	}
+	column, direction, _ := strings.Cut(q.Sort, ",")
+	switch column {
+	case "", "updatedAt", "title", "categoryPath":
+	default:
+		return domain.ProductDraftList{}, domain.ValidationProblem(map[string]string{"sort": "Sort by updatedAt, title or categoryPath"})
+	}
+	if direction != "" && direction != "asc" && direction != "desc" {
+		return domain.ProductDraftList{}, domain.ValidationProblem(map[string]string{"sort": "Direction is asc or desc"})
+	}
+	list, total, err := l.Drafts(ctx, c.BearerToken, q)
 	if err != nil {
 		return domain.ProductDraftList{}, mapErr("catalog", err)
 	}
-	out := domain.ProductDraftList{Items: make([]domain.ProductDraftSummary, 0, len(list))}
+	out := domain.ProductDraftList{Items: make([]domain.ProductDraftSummary, 0, len(list)), Total: total, Page: q.Page, Size: q.Size}
 	for _, d := range list {
 		out.Items = append(out.Items, draftSummaryOf(d))
 	}

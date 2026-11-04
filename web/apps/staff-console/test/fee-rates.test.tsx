@@ -120,7 +120,8 @@ describe('Fees & commissions screens', () => {
     await user.selectOptions(screen.getByLabelText('Type', { selector: 'select' }), 'CONNECTION_FEE');
     await waitFor(() => expect(within(table).queryByText(/Wholesale partner/)).not.toBeInTheDocument());
     expect(within(table).getByText(/Launch provider/)).toBeInTheDocument();
-    await user.click(within(table).getByRole('button', { name: 'End' }));
+    await user.click(within(table).getByRole('button', { name: /^Actions for / }));
+    await user.click(await screen.findByRole('menuitem', { name: 'End' }));
     await user.click(screen.getByRole('button', { name: 'End now' }));
     expect(await screen.findByText(/Say why/)).toBeInTheDocument();
     await user.type(screen.getByLabelText(/Why it ends/), 'Promotion over');

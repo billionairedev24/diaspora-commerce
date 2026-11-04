@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -52,16 +54,39 @@ func (u *Upstreams) catalogListingRoutes(mux *http.ServeMux) {
 	})
 	draftJSON := func(id string, d map[string]any) map[string]any {
 		out := map[string]any{"id": id, "productId": d["productId"], "title": d["title"], "categoryPath": d["categoryPath"],
-			"payload": d["payload"], "updatedAt": "2026-10-10T10:00:00Z", "version": d["version"]}
+			"payload": d["payload"], "updatedAt": "2026-10-10T10:00:00Z", "version": d["version"], "todo": 4}
 		return out
 	}
-	mux.HandleFunc("GET /v1/product-drafts", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /v1/product-drafts", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
-		out := []any{}
+		q := r.URL.Query()
+		ids := []string{}
 		for id, d := range u.seller.drafts {
-			out = append(out, draftJSON(id, d))
+			if text := strings.ToLower(q.Get("q")); text != "" {
+				title, _ := d["title"].(string)
+				path, _ := d["categoryPath"].(string)
+				if !strings.Contains(strings.ToLower(title), text) && !strings.Contains(strings.ToLower(path), text) {
+					continue
+				}
+			}
+			if pid, _ := d["productId"].(string); q.Get("kind") == "new" && pid != "" {
+				continue
+			}
+			ids = append(ids, id)
 		}
+		sort.Strings(ids)
+		total := len(ids)
+		page, _ := strconv.Atoi(q.Get("page"))
+		size, err := strconv.Atoi(q.Get("size"))
+		if err != nil || size < 1 {
+			size = 100
+		}
+		out := []any{}
+		for i := page * size; i < total && i < (page+1)*size; i++ {
+			out = append(out, draftJSON(ids[i], u.seller.drafts[ids[i]]))
+		}
+		w.Header().Set("X-Total-Count", strconv.Itoa(total))
 		writeJSON(w, 200, out)
 	})
 	mux.HandleFunc("POST /v1/product-drafts", func(w http.ResponseWriter, r *http.Request) {

@@ -2,8 +2,8 @@
 
 import { accountQueries, type Offer, pickerDimensions, productQueries, selectedSize } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, CheckCircle, FulfilmentBadge, ImagePlaceholder, MapPin, Price, QuantityStepper, Sparkle, Stars, TextField } from '@afrotransact/ui';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { Button, CheckCircle, FulfilmentBadge, ImagePlaceholder, MapPin, Price, QuantityStepper, Sparkle, Stars } from '@afrotransact/ui';
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -21,6 +21,7 @@ import { useAvailability } from '@/lib/preorder/useAvailability';
 
 import styles from './Product.module.css';
 import { SizeGuide, VariantChips } from './SizeGuide';
+import { StockAlertForm } from './StockAlertForm';
 
 function OfferCartControl({ offer, title, label }: { offer: Offer; title: string; label: string }) {
   const t = useT();
@@ -62,9 +63,6 @@ export function ProductView({ atin }: { atin: string }) {
   const [qty, setQty] = useState(1);
   const [locOpen, setLocOpen] = useState(false);
   const [lolaOpen, setLolaOpen] = useState(false);
-  const [email, setEmail] = useState('');
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const alert = useMutation({ mutationFn: (e?: string) => api.createStockAlert(atin, e) });
   const availability = useAvailability(data?.product.preorderEligible);
 
   if (!data) return <p className={styles.notFound}>{t('pdp.notFound')}</p>;
@@ -84,15 +82,6 @@ export function ProductView({ atin }: { atin: string }) {
     if (!bb || lockedLabel) return;
     const n = Math.max(1, Math.min(qty, max - inCart));
     cartMutation.mutate({ kind: 'add', offerId: bb.offerId, quantity: n, title: p.title }, { onSuccess: () => andCheckout && router.push('/checkout') });
-  };
-
-  const notify = () => {
-    if (!me?.authenticated && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email.trim())) {
-      setEmailError('Enter a valid email address');
-      return;
-    }
-    setEmailError(null);
-    alert.mutate(me?.authenticated ? undefined : email.trim());
   };
 
   return (
@@ -294,12 +283,7 @@ export function ProductView({ atin }: { atin: string }) {
                 <strong>{t('pdp.unavailable')}</strong>
               </p>
               <p className={styles.unavailableHint}>{t('pdp.unavailableHint')}</p>
-              {!me?.authenticated && !alert.isSuccess && (
-                <TextField label={t('pdp.notifyEmail')} type="email" value={email} onChange={(e) => setEmail(e.target.value)} error={emailError} autoComplete="email" />
-              )}
-              <Button variant="neutral" size="sm" onClick={notify} loading={alert.isPending} disabled={alert.isSuccess} aria-live="polite">
-                {alert.isSuccess ? t('pdp.notifyDone') : t('pdp.notify')}
-              </Button>
+              <StockAlertForm key={me?.user?.email ?? 'guest'} atin={atin} accountEmail={me?.authenticated ? me.user?.email : undefined} />
             </div>
           )}
           <dl className={styles.boxFacts}>

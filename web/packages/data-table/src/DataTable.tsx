@@ -301,7 +301,8 @@ export function DataTable<T>(props: DataTableProps<T>) {
   const openRow = (row: Row<T>, e: MouseEvent<HTMLTableRowElement> | KeyboardEvent<HTMLTableRowElement>) => {
     if (!onRowClick) return;
     const target = e.target as HTMLElement;
-    if (target !== e.currentTarget && target.closest(INTERACTIVE)) return;
+    // React events bubble out of portals: a click inside a row's menu or dialog is not a click on the row.
+    if (target !== e.currentTarget && (!e.currentTarget.contains(target) || target.closest(INTERACTIVE))) return;
     onRowClick(row.original);
   };
 
@@ -470,6 +471,13 @@ export function DataTable<T>(props: DataTableProps<T>) {
       );
     }
     const primary = c.id === firstColumn;
+    if (c.columnDef.meta?.actions) {
+      return (
+        <td key={cell.id} className={cx('px-1 align-top', pad, '@max-xl/dt:static! @max-xl/dt:col-start-2 @max-xl/dt:row-start-1 @max-xl/dt:-my-2 @max-xl/dt:p-0')} data-no-row-click>
+          {flexRender(c.columnDef.cell, cell.getContext())}
+        </td>
+      );
+    }
     return (
       <td
         key={cell.id}
@@ -495,11 +503,13 @@ export function DataTable<T>(props: DataTableProps<T>) {
 
   const visibleCount = table.getVisibleLeafColumns().length;
   const fitted = Object.keys(sizing).length === 0;
-  const fixedWidth = enableSelection ? 44 : 0;
-  const flexibleTotal = Math.max(1, table.getVisibleLeafColumns().reduce((n, c) => n + (c.id === SELECT_COLUMN ? 0 : c.getSize()), 0));
+  // The checkbox and the row-actions column keep a fixed width; the others share the rest.
+  const isFixed = (c: Column<T, unknown>) => c.id === SELECT_COLUMN || !!c.columnDef.meta?.actions;
+  const fixedWidth = (enableSelection ? 44 : 0) + table.getVisibleLeafColumns().reduce((n, c) => n + (c.columnDef.meta?.actions ? c.getSize() : 0), 0);
+  const flexibleTotal = Math.max(1, table.getVisibleLeafColumns().reduce((n, c) => n + (isFixed(c) ? 0 : c.getSize()), 0));
   // Fitted tables never squeeze a column below ~96px (text would wrap letter by letter on a tablet): past that the
   // region scrolls sideways with the checkbox and first column pinned. Phones get cards instead (container query).
-  const minFitted = table.getVisibleLeafColumns().reduce((n, c) => n + (c.id === SELECT_COLUMN ? 44 : Math.max(96, Math.min(c.getSize(), 140))), 0);
+  const minFitted = table.getVisibleLeafColumns().reduce((n, c) => n + (c.id === SELECT_COLUMN ? 44 : c.columnDef.meta?.actions ? c.getSize() : Math.max(96, Math.min(c.getSize(), 140))), 0);
   const from = pagination.pageIndex * pagination.pageSize + (pageRows.length ? 1 : 0);
   const to = pagination.pageIndex * pagination.pageSize + pageRows.length;
   const hasPrev = client ? table.getCanPreviousPage() : pagination.pageIndex > 0;
@@ -635,7 +645,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
         >
           <colgroup className="@max-xl/dt:hidden">
             {table.getVisibleLeafColumns().map((c) => (
-              <col key={c.id} style={{ width: fitted && c.id !== SELECT_COLUMN ? `calc((100% - ${fixedWidth}px) * ${c.getSize() / flexibleTotal})` : c.getSize() }} />
+              <col key={c.id} style={{ width: fitted && !isFixed(c) ? `calc((100% - ${fixedWidth}px) * ${c.getSize() / flexibleTotal})` : c.getSize() }} />
             ))}
           </colgroup>
           <thead className="@max-xl/dt:block">

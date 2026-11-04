@@ -50,7 +50,7 @@ describe('MenuItem disabled', () => {
     render(
       <Menu trigger={<button type="button">Set status</button>} label="Set status" inline defaultOpen>
         <MenuItem onSelect={() => (picked = 'ok')}>Picked up</MenuItem>
-        <MenuItem disabled description="Earlier steps come first" onSelect={() => (picked = 'no')}>
+        <MenuItem disabled="Earlier steps come first" onSelect={() => (picked = 'no')}>
           Delivered
         </MenuItem>
       </Menu>

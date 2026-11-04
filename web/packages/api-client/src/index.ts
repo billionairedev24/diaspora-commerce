@@ -55,7 +55,7 @@ export * from './schemas/shopper';
 export * from './schemas/site';
 export * from './schemas/staff';
 export { fromApiSearchParams, parseSearchUrl, searchHref, toApiSearchParams, toSearchUrl } from './search-params';
-export { createSellerApiClient, type ImportRowsQuery, type ListingsQuery, type SellerApiClient, type SellerExportRequest, type SellerOrdersQuery, type SizeChartsQuery } from './seller-client';
+export { createSellerApiClient, type ImportRowsQuery, type ListingsQuery, type ProductDraftsQuery, type SellerApiClient, type SellerExportRequest, type SellerOrdersQuery, type SizeChartsQuery } from './seller-client';
 export { createSessionApi, serverTimeOf, type SessionApi, type SignedOutState } from './session-api';
 export { createSessionEndBus, reportSessionEnd, type SessionEndBus, sessionEndBus, type SessionEndListener, sessionEndReasonOf } from './session-end';
 export { createSettingsApiClient, type SettingsApiClient } from './settings-client';

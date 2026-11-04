@@ -2,7 +2,7 @@ import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
 import { BACKGROUND } from '../http';
 import { type BrandScope, type Cadence, type ImageLibraryQuery, type ProductImport } from '../schemas/seller';
-import { type ImportRowsQuery, type ListingsQuery, type SellerApiClient, type SellerOrdersQuery, type SizeChartsQuery } from '../seller-client';
+import { type ImportRowsQuery, type ListingsQuery, type ProductDraftsQuery, type SellerApiClient, type SellerOrdersQuery, type SizeChartsQuery } from '../seller-client';
 import { pollingOf,type PollRule } from './polling';
 
 /* TanStack Query key factories for the Seller Center & Provider Hub. Everything hangs off ['seller', orgId] so
@@ -38,6 +38,7 @@ export const sellerKeys = {
   productType: (code: string) => [...sellerKeys.all, 'catalog', 'product-type', code] as const,
   product: (orgId: string, productId: string) => [...sellerKeys.listings(orgId), 'product', productId] as const,
   productDrafts: (orgId: string) => [...sellerKeys.org(orgId), 'product-drafts'] as const,
+  productDraftPage: (orgId: string, q: ProductDraftsQuery) => [...sellerKeys.productDrafts(orgId), 'page', q] as const,
   productDraft: (orgId: string, id: string) => [...sellerKeys.productDrafts(orgId), id] as const,
   listingContext: (orgId: string) => [...sellerKeys.org(orgId), 'listing-context'] as const,
   imports: (orgId: string) => [...sellerKeys.org(orgId), 'imports'] as const,
@@ -131,7 +132,9 @@ export const sellerQueries = {
   product: (api: SellerApiClient, orgId: string, productId: string) =>
     queryOptions({ queryKey: sellerKeys.product(orgId, productId), queryFn: ({ signal }) => api.getProduct(productId, signal), staleTime: 0, enabled: productId !== '' }),
   productDrafts: (api: SellerApiClient, orgId: string) =>
-    queryOptions({ queryKey: sellerKeys.productDrafts(orgId), queryFn: ({ signal }) => api.listProductDrafts(signal), staleTime: 15_000 }),
+    queryOptions({ queryKey: sellerKeys.productDrafts(orgId), queryFn: ({ signal }) => api.listProductDrafts(undefined, signal), staleTime: 15_000 }),
+  productDraftPage: (api: SellerApiClient, orgId: string, q: ProductDraftsQuery) =>
+    queryOptions({ queryKey: sellerKeys.productDraftPage(orgId, q), queryFn: ({ signal }) => api.listProductDrafts(q, signal), placeholderData: keepPreviousData, staleTime: 15_000 }),
   productDraft: (api: SellerApiClient, orgId: string, id: string) =>
     queryOptions({ queryKey: sellerKeys.productDraft(orgId, id), queryFn: ({ signal }) => api.getProductDraft(id, signal), staleTime: 0, enabled: id !== '' }),
   listingContext: (api: SellerApiClient, orgId: string) =>

@@ -8,6 +8,7 @@ import { PublishedPagesView } from '@/components/pages/PublishedPagesView';
 
 import { asRoles } from './mock-api';
 import { renderScreen } from './render';
+import { chooseRowAction } from './row-menu';
 import { nav } from './setup';
 
 /* Settings → Published pages against the mock BFF: the index with absolute live links, the preview in each language and
@@ -51,7 +52,7 @@ describe('the index', () => {
   it('previews a page in a sheet with the language and width switchers, and falls back to English with a notice', async () => {
     const user = userEvent.setup();
     await renderScreen(<PublishedPagesView />);
-    await user.click(await screen.findByRole('button', { name: 'Preview Privacy Notice' }));
+    await chooseRowAction('Privacy Notice', 'Preview');
     const sheet = await screen.findByRole('dialog');
     const stage = await within(sheet).findByTestId('preview-stage');
     expect(within(stage).getByRole('heading', { level: 1, name: 'Privacy Notice' })).toBeInTheDocument();

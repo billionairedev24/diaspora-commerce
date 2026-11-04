@@ -415,7 +415,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The organisation's drafts, most recently saved first */
+        /**
+         * The organisation's drafts, most recently saved first
+         * @description Server-driven: q searches title and category path, kind=new leaves out the unsaved edits of existing products, sort is updatedAt|title|categoryPath[,asc|desc] (default updatedAt,desc), page is 0-based, size is at most 100. The body stays a plain array; X-Total-Count is the number of drafts matching q and kind.
+         */
         get: operations["listDrafts"];
         put?: never;
         /** Save a new draft (Save draft, or the first autosave) */
@@ -2293,6 +2296,11 @@ export interface components {
             updatedAt?: string;
             /** Format: int64 */
             version?: number;
+            /**
+             * Format: int32
+             * @description How many of the five basics (category, title, a photo, a price, a description) the draft still lacks; 0 = ready to review
+             */
+            todo?: number;
         };
         ProductImportPage: {
             items?: components["schemas"]["ProductImport"][];
@@ -3619,7 +3627,16 @@ export interface operations {
     };
     listDrafts: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Search over title and category path */
+                q?: string;
+                /** @description new = drafts of products not created yet; all (default) = every draft */
+                kind?: string;
+                /** @description updatedAt | title | categoryPath, optionally ,asc or ,desc */
+                sort?: string;
+                page?: number;
+                size?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3629,6 +3646,8 @@ export interface operations {
             /** @description OK */
             200: {
                 headers: {
+                    /** @description Drafts matching q and kind, in all pages */
+                    "X-Total-Count"?: number;
                     [name: string]: unknown;
                 };
                 content: {

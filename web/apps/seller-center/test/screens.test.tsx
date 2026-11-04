@@ -14,6 +14,7 @@ import { TeamView } from '@/components/team/TeamView';
 
 import { asRole } from './mock-api';
 import { renderScreen, renderWithProviders } from './render';
+import { chooseRowAction } from './row-menu';
 
 describe('Seller Center screens (against the seller mocks)', () => {
   beforeEach(() => {
@@ -103,10 +104,10 @@ describe('Seller Center screens (against the seller mocks)', () => {
     await renderScreen(<CouponsView />);
     expect(await screen.findByRole('table', { name: 'Coupons' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New seller coupon' })).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: /Delete coupon ADE10/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Actions for ADE10' })).toBeInTheDocument();
 
     // Clicking delete opens confirmation dialog
-    await user.click(screen.getByRole('button', { name: /Delete coupon ADE10/i }));
+    await chooseRowAction('ADE10', 'Delete');
     const dialog = await screen.findByRole('dialog', { name: /Delete ADE10/ });
     expect(dialog).toBeInTheDocument();
     expect(within(dialog).getByText(/Customers will no longer be able to use it/)).toBeInTheDocument();

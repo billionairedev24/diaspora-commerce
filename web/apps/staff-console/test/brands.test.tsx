@@ -12,6 +12,7 @@ import { SellerFormPreview } from '@/components/catalog/SellerFormPreview';
 
 import { asRoles, mockApi } from './mock-api';
 import { renderScreen } from './render';
+import { chooseRowAction } from './row-menu';
 import { nav } from './setup';
 
 const api = () => mockApi().taxonomy;
@@ -80,7 +81,7 @@ describe('the brand queue', () => {
   it('approves a brand: a reason is required, and the history names who decided', async () => {
     const user = userEvent.setup();
     await renderScreen(<BrandsView />);
-    await user.click(await screen.findByRole('button', { name: 'Approve Nikee' }));
+    await chooseRowAction('Nikee', 'Approve');
     const s = await sheet();
     const submit = within(s).getByRole('button', { name: 'Approve' });
     expect(submit).toBeDisabled();

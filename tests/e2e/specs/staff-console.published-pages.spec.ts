@@ -37,7 +37,8 @@ test.describe('staff console · published pages', () => {
 
   test('previews a legal document in a sheet: language, width, the fallback notice; an outside click closes the sheet', async ({ page }) => {
     await openIndex(page);
-    await page.getByRole('button', { name: 'Preview Privacy Notice' }).click();
+    await page.getByRole('button', { name: 'Actions for Privacy Notice' }).click();
+    await page.getByRole('menuitem', { name: 'Preview' }).click();
     const sheet = page.getByRole('dialog');
     await expect(sheet.getByTestId('preview-stage')).toBeVisible();
     await expect(sheet.getByText('Draft for legal counsel review — not yet in force.')).toBeVisible();

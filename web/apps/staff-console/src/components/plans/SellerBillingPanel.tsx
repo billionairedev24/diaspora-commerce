@@ -12,7 +12,7 @@ import {
   staffPlanKeys,
   staffPlanQueries
 } from '@afrotransact/api-client';
-import { DataTable, useTableState } from '@afrotransact/data-table';
+import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
 import { MagnifyingGlass } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -286,12 +286,12 @@ export function SellerBillingPanel() {
       cell: ({ row }) => <StatusPill tone={row.original.status === 'paid' ? 'good' : row.original.status === 'open' ? 'warn' : 'brand'}>{row.original.waivedCents ? t('st.plans.waived') : (row.original.status ?? '—')}</StatusPill> },
     { id: 'lastError', accessorFn: (i) => i.lastError ?? '', header: t('st.plans.col.detail'), size: 220,
       cell: ({ row }) => <span className="text-xs text-muted">{row.original.lastError ? `${row.original.lastError} (${t('st.plans.attempts', { count: row.original.attempts })})` : ''}</span> },
-    { id: 'actions', header: () => <span className="at-visually-hidden">{t('st.plans.col.actions')}</span>, size: 200, enableSorting: false, meta: { export: false, label: t('st.plans.col.actions') },
-      cell: ({ row }) => (
-        <div className="flex flex-wrap gap-2">
-          {adjust && row.original.status === 'open' ? <Button size="sm" variant="link" onClick={() => open({ kind: 'waive', invoice: row.original })}>{t('st.plans.waive')}</Button> : null}
-        </div>
-      ) }
+    rowActionsColumn<StaffBillingInvoice>({
+      header: t('st.plans.col.actions'),
+      name: (i) => i.number ?? i.id,
+      label: (i) => t('st.rows.actionsFor', { name: i.number ?? i.id }),
+      items: (i) => [adjust && i.status === 'open' && { label: t('st.plans.waive'), onSelect: () => open({ kind: 'waive', invoice: i }) }]
+    })
   ], [t, adjust]);
   const grantCols = useMemo(() => grantColumns(t, false), [t]);
   const collectionColumns = useMemo<ColumnDef<StaffEarningsCollection>[]>(() => [

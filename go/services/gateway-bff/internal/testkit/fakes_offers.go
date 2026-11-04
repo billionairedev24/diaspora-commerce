@@ -142,6 +142,19 @@ func (u *Upstreams) notificationsRoutes(mux *http.ServeMux) {
 		writeJSON(w, status, map[string]any{"id": "11111111-1111-4111-8111-111111111111", "atin": a.ATIN, "email": a.Email, "productTitle": a.Title,
 			"status": a.Status, "market": "us", "locale": "en", "createdAt": a.CreatedAt})
 	})
+	mux.HandleFunc("POST /v1/stock-alerts/guest", func(w http.ResponseWriter, r *http.Request) {
+		// Only the BFF's own client-credentials token with the guest scope (the fake identity names it svc-<scope>).
+		if r.Header.Get("Authorization") != "Bearer svc-notifications:stock-alerts.guest" {
+			problem(w, 403, "auth.missing-permission", "notifications:stock-alerts.guest required", nil)
+			return
+		}
+		var b map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		u.mu.Lock()
+		u.GuestStockAlerts = append(u.GuestStockAlerts, b)
+		u.mu.Unlock()
+		writeJSON(w, 201, map[string]any{"atin": b["atin"], "status": "subscribed"})
+	})
 	mux.HandleFunc("GET /v1/stock-alerts", func(w http.ResponseWriter, r *http.Request) {
 		sub := subjectOf(r)
 		u.mu.Lock()

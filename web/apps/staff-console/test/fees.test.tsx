@@ -9,6 +9,7 @@ import { affectedSellers, diffDraft, formFrom, impactRows, parseDollars, toDraft
 
 import { asRoles, mockApi } from './mock-api';
 import { renderScreen } from './render';
+import { chooseRowAction } from './row-menu';
 
 const NOW = new Date('2026-10-10T15:00:00Z');
 
@@ -148,7 +149,7 @@ describe('fee schedules screen', () => {
     expect(within(table).getByText('Scheduled')).toBeInTheDocument();
     expect(within(table).getByText('Cancelled')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'New version' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^Cancel v/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Actions for v/ })).not.toBeInTheDocument();
     expect(screen.getByText(/needs payments:configure/)).toBeInTheDocument();
     expect(screen.getByText(/No commission, no fees \(merchant of record\)/)).toBeInTheDocument();
   });
@@ -197,7 +198,7 @@ describe('fee schedules screen', () => {
     asRoles('platform.finance');
     const user = userEvent.setup();
     await renderScreen(<FeeSchedulesPanel />);
-    await user.click(await screen.findByRole('button', { name: 'Cancel v4' }));
+    await chooseRowAction('v4', 'Cancel version');
     const dialog = await screen.findByRole('dialog', { name: 'Cancel fee schedule v4' });
     await user.type(within(dialog).getByLabelText(/Reason/), 'Holiday promo postponed');
     await user.click(within(dialog).getByRole('button', { name: 'Cancel version' }));

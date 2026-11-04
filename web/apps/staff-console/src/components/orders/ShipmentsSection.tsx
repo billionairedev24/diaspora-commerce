@@ -210,8 +210,7 @@ function StatusControl({ shipment: s, busy, onPick }: { shipment: RecordShipment
       {s.transitions.map((step) => (
         <MenuItem
           key={step.to}
-          disabled={!step.allowed}
-          description={step.allowed ? undefined : step.blocked ? t(BLOCKED_KEYS[step.blocked]) : (step.reason ?? undefined)}
+          disabled={step.allowed ? false : step.blocked ? t(BLOCKED_KEYS[step.blocked]) : (step.reason ?? true)}
           onSelect={() => onPick(s, step)}
         >
           {shipmentStatusLabel(t, step.to)}

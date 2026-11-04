@@ -1,7 +1,7 @@
 'use client';
 
 import { type CreateSellerCoupon, type SellerCoupon, sellerKeys, sellerQueries } from '@afrotransact/api-client';
-import { DataTable, useTableState } from '@afrotransact/data-table';
+import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { Plus, Trash } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -138,48 +138,17 @@ export function CouponsView() {
           </StatusPill>
         )
       },
-      {
-        id: 'actions',
-        header: () => <span className="sr-only">Actions</span>,
-        size: 180,
-        enableSorting: false,
-        cell: ({ row }) => {
-          const c = row.original;
-          if (!c.editable || !editable) return null;
-          return (
-            <div className="flex items-center justify-end gap-2">
-              {c.status === 'ACTIVE' ? (
-                <Button
-                  size="sm"
-                  variant="neutral"
-                  loading={setStatus.isPending && setStatus.variables?.id === c.id}
-                  onClick={() => setStatus.mutate({ id: c.id, status: 'PAUSED' })}
-                >
-                  {t('sc.coupons.pause')}
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  loading={setStatus.isPending && setStatus.variables?.id === c.id}
-                  onClick={() => setStatus.mutate({ id: c.id, status: 'ACTIVE' })}
-                >
-                  {t('sc.coupons.activate')}
-                </Button>
-              )}
-              <Button
-                size="sm"
-                variant="neutral"
-                icon={<Trash size={16} aria-hidden />}
-                onClick={() => setToDelete(c)}
-                aria-label={`Delete coupon ${c.code}`}
-              >
-                {t('sc.coupons.delete')}
-              </Button>
-            </div>
-          );
-        }
-      }
+      rowActionsColumn<SellerCoupon>({
+        header: t('sc.rows.actionsHeader'),
+        name: (c) => c.code,
+        label: (c) => t('sc.rows.actionsFor', { name: c.code }),
+        items: (c) => [
+          editable && c.editable && (c.status === 'ACTIVE'
+            ? { label: t('sc.coupons.pause'), onSelect: () => setStatus.mutate({ id: c.id, status: 'PAUSED' }) }
+            : { label: t('sc.coupons.activate'), onSelect: () => setStatus.mutate({ id: c.id, status: 'ACTIVE' }) }),
+          editable && c.editable && { label: t('sc.coupons.delete'), icon: <Trash size={16} aria-hidden />, danger: true, onSelect: () => setToDelete(c) }
+        ]
+      })
     ],
     [editable, setStatus, t]
   );

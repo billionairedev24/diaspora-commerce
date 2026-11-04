@@ -36,6 +36,7 @@ Where a decision changes how the product behaves (not only the text), the last c
 | Q29 | Stripe: exact terms to name, controller/processor description, Link wording, recurring-charge authorisation | conditions-of-use, privacy, provider-terms-matrix | Read the live Stripe Services Agreement, Privacy Policy, Link terms and card-network rules | Link to Stripe's privacy policy and name the terms customers accept; record the mandate text version at sign-up | Store the mandate text version with saved methods |
 | Q30 | Pre-order delay and refund rules (FTC Mail, Internet or Telephone Order Merchandise Rule and state law) | preorder-delivery-terms | Delay-notice and cancel-and-refund obligations | Offer a cancel option and automatic refund when a date slips, as the product already does for cancelled runs | Delay notification step |
 | Q32 | Support reply target for help requests | returns | A response time we can meet | Publish a target (for example 2 business days) and staff to it | Support operations |
+| Q33 | Does a one-time back-in-stock email to an address typed by a guest (no account, no confirmation email) need a double opt-in in the launch markets (US, CA, EU/UK, Nigeria)? Engineering sends one transactional email per alert with a one-click unsubscribe link and keeps the address 180 days at most (14 days after sending). | privacy | If counsel wants a double opt-in, subscription would send a confirmation email first and arm the alert only on click (a change in notifications and the BFF). |
 
 ## Notes for counsel
 

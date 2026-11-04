@@ -1,8 +1,8 @@
 'use client';
 
 import { type ImageLibraryItem, type ImageLibraryQuery, sellerKeys, sellerQueries } from '@afrotransact/api-client';
-import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, buttonClassName, cx, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
+import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
+import { Button, buttonClassName, ConfirmDelete, cx, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
 import { FileArrowUp, FolderOpen, ImagesSquare, LinkSimple, PencilSimple, Trash } from '@phosphor-icons/react/ssr';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -46,6 +46,7 @@ export function ImageLibraryView() {
   const state = useTableState({ searchParams: useSearchParams() });
   const [status, setStatus] = useState<'' | ImageLibraryItem['status']>('');
   const [matched, setMatched] = useState<'' | 'true' | 'false'>('');
+  const [removing, setRemoving] = useState<ImageLibraryItem | null>(null);
   const [renaming, setRenaming] = useState<{ assetId: string; fileName: string } | null>(null);
   const [newName, setNewName] = useState('');
   const query: ImageLibraryQuery = {
@@ -188,35 +189,16 @@ export function ImageLibraryView() {
     },
     { id: 'size', accessorFn: (r) => `${r.width}×${r.height}`, header: t('sc.img.col.size'), size: 110, enableSorting: false, meta: { kind: 'mono' } },
     { id: 'createdAt', accessorFn: (r) => r.createdAt, header: t('sc.img.col.added'), size: 160, meta: { kind: 'datetime' }, cell: ({ row }) => dateTime(row.original.createdAt) },
-    {
-      id: 'actions', header: '', size: 160, enableSorting: false, meta: { label: t('sc.img.remove') },
-      cell: ({ row }) => (
-        <div className="flex items-center gap-1">
-          <Button
-            variant="link"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              setRenaming({ assetId: row.original.assetId, fileName: row.original.fileName });
-              setNewName(row.original.fileName);
-            }}
-            aria-label={t('sc.img.renameAria', { name: row.original.fileName })}
-          >
-            <PencilSimple size={16} aria-hidden /> {t('sc.img.rename')}
-          </Button>
-          <Button
-            variant="link"
-            size="sm"
-            loading={remove.isPending && remove.variables === row.original.assetId}
-            onClick={(e) => { e.stopPropagation(); remove.mutate(row.original.assetId); }}
-            aria-label={t('sc.img.removeAria', { name: row.original.fileName })}
-          >
-            <Trash size={16} aria-hidden /> {t('sc.img.remove')}
-          </Button>
-        </div>
-      )
-    }
-  ], [t, remove]);
+    rowActionsColumn<ImageLibraryItem>({
+      header: t('sc.rows.actionsHeader'),
+      name: (r) => r.fileName,
+      label: (r) => t('sc.rows.actionsFor', { name: r.fileName }),
+      items: (r) => [
+        { label: t('sc.img.rename'), icon: <PencilSimple size={16} aria-hidden />, onSelect: () => { setRenaming({ assetId: r.assetId, fileName: r.fileName }); setNewName(r.fileName); } },
+        { label: t('sc.img.remove'), icon: <Trash size={16} aria-hidden />, danger: true, onSelect: () => setRemoving(r) }
+      ]
+    })
+  ], [t]);
 
   const done = progress.filter((p) => p.state === 'done').length;
   const failed = progress.filter((p) => p.state === 'failed' || p.state === 'skipped').length;
@@ -286,6 +268,20 @@ export function ImageLibraryView() {
         </section>
       </div>
 
+      <ConfirmDelete
+        open={removing !== null}
+        onOpenChange={(o) => (o ? undefined : setRemoving(null))}
+        title={t('sc.img.removeTitle', { name: removing?.fileName ?? '' })}
+        description={t('sc.img.removeBody')}
+        verb={t('sc.img.remove')}
+        cancelLabel={t('sc.rows.cancel')}
+        closeLabel={t('sc.rows.close')}
+        pending={remove.isPending}
+        onConfirm={async () => {
+          if (removing) await remove.mutateAsync(removing.assetId).catch(() => undefined);
+          setRemoving(null);
+        }}
+      />
       <DataTable<ImageLibraryItem>
         id="seller.image-library"
         label={t('sc.img.title')}

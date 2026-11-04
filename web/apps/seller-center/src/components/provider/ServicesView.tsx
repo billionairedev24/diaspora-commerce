@@ -2,7 +2,7 @@
 
 import { sellerKeys, sellerQueries, type ServiceInput, ServiceInputSchema, type ServiceOffer } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Checkbox, Sheet, TextField, useToast } from '@afrotransact/ui';
+import { Button, Checkbox, RowName, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
@@ -58,13 +58,12 @@ export function ServicesView() {
     setErrors({});
   };
   const columns: ColumnDef<ServiceOffer>[] = [
-    { id: 'name', accessorFn: (s) => s.name, header: 'Service', size: 260, meta: { kind: 'strong' }, cell: ({ row }) => <span className="flex flex-col"><strong>{row.original.name}</strong><span className="truncate text-xs text-muted">{row.original.description}</span></span> },
+    { id: 'name', accessorFn: (s) => s.name, header: 'Service', size: 260, meta: { kind: 'strong' }, cell: ({ row }) => <RowName onClick={editable ? () => open(row.original) : undefined} meta={<span className="block max-w-80 truncate">{row.original.description}</span>}>{row.original.name}</RowName> },
     { id: 'durationMinutes', accessorFn: (s) => s.durationMinutes, header: 'Duration', size: 110, meta: { kind: 'number', label: 'Duration (minutes)' }, cell: ({ row }) => minutesLabel(row.original.durationMinutes) },
     { id: 'priceMinor', accessorFn: (s) => s.priceMinor, header: 'Price', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.priceMinor, row.original.currency) },
     { id: 'depositMinor', accessorFn: (s) => s.depositMinor, header: 'Deposit', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.depositMinor, row.original.currency) },
     { id: 'takeHomeMinor', accessorFn: (s) => s.takeHome.takeHomeMinor, header: 'You take home', size: 130, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => <strong>{money(row.original.takeHome.takeHomeMinor, row.original.currency)}</strong> },
-    { id: 'status', accessorFn: (s) => (s.active ? 'Bookable' : 'Hidden'), header: 'Status', size: 110, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={row.original.active ? 'good' : 'info'}>{row.original.active ? 'Bookable' : 'Hidden'}</StatusPill> },
-    { id: 'edit', header: () => <span className="at-visually-hidden">Edit</span>, size: 90, enableSorting: false, meta: { export: false, label: 'Edit' }, cell: ({ row }) => (editable ? <Button size="sm" variant="neutral" onClick={() => open(row.original)}>Edit</Button> : null) }
+    { id: 'status', accessorFn: (s) => (s.active ? 'Bookable' : 'Hidden'), header: 'Status', size: 110, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={row.original.active ? 'good' : 'info'}>{row.original.active ? 'Bookable' : 'Hidden'}</StatusPill> }
   ];
   const priceMinor = toMinor(draft.price);
   const est = estimateTakeHome(Number.isNaN(priceMinor) ? 0 : priceMinor, commission);

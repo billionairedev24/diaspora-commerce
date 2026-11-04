@@ -65,11 +65,16 @@ type ProductDraftSummary struct {
 	CategoryPath *string   `json:"categoryPath"`
 	UpdatedAt    time.Time `json:"updatedAt"`
 	Version      int64     `json:"version"`
+	// Todo is how many of the five basics (category, title, a photo, a price, a description) the draft lacks.
+	Todo int `json:"todo"`
 }
 
-// ProductDraftList is GET /v1/seller/product-drafts.
+// ProductDraftList is GET /v1/seller/product-drafts: one page and how many drafts match in all.
 type ProductDraftList struct {
 	Items []ProductDraftSummary `json:"items"`
+	Total int64                 `json:"total"`
+	Page  int                   `json:"page"`
+	Size  int                   `json:"size"`
 }
 
 // SavedProductDraft is a draft with the form's input.

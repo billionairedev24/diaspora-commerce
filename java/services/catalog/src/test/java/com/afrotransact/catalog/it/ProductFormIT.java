@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.afrotransact.catalog.application.CategoryService;
 import com.afrotransact.catalog.application.CreateProductCommand;
@@ -24,6 +25,8 @@ import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.ProductType;
+import com.afrotransact.catalog.domain.DraftListItem;
+import com.afrotransact.catalog.domain.DraftSortField;
 import com.afrotransact.catalog.domain.SavedDraft;
 import com.afrotransact.catalog.domain.ShipFromRef;
 import com.afrotransact.catalog.domain.VariantDraft;
@@ -173,6 +176,32 @@ class ProductFormIT {
                 null, null));
         assertThat(added.status()).isEqualTo(ProductStatus.LIVE);
         assertThat(added.variants().getFirst().quantity()).isZero();
+    }
+
+    @Test
+    void draftsTableIsSearchedSortedPagedAndCountedInTheDatabase() {
+        String ready = "{\"categoryId\":\"c1\",\"title\":\"Ready\",\"images\":[{\"url\":\"u1\"}],"
+                + "\"single\":{\"price\":\"9.99\"},\"description\":\"" + "d".repeat(45) + "\"}";
+        SavedDraft a = drafts.create(null, "Zulu table zq", "Home › Decor", "{\"title\":\"Zulu table zq\"}");
+        SavedDraft b = drafts.create(null, "Alpha lamp zq", "Home › Lighting", ready);
+        SavedDraft c = drafts.create(null, "100% cotton zq", null, "{\"rows\":{\"S\":{\"price\":\"5\"}}}");
+
+        var byTitle = drafts.search("zq", true, DraftSortField.TITLE, false, 0, 2);
+        assertThat(byTitle.total()).isEqualTo(3);
+        assertThat(byTitle.items()).extracting(DraftListItem::title).containsExactly("100% cotton zq", "Alpha lamp zq");
+        assertThat(drafts.search("zq", true, DraftSortField.TITLE, false, 1, 2).items())
+                .extracting(DraftListItem::title).containsExactly("Zulu table zq");
+        assertThat(drafts.search("LIGHTING", true, DraftSortField.UPDATED_AT, true, 0, 25).items())
+                .extracting(DraftListItem::id).containsExactly(b.id());
+        // % and _ in the search are literal characters, not wildcards.
+        assertThat(drafts.search("100%", true, DraftSortField.TITLE, false, 0, 25).total()).isEqualTo(1);
+        assertThat(drafts.search("_", true, DraftSortField.TITLE, false, 0, 25).total()).isZero();
+
+        var progress = drafts.search("zq", true, DraftSortField.TITLE, false, 0, 25).items().stream()
+                .collect(Collectors.toMap(DraftListItem::id, DraftListItem::todo));
+        assertThat(progress.get(b.id())).isZero();
+        assertThat(progress.get(a.id())).isEqualTo(4);
+        assertThat(progress.get(c.id())).isEqualTo(3);
     }
 
     @Test

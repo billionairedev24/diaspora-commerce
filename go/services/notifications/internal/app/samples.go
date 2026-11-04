@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/events"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/domain"
@@ -82,7 +83,8 @@ func NewTemplateSamples(ctx context.Context, links Links, opts ...SampleOption) 
 	products := sampleProducts(o)
 	capture := &captureNotifier{data: map[string]map[string]any{}, source: map[string]SampleSource{}}
 	discard := slog.New(slog.DiscardHandler)
-	alerts := NewStockAlerts(sampleAlertStore{}, capture, sampleIdentity{}, links, discard)
+	alerts := NewStockAlerts(sampleAlertStore{}, capture, sampleIdentity{}, links, NewUnsubscriber(join(links.Storefront, "/api/notifications"), "", []byte("sample")), discard,
+		WithStockAlertClock(func() time.Time { return time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC) }))
 	ingest := NewIngest(capture, IngestConfig{Resolver: sampleIdentity{}, Links: links, StockAlerts: alerts,
 		Audience: SampleAudience(), Locations: SampleLocationAudience()}, discard)
 
@@ -434,11 +436,15 @@ type sampleAlertStore struct{}
 
 var _ port.StockAlertStore = sampleAlertStore{}
 
-func (sampleAlertStore) Subscribe(_ context.Context, a domain.StockAlert) (domain.StockAlert, bool, error) {
+func (sampleAlertStore) Subscribe(_ context.Context, a domain.StockAlert, _ int) (domain.StockAlert, bool, error) {
 	return a, true, nil
 }
 
 func (sampleAlertStore) Unsubscribe(context.Context, string, string) error { return nil }
+
+func (sampleAlertStore) DeleteByID(context.Context, string) error { return nil }
+
+func (sampleAlertStore) Purge(context.Context, time.Time, time.Time) (int64, error) { return 0, nil }
 
 func (sampleAlertStore) ListByUser(context.Context, string) ([]domain.StockAlert, error) {
 	return nil, nil

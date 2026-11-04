@@ -54,10 +54,12 @@ test.describe('seller center · size charts', () => {
     await page.getByRole('searchbox', { name: 'Search my size charts' }).fill(name);
     const row = page.getByRole('row', { name: new RegExp(name) });
     await expect(row).toBeVisible();
-    await page.getByRole('button', { name: `Duplicate ${name}` }).click();
+    await page.getByRole('button', { name: `Actions for ${name}`, exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Duplicate' }).click();
     await expect(page.getByText(`Created “${name} (copy)”`)).toBeVisible();
 
-    await page.getByRole('button', { name: `Retire ${name}`, exact: true }).click();
+    await page.getByRole('button', { name: `Actions for ${name}`, exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Retire' }).click();
     await expect(page.getByRole('heading', { name: `Retire “${name}”?` })).toBeVisible();
     await page.getByRole('button', { name: 'Retire chart' }).click();
     await expect(page.getByText(`“${name}” retired`)).toBeVisible();
@@ -65,7 +67,8 @@ test.describe('seller center · size charts', () => {
 
   test('closing the editor with unsaved changes asks first', async ({ page }) => {
     await page.goto('/listings/size-charts');
-    await page.getByRole('button', { name: 'Edit Leather sandals' }).click();
+    await page.getByRole('button', { name: 'Actions for Leather sandals' }).click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
     const editor = page.getByTestId('size-chart-editor');
     await editor.getByLabel('Chart name').fill('Sandals, renamed');
     await page.getByRole('button', { name: 'Close', exact: true }).click();

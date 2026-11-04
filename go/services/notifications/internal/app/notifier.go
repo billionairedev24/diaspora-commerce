@@ -224,6 +224,9 @@ func (n *notifierImpl) build(ctx context.Context, req domain.Request) ([]domain.
 			if ch == domain.ChannelEmail && tpl.Category == domain.CategoryMarketing && n.unsub != nil {
 				row.Headers = n.unsub.Headers(domain.Key(req.Recipient.ID, addr), addr, tpl.Category, now)
 			}
+			if ch == domain.ChannelEmail && len(req.Headers) > 0 {
+				row.Headers = req.Headers
+			}
 			rows = append(rows, row)
 		}
 	}

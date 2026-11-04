@@ -72,6 +72,8 @@ type Config struct {
 	Store      valkey.Store
 	// AuthPerMinute overrides the auth rate limit (default 1000).
 	AuthPerMinute int
+	// StockAlertLimits overrides the per-hour limits of "Email me when available" (defaults 20 / 10 / 300).
+	StockAlertLimits app.StockAlertLimits
 }
 
 // NewBFF wires the BFF exactly like cmd/gateway-bff, against u.
@@ -151,6 +153,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		Search: app.NewSearchService(search, storefrontOffers, location, estimator, "us", clock.Now,
 			app.WithServices(upstreams.NewCustomerBookings(client("bookings", base+ShopperPrefix)))),
 		Products: app.NewProductService(app.ProductDeps{Catalog: catalog, Inventory: inventory, Promise: promise, Notifications: notifications, Offers: storefrontOffers,
+			Tokens: upstreams.NewServiceTokens(identityClient, clientCreds), Limiter: store, AlertLimits: cfg.StockAlertLimits,
 			Location: location, Estimator: estimator, Sellers: sellers, Clock: clock.Now, Log: log}),
 		Cart:     carts,
 		Account:  app.NewAccountService(identity, geo, payments, orders),

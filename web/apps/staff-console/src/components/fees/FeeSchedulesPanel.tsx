@@ -1,7 +1,7 @@
 'use client';
 
 import { type FeeScheduleStatus, type FeeScheduleView, formatBps, type RecordTone, staffKeys, staffQueries, tariffSummary } from '@afrotransact/api-client';
-import { DataTable, useTableState } from '@afrotransact/data-table';
+import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, Field, fieldStyles, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -115,6 +115,7 @@ function CurrentSchedule({ s }: { s: FeeScheduleView }) {
 
 /** Fee schedules: the version in force, the history (active, scheduled, past, cancelled) and the editor. */
 export function FeeSchedulesPanel() {
+  const t = useT();
   const qc = useQueryClient();
   const q = useQuery(staffQueries.fees(staffApi()));
   const state = useTableState({ searchParams: useSearchParams(), prefix: 'versions', defaultSort: [{ id: 'version', desc: true }] });
@@ -167,21 +168,14 @@ export function FeeSchedulesPanel() {
           </>
         )
       },
-      {
-        id: 'actions',
-        header: () => <span className="at-visually-hidden">Actions</span>,
-        size: 100,
-        enableSorting: false,
-        meta: { export: false, label: 'Actions' },
-        cell: ({ row }) =>
-          row.original.cancellable ? (
-            <Button size="sm" variant="neutral" onClick={() => setCancelling(row.original)} aria-label={`Cancel v${row.original.version}`}>
-              Cancel
-            </Button>
-          ) : null
-      }
+      rowActionsColumn<FeeScheduleView>({
+        header: t('st.rows.actionsHeader'),
+        name: (v) => `v${v.version}`,
+        label: (v) => t('st.rows.actionsFor', { name: `v${v.version}` }),
+        items: (v) => [v.cancellable && { label: 'Cancel version', danger: true, onSelect: () => setCancelling(v) }]
+      })
     ],
-    []
+    [t]
   );
   if (q.isPending) return <Spinner />;
   if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;

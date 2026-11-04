@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DataTable, type DataTableProps, pageNumbers, type TableExportRequest, useTableState } from '../src';
+import { DataTable, type DataTableProps, pageNumbers, rowActionsColumn, type TableExportRequest, useTableState } from '../src';
 
 interface Order {
   id: string;
@@ -223,5 +223,41 @@ describe('default density (My account › Preferences)', () => {
     expect(readDefaultDensity()).toBe('compact');
     render(<Harness />);
     await waitFor(() => expect(screen.getAllByRole('cell')[0]?.className).toContain('py-1.5'));
+  });
+});
+
+describe('rowActionsColumn', () => {
+  const actionColumns: ColumnDef<Order>[] = [
+    ...columns,
+    rowActionsColumn<Order>({
+      header: 'Actions',
+      name: (o) => o.number,
+      items: (o) => [{ label: 'Edit', onSelect: () => undefined }, o.status !== 'CANCELLED' && { label: 'Cancel order', danger: true }]
+    })
+  ];
+
+  it('adds one "⋯" button per row, named after the row, that never opens the row or leaves the exports', async () => {
+    const user = userEvent.setup();
+    const onRowClick = vi.fn();
+    render(<Harness columns={actionColumns} onRowClick={onRowClick} />);
+    expect(screen.getAllByRole('button', { name: /^Actions for AT-/ })).toHaveLength(ORDERS.length);
+    await user.click(screen.getByRole('button', { name: 'Actions for AT-9' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit' }));
+    expect(onRowClick).not.toHaveBeenCalled();
+    // The menu is in a portal, but its padding and separators are not clicks on the row either.
+    await user.click(screen.getByRole('button', { name: 'Actions for AT-10' }));
+    await user.click(within(await screen.findByRole('menu')).getByRole('separator'));
+    expect(onRowClick).not.toHaveBeenCalled();
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByText('Ada Obi'));
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('draws no button for a row without actions, and the column cannot be hidden', async () => {
+    const one: ColumnDef<Order>[] = [...columns, rowActionsColumn<Order>({ header: 'Actions', name: (o) => o.number, items: (o) => [o.id === 'o1' && { label: 'Edit' }] })];
+    render(<Harness columns={one} />);
+    expect(screen.getAllByRole('button', { name: /^Actions for AT-/ })).toHaveLength(1);
+    await userEvent.click(screen.getByRole('button', { name: /Columns/ }));
+    expect(screen.queryByRole('menuitemcheckbox', { name: 'Actions' })).not.toBeInTheDocument();
   });
 });

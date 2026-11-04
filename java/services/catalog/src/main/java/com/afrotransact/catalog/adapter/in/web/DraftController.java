@@ -8,9 +8,13 @@ import com.afrotransact.catalog.adapter.in.web.DraftDtos.CreateDraftRequest;
 import com.afrotransact.catalog.adapter.in.web.DraftDtos.DraftResponse;
 import com.afrotransact.catalog.adapter.in.web.DraftDtos.DraftSummary;
 import com.afrotransact.catalog.adapter.in.web.DraftDtos.SaveDraftRequest;
+import com.afrotransact.catalog.application.PageView;
 import com.afrotransact.catalog.application.ProductDraftService;
+import com.afrotransact.catalog.domain.DraftListItem;
+import com.afrotransact.catalog.domain.DraftSortField;
 import com.afrotransact.catalog.domain.SavedDraft;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +25,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -37,10 +42,27 @@ class DraftController {
         this.json = json;
     }
 
-    @Operation(operationId = "listDrafts", summary = "The organisation's drafts, most recently saved first")
+    @Operation(operationId = "listDrafts", summary = "The organisation's drafts, most recently saved first",
+            description = "Server-driven: q searches title and category path, kind=new leaves out the unsaved "
+            + "edits of existing products, sort is updatedAt|title|categoryPath[,asc|desc] (default updatedAt,desc), "
+            + "page is 0-based, size is at most 100. The body stays a plain array; X-Total-Count is the number of "
+            + "drafts matching q and kind.")
     @GetMapping
-    List<DraftSummary> list() {
-        return drafts.list().stream().map(DraftSummary::of).toList();
+    ResponseEntity<List<DraftSummary>> list(
+            @Parameter(description = "Search over title and category path") @RequestParam(required = false) String q,
+            @Parameter(description = "new = drafts of products not created yet; all (default) = every draft")
+            @RequestParam(defaultValue = "all") String kind,
+            @Parameter(description = "updatedAt | title | categoryPath, optionally ,asc or ,desc")
+            @RequestParam(required = false) String sort,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        String[] parts = sort == null ? new String[0] : sort.split(",", 2);
+        boolean descending = parts.length < 2 ? parts.length == 0 || DraftSortField.parse(parts[0]) == DraftSortField.UPDATED_AT
+                : !"asc".equalsIgnoreCase(parts[1].strip());
+        PageView<DraftListItem> result = drafts.search(q, "new".equalsIgnoreCase(kind),
+                DraftSortField.parse(parts.length == 0 ? null : parts[0]), descending, page, size);
+        return ResponseEntity.ok().header("X-Total-Count", Long.toString(result.total()))
+                .body(result.items().stream().map(DraftSummary::of).toList());
     }
 
     @Operation(operationId = "createDraft", summary = "Save a new draft (Save draft, or the first autosave)")

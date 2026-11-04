@@ -69,6 +69,7 @@ import {
   advanceImport,
   categoryLeaves,
   detailOf,
+  draftSummary,
   draftView,
   IMPORT_LIMITS,
   importSummary,
@@ -1495,7 +1496,22 @@ export const sellerHandlers = [
     `${W}/product-drafts`,
     route((ctx) => {
       require(ctx, 'listings', 'EDIT', 'SELLER');
-      return { items: ctx.db.drafts.filter((x) => x.orgId === ctx.org.id).map(({ orgId: _o, payload: _p, ...s }) => s) };
+      const q = query(ctx);
+      const text = (q.get('q') ?? '').trim().toLowerCase();
+      const [column = 'updatedAt', direction] = (q.get('sort') ?? 'updatedAt,desc').split(',');
+      const sortKey = ['title', 'categoryPath', 'updatedAt'].includes(column) ? (column as 'title' | 'categoryPath' | 'updatedAt') : null;
+      if (!sortKey) throw invalid({ sort: 'Sort by updatedAt, title or categoryPath' });
+      const kind = q.get('kind') ?? 'all';
+      if (kind !== 'all' && kind !== 'new') throw invalid({ kind: 'Must be all or new' });
+      const page = Number(q.get('page') ?? 0);
+      const size = Number(q.get('size') ?? 25);
+      if (!Number.isInteger(page) || page < 0 || !Number.isInteger(size) || size < 1 || size > 100) throw invalid({ size: 'Page must be 0 or more and size 1 to 100' });
+      const sign = (direction ?? (sortKey === 'updatedAt' ? 'desc' : 'asc')) === 'asc' ? 1 : -1;
+      const matching = ctx.db.drafts
+        .filter((x) => x.orgId === ctx.org.id && (kind === 'all' || !x.productId))
+        .filter((x) => !text || x.title.toLowerCase().includes(text) || (x.categoryPath ?? '').toLowerCase().includes(text))
+        .sort((a, b) => sign * (a[sortKey] ?? '').localeCompare(b[sortKey] ?? ''));
+      return { items: matching.slice(page * size, (page + 1) * size).map(draftSummary), total: matching.length, page, size };
     })
   ),
   http.post(

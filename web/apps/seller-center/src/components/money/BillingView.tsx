@@ -17,7 +17,7 @@ import {
   sellerQueries,
   type Subscription
 } from '@afrotransact/api-client';
-import { DataTable, useTableState } from '@afrotransact/data-table';
+import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
 import { Badge, Button, ChipGroup, cx, Dialog, SavedPaymentCard, TextField, useToast } from '@afrotransact/ui';
 import { CheckCircle, Flask, Gift, Plus } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -216,15 +216,15 @@ const invoiceColumns = (t: T, a: InvoiceActions): ColumnDef<Invoice>[] => [
     cell: ({ row }) => <span className={cx('text-sm', row.original.paidFromSalesMinor > 0 && 'font-semibold')}>{paidWith(row.original, t)}</span>
   },
   { id: 'status', accessorFn: (i) => i.status, header: t('sc.billing.col.status'), size: 120, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.status.toLowerCase()}</StatusPill> },
-  {
-    id: 'actions', header: () => <span className="at-visually-hidden">{t('sc.billing.col.download')}</span>, size: 220, enableSorting: false, meta: { export: false, label: t('sc.billing.col.download') },
-    cell: ({ row }) => (
-      <span className="flex items-center gap-2">
-        <Button size="sm" variant="link" disabled={a.busy === row.original.id} onClick={() => a.onDownload(row.original)}>{t('sc.billing.downloadInvoice')}</Button>
-        {row.original.canRetry && a.canManage ? <Button size="sm" variant="neutral" loading={a.busy === `retry:${row.original.id}`} onClick={() => a.onRetry(row.original)}>{t('sc.billing.retryPayment')}</Button> : null}
-      </span>
-    )
-  }
+  rowActionsColumn<Invoice>({
+    header: t('sc.billing.col.download'),
+    name: (i) => i.number,
+    label: (i) => t('sc.rows.actionsFor', { name: i.number }),
+    items: (i) => [
+      { label: t('sc.billing.downloadInvoice'), disabled: a.busy === i.id, onSelect: () => a.onDownload(i) },
+      i.canRetry && a.canManage && { label: t('sc.billing.retryPayment'), disabled: a.busy === `retry:${i.id}`, onSelect: () => a.onRetry(i) }
+    ]
+  })
 ];
 
 /** "Credit $5.00 · Your sales $90.00 · Card $21.15": what settled the invoice, in the order it is taken (S298). */
