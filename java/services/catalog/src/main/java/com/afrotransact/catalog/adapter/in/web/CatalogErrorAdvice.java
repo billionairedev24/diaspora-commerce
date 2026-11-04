@@ -12,6 +12,8 @@ import com.afrotransact.catalog.domain.imports.SpreadsheetRejected;
 import com.afrotransact.catalog.port.ImageImporter.ImageServiceUnavailable;
 import com.afrotransact.catalog.port.PurchaseVerifier.PurchaseCheckUnavailable;
 import com.afrotransact.platform.web.error.ProblemTypes;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -23,6 +25,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class CatalogErrorAdvice {
+
+    private static final Logger LOG = LoggerFactory.getLogger(CatalogErrorAdvice.class);
 
     @ExceptionHandler(CatalogRuleViolation.class)
     ProblemDetail ruleViolation(CatalogRuleViolation ex) {
@@ -45,6 +49,8 @@ class CatalogErrorAdvice {
 
     @ExceptionHandler(ScopeUnavailable.class)
     ProblemDetail scopeUnavailable(ScopeUnavailable ex) {
+        // The real cause (a 401/403 from seller-service, a refused connection, a timeout) is for the operator, never the shopper.
+        LOG.warn("catalog scope unavailable: {}", ex.getMessage(), ex.getCause());
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
                 "We could not check which departments your store sells in; try again in a minute");
         pd.setType(ProblemTypes.of("catalog.scope-unavailable"));
