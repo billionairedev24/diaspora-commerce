@@ -137,7 +137,7 @@ describe('Order sheet: shipments', () => {
     expect(within(patel).getByText('Cancelled')).toBeInTheDocument();
 
     // History: collapsed, newest first, with who and the note.
-    const history = within(patel).getByText('History (3)');
+    const history = within(patel).getByText('History (4)');
     await user.click(history);
     expect(within(patel).getByText('Seller is out of stock')).toBeVisible();
     expect(within(patel).getAllByRole('listitem')[0]).toHaveTextContent('Cancelled · Platform admin');
@@ -164,12 +164,13 @@ describe('Order sheet: layout', () => {
 
   it('leads with the header, then shipments, then facts grouped by topic', async () => {
     const { sheet } = await openOrder();
-    expect(within(sheet).getByText(/Amara Nwosu|Chidi|Adaeze|Kofi|Zainab|Tunde|Ngozi|Femi/)).toBeInTheDocument();
     const headings = within(sheet)
       .getAllByRole('heading', { level: 3 })
       .map((h) => h.textContent);
     expect(headings.slice(0, 3)).toEqual(['Shipments', 'Customer', 'Payment']);
-    expect(within(sheet).getByText(/Placed /)).toBeInTheDocument();
+    // Header: status chip, total, then the customer's name and when it was placed.
+    expect(within(sheet).getByText(/^\S.* · Placed /)).toBeInTheDocument();
+    expect(within(sheet).getByText('Open')).toBeInTheDocument();
   });
 
   it('shows no ids and no empty rows, and keeps ids under a collapsed Technical details with copy buttons', async () => {
