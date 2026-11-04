@@ -48,7 +48,7 @@ describe('Plan & billing (S292–S297)', () => {
     expect(within(gate).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
   });
 
-    const user = userEvent.setup();
+  it('retries an unpaid invoice after the payment method is fixed', async () => {
     const db = getSellerDb();
     const inv = db.invoices[0];
     if (!inv) throw new Error('seeded');
