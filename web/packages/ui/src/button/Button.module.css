@@ -45,6 +45,11 @@
   .neutral:hover:not(:disabled) { background: var(--at-color-action-neutral-hover); color: var(--at-color-text); }
 }
 
+.danger { background: var(--at-color-danger); color: var(--at-ink-0); }
+@media (hover: hover) {
+  .danger:hover:not(:disabled) { background: var(--at-red-700); color: var(--at-ink-0); }
+}
+
 .dark { background: var(--at-ink-1000); color: var(--at-ink-0); }
 @media (hover: hover) {
   .dark:hover:not(:disabled) { background: var(--at-ink-800); color: var(--at-ink-0); }

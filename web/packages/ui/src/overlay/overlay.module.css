@@ -108,6 +108,9 @@
 @media (hover: hover) {
   .menuItem:hover { background: var(--at-color-surface-hover); color: var(--at-color-text); text-decoration: none; }
 }
+.menuDanger, .menuDanger .menuIcon { color: var(--at-color-danger); }
+.menuItem[data-disabled] { opacity: 0.55; cursor: not-allowed; pointer-events: auto; }
+.menuReason { display: block; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
 .menuIcon { font-size: var(--at-text-lg); color: var(--at-color-text-muted); flex: none; }
 .menuText { flex: 1; }
 .menuCount { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
@@ -163,3 +166,42 @@
 .toastAction { margin-left: var(--at-space-2); min-height: 32px; padding: 0 var(--at-space-3); border: 1px solid currentColor; border-radius: var(--at-radius-pill); background: transparent; color: inherit; font: inherit; font-weight: var(--at-weight-bold); cursor: pointer; }
 .toastAction:focus-visible { outline: 2px solid var(--at-gold-500); outline-offset: 2px; }
 .toastError .toastIcon { color: var(--at-red-100); }
+
+/* Row actions: the "⋯" button that closes every table row, the row's name link and the confirm dialog's buttons. */
+.rowTrigger {
+  display: inline-grid;
+  place-items: center;
+  width: var(--at-size-control-sm);
+  height: var(--at-size-control-sm);
+  border: 0;
+  border-radius: var(--at-radius-pill);
+  background: none;
+  color: var(--at-color-text-muted);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .rowTrigger:hover { background: var(--at-color-surface-hover); color: var(--at-color-text); }
+}
+.rowTrigger[aria-expanded='true'] { background: var(--at-color-surface-hover); color: var(--at-color-text); }
+.rowTrigger:disabled { opacity: 0.45; cursor: not-allowed; }
+.rowActions { display: flex; justify-content: flex-end; }
+
+.rowName { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rowNameTop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--at-space-1) var(--at-space-2); }
+.rowNameLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: var(--at-weight-semibold);
+  color: var(--at-color-text);
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .rowNameLink:hover { color: var(--at-color-link); text-decoration: underline; }
+}
+.rowNameMeta { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+
+.confirmActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--at-space-2); margin-top: var(--at-space-4); }

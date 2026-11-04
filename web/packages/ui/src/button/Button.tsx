@@ -4,7 +4,7 @@ import { cx } from '../cx';
 import { CircleNotch } from '../icons';
 import styles from './Button.module.css';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'neutral' | 'dark' | 'link';
+export type ButtonVariant = 'primary' | 'secondary' | 'neutral' | 'danger' | 'dark' | 'link';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export interface ButtonStyleOptions {
