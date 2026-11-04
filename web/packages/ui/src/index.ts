@@ -21,6 +21,7 @@ export { QuantityStepper, type QuantityStepperProps } from './commerce/QuantityS
 export { cardExpired, SavedPaymentCard, type SavedPaymentCardLabels, type SavedPaymentCardProps } from './commerce/SavedPaymentCard';
 export { Stars, type StarsProps } from './commerce/Stars';
 export { cx } from './cx';
+export { Alert, AlertAction, type AlertProps, alertRole, type AlertVariant } from './feedback/Alert';
 export { MaintenancePage, type MaintenancePageProps } from './feedback/MaintenancePage';
 export { PendingNavigation, type PendingNavigationProps } from './feedback/PendingNavigation';
 export { Spinner, type SpinnerProps, type SpinnerSize, type SpinnerVariant } from './feedback/Spinner';
@@ -74,7 +75,9 @@ export { formatNational, phoneCountries, type PhoneCountry, PhoneInput, type Pho
 export { PhoneNumberField, type PhoneNumberFieldProps, splitE164 as splitPhoneE164, toE164Number } from './form/PhoneNumberField';
 export { Select, type SelectOption, type SelectProps, TextField, type TextFieldProps } from './form/TextField';
 export * from './icons';
+export { PageStack, type PageStackProps } from './layout/PageStack';
 export { SheetTableScroll, type SheetTableScrollProps } from './layout/SheetTableScroll';
+export { type StatItem, StatStrip, type StatStripProps, type StatTone } from './layout/StatStrip';
 export { Dialog, type DialogProps, Sheet, type SheetProps } from './overlay/Dialog';
 export { Menu, MenuGroup, MenuItem, type MenuItemProps, type MenuProps, MenuSeparator } from './overlay/Menu';
 export { type TabItem, Tabs, type TabsProps } from './overlay/Tabs';

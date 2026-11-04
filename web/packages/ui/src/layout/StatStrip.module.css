@@ -1,0 +1,48 @@
+/* StatStrip: one flat row of figures, thin rules between them, no boxes. Two columns on phones. */
+.strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--at-space-4) 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stat { min-inline-size: 0; padding-inline: var(--at-space-4); border-inline-start: 1px solid var(--at-color-border); }
+/* Phones: the rule only separates the two columns. */
+.stat:nth-child(odd) { padding-inline-start: 0; border-inline-start: 0; }
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  inline-size: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+.label { color: var(--at-color-text-muted); font-size: var(--at-text-xs); font-weight: var(--at-weight-semibold); line-height: var(--at-leading-tight); }
+.value { color: var(--at-color-text); font-size: var(--at-text-2xl); font-weight: var(--at-weight-bold); line-height: var(--at-leading-tight); font-variant-numeric: tabular-nums; }
+.sub { color: var(--at-color-text-muted); font-size: var(--at-text-xs); font-variant-numeric: tabular-nums; }
+.positive { color: var(--at-color-success); }
+.attention { color: var(--at-color-warning); }
+.negative { color: var(--at-color-danger); }
+
+.interactive { cursor: pointer; text-decoration: none; }
+.interactive .value { color: var(--at-color-link); }
+@media (hover: hover) {
+  .interactive:hover { text-decoration: none; }
+  .interactive:hover .value { text-decoration: underline; text-underline-offset: 3px; }
+}
+
+@media (min-width: 640px) {
+  .strip { display: flex; flex-wrap: wrap; gap: var(--at-space-4) 0; }
+  .stat { flex: 0 1 auto; min-inline-size: 7.5rem; padding-inline: var(--at-space-6); }
+  .stat:nth-child(odd) { padding-inline-start: var(--at-space-6); border-inline-start: 1px solid var(--at-color-border); }
+  .stat:first-child { padding-inline-start: 0; border-inline-start: 0; }
+}

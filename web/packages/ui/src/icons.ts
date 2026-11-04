@@ -40,6 +40,7 @@ export {
   Heartbeat,
   House,
   HouseLine,
+  Info,
   Key,
   Lightning,
   List,
