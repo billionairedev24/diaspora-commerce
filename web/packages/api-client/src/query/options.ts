@@ -14,6 +14,9 @@ const MINUTE = 60_000;
 export const siteQueries = {
   config: (api: ApiClient) => queryOptions({ queryKey: siteKeys.config(), queryFn: ({ signal }) => api.getSiteConfig(signal), staleTime: 10 * MINUTE }),
   home: (api: ApiClient) => queryOptions({ queryKey: siteKeys.home(), queryFn: ({ signal }) => api.getHome(signal), staleTime: MINUTE }),
+  /** The recently viewed rail: cards for the browser's remembered ATINs (most recent first). */
+  recentlyViewed: (api: ApiClient, atins: readonly string[]) =>
+    queryOptions({ queryKey: siteKeys.recentlyViewed(atins), queryFn: ({ signal }) => api.getRecentlyViewed(atins, signal), staleTime: MINUTE, enabled: atins.length > 0 }),
   deliveryLocation: (api: ApiClient) =>
     queryOptions({ queryKey: siteKeys.deliveryLocation(), queryFn: ({ signal }) => api.getDeliveryLocation(signal), staleTime: 10 * MINUTE })
 };

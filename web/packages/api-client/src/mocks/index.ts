@@ -9,7 +9,7 @@ export { handlers, SESSION_COOKIE } from './handlers';
 export { completePhrases, levenshtein, matchScore, PHRASES, SYNONYMS, words } from './matching';
 export { markTrialUsed, MOCK_DECLINED_CARD, MOCK_MEMBERSHIP_TIERS } from './membership';
 export { handleMockRequest } from './runtime';
-export { buildCart, productDetail, search, suggest } from './service';
+export { activeHero, buildCart, eligibleForHome, home, productDetail, recentlyViewed, search, suggest } from './service';
 export { endMockSession, MOCK_SESSION_COOKIE, MOCK_SESSION_DEFAULTS, resetMockSession, setMockSessionPolicy, startMockSession } from './session';
 export { MOCK_STRIPE_KEY_COOKIE } from './shopper';
 export { MOCK_PAY_LINK } from './shopper';

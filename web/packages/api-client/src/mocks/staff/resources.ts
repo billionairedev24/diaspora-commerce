@@ -1607,6 +1607,56 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   ...IDENTITY_RESOURCES
 };
 
+/* Home tile cell rules and hero slide windows, as the BFF's placement editor offers them (staff_placement_rules.go). */
+/** Functions, not constants: the resource table above builds its create forms at module load. */
+function tileRules() {
+  return [
+    { value: 'top-rated', label: 'Top rated in a department' },
+    { value: 'new', label: 'New in a department' },
+    { value: 'bestsellers', label: 'Best sellers in a department' },
+    { value: 'search', label: 'Search results for words' },
+    { value: 'fastest', label: 'Fastest delivery from AfroTransact' },
+    { value: 'picked', label: 'Picked products (ATINs)' }
+  ];
+}
+function tileDepartments() {
+  return ['Groceries', 'Fashion', 'Beauty', 'Home & Art', 'Books', 'Health', 'Party'].map((d) => ({ value: d, label: d }));
+}
+
+/** The four tile cells' fields (shown for home tiles only) and the hero window fields (hero carousel only). */
+function slotFields(slot: string | null, values: Record<string, FieldValue | Scalar | undefined> = {}): FormField[] {
+  const when = (s: string): Partial<FormField> => (slot === null ? { showWhen: { key: 'slot', in: [s] } } : {});
+  const out: FormField[] = [];
+  if (slot === null || slot === 'home_tiles') {
+    out.push(field('cta', 'Button text', 'text', false, { maxLength: 40, value: str(values.cta), ...when('home_tiles') }));
+    for (let n = 1; n <= 4; n += 1) {
+      const sec = { section: `Tile cell ${n} (home tiles only)`, ...when('home_tiles') };
+      const k = (f: string) => `cell${n}_${f}`;
+      out.push(
+        field(k('rule'), 'Product rule (leave empty for a fixed image)', 'select', false, { options: tileRules(), help: 'A rule shows the best in-stock product with a real photo; its image, name and link are filled in for you.', value: str(values[k('rule')]), ...sec }),
+        field(k('department'), 'Department (for department rules)', 'select', false, { options: tileDepartments(), value: str(values[k('department')]), ...sec }),
+        field(k('query'), 'Search words (for search rules)', 'text', false, { maxLength: 120, value: str(values[k('query')]), ...sec }),
+        field(k('atins'), 'Product ATINs, comma separated (for picked products)', 'text', false, { maxLength: 240, value: str(values[k('atins')]), ...sec }),
+        field(k('label'), 'Fixed cell: label', 'text', false, { maxLength: 40, value: str(values[k('label')]), ...sec }),
+        field(k('href'), 'Fixed cell: link', 'text', false, { pattern: '^(/|https://)', help: 'A storefront path starting with / or an https:// address', value: str(values[k('href')]), ...sec }),
+        field(k('imageUrl'), 'Fixed cell: image address', 'text', false, { pattern: '^https://', help: 'An https:// image address', value: str(values[k('imageUrl')]), ...sec })
+      );
+    }
+  }
+  if (slot === null || slot === 'hero_carousel') {
+    const sec = { section: 'Hero slide schedule (hero carousel only)', ...when('hero_carousel') };
+    out.push(
+      field('slideStartsAt', 'Show the slide from', 'datetime', false, { value: str(values.slideStartsAt), ...sec }),
+      field('slideEndsAt', 'Hide the slide after', 'datetime', false, { value: str(values.slideEndsAt), ...sec })
+    );
+  }
+  return out;
+}
+
+function slotFieldKeys(): string[] {
+  return slotFields(null).map((f) => f.key);
+}
+
 function placementsDef(title: string, announcementsOnly: boolean): MockResource {
   const baseActions: MockAction[] = [
     { key: 'submit', label: 'Send for review', tone: 'primary', permission: 'content:placements.edit', confirm: 'Send this placement for review?', when: (r) => stateReason(r, 'DRAFT'), apply: setStatus('IN_REVIEW', 'Sent for review') },
@@ -1645,9 +1695,13 @@ function placementsDef(title: string, announcementsOnly: boolean): MockResource 
         field('name', 'Name', 'text', true, { maxLength: 120, value: str(r.fields.name) }),
         field('text', announcementsOnly ? 'Announcement text' : 'Headline', 'text', true, { maxLength: 140, value: str(r.fields.text) }),
         field('startsAt', 'Starts', 'datetime', true, { value: str(r.fields.startsAt) }),
-        field('endsAt', 'Ends', 'datetime', false, { value: str(r.fields.endsAt) })
+        field('endsAt', 'Ends', 'datetime', false, { value: str(r.fields.endsAt) }),
+        ...(announcementsOnly ? [] : slotFields(str(r.fields.slot), r.fields))
       ]),
-      apply: (r, v) => { r.fields.name = str(v.name); r.fields.text = str(v.text); r.fields.startsAt = str(v.startsAt); r.fields.endsAt = str(v.endsAt) || null; r.fields.version = num(r.fields.version) + 1; }
+      apply: (r, v) => {
+        r.fields.name = str(v.name); r.fields.text = str(v.text); r.fields.startsAt = str(v.startsAt); r.fields.endsAt = str(v.endsAt) || null; r.fields.version = num(r.fields.version) + 1;
+        if (!announcementsOnly) slotFieldKeys().forEach((k) => { r.fields[k] = v[k] === undefined ? null : str(v[k]); });
+      }
     },
     create: {
       permission: 'content:placements.edit',
@@ -1658,11 +1712,14 @@ function placementsDef(title: string, announcementsOnly: boolean): MockResource 
         field('href', 'Link', 'text', false, { pattern: '^/' }),
         field('startsAt', 'Starts', 'datetime', true),
         field('endsAt', 'Ends', 'datetime', false),
-        ...(announcementsOnly ? [] : [field('advertiser', 'Advertiser (paid)', 'text', false, { maxLength: 80 })])
+        ...(announcementsOnly ? [] : [...slotFields(null), field('advertiser', 'Advertiser (paid)', 'text', false, { maxLength: 80 })])
       ]),
       build: (v, id, ctx) => ({
         id,
-        fields: { name: str(v.name), slot: announcementsOnly ? 'announcement_bar' : str(v.slot), status: 'DRAFT', paid: !!v.advertiser, advertiser: str(v.advertiser) || null, text: str(v.text), priority: 10, startsAt: str(v.startsAt), endsAt: str(v.endsAt) || null, version: 1 },
+        fields: {
+          name: str(v.name), slot: announcementsOnly ? 'announcement_bar' : str(v.slot), status: 'DRAFT', paid: !!v.advertiser, advertiser: str(v.advertiser) || null, text: str(v.text), priority: 10, startsAt: str(v.startsAt), endsAt: str(v.endsAt) || null, version: 1,
+          ...Object.fromEntries(slotFieldKeys().filter((k) => v[k] !== undefined).map((k) => [k, str(v[k])]))
+        },
         activity: [{ at: ctx.now.toISOString(), actor: ctx.actor, text: 'Draft created' }]
       })
     }

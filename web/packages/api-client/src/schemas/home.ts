@@ -19,7 +19,10 @@ export const HeroSlideSchema = z.object({
   href: z.string(),
   /** "AfroTransact" for house promotions, "Sponsored" for paid placements. */
   label: z.string(),
-  imageUrl: z.string().nullable()
+  imageUrl: z.string().nullable(),
+  /** Only on scheduled slides; a slide outside its window is never served. */
+  startsAt: z.string().optional(),
+  endsAt: z.string().optional()
 });
 export type HeroSlide = z.infer<typeof HeroSlideSchema>;
 
@@ -28,7 +31,8 @@ export const TileSchema = z.object({
   title: z.string(),
   cta: z.string(),
   href: z.string(),
-  cells: z.array(z.object({ label: z.string(), href: z.string(), imageUrl: z.string().nullable() })).max(4)
+  /** A fixed image and link, or a product the gateway picked by a rule (then `atin` is set and the image is a real photo). */
+  cells: z.array(z.object({ label: z.string(), href: z.string(), imageUrl: z.string().nullable(), atin: z.string().optional() })).max(4)
 });
 export type Tile = z.infer<typeof TileSchema>;
 
@@ -46,6 +50,10 @@ export type Banner = z.infer<typeof BannerSchema>;
 
 export const RailSchema = z.object({ id: z.string(), title: z.string(), href: z.string(), items: z.array(ProductSummarySchema) });
 export type Rail = z.infer<typeof RailSchema>;
+
+/** GET /v1/home/recently-viewed: cards for the ATINs the browser remembers, eligible ones only. */
+export const RecentlyViewedSchema = z.object({ items: z.array(ProductSummarySchema) });
+export type RecentlyViewed = z.infer<typeof RecentlyViewedSchema>;
 
 export const PlacementsSchema = z.object({
   announcements: z.array(AnnouncementSchema),

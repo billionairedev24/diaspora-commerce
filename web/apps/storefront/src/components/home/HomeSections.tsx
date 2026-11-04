@@ -17,7 +17,7 @@ export async function Tiles({ tiles }: { tiles: Tile[] }) {
           <h2 className={styles.tileTitle}>{tile.title}</h2>
           <ul className={styles.cells}>
             {tile.cells.map((c) => (
-              <li key={c.label}>
+              <li key={c.atin ?? c.label}>
                 <Link href={c.href} className={styles.cell}>
                   <ImagePlaceholder src={c.imageUrl} alt="" />
                   <span className={styles.cellLabel}>{c.label}</span>

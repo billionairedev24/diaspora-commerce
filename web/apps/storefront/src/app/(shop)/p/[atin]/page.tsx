@@ -4,6 +4,7 @@ import { type Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { ProductView } from '@/components/product/ProductView';
+import { TrackView } from '@/components/product/TrackView';
 import { productQueries } from '@/lib/api/queries';
 import { serverApi } from '@/lib/api/server';
 import { getQueryClient } from '@/lib/query/getQueryClient';
@@ -52,6 +53,7 @@ export default async function ProductPage({ params }: Props) {
   return (
     <HydrationBoundary state={dehydrate(r.qc)}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
+      <TrackView atin={p.atin} />
       <ProductView atin={p.atin} />
     </HydrationBoundary>
   );

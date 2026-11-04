@@ -10,11 +10,11 @@ import { PRICE_BUCKETS, type SearchPage, type SearchQuery, type Suggestions } fr
 import { getDb, type MockOffer, type MockSession, nextId } from './db';
 import { deliveryOptions, deliveryPromise, etaDays, FREE_SHIPPING_THRESHOLD_MINOR, locationForZip, metroOf, nearestFc, SELLER_SHIPPING_MINOR } from './delivery';
 import { atinOf,DEPARTMENTS, type FixtureProduct, PLATFORM_SELLER } from './fixtures/catalog';
-import { PLACEMENTS, SPONSORED_SEARCH } from './fixtures/content';
+import { PLACEMENTS, SPONSORED_SEARCH, type TileRule } from './fixtures/content';
 import { completePhrases, matchScore } from './matching';
 import { fixturePreorderEligible, withPreorderPackage } from './preorders';
 import { publicSizeChart, seedSizeCharts,SIZE_CHART_IDS } from './seller/size-charts';
-import { PROVIDERS, SERVICES } from './shopper-state';
+import { account, PROVIDERS, SERVICES } from './shopper-state';
 
 export class MockProblem extends Error {
   constructor(
@@ -299,7 +299,94 @@ export function suggest(query: string, loc: DeliveryLocation, now: Date): Sugges
 
 /* ── Home placements ────────────────────────────────────────────── */
 
-export function home(loc: DeliveryLocation, now: Date): Home {
+/** In stock with a real photograph (never a missing image, inline/vector image or placeholder): what every home rule shows. */
+export function eligibleForHome(p: ProductSummary): boolean {
+  const u = (p.imageUrl ?? '').toLowerCase();
+  return p.inStock && /^(https?:\/\/|\/)/.test(u) && !/\.(svg|ico)(\?|$)|placeholder|no-image|\/icons?\//.test(u);
+}
+
+/** Hero slides inside their optional startsAt/endsAt window, in placement order. */
+export function activeHero(slides: Home['hero'], now: Date): Home['hero'] {
+  const t = now.getTime();
+  return slides.filter((h) => (!h.startsAt || Date.parse(h.startsAt) <= t) && (!h.endsAt || t < Date.parse(h.endsAt)));
+}
+
+/** Tile cells: fixed cells stay as they are; a rule cell becomes the best eligible product not shown elsewhere on the page. */
+function resolveTiles(all: ProductSummary[]): Home['tiles'] {
+  const used = new Set<string>();
+  const pick = (rule: TileRule): ProductSummary | undefined => {
+    const pool = all.filter((x) => eligibleForHome(x) && !used.has(x.atin) && (!rule.department || x.department === rule.department));
+    const ranked =
+      rule.kind === 'top-rated'
+        ? pool.sort((a, b) => b.rating - a.rating || b.reviewCount - a.reviewCount)
+        : rule.kind === 'new'
+          ? pool.reverse()
+          : pool.filter((x) => x.fulfilment === 'AFROTRANSACT').sort((a, b) => a.delivery.days - b.delivery.days);
+    const found = ranked[0];
+    if (found) used.add(found.atin);
+    return found;
+  };
+  const tiles: Home['tiles'] = [];
+  for (const t of PLACEMENTS.tiles) {
+    const cells: Home['tiles'][number]['cells'] = [];
+    let ruled = false;
+    for (const c of t.cells) {
+      if (!('rule' in c)) {
+        cells.push(c);
+        continue;
+      }
+      ruled = true;
+      const p = pick(c.rule);
+      if (p) cells.push({ label: p.title, href: `/p/${p.atin}`, imageUrl: p.imageUrl, atin: p.atin });
+    }
+    if (cells.length > 0 && (!ruled || cells.length >= 2)) tiles.push({ id: t.id, title: t.title, cta: t.cta, href: t.href, cells });
+  }
+  return tiles;
+}
+
+/** "Based on your orders": the best-rated eligible products in the departments the shopper bought from most, minus what they bought. */
+function basedOnOrders(all: ProductSummary[], userId: string): Home['rails'][number] | null {
+  const bought = new Set<string>();
+  const count = new Map<string, number>();
+  for (const o of account(userId).orders) {
+    for (const l of o.shipments.flatMap((sh) => sh.lines)) {
+      const atin = l.productAtin;
+      if (!atin) continue;
+      const dept = all.find((x) => x.atin === atin)?.department;
+      bought.add(atin);
+      if (dept) count.set(dept, (count.get(dept) ?? 0) + 1);
+    }
+  }
+  const top = [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([d]) => d);
+  const pools = top.map((d) => all.filter((x) => x.department === d && eligibleForHome(x)).sort((a, b) => b.rating - a.rating));
+  const items: ProductSummary[] = [];
+  for (let i = 0; items.length < 12 && pools.some((p) => i < p.length); i += 1) {
+    for (const pool of pools) {
+      const p = pool[i];
+      if (p && !bought.has(p.atin) && !items.some((x) => x.atin === p.atin) && items.length < 12) items.push(p);
+    }
+  }
+  return items.length > 0 ? { id: 'based-on-orders', title: 'Based on your orders', href: `/s?dept=${encodeURIComponent(top[0] ?? '')}`, items } : null;
+}
+
+/** Cards for the ATINs a browser remembers (recently viewed): order kept, ineligible products dropped. */
+export function recentlyViewed(atins: string[], loc: DeliveryLocation, now: Date): ProductSummary[] {
+  const db = getDb();
+  const metro = metroOf(loc);
+  const seen = new Set<string>();
+  const out: ProductSummary[] = [];
+  for (const raw of atins.slice(0, 12)) {
+    const atin = raw.trim().toUpperCase();
+    const p = db.products.get(atin);
+    if (!p || p.unlisted || seen.has(atin)) continue;
+    seen.add(atin);
+    const card = summarize(p, metro, now);
+    if (eligibleForHome(card)) out.push(card);
+  }
+  return out;
+}
+
+export function home(loc: DeliveryLocation, now: Date, userId: string | null = null): Home {
   const db = getDb();
   const metro = metroOf(loc);
   const all = [...db.products.values()].filter((p) => !p.unlisted).map((p) => summarize(p, metro, now));
@@ -313,9 +400,17 @@ export function home(loc: DeliveryLocation, now: Date): Home {
       const ids = r.source.ids;
       items = ids.map((id) => all.find((x) => x.atin === atinOf(id))).filter((x): x is ProductSummary => !!x);
     }
-    return { id: r.id, title: r.title.replace('{city}', loc.city), href: r.href, items };
+    return { id: r.id, title: r.title.replace('{city}', loc.city), href: r.href, items: items.filter(eligibleForHome) };
   });
-  return { announcements: PLACEMENTS.announcements, hero: PLACEMENTS.hero, tiles: PLACEMENTS.tiles, banners: PLACEMENTS.banners, rails, deliverTo: loc };
+  const personal = userId ? basedOnOrders(all, userId) : null;
+  return {
+    announcements: PLACEMENTS.announcements,
+    hero: activeHero(PLACEMENTS.hero, now),
+    tiles: resolveTiles(all),
+    banners: PLACEMENTS.banners,
+    rails: [...(personal ? [personal] : []), ...rails.filter((r) => r.items.length > 0)],
+    deliverTo: loc
+  };
 }
 
 /* ── Cart ───────────────────────────────────────────────────────── */

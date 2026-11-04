@@ -22,10 +22,10 @@ import {
   ResumeUploadSchema
 } from './schemas/careers';
 import { type AddToCartRequest, type Cart, CartSchema, type UpdateCartLineRequest } from './schemas/cart';
-import { type ProductDetail, ProductDetailSchema, type StockAlert, StockAlertSchema } from './schemas/catalog';
+import { type ProductDetail, ProductDetailSchema, type ProductSummary, type StockAlert, StockAlertSchema } from './schemas/catalog';
 import { type HelpArticle, type HelpArticlePage, HelpArticlePageSchema, HelpArticleSchema, type HelpQuery } from './schemas/help';
 import { type HelpEvidenceAsset } from './schemas/help-requests';
-import { type Home, HomeSchema } from './schemas/home';
+import { type Home, HomeSchema, RecentlyViewedSchema } from './schemas/home';
 import {
   type ConsentRecord,
   ConsentRecordSchema,
@@ -60,6 +60,8 @@ export function createApiClient(options: ApiClientOptions) {
     /* Site & content */
     getSiteConfig: (signal?: AbortSignal): Promise<SiteConfig> => request('/v1/site-config', SiteConfigSchema, { signal }),
     getHome: (signal?: AbortSignal): Promise<Home> => request('/v1/home', HomeSchema, { signal }),
+    getRecentlyViewed: (atins: readonly string[], signal?: AbortSignal): Promise<ProductSummary[]> =>
+      request('/v1/home/recently-viewed', RecentlyViewedSchema, { query: { atins: atins.join(',') }, signal }).then((r) => r.items),
     subscribeNewsletter: (email: string) => request('/v1/newsletter/subscriptions', NewsletterResponseSchema, { method: 'POST', body: { email } }),
 
     /* Legal & privacy center */

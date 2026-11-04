@@ -32,6 +32,7 @@ import {
   MockProblem,
   moveToCart,
   productDetail,
+  recentlyViewed,
   removeLine,
   removeSaved,
   saveForLater,
@@ -100,7 +101,11 @@ export const handlers = [
   ...sessionHandlers('customer-web'),
   /* Site & content */
   http.get('*/v1/site-config', route(() => json(SITE_CONFIG))),
-  http.get('*/v1/home', route((ctx) => json(home(sessionLocation(ctx.session), ctx.now)))),
+  http.get('*/v1/home', route((ctx) => json(home(sessionLocation(ctx.session), ctx.now, ctx.session.userId ?? null)))),
+  http.get('*/v1/home/recently-viewed', route((ctx) => {
+    const atins = (new URL(ctx.request.url).searchParams.get('atins') ?? '').split(',').filter(Boolean);
+    return json({ items: recentlyViewed(atins, sessionLocation(ctx.session), ctx.now) });
+  })),
   http.post('*/v1/newsletter/subscriptions', route(async (ctx) => {
     await body(ctx.request, NewsletterRequestSchema);
     return json({ status: 'pending_confirmation' }, 202);

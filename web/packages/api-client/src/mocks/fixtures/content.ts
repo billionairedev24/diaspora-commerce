@@ -2,11 +2,20 @@
    (DEFAULT_PLACEMENTS, at-site.js DEF, JOBS, sign-in demo). In production these come from the
    content service (placements, site config) and identity (accounts) through the gateway BFF. */
 import type { Job } from '../../schemas/careers';
-import type { Placements } from '../../schemas/home';
+import type { Placements, Tile } from '../../schemas/home';
 import type { SiteConfig } from '../../schemas/site';
 
-/** Placements without the product rails (rails are resolved against the catalogue by the mock BFF). */
-export const PLACEMENTS: Omit<Placements, 'rails'> & { rails: Array<{ id: string; title: string; href: string; source: RailSource }> } = {
+/** A tile cell rule the mock BFF resolves to a product (the real gateway takes the same idea as a rail-shaped source). */
+export interface TileRule {
+  kind: 'top-rated' | 'new' | 'fulfilled-fastest';
+  department?: string;
+}
+/** A fixed image-and-link cell, or a rule cell that is filled from the catalogue. */
+export type MockTileCell = Tile['cells'][number] | { rule: TileRule };
+export type MockTile = Omit<Tile, 'cells'> & { cells: MockTileCell[] };
+
+/** Placements without the product rails and rule tiles (resolved against the catalogue by the mock BFF). */
+export const PLACEMENTS: Omit<Placements, 'rails' | 'tiles'> & { tiles: MockTile[]; rails: Array<{ id: string; title: string; href: string; source: RailSource }> } = {
   announcements: [
     { id: 'a1', tone: 'ink', icon: 'truck', text: 'FREE delivery on Fulfilled by AfroTransact items', cta: 'Shop fast delivery', href: '/s?delivery=1' },
     { id: 'a2', tone: 'gold', icon: 'calendar-star', text: 'Diwali and Detty December stock is landing — order early', cta: 'See picks', href: '/s?community=Indian' },
@@ -22,12 +31,15 @@ export const PLACEMENTS: Omit<Placements, 'rails'> & { rails: Array<{ id: string
     { id: 't1', title: 'Shop by community', cta: 'See all communities', href: '/s', cells: [
       { label: 'Nigerian', href: '/s?community=Nigerian', imageUrl: null }, { label: 'Indian', href: '/s?community=Indian', imageUrl: null },
       { label: 'Jamaican', href: '/s?community=Jamaican', imageUrl: null }, { label: 'Ethiopian', href: '/s?community=Ethiopian', imageUrl: null }] },
-    { id: 't2', title: 'AfroTransact Brand staples', cta: 'Shop our brand', href: '/s?soldBy=platform', cells: [
-      { label: 'Jollof Seasoning, 6 oz', href: '/p/AT000000P2', imageUrl: null }, { label: 'Aged Basmati Rice, 10 lb', href: '/p/AT00000P11', imageUrl: null },
-      { label: 'African Black Soap, 8 oz', href: '/p/AT00000P16', imageUrl: null }, { label: 'Shito Black Pepper Sauce, Hot, 12 oz', href: '/p/AT000000P3', imageUrl: null }] },
+    { id: 't2', title: 'Top rated by department', cta: 'See best sellers', href: '/s', cells: [
+      { rule: { kind: 'top-rated', department: 'Groceries' } }, { rule: { kind: 'top-rated', department: 'Beauty' } },
+      { rule: { kind: 'top-rated', department: 'Fashion' } }, { rule: { kind: 'top-rated', department: 'Books' } }] },
     { id: 't3', title: 'Get it tomorrow', cta: 'See fast delivery', href: '/s?delivery=1', cells: [
-      { label: 'Blue Mountain Jerk Paste', href: '/p/AT000000P9', imageUrl: null }, { label: 'Dried Hibiscus (Bissap)', href: '/p/AT000000P8', imageUrl: null },
-      { label: 'Raw Unrefined Shea Butter', href: '/p/AT00000P15', imageUrl: null }, { label: 'Dried Guajillo Chiles', href: '/p/AT00000P22', imageUrl: null }] },
+      { rule: { kind: 'fulfilled-fastest' } }, { rule: { kind: 'fulfilled-fastest' } },
+      { rule: { kind: 'fulfilled-fastest' } }, { rule: { kind: 'fulfilled-fastest' } }] },
+    { id: 't5', title: 'New in the shop', cta: 'See what is new', href: '/s?sort=newest', cells: [
+      { rule: { kind: 'new', department: 'Groceries' } }, { rule: { kind: 'new', department: 'Beauty' } },
+      { rule: { kind: 'new', department: 'Fashion' } }, { rule: { kind: 'new', department: 'Home & Art' } }] },
     { id: 't4', title: 'Book a service', cta: 'All services', href: '/services', cells: [
       { label: 'Hair & beauty', href: '/services', imageUrl: null }, { label: 'Catering', href: '/services', imageUrl: null },
       { label: 'Tailoring', href: '/services', imageUrl: null }, { label: 'Events & DJ', href: '/services', imageUrl: null }] }
