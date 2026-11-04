@@ -5,9 +5,11 @@ import {
   type ActivityEntry,
   type ColumnKind,
   type DetailField,
+  type DetailSection,
   type FieldValue,
   type FormField,
   type RecordLink,
+  type RecordShipment,
   type RecordTone,
   type ResourceColumn,
   type ResourceFacet,
@@ -20,6 +22,7 @@ import { exchangeRatesDef } from './exchange-rates';
 import { IDENTITY_RESOURCES } from './identity';
 import { MOCK_DRIVERS } from './lookups';
 import { tierBenefitDetails } from './membership-tiers';
+import { applyShipmentStep, noStepReason, orderSections, shipmentsOf, stepOptions } from './order-shipments';
 import { categoryRequestsDef } from './taxonomy';
 
 export interface ActionCtx {
@@ -73,6 +76,12 @@ export interface MockResource {
    */
   ids?: Record<string, string>;
   sections?: [string, string[]][];
+  /** Lays out the sheet's facts itself (grouped, empty ones left out) instead of from the fields. */
+  sheetSections?: (r: MockRecord) => DetailSection[];
+  /** An order's packages with the statuses the caller may set (`may`: they hold the permission and module level). */
+  shipments?: (r: MockRecord, may: boolean) => RecordShipment[];
+  /** Permissions of which the caller needs one to set a shipment's status. */
+  shipmentPermissions?: string[];
   linesTitle?: string;
   lineColumns?: ResourceColumn[];
   links?: (r: MockRecord) => RecordLink[];
@@ -312,35 +321,25 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     ids: { customerId: 'Customer' },
     titleOf: (r) => `Order ${r.id}`,
     subtitleOf: (r) => `${str(r.fields.customer)} · ${str(r.fields.shipTo)}`,
-    sections: [
-      ['Order', ['orderNumber', 'status', 'placedAt', 'customer', 'shipTo', 'department']],
-      ['Money', ['itemsMinor', 'shippingMinor', 'taxMinor', 'totalMinor', 'currency']]
-    ],
+    sheetSections: orderSections,
+    shipments: shipmentsOf,
+    shipmentPermissions: ['orders:manage'],
     linesTitle: 'Shipments',
-    lineColumns: [col('label', 'Shipment', 'strong', 18), col('status', 'Status', 'status', 18), col('carrier', 'Carrier', 'text', 14), col('trackingNumber', 'Tracking', 'mono', 30), col('totalMinor', 'Total', 'money', 20)],
-    links: (r) => [{ label: 'Open in customer support', href: `/support?customer=${encodeURIComponent(str(r.fields.customerId))}` }],
+    links: (r) => [
+      { label: 'Open in customer support', href: `/support?customer=${encodeURIComponent(str(r.fields.customerId))}` },
+      ...((r.lines ?? []).some((l) => str(l.deliveryMethod) === 'AFROTRANSACT_DELIVERY' && ['READY', 'PACKED'].includes(str(l.status))) ? [{ label: 'Assign a driver', href: '/dispatch?tab=pickups' }] : [])
+    ],
     actions: [
       {
-        key: 'shipment-status', label: 'Update a shipment', tone: 'primary', permission: 'orders:manage', when: (r) => stateReason(r, 'OPEN'),
-        form: (r) => {
-          const lines = r.lines ?? [];
-          const verbs: [string, string][] = [['OUT_FOR_DELIVERY', 'Mark out for delivery'], ['DELIVERED', 'Mark delivered'], ['DELIVERY_FAILED', 'Record a failed delivery'], ['RETURNED', 'Mark returned'], ['CANCELLED', 'Cancel the shipment']];
-          return form('What happened to the shipment?', 'Save', [
-            field('step', 'Next step', 'select', true, {
-              options: lines.flatMap((l) => verbs.map(([to, verb]) => ({ value: `${str(l.id)}|${to}`, label: lines.length > 1 ? `${str(l.label)} · ${verb}` : verb })))
-            }),
-            field('reason', 'Reason or note', 'text', false, { maxLength: 500 })
-          ]);
-        },
-        apply: (r, v, ctx) => {
-          const [shipmentId, to = ''] = str(v.step).split('|');
-          const line = (r.lines ?? []).find((l) => l.id === shipmentId);
-          if (line) line.status = to;
-          r.fields.shipmentStatus = to;
-          if (to === 'DELIVERED') r.fields.status = 'COMPLETED';
-          if (to === 'CANCELLED') r.fields.status = 'CANCELLED';
-          log(r, ctx, `Shipment moved to ${humanize(to).toLowerCase()}`);
-        }
+        key: 'shipment-status', label: 'Set shipment status', tone: 'neutral', permission: 'orders:manage', when: (r) => noStepReason(r),
+        form: (r) =>
+          form('What happened to the shipment?', 'Save', [
+            field('step', 'Next step', 'select', true, { options: stepOptions(r) }),
+            field('reason', 'Reason or note', 'text', false, { maxLength: 500 }),
+            field('handoverCode', 'Customer’s code (handing over a pickup order)', 'text', false, { pattern: '^\\d{4}$' })
+          ]),
+        apply: (r, v, ctx) =>
+          applyShipmentStep(r, v, ctx.actor, ctx.now, ctx.fail ?? ((errors) => { throw new Error(JSON.stringify(errors)); }))
       }
     ]
   },

@@ -15,6 +15,7 @@ import { seedIdentityAdmin } from './identity';
 import { type MockMarketsState, seedMarkets } from './markets';
 import { tierBenefitDetails } from './membership-tiers';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
+import { seedShipments, syncOrder } from './order-shipments';
 import { type MockPlansState, seedPlans } from './plans';
 import { type MockPreorderState, seedPreorders } from './preorders';
 import { type MockSearchState, seedSearch } from './search';
@@ -174,14 +175,18 @@ function seed(now: Date): MockStaffDb {
         totalMinor: items + shipping + tax,
         currency: 'USD',
         shipTo: pick(['Houston, TX 77042', 'Edison, NJ 08817', 'Atlanta, GA 30303', 'Silver Spring, MD 20910']),
-        placedAt: placed
+        placedAt: placed,
+        customerPhone: `+1713555${String(100 + i).padStart(4, '0')}`,
+        channel: i % 5 === 2 ? 'Instagram' : null,
+        attributionSource: i % 5 === 2 ? 'ig' : null,
+        tags: i % 7 === 3 ? 'Gift, Priority' : null
       },
       [act(placed, c.name, 'Order placed'), ...(status !== 'PLACED' ? [act(ago(Math.floor(i * 0.7) - 0.2), 'Seller', `Shipment ${status.toLowerCase().replace(/_/g, ' ')}`)] : [])],
-      [
-        { id: `shp-${i}-1`, label: 'Package 1', status, carrier: status === 'PLACED' ? null : 'UPS', trackingNumber: status === 'PLACED' ? null : `1Z${String(9_000_000 + i * 13)}`, cancellable: ['PLACED', 'CONFIRMED'].includes(status), totalMinor: items + shipping + tax }
-      ]
+      seedShipments(i, status, { items, shipping, tax }, ago)
     );
   });
+
+  orders.forEach(syncOrder);
 
   const products = Array.from({ length: 14 }, (_, i) =>
     rec(`prd-${300 + i}`, {

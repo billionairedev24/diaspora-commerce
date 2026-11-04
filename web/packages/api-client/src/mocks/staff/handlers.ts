@@ -252,7 +252,8 @@ function detail(ctx: Ctx, resource: ResourceKey, r: MockRecord): RecordDetail {
   const idFields = Object.entries(idLabels)
     .filter(([k]) => r.fields[k])
     .map(([k, label]) => ({ label: `${label} ID`, value: String(r.fields[k]), kind: 'mono' as const }));
-  if (idFields.length) sections.push({ title: 'IDs', fields: idFields });
+  if (idFields.length && !def.sheetSections) sections.push({ title: 'IDs', fields: idFields });
+  const mayShip = (def.shipmentPermissions ?? []).some((p) => ctx.permissions.includes(p)) && allows(ctx.roles, RESOURCE_MODULE[resource], 'EDIT');
   const status = def.statusKey ? (r.fields[def.statusKey] as string | null) ?? null : null;
   const canEdit = !!def.edit && ctx.permissions.includes(def.edit.permission) && allows(ctx.roles, RESOURCE_MODULE[resource], 'EDIT');
   return {
@@ -262,7 +263,7 @@ function detail(ctx: Ctx, resource: ResourceKey, r: MockRecord): RecordDetail {
     subtitle: def.subtitleOf(r),
     status,
     tone: toneOf(status),
-    sections,
+    sections: def.sheetSections ? def.sheetSections(r) : sections,
     tables: r.lines && def.lineColumns ? [{ title: def.linesTitle ?? 'Items', columns: def.lineColumns, rows: r.lines.map((l, i) => ({ id: String(l.id ?? i), cells: Object.fromEntries(Object.entries(l).map(([k, v]) => [k, cellOf(v)])), tone: toneOf(typeof l.status === 'string' ? l.status : null) })) }] : [],
     activity: r.activity,
     notes: [],
@@ -270,7 +271,8 @@ function detail(ctx: Ctx, resource: ResourceKey, r: MockRecord): RecordDetail {
     actions: def.actions.map((a) => actionView(ctx, resource, r, a)),
     editForm: canEdit && def.edit ? def.edit.form(r) : null,
     links: def.links ? def.links(r) : [],
-    version: r.fields.version === undefined || r.fields.version === null ? null : String(r.fields.version)
+    version: r.fields.version === undefined || r.fields.version === null ? null : String(r.fields.version),
+    ...(def.shipments ? { shipments: def.shipments(r, mayShip) } : {})
   };
 }
 

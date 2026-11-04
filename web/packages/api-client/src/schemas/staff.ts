@@ -194,6 +194,39 @@ export type RecordLink = z.infer<typeof RecordLinkSchema>;
 export const OneTimeSecretSchema = z.object({ label: z.string(), value: z.string(), note: z.string() });
 export type OneTimeSecret = z.infer<typeof OneTimeSecretSchema>;
 
+/** Why a shipment status is not on offer (the console words it in the staff member's language). */
+export const ShipmentBlockedSchema = z.enum(['PERMISSION', 'SELLER', 'SEQUENCE', 'STATE']);
+export type ShipmentBlocked = z.infer<typeof ShipmentBlockedSchema>;
+export const ShipmentStepSchema = z.object({
+  to: z.string(),
+  allowed: z.boolean(),
+  reason: nullableString,
+  blocked: ShipmentBlockedSchema.nullable(),
+  noteRequired: z.boolean(),
+  codeAccepted: z.boolean(),
+  driverStep: z.boolean()
+});
+export type ShipmentStep = z.infer<typeof ShipmentStepSchema>;
+export const ShipmentChangeSchema = z.object({ at: z.string(), from: nullableString, to: z.string(), actor: z.string(), note: nullableString });
+export type ShipmentChange = z.infer<typeof ShipmentChangeSchema>;
+/** One package of an order sheet with the statuses the caller may set on it (set with the order's `shipment-status` action). */
+export const RecordShipmentSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  sellerName: z.string(),
+  status: z.string(),
+  tone: RecordToneSchema.nullable(),
+  fulfilmentLabel: z.string(),
+  deliveryLabel: z.string(),
+  itemCount: z.number(),
+  itemTitles: z.array(z.string()),
+  carrier: nullableString,
+  trackingNumber: nullableString,
+  transitions: z.array(ShipmentStepSchema),
+  history: z.array(ShipmentChangeSchema)
+});
+export type RecordShipment = z.infer<typeof RecordShipmentSchema>;
+
 export const RecordDetailSchema = z.object({
   resource: ResourceKeySchema,
   id: z.string(),
@@ -210,6 +243,7 @@ export const RecordDetailSchema = z.object({
   editForm: StaffFormSchema.nullable(),
   links: z.array(RecordLinkSchema),
   version: nullableString,
+  shipments: z.array(RecordShipmentSchema).optional(),
   removed: z.boolean().optional(),
   reveal: OneTimeSecretSchema.optional()
 });

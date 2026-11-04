@@ -7212,9 +7212,58 @@ export interface components {
             links: components["schemas"]["RecordLink"][];
             /** @description Optimistic-locking version to send back with edits */
             version: string | null;
+            /** @description An order's packages, each with the statuses the caller may set on it (orders only). A status is set with the order's `shipment-status` action (values `step` = `<shipment id>|<STATUS>`, `reason`, `handoverCode`). */
+            shipments?: components["schemas"]["RecordShipment"][];
             /** @description Set when an action deleted the record; the console closes the sheet */
             removed?: boolean;
             reveal?: components["schemas"]["OneTimeSecret"];
+        };
+        RecordShipment: {
+            /** @description The shipment id; the first half of the `step` value of the `shipment-status` action */
+            id: string;
+            /** @description Shipment 1 of 2 · Seller */
+            label: string;
+            sellerName: string;
+            /** @description Upper-case shipment status, for example PICKED_UP */
+            status: string;
+            tone: components["schemas"]["Tone"] | null;
+            /** @description Who packs it (AfroTransact or Seller) */
+            fulfilmentLabel: string;
+            /** @description How it travels (Carrier, AfroTransact Delivery, Pickup) */
+            deliveryLabel: string;
+            /** @description Units in the shipment */
+            itemCount: number;
+            /** @description The first item names (at most three) */
+            itemTitles: string[];
+            carrier: string | null;
+            trackingNumber: string | null;
+            /** @description The statuses the caller may set now (allowed) and the later steps and exceptions they cannot (with why). Empty when the shipment is finished. */
+            transitions: components["schemas"]["ShipmentStep"][];
+            /** @description Status changes, newest first */
+            history: components["schemas"]["ShipmentChange"][];
+        };
+        ShipmentStep: {
+            /** @description Upper-case target status, for example OUT_FOR_DELIVERY */
+            to: string;
+            allowed: boolean;
+            /** @description Short English reason when not allowed */
+            reason: string | null;
+            blocked: ("PERMISSION" | "SELLER" | "SEQUENCE" | "STATE") | null;
+            /** @description The step needs a reason (satisfied by the handover code where codeAccepted) */
+            noteRequired: boolean;
+            /** @description The customer's 4-digit handover code may be given (handing over a pickup order) */
+            codeAccepted: boolean;
+            /** @description AfroTransact drivers normally take this step in the driver app; staff do it by hand */
+            driverStep: boolean;
+        };
+        ShipmentChange: {
+            /** Format: date-time */
+            at: string;
+            from: string | null;
+            to: string;
+            /** @description Who or what moved it (Seller, Platform admin, Carrier, Driver, System) */
+            actor: string;
+            note: string | null;
         };
         /** @description A secret shown once, right after it was created (a new OAuth client secret). It is in this answer only; the BFF keeps nothing and the upstream cannot return it again. The console shows it in a dialog and never stores it. */
         OneTimeSecret: {
