@@ -1209,10 +1209,12 @@ export const ProductDraftSummarySchema = z.object({
   title: z.string(),
   categoryPath: nullableString,
   updatedAt: z.string(),
-  version: z.number().int()
+  version: z.number().int(),
+  /** How many of the five basics (category, title, a photo, a price, a description) the draft still lacks; 0 = ready. */
+  todo: z.number().int().min(0)
 });
 export type ProductDraftSummary = z.infer<typeof ProductDraftSummarySchema>;
-export const ProductDraftListSchema = z.object({ items: z.array(ProductDraftSummarySchema) });
+export const ProductDraftListSchema = z.object({ items: z.array(ProductDraftSummarySchema), total: z.number().int(), page: z.number().int(), size: z.number().int() });
 export type ProductDraftList = z.infer<typeof ProductDraftListSchema>;
 export const SavedProductDraftSchema = ProductDraftSummarySchema.extend({ payload: z.record(z.string(), z.unknown()) });
 export type SavedProductDraft = z.infer<typeof SavedProductDraftSchema>;

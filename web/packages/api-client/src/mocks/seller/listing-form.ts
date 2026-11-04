@@ -8,6 +8,7 @@ import {
   type ImportRowMessage,
   type ListingRow,
   type ProductDraft,
+  type ProductDraftSummary,
   type ProductImport,
   type ProductImportRow,
   type SavedProductDraft,
@@ -22,7 +23,7 @@ export interface MockImport extends ProductImport {
   rows: ProductImportRow[];
 }
 
-export interface MockDraft extends SavedProductDraft {
+export interface MockDraft extends Omit<SavedProductDraft, 'todo'> {
   orgId: string;
 }
 
@@ -393,5 +394,26 @@ export function reportCsv(imp: MockImport): string {
   ]);
 }
 
-export const draftView = ({ orgId: _o, ...d }: MockDraft): SavedProductDraft => d;
+const filled = (v: unknown): boolean => typeof v === 'string' && v.trim() !== '';
+const record = (v: unknown): Record<string, unknown> => (typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+
+/** How many of the five basics (category, title, a photo, a price, a description) a draft still lacks: catalog does the same in SQL. */
+export function draftTodo(d: Pick<MockDraft, 'title' | 'payload'>): number {
+  const p = d.payload;
+  const hasPrice = filled(record(p.single).price) || Object.values(record(p.rows)).some((r) => filled(record(r).price));
+  return (
+    (filled(p.categoryId) || filled(record(p.request).id) ? 0 : 1) +
+    (d.title.trim() ? 0 : 1) +
+    (Array.isArray(p.images) && p.images.length > 0 ? 0 : 1) +
+    (hasPrice ? 0 : 1) +
+    (typeof p.description === 'string' && p.description.trim().length >= 40 ? 0 : 1)
+  );
+}
+
+export function draftSummary(d: MockDraft): ProductDraftSummary {
+  const { orgId: _o, payload, ...summary } = d;
+  return { ...summary, todo: draftTodo({ title: d.title, payload }) };
+}
+
+export const draftView = ({ orgId: _o, ...d }: MockDraft): SavedProductDraft => ({ ...d, todo: draftTodo(d) });
 export const importView = ({ orgId: _o, rows: _r, ...i }: MockImport): ProductImport => i;

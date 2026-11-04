@@ -206,6 +206,16 @@ export interface SellerOrdersQuery {
   limit?: number;
 }
 
+/** Server-driven drafts table query: search over title and category, sort (updatedAt | title | categoryPath), page. */
+export interface ProductDraftsQuery {
+  q?: string;
+  /** new = only drafts of products not created yet (the Drafts table); all = also the unsaved edits of listings. */
+  kind?: 'all' | 'new';
+  sort?: string[];
+  page: number;
+  size: number;
+}
+
 /** Server-driven listings table query. */
 export interface ListingsQuery {
   status?: ListingStatus;
@@ -373,7 +383,9 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request(`/v1/seller/listings/${enc(productId)}`, SellerProductDetailSchema, { signal }),
     updateProduct: (productId: string, body: ProductUpdate): Promise<ListingRow> =>
       request(`/v1/seller/products/${enc(productId)}`, ListingRowSchema, { method: 'PUT', body }),
-    listProductDrafts: (signal?: AbortSignal): Promise<ProductDraftList> => request('/v1/seller/product-drafts', ProductDraftListSchema, { signal }),
+    /** One page of drafts and the total. Without a query: the first 100 of every kind (the form looks its own edit up here). */
+    listProductDrafts: (q: ProductDraftsQuery = { page: 0, size: 100 }, signal?: AbortSignal): Promise<ProductDraftList> =>
+      request('/v1/seller/product-drafts', ProductDraftListSchema, { query: tableSearchParams({ q: q.q, kind: q.kind, page: q.page, size: q.size }, q.sort), signal }),
     getProductDraft: (id: string, signal?: AbortSignal): Promise<SavedProductDraft> =>
       request(`/v1/seller/product-drafts/${enc(id)}`, SavedProductDraftSchema, { signal }),
     createProductDraft: (body: SaveProductDraftRequest): Promise<SavedProductDraft> =>

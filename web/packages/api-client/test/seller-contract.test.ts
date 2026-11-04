@@ -218,6 +218,16 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     const saved = await api.saveProductDraft(draft.id, { title: 'Suya Pepper Spice', payload: { title: 'Suya Pepper Spice' }, version: draft.version });
     await expect(api.saveProductDraft(draft.id, { payload: {}, version: draft.version })).rejects.toSatisfy((e) => isApiError(e) && e.status === 409);
     expect((await api.listProductDrafts()).items.map((d) => d.id)).toContain(saved.id);
+    // The drafts table: search, sort, page and the total come from the server.
+    const other = await api.createProductDraft({ title: 'Adire cloth', categoryPath: 'Fashion', payload: { title: 'Adire cloth', description: 'x'.repeat(50) } });
+    const byTitle = await api.listProductDrafts({ kind: 'new', sort: ['title,asc'], page: 0, size: 1 });
+    expect(byTitle).toMatchObject({ total: 2, page: 0, size: 1 });
+    expect(byTitle.items.map((d) => d.id)).toEqual([other.id]);
+    expect((await api.listProductDrafts({ sort: ['title,asc'], page: 1, size: 1 })).items.map((d) => d.id)).toEqual([saved.id]);
+    expect((await api.listProductDrafts({ q: 'FASHION', page: 0, size: 25 })).total).toBe(1);
+    expect(byTitle.items[0]?.todo).toBe(3);
+    await expect(api.listProductDrafts({ sort: ['payload,asc'], page: 0, size: 25 })).rejects.toSatisfy((e) => isApiError(e) && e.status === 422);
+    await api.deleteProductDraft(other.id);
 
     const input: ProductDraft = {
       categoryId: 'pt-spices', title: 'Suya Pepper Spice Blend from Kano', attributes: { brand: 'Mama Kano', shelf: '12 months' },
