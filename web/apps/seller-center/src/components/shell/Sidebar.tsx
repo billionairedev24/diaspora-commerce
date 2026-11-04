@@ -139,7 +139,7 @@ export function Sidebar({ session, active, onSwitch, switching }: { session: Sel
   // scope loads nothing flashes in; if it cannot be read the entry stays (the catalog enforces the scope on the server).
   const org = session.activeOrg;
   const scope = useSellerScopeOf(org?.id, !!org && org.kind === 'SELLER' && org.approved);
-  const showSizeCharts = scope.exempt || scope.hasSizing || scope.isError || (!!org && org.kind !== 'SELLER');
+  const showSizeCharts = scope.exempt || scope.hasSizing || (!!org && org.kind !== 'SELLER');
   return (
     <nav aria-label={t('sc.sidebar.backOffice')} className="flex h-full flex-col gap-0.5 px-3 pt-4 pb-[calc(1rem+var(--at-chat-fab-clear,0px))]">
       <div className="pb-3">
