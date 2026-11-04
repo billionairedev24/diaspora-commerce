@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/mail"
 	"regexp"
 	"strings"
 	"time"
@@ -31,6 +30,9 @@ type productServiceImpl struct {
 	inventory     port.InventoryClient
 	promise       port.PromiseClient
 	notifications port.NotificationsClient
+	tokens        port.ServiceTokens
+	limiter       port.RateLimiter
+	limits        StockAlertLimits
 	offers        port.StorefrontOffersClient
 	location      LocationService
 	estimator     domain.Estimator
@@ -47,6 +49,10 @@ type ProductDeps struct {
 	Inventory     port.InventoryClient
 	Promise       port.PromiseClient
 	Notifications port.NotificationsClient
+	// Tokens (the BFF's client credentials) subscribe guests to stock alerts; Limiter bounds "Email me when available".
+	Tokens      port.ServiceTokens
+	Limiter     port.RateLimiter
+	AlertLimits StockAlertLimits
 	// Offers is optional: without it the page shows the catalog's single seller.
 	Offers    port.StorefrontOffersClient
 	Location  LocationService
@@ -61,7 +67,7 @@ func NewProductService(d ProductDeps) ProductService {
 	if d.Log == nil {
 		d.Log = slog.Default()
 	}
-	return &productServiceImpl{catalog: d.Catalog, inventory: d.Inventory, promise: d.Promise, notifications: d.Notifications,
+	return &productServiceImpl{catalog: d.Catalog, inventory: d.Inventory, promise: d.Promise, notifications: d.Notifications, tokens: d.Tokens, limiter: d.Limiter, limits: d.AlertLimits.withDefaults(),
 		offers: d.Offers, location: d.Location, estimator: d.Estimator, sellers: d.Sellers, clock: d.Clock, log: d.Log}
 }
 
@@ -275,40 +281,6 @@ func returnsPolicy(fulfilment, department string) string {
 	default:
 		return "Seller return policy, 14 days"
 	}
-}
-
-// StockAlert arms "Email me when available" for the product's requested variant (or its first variant). The
-// notifications service keys alerts by the shopper's account, so guests must sign in first.
-func (s *productServiceImpl) StockAlert(ctx context.Context, c *domain.Caller, atin, email string) error {
-	p, wanted, err := resolveProduct(ctx, s.catalog, atin)
-	if err != nil {
-		return err
-	}
-	email = strings.TrimSpace(email)
-	if email == "" && c.Session != nil && c.Session.Profile != nil {
-		email = c.Session.Profile.Email
-	}
-	if email == "" {
-		p := domain.NewProblem(http.StatusUnprocessableEntity, domain.CodeValidationFailed, "Email required", "Enter an email address so we can tell you when it’s back.")
-		p.Errors = map[string]string{"email": "Enter your email"}
-		return p
-	}
-	if _, err := mail.ParseAddress(email); err != nil {
-		return domain.ValidationProblem(map[string]string{"email": "Enter a valid email address"})
-	}
-	if !c.Authenticated() {
-		return domain.NewProblem(http.StatusUnauthorized, domain.CodeUnauthenticated, "Sign in to get an alert",
-			"Sign in and we'll email you when it's back in stock.")
-	}
-	variant := wanted
-	if variant == "" && len(p.Variants) > 0 {
-		variant = p.Variants[0].ATIN
-	}
-	in := port.StockAlertInput{ATIN: variant, Email: email, ProductTitle: p.Title}
-	if err := s.notifications.SubscribeStockAlert(ctx, c.BearerToken, in); err != nil {
-		return mapErr("notifications", err)
-	}
-	return nil
 }
 
 func (s *productServiceImpl) StockAlerts(ctx context.Context, c *domain.Caller) ([]domain.StockAlertItem, error) {

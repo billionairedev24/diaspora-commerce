@@ -489,6 +489,16 @@ type StockAlertInput struct {
 	ATIN         string `json:"atin"`
 	Email        string `json:"email,omitempty"`
 	Market       string `json:"market,omitempty"`
+	Locale       string `json:"locale,omitempty"`
+	ProductTitle string `json:"productTitle,omitempty"`
+}
+
+// GuestStockAlertInput subscribes an email address without an account (notifications POST /v1/stock-alerts/guest,
+// service token with scope notifications:stock-alerts.guest).
+type GuestStockAlertInput struct {
+	ATIN         string `json:"atin"`
+	Email        string `json:"email"`
+	Locale       string `json:"locale,omitempty"`
 	ProductTitle string `json:"productTitle,omitempty"`
 }
 
@@ -506,6 +516,9 @@ type StockAlert struct {
 // refused by notifications). Subscribing is 201 when armed and 200 when already active — both are success.
 type NotificationsClient interface {
 	SubscribeStockAlert(ctx context.Context, bearer string, in StockAlertInput) error
+	// SubscribeGuestStockAlert uses the BFF's service token (not a shopper's); the answer never says whether the
+	// address already had the alert.
+	SubscribeGuestStockAlert(ctx context.Context, serviceToken string, in GuestStockAlertInput) error
 	StockAlerts(ctx context.Context, bearer string) ([]StockAlert, error)
 	RemoveStockAlert(ctx context.Context, bearer, atin string) error
 }

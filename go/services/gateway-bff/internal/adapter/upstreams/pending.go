@@ -341,6 +341,11 @@ func (n *notificationsImpl) SubscribeStockAlert(ctx context.Context, bearer stri
 	return err
 }
 
+func (n *notificationsImpl) SubscribeGuestStockAlert(ctx context.Context, serviceToken string, in port.GuestStockAlertInput) error {
+	_, err := call(ctx, n.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/stock-alerts/guest", Bearer: serviceToken, JSON: in}, nil)
+	return err
+}
+
 func (n *notificationsImpl) StockAlerts(ctx context.Context, bearer string) ([]port.StockAlert, error) {
 	res, err := call(ctx, n.c, httpclient.Request{Path: "/v1/stock-alerts", Bearer: bearer}, nil)
 	if err != nil {

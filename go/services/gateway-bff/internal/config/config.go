@@ -136,6 +136,10 @@ type Config struct {
 		LookupPerMinute int  `yaml:"lookupPerMinute" env:"RATE_LIMIT_LOOKUP_PER_MINUTE"`
 		TrustForwarded  bool `yaml:"trustForwardedFor" env:"TRUST_FORWARDED_FOR"`
 		MaxBodyBytes    int  `yaml:"maxBodyBytes" env:"MAX_BODY_BYTES"`
+		// "Email me when available" (guests included), per hour; 0 = defaults 20 / 10 / 300.
+		StockAlertPerIPPerHour    int `yaml:"stockAlertPerIpPerHour" env:"RATE_LIMIT_STOCK_ALERT_PER_IP_HOUR"`
+		StockAlertPerEmailPerHour int `yaml:"stockAlertPerEmailPerHour" env:"RATE_LIMIT_STOCK_ALERT_PER_EMAIL_HOUR"`
+		StockAlertPerATINPerHour  int `yaml:"stockAlertPerAtinPerHour" env:"RATE_LIMIT_STOCK_ALERT_PER_ATIN_HOUR"`
 	} `yaml:"rateLimit"`
 
 	Cache struct {

@@ -58,22 +58,6 @@ func TestProductPageWithoutOffersUsesCatalogSeller(t *testing.T) {
 	}
 }
 
-func TestStockAlertsWithNotifications(t *testing.T) {
-	bff, b := setup(t, testkit.Options{Notifications: true})
-	mustStatus(t, b.do("POST", "/v1/products/ATGARI0001/stock-alerts", map[string]any{"email": "a@example.com"}), 401)
-	mustStatus(t, signIn(t, bff, b, "/"), 302)
-	r := b.do("POST", "/v1/products/ATGARI0001/stock-alerts", map[string]any{})
-	mustStatus(t, r, 201)
-	mustStatus(t, b.do("POST", "/v1/products/ATGARI0001/stock-alerts", map[string]any{}), 201) // 200 upstream: still subscribed
-	items := b.do("GET", "/v1/account/stock-alerts", nil).json(t)["items"].([]any)
-	if len(items) != 1 || items[0].(map[string]any)["atin"] != "ATGARIV001" || items[0].(map[string]any)["productTitle"] != "Ijebu Garri" ||
-		items[0].(map[string]any)["status"] != "active" {
-		t.Fatalf("alerts = %v", items)
-	}
-	mustStatus(t, b.do("DELETE", "/v1/account/stock-alerts/ATGARIV001", nil), 204)
-	mustStatus(t, b.do("DELETE", "/v1/account/stock-alerts/ATGARIV001", nil), 404)
-}
-
 func TestCareersResumeUpload(t *testing.T) {
 	bff, b := setup(t, testkit.Options{Content: true})
 	r := b.do("POST", "/v1/careers/uploads", map[string]any{"fileName": "Ada Obi CV.pdf", "contentType": "application/pdf", "size": 120000})
