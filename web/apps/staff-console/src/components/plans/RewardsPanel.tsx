@@ -11,8 +11,8 @@ import {
   type StaffRewardRule,
   type StaffRewardRuleInput
 } from '@afrotransact/api-client';
-import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
+import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
+import { Button, ConfirmDelete, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
@@ -248,6 +248,7 @@ export function RewardsPanel() {
   const rules = useQuery(staffPlanQueries.rules(plansApi()));
   const state = useTableState({ searchParams: useSearchParams(), prefix: 'rules' });
   const [editing, setEditing] = useState<{ rule: StaffRewardRule | null } | null>(null);
+  const [ending, setEnding] = useState<StaffRewardRule | null>(null);
   const status = useMutation({
     mutationFn: (v: { id: string; status: 'ACTIVE' | 'PAUSED' | 'ENDED' }) => plansApi().setRuleStatus(v.id, v.status),
     onSuccess: () => void qc.invalidateQueries({ queryKey: staffPlanKeys.rules() }),
@@ -260,23 +261,37 @@ export function RewardsPanel() {
     { id: 'grants', accessorFn: (r) => r.grantsCount, header: t('st.plans.col.grants'), size: 110, meta: { kind: 'number', align: 'end' },
       cell: ({ row }) => (row.original.maxGrants ? `${row.original.grantsCount} / ${row.original.maxGrants}` : String(row.original.grantsCount)) },
     { id: 'status', accessorFn: (r) => r.status, header: t('st.plans.col.status'), size: 110, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={STATUS_TONE[row.original.status] ?? 'info'}>{humanize(row.original.status)}</StatusPill> },
-    {
-      id: 'actions', header: () => <span className="at-visually-hidden">{t('st.plans.col.actions')}</span>, size: 240, enableSorting: false, meta: { export: false, label: t('st.plans.col.actions') },
-      cell: ({ row }) => (
-        <div className="flex flex-wrap gap-1">
-          <Button size="sm" variant="link" onClick={() => setEditing({ rule: row.original })}>{manage ? t('st.plans.edit') : t('st.plans.view')}</Button>
-          {manage && row.original.status !== 'ACTIVE' && row.original.status !== 'ENDED' ? <Button size="sm" variant="link" onClick={() => status.mutate({ id: row.original.id, status: 'ACTIVE' })}>{t('st.plans.activate')}</Button> : null}
-          {manage && row.original.status === 'ACTIVE' ? <Button size="sm" variant="link" onClick={() => status.mutate({ id: row.original.id, status: 'PAUSED' })}>{t('st.plans.pause')}</Button> : null}
-          {manage && row.original.status !== 'ENDED' ? <Button size="sm" variant="link" className="text-danger" onClick={() => status.mutate({ id: row.original.id, status: 'ENDED' })}>{t('st.plans.end')}</Button> : null}
-        </div>
-      )
-    }
+    rowActionsColumn<StaffRewardRule>({
+      header: t('st.plans.col.actions'),
+      name: (r) => r.name,
+      label: (r) => t('st.rows.actionsFor', { name: r.name }),
+      items: (r) => [
+        { label: manage ? t('st.plans.edit') : t('st.plans.view'), onSelect: () => setEditing({ rule: r }) },
+        manage && r.status !== 'ACTIVE' && r.status !== 'ENDED' && { label: t('st.plans.activate'), onSelect: () => status.mutate({ id: r.id, status: 'ACTIVE' }) },
+        manage && r.status === 'ACTIVE' && { label: t('st.plans.pause'), onSelect: () => status.mutate({ id: r.id, status: 'PAUSED' }) },
+        manage && r.status !== 'ENDED' && { label: t('st.plans.end'), danger: true, onSelect: () => setEnding(r) }
+      ]
+    })
   ], [t, manage, status]);
   return (
     <>
       <DataTable<StaffRewardRule> id="staff.plans.rules" label={t('st.plans.tab.rewards')} columns={columns} data={rules.data ?? []} getRowId={(r) => r.id} rowLabel={(r) => r.name}
         state={state} mode="client" loading={rules.isPending} fetching={rules.isFetching} error={rules.isError ? <ErrorState error={rules.error} onRetry={() => void rules.refetch()} /> : undefined}
         toolbar={manage ? <Button size="sm" onClick={() => setEditing({ rule: null })}>{t('st.plans.newRule')}</Button> : null} empty={t('st.plans.noRules')} />
+      <ConfirmDelete
+        open={ending !== null}
+        onOpenChange={(o) => (o ? undefined : setEnding(null))}
+        title={t('st.plans.endTitle', { name: ending?.name ?? '' })}
+        description={t('st.plans.endBody')}
+        verb={t('st.plans.end')}
+        cancelLabel={t('st.rows.cancel')}
+        closeLabel={t('st.rows.close')}
+        pending={status.isPending}
+        onConfirm={async () => {
+          if (ending) await status.mutateAsync({ id: ending.id, status: 'ENDED' }).catch(() => undefined);
+          setEnding(null);
+        }}
+      />
       <RuleDialog key={editing?.rule?.id ?? (editing ? 'new' : 'none')} rule={editing?.rule ?? null} open={!!editing} onClose={() => setEditing(null)} t={t} />
     </>
   );

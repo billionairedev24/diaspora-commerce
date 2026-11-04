@@ -1,8 +1,8 @@
 'use client';
 
 import { CHARGE_KEYS, CHARGE_METRICS, type ChargeMetric, type ChargePolicy, chargePolicyLimits, chargePolicyOf, chargeTermsOf, formatBps, planFeatureList, type PlanVisibility, type StaffPlan, type StaffPlanEntitlements, staffPlanKeys, staffPlanQueries, staffQueries } from '@afrotransact/api-client';
-import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Dialog, DotsThreeVertical, Menu, MenuItem, MenuSeparator, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
+import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
+import { Button, ConfirmDelete, Dialog, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
@@ -378,6 +378,7 @@ export function CataloguePanel() {
   const plans = useQuery(staffPlanQueries.plans(plansApi()));
   const state = useTableState({ searchParams: useSearchParams(), prefix: 'plans' });
   const [editing, setEditing] = useState<Editing>(null);
+  const [retiring, setRetiring] = useState<StaffPlan | null>(null);
   const act = useMutation({
     mutationFn: (v: { code: string; op: 'publish' | 'retire' }) => (v.op === 'publish' ? plansApi().publish(v.code) : plansApi().retire(v.code)),
     onSuccess: (p, v) => {
@@ -400,37 +401,44 @@ export function CataloguePanel() {
     { id: 'visibility', accessorFn: (p) => p.visibility, header: t('st.plans.visibility'), size: 120, cell: ({ row }) => <StatusPill tone={STATUS_TONE[row.original.visibility] ?? 'info'}>{t(`st.plans.visibility.${row.original.visibility}`)}</StatusPill> },
     { id: 'status', accessorFn: (p) => p.status, header: t('st.plans.col.status'), size: 110, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={STATUS_TONE[row.original.status] ?? 'info'}>{humanize(row.original.status)}</StatusPill> },
     { id: 'subscribers', accessorFn: (p) => p.subscribers, header: t('st.plans.col.subscribers'), size: 130, meta: { kind: 'number', align: 'end' } },
-    {
-      id: 'actions', header: () => <span className="at-visually-hidden">{t('st.plans.col.actions')}</span>, size: 64, enableSorting: false, meta: { export: false, label: t('st.plans.col.actions') },
-      cell: ({ row }) => {
-        const p = row.original;
+    rowActionsColumn<StaffPlan>({
+      header: t('st.plans.col.actions'),
+      name: (p) => p.name,
+      label: (p) => t('st.rows.actionsFor', { name: p.name }),
+      width: 220,
+      items: (p) => {
         const draft = p.versions.some((v) => v.status === 'DRAFT');
         const old = p.versions.some((v) => v.status === 'SUPERSEDED' && v.subscribers > 0);
-        return (
-          <div className="flex items-center justify-end">
-            <Menu label={t('st.plans.moreFor', { name: p.name })} width={220}
-              trigger={<Button size="sm" variant="neutral" aria-label={t('st.plans.moreFor', { name: p.name })}><DotsThreeVertical size={16} weight="bold" aria-hidden /></Button>}>
-              <MenuItem onSelect={() => setEditing({ mode: 'view', plan: p })}>{t('st.plans.view')}</MenuItem>
-              {manage ? (
-                <>
-                  <MenuItem onSelect={() => setEditing({ mode: 'edit', plan: p })}>{t('st.plans.edit')}</MenuItem>
-                  <MenuItem onSelect={() => setEditing({ mode: 'prices', plan: p })}>{t('st.plans.newVersion')}</MenuItem>
-                  {draft ? <MenuItem onSelect={() => act.mutate({ code: p.code, op: 'publish' })}>{t('st.plans.publish')}</MenuItem> : null}
-                  {old ? <MenuItem onSelect={() => setEditing({ mode: 'migrate', plan: p })}>{t('st.plans.migrate')}</MenuItem> : null}
-                  {p.status !== 'RETIRED' ? <><MenuSeparator /><MenuItem className="text-danger" onSelect={() => act.mutate({ code: p.code, op: 'retire' })}>{t('st.plans.retire')}</MenuItem></> : null}
-                </>
-              ) : null}
-            </Menu>
-          </div>
-        );
+        return [
+          { label: t('st.plans.view'), onSelect: () => setEditing({ mode: 'view', plan: p }) },
+          manage && { label: t('st.plans.edit'), onSelect: () => setEditing({ mode: 'edit', plan: p }) },
+          manage && { label: t('st.plans.newVersion'), onSelect: () => setEditing({ mode: 'prices', plan: p }) },
+          manage && draft && { label: t('st.plans.publish'), onSelect: () => act.mutate({ code: p.code, op: 'publish' }) },
+          manage && old && { label: t('st.plans.migrate'), onSelect: () => setEditing({ mode: 'migrate', plan: p }) },
+          manage && p.status !== 'RETIRED' && { label: t('st.plans.retire'), danger: true, onSelect: () => setRetiring(p) }
+        ];
       }
-    }
+    })
   ], [t, manage, act]);
   return (
     <div className="flex flex-col gap-4">
       <DataTable<StaffPlan> id="staff.plans.catalogue" label={t('st.plans.tab.plans')} columns={columns} data={plans.data ?? []} getRowId={(p) => p.code} rowLabel={(p) => p.name} onRowClick={(p) => setEditing({ mode: 'view', plan: p })}
         state={state} mode="client" loading={plans.isPending} fetching={plans.isFetching} error={plans.isError ? <ErrorState error={plans.error} onRetry={() => void plans.refetch()} /> : undefined}
         toolbar={manage ? <Button size="sm" onClick={() => setEditing({ mode: 'create' })}>{t('st.plans.newPlan')}</Button> : null} empty={t('st.plans.noPlans')} />
+      <ConfirmDelete
+        open={retiring !== null}
+        onOpenChange={(o) => (o ? undefined : setRetiring(null))}
+        title={t('st.plans.retireTitle', { name: retiring?.name ?? '' })}
+        description={t('st.plans.retireBody')}
+        verb={t('st.plans.retire')}
+        cancelLabel={t('st.rows.cancel')}
+        closeLabel={t('st.rows.close')}
+        pending={act.isPending}
+        onConfirm={async () => {
+          if (retiring) await act.mutateAsync({ code: retiring.code, op: 'retire' }).catch(() => undefined);
+          setRetiring(null);
+        }}
+      />
       <PlanViewSheet plan={editing?.mode === 'view' ? editing.plan : null} onClose={() => setEditing(null)} onEdit={(p) => setEditing({ mode: 'edit', plan: p })} canEdit={manage} t={t} />
       <PlanDialog key={editing?.mode === 'edit' ? editing.plan.code : editing?.mode ?? 'none'} editing={editing} onClose={() => setEditing(null)} t={t} />
       <PricesDialog key={editing?.mode === 'prices' ? `p-${editing.plan.code}` : 'p'} plan={editing?.mode === 'prices' ? editing.plan : null} onClose={() => setEditing(null)} t={t} />

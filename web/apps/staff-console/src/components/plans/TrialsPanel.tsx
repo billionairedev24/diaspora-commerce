@@ -1,8 +1,8 @@
 'use client';
 
 import { staffPlanKeys, staffPlanQueries,type StaffTrialCampaign } from '@afrotransact/api-client';
-import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
+import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
+import { Button, ConfirmDelete, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
@@ -103,6 +103,7 @@ export function TrialsPanel() {
   const campaigns = useQuery(staffPlanQueries.campaigns(plansApi()));
   const state = useTableState({ searchParams: useSearchParams(), prefix: 'trials' });
   const [editing, setEditing] = useState<{ campaign: StaffTrialCampaign | null } | null>(null);
+  const [ending, setEnding] = useState<StaffTrialCampaign | null>(null);
   const status = useMutation({
     mutationFn: (v: { id: string; status: 'ACTIVE' | 'PAUSED' | 'ENDED' }) => plansApi().setCampaignStatus(v.id, v.status),
     onSuccess: () => void qc.invalidateQueries({ queryKey: staffPlanKeys.campaigns() }),
@@ -118,23 +119,37 @@ export function TrialsPanel() {
     { id: 'redemptions', accessorFn: (c) => c.redemptions, header: t('st.plans.redemptions'), size: 120, meta: { kind: 'number', align: 'end' },
       cell: ({ row }) => (row.original.maxRedemptions ? `${row.original.redemptions} / ${row.original.maxRedemptions}` : String(row.original.redemptions)) },
     { id: 'status', accessorFn: (c) => c.status, header: t('st.plans.col.status'), size: 110, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={STATUS_TONE[row.original.status] ?? 'info'}>{humanize(row.original.status)}</StatusPill> },
-    {
-      id: 'actions', header: () => <span className="at-visually-hidden">{t('st.plans.col.actions')}</span>, size: 220, enableSorting: false, meta: { export: false, label: t('st.plans.col.actions') },
-      cell: ({ row }) => manage ? (
-        <div className="flex flex-wrap gap-1">
-          <Button size="sm" variant="link" onClick={() => setEditing({ campaign: row.original })}>{t('st.plans.edit')}</Button>
-          {row.original.status === 'ACTIVE' ? <Button size="sm" variant="link" onClick={() => status.mutate({ id: row.original.id, status: 'PAUSED' })}>{t('st.plans.pause')}</Button> : null}
-          {row.original.status === 'PAUSED' ? <Button size="sm" variant="link" onClick={() => status.mutate({ id: row.original.id, status: 'ACTIVE' })}>{t('st.plans.resume')}</Button> : null}
-          {row.original.status !== 'ENDED' ? <Button size="sm" variant="link" className="text-danger" onClick={() => status.mutate({ id: row.original.id, status: 'ENDED' })}>{t('st.plans.end')}</Button> : null}
-        </div>
-      ) : null
-    }
+    rowActionsColumn<StaffTrialCampaign>({
+      header: t('st.plans.col.actions'),
+      name: (c) => c.name,
+      label: (c) => t('st.rows.actionsFor', { name: c.name }),
+      items: (c) => [
+        manage && { label: t('st.plans.edit'), onSelect: () => setEditing({ campaign: c }) },
+        manage && c.status === 'ACTIVE' && { label: t('st.plans.pause'), onSelect: () => status.mutate({ id: c.id, status: 'PAUSED' }) },
+        manage && c.status === 'PAUSED' && { label: t('st.plans.resume'), onSelect: () => status.mutate({ id: c.id, status: 'ACTIVE' }) },
+        manage && c.status !== 'ENDED' && { label: t('st.plans.end'), danger: true, onSelect: () => setEnding(c) }
+      ]
+    })
   ], [t, manage, status]);
   return (
     <>
       <DataTable<StaffTrialCampaign> id="staff.plans.trials" label={t('st.plans.tab.trials')} columns={columns} data={campaigns.data ?? []} getRowId={(c) => c.id} rowLabel={(c) => c.name}
         state={state} mode="client" loading={campaigns.isPending} fetching={campaigns.isFetching} error={campaigns.isError ? <ErrorState error={campaigns.error} onRetry={() => void campaigns.refetch()} /> : undefined}
         toolbar={manage ? <Button size="sm" onClick={() => setEditing({ campaign: null })}>{t('st.plans.newCampaign')}</Button> : null} empty={t('st.plans.noCampaigns')} />
+      <ConfirmDelete
+        open={ending !== null}
+        onOpenChange={(o) => (o ? undefined : setEnding(null))}
+        title={t('st.plans.endTitle', { name: ending?.name ?? '' })}
+        description={t('st.plans.endBody')}
+        verb={t('st.plans.end')}
+        cancelLabel={t('st.rows.cancel')}
+        closeLabel={t('st.rows.close')}
+        pending={status.isPending}
+        onConfirm={async () => {
+          if (ending) await status.mutateAsync({ id: ending.id, status: 'ENDED' }).catch(() => undefined);
+          setEnding(null);
+        }}
+      />
       <CampaignDialog key={editing?.campaign?.id ?? (editing ? 'new' : 'none')} campaign={editing?.campaign ?? null} open={!!editing} onClose={() => setEditing(null)} t={t} />
     </>
   );

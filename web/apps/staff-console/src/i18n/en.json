@@ -2151,5 +2151,13 @@
   "st.session.endedAbsolute": "Your session reached its maximum length, so we signed you out for your security. Sign in again to continue.",
   "st.session.endedSignedOut": "You signed out in another tab or window. Sign in again to continue.",
   "st.session.signInAgain": "Sign in again",
-  "st.session.signingOut": "Finishing sign-out…"
+  "st.session.signingOut": "Finishing sign-out…",
+  "st.rows.actionsFor": "Actions for {name}",
+  "st.rows.cancel": "Cancel",
+  "st.rows.close": "Close",
+  "st.plans.endTitle": "End “{name}”?",
+  "st.plans.endBody": "It stops applying right away and cannot be turned back on.",
+  "st.plans.retireTitle": "Retire “{name}”?",
+  "st.plans.retireBody": "No new sellers will be able to subscribe to it.",
+  "st.rows.actionsHeader": "Actions"
 }

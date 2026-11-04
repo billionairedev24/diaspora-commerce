@@ -1,13 +1,13 @@
 'use client';
 
 import { type ContentLocale, contentPageHref, type ContentPageRow, type ContentPageStatus, type RecordTone, staffContentQueries } from '@afrotransact/api-client';
-import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, buttonClassName, Select, Sheet } from '@afrotransact/ui';
+import { DataTable, rowActionsColumn, type RowActionsColumnOptions, useTableState } from '@afrotransact/data-table';
+import { buttonClassName, Select, Sheet } from '@afrotransact/ui';
 import { ArrowSquareOut } from '@phosphor-icons/react/ssr';
 import { useQuery } from '@tanstack/react-query';
-import { type ColumnDef } from '@tanstack/react-table';
+import { type ColumnDef, flexRender } from '@tanstack/react-table';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
 import { ErrorState, Spinner } from '@/components/ui/States';
@@ -68,6 +68,12 @@ function PreviewSheet({ row, onClose }: { row: ContentPageRow; onClose: () => vo
   );
 }
 
+/** The row menu, except on pages only a developer changes: they have nothing to choose, so the row says so in words. */
+function pagesActions(options: RowActionsColumnOptions<ContentPageRow>, developerOnly: string): ColumnDef<ContentPageRow> {
+  const base = rowActionsColumn<ContentPageRow>(options);
+  return { ...base, cell: (ctx) => (ctx.row.original.editor === 'developer' ? <span className="text-xs text-muted">{developerOnly}</span> : flexRender(base.cell, ctx)) };
+}
+
 /**
  * Settings → Published pages: every public page with its live link, when it was last updated and by whom, and what can
  * be done with it. Legal documents and help pages are previewed and edited here, in the console; the other surfaces
@@ -76,6 +82,7 @@ function PreviewSheet({ row, onClose }: { row: ContentPageRow; onClose: () => vo
  */
 export function PublishedPagesView() {
   const t = useT();
+  const router = useRouter();
   const list = useQuery(staffContentQueries.pages(staffApi().content));
   const state = useTableState({ searchParams: useSearchParams(), prefix: 'pages', defaultPageSize: 50 });
   const [kind, setKind] = useState<KindFilter>('all');
@@ -144,33 +151,21 @@ export function PublishedPagesView() {
         size: 170,
         cell: ({ row }) => (row.original.hasDraft ? <StatusPill tone="info">{t('st.pages.draftBy2', { name: personName(t, row.original.draftUpdatedByName) })}</StatusPill> : <span className="text-muted">—</span>)
       },
-      {
-        id: 'actions',
-        header: () => <span className="sr-only">{t('st.pages.col.actions')}</span>,
-        enableSorting: false,
-        size: 190,
-        cell: ({ row }) => {
-          const r = row.original;
+      pagesActions({
+        header: t('st.pages.col.actions'),
+        name: (r) => r.title,
+        label: (r) => t('st.rows.actionsFor', { name: r.title }),
+        items: (r) => {
           const href = editHref(r);
-          if (r.editor === 'developer') return <span className="text-xs text-muted">{t('st.pages.developerOnly')}</span>;
-          return (
-            <span className="inline-flex flex-wrap gap-1">
-              {r.editor === 'page' ? (
-                <Button size="sm" variant="neutral" onClick={() => setLooking(r)} aria-label={t('st.pages.previewRow', { title: r.title })}>
-                  {t('st.pages.preview')}
-                </Button>
-              ) : null}
-              {href ? (
-                <Link href={href} className={buttonClassName({ variant: 'neutral', size: 'sm' })} aria-label={t(r.canEdit ? 'st.pages.editRow' : 'st.pages.openRow', { title: r.title })}>
-                  {r.editor === 'page' ? (r.canEdit ? t('st.pages.edit') : t('st.pages.open')) : t('st.pages.openIn')}
-                </Link>
-              ) : null}
-            </span>
-          );
+          if (r.editor === 'developer') return [];
+          return [
+            r.editor === 'page' && { label: t('st.pages.preview'), onSelect: () => setLooking(r) },
+            !!href && { label: r.editor === 'page' ? (r.canEdit ? t('st.pages.edit') : t('st.pages.open')) : t('st.pages.openIn'), onSelect: () => router.push(href) }
+          ];
         }
-      }
+      }, t('st.pages.developerOnly'))
     ],
-    [t]
+    [t, router]
   );
   return (
     <div className="flex min-w-0 flex-col gap-3">

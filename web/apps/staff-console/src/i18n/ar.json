@@ -2158,5 +2158,13 @@
   "st.session.endedAbsolute": "وصلت جلستك إلى أقصى مدة لها، فسجّلنا خروجك حفاظًا على أمانك. سجّل الدخول مرة أخرى للمتابعة.",
   "st.session.endedSignedOut": "سجّلت الخروج في علامة تبويب أو نافذة أخرى. سجّل الدخول مرة أخرى للمتابعة.",
   "st.session.signInAgain": "تسجيل الدخول مرة أخرى",
-  "st.session.signingOut": "جارٍ إنهاء تسجيل الخروج…"
+  "st.session.signingOut": "جارٍ إنهاء تسجيل الخروج…",
+  "st.rows.actionsFor": "إجراءات {name}",
+  "st.rows.cancel": "إلغاء",
+  "st.rows.close": "إغلاق",
+  "st.plans.endTitle": "هل تريد إنهاء «{name}»؟",
+  "st.plans.endBody": "يتوقف تطبيقه فورًا ولا يمكن إعادة تشغيله.",
+  "st.plans.retireTitle": "هل تريد سحب «{name}»؟",
+  "st.plans.retireBody": "لن يتمكن أي بائع جديد من الاشتراك فيها.",
+  "st.rows.actionsHeader": "الإجراءات"
 }

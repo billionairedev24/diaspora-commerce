@@ -2158,5 +2158,13 @@
   "st.session.endedAbsolute": "Tu sesión alcanzó su duración máxima y la cerramos por tu seguridad. Inicia sesión de nuevo para continuar.",
   "st.session.endedSignedOut": "Cerraste sesión en otra pestaña o ventana. Inicia sesión de nuevo para continuar.",
   "st.session.signInAgain": "Iniciar sesión de nuevo",
-  "st.session.signingOut": "Finalizando el cierre de sesión…"
+  "st.session.signingOut": "Finalizando el cierre de sesión…",
+  "st.rows.actionsFor": "Acciones para {name}",
+  "st.rows.cancel": "Cancelar",
+  "st.rows.close": "Cerrar",
+  "st.plans.endTitle": "¿Terminar «{name}»?",
+  "st.plans.endBody": "Deja de aplicarse de inmediato y no se puede volver a activar.",
+  "st.plans.retireTitle": "¿Retirar «{name}»?",
+  "st.plans.retireBody": "Ningún vendedor nuevo podrá suscribirse.",
+  "st.rows.actionsHeader": "Acciones"
 }

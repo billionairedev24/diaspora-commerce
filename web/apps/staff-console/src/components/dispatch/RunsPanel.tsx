@@ -319,7 +319,7 @@ export function RunsPanel() {
         enableSorting: false,
         meta: { export: false, label: t('st.runs.actions') },
         cell: ({ row }) => (
-          <Button size="sm" variant={selected === row.original.runId ? 'primary' : 'neutral'} onClick={() => setSelected(row.original.runId)} aria-label={t('st.runs.openRun', { town: row.original.town })}>
+          <Button size="sm" variant="link" aria-pressed={selected === row.original.runId} onClick={() => setSelected(row.original.runId)} aria-label={t('st.runs.openRun', { town: row.original.town })}>
             {t('st.runs.open')}
           </Button>
         )

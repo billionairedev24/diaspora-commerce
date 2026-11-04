@@ -219,7 +219,7 @@ export function PickupsPanel() {
         enableSorting: false,
         meta: { export: false, label: t('st.pickups.actions') },
         cell: ({ row }) => (
-          <Button size="sm" variant={selected === row.original.shipmentId ? 'primary' : 'neutral'} onClick={() => setSelected(row.original.shipmentId)} aria-label={t('st.pickups.driversFor', { order: row.original.orderNumber })}>
+          <Button size="sm" variant="link" aria-pressed={selected === row.original.shipmentId} onClick={() => setSelected(row.original.shipmentId)} aria-label={t('st.pickups.driversFor', { order: row.original.orderNumber })}>
             {t('st.pickups.drivers')}
           </Button>
         )

@@ -34,7 +34,7 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     const growth = await within(table).findByRole('row', { name: /Seller Growth/ });
     expect(within(growth).getByText('$39.00')).toBeInTheDocument();
     expect(within(growth).getByText('Up to 1,000 listings · Bulk upload · Image library · Coupons · AI listing writer · Lola Growth assistant')).toBeInTheDocument();
-    await user.click(within(growth).getByRole('button', { name: 'More actions for Seller Growth' }));
+    await user.click(within(growth).getByRole('button', { name: 'Actions for Seller Growth' }));
     await user.click(await screen.findByRole('menuitem', { name: 'New prices or trial' }));
     const dialog = await screen.findByRole('dialog', { name: 'New prices or trial for Seller Growth' });
     const monthly = within(dialog).getByLabelText('Monthly ($)');
@@ -45,7 +45,7 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     const plan = getStaffDb().plans.plans.find((p) => p.code === 'seller_growth');
     expect(plan).toMatchObject({ currentVersion: 2, monthlyCents: 4500 });
     expect(await within(table).findByText('$45.00')).toBeInTheDocument();
-    await user.click(within(await within(table).findByRole('row', { name: /Seller Growth/ })).getByRole('button', { name: 'More actions for Seller Growth' }));
+    await user.click(within(await within(table).findByRole('row', { name: /Seller Growth/ })).getByRole('button', { name: 'Actions for Seller Growth' }));
     expect(await screen.findByRole('menuitem', { name: 'Migrate subscribers' })).toBeInTheDocument();
     await user.keyboard('{Escape}');
   });
@@ -54,7 +54,7 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     const user = userEvent.setup();
     await renderScreen(<CataloguePanel />);
     const table = await screen.findByRole('table', { name: 'Plans' });
-    await user.click(within(await within(table).findByRole('row', { name: /Seller Growth/ })).getByRole('button', { name: 'More actions for Seller Growth' }));
+    await user.click(within(await within(table).findByRole('row', { name: /Seller Growth/ })).getByRole('button', { name: 'Actions for Seller Growth' }));
     await user.click(await screen.findByRole('menuitem', { name: 'View' }));
     const dialog = await screen.findByRole('dialog', { name: /Seller Growth/ });
     expect(within(dialog).getByText('$39.00')).toBeInTheDocument();
@@ -66,7 +66,7 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     const user = userEvent.setup();
     await renderScreen(<CataloguePanel />);
     const table = await screen.findByRole('table', { name: 'Plans' });
-    await user.click(within(await within(table).findByRole('row', { name: /Seller Growth/ })).getByRole('button', { name: 'More actions for Seller Growth' }));
+    await user.click(within(await within(table).findByRole('row', { name: /Seller Growth/ })).getByRole('button', { name: 'Actions for Seller Growth' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Edit' }));
     const sheet = await screen.findByRole('dialog', { name: /Edit Seller Growth/ });
     expect(await within(sheet).findByText(/Product commission .*FBA fee per unit/)).toBeInTheDocument();
@@ -81,7 +81,7 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     const table = await screen.findByRole('table', { name: 'Plans' });
     const essentials = await within(table).findByRole('row', { name: /Seller Essentials/ });
     expect(within(essentials).getByText('Up to 50 listings · Lola Essentials assistant')).toBeInTheDocument();
-    await user.click(within(essentials).getByRole('button', { name: 'More actions for Seller Essentials' }));
+    await user.click(within(essentials).getByRole('button', { name: 'Actions for Seller Essentials' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Edit' }));
     const dialog = await screen.findByRole('dialog', { name: /Edit Seller Essentials/ });
     const cap = within(dialog).getByLabelText('Live listings');
@@ -201,11 +201,12 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     expect(getStaffDb().plans.grants[0]).toMatchObject({ type: 'CREDIT', reasonCode: 'GOODWILL', creditCents: 2500 });
 
     const invoices = screen.getByRole('table', { name: 'Invoices' });
-    await user.click(within(invoices).getByRole('button', { name: 'Waive' }));
+    await user.click(within(invoices).getByRole('button', { name: /^Actions for / }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Waive' }));
     const waive = await screen.findByRole('dialog', { name: /Waive invoice/ });
     await user.selectOptions(within(waive).getByLabelText('Reason'), 'BILLING_ERROR');
     await user.click(within(waive).getByRole('button', { name: 'Apply' }));
-    await waitFor(() => expect(within(invoices).queryByRole('button', { name: 'Waive' })).not.toBeInTheDocument());
+    await waitFor(() => expect(within(invoices).queryByRole('button', { name: /^Actions for / })).not.toBeInTheDocument());
     expect(within(screen.getByRole('table', { name: 'Rewards and adjustments' })).getAllByRole('row').length).toBeGreaterThan(2);
   });
 

@@ -2158,5 +2158,13 @@
   "st.session.endedAbsolute": "Votre session a atteint sa durée maximale : nous vous avons déconnecté pour votre sécurité. Reconnectez-vous pour continuer.",
   "st.session.endedSignedOut": "Vous vous êtes déconnecté dans un autre onglet ou une autre fenêtre. Reconnectez-vous pour continuer.",
   "st.session.signInAgain": "Se reconnecter",
-  "st.session.signingOut": "Finalisation de la déconnexion…"
+  "st.session.signingOut": "Finalisation de la déconnexion…",
+  "st.rows.actionsFor": "Actions pour {name}",
+  "st.rows.cancel": "Annuler",
+  "st.rows.close": "Fermer",
+  "st.plans.endTitle": "Terminer « {name} » ?",
+  "st.plans.endBody": "Elle cesse de s’appliquer immédiatement et ne peut pas être réactivée.",
+  "st.plans.retireTitle": "Retirer « {name} » ?",
+  "st.plans.retireBody": "Aucun nouveau vendeur ne pourra s’y abonner.",
+  "st.rows.actionsHeader": "Actions"
 }

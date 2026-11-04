@@ -2158,5 +2158,13 @@
   "st.session.endedAbsolute": "Ìgbà ìjókòó rẹ ti dé òpin tó pọ̀ jù, nítorí náà a mú ọ jáde fún ààbò rẹ. Tún wọlé láti tẹ̀síwájú.",
   "st.session.endedSignedOut": "O ti jáde ní táàbù tàbí fèrèsé mìíràn. Tún wọlé láti tẹ̀síwájú.",
   "st.session.signInAgain": "Tún wọlé",
-  "st.session.signingOut": "À ń parí jíjáde…"
+  "st.session.signingOut": "À ń parí jíjáde…",
+  "st.rows.actionsFor": "Àwọn iṣẹ́ fún {name}",
+  "st.rows.cancel": "Fagilé",
+  "st.rows.close": "Ti",
+  "st.plans.endTitle": "Ṣé kí a parí “{name}”?",
+  "st.plans.endBody": "Ó dáwọ́ dúró lẹ́sẹ̀kẹsẹ̀, a kò sì lè tún un ṣí.",
+  "st.plans.retireTitle": "Ṣé kí a yọ “{name}” kúrò?",
+  "st.plans.retireBody": "Kò sí olùtajà tuntun tó lè forúkọsílẹ̀ sórí rẹ̀.",
+  "st.rows.actionsHeader": "Àwọn iṣẹ́"
 }
