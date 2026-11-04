@@ -6,7 +6,7 @@ import '../../../../../apps/seller-center/src/app/globals.css';
 import { type Meta, type StoryObj } from '@storybook/react-vite';
 
 import { Card } from '../../../../../apps/seller-center/src/components/ui/Card';
-import { KpiTile } from '../../../../../apps/seller-center/src/components/ui/Kpi';
+import { KpiStrip } from '../../../../../apps/seller-center/src/components/ui/Kpi';
 import { Notice } from '../../../../../apps/seller-center/src/components/ui/Notice';
 import { PageHeader } from '../../../../../apps/seller-center/src/components/ui/PageHeader';
 import { EmptyState, ErrorState, NoAccess, Spinner } from '../../../../../apps/seller-center/src/components/ui/States';
@@ -18,7 +18,7 @@ const meta: Meta = { title: 'Apps/Seller Center/Primitives', parameters: { layou
 export default meta;
 type Story = StoryObj;
 
-type KpiData = Parameters<typeof KpiTile>[0]['kpi'];
+type KpiData = Parameters<typeof KpiStrip>[0]['kpis'][number];
 const kpis: KpiData[] = [
   { label: 'Sales today', value: '$1,284.50', detail: '+12% vs last Friday', tone: 'positive' },
   { label: 'Orders to ship', value: '16', detail: '3 due by 4 pm', tone: 'attention' },
@@ -26,7 +26,7 @@ const kpis: KpiData[] = [
 ];
 
 export const Kpis: Story = {
-  render: () => <div className="grid grid-cols-3 gap-3">{kpis.map((k) => <KpiTile key={k.label} kpi={k} />)}</div>
+  render: () => <KpiStrip kpis={kpis} />
 };
 
 export const Header: Story = {
@@ -65,4 +65,4 @@ export const Empty: Story = { render: () => <EmptyState title="No orders yet" ac
 export const ErrorStory: Story = { name: 'Error', render: () => <ErrorState error={new Error('boom')} onRetry={() => undefined} /> };
 export const AccessDenied: Story = { render: () => <NoAccess role="Fulfilment" /> };
 export const RTL: Story = { ...rtl, render: () => <Notice tone="info" title="للقراءة فقط.">لا يمكن لدورك تغيير الطلبات.</Notice> };
-export const Mobile: Story = { ...mobile, render: () => <div className="grid gap-3">{kpis.map((k) => <KpiTile key={k.label} kpi={k} />)}</div> };
+export const Mobile: Story = { ...mobile, render: () => <KpiStrip kpis={kpis} /> };
