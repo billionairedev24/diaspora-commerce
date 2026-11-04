@@ -42,7 +42,7 @@
 
 @media (min-width: 640px) {
   .strip { display: flex; flex-wrap: wrap; gap: var(--at-space-4) 0; }
-  .stat { flex: 0 1 auto; min-inline-size: 7.5rem; padding-inline: var(--at-space-6); }
+  .stat { flex: 0 1 auto; min-inline-size: 7.5rem; max-inline-size: 22rem; padding-inline: var(--at-space-6); }
   .stat:nth-child(odd) { padding-inline-start: var(--at-space-6); border-inline-start: 1px solid var(--at-color-border); }
   .stat:first-child { padding-inline-start: 0; border-inline-start: 0; }
 }

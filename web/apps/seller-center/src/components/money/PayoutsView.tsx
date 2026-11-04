@@ -2,7 +2,7 @@
 
 import { type Payout, type PlanFeeDeduction, sellerKeys, sellerQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Dialog, TextField, useToast } from '@afrotransact/ui';
+import { Button, Dialog, StatStrip, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
@@ -103,48 +103,6 @@ export function PayoutsView() {
         ) : null
       }
     >
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-3">
-        <div className={`flex flex-col gap-1 rounded-md border p-4 ${b.availableMinor < 0 ? 'border-amber-500/40 bg-amber-500/5' : 'border-border'}`}>
-          <span className="text-xs font-semibold text-muted">Available to request</span>
-          <strong className={`text-2xl ${b.availableMinor < 0 ? 'text-amber-600 dark:text-amber-400' : ''}`}>
-            {money(b.availableMinor, b.currency)}
-          </strong>
-          <span className="text-xs text-muted">
-            {b.payoutsPaused
-              ? 'Paused — see above'
-              : b.availableMinor < 0
-              ? 'Negative balance: shipping label charges will be covered once orders on hold settle.'
-              : `Minimum ${money(b.minimumPayoutMinor, b.currency)} · one request a day`}
-          </span>
-        </div>
-
-        <div className="flex flex-col gap-1 rounded-md border border-border p-4">
-          <span className="text-xs font-semibold text-muted">Still settling (on hold)</span>
-          <strong className="text-2xl">{money(b.onHoldMinor, b.currency)}</strong>
-          <span className="text-xs text-muted">Released after delivery or completion buffer</span>
-        </div>
-
-        <div className="flex flex-col gap-1 rounded-md border border-border p-4">
-          <span className="text-xs font-semibold text-muted">On the way</span>
-          <strong className="text-2xl">{money(b.requestedOrInTransitMinor, b.currency)}</strong>
-          <span className="text-xs text-muted">Requested or in transit to your bank</span>
-        </div>
-
-        <div className="flex flex-col gap-1 rounded-md border border-border p-4">
-          <span className="text-xs font-semibold text-muted">Paid out</span>
-          <strong className="text-2xl">{money(b.paidMinor, b.currency)}</strong>
-          <span className="text-xs text-muted">Total earnings transferred to date</span>
-        </div>
-
-        {b.providerFeesMinor ? (
-          <div className="flex flex-col gap-1 rounded-md border border-border p-4">
-            <span className="text-xs font-semibold text-muted">Provider fees</span>
-            <strong className="text-2xl">{money(b.providerFeesMinor, b.currency)}</strong>
-            <span className="text-xs text-muted">Late cancellations debited from your balance</span>
-          </div>
-        ) : null}
-      </div>
-
       {b.payoutAccountMissing ? (
         <Notice tone="warning" title={t('sc.payouts.accountMissing.title')}>
           {t('sc.payouts.accountMissing.body')}{' '}
@@ -159,6 +117,27 @@ export function PayoutsView() {
           You have {money(Math.abs(b.availableMinor), b.currency)} in shipping label or service charges awaiting settlement. Once your held funds of {money(b.onHoldMinor, b.currency)} release upon delivery, this amount will automatically be offset and the remainder will be available to request.
         </Notice>
       ) : null}
+
+      <StatStrip
+        label="Balance"
+        items={[
+          {
+            id: 'available',
+            label: 'Available to request',
+            value: money(b.availableMinor, b.currency),
+            tone: b.availableMinor < 0 ? 'attention' : 'neutral',
+            sub: b.payoutsPaused
+              ? 'Paused — see above'
+              : b.availableMinor < 0
+              ? 'Negative balance: shipping label charges will be covered once orders on hold settle.'
+              : `Minimum ${money(b.minimumPayoutMinor, b.currency)} · one request a day`
+          },
+          { id: 'hold', label: 'Still settling (on hold)', value: money(b.onHoldMinor, b.currency), sub: 'Released after delivery or completion buffer' },
+          { id: 'transit', label: 'On the way', value: money(b.requestedOrInTransitMinor, b.currency), sub: 'Requested or in transit to your bank' },
+          { id: 'paid', label: 'Paid out', value: money(b.paidMinor, b.currency), sub: 'Total earnings transferred to date' },
+          ...(b.providerFeesMinor ? [{ id: 'fees', label: 'Provider fees', value: money(b.providerFeesMinor, b.currency), sub: 'Late cancellations debited from your balance' }] : [])
+        ]}
+      />
 
       {b.holds.length ? (
         <Card title="Funds on hold per order">
