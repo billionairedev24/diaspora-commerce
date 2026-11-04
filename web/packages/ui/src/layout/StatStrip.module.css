@@ -34,10 +34,10 @@
 .negative { color: var(--at-color-danger); }
 
 .interactive { cursor: pointer; text-decoration: none; }
-.interactive .value { color: var(--at-color-link); }
+.interactive .value { text-decoration: underline; text-decoration-color: var(--at-color-border-strong); text-underline-offset: 4px; }
 @media (hover: hover) {
   .interactive:hover { text-decoration: none; }
-  .interactive:hover .value { text-decoration: underline; text-underline-offset: 3px; }
+  .interactive:hover .value { text-decoration-color: currentColor; }
 }
 
 @media (min-width: 640px) {
