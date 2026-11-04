@@ -303,10 +303,20 @@ export interface paths {
         put?: never;
         /**
          * "Email me when available" for an out-of-stock product
-         * @description Arms a back-in-stock alert at the notifications service for the requested variant (the product's first
-         *     variant for a product ATIN), with the shopper's own token: signing in is required (401 for guests). The
-         *     email defaults to the account's; a typed one overrides it. Subscribing again while the alert is active is a
-         *     no-op (still 201).
+         * @description **Public: no sign-in, no account.** Arms a back-in-stock alert for the requested variant (the product's first
+         *     variant for a product ATIN). A guest's typed email is subscribed with the BFF's own service token; a signed-in
+         *     shopper's alert belongs to their account with their own token (it lists under `/v1/account/stock-alerts`), and
+         *     their email defaults to the account's. A guest alert is not merged into an account later, even if the email
+         *     matches a sign-in.
+         *
+         *     The answer is the same `201` whether the address is new, already subscribed, at its cap of open alerts or
+         *     belongs to an account: it never reveals either. Nothing is emailed at subscription time; the email goes out
+         *     once when the item is back, in the language of the request's `Accept-Language` (en, fr, es, ar, yo), with a
+         *     one-click unsubscribe link. The address is validated (a plain `name@domain.tld`, at most 254 characters) and
+         *     stored lower-cased; no other free text is kept.
+         *
+         *     Rate limits per hour, counted per client IP (20), per email address (10) and per variant (300): over any of
+         *     them the answer is `429` with `Retry-After`.
          */
         post: operations["createStockAlert"];
         delete?: never;
@@ -2084,7 +2094,10 @@ export interface components {
             unitPriceLabel: string;
         };
         StockAlertRequest: {
-            /** Format: email */
+            /**
+             * Format: email
+             * @description Where to send the one back-in-stock email. Required for guests; signed-in shoppers default to their account's address.
+             */
             email?: string;
         };
         StockAlert: {
@@ -4134,9 +4147,10 @@ export interface operations {
                     "application/json": components["schemas"]["StockAlert"];
                 };
             };
-            401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
         };
     };
     getCart: {

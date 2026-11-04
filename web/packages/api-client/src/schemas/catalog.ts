@@ -142,7 +142,12 @@ export const ProductDetailSchema = z.object({
 });
 export type ProductDetail = z.infer<typeof ProductDetailSchema>;
 
-export const StockAlertRequestSchema = z.object({ email: z.email().optional() });
+/** A plain name@domain.tld address, like the BFF accepts: no display name, quotes, spaces or non-ASCII; at most 254 characters. */
+export function isPlainEmail(value: string): boolean {
+  const v = value.trim();
+  return v.length <= 254 && /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(v) && !/(^\.|\.\.|\.@)/.test(v) && /\.[A-Za-z]{2,}$|\.xn--[a-z0-9-]+$/i.test(v);
+}
+export const StockAlertRequestSchema = z.object({ email: z.string().refine(isPlainEmail, 'Enter a valid email address, like name@example.com').optional() });
 export type StockAlertRequest = z.infer<typeof StockAlertRequestSchema>;
 export const StockAlertSchema = z.object({ atin: AtinSchema, status: z.enum(['subscribed']) });
 export type StockAlert = z.infer<typeof StockAlertSchema>;
