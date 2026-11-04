@@ -18,6 +18,8 @@ declare module '@tanstack/react-table' {
     exportValue?: (row: TData) => ExportCell;
     /** Leave the column out of exports (actions, thumbnails). */
     export?: boolean;
+    /** The trailing row-actions column (rowActionsColumn): a small fixed width, and the corner of the card on phones. */
+    actions?: boolean;
   }
 }
 

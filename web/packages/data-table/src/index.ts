@@ -14,6 +14,7 @@
 export { ColumnsMenu, type Density } from './ColumnsMenu';
 export { DataTable, type DataTableProps, pageNumbers } from './DataTable';
 export { columnLabel, datasetOf, type ExportOutcome, type TableExportRequest, tableKey } from './export';
+export { rowActionsColumn, type RowActionsColumnOptions } from './rowActions';
 export { everyColumnFilter, kindSortingFn, searchTerms, searchTexts } from './search';
 export { readDefaultDensity, readPrefs, type TablePrefs, writeDefaultDensity, writePrefs } from './storage';
 export { type ColumnKind, SELECT_COLUMN } from './types';
