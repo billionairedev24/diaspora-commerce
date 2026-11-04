@@ -47,13 +47,20 @@ export interface MenuItemProps {
   /** The link leaves this app (opens in a new tab). */
   external?: boolean;
   className?: string;
+  /** Listed but not selectable; its description (the reason) is part of its accessible name. */
+  disabled?: boolean;
+  /** A short second line under the label: why it is disabled, or what it does. */
+  description?: ReactNode;
 }
 
-export const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(function MenuItem({ icon, count, children, onSelect, href, external, className }, ref) {
+export const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(function MenuItem({ icon, count, children, onSelect, href, external, className, disabled, description }, ref) {
   const inner = (
     <>
       {icon && <span className={styles.menuIcon}>{icon}</span>}
-      <span className={styles.menuText}>{children}</span>
+      <span className={styles.menuText}>
+        {children}
+        {description ? <span className={styles.menuDesc}>{description}</span> : null}
+      </span>
       {count !== undefined && count !== null && count !== 0 && <span className={styles.menuCount}>{count}</span>}
     </>
   );
@@ -68,7 +75,7 @@ export const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(function MenuI
     );
   }
   return (
-    <Item ref={ref} onSelect={onSelect} className={cx(styles.menuItem, className)}>
+    <Item ref={ref} onSelect={onSelect} disabled={disabled} className={cx(styles.menuItem, className)}>
       {inner}
     </Item>
   );

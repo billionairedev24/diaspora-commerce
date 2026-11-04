@@ -73,6 +73,11 @@ export function Dialog({ open, onOpenChange, title, description, children, width
   );
 }
 
+/** The footer of a dialog (Cancel, then the primary button): wraps instead of clipping when a label is long. */
+export function DialogActions({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cx(styles.actions, className)}>{children}</div>;
+}
+
 export interface SheetProps extends Omit<DialogProps, 'width'> {
   side?: 'right' | 'left';
   header?: ReactNode;

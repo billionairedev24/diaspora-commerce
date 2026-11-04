@@ -10,6 +10,7 @@
   z-index: var(--at-z-dialog);
   width: min(var(--dialog-width, 480px), calc(100vw - 2 * var(--at-space-4)));
   max-height: calc(100dvh - 2 * var(--at-space-4));
+  overflow-x: hidden;
   overflow-y: auto;
   background: var(--at-color-surface);
   color: var(--at-color-text);
@@ -22,6 +23,10 @@
 .head { display: flex; align-items: center; gap: var(--at-space-2); padding: var(--at-space-4) var(--at-space-5); background: var(--at-color-surface-muted); }
 .title { flex: 1; margin: 0; font-size: var(--at-text-base); font-weight: var(--at-weight-bold); }
 .body { padding: var(--at-space-5); display: flex; flex-direction: column; gap: var(--at-space-3); }
+/* The footer of a dialog: buttons end-aligned that wrap onto a second line instead of being pushed out of the dialog's
+   start edge and clipped (a long primary label used to cut "Cancel" in half). */
+.actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--at-space-2); min-width: 0; }
+.actions > * { max-width: 100%; }
 .desc { margin: 0; font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
 
 .close {
@@ -109,7 +114,10 @@
   .menuItem:hover { background: var(--at-color-surface-hover); color: var(--at-color-text); text-decoration: none; }
 }
 .menuIcon { font-size: var(--at-text-lg); color: var(--at-color-text-muted); flex: none; }
-.menuText { flex: 1; }
+.menuText { flex: 1; min-width: 0; }
+.menuItem[data-disabled] { color: var(--at-color-text-muted); cursor: not-allowed; }
+.menuItem[data-disabled][data-highlighted] { background: none; box-shadow: none; }
+.menuDesc { display: block; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
 .menuCount { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
 .menuSeparator { height: 1px; background: var(--at-color-border); margin: 0; }
 .menuGroup { padding: var(--at-space-1) 0; }

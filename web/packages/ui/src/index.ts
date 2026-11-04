@@ -78,7 +78,7 @@ export * from './icons';
 export { PageStack, type PageStackProps } from './layout/PageStack';
 export { SheetTableScroll, type SheetTableScrollProps } from './layout/SheetTableScroll';
 export { type StatItem, StatStrip, type StatStripProps, type StatTone } from './layout/StatStrip';
-export { Dialog, type DialogProps, Sheet, type SheetProps } from './overlay/Dialog';
+export { Dialog, DialogActions, type DialogProps, Sheet, type SheetProps } from './overlay/Dialog';
 export { Menu, MenuGroup, MenuItem, type MenuItemProps, type MenuProps, MenuSeparator } from './overlay/Menu';
 export { type TabItem, Tabs, type TabsProps } from './overlay/Tabs';
 export { type ToastAction, type ToastMessage, ToastProvider, useToast } from './overlay/Toast';
