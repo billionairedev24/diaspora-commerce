@@ -1330,5 +1330,7 @@
   "sc.drafts.discardBody": "El borrador se elimina. No se publica nada y no se puede deshacer.",
   "sc.drafts.discardMany": "Descartar seleccionados",
   "sc.drafts.discardManyTitle": "{count, plural, one {¿Descartar # borrador?} other {¿Descartar # borradores?}}",
-  "sc.drafts.discarded": "Borrador descartado"
+  "sc.drafts.discarded": "Borrador descartado",
+  "sc.img.removeTitle": "¿Quitar «{name}» de la biblioteca?",
+  "sc.img.removeBody": "La foto sale de tu biblioteca. Los anuncios que ya la usan la conservan."
 }

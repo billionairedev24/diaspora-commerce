@@ -1323,5 +1323,7 @@
   "sc.drafts.discardBody": "The draft is deleted. Nothing is published, and this cannot be undone.",
   "sc.drafts.discardMany": "Discard selected",
   "sc.drafts.discardManyTitle": "{count, plural, one {Discard # draft?} other {Discard # drafts?}}",
-  "sc.drafts.discarded": "Draft discarded"
+  "sc.drafts.discarded": "Draft discarded",
+  "sc.img.removeTitle": "Remove “{name}” from the library?",
+  "sc.img.removeBody": "The photo leaves your library. Listings that already use it keep it."
 }

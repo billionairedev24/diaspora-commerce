@@ -1330,5 +1330,7 @@
   "sc.drafts.discardBody": "Le brouillon est supprimé. Rien n’est publié, et cette action est irréversible.",
   "sc.drafts.discardMany": "Supprimer la sélection",
   "sc.drafts.discardManyTitle": "{count, plural, one {Supprimer # brouillon ?} other {Supprimer # brouillons ?}}",
-  "sc.drafts.discarded": "Brouillon supprimé"
+  "sc.drafts.discarded": "Brouillon supprimé",
+  "sc.img.removeTitle": "Retirer « {name} » de la bibliothèque ?",
+  "sc.img.removeBody": "La photo quitte votre bibliothèque. Les annonces qui l’utilisent déjà la conservent."
 }

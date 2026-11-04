@@ -1330,5 +1330,7 @@
   "sc.drafts.discardBody": "A ó pa àkọsílẹ̀ náà rẹ́. A kò ní gbé ohunkóhun jáde, a kò sì lè dá a padà.",
   "sc.drafts.discardMany": "Pa àwọn tí a yàn tì",
   "sc.drafts.discardManyTitle": "{count, plural, other {Ṣé kí a pa # àkọsílẹ̀ tì?}}",
-  "sc.drafts.discarded": "A ti pa àkọsílẹ̀ tì"
+  "sc.drafts.discarded": "A ti pa àkọsílẹ̀ tì",
+  "sc.img.removeTitle": "Ṣé kí a yọ “{name}” kúrò nínú ibi ìkówèé?",
+  "sc.img.removeBody": "Fọ́tò náà yóò kúrò nínú ibi ìkówèé rẹ. Àwọn àtòkọ tó ń lò ó yóò máa tọ́jú rẹ̀."
 }

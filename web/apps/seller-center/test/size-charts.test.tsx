@@ -6,6 +6,7 @@ import { SizeChartsView } from '@/components/size-charts/SizeChartsView';
 
 import { mockApi } from './mock-api';
 import { renderScreen } from './render';
+import { chooseRowAction } from './row-menu';
 import { nav } from './setup';
 
 beforeEach(() => {
@@ -82,7 +83,7 @@ describe('My size charts', () => {
 
   it('edits a chart and saves it, and asks before closing with unsaved changes', async () => {
     await renderScreen(<SizeChartsView />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit Kaftans and shirts' }));
+    await chooseRowAction('Kaftans and shirts', 'Edit');
     const ed = within(await editor());
     expect(ed.getByText('1 product uses this chart.')).toBeInTheDocument();
     expect(ed.getByRole('button', { name: 'Save changes' })).toBeDisabled();
@@ -104,12 +105,12 @@ describe('My size charts', () => {
 
   it('leaves without asking when nothing changed, and discards on request', async () => {
     await renderScreen(<SizeChartsView />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit Leather sandals' }));
+    await chooseRowAction('Leather sandals', 'Edit');
     await editor();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(screen.queryByTestId('size-chart-editor')).not.toBeInTheDocument());
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit Leather sandals' }));
+    await chooseRowAction('Leather sandals', 'Edit');
     const ed = within(await editor());
     fireEvent.change(ed.getByLabelText('Chart name'), { target: { value: 'Sandals' } });
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
@@ -120,7 +121,7 @@ describe('My size charts', () => {
 
   it('keeps the row of a size that products still sell, and offers to load the latest version after a conflict', async () => {
     await renderScreen(<SizeChartsView />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit Kaftans and shirts' }));
+    await chooseRowAction('Kaftans and shirts', 'Edit');
     const ed = within(await editor());
     // Someone else saves first.
     const fresh = await mockApi().getSizeChart(SIZE_CHART_IDS.mensTops);
@@ -135,11 +136,11 @@ describe('My size charts', () => {
 
   it('duplicates a chart and retires one after a confirmation that says how many products use it', async () => {
     await renderScreen(<SizeChartsView />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Duplicate Adire dresses' }));
+    await chooseRowAction('Adire dresses', 'Duplicate');
     expect(await screen.findByText('Created “Adire dresses (copy)”')).toBeInTheDocument();
     expect(await screen.findByText('Adire dresses (copy)')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retire Kaftans and shirts' }));
+    await chooseRowAction('Kaftans and shirts', 'Retire');
     expect(await screen.findByRole('heading', { name: 'Retire “Kaftans and shirts”?' })).toBeInTheDocument();
     expect(screen.getByText(/1 product uses it\. They keep showing it/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Retire chart' }));

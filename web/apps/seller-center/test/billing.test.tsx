@@ -9,6 +9,7 @@ import { OnboardingWizard } from '@/components/onboarding/OnboardingView';
 
 import { asRole, mockApi } from './mock-api';
 import { renderScreen } from './render';
+import { chooseRowAction } from './row-menu';
 import { nav } from './setup';
 
 describe('Plan & billing (S292–S297)', () => {
@@ -29,7 +30,7 @@ describe('Plan & billing (S292–S297)', () => {
     const earned = screen.getByRole('table', { name: 'Rewards and credits received' });
     expect(await within(earned).findByText('$25 credit')).toBeInTheDocument();
     const invoices = screen.getByRole('table', { name: 'Invoices' });
-    expect(within(invoices).getAllByRole('button', { name: 'Download invoice' })).toHaveLength(3);
+    expect(within(invoices).getAllByRole('button', { name: /^Actions for AT-/ })).toHaveLength(3);
     expect(screen.getByTestId('entitlements')).toHaveTextContent('Up to 1,000 live listings · AI listing writer included · Lola Growth');
   });
 
@@ -47,7 +48,6 @@ describe('Plan & billing (S292–S297)', () => {
     expect(within(gate).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
   });
 
-  it('retries an unpaid invoice after the payment method is fixed', async () => {
     const user = userEvent.setup();
     const db = getSellerDb();
     const inv = db.invoices[0];
@@ -56,7 +56,7 @@ describe('Plan & billing (S292–S297)', () => {
     await renderScreen(<BillingView />);
     expect(await screen.findByText('Invoice AT-1003 is unpaid')).toBeInTheDocument();
     expect(screen.getByText(/Your card was declined\./)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Retry payment' }));
+    await chooseRowAction('AT-1003', 'Retry payment');
     await waitFor(() => expect(db.invoices[0]?.status).toBe('PAID'));
     await waitFor(() => expect(screen.queryByText('Invoice AT-1003 is unpaid')).not.toBeInTheDocument());
   });

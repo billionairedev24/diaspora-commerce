@@ -1330,5 +1330,7 @@
   "sc.drafts.discardBody": "سيتم حذف المسودة. لن يُنشر شيء ولا يمكن التراجع عن ذلك.",
   "sc.drafts.discardMany": "تجاهل المحدد",
   "sc.drafts.discardManyTitle": "{count, plural, one {تجاهل مسودة واحدة؟} other {تجاهل # مسودات؟}}",
-  "sc.drafts.discarded": "تم تجاهل المسودة"
+  "sc.drafts.discarded": "تم تجاهل المسودة",
+  "sc.img.removeTitle": "هل تريد إزالة «{name}» من المكتبة؟",
+  "sc.img.removeBody": "ستُزال الصورة من مكتبتك. تحتفظ بها القوائم التي تستخدمها بالفعل."
 }

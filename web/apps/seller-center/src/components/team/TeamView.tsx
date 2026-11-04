@@ -1,7 +1,7 @@
 'use client';
 
 import { InviteFormSchema, isApiError, type RoleCard, sellerKeys, sellerQueries, TEAM_ERROR_MESSAGES, type TeamMember } from '@afrotransact/api-client';
-import { DataTable, useTableState } from '@afrotransact/data-table';
+import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
 import { Button, buttonClassName, cx, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
 import { CheckCircle, Eye, Prohibit } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,6 +14,7 @@ import { FormErrors } from '@/components/ui/FormErrors';
 import { ModulePage } from '@/components/ui/ModulePage';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
+import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
@@ -69,6 +70,7 @@ type Pending = { kind: 'remove' | 'revoke'; member: TeamMember } | null;
 /** Team & roles: identity's member directory with pending invitations (INVITED rows), invite / revoke, role changes,
     removal, and capability cards. */
 export function TeamView() {
+  const t = useT();
   const api = sellerApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -145,24 +147,18 @@ export function TeamView() {
           </span>
         )
       },
-      {
-        id: 'actions', header: () => <span className="at-visually-hidden">Actions</span>, size: 130, enableSorting: false, meta: { export: false, label: 'Actions' },
-        cell: ({ row }) => {
-          const m = row.original;
-          if (!canManage || m.isYou) return null;
-          return m.status === 'INVITED' ? (
-            <Button variant="neutral" size="sm" onClick={() => setPending({ kind: 'revoke', member: m })} aria-label={`Withdraw the invitation to ${m.email ?? m.name}`}>
-              Withdraw
-            </Button>
-          ) : (
-            <Button variant="neutral" size="sm" onClick={() => setPending({ kind: 'remove', member: m })} aria-label={`Remove ${m.name}`}>
-              Remove
-            </Button>
-          );
-        }
-      }
+      rowActionsColumn<TeamMember>({
+        header: t('sc.rows.actionsHeader'),
+        name: (m) => m.name,
+        label: (m) => t('sc.rows.actionsFor', { name: m.name }),
+        items: (m) => [
+          canManage && !m.isYou && (m.status === 'INVITED'
+            ? { label: 'Withdraw invitation', danger: true, onSelect: () => setPending({ kind: 'revoke', member: m }) }
+            : { label: 'Remove member', danger: true, onSelect: () => setPending({ kind: 'remove', member: m }) })
+        ]
+      })
     ],
-    [canManage, assign, roleOptions]
+    [canManage, assign, roleOptions, t]
   );
   if (q.isPending) return <ModulePage module="team"><Spinner /></ModulePage>;
   if (q.isError) return <ModulePage module="team"><ErrorState error={q.error} onRetry={() => void q.refetch()} /></ModulePage>;
