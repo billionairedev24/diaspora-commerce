@@ -51,6 +51,7 @@ import { sessionHandlers } from '../session';
 import { parseSort, queryRows, type SortKey } from '../table';
 import { contentPageHandlers } from './content-pages';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
+import { departmentHandlers, pendingDepartmentRequests } from './departments';
 import { canAdvance, planRun } from './dispatch';
 import { feeRateHandlers } from './fee-rates';
 import { activeFeeSchedule, createFeeSchedule, FEE_ORGS, feeRecords, feesOverview, feeView, MOCK_RETAIL_ORG_ID, quoteDelivery, searchFeeOrgs } from './fees';
@@ -682,6 +683,7 @@ export const staffHandlers = [
     route((ctx): StaffSession => {
       const nav = navigation(ctx.roles, {
         apps: records(ctx, 'applications').filter((a) => ['PENDING_REVIEW', 'FLAGGED', 'AWAITING_FINAL_APPROVAL'].includes(String(a.fields.status))).length,
+        deptRequests: pendingDepartmentRequests(ctx.db.departments),
         support: records(ctx, 'support-cases').filter((c) => c.fields.status === 'OPEN').length,
         disputes: records(ctx, 'claims').filter((c) => ['UNDER_REVIEW', 'ESCALATED'].includes(String(c.fields.status))).length
       });
@@ -1315,6 +1317,7 @@ export const staffHandlers = [
   /* Settings → Markets & locations (location tree) and the shared place pickers */
   ...marketHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Search analytics and synonym rules */
+  ...departmentHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   ...searchHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Settings → Published pages: the legal and help editors, drafts, publication and rollback */
   ...contentPageHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
