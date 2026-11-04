@@ -1,7 +1,7 @@
 'use client';
 
 import { isApiError, type OnboardingStripeSession, sellerKeys, sellerQueries } from '@afrotransact/api-client';
-import { Button } from '@afrotransact/ui';
+import { Button, StatStrip } from '@afrotransact/ui';
 import { CheckCircle, CircleNotch, ShieldCheck } from '@phosphor-icons/react/ssr';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -57,20 +57,16 @@ export function AccountHealthView() {
           ) : (
             <Notice tone="success" title="Your account is in good standing.">Payments and payouts are on.</Notice>
           )}
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))] gap-3 text-sm">
-            {[
+          <StatStrip
+            label="Account status"
+            items={[
               ['Charges', q.data.chargesEnabled ? 'Enabled' : 'Disabled'],
               ['Payouts', q.data.payoutsPaused ? 'Paused' : q.data.payoutsEnabled ? 'Enabled' : 'Disabled'],
               ['Listings', q.data.listingsHidden ? 'Hidden from shoppers' : 'Visible'],
               ['Payout account', q.data.payoutBank?.last4 ? `${q.data.payoutBank.bankName ?? 'Bank'} ••${q.data.payoutBank.last4}` : 'Not added'],
               ['Deadline', q.data.deadline ? shortDate(q.data.deadline) : '—']
-            ].map(([k, v]) => (
-              <div key={k} className="flex flex-col rounded-md border border-border p-3">
-                <span className="text-xs font-semibold text-muted">{k}</span>
-                <strong>{v}</strong>
-              </div>
-            ))}
-          </div>
+            ].map(([label, value]) => ({ id: label, label, value: <span className="text-lg">{value}</span> }))}
+          />
           {q.data.items.length ? (
             <ul className="m-0 flex list-none flex-col gap-2 p-0">
               {q.data.items.map((i) => (

@@ -31,6 +31,12 @@ type Unsubscriber interface {
 	URL(c UnsubscribeClaims) string
 	// Verify checks a token and returns its claims.
 	Verify(token string) (UnsubscribeClaims, error)
+	// StockAlertURL returns the signed link that removes one back-in-stock alert (no login).
+	StockAlertURL(alertID string, now time.Time) string
+	// StockAlertHeaders returns List-Unsubscribe and List-Unsubscribe-Post for a back-in-stock email.
+	StockAlertHeaders(alertID string, now time.Time) map[string]string
+	// VerifyStockAlert checks a stock-alert link token and returns its claims.
+	VerifyStockAlert(token string) (StockAlertClaims, error)
 }
 
 type unsubscriberImpl struct {
@@ -88,6 +94,47 @@ func (u *unsubscriberImpl) Verify(token string) (UnsubscribeClaims, error) {
 	}
 	if time.Since(time.Unix(c.IssuedAt, 0)) > u.maxAge || c.RecipientKey == "" {
 		return UnsubscribeClaims{}, ErrInvalidToken
+	}
+	return c, nil
+}
+
+// StockAlertClaims identify the one back-in-stock alert a link removes. The token carries the alert id and the issue
+// time only: no address, so a forwarded email or a leaked link discloses nothing.
+type StockAlertClaims struct {
+	AlertID  string `json:"al"`
+	IssuedAt int64  `json:"iat"`
+}
+
+// stockAlertDomain separates stock-alert signatures from preference tokens: a token minted for one is rejected by the
+// other even though they share the signing key.
+const stockAlertDomain = "stock-alert|"
+
+func (u *unsubscriberImpl) StockAlertURL(alertID string, now time.Time) string {
+	raw, _ := json.Marshal(StockAlertClaims{AlertID: alertID, IssuedAt: now.Unix()})
+	payload := base64.RawURLEncoding.EncodeToString(raw)
+	return u.baseURL + "/v1/stock-alerts/unsubscribe?t=" + url.QueryEscape(payload+"."+u.sign(stockAlertDomain+payload))
+}
+
+func (u *unsubscriberImpl) StockAlertHeaders(alertID string, now time.Time) map[string]string {
+	v := "<" + u.StockAlertURL(alertID, now) + ">"
+	return map[string]string{"List-Unsubscribe": v, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"}
+}
+
+func (u *unsubscriberImpl) VerifyStockAlert(token string) (StockAlertClaims, error) {
+	payload, sig, ok := strings.Cut(token, ".")
+	if !ok || !hmac.Equal([]byte(sig), []byte(u.sign(stockAlertDomain+payload))) {
+		return StockAlertClaims{}, ErrInvalidToken
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(payload)
+	if err != nil {
+		return StockAlertClaims{}, fmt.Errorf("%w: %w", ErrInvalidToken, err)
+	}
+	var c StockAlertClaims
+	if err := json.Unmarshal(raw, &c); err != nil {
+		return StockAlertClaims{}, fmt.Errorf("%w: %w", ErrInvalidToken, err)
+	}
+	if time.Since(time.Unix(c.IssuedAt, 0)) > u.maxAge || c.AlertID == "" {
+		return StockAlertClaims{}, ErrInvalidToken
 	}
 	return c, nil
 }

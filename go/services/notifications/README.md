@@ -81,6 +81,8 @@ contract copy in `contracts/openapi/notifications.yaml`).
 | `POST /v1/webhooks/resend`, `/sendgrid`, `/twilio/status`, `/twilio/inbound` | provider signature |
 | `GET/POST /v1/unsubscribe?t=…` | signed token (RFC 8058) |
 | `POST /v1/stock-alerts`, `GET /v1/stock-alerts`, `DELETE /v1/stock-alerts/{atin}` | the shopper's own token (service tokens get 403) |
+| `POST /v1/stock-alerts/guest` | service token with scope `notifications:stock-alerts.guest` (the gateway-bff); no account |
+| `GET/POST /v1/stock-alerts/unsubscribe?t=…` | signed token from the email (names one alert) |
 
 ### Back-in-stock alerts (S211)
 
@@ -90,7 +92,46 @@ shopper and variant ATIN (201; 200 with the existing alert when already active; 
 On `inventory.availability.changed` (`at.inventory.events`, SKU = variant ATIN) with `available > 0`, up to 500 active
 alerts for the SKU are claimed (`notified_event_id` = the event, so a redelivery re-claims the same rows and the inbox
 prevents a second send) and `stock.back_in_stock` goes out by email (the alert's `email`, else identity's) and push.
-Table `stock_alert` (migration `0004`).
+Table `stock_alert` (migrations `0004`, `0025`).
+
+#### Guests (no account) and privacy
+
+A visitor who is not signed in can subscribe with just an email address. The gateway-bff calls
+`POST /v1/stock-alerts/guest` `{atin, email, market?, locale?, productTitle?}` with its own client-credentials token
+(scope `notifications:stock-alerts.guest`, granted by identity migration `V25` to the `gateway-bff` client; shoppers and
+other services get 403). The BFF validates and rate-limits first (per client IP 20, per address 10, per variant 300, per
+hour; 429 with `Retry-After`).
+
+* **One alert per (email, ATIN)**, whatever the case of the address. The answer is always `201 {atin, status}`: it never
+  says whether the address was new, already subscribed, at its cap or has an account, and never echoes the address.
+  **Nothing is sent at subscription time** (no confirmation email; see counsel question Q33).
+* **Address rules** (`domain.ParseEmail`): a plain `name@domain.tld`, at most 254 characters (local part 64), trimmed and
+  lower-cased. No display name, quotes, comments, IP literals, whitespace, control characters or non-ASCII (use
+  punycode), so the value is safe in a `To` header. The BFF applies the same rules first.
+* **Caps**: 50 open alerts per address and per account (`stockAlerts.maxOpen`, `STOCK_ALERTS_MAX_OPEN`). Past the cap a
+  guest still gets the same 201 (a warning is logged with the masked address and nothing is stored); a signed-in shopper
+  gets `422 notifications.alert-limit`.
+* **Signed-in shoppers** keep using their account (`POST/GET /v1/stock-alerts`, `DELETE /v1/stock-alerts/{atin}`; the BFF
+  exposes them as `/v1/account/stock-alerts`). A guest alert is **not merged** into an account later, even when the
+  address matches a sign-in: the address was never verified for that account. If the same person has both, they get
+  one email for each.
+* **Fan-out**: on a restock every active alert, guest or account, gets exactly one `stock.back_in_stock` email (guests
+  email only; accounts also push) in the locale saved at subscription time (the request's `Accept-Language`: `en`, `fr`,
+  `es`, `ar` or `yo`; templates in migration `0026`), then the alert is closed (`notified_at`).
+* **Unsubscribe**: every email carries `alertUnsubscribeUrl` and `List-Unsubscribe` / `List-Unsubscribe-Post`
+  (RFC 8058): a signed link (`Unsubscriber.StockAlertURL`, same HMAC key as marketing links, domain-separated so tokens
+  are not interchangeable; valid one year from sending) to `GET /v1/stock-alerts/unsubscribe?t=` (confirmation page in the
+  browser's language, removes nothing so link scanners cannot trigger it) and `POST` (removes that one alert, no login;
+  an alert already gone is still 200). The token names the alert id only: no address, no account, nothing else to manage.
+* **Data kept per alert**: address (guests; accounts may carry an override), ATIN, market, locale, catalog product title
+  (from the BFF, never from the visitor), created and sent times. No other free text, no IP address, no user agent.
+* **Retention**: an hourly worker (`purgeStockAlerts`) deletes alerts never sent after **180 days**
+  (`stockAlerts.openLifetime`) and sent alerts **14 days** after sending (`stockAlerts.sentKeep`; long enough for a
+  redelivered restock event and a quick re-subscribe). **Not covered by this purge:** the delivery log row of the sent
+  email (`notification.address`, subject, body). The service has no retention job for the log today; that is an open
+  PII-retention item for all emails, not only alerts.
+* **Logs** never carry the address: the cap warning logs `a***@example.com`. (The local `log` provider prints
+  messages and exists for local development only.)
 
 ## Email layout, brand and advertorials (S279)
 

@@ -2,7 +2,7 @@
 
 import { type Earnings, type EarningsRow, type ProviderFees, sellerQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { ChipGroup } from '@afrotransact/ui';
+import { ChipGroup, StatStrip } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
@@ -105,21 +105,17 @@ export function EarningsView() {
         options={[{ value: '30', label: 'Last 30 days' }, { value: '90', label: 'Last 90 days' }, { value: 'ytd', label: 'This year' }]} />
       {q.isPending ? <Spinner /> : q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : e ? (
         <>
-          <dl aria-label="Earnings totals" className="m-0 grid grid-cols-[repeat(auto-fit,minmax(min(100%,150px),1fr))] gap-3">
-            {[
-              ['Customers paid', money(e.totals.collectedMinor, e.currency), ''],
-              [t('sc.earnings.connectionFeeTotal', { pct: String(e.commissionPercent) }), `−${money(e.totals.commissionMinor, e.currency)}`, ''],
-              ['Stripe card fees', `−${money(e.totals.cardFeesMinor, e.currency)}`, ''],
-              ['Late-cancel fees', `−${money(e.totals.lateCancelFeesMinor, e.currency)}`, e.totals.lateCancelFeesMinor ? 'text-danger' : ''],
-              ['Net earnings', money(e.totals.netMinor, e.currency), ''],
-              ['Deposits held', money(e.totals.heldMinor, e.currency), 'text-muted']
-            ].map(([k, v, cls]) => (
-              <div key={k} className="flex flex-col gap-1 rounded-md border border-border p-4">
-                <dt className="text-xs font-semibold text-muted">{k}</dt>
-                <dd className={`m-0 text-2xl font-bold ${cls ?? ''}`}>{v}</dd>
-              </div>
-            ))}
-          </dl>
+          <StatStrip
+            label="Earnings totals"
+            items={[
+              { id: 'paid', label: 'Customers paid', value: money(e.totals.collectedMinor, e.currency) },
+              { id: 'fee', label: t('sc.earnings.connectionFeeTotal', { pct: String(e.commissionPercent) }), value: `−${money(e.totals.commissionMinor, e.currency)}` },
+              { id: 'stripe', label: 'Stripe card fees', value: `−${money(e.totals.cardFeesMinor, e.currency)}` },
+              { id: 'late', label: 'Late-cancel fees', value: `−${money(e.totals.lateCancelFeesMinor, e.currency)}`, tone: e.totals.lateCancelFeesMinor ? 'negative' : 'neutral' },
+              { id: 'net', label: 'Net earnings', value: money(e.totals.netMinor, e.currency) },
+              { id: 'held', label: 'Deposits held', value: money(e.totals.heldMinor, e.currency) }
+            ]}
+          />
           <p className="m-0 text-sm text-muted">Paid out every {e.payoutDay}. Deposits held are authorised but not yet captured.</p>
           {e.connectionFee ? <ConnectionFeesCard card={e.connectionFee} t={t} /> : null}
           <ProviderFeesCard fees={e.providerFees} currency={e.currency} />

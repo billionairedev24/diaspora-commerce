@@ -85,6 +85,10 @@ func (h *handlersImpl) Register(mux *http.ServeMux, authn func(http.Handler) htt
 		mux.Handle("POST /v1/stock-alerts", authn(http.HandlerFunc(h.subscribeStockAlert)))
 		mux.Handle("GET /v1/stock-alerts", authn(http.HandlerFunc(h.listStockAlerts)))
 		mux.Handle("DELETE /v1/stock-alerts/{atin}", authn(http.HandlerFunc(h.unsubscribeStockAlert)))
+		// Visitors without an account: the BFF subscribes them with its service token; the email's link removes the alert.
+		mux.Handle("POST /v1/stock-alerts/guest", authn(auth.Require(PermStockAlertGuest, h.subscribeGuestStockAlert)))
+		mux.HandleFunc("GET /v1/stock-alerts/unsubscribe", h.stockAlertUnsubscribePage)
+		mux.HandleFunc("POST /v1/stock-alerts/unsubscribe", h.stockAlertUnsubscribe)
 	}
 
 	mux.HandleFunc("POST /v1/webhooks/resend", h.resendWebhook)
@@ -411,6 +415,9 @@ func (h *handlersImpl) writeErr(w http.ResponseWriter, r *http.Request, err erro
 	switch {
 	case errors.Is(err, domain.ErrInvalidRequest), errors.Is(err, app.ErrRender):
 		problem.Write(w, r, problem.New(http.StatusBadRequest, "notifications.invalid-request", err.Error()))
+	case errors.Is(err, domain.ErrAlertLimit):
+		problem.Write(w, r, problem.New(http.StatusUnprocessableEntity, "notifications.alert-limit",
+			"You already have the maximum number of open back-in-stock alerts. Remove one to add another."))
 	case errors.Is(err, domain.ErrTemplateNotFound):
 		problem.Write(w, r, problem.New(http.StatusNotFound, "notifications.template-not-found", "No template matches"))
 	case errors.Is(err, domain.ErrNotFound):

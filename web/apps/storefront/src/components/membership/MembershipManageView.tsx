@@ -13,6 +13,7 @@ import {
 } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import {
+  Alert,
   Button,
   buttonClassName,
   DataTable,
@@ -209,9 +210,9 @@ export function MembershipManageView() {
         {ending && <p className={styles.notice} data-testid="membership-ending">{t('mem.manage.endsOn', { date: fmt.date(m.periodEnd) })}</p>}
         {!live && !needsAttention && <p className={styles.rule}>{t('mem.manage.ended', { date: fmt.date(m.endedAt ?? m.periodEnd) })}</p>}
         {needsAttention && (
-          <p className={styles.alert} role="alert">
+          <Alert variant="warning" urgent>
             {t('mem.manage.pastDue')} {m.nextRetryAt ? t('mem.manage.retryOn', { date: fmt.date(m.nextRetryAt) }) : ''}
-          </p>
+          </Alert>
         )}
         {pending && m.pendingInterval && (
           <p className={styles.notice} data-testid="membership-pending">

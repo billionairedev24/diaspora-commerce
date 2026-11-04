@@ -1,6 +1,7 @@
 'use client';
 
 import { type StaffModuleKey } from '@afrotransact/api-client';
+import { PageStack } from '@afrotransact/ui';
 import { createContext, type ReactNode, useContext } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
@@ -28,12 +29,14 @@ export function ModulePage({ module, actions, children }: { module: StaffModuleK
   return (
     <>
       <PageHeader title={m?.label ?? module} description={m?.description} actions={actions} />
-      {m?.level === 'VIEW' ? (
-        <Notice tone="info" icon="eye" title={t('st.modulePage.readOnly')}>
-          {session.roleLabel} can view {m.label.toLowerCase()} but not change it.
-        </Notice>
-      ) : null}
-      {children}
+      <PageStack>
+        {m?.level === 'VIEW' ? (
+          <Notice tone="info" icon="eye" title={t('st.modulePage.readOnly')}>
+            {session.roleLabel} can view {m.label.toLowerCase()} but not change it.
+          </Notice>
+        ) : null}
+        {children}
+      </PageStack>
     </>
   );
 }

@@ -138,6 +138,8 @@ type Upstreams struct {
 	// MemberOrgs are the organisations of every signed-in member; ActiveOrgID is identity's active org.
 	MemberOrgs  []MemberOrg
 	ActiveOrgID string
+	// GuestStockAlerts records what notifications received on POST /v1/stock-alerts/guest (service token required).
+	GuestStockAlerts []map[string]string
 	// ServiceTokenRequests records the scopes of client-credentials token requests.
 	ServiceTokenRequests []string
 	// GeoAutocompleteQueries are the query strings geo's autocomplete received; GeoResolves "id?query" per resolve.

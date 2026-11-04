@@ -137,7 +137,7 @@
 }
 
 .tab[data-state='active'] { color: var(--at-color-text); border-bottom-color: var(--at-color-action-primary); }
-.tabPanel { padding-top: var(--at-space-4); }
+.tabPanel { padding-top: var(--at-page-gap-tabs, 24px); }
 .tabPanel:focus-visible { outline: 2px solid var(--at-color-focus); }
 
 /* Toast */

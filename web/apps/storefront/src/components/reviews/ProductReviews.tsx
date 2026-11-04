@@ -11,7 +11,7 @@ import {
   type ReviewReasonCode,
   type ReviewSort} from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, Dialog,SealCheck, Select, Skeleton, Stars, TextField, useToast } from '@afrotransact/ui';
+import { Button, Dialog,SealCheck, Select, Stars, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 

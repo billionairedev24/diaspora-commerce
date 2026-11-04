@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 
-import { KpiTile } from '@/components/ui/Kpi';
+import { KpiStrip } from '@/components/ui/Kpi';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
@@ -48,11 +48,7 @@ export function DashboardView() {
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {q.data ? (
         <>
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-3">
-            {q.data.kpis.map((k) => (
-              <KpiTile key={k.label} kpi={k} />
-            ))}
-          </div>
+          <KpiStrip kpis={q.data.kpis} />
           {q.data.todo.length ? (
             <section aria-labelledby="todo-h" className="rounded-md border border-border p-4">
               <h2 id="todo-h" className="m-0 mb-2 text-md font-semibold">

@@ -13,6 +13,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.platform.web.error.NotFoundException;
@@ -41,6 +42,8 @@ class CatalogScopeServiceImpl implements CatalogScopeService {
     /** Who may ask for another department. */
     private static final Set<String> REQUESTERS = Set.of("owner", "admin", "catalog");
     private static final int MIN_REASON = 10;
+    /** A rejection says why, in words the seller can act on. */
+    private static final int MIN_REJECTION = 3;
     private static final int MAX_NOTE = 500;
 
     private final CatalogScopeRepository scopes;
@@ -50,10 +53,11 @@ class CatalogScopeServiceImpl implements CatalogScopeService {
     private final AccessGuard access;
     private final SellerSettings settings;
     private final Clock clock;
+    private final DomainEventPublisher events;
 
     CatalogScopeServiceImpl(CatalogScopeRepository scopes, ApplicationRepository applications,
                             OrganisationRepository orgs, DepartmentDirectory directory, AccessGuard access,
-                            SellerSettings settings, Clock clock) {
+                            SellerSettings settings, Clock clock, DomainEventPublisher events) {
         this.scopes = scopes;
         this.applications = applications;
         this.orgs = orgs;
@@ -61,6 +65,7 @@ class CatalogScopeServiceImpl implements CatalogScopeService {
         this.access = access;
         this.settings = settings;
         this.clock = clock;
+        this.events = events;
     }
 
     @Override
@@ -133,7 +138,11 @@ class CatalogScopeServiceImpl implements CatalogScopeService {
         }
         Set<String> valid = new LinkedHashSet<>();
         chosen.forEach(c -> valid.add(known(c).code()));
-        scopes.replace(orgId, valid, "STAFF", staff.subject(), Instant.now(clock));
+        Set<String> before = scopes.departments(orgId);
+        Instant now = Instant.now(clock);
+        scopes.replace(orgId, valid, "STAFF", staff.subject(), now);
+        events.publish(SellerEvents.DEPARTMENTS_CHANGED, SellerEvents.AGGREGATE_APPLICATION, orgId,
+                DepartmentsChangedPayload.of(orgId, before, valid, staff.subject(), reason.strip(), now));
         return scope(orgId);
     }
 
@@ -147,12 +156,21 @@ class CatalogScopeServiceImpl implements CatalogScopeService {
             throw new SellerStateConflict("seller.department-request-decided",
                     "This request was already " + request.status().name().toLowerCase(Locale.ROOT));
         }
+        String text = note == null || note.isBlank() ? null : note.strip();
+        if (!approve && (text == null || text.length() < MIN_REJECTION)) {
+            throw new SellerRuleViolation("seller.reason-required",
+                    "Say why the request is rejected: the seller reads it");
+        }
         Instant now = Instant.now(clock);
         if (approve) {
             scopes.add(request.orgId(), Set.of(request.departmentCode()), "REQUEST", staff.subject(), now);
         }
-        return needs(scopes.update(request.decided(approve ? DepartmentRequestStatus.APPROVED
-                : DepartmentRequestStatus.REJECTED, staff.subject(), note == null ? null : note.strip(), now)), null);
+        DepartmentRequestStatus outcome = approve ? DepartmentRequestStatus.APPROVED : DepartmentRequestStatus.REJECTED;
+        DepartmentRequest decided = scopes.update(request.decided(outcome, staff.subject(), text, now));
+        events.publish(SellerEvents.DEPARTMENT_REQUEST_DECIDED, SellerEvents.AGGREGATE_APPLICATION, request.orgId(),
+                new DepartmentRequestDecidedPayload(decided.id(), decided.orgId(), decided.departmentCode(),
+                        outcome.name(), staff.subject(), text, now));
+        return needs(decided, null);
     }
 
     @Override
@@ -161,6 +179,14 @@ class CatalogScopeServiceImpl implements CatalogScopeService {
         access.staffAny(SellerPermissions.APPLICATIONS_REVIEW, SellerPermissions.APPLICATIONS_APPROVE);
         return scopes.queue(status == null ? DepartmentRequestStatus.PENDING : status, QUEUE_LIMIT).stream()
                 .map(r -> needs(r, null)).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DepartmentRequest request(UUID requestId) {
+        access.staffAny(SellerPermissions.APPLICATIONS_REVIEW, SellerPermissions.APPLICATIONS_APPROVE);
+        return needs(scopes.findRequest(requestId).orElseThrow(() ->
+                new NotFoundException("seller.department-request-not-found", "Department request not found")), null);
     }
 
     private CatalogScope scope(String orgId) {

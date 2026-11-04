@@ -55,7 +55,9 @@ const config: StorybookConfig = {
   addons: ['@storybook/addon-a11y', '@storybook/addon-docs', '@storybook/addon-vitest'],
   framework: { name: '@storybook/react-vite', options: {} },
   core: { disableTelemetry: true },
-  typescript: { reactDocgen: 'react-docgen-typescript' },
+  // react-docgen-typescript needs the TypeScript JS compiler API, which TypeScript 7 (native) does not ship: it crashed the preview
+  // ("Cannot read properties of undefined (reading 'fileExists')"). react-docgen reads the props from the source with Babel.
+  typescript: { reactDocgen: 'react-docgen' },
   viteFinal: async (cfg) => ({
     ...cfg,
     plugins: [appAliasPlugin(), ...(cfg.plugins ?? [])],

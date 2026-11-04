@@ -280,6 +280,7 @@ func (s *staffShellImpl) badges(ctx context.Context, sc staffCtx) map[string]int
 	probes := []probe{
 		{"apps", "applications:review", sc.up.Seller, "/v1/applications", url.Values{"size": {"1"}}},
 		{"support", "support:respond", sc.up.TrustOps, "/v1/support-cases", url.Values{"status": {"OPEN"}, "size": {"1"}}},
+		{domain.DepartmentRequestsModule, "applications:review", sc.up.Seller, "/v1/department-requests", url.Values{"status": {"PENDING"}}},
 		{"disputes", "disputes:manage", sc.up.TrustOps, "/v1/claims", url.Values{"status": {"UNDER_REVIEW"}, "size": {"1"}}},
 	}
 	out := map[string]int{}
@@ -294,18 +295,26 @@ func (s *staffShellImpl) badges(ctx context.Context, sc staffCtx) map[string]int
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			var page struct {
-				Total int `json:"total"`
-			}
-			if err := sc.get(cctx, p.up, p.path, p.q, &page); err != nil {
+			// A paged answer carries its total; a queue the service lists whole (department requests) is counted.
+			var raw any
+			if err := sc.get(cctx, p.up, p.path, p.q, &raw); err != nil {
 				var pr *domain.Problem
 				if !errors.As(err, &pr) || pr.Status >= 500 {
 					s.r.d.Log.DebugContext(ctx, "staff badge unavailable", "module", p.module, "error", err.Error())
 				}
 				return
 			}
+			count := 0
+			switch v := raw.(type) {
+			case []any:
+				count = len(v)
+			case map[string]any:
+				if t, ok := v["total"].(float64); ok {
+					count = int(t)
+				}
+			}
 			mu.Lock()
-			out[p.module] = page.Total
+			out[p.module] = count
 			mu.Unlock()
 		}()
 	}

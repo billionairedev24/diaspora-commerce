@@ -157,6 +157,15 @@ type Config struct {
 		ReplyTo           string `yaml:"replyTo" env:"EMAIL_REPLY_TO"`
 		UnsubscribeMailto string `yaml:"unsubscribeMailto" env:"EMAIL_UNSUBSCRIBE_MAILTO"`
 	} `yaml:"email"`
+	// StockAlerts bound the back-in-stock alerts table (docs: notifications README, "Guests and privacy"). Zero values
+	// take the defaults: 50 open alerts per account or address, open alerts purged after 180 days, sent ones after
+	// 14 days, purge hourly.
+	StockAlerts struct {
+		MaxOpen      int           `yaml:"maxOpen" env:"STOCK_ALERTS_MAX_OPEN"`
+		OpenLifetime time.Duration `yaml:"openLifetime" env:"STOCK_ALERTS_OPEN_LIFETIME"`
+		SentKeep     time.Duration `yaml:"sentKeep" env:"STOCK_ALERTS_SENT_KEEP"`
+		PurgeEvery   time.Duration `yaml:"purgeEvery" env:"STOCK_ALERTS_PURGE_EVERY"`
+	} `yaml:"stockAlerts"`
 	UnsubscribeSigningKey string `env:"UNSUBSCRIBE_SIGNING_KEY"`
 	Webhooks              struct {
 		Verify            bool   `yaml:"verify" env:"WEBHOOKS_VERIFY"`

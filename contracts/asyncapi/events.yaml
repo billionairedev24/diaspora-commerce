@@ -821,6 +821,10 @@ channels:
         $ref: '#/components/messages/sellerApplicationApproved'
       sellerApplicationRejected:
         $ref: '#/components/messages/sellerApplicationRejected'
+      sellerDepartmentRequestDecided:
+        $ref: '#/components/messages/sellerDepartmentRequestDecided'
+      sellerOrgDepartmentsChanged:
+        $ref: '#/components/messages/sellerOrgDepartmentsChanged'
   sellerOrgEvents:
     address: at.seller-org.events
     description: Seller and provider organisations (key = org id).
@@ -2806,6 +2810,20 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/SellerEnforcement'
+    sellerDepartmentRequestDecided:
+      name: seller.department_request.decided
+      title: Staff approved or rejected a seller's department request (audit - who, what, why; key = org id)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerDepartmentRequestDecided'
+    sellerOrgDepartmentsChanged:
+      name: seller.org.departments_changed
+      title: Staff replaced the departments an organisation may sell in, with a reason (audit; key = org id)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerOrgDepartmentsChanged'
     sellerSubscriptionChanged:
       name: seller.subscription.changed
       headers:
@@ -10643,6 +10661,79 @@ components:
         occurredAt:
           type: string
           format: date-time
+    SellerDepartmentRequestDecided:
+      type: object
+      required:
+      - requestId
+      - orgId
+      - departmentCode
+      - decision
+      - actorId
+      - occurredAt
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        departmentCode:
+          type: string
+          description: Catalog department node code
+        decision:
+          type: string
+          enum:
+          - APPROVED
+          - REJECTED
+        actorId:
+          type: string
+          description: The staff member who decided
+        reason:
+          type:
+          - string
+          - 'null'
+          description: The decision note; always present for a rejection (the seller reads it)
+        occurredAt:
+          type: string
+          format: date-time
+    SellerOrgDepartmentsChanged:
+      type: object
+      required:
+      - orgId
+      - before
+      - after
+      - added
+      - removed
+      - actorId
+      - reason
+      - occurredAt
+      properties:
+        orgId:
+          type: string
+        before:
+          type: array
+          items:
+            type: string
+        after:
+          type: array
+          items:
+            type: string
+        added:
+          type: array
+          items:
+            type: string
+        removed:
+          type: array
+          items:
+            type: string
+        actorId:
+          type: string
+          description: The staff member who changed the set
+        reason:
+          type: string
+          minLength: 10
+        occurredAt:
+          type: string
+          format: date-time
     SellerSubscriptionChanged:
       type: object
       required:
@@ -12182,7 +12273,8 @@ operations:
       $ref: '#/channels/sellerApplicationEvents'
     summary: seller-service publishes application lifecycle events via its transactional outbox. notifications-service tells
       the applicant (submitted, info requested with the requested items, approved, rejected); staff-console badges count flagged
-      applications.
+      applications. seller.department_request.decided and seller.org.departments_changed (key = org id) record staff decisions
+      on the catalog departments an organisation may sell in; trust-ops audits both.
   publishSellerOrgEvents:
     action: send
     channel:

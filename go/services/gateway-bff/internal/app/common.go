@@ -32,7 +32,7 @@ func (c Clock) now() time.Time {
 // mapErr turns an upstream error into a contract problem. Known problems pass through; unavailability becomes
 // 503 UPSTREAM_UNAVAILABLE; generic 4xx answers keep their meaning; anything else is a 502.
 // alreadyDecided are upstream 409 codes meaning the action already happened (mapped to ALREADY_DONE).
-var alreadyDecided = map[string]bool{"seller.already-decided": true, "seller.already-reviewed": true}
+var alreadyDecided = map[string]bool{"seller.already-decided": true, "seller.already-reviewed": true, "seller.department-request-decided": true}
 
 func mapErr(upstream string, err error) error {
 	if err == nil {

@@ -129,6 +129,13 @@ tags:
       open pre-orders, from delivery-runs); removing a city an open pre-order sells to is refused (409, switch it off
       instead). Module `markets`: VIEW to read; EDIT and `content:markets.edit` to change. `GET /v1/staff/places`
       browses geo's gazetteer for the pickers of Markets and Pre-order areas.
+  - name: Department requests
+    description: |
+      Sellers ask (in Seller Center) to sell in another catalog department; staff approve or reject each request, or replace
+      an organisation's departments with a reason (seller service, docs/engineering/seller-catalog-scope.md). Module
+      `deptRequests` is derived from the seller service's permissions: VIEW with `applications:review`, EDIT with
+      `applications:approve`. Approving or rejecting is one person's decision (not maker-checker). The seller service audits
+      every decision and override (who, what, why) through trust-ops. The queue is joined to names; ids are never shown.
   - name: Search analytics
     description: |
       What shoppers search for, which searches find nothing and which results get clicked (search service, daily
@@ -6166,6 +6173,153 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── department requests
+  /v1/staff/department-requests:
+    get:
+      tags: [Department requests]
+      operationId: listStaffDepartmentRequests
+      security: [{sessionCookie: []}]
+      summary: Sellers' requests to sell in another department, one server-driven page
+      description: |
+        seller `GET /v1/department-requests?status=` (`applications:review` or `applications:approve`; the module is derived
+        from those permissions). The seller service lists at most 200 requests per status (the open ones oldest first, the
+        decided ones newest decision first); the BFF joins the organisation, department and people names, then filters,
+        sorts and pages them. `status` is `PENDING` (default), `DECIDED` (approved and rejected together), `APPROVED` or
+        `REJECTED`. `department` and `organisation` match part of the name, ignoring case; `from` and `to` are the days the
+        request was made (inclusive). Default sort: oldest open request first; newest decision first for decided requests.
+        `pending` is the number of requests waiting whatever the filters say (the tab and nav badge); `truncated` says the
+        service holds more than it lists.
+      parameters:
+        - {name: status, in: query, schema: {type: string, enum: [PENDING, DECIDED, APPROVED, REJECTED], default: PENDING}}
+        - {name: department, in: query, schema: {type: string, maxLength: 120}, description: Part of the department's name}
+        - {name: organisation, in: query, schema: {type: string, maxLength: 120}, description: Part of the organisation's name}
+        - {name: from, in: query, schema: {type: string, format: date}, description: First day the request was made}
+        - {name: to, in: query, schema: {type: string, format: date}, description: Last day the request was made}
+        - name: sort
+          in: query
+          style: form
+          explode: true
+          description: '`<column>,asc|desc`; columns organisation, department, requestedAt, status, decidedAt. Empty cells sort last.'
+          schema:
+            type: array
+            maxItems: 1
+            items: {type: string, pattern: '^(organisation|department|requestedAt|status|decidedAt)(,(asc|desc|ASC|DESC))?$'}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
+      responses:
+        '200': {description: One page, content: {application/json: {schema: {$ref: '#/components/schemas/StaffDepartmentRequestPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/department-requests/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      tags: [Department requests]
+      operationId: getStaffDepartmentRequest
+      security: [{sessionCookie: []}]
+      summary: One request with the organisation's current departments and the department's compliance prompts
+      description: |
+        seller `GET /v1/department-requests/{id}` and `GET /v1/orgs/{orgId}/catalog-scope`. `prompts` lists what the
+        department asks the seller to have on file (a food permit, beauty labelling) and whether the organisation's
+        compliance data already satisfies it (`satisfied` is null for a rejected request: it was not checked).
+      responses:
+        '200': {description: The request, content: {application/json: {schema: {$ref: '#/components/schemas/StaffDepartmentRequest'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/department-requests/{id}/approve:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Department requests]
+      operationId: approveStaffDepartmentRequest
+      security: [{sessionCookie: []}]
+      summary: Approve a request; the department joins the organisation's set at once
+      description: |
+        seller `POST /v1/department-requests/{id}/decision` (`applications:approve`). One person decides (the seller's
+        department decisions are not maker-checker, unlike applications). The seller service records who decided and
+        publishes `seller.department_request.decided`, which trust-ops copies into the audit log. A request someone
+        already decided answers 409 `ALREADY_DONE` with who decided it.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffDepartmentApprove'}
+      responses:
+        '200': {description: The request as decided, content: {application/json: {schema: {$ref: '#/components/schemas/StaffDepartmentRequest'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/department-requests/{id}/reject:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      tags: [Department requests]
+      operationId: rejectStaffDepartmentRequest
+      security: [{sessionCookie: []}]
+      summary: Reject a request, with the reason the seller reads
+      description: |
+        seller `POST /v1/department-requests/{id}/decision` with `approve=false` (`applications:approve`). The reason is
+        required (3 to 500 characters), is shown to the seller and is kept in the audit log with the staff member's id.
+        A request someone already decided answers 409 `ALREADY_DONE`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffDepartmentReject'}
+      responses:
+        '200': {description: The request as decided, content: {application/json: {schema: {$ref: '#/components/schemas/StaffDepartmentRequest'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/organisations/{orgId}/departments:
+    parameters:
+      - {name: orgId, in: path, required: true, schema: {type: string, maxLength: 120}}
+    get:
+      tags: [Department requests]
+      operationId: getStaffOrgDepartments
+      security: [{sessionCookie: []}]
+      summary: The departments an organisation may sell in, and the catalog's departments to choose from
+      description: seller `GET /v1/orgs/{orgId}/catalog-scope` and `GET /v1/departments` (`applications:review` or `applications:approve`). AfroTransact Retail is `exempt`; it sells in every department.
+      responses:
+        '200': {description: The organisation's departments, content: {application/json: {schema: {$ref: '#/components/schemas/StaffOrgDepartments'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Department requests]
+      operationId: setStaffOrgDepartments
+      security: [{sessionCookie: []}]
+      summary: Replace the organisation's departments, with a reason
+      description: |
+        seller `PUT /v1/orgs/{orgId}/catalog-scope/departments` (`applications:approve`). The reason is required (at least
+        10 characters); the set must differ from the current one (422 on `departments` otherwise) and every code must be a
+        catalog department. Live products in a department the organisation no longer has stay live; changing their
+        category is refused. The seller service publishes `seller.org.departments_changed`, which trust-ops audits with
+        who, what changed and why. AfroTransact Retail cannot be overridden (409).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StaffOrgDepartmentsSet'}
+      responses:
+        '200': {description: The organisation's departments as saved, content: {application/json: {schema: {$ref: '#/components/schemas/StaffOrgDepartments'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     sessionCookie:
@@ -7490,8 +7644,8 @@ components:
     AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
     StaffModuleKey:
       type: string
-      description: Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search and identity are derived; identity needs the identity:admin permission; preorders follows the Pre-orders matrix column).
-      enum: [dash, exports, orders, catalog, search, inventory, retail, dispatch, orgs, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, identity, notifications, preorders, plans]
+      description: Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search, deptRequests and identity are derived; deptRequests follows applications:review / applications:approve; identity needs the identity:admin permission; preorders follows the Pre-orders matrix column).
+      enum: [dash, exports, orders, catalog, search, inventory, retail, dispatch, orgs, apps, deptRequests, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, identity, notifications, preorders, plans]
     StaffUser:
       type: object
       required: [id, firstName, lastName, email, initials]
@@ -10110,6 +10264,86 @@ components:
             zeroResults: {type: integer, format: int64}
             ctr: {type: number}
             zeroResultRate: {type: number}
+    # ── department requests
+    StaffDepartment:
+      type: object
+      required: [code, name, requires]
+      properties:
+        code: {type: string, description: The catalog department's node code (what the API sends; never shown to staff)}
+        name: {type: string}
+        requires:
+          type: array
+          description: The evidence a seller must have on file to sell here
+          items: {type: string, enum: [FOOD_PERMIT, BEAUTY_LABELLING]}
+    StaffCompliancePrompt:
+      type: object
+      required: [requirement, label, satisfied]
+      properties:
+        requirement: {type: string, enum: [FOOD_PERMIT, BEAUTY_LABELLING]}
+        label: {type: string, description: Plain-language English text; the console translates by requirement}
+        satisfied: {type: [boolean, 'null'], description: Whether the organisation's compliance data already satisfies it; null when it was not checked (a rejected request)}
+    StaffDepartmentRequestRow:
+      type: object
+      required: [id, orgId, orgName, departmentName, requestedByName, requestedAt, status, decidedByName, decidedAt]
+      properties:
+        id: {type: string, format: uuid}
+        orgId: {type: string, description: Only links to the organisation; staff read orgName}
+        orgName: {type: string}
+        departmentName: {type: string}
+        requestedByName: {type: string}
+        requestedAt: {type: string, format: date-time}
+        status: {type: string, enum: [PENDING, APPROVED, REJECTED]}
+        decidedByName: {type: [string, 'null']}
+        decidedAt: {type: [string, 'null'], format: date-time}
+    StaffDepartmentRequestPage:
+      type: object
+      required: [items, total, page, size, pending, truncated, canDecide]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffDepartmentRequestRow'}}
+        total: {type: integer, description: Requests matching the filters}
+        page: {type: integer}
+        size: {type: integer}
+        pending: {type: integer, description: 'Requests waiting for a decision, whatever the filters say'}
+        truncated: {type: boolean, description: The seller service holds more requests than it lists (200 per status)}
+        canDecide: {type: boolean, description: Whether the staff member holds applications:approve}
+    StaffDepartmentRequest:
+      allOf:
+        - $ref: '#/components/schemas/StaffDepartmentRequestRow'
+        - type: object
+          required: [note, decisionNote, prompts, currentDepartments, exempt, canDecide]
+          properties:
+            note: {type: [string, 'null'], description: What the seller wrote when asking}
+            decisionNote: {type: [string, 'null'], description: 'The approver''s note; for a rejection, the reason the seller reads'}
+            prompts: {type: array, items: {$ref: '#/components/schemas/StaffCompliancePrompt'}}
+            currentDepartments: {type: array, description: 'The departments the organisation may sell in now, by name', items: {$ref: '#/components/schemas/StaffDepartment'}}
+            exempt: {type: boolean, description: AfroTransact Retail sells in every department}
+            canDecide: {type: boolean}
+    StaffDepartmentApprove:
+      type: object
+      properties:
+        note: {type: string, maxLength: 500, description: Optional; shown to the seller with the decision}
+    StaffDepartmentReject:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 3, maxLength: 500, description: Shown to the seller}
+    StaffOrgDepartments:
+      type: object
+      required: [orgId, orgName, exempt, departments, catalog, canEdit, pendingRequests]
+      properties:
+        orgId: {type: string}
+        orgName: {type: string}
+        exempt: {type: boolean, description: AfroTransact Retail sells in every department and cannot be overridden}
+        departments: {type: array, items: {$ref: '#/components/schemas/StaffDepartment'}}
+        catalog: {type: array, description: 'Every department of the catalog, by name: what an override chooses from', items: {$ref: '#/components/schemas/StaffDepartment'}}
+        canEdit: {type: boolean, description: Holds applications:approve and the organisation is not exempt}
+        pendingRequests: {type: integer, description: The organisation's requests waiting for a decision}
+    StaffOrgDepartmentsSet:
+      type: object
+      required: [departments, reason]
+      properties:
+        departments: {type: array, items: {type: string}, description: Catalog department codes; the complete new set}
+        reason: {type: string, minLength: 10, maxLength: 1000, description: Why the departments change (audited)}
     StaffSynonymRule:
       type: object
       required: [id, terms]

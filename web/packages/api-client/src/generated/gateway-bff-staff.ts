@@ -5387,6 +5387,136 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/department-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sellers' requests to sell in another department, one server-driven page
+         * @description seller `GET /v1/department-requests?status=` (`applications:review` or `applications:approve`; the module is derived
+         *     from those permissions). The seller service lists at most 200 requests per status (the open ones oldest first, the
+         *     decided ones newest decision first); the BFF joins the organisation, department and people names, then filters,
+         *     sorts and pages them. `status` is `PENDING` (default), `DECIDED` (approved and rejected together), `APPROVED` or
+         *     `REJECTED`. `department` and `organisation` match part of the name, ignoring case; `from` and `to` are the days the
+         *     request was made (inclusive). Default sort: oldest open request first; newest decision first for decided requests.
+         *     `pending` is the number of requests waiting whatever the filters say (the tab and nav badge); `truncated` says the
+         *     service holds more than it lists.
+         */
+        get: operations["listStaffDepartmentRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/department-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One request with the organisation's current departments and the department's compliance prompts
+         * @description seller `GET /v1/department-requests/{id}` and `GET /v1/orgs/{orgId}/catalog-scope`. `prompts` lists what the
+         *     department asks the seller to have on file (a food permit, beauty labelling) and whether the organisation's
+         *     compliance data already satisfies it (`satisfied` is null for a rejected request: it was not checked).
+         */
+        get: operations["getStaffDepartmentRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/department-requests/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a request; the department joins the organisation's set at once
+         * @description seller `POST /v1/department-requests/{id}/decision` (`applications:approve`). One person decides (the seller's
+         *     department decisions are not maker-checker, unlike applications). The seller service records who decided and
+         *     publishes `seller.department_request.decided`, which trust-ops copies into the audit log. A request someone
+         *     already decided answers 409 `ALREADY_DONE` with who decided it.
+         */
+        post: operations["approveStaffDepartmentRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/department-requests/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject a request, with the reason the seller reads
+         * @description seller `POST /v1/department-requests/{id}/decision` with `approve=false` (`applications:approve`). The reason is
+         *     required (3 to 500 characters), is shown to the seller and is kept in the audit log with the staff member's id.
+         *     A request someone already decided answers 409 `ALREADY_DONE`.
+         */
+        post: operations["rejectStaffDepartmentRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/organisations/{orgId}/departments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * The departments an organisation may sell in, and the catalog's departments to choose from
+         * @description seller `GET /v1/orgs/{orgId}/catalog-scope` and `GET /v1/departments` (`applications:review` or `applications:approve`). AfroTransact Retail is `exempt`; it sells in every department.
+         */
+        get: operations["getStaffOrgDepartments"];
+        /**
+         * Replace the organisation's departments, with a reason
+         * @description seller `PUT /v1/orgs/{orgId}/catalog-scope/departments` (`applications:approve`). The reason is required (at least
+         *     10 characters); the set must differ from the current one (422 on `departments` otherwise) and every code must be a
+         *     catalog department. Live products in a department the organisation no longer has stay live; changing their
+         *     category is refused. The seller service publishes `seller.org.departments_changed`, which trust-ops audits with
+         *     who, what changed and why. AfroTransact Retail cannot be overridden (409).
+         */
+        put: operations["setStaffOrgDepartments"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -6815,10 +6945,10 @@ export interface components {
         /** @enum {string} */
         AccessLevel: "VIEW" | "EDIT" | "APPROVE" | "FULL";
         /**
-         * @description Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search and identity are derived; identity needs the identity:admin permission; preorders follows the Pre-orders matrix column).
+         * @description Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications, search, deptRequests and identity are derived; deptRequests follows applications:review / applications:approve; identity needs the identity:admin permission; preorders follows the Pre-orders matrix column).
          * @enum {string}
          */
-        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "search" | "inventory" | "retail" | "dispatch" | "orgs" | "apps" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "identity" | "notifications" | "preorders" | "plans";
+        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "search" | "inventory" | "retail" | "dispatch" | "orgs" | "apps" | "deptRequests" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "identity" | "notifications" | "preorders" | "plans";
         StaffUser: {
             id: string;
             firstName: string;
@@ -9693,6 +9823,89 @@ export interface components {
                 ctr: number;
                 zeroResultRate: number;
             };
+        };
+        StaffDepartment: {
+            /** @description The catalog department's node code (what the API sends; never shown to staff) */
+            code: string;
+            name: string;
+            /** @description The evidence a seller must have on file to sell here */
+            requires: ("FOOD_PERMIT" | "BEAUTY_LABELLING")[];
+        };
+        StaffCompliancePrompt: {
+            /** @enum {string} */
+            requirement: "FOOD_PERMIT" | "BEAUTY_LABELLING";
+            /** @description Plain-language English text; the console translates by requirement */
+            label: string;
+            /** @description Whether the organisation's compliance data already satisfies it; null when it was not checked (a rejected request) */
+            satisfied: boolean | null;
+        };
+        StaffDepartmentRequestRow: {
+            /** Format: uuid */
+            id: string;
+            /** @description Only links to the organisation; staff read orgName */
+            orgId: string;
+            orgName: string;
+            departmentName: string;
+            requestedByName: string;
+            /** Format: date-time */
+            requestedAt: string;
+            /** @enum {string} */
+            status: "PENDING" | "APPROVED" | "REJECTED";
+            decidedByName: string | null;
+            /** Format: date-time */
+            decidedAt: string | null;
+        };
+        StaffDepartmentRequestPage: {
+            items: components["schemas"]["StaffDepartmentRequestRow"][];
+            /** @description Requests matching the filters */
+            total: number;
+            page: number;
+            size: number;
+            /** @description Requests waiting for a decision, whatever the filters say */
+            pending: number;
+            /** @description The seller service holds more requests than it lists (200 per status) */
+            truncated: boolean;
+            /** @description Whether the staff member holds applications:approve */
+            canDecide: boolean;
+        };
+        StaffDepartmentRequest: components["schemas"]["StaffDepartmentRequestRow"] & {
+            /** @description What the seller wrote when asking */
+            note: string | null;
+            /** @description The approver's note; for a rejection, the reason the seller reads */
+            decisionNote: string | null;
+            prompts: components["schemas"]["StaffCompliancePrompt"][];
+            /** @description The departments the organisation may sell in now, by name */
+            currentDepartments: components["schemas"]["StaffDepartment"][];
+            /** @description AfroTransact Retail sells in every department */
+            exempt: boolean;
+            canDecide: boolean;
+        };
+        StaffDepartmentApprove: {
+            /** @description Optional; shown to the seller with the decision */
+            note?: string;
+        };
+        StaffDepartmentReject: {
+            /** @description Shown to the seller */
+            reason: string;
+        };
+        StaffOrgDepartments: {
+            orgId: string;
+            orgName: string;
+            /** @description AfroTransact Retail sells in every department and cannot be overridden */
+            exempt: boolean;
+            departments: components["schemas"]["StaffDepartment"][];
+            /** @description Every department of the catalog, by name: what an override chooses from */
+            catalog: components["schemas"]["StaffDepartment"][];
+            /** @description Holds applications:approve and the organisation is not exempt */
+            canEdit: boolean;
+            /** @description The organisation's requests waiting for a decision */
+            pendingRequests: number;
+        };
+        StaffOrgDepartmentsSet: {
+            /** @description Catalog department codes; the complete new set */
+            departments: string[];
+            /** @description Why the departments change (audited) */
+            reason: string;
         };
         StaffSynonymRule: {
             /** @description Used to delete the rule; not shown to staff */
@@ -18951,6 +19164,192 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffDepartmentRequests: {
+        parameters: {
+            query?: {
+                status?: "PENDING" | "DECIDED" | "APPROVED" | "REJECTED";
+                /** @description Part of the department's name */
+                department?: string;
+                /** @description Part of the organisation's name */
+                organisation?: string;
+                /** @description First day the request was made */
+                from?: string;
+                /** @description Last day the request was made */
+                to?: string;
+                /** @description `<column>,asc|desc`; columns organisation, department, requestedAt, status, decidedAt. Empty cells sort last. */
+                sort?: string[];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDepartmentRequestPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffDepartmentRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDepartmentRequest"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    approveStaffDepartmentRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StaffDepartmentApprove"];
+            };
+        };
+        responses: {
+            /** @description The request as decided */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDepartmentRequest"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    rejectStaffDepartmentRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffDepartmentReject"];
+            };
+        };
+        responses: {
+            /** @description The request as decided */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDepartmentRequest"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffOrgDepartments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The organisation's departments */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffOrgDepartments"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setStaffOrgDepartments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffOrgDepartmentsSet"];
+            };
+        };
+        responses: {
+            /** @description The organisation's departments as saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffOrgDepartments"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
     };

@@ -24,6 +24,7 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
     label: 'Applications',
     description: 'Seller and service-provider onboarding queue. Every application goes through two people: a reviewer, then a different approver.'
   },
+  deptRequests: { label: 'Department requests', description: 'Sellers ask to sell in another catalog department. Approve or reject each request, with the reason the seller reads.' },
   support: { label: 'Customer support', description: 'Lola hand-offs, customer lookup, refunds within your limit, notifications and shipments.' },
   rbac: { label: 'Users & roles', description: 'Who can do what in every back office. Role changes are audited.' },
   payouts: { label: 'Payouts & ledger', description: 'Weekly Stripe Connect payouts. Holding or releasing money needs Approve.' },
@@ -55,7 +56,7 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
 export const NAV: { key: StaffNavGroupKey; label: string; modules: StaffModuleKey[] }[] = [
   { key: 'overview', label: 'Overview', modules: ['dash', 'exports'] },
   { key: 'commerce', label: 'Commerce', modules: ['orders', 'catalog', 'search', 'inventory', 'retail', 'dispatch', 'preorders'] },
-  { key: 'partners', label: 'Partners', modules: ['apps', 'support', 'rbac'] },
+  { key: 'partners', label: 'Partners', modules: ['apps', 'deptRequests', 'support', 'rbac'] },
   { key: 'finance', label: 'Finance', modules: ['payouts', 'fees', 'plans'] },
   { key: 'growth', label: 'Growth', modules: ['marketing'] },
   { key: 'trust', label: 'Trust & compliance', modules: ['disputes', 'audit'] },
@@ -182,6 +183,11 @@ export function levelOf(roles: string[], module: StaffModuleKey): AccessLevel | 
     // Derived from the seller service's permissions, as the BFF does (identity's matrix has no Plans & billing column).
     const perms = permissionsOf(roles);
     return perms.includes('plans:manage') || perms.includes('billing:adjust') ? 'EDIT' : perms.includes('seller:billing') || perms.includes('billing:usage') ? 'VIEW' : null;
+  }
+  if (module === 'deptRequests') {
+    // Derived from the seller service's permissions, as the BFF does (identity's matrix has no column for it).
+    const perms = permissionsOf(roles);
+    return perms.includes('applications:approve') ? 'EDIT' : perms.includes('applications:review') ? 'VIEW' : null;
   }
   if (module === 'orgs') {
     // Organisations follow the seller service's permissions (identity's matrix has no Organisations column).

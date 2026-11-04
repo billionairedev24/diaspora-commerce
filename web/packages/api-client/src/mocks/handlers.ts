@@ -153,8 +153,9 @@ export const handlers = [
     const atin = p.atin ?? '';
     if (!getDb().products.has(atin)) throw new MockProblem(404, 'PRODUCT_NOT_FOUND', 'Product not found', `No product with ATIN ${atin}.`);
     const req = await body(ctx.request, StockAlertRequestSchema);
-    const email = req.email ?? userById(ctx.session.userId)?.email;
+    const email = (req.email ?? userById(ctx.session.userId)?.email)?.trim().toLowerCase();
     if (!email) throw new MockProblem(422, 'VALIDATION_FAILED', 'Email required', 'Enter an email address so we can tell you when it’s back.', { errors: { email: 'Enter your email' } });
+    // Guests need no account: the same 201 for a new, repeated or known address.
     getDb().stockAlerts.add(`${atin}:${email}`);
     return json({ atin, status: 'subscribed' }, 201);
   })),

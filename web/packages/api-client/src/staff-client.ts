@@ -76,6 +76,7 @@ import {
   TaxRatesImportResultSchema} from './schemas/staff';
 import { createStaffContentApi } from './staff-content';
 import { createStaffDeliveryFeesApi } from './staff-delivery-fees';
+import { createStaffDepartmentsApi } from './staff-departments';
 import { createStaffMarketsApi } from './staff-markets';
 import { createStaffPlansApi } from './staff-plans';
 import { createStaffPreordersApi } from './staff-preorders';
@@ -214,6 +215,9 @@ export function createStaffApiClient(options: ApiClientOptions) {
     /* Plans & billing (S292–S297): /v1/staff/billing/** (catalogue, trials, rewards, grants, per-seller panel) */
     plans: createStaffPlansApi(request),
     feeRates: createStaffFeeRatesApi(request),
+
+    /* Department requests and an organisation's departments: /v1/staff/department-requests/**, /v1/staff/organisations/{orgId}/departments */
+    departments: createStaffDepartmentsApi(request),
 
     /* Search analytics and synonym rules: /v1/staff/search/** */
     search: createStaffSearchApi(request),

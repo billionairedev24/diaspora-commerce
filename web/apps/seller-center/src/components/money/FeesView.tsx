@@ -10,6 +10,7 @@ import {
   sellerQueries,
   type SellerRateCard} from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
+import { StatStrip } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
@@ -113,23 +114,14 @@ function FeeTiles({ v }: { v: SellerFeeVersion }) {
         df.enabled ? `${t('sc.fees.deliveryDetail', { miles: df.maxRadiusMiles })} · ${t(`sc.fees.deliverySource.${df.source}`)}` : ''
       ]
     : null;
-  return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-3">
-      {[
-        ['Card fee estimate', `${formatBps(v.cardPctBps)} + ${money(v.cardFixedMinor)}`, 'Per charge, until Stripe reports the actual fee'],
-        ['FBA fee', `${money(v.fbaPerUnitMinor)} / unit`, 'Pick, pack and ship for fulfilled-by-AfroTransact orders'],
-        ...(delivery ? [delivery] : []),
-        ['Other categories', formatBps(v.defaultCommissionBps), 'Commission where no category rate applies'],
-        ['Refunds', v.reverseCommissionOnRefund ? 'Commission returned' : 'Commission kept', 'On the refunded amount']
-      ].map(([label, value, detail]) => (
-        <div key={label} className="flex flex-col gap-1 rounded-md border border-border p-4">
-          <span className="text-xs font-semibold text-muted">{label}</span>
-          <strong className="text-xl">{value}</strong>
-          <span className="text-xs text-muted">{detail}</span>
-        </div>
-      ))}
-    </div>
-  );
+  const tiles: [string, string, string][] = [
+    ['Card fee estimate', `${formatBps(v.cardPctBps)} + ${money(v.cardFixedMinor)}`, 'Per charge, until Stripe reports the actual fee'],
+    ['FBA fee', `${money(v.fbaPerUnitMinor)} / unit`, 'Pick, pack and ship for fulfilled-by-AfroTransact orders'],
+    ...(delivery ? [delivery] : []),
+    ['Other categories', formatBps(v.defaultCommissionBps), 'Commission where no category rate applies'],
+    ['Refunds', v.reverseCommissionOnRefund ? 'Commission returned' : 'Commission kept', 'On the refunded amount']
+  ];
+  return <StatStrip label="Fees at a glance" items={tiles.map(([label, value, detail]) => ({ id: label, label, value, sub: detail || undefined }))} />;
 }
 
 /** Fees & commission (read-only): what payments charges the active organisation now, and the next scheduled change. */

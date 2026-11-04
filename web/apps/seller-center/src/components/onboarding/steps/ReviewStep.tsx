@@ -1,7 +1,7 @@
 'use client';
 
 import { isApiError, LEGAL_DOCUMENT_TITLES, type LegalDocumentKey, type OnboardingForm, type OnboardingStatus, type SellerDepartment,sellerKeys, sellerQueries } from '@afrotransact/api-client';
-import { WarningCircle } from '@phosphor-icons/react/ssr';
+import { Alert } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type ReactNode, useImperativeHandle, useRef, useState } from 'react';
@@ -170,11 +170,8 @@ export function ReviewStep({ status, ref }: StepProps) {
     <div className="flex flex-col gap-4">
       <div ref={box} tabIndex={-1} className="outline-none">
         {problems.length ? (
-          <div role="alert" className="flex flex-col gap-1 rounded-lg bg-danger-bg px-4 py-3 text-sm">
-            <strong className="inline-flex items-center gap-1.5">
-              <WarningCircle size={18} weight="fill" aria-hidden className="text-danger" /> Some steps still need answers
-            </strong>
-            <ul className="m-0 pl-5">
+          <Alert variant="danger" title="Some steps still need answers">
+            <ul className="m-0 mt-1 pl-5">
               {problems.map((p) => (
                 <li key={p.slug}>
                   <Link href={onboardingHref(p.slug)}>
@@ -183,7 +180,7 @@ export function ReviewStep({ status, ref }: StepProps) {
                 </li>
               ))}
             </ul>
-          </div>
+          </Alert>
         ) : null}
       </div>
       {sections.map((s) => (

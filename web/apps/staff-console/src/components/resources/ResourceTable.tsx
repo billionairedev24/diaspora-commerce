@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
+import { OrgDepartmentsSection } from '@/components/departments/OrgDepartmentsSection';
 import { ErrorState, problemMessage } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
@@ -169,7 +170,13 @@ export function ResourceTable({ resource, urlPrefix, statusFilter = false }: { r
           ) : null
         }
       />
-      <RecordSheet resource={resource} id={openId} onClose={() => setOpen(null)} sharedOpen={urlPrefix !== undefined} />
+      <RecordSheet
+        resource={resource}
+        id={openId}
+        onClose={() => setOpen(null)}
+        sharedOpen={urlPrefix !== undefined}
+        extra={resource === 'organisations' && openId ? <OrgDepartmentsSection orgId={openId} /> : undefined}
+      />
       {/* Shown once the new record's sheet is open, so the dialog sits above the sheet and clicking in it never closes the sheet. */}
       <RevealDialog secret={reveal && reveal.recordId === openId ? reveal.secret : null} onClose={() => setReveal(null)} />
       {data?.createForm ? (

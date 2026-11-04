@@ -1,0 +1,97 @@
+/* Alert: flat tinted strip, accent bar on the start edge. Colours come from the --at-color-alert-<variant>-* tokens. */
+.alert {
+  --alert-bg: var(--at-color-alert-info-bg);
+  --alert-border: var(--at-color-alert-info-border);
+  --alert-accent: var(--at-color-alert-info-accent);
+  --alert-icon: var(--at-color-alert-info-icon);
+  --alert-text: var(--at-color-alert-info-text);
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--at-space-1) var(--at-space-3);
+  inline-size: fit-content;
+  max-inline-size: min(100%, var(--at-alert-max, 720px));
+  padding: var(--at-space-3) var(--at-space-4);
+  padding-inline-start: var(--at-space-3);
+  border: 1px solid var(--alert-border);
+  border-inline-start: 4px solid var(--alert-accent);
+  border-radius: var(--at-radius-xs);
+  background: var(--alert-bg);
+  color: var(--alert-text);
+  font-size: var(--at-text-md);
+  line-height: var(--at-leading-normal);
+}
+
+.info { --alert-bg: var(--at-color-alert-info-bg); --alert-border: var(--at-color-alert-info-border); --alert-accent: var(--at-color-alert-info-accent); --alert-icon: var(--at-color-alert-info-icon); --alert-text: var(--at-color-alert-info-text); }
+.success { --alert-bg: var(--at-color-alert-success-bg); --alert-border: var(--at-color-alert-success-border); --alert-accent: var(--at-color-alert-success-accent); --alert-icon: var(--at-color-alert-success-icon); --alert-text: var(--at-color-alert-success-text); }
+.warning { --alert-bg: var(--at-color-alert-warning-bg); --alert-border: var(--at-color-alert-warning-border); --alert-accent: var(--at-color-alert-warning-accent); --alert-icon: var(--at-color-alert-warning-icon); --alert-text: var(--at-color-alert-warning-text); }
+.danger { --alert-bg: var(--at-color-alert-danger-bg); --alert-border: var(--at-color-alert-danger-border); --alert-accent: var(--at-color-alert-danger-accent); --alert-icon: var(--at-color-alert-danger-icon); --alert-text: var(--at-color-alert-danger-text); }
+.neutral { --alert-bg: var(--at-color-alert-neutral-bg); --alert-border: var(--at-color-alert-neutral-border); --alert-accent: var(--at-color-alert-neutral-accent); --alert-icon: var(--at-color-alert-neutral-icon); --alert-text: var(--at-color-alert-neutral-text); }
+
+.fill { inline-size: 100%; max-inline-size: none; }
+
+.icon { flex: none; margin-block-start: 1px; color: var(--alert-icon); }
+
+.body { flex: 1 1 16rem; min-inline-size: 0; overflow-wrap: anywhere; }
+.title { font-weight: var(--at-weight-bold); }
+
+.action { flex: none; align-self: center; }
+
+/* A plain link or button passed as the action is restyled too, so a pill never lands in an alert. */
+.link,
+.action :is(a, button) {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 24px;
+  padding: 0;
+  block-size: auto;
+  border-radius: 0;
+  box-shadow: none;
+  border: 0;
+  background: none;
+  color: var(--alert-text);
+  font: inherit;
+  font-weight: var(--at-weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+
+@media (hover: hover) {
+  .link:hover,
+  .action :is(a, button):hover { color: var(--alert-text); text-decoration-thickness: 2px; }
+}
+
+.dismiss {
+  flex: none;
+  display: grid;
+  place-items: center;
+  inline-size: 24px;
+  block-size: 24px;
+  margin-block: -2px;
+  margin-inline-end: calc(-1 * var(--at-space-1));
+  padding: 0;
+  border: 0;
+  border-radius: var(--at-radius-xs);
+  background: none;
+  color: var(--alert-text);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .dismiss:hover { background: color-mix(in srgb, var(--alert-text) 10%, transparent); }
+}
+
+/* Touch screens: 44px targets (WCAG 2.5.5) without growing the strip much. */
+@media (pointer: coarse) {
+  .link,
+  .action :is(a, button) { min-block-size: var(--at-size-touch); }
+  .dismiss { inline-size: var(--at-size-touch); block-size: var(--at-size-touch); margin-block: calc(-1 * var(--at-space-3)); margin-inline-end: calc(-1 * var(--at-space-3)); }
+}
+
+/* Narrow screens: the action drops under the text, aligned with it (icon width + gap). */
+@media (max-width: 560px) {
+  .action { flex-basis: 100%; align-self: flex-start; padding-inline-start: calc(20px + var(--at-space-3)); }
+}
