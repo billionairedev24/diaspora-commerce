@@ -1333,6 +1333,42 @@ func TestStaffContractConformance(t *testing.T) {
 		t.Fatalf("decision body = %v", f.bodies["POST /v1/claims/clm-1/decision"])
 	}
 	do("admin", "POST", "/v1/staff/resources/purchase-orders/po-1/actions/approve", map[string]any{"values": map[string]any{"note": "ok"}}, 200)
+	// The order sheet: packages with the statuses the caller may set (and why not), facts grouped with the ids apart.
+	orderSheet := do("admin", "GET", "/v1/staff/resources/orders/AT-000001", nil, 200)
+	ships := orderSheet["shipments"].([]any)
+	if len(ships) != 1 {
+		t.Fatalf("shipments = %v", ships)
+	}
+	ship := ships[0].(map[string]any)
+	if ship["sellerName"] != "Kente Naturals" || ship["status"] != "PLACED" {
+		t.Fatalf("shipment = %v", ship)
+	}
+	allowed, off := map[string]bool{}, map[string]string{}
+	for _, st := range ship["transitions"].([]any) {
+		m := st.(map[string]any)
+		if m["allowed"] == true {
+			allowed[m["to"].(string)] = true
+		} else {
+			off[m["to"].(string)] = m["reason"].(string)
+		}
+	}
+	if !allowed["CONFIRMED"] || !allowed["CANCELLED"] || off["DELIVERED"] == "" {
+		t.Fatalf("transitions allowed=%v off=%v", allowed, off)
+	}
+	for _, sec := range orderSheet["sections"].([]any) {
+		m := sec.(map[string]any)
+		for _, fld := range m["fields"].([]any) {
+			if fld.(map[string]any)["kind"] == "mono" && m["title"] != "Technical details" {
+				t.Fatalf("an id outside the technical details: %v", fld)
+			}
+		}
+	}
+	// Support cannot change shipments without the permission: every status is listed, none allowed.
+	for _, st := range do("support", "GET", "/v1/staff/resources/orders/AT-000001", nil, 200)["shipments"].([]any)[0].(map[string]any)["transitions"].([]any) {
+		if st.(map[string]any)["allowed"] == true && st.(map[string]any)["blocked"] != nil {
+			t.Fatalf("inconsistent step %v", st)
+		}
+	}
 	do("admin", "POST", "/v1/staff/resources/orders/AT-000001/actions/shipment-status", map[string]any{"values": map[string]any{"step": "shp-1|CANCELLED", "reason": "Customer asked"}}, 200)
 	do("admin", "POST", "/v1/staff/resources/orders/AT-000001/actions/nope", nil, 404)
 	// Create and edit with validation.

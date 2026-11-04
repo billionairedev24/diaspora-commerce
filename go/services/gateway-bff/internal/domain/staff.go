@@ -457,6 +457,51 @@ type RecordAction struct {
 	Form       *Form   `json:"form"`
 }
 
+// RecordShipment is one package of an order sheet: what it holds, where it is, and the statuses staff may set now.
+type RecordShipment struct {
+	ID         string  `json:"id"`
+	Label      string  `json:"label"`
+	SellerName string  `json:"sellerName"`
+	Status     string  `json:"status"`
+	Tone       *string `json:"tone"`
+	// FulfilmentLabel says who packs it ("AfroTransact" or "Seller"); DeliveryLabel how it travels ("Carrier",
+	// "AfroTransact Delivery", "Pickup").
+	FulfilmentLabel string           `json:"fulfilmentLabel"`
+	DeliveryLabel   string           `json:"deliveryLabel"`
+	ItemCount       int              `json:"itemCount"`
+	ItemTitles      []string         `json:"itemTitles"`
+	Carrier         *string          `json:"carrier"`
+	TrackingNumber  *string          `json:"trackingNumber"`
+	Transitions     []ShipmentStep   `json:"transitions"`
+	History         []ShipmentChange `json:"history"`
+}
+
+// ShipmentStep is one status staff could set on a shipment, with why they cannot when they cannot.
+type ShipmentStep struct {
+	To      string  `json:"to"`
+	Allowed bool    `json:"allowed"`
+	Reason  *string `json:"reason"`
+	// Blocked classifies Reason so the console can word it in the staff member's language: PERMISSION (the role may not
+	// change shipments), SELLER (only the seller does this step), SEQUENCE (earlier steps come first), STATE (not
+	// reachable from the current status).
+	Blocked *string `json:"blocked"`
+	// NoteRequired: the step needs a reason (or, where CodeAccepted, the customer's code instead).
+	NoteRequired bool `json:"noteRequired"`
+	// CodeAccepted: the customer's 4-digit handover code may be entered (handing over a pickup order).
+	CodeAccepted bool `json:"codeAccepted"`
+	// DriverStep: AfroTransact drivers normally take this step in the driver app; staff do it by hand.
+	DriverStep bool `json:"driverStep"`
+}
+
+// ShipmentChange is one line of a shipment's status history.
+type ShipmentChange struct {
+	At    time.Time `json:"at"`
+	From  *string   `json:"from"`
+	To    string    `json:"to"`
+	Actor string    `json:"actor"`
+	Note  *string   `json:"note"`
+}
+
 // RecordLink points at another console page (customer 360, the order of a claim…).
 type RecordLink struct {
 	Label string `json:"label"`
@@ -485,6 +530,8 @@ type RecordDetail struct {
 	EditForm     *Form           `json:"editForm"`
 	Links        []RecordLink    `json:"links"`
 	Version      *string         `json:"version"`
+	// Shipments lists an order's packages with the statuses staff may set on each (orders only).
+	Shipments []RecordShipment `json:"shipments,omitempty"`
 	// Removed is set when an action deleted the record; the console closes the sheet and refreshes the table.
 	Removed *bool `json:"removed,omitempty"`
 	// Reveal carries a secret that is shown once (a new OAuth client secret); it is in this answer only and nowhere else.

@@ -592,7 +592,12 @@ func (r *staffResource) nameSections(o jobj, sections []domain.DetailSection) []
 		sections[0].Fields = append(lead, sections[0].Fields...)
 	}
 	if len(ids) > 0 {
-		sections = append(sections, domain.DetailSection{Title: "IDs", Fields: ids})
+		title := firstNonEmpty(r.idsTitle, "IDs")
+		if i := slices.IndexFunc(sections, func(s domain.DetailSection) bool { return s.Title == title }); i >= 0 {
+			sections[i].Fields = append(sections[i].Fields, ids...)
+		} else {
+			sections = append(sections, domain.DetailSection{Title: title, Fields: ids})
+		}
 	}
 	return sections
 }

@@ -236,6 +236,9 @@ func (s *staffRecordsImpl) detail(ctx context.Context, r *staffResource, sc staf
 			d.Version = &v
 		}
 	}
+	if r.shipments != nil {
+		d.Shipments = r.shipments(sc, o)
+	}
 	for _, a := range r.actionList(o) {
 		d.Actions = append(d.Actions, actionView(ctx, r, sc, a, o))
 	}

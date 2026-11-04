@@ -7958,8 +7958,60 @@ components:
         editForm: {oneOf: [{$ref: '#/components/schemas/Form'}, {type: 'null'}]}
         links: {type: array, items: {$ref: '#/components/schemas/RecordLink'}}
         version: {type: [string, 'null'], description: Optimistic-locking version to send back with edits}
+        shipments:
+          type: array
+          description: An order's packages, each with the statuses the caller may set on it (orders only). A status is set with the order's `shipment-status` action (values `step` = `<shipment id>|<STATUS>`, `reason`, `handoverCode`).
+          items: {$ref: '#/components/schemas/RecordShipment'}
         removed: {type: boolean, description: Set when an action deleted the record; the console closes the sheet}
         reveal: {$ref: '#/components/schemas/OneTimeSecret'}
+    RecordShipment:
+      type: object
+      required: [id, label, sellerName, status, tone, fulfilmentLabel, deliveryLabel, itemCount, itemTitles, carrier, trackingNumber, transitions, history]
+      properties:
+        id: {type: string, description: The shipment id; the first half of the `step` value of the `shipment-status` action}
+        label: {type: string, description: 'Shipment 1 of 2 · Seller'}
+        sellerName: {type: string}
+        status: {type: string, description: 'Upper-case shipment status, for example PICKED_UP'}
+        tone: {oneOf: [{$ref: '#/components/schemas/Tone'}, {type: 'null'}]}
+        fulfilmentLabel: {type: string, description: Who packs it (AfroTransact or Seller)}
+        deliveryLabel: {type: string, description: 'How it travels (Carrier, AfroTransact Delivery, Pickup)'}
+        itemCount: {type: integer, minimum: 0, description: Units in the shipment}
+        itemTitles: {type: array, items: {type: string}, description: The first item names (at most three)}
+        carrier: {type: [string, 'null']}
+        trackingNumber: {type: [string, 'null']}
+        transitions:
+          type: array
+          description: The statuses the caller may set now (allowed) and the later steps and exceptions they cannot (with why). Empty when the shipment is finished.
+          items: {$ref: '#/components/schemas/ShipmentStep'}
+        history:
+          type: array
+          description: Status changes, newest first
+          items: {$ref: '#/components/schemas/ShipmentChange'}
+    ShipmentStep:
+      type: object
+      required: [to, allowed, reason, blocked, noteRequired, codeAccepted, driverStep]
+      properties:
+        to: {type: string, description: 'Upper-case target status, for example OUT_FOR_DELIVERY'}
+        allowed: {type: boolean}
+        reason: {type: [string, 'null'], description: Short English reason when not allowed}
+        blocked:
+          oneOf:
+            - type: string
+              enum: [PERMISSION, SELLER, SEQUENCE, STATE]
+              description: 'PERMISSION: the role may not change shipments. SELLER: only the seller does this step. SEQUENCE: earlier steps come first. STATE: not reachable from the current status.'
+            - type: 'null'
+        noteRequired: {type: boolean, description: The step needs a reason (satisfied by the handover code where codeAccepted)}
+        codeAccepted: {type: boolean, description: The customer's 4-digit handover code may be given (handing over a pickup order)}
+        driverStep: {type: boolean, description: AfroTransact drivers normally take this step in the driver app; staff do it by hand}
+    ShipmentChange:
+      type: object
+      required: [at, from, to, actor, note]
+      properties:
+        at: {type: string, format: date-time}
+        from: {type: [string, 'null']}
+        to: {type: string}
+        actor: {type: string, description: 'Who or what moved it (Seller, Platform admin, Carrier, Driver, System)'}
+        note: {type: [string, 'null']}
     OneTimeSecret:
       type: object
       description: A secret shown once, right after it was created (a new OAuth client secret). It is in this answer only; the BFF keeps nothing and the upstream cannot return it again. The console shows it in a dialog and never stores it.

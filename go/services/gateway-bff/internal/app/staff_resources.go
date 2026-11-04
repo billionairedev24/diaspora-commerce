@@ -95,8 +95,12 @@ type staffResource struct {
 	actions []staffAction
 	// actionsFor adds actions that depend on the record (one tap per shipment's next step); looked up like actions.
 	actionsFor func(o jobj) []staffAction
-	edit       *staffEdit
-	create     *staffCreate
+	// shipments lays out an order's packages with the statuses the staff member may set on each.
+	shipments func(sc staffCtx, o jobj) []domain.RecordShipment
+	// idsTitle names the section that lists internal ids (default "IDs"); a section already called that gets them added.
+	idsTitle string
+	edit     *staffEdit
+	create   *staffCreate
 }
 
 func (r *staffResource) id(o jobj) string {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -66,8 +67,15 @@ func ordersResource() *staffResource {
 			return strings.Trim(jstr(o, "customerName")+" · "+jstr(o, "shipTo"), " ·")
 		},
 		sections: func(o jobj) []domain.DetailSection {
-			return append(autoSections(o, "status", "shipments"), proofSections(o)...)
+			secs := orderSections(o)
+			proof := proofSections(o)
+			if n := len(secs); n > 0 && secs[n-1].Title == "Technical details" {
+				return slices.Concat(secs[:n-1], proof, secs[n-1:])
+			}
+			return slices.Concat(secs, proof)
 		},
+		idsTitle:  "Technical details",
+		shipments: orderShipments,
 		tables: func(o jobj) []domain.DetailTable {
 			lines := []jobj{}
 			for _, s := range objs(o, "shipments") {
@@ -77,8 +85,6 @@ func ordersResource() *staffResource {
 				}
 			}
 			return []domain.DetailTable{
-				tableOf("Shipments", objs(o, "shipments"), []domain.Column{col("label", "Shipment", "strong", 14), col("sellerName", "Seller", "text", 20),
-					col("status", "Status", "status", 16), col("carrier", "Carrier", "text", 12), col("trackingNumber", "Tracking", "mono", 22), col("totalMinor", "Total", "money", 16)}, "id"),
 				tableOf("Items", lines, []domain.Column{col("shipment", "Shipment", "text", 14), col("title", "Item", "strong", 34), col("category", "Department", "text", 18),
 					col("quantity", "Qty", "number", 10), col("itemsMinor", "Amount", "money", 24)}, "id"),
 			}
@@ -116,7 +122,7 @@ func ordersResource() *staffResource {
 		// ones: cancel, a failed delivery, handing over a pickup order with the customer's code.
 		actionsFor: shipmentNextStepActions,
 		actions: []staffAction{
-			{key: "shipment-status", label: "More options", tone: "neutral", permission: "orders:manage", also: []string{"orders:update-status"},
+			{key: "shipment-status", label: "Set shipment status", tone: "neutral", permission: "orders:manage", also: []string{"orders:update-status"},
 				form: func(_ context.Context, _ staffCtx, o jobj) *domain.Form {
 					return &domain.Form{Title: "What happened to the shipment?", SubmitLabel: "Save", Fields: []domain.FormField{
 						withOptions(ff("step", "Next step", "select", true), shipmentSteps(o)),
