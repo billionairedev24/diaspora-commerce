@@ -1270,7 +1270,7 @@ paths:
       tags:
       - Catalog scope
       summary: 'Staff: approve or reject a department request (applications:approve)'
-      description: A rejection needs a note (3+ characters): the seller reads it. Approving adds the department to the organisation's set at once.
+      description: 'A rejection needs a note (3+ characters): the seller reads it. Approving adds the department to the organisation''s set at once.'
       operationId: decide
       parameters:
       - name: id
