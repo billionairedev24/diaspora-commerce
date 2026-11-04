@@ -20,8 +20,8 @@ export function SizeChartsGate({ children }: { children: ReactNode }) {
   const scope = useSellerScope();
   if (isProvider) return children;
   if (scope.isPending) return <Spinner label={t('sc.scope.loading')} />;
-  // When the scope cannot be read the page opens as before: the catalog still refuses what the store may not do.
-  if (scope.isError || scope.exempt || scope.hasSizing) return children;
+  // Fails closed: when the scope cannot be read the page does not open (same rule as the sidebar and the listings button).
+  if (scope.exempt || scope.hasSizing) return children;
   return (
     <>
       <PageHeader title={t('sc.sz.title')} />

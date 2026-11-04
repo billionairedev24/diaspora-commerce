@@ -17,6 +17,7 @@ import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { idempotencyKey, money, shortDate } from '@/lib/format';
 import { useStorefrontUrl } from '@/lib/runtime-config';
+import { useShowSizeCharts } from '@/lib/seller-scope';
 import { useSeller } from '@/lib/session';
 import { exportTable, pollExport, runForEach } from '@/lib/table-export';
 
@@ -39,6 +40,7 @@ export function ListingsView() {
   const params = useSearchParams();
   const { orgId, can, has } = useSeller();
   const editable = can('listings');
+  const showSizeCharts = useShowSizeCharts();
   const api = sellerApi();
   const tab = editable && params.get('tab') === 'drafts' ? 'drafts' : 'listings';
   // The tab's count comes from the API total (a page of one row is enough to read it).
@@ -53,9 +55,11 @@ export function ListingsView() {
               <ImagesSquare size={18} aria-hidden /> {t('sc.listings.images')}
             </Link>
           ) : null}
-          <Link href="/listings/size-charts" className={buttonClassName({ variant: 'neutral' })}>
-            <Ruler size={18} aria-hidden /> {t('sc.listings.sizeCharts')}
-          </Link>
+          {showSizeCharts ? (
+            <Link href="/listings/size-charts" className={buttonClassName({ variant: 'neutral' })}>
+              <Ruler size={18} aria-hidden /> {t('sc.listings.sizeCharts')}
+            </Link>
+          ) : null}
           {has('bulkUpload') ? (
             <Link href="/listings/bulk" className={buttonClassName({ variant: 'neutral' })}>
               <FileArrowUp size={18} aria-hidden /> {t('sc.listings.bulk')}

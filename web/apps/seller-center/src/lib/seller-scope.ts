@@ -44,6 +44,13 @@ export function useSellerScopeOf(orgId: string | null | undefined, enabled: bool
   };
 }
 
+/** Whether Size charts applies to the active organisation (same rule as the sidebar; fails closed while loading or on error). */
+export function useShowSizeCharts(): boolean {
+  const { isProvider } = useSeller();
+  const scope = useSellerScope();
+  return isProvider || scope.exempt || scope.hasSizing;
+}
+
 /** The active organisation's scope (inside the portal shell). A service-provider organisation has none. */
 export function useSellerScope(): SellerScopeView {
   const { orgId, isProvider } = useSeller();
