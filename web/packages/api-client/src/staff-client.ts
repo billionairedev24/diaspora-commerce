@@ -81,7 +81,6 @@ import { createStaffMarketsApi } from './staff-markets';
 import { createStaffPlansApi } from './staff-plans';
 import { createStaffPreordersApi } from './staff-preorders';
 import { createStaffRunsApi } from './staff-runs';
-import { createStaffSearchApi } from './staff-search';
 import { createStaffTaxonomyApi } from './staff-taxonomy';
 import { tableSearchParams } from './table-query';
 
@@ -218,9 +217,6 @@ export function createStaffApiClient(options: ApiClientOptions) {
 
     /* Department requests and an organisation's departments: /v1/staff/department-requests/**, /v1/staff/organisations/{orgId}/departments */
     departments: createStaffDepartmentsApi(request),
-
-    /* Search analytics and synonym rules: /v1/staff/search/** */
-    search: createStaffSearchApi(request),
 
     /* Pre-orders (S274): /v1/staff/preorders/** mirrors delivery-runs' staff API */
     preorders: createStaffPreordersApi(request, options),

@@ -34,20 +34,6 @@ func (f *fakeClicks) Record(_ context.Context, c domain.Click) (domain.ClickResu
 	return domain.ClickResult{Recorded: true}, nil
 }
 
-type fakeReporter struct{}
-
-func (fakeReporter) TopQueries(context.Context, domain.AnalyticsRange) (domain.QueryReport, error) {
-	return domain.QueryReport{Market: "us", Items: []domain.QueryStat{{Query: "egusi", Searches: 3}}}, nil
-}
-
-func (fakeReporter) ZeroResultQueries(context.Context, domain.AnalyticsRange) (domain.QueryReport, error) {
-	return domain.QueryReport{Items: []domain.QueryStat{}}, nil
-}
-
-func (fakeReporter) ClickThrough(context.Context, domain.AnalyticsRange) (domain.CTRReport, error) {
-	return domain.CTRReport{Days: []domain.DailyCTR{}}, nil
-}
-
 // as authenticates every request as actor (nil: anonymous).
 func as(actor *auth.Actor) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -63,7 +49,7 @@ func as(actor *auth.Actor) func(http.Handler) http.Handler {
 func server(actor *auth.Actor) (*http.ServeMux, *fakeSearcher, *fakeClicks) {
 	s, c := &fakeSearcher{}, &fakeClicks{}
 	mux := http.NewServeMux()
-	httpapi.New(httpapi.Deps{Searcher: s, Clicks: c, Analytics: fakeReporter{}}).Register(mux, as(actor))
+	httpapi.New(httpapi.Deps{Searcher: s, Clicks: c}).Register(mux, as(actor))
 	return mux, s, c
 }
 
@@ -121,23 +107,12 @@ func TestClicks(t *testing.T) {
 	}
 }
 
-func TestAnalyticsNeedsPermission(t *testing.T) {
+func TestSynonymEditNeedsPermission(t *testing.T) {
 	anon, _, _ := server(nil)
-	if rec := do(anon, http.MethodGet, "/v1/search/analytics/top-queries", ""); rec.Code != http.StatusUnauthorized {
+	if rec := do(anon, http.MethodGet, "/v1/search/synonyms", ""); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous: %d", rec.Code)
 	}
-	shopper, _, _ := server(&auth.Actor{Subject: "cus_1", Type: "CUSTOMER"})
-	if rec := do(shopper, http.MethodGet, "/v1/search/analytics/ctr", ""); rec.Code != http.StatusForbidden {
-		t.Fatalf("customer: %d", rec.Code)
-	}
-	staff, _, _ := server(&auth.Actor{Subject: "ops", Type: "STAFF", Permissions: []string{httpapi.PermAnalyticsView}})
-	rec := do(staff, http.MethodGet, "/v1/search/analytics/top-queries?from=2026-10-01&to=2026-10-09&limit=5", "")
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "egusi") {
-		t.Fatalf("staff: %d %s", rec.Code, rec.Body)
-	}
-	if rec := do(staff, http.MethodGet, "/v1/search/analytics/zero-results?from=yesterday", ""); rec.Code != http.StatusBadRequest {
-		t.Fatalf("bad date: %d", rec.Code)
-	}
+	staff, _, _ := server(&auth.Actor{Subject: "ops", Type: "STAFF", Permissions: []string{"search:analytics.view"}})
 	if rec := do(staff, http.MethodPut, "/v1/search/synonyms/ogbono", `{"synonyms":"ogbono, bush mango"}`); rec.Code != http.StatusForbidden {
 		t.Fatalf("synonym edit needs search:synonyms.edit: %d", rec.Code)
 	}

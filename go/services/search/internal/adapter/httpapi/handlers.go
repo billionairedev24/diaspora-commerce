@@ -2,14 +2,12 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/problem"
@@ -19,8 +17,7 @@ import (
 
 // Permissions checked by the staff endpoints (granted by identity roles; the staff console holds them).
 const (
-	PermAnalyticsView = "search:analytics.view"
-	PermSynonymsEdit  = "search:synonyms.edit"
+	PermSynonymsEdit = "search:synonyms.edit"
 )
 
 // Handlers exposes the search use cases over HTTP.
@@ -34,7 +31,6 @@ type Deps struct {
 	Searcher  app.ProductSearcher
 	Suggester app.Suggester
 	Clicks    app.ClickRecorder
-	Analytics app.AnalyticsReporter
 	Synonyms  app.SynonymCurator
 }
 
@@ -51,10 +47,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux, wrap func(http.Handler) http
 	mux.Handle("GET /v1/search", wrap(http.HandlerFunc(h.search)))
 	mux.Handle("GET /v1/suggest", wrap(http.HandlerFunc(h.suggest)))
 	mux.Handle("POST /v1/search/clicks", wrap(http.HandlerFunc(h.click)))
-	mux.Handle("GET /v1/search/analytics/top-queries", wrap(auth.Require(PermAnalyticsView, h.topQueries)))
-	mux.Handle("GET /v1/search/analytics/zero-results", wrap(auth.Require(PermAnalyticsView, h.zeroResults)))
-	mux.Handle("GET /v1/search/analytics/ctr", wrap(auth.Require(PermAnalyticsView, h.ctr)))
-	mux.Handle("GET /v1/search/synonyms", wrap(requireAny(h.listSynonyms, PermAnalyticsView, PermSynonymsEdit)))
+	mux.Handle("GET /v1/search/synonyms", wrap(auth.Require(PermSynonymsEdit, h.listSynonyms)))
 	mux.Handle("PUT /v1/search/synonyms/{ruleId}", wrap(auth.Require(PermSynonymsEdit, h.putSynonym)))
 	mux.Handle("DELETE /v1/search/synonyms/{ruleId}", wrap(auth.Require(PermSynonymsEdit, h.deleteSynonym)))
 }
@@ -164,58 +157,6 @@ func (h *handlersImpl) click(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, res)
 }
 
-func (h *handlersImpl) topQueries(w http.ResponseWriter, r *http.Request) {
-	h.queryReport(w, r, func(ctx context.Context, rng domain.AnalyticsRange) (domain.QueryReport, error) {
-		return h.d.Analytics.TopQueries(ctx, rng)
-	})
-}
-
-func (h *handlersImpl) zeroResults(w http.ResponseWriter, r *http.Request) {
-	h.queryReport(w, r, func(ctx context.Context, rng domain.AnalyticsRange) (domain.QueryReport, error) {
-		return h.d.Analytics.ZeroResultQueries(ctx, rng)
-	})
-}
-
-func (h *handlersImpl) queryReport(w http.ResponseWriter, r *http.Request,
-	run func(ctx context.Context, rng domain.AnalyticsRange) (domain.QueryReport, error),
-) {
-	if h.d.Analytics == nil {
-		problem.Write(w, r, problem.New(http.StatusServiceUnavailable, "search.analytics-disabled", "Analytics are off"))
-		return
-	}
-	rng, err := parseRange(r)
-	if err != nil {
-		problem.Write(w, r, err)
-		return
-	}
-	out, err := run(r.Context(), rng)
-	if err != nil {
-		writeErr(w, r, err)
-		return
-	}
-	w.Header().Set("Cache-Control", "private, max-age=60")
-	writeJSON(w, http.StatusOK, out)
-}
-
-func (h *handlersImpl) ctr(w http.ResponseWriter, r *http.Request) {
-	if h.d.Analytics == nil {
-		problem.Write(w, r, problem.New(http.StatusServiceUnavailable, "search.analytics-disabled", "Analytics are off"))
-		return
-	}
-	rng, err := parseRange(r)
-	if err != nil {
-		problem.Write(w, r, err)
-		return
-	}
-	out, err := h.d.Analytics.ClickThrough(r.Context(), rng)
-	if err != nil {
-		writeErr(w, r, err)
-		return
-	}
-	w.Header().Set("Cache-Control", "private, max-age=60")
-	writeJSON(w, http.StatusOK, out)
-}
-
 func (h *handlersImpl) listSynonyms(w http.ResponseWriter, r *http.Request) {
 	if h.d.Synonyms == nil {
 		problem.Write(w, r, problem.New(http.StatusServiceUnavailable, "search.synonyms-disabled", "Synonym curation is off"))
@@ -261,53 +202,12 @@ func (h *handlersImpl) deleteSynonym(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func parseRange(r *http.Request) (domain.AnalyticsRange, error) {
-	v := r.URL.Query()
-	rng := domain.AnalyticsRange{Market: v.Get("market")}
-	for name, dst := range map[string]*time.Time{"from": &rng.From, "to": &rng.To} {
-		raw := v.Get(name)
-		if raw == "" {
-			continue
-		}
-		t, err := time.Parse(time.DateOnly, raw)
-		if err != nil {
-			return rng, problem.New(http.StatusBadRequest, "search.invalid-parameter", name+" must be YYYY-MM-DD")
-		}
-		*dst = t
-	}
-	if raw := v.Get("limit"); raw != "" {
-		n, err := strconv.Atoi(raw)
-		if err != nil {
-			return rng, problem.New(http.StatusBadRequest, "search.invalid-parameter", "limit is not a number")
-		}
-		rng.Limit = n
-	}
-	return rng, nil
-}
-
 // customerID is the signed-in shopper's subject (customers only), used for ad click attribution.
 func customerID(r *http.Request) string {
 	if a, ok := auth.FromContext(r.Context()); ok && a.Type == "CUSTOMER" {
 		return a.Subject
 	}
 	return ""
-}
-
-func requireAny(next http.HandlerFunc, perms ...string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		a, ok := auth.FromContext(r.Context())
-		if !ok {
-			problem.Write(w, r, problem.New(http.StatusUnauthorized, "auth.unauthenticated", "Bearer token required"))
-			return
-		}
-		for _, p := range perms {
-			if a.Can(p) {
-				next(w, r)
-				return
-			}
-		}
-		problem.Write(w, r, problem.New(http.StatusForbidden, "auth.missing-permission", "Missing permission "+perms[0]))
-	}
 }
 
 func writeErr(w http.ResponseWriter, r *http.Request, err error) {
@@ -321,8 +221,6 @@ func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, app.ErrInvalidAdToken):
 		problem.Write(w, r, problem.New(http.StatusBadRequest, "search.invalid-ad-token",
 			"The ad token is invalid or does not belong to this result"))
-	case errors.Is(err, domain.ErrInvalidRange):
-		problem.Write(w, r, problem.New(http.StatusBadRequest, "search.invalid-range", err.Error()))
 	case errors.Is(err, domain.ErrInvalidSynonym):
 		problem.Write(w, r, problem.New(http.StatusUnprocessableEntity, "search.invalid-synonym", err.Error()))
 	case errors.Is(err, app.ErrSynonymNotFound):

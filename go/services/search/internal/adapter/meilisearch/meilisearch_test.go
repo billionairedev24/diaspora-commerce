@@ -48,7 +48,6 @@ func setup(t *testing.T, rules ...domain.SynonymRule) env {
 	t.Cleanup(func() {
 		bg := context.WithoutCancel(ctx)
 		_ = c.Task(bg, http.MethodDelete, "/indexes/"+searchindex.MeiliIndexUID(market), nil)
-		_ = c.Task(bg, http.MethodDelete, "/indexes/"+meilisearch.AnalyticsIndex(market), nil)
 	})
 	return env{c: c, market: market, ctx: ctx}
 }
@@ -277,44 +276,6 @@ func TestSynonymRulesRoundTrip(t *testing.T) {
 	}
 	if got := atins(e.search(t, domain.Query{Text: "ugu"}, nil)); len(got) != 0 {
 		t.Fatalf("a deleted rule stops applying: %v", got)
-	}
-}
-
-func TestAnalyticsAccumulatesAndReports(t *testing.T) {
-	e := setup(t)
-	if err := meilisearch.EnsureAnalyticsIndex(e.ctx, e.c, e.market); err != nil {
-		t.Fatal(err)
-	}
-	store := meilisearch.NewAnalyticsStore(e.c)
-	today := time.Now().UTC()
-	day := domain.Day(today)
-	add := func(q string, s, z, c int64) domain.AnalyticsDelta {
-		return domain.AnalyticsDelta{Market: e.market, Day: day, Query: q, Searches: s, ZeroResults: z, Clicks: c}
-	}
-	if err := store.Add(e.ctx, []domain.AnalyticsDelta{add("gari", 3, 0, 1), add("unicorn", 2, 2, 0)}); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Add(e.ctx, []domain.AnalyticsDelta{add("gari", 2, 0, 1)}); err != nil {
-		t.Fatal(err)
-	}
-	r := domain.AnalyticsRange{Market: e.market, From: today.AddDate(0, 0, -1), To: today, Limit: 10}
-	top, err := store.TopQueries(e.ctx, r)
-	if err != nil || len(top) != 2 || top[0].Query != "gari" || top[0].Searches != 5 || top[0].Clicks != 2 {
-		t.Fatalf("top %v %v", top, err)
-	}
-	zero, err := store.ZeroResultQueries(e.ctx, r)
-	if err != nil || len(zero) != 1 || zero[0].Query != "unicorn" {
-		t.Fatalf("zero %v %v", zero, err)
-	}
-	days, err := store.DailyCTR(e.ctx, r)
-	if err != nil || len(days) != 2 || days[1].Searches != 7 || days[0].Searches != 0 {
-		t.Fatalf("days %v %v", days, err)
-	}
-	if err := store.Purge(e.ctx, e.market, today.AddDate(0, 0, 1)); err != nil {
-		t.Fatal(err)
-	}
-	if top, _ := store.TopQueries(e.ctx, r); len(top) != 0 {
-		t.Fatalf("purged: %v", top)
 	}
 }
 

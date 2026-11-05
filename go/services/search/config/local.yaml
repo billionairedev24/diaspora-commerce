@@ -28,9 +28,6 @@ synonyms:
   overwrite: false
   migrateIndex: true
 analytics:
-  enabled: true
-  flushInterval: 10s
-  retentionDays: 400
   clickDedupe: 30m
 ads:
   enabled: true

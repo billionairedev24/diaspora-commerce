@@ -64,7 +64,6 @@ import { planHandlers } from './plans';
 import { ordersOf, PREORDER_ORDER_COLUMNS, preorderHandlers, preorderOrderRow } from './preorders';
 import { type ActionCtx, detailKind, humanize, type MockAction, RESOURCES, toneOf } from './resources';
 import { runHandlers } from './runs';
-import { searchHandlers } from './search';
 import { staffSettingsHandlers } from './settings';
 import { taxonomyHandlers } from './taxonomy';
 import { MockRenderError, renderPart, type TemplatePart } from './template-render';
@@ -1318,9 +1317,7 @@ export const staffHandlers = [
   ...runHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Settings → Markets & locations (location tree) and the shared place pickers */
   ...marketHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
-  /* Search analytics and synonym rules */
   ...departmentHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
-  ...searchHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Settings → Published pages: the legal and help editors, drafts, publication and rollback */
   ...contentPageHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   ...taxonomyHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),

@@ -2,7 +2,7 @@
 # product_search analyzer (synonym_graph, updateable): editing the set reloads search analyzers without reindexing.
 # One rule per line of equivalents (Solr format). Multi-word synonyms match as phrases ("plantain chips").
 # On start the service seeds the set when it does not exist yet (or always with SYNONYMS_OVERWRITE=true); staff curate
-# it afterwards with PUT/DELETE /v1/search/synonyms/{ruleId}, guided by GET /v1/search/analytics/zero-results.
+# it afterwards with PUT/DELETE /v1/search/synonyms/{ruleId}.
 # Override the file with SYNONYMS_FILE (for example a ConfigMap mount).
 set: diaspora-synonyms
 rules:

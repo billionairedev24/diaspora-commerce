@@ -40,57 +40,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/search/analytics/top-queries": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Most searched queries in a window, with zero results, clicks and CTR */
-        get: operations["topSearchQueries"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/search/analytics/zero-results": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Queries that returned nothing, for synonym curation */
-        get: operations["zeroResultSearchQueries"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/search/analytics/ctr": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Searches, clicks, click-through and zero-result rates by day */
-        get: operations["searchClickThroughByDay"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/search/synonyms": {
         parameters: {
             query?: never;
@@ -98,7 +47,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Rules of the diaspora synonym set (search:analytics.view or search:synonyms.edit) */
+        /** Rules of the diaspora synonym set (search:synonyms.edit) */
         get: operations["listSearchSynonyms"];
         put?: never;
         post?: never;
@@ -239,46 +188,6 @@ export interface components {
             /** @enum {string} */
             adStatus?: "BILLABLE" | "DUPLICATE" | "EXPIRED";
         };
-        QueryStat: {
-            /** @description Normalised query */
-            query: string;
-            /** Format: int64 */
-            searches: number;
-            /** Format: int64 */
-            zeroResults: number;
-            /** Format: int64 */
-            clicks: number;
-            ctr: number;
-        };
-        QueryReport: {
-            market: string;
-            /** Format: date */
-            from: string;
-            /** Format: date */
-            to: string;
-            items: components["schemas"]["QueryStat"][];
-        };
-        DailyCTR: {
-            /** @description YYYY-MM-DD, or "total" */
-            day: string;
-            /** Format: int64 */
-            searches: number;
-            /** Format: int64 */
-            clicks: number;
-            /** Format: int64 */
-            zeroResults: number;
-            ctr: number;
-            zeroResultRate: number;
-        };
-        CTRReport: {
-            market: string;
-            /** Format: date */
-            from: string;
-            /** Format: date */
-            to: string;
-            days: components["schemas"]["DailyCTR"][];
-            total: components["schemas"]["DailyCTR"];
-        };
         SynonymRule: {
             id: string;
             /** @example gari, garri, cassava flakes */
@@ -335,14 +244,7 @@ export interface components {
             };
         };
     };
-    parameters: {
-        Market: string;
-        /** @description First day (UTC), default 6 days before to */
-        From: string;
-        /** @description Last day (UTC), default today */
-        To: string;
-        Limit: number;
-    };
+    parameters: never;
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -378,7 +280,7 @@ export interface operations {
                 size?: number;
                 /** @description Blend sponsored products into the page at the configured slots (positions 1 and 5). Results pages only; the response is then private (Cache-Control no-store) because each ad carries a click token. */
                 ads?: boolean;
-                /** @description Count the search in analytics and publish search.query.performed. Send false for home rails, Lola and other machine-made queries. */
+                /** @description Publish search.query.performed for the search. Send false for home rails, Lola and other machine-made queries. */
                 track?: boolean;
             };
             header?: never;
@@ -423,95 +325,6 @@ export interface operations {
                 };
             };
             400: components["responses"]["Problem"];
-        };
-    };
-    topSearchQueries: {
-        parameters: {
-            query?: {
-                market?: components["parameters"]["Market"];
-                /** @description First day (UTC), default 6 days before to */
-                from?: components["parameters"]["From"];
-                /** @description Last day (UTC), default today */
-                to?: components["parameters"]["To"];
-                limit?: components["parameters"]["Limit"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Queries by searches (descending) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["QueryReport"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-        };
-    };
-    zeroResultSearchQueries: {
-        parameters: {
-            query?: {
-                market?: components["parameters"]["Market"];
-                /** @description First day (UTC), default 6 days before to */
-                from?: components["parameters"]["From"];
-                /** @description Last day (UTC), default today */
-                to?: components["parameters"]["To"];
-                limit?: components["parameters"]["Limit"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Queries by zero-result searches (descending) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["QueryReport"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-        };
-    };
-    searchClickThroughByDay: {
-        parameters: {
-            query?: {
-                market?: components["parameters"]["Market"];
-                /** @description First day (UTC), default 6 days before to */
-                from?: components["parameters"]["From"];
-                /** @description Last day (UTC), default today */
-                to?: components["parameters"]["To"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description One row per day of the window (days without searches included) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CTRReport"];
-                };
-            };
-            400: components["responses"]["Problem"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
         };
     };
     listSearchSynonyms: {

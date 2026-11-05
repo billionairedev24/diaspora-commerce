@@ -1,5 +1,5 @@
 # AsyncAPI 3.0 fragment for search-service (Go). Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
-# Search analytics (S039) and sponsored-products delivery (S127). Events are published asynchronously (never on the
+# Search events (S039) and sponsored-products delivery (S127). Events are published asynchronously (never on the
 # request path); event ids are deterministic for clicks and impressions, so consumers' inboxes drop replays.
 channels:
   searchEvents:
@@ -24,8 +24,7 @@ operations:
     action: send
     channel: {$ref: '#/channels/searchEvents'}
     summary: >-
-      Search analytics: data platform and personalisation consume them; search itself keeps daily per-query
-      aggregates (searches, zero results, clicks) in Elasticsearch for the staff console.
+      Search events: data platform and personalisation consume them; search keeps no aggregates of its own.
   publishAdsEvents:
     action: send
     channel: {$ref: '#/channels/adsEvents'}

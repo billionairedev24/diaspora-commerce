@@ -18,7 +18,6 @@ import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTe
 import { seedShipments, syncOrder } from './order-shipments';
 import { type MockPlansState, seedPlans } from './plans';
 import { type MockPreorderState, seedPreorders } from './preorders';
-import { type MockSearchState, seedSearch } from './search';
 import { type MockTaxonomyState, seedCategoryRequests, seedTaxonomy } from './taxonomy';
 
 export type Scalar = string | number | boolean | null;
@@ -63,8 +62,6 @@ export interface MockStaffDb {
   markets: MockMarketsState;
   /** seller's department requests and organisations' departments (Department requests). */
   departments: MockDepartmentsState;
-  /** search's synonym rules (Search analytics). */
-  search: MockSearchState;
   /** content's legal and help authoring: versions, revisions and working drafts (Settings → Published pages). */
   content: MockContentState;
   /** catalog's category tree, product-type details and the audit of changes (Catalog → Categories). */
@@ -698,7 +695,6 @@ function seed(now: Date): MockStaffDb {
     preorders: seedPreorders(now),
     markets: seedMarkets(),
     departments: seedDepartments(now),
-    search: seedSearch(),
     content: seedContent(now, helpArticles.map((r) => ({ slug: r.id, title: String(r.fields.title), summary: String(r.fields.summary), topic: String(r.fields.topic), status: String(r.fields.status), body: String(r.fields.sections), updatedAt: String(r.fields.updatedAt) }))),
     taxonomy: seedTaxonomy(),
     plans: seedPlans(now),
@@ -714,7 +710,6 @@ export function getStaffDb(): MockStaffDb {
   g[KEY].preorders ??= seedPreorders(g[KEY].now);
   g[KEY].markets ??= seedMarkets();
   g[KEY].departments ??= seedDepartments(g[KEY].now);
-  g[KEY].search ??= seedSearch();
   g[KEY].content ??= seedContent(g[KEY].now, []);
   g[KEY].taxonomy ??= seedTaxonomy();
   g[KEY].plans ??= seedPlans(g[KEY].now);

@@ -3,7 +3,6 @@ package port
 
 import (
 	"context"
-	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/events"
 	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/domain"
@@ -45,17 +44,6 @@ type IndexAdmin interface {
 // Embedder turns text into a vector (implemented by the Spring AI gateway client).
 type Embedder interface {
 	Embed(ctx context.Context, text string) ([]float32, error)
-}
-
-// AnalyticsStore keeps the daily per-query aggregates (searches, zero results, clicks).
-type AnalyticsStore interface {
-	// Add applies increments to the daily aggregates.
-	Add(ctx context.Context, deltas []domain.AnalyticsDelta) error
-	TopQueries(ctx context.Context, r domain.AnalyticsRange) ([]domain.QueryStat, error)
-	ZeroResultQueries(ctx context.Context, r domain.AnalyticsRange) ([]domain.QueryStat, error)
-	DailyCTR(ctx context.Context, r domain.AnalyticsRange) ([]domain.DailyCTR, error)
-	// Purge deletes the market's aggregates of days before the given time (retention).
-	Purge(ctx context.Context, market string, before time.Time) error
 }
 
 // CampaignSource returns the sponsored-products campaigns eligible to serve in a market (content-service).

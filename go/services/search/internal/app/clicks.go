@@ -28,22 +28,21 @@ const (
 )
 
 type clickRecorderImpl struct {
-	tokens    port.AdTokens
-	events    port.EventPublisher
-	analytics AnalyticsRecorder
-	seen      *dedupeSet
-	log       *slog.Logger
-	now       func() time.Time
+	tokens port.AdTokens
+	events port.EventPublisher
+	seen   *dedupeSet
+	log    *slog.Logger
+	now    func() time.Time
 }
 
 var _ ClickRecorder = (*clickRecorderImpl)(nil)
 
 // NewClickRecorder returns the click use case. Clicks are de-duplicated per replica for dedupeWindow (same search and
 // product, same ad token); every event also carries a deterministic event-id so consumers' inboxes drop the rest.
-func NewClickRecorder(tokens port.AdTokens, events port.EventPublisher, analytics AnalyticsRecorder,
+func NewClickRecorder(tokens port.AdTokens, events port.EventPublisher,
 	dedupeWindow time.Duration, log *slog.Logger,
 ) ClickRecorder {
-	return &clickRecorderImpl{tokens: tokens, events: events, analytics: analytics,
+	return &clickRecorderImpl{tokens: tokens, events: events,
 		seen: newDedupeSet(dedupeWindow, 200_000), log: log, now: time.Now}
 }
 
@@ -75,9 +74,6 @@ func (r *clickRecorderImpl) Record(ctx context.Context, c domain.Click) (domain.
 		return res, nil
 	}
 	res.Recorded = true
-	if r.analytics != nil {
-		r.analytics.Clicked(c.Market, c.Query, now)
-	}
 	id := stableID(domain.EventResultClicked, c.SearchID, c.ATIN)
 	e, err := envelope(id, domain.EventResultClicked, domain.AggregateSearch, c.SearchID, now, domain.ResultClicked{
 		SearchID: c.SearchID, Market: c.Market, Query: c.Query, Normalized: domain.AnalyticsKey(c.Query), ATIN: c.ATIN,

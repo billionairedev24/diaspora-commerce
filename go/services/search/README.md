@@ -62,42 +62,18 @@ before tuning `semanticThresholds`.
 go test ./internal/adapter/elastic -run TestRelevanceJudgements -v   # prints the per-query table
 ```
 
-## Search analytics (S039)
+## Search events (S039)
 
 Every tracked search (`track` defaults to true; the BFF sends `track=false` for rails and Lola) publishes
 `search.query.performed`; `POST /v1/search/clicks` publishes `search.result.clicked` (once per search and product).
-Daily aggregates per normalised query (searches, zero results, clicks) live in Elasticsearch, index
-`search-analytics-<market>`: one document per (day, query), incremented by a buffered flush every 10 s
-(`ANALYTICS_FLUSH_INTERVAL`), purged after 400 days.
+Consumers (data platform, personalisation) read the Kafka events; search keeps no aggregates of its own.
 
-*Why Elasticsearch and not Postgres:* search has no database today and Elasticsearch is already its only store, so
-analytics add no new datastore, credentials, migrations or infra; the reports are aggregations (terms by query,
-date histogram by day) that Elasticsearch answers natively; the aggregates are derived data — rebuildable from the
-`search.query.performed` stream — so they do not need transactional guarantees; and bounded (day × query) documents
-updated by batched scripted upserts avoid per-search writes. The trade-off is that an unflushed buffer (≤ 10 s) is
-lost on a crash; the Kafka events remain the durable record.
+There is no staff "Search analytics" page: developers use Meilisearch's own dashboard. The earlier staff reports
+(`/v1/search/analytics/*`), the per-day aggregate index `search-analytics-<market>` and the BFF's `/v1/staff/search/**`
+routes were removed. Existing `search-analytics-*` indices are no longer written or read and can be deleted.
 
-Staff console (`search:analytics.view`): `GET /v1/search/analytics/top-queries`, `/zero-results`, `/ctr`
-(`market`, `from`, `to` as YYYY-MM-DD, `limit`). Synonym curation: `GET /v1/search/synonyms`
-(`search:analytics.view` or `search:synonyms.edit`), `PUT|DELETE /v1/search/synonyms/{ruleId}` (`search:synonyms.edit`).
-
-**Staff console › Search analytics** (`/search/analytics`, Commerce group of the sidebar; shown with either search
-permission). It reads these endpoints through the gateway BFF (`/v1/staff/search/**`, contract
-[`gateway-bff-staff.yaml`](../../../contracts/openapi/gateway-bff-staff.yaml), tag *Search analytics*), which relays the
-staff member's token, so search keeps checking its own permissions:
-
-- *Top queries*, *No results* and *Click-through* tabs share a header: market (by name), 7 / 30 / 90 days or a custom
-  range (at most 366 days, UTC days) and *Export CSV* of the current tab, search and sort. The reports are whole windows
-  of at most 500 queries (`limit=500`), so the BFF filters, sorts and pages them for the server-driven tables and says
-  `truncated` when the cap cut the list. Click-through is by day, with a trend line of the click-through and no-result
-  rates; there is no per-query trend because the reports give per-query totals and per-day totals, not a daily series per query.
-- *No results* has a row action *Add synonym*: the query is fixed and staff type the words it should match
-  (`agbada kids` = `grand boubou kids`). The BFF turns that into `PUT /v1/search/synonyms/{ruleId}` with a rule id derived
-  from the first term (kept unique), and shows search's 422 message on the words field. Needs `search:synonyms.edit`.
-- *Synonym rules* lists the set (`GET /v1/search/synonyms`) with *Delete* for `search:synonyms.edit`. Rules are not
-  per market. Search keeps no audit trail of rule edits; the BFF logs who added or deleted a rule.
-- Counts are buffered, aggregated events and can be slightly off, for example when two replicas flush at once: the page
-  presents them as figures to spot patterns with, never as accounting.
+Synonym curation stays on the service: `GET /v1/search/synonyms`, `PUT|DELETE /v1/search/synonyms/{ruleId}`
+(all `search:synonyms.edit`); the seed file is `config/synonyms.yaml`.
 
 ## Sponsored products (S127)
 
@@ -123,7 +99,7 @@ used by the indexer (writer) and this service (reader). Index `products-<market>
 
 ## API
 
-`GET /v1/search`, `GET /v1/suggest`, `POST /v1/search/clicks`, `GET /v1/search/analytics/*`,
+`GET /v1/search`, `GET /v1/suggest`, `POST /v1/search/clicks`,
 `/v1/search/synonyms[/{ruleId}]` — contract [`contracts/openapi/search.yaml`](../../../contracts/openapi/search.yaml).
 Also `/healthz`, `/readyz` (pings Elasticsearch), `/metrics`, `/openapi.yaml`, `/docs` (Scalar), `/redoc`.
 Auth is optional (public reads); when a bearer token is present it is verified against the identity JWKS.
@@ -136,12 +112,10 @@ Auth is optional (public reads); when a bearer token is present it is verified a
 `SEARCH_CLIENT_ID` / `SEARCH_CLIENT_SECRET` client), `OTEL_EXPORTER_OTLP_ENDPOINT_HOST`, `TRACE_SAMPLING`,
 `DOCS_ENABLED`, `MARKETS`, `KAFKA_BOOTSTRAP` (search and ads
 events; empty = dropped and counted in `search_events_total`), `SYNONYMS_FILE`, `SYNONYMS_OVERWRITE`,
-`SYNONYMS_MIGRATE_INDEX`, `ANALYTICS_ENABLED`, `ANALYTICS_FLUSH_INTERVAL`, `ANALYTICS_RETENTION_DAYS`,
-`CLICK_DEDUPE_WINDOW`, `ADS_ENABLED`, `ADS_MIN_QUALITY`, `ADS_RESERVE_MINOR`, `ADS_TOKEN_KEY` (secret), `ADS_TOKEN_TTL`,
+`SYNONYMS_MIGRATE_INDEX`, `CLICK_DEDUPE_WINDOW`, `ADS_ENABLED`, `ADS_MIN_QUALITY`, `ADS_RESERVE_MINOR`, `ADS_TOKEN_KEY` (secret), `ADS_TOKEN_TTL`,
 `ADS_CACHE_TTL`, `CONTENT_URL`, `AUTH_TOKEN_URL`, `SEARCH_CLIENT_ID`, `SEARCH_CLIENT_SECRET` (secret),
 `SEARCH_CLIENT_SCOPES`. In `local` the service creates the index and alias on start; in every environment it seeds the
-synonyms set and creates `search-analytics-<market>` (the Elasticsearch API key needs `create_index`, `write` and
-`manage` on `search-analytics-*` and the `manage_search_synonyms` cluster privilege).
+synonyms set (the Elasticsearch API key needs the `manage_search_synonyms` cluster privilege).
 
 ## Run and test
 

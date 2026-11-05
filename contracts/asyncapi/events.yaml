@@ -12259,8 +12259,7 @@ operations:
     action: send
     channel:
       $ref: '#/channels/searchEvents'
-    summary: 'Search analytics: data platform and personalisation consume them; search itself keeps daily per-query aggregates
-      (searches, zero results, clicks) in Elasticsearch for the staff console.'
+    summary: 'Search events: data platform and personalisation consume them; search keeps no aggregates of its own.'
   publishAdsEvents:
     action: send
     channel:

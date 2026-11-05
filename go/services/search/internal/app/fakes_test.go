@@ -6,33 +6,10 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/events"
 	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/domain"
 )
-
-type fakeRecorder struct {
-	mu       sync.Mutex
-	searched []string
-	clicked  []string
-}
-
-func (f *fakeRecorder) Searched(market, query string, zero bool, _ time.Time) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.searched = append(f.searched, fmt.Sprintf("%s|%s|%v", market, domain.AnalyticsKey(query), zero))
-}
-
-func (f *fakeRecorder) Clicked(market, query string, _ time.Time) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.clicked = append(f.clicked, market+"|"+domain.AnalyticsKey(query))
-}
-
-func (f *fakeRecorder) Flush(context.Context) error { return nil }
-
-func (f *fakeRecorder) Run(context.Context, time.Duration, time.Duration, []string) error { return nil }
 
 type fakeBus struct {
 	mu     sync.Mutex

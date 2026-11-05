@@ -203,16 +203,16 @@ func TestMarketFilterRejectsUnservedMarkets(t *testing.T) {
 	}
 }
 
-func TestTrackedSearchesAreCountedAndPublished(t *testing.T) {
+func TestTrackedSearchesArePublished(t *testing.T) {
 	idx := &fakeIndex{page: domain.Page{Total: 0, Hits: []domain.Hit{}}}
-	rec, bus := &fakeRecorder{}, &fakeBus{}
-	s := app.NewProductSearcher(idx, nil, quiet, app.WithAnalytics(rec, bus))
+	bus := &fakeBus{}
+	s := app.NewProductSearcher(idx, nil, quiet, app.WithEvents(bus))
 	page, err := s.Search(context.Background(), domain.Query{Text: "Kpekere ", Track: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if page.SearchID == "" || len(rec.searched) != 1 || rec.searched[0] != "us|kpekere|true" {
-		t.Fatalf("search not counted: %+v %q", rec.searched, page.SearchID)
+	if page.SearchID == "" {
+		t.Fatalf("search without an id: %+v", page)
 	}
 	if len(bus.events) != 1 || bus.events[0].Type != domain.EventQueryPerformed || bus.events[0].ID != page.SearchID ||
 		bus.events[0].Topic() != "at.search.events" {
@@ -225,7 +225,7 @@ func TestTrackedSearchesAreCountedAndPublished(t *testing.T) {
 	if _, err := s.Search(context.Background(), domain.Query{Track: true}); err != nil {
 		t.Fatal(err)
 	}
-	if len(rec.searched) != 1 || len(bus.events) != 1 {
-		t.Fatalf("untracked searches recorded: %+v", rec.searched)
+	if len(bus.events) != 1 {
+		t.Fatalf("untracked searches published: %+v", bus.events)
 	}
 }

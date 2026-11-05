@@ -52,10 +52,7 @@ type Config struct {
 		MigrateIndex bool `yaml:"migrateIndex" env:"SYNONYMS_MIGRATE_INDEX"`
 	} `yaml:"synonyms"`
 	Analytics struct {
-		Enabled       bool          `yaml:"enabled" env:"ANALYTICS_ENABLED"`
-		FlushInterval time.Duration `yaml:"flushInterval" env:"ANALYTICS_FLUSH_INTERVAL"`
-		RetentionDays int           `yaml:"retentionDays" env:"ANALYTICS_RETENTION_DAYS"`
-		ClickDedupe   time.Duration `yaml:"clickDedupe" env:"CLICK_DEDUPE_WINDOW"`
+		ClickDedupe time.Duration `yaml:"clickDedupe" env:"CLICK_DEDUPE_WINDOW"`
 	} `yaml:"analytics"`
 	Ads struct {
 		Enabled bool `yaml:"enabled" env:"ADS_ENABLED"`

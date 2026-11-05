@@ -1,5 +1,5 @@
-// Command search serves product search and typeahead over Elasticsearch, with sponsored products, click tracking and
-// search analytics.
+// Command search serves product search and typeahead over Meilisearch or Elasticsearch, with sponsored products and
+// click tracking (search events go to Kafka).
 package main
 
 import (
@@ -104,13 +104,7 @@ func run() error {
 	index := be.index
 	opts := []app.SearcherOption{app.WithMarkets(cfg.Markets)}
 
-	var recorder app.AnalyticsRecorder
-	var reporter app.AnalyticsReporter
-	if cfg.Analytics.Enabled {
-		store := be.analytics()
-		recorder, reporter = app.NewAnalyticsRecorder(store, log), app.NewAnalyticsReporter(store)
-		opts = append(opts, app.WithAnalytics(recorder, bus))
-	}
+	opts = append(opts, app.WithEvents(bus))
 
 	tokenKey := cfg.Ads.TokenKey
 	if tokenKey == "" && local {
@@ -147,11 +141,10 @@ func run() error {
 	deps := httpapi.Deps{
 		Searcher:  app.NewProductSearcher(index, emb, log, opts...),
 		Suggester: app.NewSuggester(index),
-		Analytics: reporter,
 		Synonyms:  app.NewSynonymCurator(admin, log),
 	}
 	// Without a token key (ads off outside local) organic clicks are still recorded; ad tokens are rejected.
-	deps.Clicks = app.NewClickRecorder(tokens, bus, recorder, max(cfg.Analytics.ClickDedupe, time.Minute), log)
+	deps.Clicks = app.NewClickRecorder(tokens, bus, max(cfg.Analytics.ClickDedupe, time.Minute), log)
 
 	var verifier auth.Verifier
 	if cfg.Auth.Enabled {
@@ -175,14 +168,6 @@ func run() error {
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return srv.Run(gctx) })
 	g.Go(func() error { return bus.Run(gctx) })
-	if recorder != nil {
-		every := cfg.Analytics.FlushInterval
-		if every <= 0 {
-			every = 10 * time.Second
-		}
-		retention := time.Duration(cfg.Analytics.RetentionDays) * 24 * time.Hour
-		g.Go(func() error { return recorder.Run(gctx, every, retention, cfg.Markets) })
-	}
 	if err := g.Wait(); err != nil {
 		return fmt.Errorf("search: %w", err)
 	}
@@ -205,7 +190,7 @@ func newElasticsearch(cfg config.Config) (*elasticsearch.Client, error) {
 }
 
 // bootstrap seeds the synonyms set, creates indices in local, switches inline-synonym indices to the set when allowed
-// and ensures the analytics indices. Failures are logged: search keeps serving with whatever is in place.
+// Failures are logged: search keeps serving with whatever is in place.
 func bootstrap(ctx context.Context, cfg config.Config, be backend,
 	synonyms domain.SynonymSet, local bool, log *slog.Logger,
 ) {
@@ -224,11 +209,6 @@ func bootstrap(ctx context.Context, cfg config.Config, be backend,
 		}
 		if err := migrateSynonyms(ctx, admin, m, cfg.Synonyms.MigrateIndex, log); err != nil {
 			log.Warn("synonyms set not applied to the index", "market", m, "error", err)
-		}
-		if cfg.Analytics.Enabled {
-			if err := be.ensureAnalytics(ctx, m); err != nil {
-				log.Warn("could not ensure the analytics index", "market", m, "error", err)
-			}
 		}
 	}
 }

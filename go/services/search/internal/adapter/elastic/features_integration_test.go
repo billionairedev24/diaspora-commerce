@@ -92,54 +92,6 @@ func TestInlineSynonymIndexMigratesToTheSet(t *testing.T) {
 	}
 }
 
-func TestAnalyticsStoreAggregates(t *testing.T) {
-	ctx := context.Background()
-	es := sharedES(t)
-	if err := elastic.EnsureAnalyticsIndex(ctx, es, "an"); err != nil {
-		t.Fatal(err)
-	}
-	if err := elastic.EnsureAnalyticsIndex(ctx, es, "an"); err != nil {
-		t.Fatal("idempotent:", err)
-	}
-	store := elastic.NewAnalyticsStore(es)
-	batch := []domain.AnalyticsDelta{
-		{Market: "an", Day: "2026-10-08", Query: "egusi", Searches: 10, Clicks: 4},
-		{Market: "an", Day: "2026-10-08", Query: "kpekere", Searches: 3, ZeroResults: 3},
-		{Market: "an", Day: "2026-10-09", Query: "egusi", Searches: 5, Clicks: 1},
-		{Market: "an", Day: "2026-10-09", Query: "agushi", Searches: 2, ZeroResults: 2},
-	}
-	if err := store.Add(ctx, batch); err != nil {
-		t.Fatal(err)
-	}
-	// A second flush increments the same daily documents.
-	if err := store.Add(ctx, []domain.AnalyticsDelta{{Market: "an", Day: "2026-10-09", Query: "egusi", Searches: 1}}); err != nil {
-		t.Fatal(err)
-	}
-	refresh(t, es, elastic.AnalyticsIndex("an"))
-	rng := domain.AnalyticsRange{Market: "an", From: day("2026-10-07"), To: day("2026-10-09"), Limit: 10}
-	top, err := store.TopQueries(ctx, rng)
-	if err != nil || len(top) != 3 || top[0].Query != "egusi" || top[0].Searches != 16 || top[0].Clicks != 5 {
-		t.Fatalf("top = %+v %v", top, err)
-	}
-	zero, err := store.ZeroResultQueries(ctx, rng)
-	if err != nil || len(zero) != 2 || zero[0].Query != "kpekere" || zero[0].ZeroResults != 3 {
-		t.Fatalf("zero = %+v %v", zero, err)
-	}
-	days, err := store.DailyCTR(ctx, rng)
-	if err != nil || len(days) != 3 || days[0].Day != "2026-10-07" || days[0].Searches != 0 ||
-		days[1].Searches != 13 || days[1].Clicks != 4 || days[2].Searches != 8 {
-		t.Fatalf("days = %+v %v", days, err)
-	}
-	if err := store.Purge(ctx, "an", day("2026-10-09")); err != nil {
-		t.Fatal(err)
-	}
-	refresh(t, es, elastic.AnalyticsIndex("an"))
-	top, _ = store.TopQueries(ctx, rng)
-	if len(top) != 2 || top[0].Searches != 6 {
-		t.Fatalf("after purge = %+v", top)
-	}
-}
-
 func TestAdCandidatesOnlyLiveInStockMatches(t *testing.T) {
 	ctx := context.Background()
 	es := sharedES(t)

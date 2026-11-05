@@ -12,10 +12,6 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
   exports: { label: 'Exports', description: 'Large exports build on the server; download links last 24 hours.' },
   orders: { label: 'Orders & shipments', description: 'All marketplace and AfroTransact Retail orders.' },
   catalog: { label: 'Catalog', description: 'Listing moderation, products, the category tree with its product-type details, and seller category requests.' },
-  search: {
-    label: 'Search analytics',
-    description: 'What shoppers search for, which searches find nothing, which results get clicked, and the synonyms that fix them.'
-  },
   inventory: { label: 'Inventory', description: 'AfroTransact-owned and FBA stock by fulfilment centre, lot by lot.' },
   retail: { label: 'AfroTransact Retail (1P)', description: 'Purchase orders for AfroTransact-owned and AfroTransact Brand inventory.' },
   dispatch: { label: 'Delivery dispatch', description: 'AfroTransact Delivery routes, drivers and internal delivery.' },
@@ -55,7 +51,7 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
 
 export const NAV: { key: StaffNavGroupKey; label: string; modules: StaffModuleKey[] }[] = [
   { key: 'overview', label: 'Overview', modules: ['dash', 'exports'] },
-  { key: 'commerce', label: 'Commerce', modules: ['orders', 'catalog', 'search', 'inventory', 'retail', 'dispatch', 'preorders'] },
+  { key: 'commerce', label: 'Commerce', modules: ['orders', 'catalog', 'inventory', 'retail', 'dispatch', 'preorders'] },
   { key: 'partners', label: 'Partners', modules: ['apps', 'deptRequests', 'support', 'rbac'] },
   { key: 'finance', label: 'Finance', modules: ['payouts', 'fees', 'plans'] },
   { key: 'growth', label: 'Growth', modules: ['marketing'] },
@@ -122,19 +118,6 @@ PENDING_PERMISSIONS['platform.finance']?.push('plans:manage', 'billing:adjust', 
 PENDING_PERMISSIONS['platform.product_owner']?.push('seller:billing');
 PENDING_PERMISSIONS['platform.auditor']?.push('seller:billing');
 
-/* Search analytics grants (identity migration V14__search_ads_permissions.sql) until rbac-data is regenerated. */
-const SEARCH_GRANTS: Record<string, string[]> = {
-  'platform.super_admin': ['search:analytics.view', 'search:synonyms.edit'],
-  'platform.marketing': ['search:analytics.view'],
-  'platform.catalog_manager': ['search:analytics.view', 'search:synonyms.edit'],
-  'platform.product_owner': ['search:analytics.view'],
-  'platform.operations_manager': ['search:analytics.view'],
-  'platform.developer': ['search:analytics.view']
-};
-Object.entries(SEARCH_GRANTS).forEach(([role, perms]) => {
-  (PENDING_PERMISSIONS[role] ??= []).push(...perms);
-});
-
 /** The Pre-orders column of the Backoffice matrix (backoffice-config.js): F full · E edit · A act (approve) · V view. */
 export const PREORDER_MATRIX: Record<string, string> = {
   'platform.super_admin': 'F',
@@ -162,7 +145,7 @@ function matrixLevel(roles: string[], module: MatrixModule | 'preorders'): Acces
   return best;
 }
 
-/** The staff member's level on a console module: the best level over their roles (support, exports, notifications and search are derived). */
+/** The staff member's level on a console module: the best level over their roles (support, exports and notifications are derived). */
 export function levelOf(roles: string[], module: StaffModuleKey): AccessLevel | null {
   if (module === 'exports') return matrixLevel(roles, 'dash');
   // Identity & access follows identity's own permission, not the module matrix.
@@ -170,10 +153,6 @@ export function levelOf(roles: string[], module: StaffModuleKey): AccessLevel | 
   if (module === 'support') {
     const perms = permissionsOf(roles);
     return perms.includes('support:respond') ? 'EDIT' : perms.includes('users:read') ? 'VIEW' : null;
-  }
-  if (module === 'search') {
-    const perms = permissionsOf(roles);
-    return perms.includes('search:synonyms.edit') ? 'EDIT' : perms.includes('search:analytics.view') ? 'VIEW' : null;
   }
   if (module === 'notifications') {
     const perms = permissionsOf(roles);

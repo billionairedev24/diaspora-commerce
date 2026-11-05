@@ -1,4 +1,4 @@
-// Package meilisearch implements the search service's ports (port.Index, port.IndexAdmin, port.AnalyticsStore) on
+// Package meilisearch implements the search service's ports (port.Index, port.IndexAdmin) on
 // Meilisearch, selected with SEARCH_PROVIDER=meilisearch. The query translation mirrors the Elasticsearch adapter: the
 // same filters, facets, sorts and hybrid (lexical + vector, fused by reciprocal rank) retrieval; the ranking signals
 // Elasticsearch multiplies into a score are precomputed by the indexer and applied as ranking rules (searchindex.MeiliSettings).

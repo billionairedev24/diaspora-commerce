@@ -20,7 +20,7 @@ info:
 
     Results pages may carry sponsored products (`ads=true`) at fixed slots, always labelled "Sponsored" with the
     reason they were shown (second-price auction on bid × relevance with a relevance floor). Clicks are reported with
-    `POST /v1/search/clicks`; searches and clicks feed the staff console's search analytics.
+    `POST /v1/search/clicks`; searches and clicks are published as `search.query.performed` and `search.result.clicked`.
   contact:
     name: AfroTransact Platform
     url: https://developers.afrotransact.com
@@ -38,8 +38,6 @@ tags:
     description: Product search and typeahead
   - name: Tracking
     description: Result and sponsored-product clicks reported by the BFF
-  - name: Analytics
-    description: Search analytics for the staff console (search:analytics.view)
   - name: Synonyms
     description: Curation of the diaspora synonym set (search:synonyms.edit)
 paths:
@@ -78,7 +76,7 @@ paths:
           in: query
           schema: {type: boolean, default: true}
           description: >-
-            Count the search in analytics and publish search.query.performed. Send false for home rails, Lola and
+            Publish search.query.performed for the search. Send false for home rails, Lola and
             other machine-made queries.
       responses:
         '200':
@@ -111,70 +109,11 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/ClickResult'}
         '400': {$ref: '#/components/responses/Problem'}
-  /v1/search/analytics/top-queries:
-    get:
-      tags: [Analytics]
-      operationId: topSearchQueries
-      summary: Most searched queries in a window, with zero results, clicks and CTR
-      security: [{bearer: []}]
-      parameters:
-        - $ref: '#/components/parameters/Market'
-        - $ref: '#/components/parameters/From'
-        - $ref: '#/components/parameters/To'
-        - $ref: '#/components/parameters/Limit'
-      responses:
-        '200':
-          description: Queries by searches (descending)
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/QueryReport'}
-        '400': {$ref: '#/components/responses/Problem'}
-        '401': {$ref: '#/components/responses/Problem'}
-        '403': {$ref: '#/components/responses/Problem'}
-  /v1/search/analytics/zero-results:
-    get:
-      tags: [Analytics]
-      operationId: zeroResultSearchQueries
-      summary: Queries that returned nothing, for synonym curation
-      security: [{bearer: []}]
-      parameters:
-        - $ref: '#/components/parameters/Market'
-        - $ref: '#/components/parameters/From'
-        - $ref: '#/components/parameters/To'
-        - $ref: '#/components/parameters/Limit'
-      responses:
-        '200':
-          description: Queries by zero-result searches (descending)
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/QueryReport'}
-        '400': {$ref: '#/components/responses/Problem'}
-        '401': {$ref: '#/components/responses/Problem'}
-        '403': {$ref: '#/components/responses/Problem'}
-  /v1/search/analytics/ctr:
-    get:
-      tags: [Analytics]
-      operationId: searchClickThroughByDay
-      summary: Searches, clicks, click-through and zero-result rates by day
-      security: [{bearer: []}]
-      parameters:
-        - $ref: '#/components/parameters/Market'
-        - $ref: '#/components/parameters/From'
-        - $ref: '#/components/parameters/To'
-      responses:
-        '200':
-          description: One row per day of the window (days without searches included)
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/CTRReport'}
-        '400': {$ref: '#/components/responses/Problem'}
-        '401': {$ref: '#/components/responses/Problem'}
-        '403': {$ref: '#/components/responses/Problem'}
   /v1/search/synonyms:
     get:
       tags: [Synonyms]
       operationId: listSearchSynonyms
-      summary: Rules of the diaspora synonym set (search:analytics.view or search:synonyms.edit)
+      summary: Rules of the diaspora synonym set (search:synonyms.edit)
       security: [{bearer: []}]
       responses:
         '200':
@@ -242,11 +181,6 @@ paths:
 components:
   securitySchemes:
     bearer: {type: http, scheme: bearer, bearerFormat: JWT}
-  parameters:
-    Market: {name: market, in: query, schema: {type: string, default: us}}
-    From: {name: from, in: query, schema: {type: string, format: date}, description: 'First day (UTC), default 6 days before to'}
-    To: {name: to, in: query, schema: {type: string, format: date}, description: 'Last day (UTC), default today'}
-    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 50}}
   responses:
     Problem:
       description: RFC 9457 problem
@@ -334,42 +268,6 @@ components:
         duplicate: {type: boolean}
         sponsored: {type: boolean}
         adStatus: {type: string, enum: [BILLABLE, DUPLICATE, EXPIRED]}
-    QueryStat:
-      type: object
-      required: [query, searches, zeroResults, clicks, ctr]
-      properties:
-        query: {type: string, description: Normalised query}
-        searches: {type: integer, format: int64}
-        zeroResults: {type: integer, format: int64}
-        clicks: {type: integer, format: int64}
-        ctr: {type: number}
-    QueryReport:
-      type: object
-      required: [market, from, to, items]
-      properties:
-        market: {type: string}
-        from: {type: string, format: date}
-        to: {type: string, format: date}
-        items: {type: array, items: {$ref: '#/components/schemas/QueryStat'}}
-    DailyCTR:
-      type: object
-      required: [day, searches, clicks, zeroResults, ctr, zeroResultRate]
-      properties:
-        day: {type: string, description: 'YYYY-MM-DD, or "total"'}
-        searches: {type: integer, format: int64}
-        clicks: {type: integer, format: int64}
-        zeroResults: {type: integer, format: int64}
-        ctr: {type: number}
-        zeroResultRate: {type: number}
-    CTRReport:
-      type: object
-      required: [market, from, to, days, total]
-      properties:
-        market: {type: string}
-        from: {type: string, format: date}
-        to: {type: string, format: date}
-        days: {type: array, items: {$ref: '#/components/schemas/DailyCTR'}}
-        total: {$ref: '#/components/schemas/DailyCTR'}
     SynonymRule:
       type: object
       required: [id, synonyms]

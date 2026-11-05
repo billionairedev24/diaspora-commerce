@@ -39,7 +39,6 @@ section 5.1 and `go/services/indexer/README.md`.
 | Facets | terms and range aggregations | term facets; the range buckets (rating, price, delivery) are counted with one filtered query each |
 | Synonyms | a synonyms set, edited from Staff | the rules live in an index `synonym-rules` and are pushed to every market index's settings on each change |
 | Writes | scripted, version-guarded upserts | read, apply the same rules (version guard, availability totals, preserved fields), write back, wait for the task |
-| Analytics (top queries, zero results, CTR) | scripted increments + aggregations | counters merged on write, reports aggregated in memory; two replicas flushing the same query at the same moment can lose a count |
 | Geo | `geo_distance` on `ships_from` | `_geoRadius` on `_geo` |
 
 Relevance judgements (`search/internal/relevance`) were tuned on Elasticsearch; run a few real queries after switching
@@ -59,7 +58,7 @@ Meilisearch before 1.13 keeps its vector store behind an experimental switch; th
 
 ## Adding another engine
 
-Implement `port.Index`, `port.IndexAdmin` and `port.AnalyticsStore` (search) and `port.ProductIndex` (indexer), then add a
+Implement `port.Index`, `port.IndexAdmin` (search) and `port.ProductIndex` (indexer), then add a
 case to `newBackend` in each service's `cmd/<service>/backend.go`.
 
 ## Embeddings (semantic search)

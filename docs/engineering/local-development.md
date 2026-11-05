@@ -164,8 +164,8 @@ never a real mailbox) and one password, **`Test1234!Local`**. Restarting identit
 | `staff.trust@afrotransact.test` | `platform.trust_safety` | Staff console | Orders, Listing moderation, Applications, Customer support, Disputes, Audit log, Site content |
 | `staff.finance@afrotransact.test` | `platform.finance` | Staff console | Orders, Inventory, Pre-orders, Applications, Payouts & ledger, Fees & tax, Disputes, Audit log |
 | `staff.support@afrotransact.test` | `platform.customer_support` | Staff console | Orders, Listing moderation, Dispatch, Pre-orders, Applications, Customer support, Payouts, Disputes, Site content, Notifications |
-| `staff.marketing@afrotransact.test` | `platform.marketing` | Staff console | Listing moderation, Search analytics (read-only), Pre-orders, Ads & announcements, Site content, Notifications |
-| `staff.catalog@afrotransact.test` | `platform.catalog_manager` | Staff console | Orders, Listing moderation, Search analytics (and synonym rules), AfroTransact Retail (1P) |
+| `staff.marketing@afrotransact.test` | `platform.marketing` | Staff console | Listing moderation, Pre-orders, Ads & announcements, Site content, Notifications |
+| `staff.catalog@afrotransact.test` | `platform.catalog_manager` | Staff console | Orders, Listing moderation, AfroTransact Retail (1P) |
 | `staff.retail@afrotransact.test` | `platform.retail_buyer` | Staff console | Orders, Listing moderation, Inventory, AfroTransact Retail (1P), Pre-orders |
 | `staff.fulfilment@afrotransact.test` | `platform.fulfilment_ops` | Staff console | Orders, Inventory, Retail (1P), Dispatch, Pre-orders, Disputes, Markets & locations |
 | `staff.inventory@afrotransact.test` | `platform.inventory_manager` | Staff console | Orders, Inventory, Retail (1P), Delivery dispatch |
@@ -176,9 +176,8 @@ never a real mailbox) and one password, **`Test1234!Local`**. Restarting identit
 | `driver@afrotransact.test` | `platform.driver` | Driver app | Driver role (fulfilment learns it from `identity.role.granted`) |
 
 The staff console shows each role what identity's module matrix gives it (every staff persona also has Dashboard and
-Exports; checked by signing each one in). Search analytics is the exception: it has no matrix column and follows the
-search permissions `search:analytics.view` (Super Admin, Operations, Marketing, Catalog Manager, Product Owner) and
-`search:synonyms.edit` (Super Admin, Catalog Manager), granted by identity migration V14. The bootstrap Super Admin
+Exports; checked by signing each one in). There is no staff search page: use Meilisearch's own dashboard
+(`http://localhost:7700`) to look at the index. The bootstrap Super Admin
 (`admin@afrotransact.com` / `LocalAdmin2026!`) is still there. `tools/dev/local.sh links` (and the end of `make up`)
 prints the same list with each app's local address.
 

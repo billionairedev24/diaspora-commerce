@@ -19,8 +19,8 @@ func adToken(t *testing.T, exp time.Time) string {
 }
 
 func TestSponsoredClickIsBillableOnce(t *testing.T) {
-	bus, rec := &fakeBus{}, &fakeRecorder{}
-	clicks := app.NewClickRecorder(fakeTokens{}, bus, rec, time.Hour, quiet)
+	bus := &fakeBus{}
+	clicks := app.NewClickRecorder(fakeTokens{}, bus, time.Hour, quiet)
 	click := domain.Click{SearchID: "srch-0001-test", ATIN: "AT00000AD1", Position: 1, Query: "tampered",
 		AdToken: adToken(t, time.Now().Add(time.Hour)), CustomerID: "cus_1"}
 
@@ -40,10 +40,6 @@ func TestSponsoredClickIsBillableOnce(t *testing.T) {
 	if payload.PriceMinor != 35 || payload.CustomerID != "cus_1" || payload.ClickID != adClicks[0].ID || payload.Query != "egusi" {
 		t.Fatalf("payload: %+v", payload)
 	}
-	// The query comes from the signed token, not the request body.
-	if len(rec.clicked) != 1 || rec.clicked[0] != "us|egusi" {
-		t.Fatalf("analytics: %+v", rec.clicked)
-	}
 
 	again, err := clicks.Record(context.Background(), click)
 	if err != nil {
@@ -59,7 +55,7 @@ func TestSponsoredClickIsBillableOnce(t *testing.T) {
 
 func TestExpiredAdClickIsNotBilledButCounted(t *testing.T) {
 	bus := &fakeBus{}
-	clicks := app.NewClickRecorder(fakeTokens{}, bus, &fakeRecorder{}, time.Hour, quiet)
+	clicks := app.NewClickRecorder(fakeTokens{}, bus, time.Hour, quiet)
 	res, err := clicks.Record(context.Background(), domain.Click{SearchID: "srch-0001-test", ATIN: "AT00000AD1",
 		Position: 1, AdToken: adToken(t, time.Now().Add(-time.Minute))})
 	if err != nil {
@@ -72,7 +68,7 @@ func TestExpiredAdClickIsNotBilledButCounted(t *testing.T) {
 }
 
 func TestForgedOrMismatchedAdTokensAreRejected(t *testing.T) {
-	clicks := app.NewClickRecorder(fakeTokens{}, &fakeBus{}, nil, time.Hour, quiet)
+	clicks := app.NewClickRecorder(fakeTokens{}, &fakeBus{}, time.Hour, quiet)
 	for _, c := range []domain.Click{
 		{SearchID: "srch-0001-test", ATIN: "AT00000AD1", Position: 1, AdToken: "forged"},
 		{SearchID: "srch-0001-test", ATIN: "AT00000ZZZ", Position: 1, AdToken: adToken(t, time.Now().Add(time.Hour))},
@@ -81,7 +77,7 @@ func TestForgedOrMismatchedAdTokensAreRejected(t *testing.T) {
 			t.Fatalf("expected ErrInvalidAdToken, got %v", err)
 		}
 	}
-	noKey := app.NewClickRecorder(nil, &fakeBus{}, nil, time.Hour, quiet)
+	noKey := app.NewClickRecorder(nil, &fakeBus{}, time.Hour, quiet)
 	if _, err := noKey.Record(context.Background(), domain.Click{SearchID: "srch-0001-test", ATIN: "AT00000AD1",
 		Position: 1, AdToken: "x"}); !errors.Is(err, app.ErrInvalidAdToken) {
 		t.Fatalf("without a key ad tokens are rejected: %v", err)
@@ -90,7 +86,7 @@ func TestForgedOrMismatchedAdTokensAreRejected(t *testing.T) {
 
 func TestOrganicClickPublishesStableEvent(t *testing.T) {
 	bus := &fakeBus{}
-	clicks := app.NewClickRecorder(fakeTokens{}, bus, nil, time.Hour, quiet)
+	clicks := app.NewClickRecorder(fakeTokens{}, bus, time.Hour, quiet)
 	res, err := clicks.Record(context.Background(), domain.Click{SearchID: "srch-0002-test", ATIN: "AT0000000A",
 		Position: 3, Query: "Garri"})
 	if err != nil || !res.Recorded || res.Sponsored {
@@ -101,7 +97,7 @@ func TestOrganicClickPublishesStableEvent(t *testing.T) {
 		t.Fatalf("event: %+v", e)
 	}
 	other := &fakeBus{}
-	_, _ = app.NewClickRecorder(fakeTokens{}, other, nil, time.Hour, quiet).Record(context.Background(),
+	_, _ = app.NewClickRecorder(fakeTokens{}, other, time.Hour, quiet).Record(context.Background(),
 		domain.Click{SearchID: "srch-0002-test", ATIN: "AT0000000A", Position: 3})
 	if other.events[0].ID != e[0].ID {
 		t.Fatal("the same click on another replica must carry the same event id")

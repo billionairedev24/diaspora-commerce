@@ -57,9 +57,9 @@ func WithMinSemanticWords(n int) SearcherOption {
 // WithAds blends sponsored products into pages that ask for them.
 func WithAds(ads AdServer) SearcherOption { return func(s *productSearcherImpl) { s.ads = ads } }
 
-// WithAnalytics records tracked searches (aggregates) and publishes search.query.performed.
-func WithAnalytics(rec AnalyticsRecorder, events port.EventPublisher) SearcherOption {
-	return func(s *productSearcherImpl) { s.analytics, s.events = rec, events }
+// WithEvents publishes search.query.performed for tracked searches.
+func WithEvents(events port.EventPublisher) SearcherOption {
+	return func(s *productSearcherImpl) { s.events = events }
 }
 
 type productSearcherImpl struct {
@@ -70,7 +70,6 @@ type productSearcherImpl struct {
 	log              *slog.Logger
 	markets          map[string]bool
 	ads              AdServer
-	analytics        AnalyticsRecorder
 	events           port.EventPublisher
 	now              func() time.Time
 }
@@ -125,7 +124,7 @@ func (s *productSearcherImpl) Search(ctx context.Context, q domain.Query) (domai
 	if q.Ads && s.ads != nil {
 		page = s.ads.Inject(ctx, q, page)
 	}
-	if q.Track && q.Text != "" && s.analytics != nil {
+	if q.Track && q.Text != "" && s.events != nil {
 		s.track(ctx, q, page)
 	}
 	return page, nil
@@ -159,16 +158,10 @@ func (s *productSearcherImpl) embed(ctx context.Context, q domain.Query) ([]floa
 	return vec, ""
 }
 
-// track counts the search for analytics and publishes search.query.performed.
+// track publishes search.query.performed.
 func (s *productSearcherImpl) track(ctx context.Context, q domain.Query, page domain.Page) {
 	now := s.now().UTC()
 	zero := page.Total == 0
-	if q.Page == 0 {
-		s.analytics.Searched(q.Market, q.Text, zero, now)
-	}
-	if s.events == nil {
-		return
-	}
 	ev := domain.QueryPerformed{SearchID: page.SearchID, Market: q.Market, Query: q.Text,
 		Normalized: domain.AnalyticsKey(q.Text), Department: q.Department, Filters: filterNames(q), Sort: q.Sort,
 		Page: q.Page, Total: page.Total, ZeroResults: zero, Semantic: page.Semantic, TookMs: page.TookMs,
