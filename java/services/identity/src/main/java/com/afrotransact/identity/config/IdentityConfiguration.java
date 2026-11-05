@@ -49,6 +49,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -125,7 +126,7 @@ class IdentityConfiguration {
 
     /**
      * BCrypt by default; the delegating encoder keeps older hashes verifiable when the default changes. Hashes imported
-     * from Keycloak ({@code {kc-pbkdf2-sha256}} and friends) verify but are never produced.
+     * from Keycloak ({@code {kc-pbkdf2-sha256}} and friends, and {@code {argon2}}) verify but are never produced.
      */
     @Bean
     PasswordEncoder passwordEncoder(Clock clock) {
@@ -135,6 +136,9 @@ class IdentityConfiguration {
         for (KeycloakPbkdf2PasswordEncoder.Variant v : KeycloakPbkdf2PasswordEncoder.Variant.values()) {
             encoders.put(v.id(), new KeycloakPbkdf2PasswordEncoder(v));
         }
+        // Keycloak 26 hashes with argon2id, which — unlike its PBKDF2 layout — has a standard encoded form carrying
+        // its own parameters, so the stock encoder verifies an imported hash whatever Keycloak's settings were.
+        encoders.put("argon2", Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8());
         // A client secret in rotation (S291) reads as {rotating}: either of its two hashes verifies until the old one
         // expires. The encoder for it is built over the hashes above.
         encoders.put(RotatingSecretEncoder.ID,

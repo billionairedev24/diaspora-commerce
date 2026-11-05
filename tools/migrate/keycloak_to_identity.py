@@ -79,21 +79,44 @@ class Skipped:
     reason: str
 
 
+def _param(cd: dict, name: str, default: str) -> str:
+    """One of Keycloak's `additionalParameters`, which it stores as single-element lists."""
+    v = (cd.get("additionalParameters") or {}).get(name, default)
+    return str(v[0]) if isinstance(v, list) and v else str(v if v is not None else default)
+
+
+def _argon2_phc(cd: dict, salt: str, value: str) -> str:
+    """Keycloak's argon2 credential as the standard PHC string Spring's Argon2PasswordEncoder reads.
+
+    Keycloak keeps the parameters apart from the hash and pads its base64; the PHC form inlines the parameters and
+    is unpadded, so the padding is stripped here or the encoder rejects the string.
+    """
+    variant = {"id": "argon2id", "i": "argon2i", "d": "argon2d"}.get(_param(cd, "type", "id"), "argon2id")
+    # Keycloak writes the argon2 version in dotted hex ("1.3"); the PHC form wants it decimal (19).
+    version = {"1.3": 19, "1.0": 16}.get(_param(cd, "version", "1.3"), 19)
+    return "$%s$v=%d$m=%s,t=%d,p=%s$%s$%s" % (
+        variant, version, _param(cd, "memory", "7168"), cd["hashIterations"], _param(cd, "parallelism", "1"),
+        salt.rstrip("="), value.rstrip("="))
+
+
 def password_hash(secret_data: str | dict | None, credential_data: str | dict | None) -> str | None:
-    """`{kc-pbkdf2-sha256}iterations$salt$key` from a Keycloak password credential, or None if unsupported."""
+    """The hash as identity stores it: `{kc-pbkdf2-*}iterations$salt$key`, `{argon2}$argon2id$…`, or None."""
     if not secret_data or not credential_data:
         return None
     sd = json.loads(secret_data) if isinstance(secret_data, str) else secret_data
     cd = json.loads(credential_data) if isinstance(credential_data, str) else credential_data
-    alg = ALGORITHMS.get(str(cd.get("algorithm", "")).lower())
+    raw_alg = str(cd.get("algorithm", "")).lower()
+    alg = ALGORITHMS.get(raw_alg)
     iterations, salt, value = cd.get("hashIterations"), sd.get("salt"), sd.get("value")
-    if not alg or not isinstance(iterations, int) or iterations < 1 or not salt or not value:
+    if (not alg and raw_alg != "argon2") or not isinstance(iterations, int) or iterations < 1 or not salt or not value:
         return None
     try:  # both must be valid base64
         base64.b64decode(salt, validate=True)
         base64.b64decode(value, validate=True)
     except ValueError:
         return None
+    if raw_alg == "argon2":
+        return "{argon2}" + _argon2_phc(cd, salt, value)
     return "{kc-pbkdf2-%s}%d$%s$%s" % (alg, iterations, salt, value)
 
 

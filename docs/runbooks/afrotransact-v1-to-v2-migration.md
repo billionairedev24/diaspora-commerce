@@ -24,9 +24,9 @@ users imported with the existing tool because password hashes are the one thing 
 
 An automated toolchain at this volume would be more code, more bugs, and less certainty than reading 40 orders.
 
-> **Status: the plan, not a finished toolchain.** `tools/migrate/keycloak_to_identity.py` exists and handles users.
-> The argon2 gap in [Part 1](#part-1--teaching-v2-to-read-keycloaks-hashes) is real and unbuilt. The order/payment SQL in
-> [Part 4](#part-4--what-maps-to-what) is written fresh during the migration, not shipped ahead of time.
+> **Status.** The user import is **built and rehearsed end to end against a copy of the local v1 database**:
+> argon2 passwords carry across and verify ([Part 1](#part-1--teaching-v2-to-read-keycloaks-hashes)). The order and
+> payment SQL in [Part 4](#part-4--what-maps-to-what) is still to be written, fresh during the migration.
 
 ---
 
@@ -83,18 +83,21 @@ Keycloak holds the same facts, only split across two JSON columns:
 
 So the job is reassembling those fields into the standard string. No cryptography of ours.
 
-1. **Add `bcprov-jdk18on`** to identity. Spring's `Argon2PasswordEncoder` delegates to Bouncy Castle;
-   `spring-security-crypto` 7.1.2 is already on the classpath but Bouncy Castle is not.
-2. **Register the stock encoder** in `IdentityConfiguration` under id `argon2`, beside the existing `bcrypt` and
-   `kc-pbkdf2-*` entries. Two lines.
-3. **Emit the PHC string** from `keycloak_to_identity.py` for argon2 credentials —
-   `{argon2}$argon2id$v=19$m=…,t=…,p=…$<salt>$<hash>` — instead of returning `None`.
-4. **Round-trip test** against a real credential row from the dump with a known password.
+**Done**, in three places:
 
-> **The gotcha:** Keycloak base64-encodes salt and value **with** padding; the PHC format expects it **without**.
-> Strip the `=` or the stock encoder rejects the string. Step 4 is what catches this.
+1. `bcprov-jdk18on` added to `java/services/identity/pom.xml` — Spring's `Argon2PasswordEncoder` delegates to
+   Bouncy Castle, which identity did not depend on.
+2. `IdentityConfiguration.passwordEncoder` registers the stock encoder under id `argon2`, beside `bcrypt` and
+   `kc-pbkdf2-*`.
+3. `keycloak_to_identity.py` emits `{argon2}$argon2id$v=19$m=…,t=…,p=…$<salt>$<hash>` for argon2 credentials.
 
-A few hours of work, and no customer is asked to reset anything.
+> **The gotcha, confirmed:** Keycloak base64-encodes salt and value **with** padding; the PHC form expects it
+> **without**, and writes the version in dotted hex (`1.3`) where PHC wants decimal (`v=19`). Both are handled.
+
+**Proven, not assumed.** `KeycloakArgon2PasswordTest` uses a credential Keycloak 26.6.4 actually produced: a user was
+created through the admin API with a known password, the row read out of the `keycloak` schema, and the resulting
+string verified by identity's real encoder bean. A full rehearsal then imported it and confirmed the hash stored in
+`user_account` is byte-identical to the one the test verifies, with the Keycloak user id unchanged.
 
 ### Still worth measuring first
 
@@ -106,7 +109,10 @@ group by 1 order by 2 desc;
 ```
 
 Accounts created before the realm reached Keycloak 24 keep PBKDF2 until their owner next changes their password, so
-expect a mix. If the argon2 count is zero, skip Part 1 entirely — the existing tool already does the job.
+expect a mix. Both formats are handled either way.
+
+On the local database this returned **argon2 for every password, with no PBKDF2 at all** — so before this work the
+importer would have given every single user a null password. Expect production to look the same.
 
 **Social-only accounts never had a password** and are unaffected: they sign in with Google or Facebook as before.
 
@@ -131,15 +137,22 @@ The migration is not proven until a real user with a real password signs in on a
 
 At this data size the dump is small and the DBeaver route is fine — no need to trim tables.
 
+**DBeaver cannot express `-e citext`**, so a dump taken this way is missing the `citext` extension that the `seller`
+schema depends on. Before restoring one, create it by hand (§2.3), or take the dump from the command line instead.
+
 ### 2.2 Command line, if DBeaver gives trouble
 
 ```bash
 export PROD_URL='postgresql://USER:PASS@HOST:5432/afrotransact?sslmode=require'
 
 pg_dump "$PROD_URL" -Fc -v -f afrotransact-prod.dump \
-  --no-owner --no-privileges \
+  --no-owner --no-privileges -e citext \
   -n keycloak -n orders -n seller -n payment -n profile -n ledger
 ```
+
+`-e citext` matters. The `citext` extension is installed **into the `seller` schema**, and a schema-filtered dump
+leaves extensions out by default — without it `seller.seller_invites` fails to restore and takes five dependent
+statements with it. Verified on local data: with the flag, a clean restore reports zero errors.
 
 `pg_dump` takes only ACCESS SHARE locks — it will not block reads or writes.
 
@@ -160,6 +173,19 @@ createdb v1_prod_copy
 pg_restore -d v1_prod_copy --no-owner --no-privileges -j4 afrotransact-prod.dump
 ```
 
+Expect **zero errors** from a dump taken with `-e citext`. If you took it with DBeaver, create the extension first —
+otherwise `seller.seller_invites` is silently missing:
+
+```bash
+createdb v1_prod_copy
+psql -d v1_prod_copy -c 'create schema if not exists seller;' \
+                     -c 'create extension if not exists citext schema seller;'
+pg_restore -d v1_prod_copy --no-owner --no-privileges afrotransact-prod.dump   # logs one harmless "schema already exists"
+```
+
+**Always check the error count**, and compare row counts against the source before trusting the copy —
+`pg_restore` ignores errors and exits 0.
+
 Bring up an empty v2 stack (`make up` runs every service's Flyway migrations) and rehearse against it.
 
 ---
@@ -175,6 +201,32 @@ Bring up an empty v2 stack (`make up` runs every service's Flyway migrations) an
 | Payments, refunds, transfers, saved cards | Same script | Follows orders. |
 | Store credit, coupons, referrals | Same script, *if rows exist* | Check first — there may be none. |
 | Accounting ledger | Not migrated | Archive v1. |
+
+### Running the user import
+
+**The connection URL must carry the schema.** v1 keeps Keycloak in a `keycloak` *schema* of the shared
+`afrotransact` database (`KC_DB_SCHEMA: keycloak`), not in a database of its own, and the importer queries
+unqualified table names. Without `options=-csearch_path%3Dkeycloak` it stops immediately with
+`relation "user_entity" does not exist`:
+
+```bash
+KC='postgresql://USER:PASS@HOST:5432/afrotransact?options=-csearch_path%3Dkeycloak'
+ID='postgresql://USER:PASS@HOST:5432/identity'
+
+python3 tools/migrate/keycloak_to_identity.py report --keycloak "$KC"              # counts, skips, unmapped roles
+python3 tools/migrate/keycloak_to_identity.py sql    --keycloak "$KC" > import.sql # read it before running it
+python3 tools/migrate/keycloak_to_identity.py apply  --keycloak "$KC" --identity "$ID"
+```
+
+`report` prints how many users have a portable password. **That number should equal your user count** — if it is
+lower, read the skip reasons before going further.
+
+**Only the `afrotransact` realm is imported.** Keycloak's own `master` realm administrator is excluded by design, so
+a master-realm login does not become a v2 account. On the local database that correctly left one account behind.
+
+Roles are listed as unmapped unless you pass `--role-map`. The local run reported `admin, buyer, inventory:access,
+inventory:approve, seller` — decide which of those matter in v2 and map them; every imported user gets
+`account.customer` regardless.
 
 ### The seller, by hand
 
