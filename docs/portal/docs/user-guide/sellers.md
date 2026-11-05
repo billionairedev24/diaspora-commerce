@@ -54,10 +54,11 @@ upload and its template, brand choices and the size chart pages. **Size charts**
 your departments sells clothing or shoes. The same rule is enforced on our side, so a listing, draft, upload row or size
 chart in another department is refused with a plain message that tells you how to add it.
 
-Need another department? Under any category picker choose **Need another department? Request it**, pick the department and
-send. AfroTransact reviews the request and, when it is approved, the department is added to your store at once. The answer
-tells you what that department also needs, for example your food permit for Groceries or confirming full ingredient
-labelling for Beauty. Listings you already have stay live and you can keep editing their price, stock and text.
+Need another department? At the bottom of the category list in the product form choose **Don't see your category? Request a
+department** (or use **Departments** on the Preferences page), pick the department and send. AfroTransact reviews the request
+and, when it is approved, the department is added to your store at once. The answer tells you what that department also
+needs, for example confirming full ingredient labelling for Beauty. Groceries needs no food permit; a permit is only asked
+of food services such as catering. Listings you already have stay live and you can keep editing their price, stock and text.
 
 ## 3. Fulfil orders
 

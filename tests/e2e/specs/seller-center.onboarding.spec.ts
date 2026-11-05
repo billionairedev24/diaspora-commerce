@@ -149,11 +149,8 @@ test.describe('seller center · application wizard', () => {
     // 7 · Catalog, permits & licences.
     await onStep(page, 'catalog-compliance', 'Catalog, permits & licences');
     await page.getByRole('button', { name: 'Groceries' }).click();
-    await page.getByLabel('Food permit type').selectOption('COTTAGE_FOOD');
-    await page.getByLabel('Permit / registration number').fill('CF-204417');
-    await page.getByLabel('Expires').fill('2028-06-30');
-    await page.locator('input[type=file]').setInputFiles(PDF);
-    await expect(page.getByText('permit.pdf')).toBeVisible();
+    // Groceries is plain product retail: no food permit is asked (that belongs to food services).
+    await expect(page.getByLabel('Food permit type')).toHaveCount(0);
     const terms = page.getByRole('checkbox', { name: /I agree to the Seller Terms/ });
     await expect(terms.locator('xpath=ancestor::label').getByRole('link')).toHaveText([
       'Seller Terms', 'Payment Terms for Sellers and Providers', 'Data Processing Terms', 'Seller Fees Summary'
