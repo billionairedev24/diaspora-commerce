@@ -93,6 +93,8 @@ type staffResource struct {
 	file    func(ctx context.Context, sc staffCtx, id, fileID string) (string, error)
 	version func(o jobj) string
 	actions []staffAction
+	// rowActions names the actions (keys of actions) that also appear in each table row's "⋯" menu.
+	rowActions []string
 	// actionsFor adds actions that depend on the record (one tap per shipment's next step); looked up like actions.
 	actionsFor func(o jobj) []staffAction
 	// shipments lays out an order's packages with the statuses the staff member may set on each.
@@ -473,6 +475,12 @@ func floatPtr(f float64) *float64 { return &f }
 // Form helpers.
 func ff(key, label, typ string, required bool) domain.FormField {
 	return domain.FormField{Key: key, Label: label, Type: typ, Required: required}
+}
+
+// withMin sets the fewest characters (trimmed) a text field needs; the form counts them as staff type.
+func withMin(f domain.FormField, n int) domain.FormField {
+	f.MinLength = n
+	return f
 }
 
 func withMax(f domain.FormField, n int) domain.FormField { f.MaxLength = n; return f }

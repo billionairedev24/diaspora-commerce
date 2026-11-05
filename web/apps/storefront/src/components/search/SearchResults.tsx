@@ -67,7 +67,7 @@ export function SearchResults() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [filtersOpen]);
-  // Result clicks feed search analytics and charge sponsored products (S240); fire and forget.
+  // Result clicks feed search events and charge sponsored products (S240); fire and forget.
   const reportClick = (p: ProductSummary, position: number) => {
     if (!data?.searchId) return;
     api.recordSearchClick({ searchId: data.searchId, q: query.q || undefined, atin: p.atin, position, adToken: p.sponsor?.adToken }).catch(() => undefined);

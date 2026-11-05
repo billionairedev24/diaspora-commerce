@@ -321,6 +321,16 @@ type Row struct {
 	Tone  *string        `json:"tone"`
 	// Search holds text the table does not show but its search box must still find (the ids behind the names).
 	Search []string `json:"-"`
+	// Actions are the actions the staff member may run on the row from its "⋯" menu now (state and permission already
+	// checked); the dialog is the same one the record's sheet opens.
+	Actions []RowAction `json:"actions,omitempty"`
+}
+
+// RowAction is one entry of a row's "⋯" menu.
+type RowAction struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	Tone  string `json:"tone"`
 }
 
 // FieldOption is one choice of a select field.
@@ -331,18 +341,20 @@ type FieldOption struct {
 
 // FormField is one input of a create, edit or action form.
 type FormField struct {
-	Key         string        `json:"key"`
-	Label       string        `json:"label"`
-	Type        string        `json:"type"`
-	Required    bool          `json:"required"`
-	Options     []FieldOption `json:"options,omitempty"`
-	Min         *float64      `json:"min,omitempty"`
-	Max         *float64      `json:"max,omitempty"`
-	MaxLength   int           `json:"maxLength,omitempty"`
-	Pattern     string        `json:"pattern,omitempty"`
-	Help        string        `json:"help,omitempty"`
-	Placeholder string        `json:"placeholder,omitempty"`
-	Value       any           `json:"value,omitempty"`
+	Key       string        `json:"key"`
+	Label     string        `json:"label"`
+	Type      string        `json:"type"`
+	Required  bool          `json:"required"`
+	Options   []FieldOption `json:"options,omitempty"`
+	Min       *float64      `json:"min,omitempty"`
+	Max       *float64      `json:"max,omitempty"`
+	MaxLength int           `json:"maxLength,omitempty"`
+	// MinLength is the fewest characters (after trimming) a text answer needs; the form shows a live count against it.
+	MinLength   int    `json:"minLength,omitempty"`
+	Pattern     string `json:"pattern,omitempty"`
+	Help        string `json:"help,omitempty"`
+	Placeholder string `json:"placeholder,omitempty"`
+	Value       any    `json:"value,omitempty"`
 	// Lookup makes the field a searchable picker (drivers, sellers): staff pick by name, the form sends the id.
 	Lookup string `json:"lookup,omitempty"`
 	// Section names the group the field belongs to: the form shows a heading when it changes from one field to the next
@@ -555,7 +567,7 @@ var statusTones = map[string]string{
 	"COMING_SOON": "brand", "SCHEDULED": "brand", "ENDED": "info", "ENABLED": "good", "DISABLED": "bad", "ACTIVE": "good", "IN_TRANSIT": "info",
 	"REFUNDED": "good", "DELIVERED": "good", "PLACED": "brand", "DELIVERY_FAILED": "bad", "OUT_FOR_DELIVERY": "info", "PACKED": "info",
 	"STATE": "info", "LOCAL": "brand", "SUBMITTED": "brand",
-	"ALERT": "bad", "BLOCKED": "bad", "AWAITING_ROUTE": "warn", "APPLIED": "good", "DUPLICATE": "info",
+	"ALERT": "bad", "BLOCKED": "bad", "SUSPENDED": "bad", "AWAITING_ROUTE": "warn", "APPLIED": "good", "DUPLICATE": "info",
 }
 
 // StatusTone maps a status onto a chip tone (nil for no status).
@@ -665,6 +677,8 @@ func checkText(fd FormField, s string) string {
 	switch {
 	case fd.MaxLength > 0 && len([]rune(s)) > fd.MaxLength:
 		return fmt.Sprintf("Keep it under %d characters", fd.MaxLength)
+	case fd.MinLength > 0 && len([]rune(strings.TrimSpace(s))) < fd.MinLength:
+		return fmt.Sprintf("Add a few more words: at least %d characters", fd.MinLength)
 	case fd.Pattern != "" && !regexp.MustCompile(fd.Pattern).MatchString(s):
 		if fd.Help != "" {
 			return fd.Help

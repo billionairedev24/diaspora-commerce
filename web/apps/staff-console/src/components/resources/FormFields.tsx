@@ -5,6 +5,8 @@ import { Button, Checkbox, DialogActions, Field, fieldStyles, Select, TextField 
 import { type FormEvent, Fragment, useState } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
+import { reasonRule } from '@/components/ui/ReasonField';
+import { useT } from '@/i18n/t';
 import { toLocalInput, toMinor } from '@/lib/format';
 
 import { FormErrors } from '../ui/FormErrors';
@@ -65,9 +67,15 @@ const inputType = (f: FormField): string => {
 
 const fieldId = (key: string) => `fld-${key.replace(/[^a-z0-9]/gi, '-')}`;
 
-function Input({ f, value, error, onChange }: { f: FormField; value: string | boolean | string[] | undefined; error?: string; onChange: (v: string | boolean | string[]) => void }) {
+function Input({ f, value, error: given, onChange }: { f: FormField; value: string | boolean | string[] | undefined; error?: string; onChange: (v: string | boolean | string[]) => void }) {
+  const t = useT();
   const id = fieldId(f.key);
   const label = `${f.label}${f.required && f.type !== 'toggle' ? '' : ' (optional)'}`;
+  // A field with a minimum length (a reason of at least 10 characters) counts as the person types, so a short answer is
+  // explained on screen, not only after Save.
+  const typed = typeof value === 'string' ? value : '';
+  const rule = f.minLength !== undefined && (f.type === 'textarea' || f.type === 'text') ? reasonRule(t, typed, f.minLength) : null;
+  const error = given ?? rule?.error;
   if (f.lookup && f.type === 'text') return <LookupField field={f} id={id} label={label} value={typeof value === 'string' ? value : ''} error={error} onChange={onChange} />;
   switch (f.type) {
     case 'toggle':
@@ -92,7 +100,7 @@ function Input({ f, value, error, onChange }: { f: FormField; value: string | bo
     }
     case 'textarea':
       return (
-        <Field label={label} error={error} help={f.help} id={id}>
+        <Field label={label} error={error} help={f.help ?? rule?.help} id={id}>
           {(a11y) => <textarea {...a11y} className={fieldStyles.control} rows={4} maxLength={f.maxLength} value={typeof value === 'string' ? value : ''} onChange={(e) => onChange(e.currentTarget.value)} />}
         </Field>
       );
@@ -111,7 +119,7 @@ function Input({ f, value, error, onChange }: { f: FormField; value: string | bo
           value={typeof value === 'string' ? value : ''}
           onChange={(e) => onChange(e.currentTarget.value)}
           error={error}
-          help={f.help}
+          help={f.help ?? rule?.help}
         />
       );
   }

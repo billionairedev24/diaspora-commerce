@@ -249,7 +249,7 @@ func orgForAccount(account, key string) string {
 func noteFormTitled(title, submit, intro string) func(context.Context, staffCtx, jobj) *domain.Form {
 	return func(context.Context, staffCtx, jobj) *domain.Form {
 		return &domain.Form{Title: title, SubmitLabel: submit, Intro: intro,
-			Fields: []domain.FormField{withMax(ff("note", "Explanation (at least 10 characters)", "textarea", true), 2000)}}
+			Fields: []domain.FormField{withMax(withMin(ff("note", "Explanation (at least 10 characters)", "textarea", true), 10), 2000)}}
 	}
 }
 
@@ -266,7 +266,7 @@ func proposeCorrectionForm(_ context.Context, _ staffCtx, o jobj) *domain.Form {
 	return &domain.Form{Title: "Propose a correction", SubmitLabel: "Propose", Intro: intro, Fields: []domain.FormField{
 		withValue(withOptions(ff("account", "Book the other side against", "select", true), adjustmentAccounts), "5000"),
 		withPattern(withMax(ff("key", "Organisation id or jurisdiction (only for 2000 and 2100)", "text", false), 80), "", "Seller payable needs the seller's organisation id, for example org_abc123. Leave empty for the other accounts."),
-		withMax(ff("reason", "Why the ledger is wrong (at least 15 characters)", "textarea", true), 1000),
+		withMax(withMin(ff("reason", "Why the ledger is wrong (at least 15 characters)", "textarea", true), 15), 1000),
 	}}
 }
 
@@ -447,7 +447,7 @@ func ledgerAdjustmentsResource() *staffResource {
 						withMax(ff("creditKey", "Credit: organisation id or jurisdiction (2000, 2100 only)", "text", false), 80),
 						withRange(ff("amount", "Amount in dollars", "number", true), 10_000_000),
 						withMax(ff("stripeRef", "Stripe object it corrects (needed when 1000 is used)", "text", false), 120),
-						withMax(ff("reason", "Why the ledger is wrong (at least 15 characters)", "textarea", true), 1000),
+						withMax(withMin(ff("reason", "Why the ledger is wrong (at least 15 characters)", "textarea", true), 15), 1000),
 					}}
 			},
 			create: func(ctx context.Context, sc staffCtx, v jobj) (string, error) {

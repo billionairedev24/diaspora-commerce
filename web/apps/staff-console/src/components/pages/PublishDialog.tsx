@@ -2,10 +2,11 @@
 
 import { type ContentKind } from '@afrotransact/api-client';
 import { type ContentIssue } from '@afrotransact/content';
-import { Button, Dialog, TextField } from '@afrotransact/ui';
+import { Button, Dialog } from '@afrotransact/ui';
 import { type FormEvent, useState } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
+import { ReasonField } from '@/components/ui/ReasonField';
 import { useT } from '@/i18n/t';
 
 import { issueText } from './MarkdownEditor';
@@ -82,15 +83,7 @@ export function PublishDialog({ open, onClose, kind, title, summary, blocking, n
         ) : null}
         {kind === 'legal' && errors.bodies ? <p role="alert" className="m-0 text-sm text-danger">{errors.bodies}</p> : null}
         {errors.changeSummary ? <p role="alert" className="m-0 text-sm text-danger">{errors.changeSummary}</p> : null}
-        <TextField
-          id="publish-reason"
-          label={t('st.pages.publish.reason')}
-          help={t('st.pages.publish.reasonHelp')}
-          value={reason}
-          maxLength={500}
-          error={errors.reason}
-          onChange={(e) => setReason(e.currentTarget.value)}
-        />
+        <ReasonField single id="publish-reason" label={t('st.pages.publish.reason')} help={t('st.pages.publish.reasonHelp')} min={5} max={500} value={reason} onChange={setReason} error={errors.reason} />
         {errors._ ? <p role="alert" className="m-0 text-sm text-danger">{errors._}</p> : null}
         <div className="flex justify-end gap-2">
           <Button variant="neutral" onClick={onClose}>

@@ -161,7 +161,7 @@ func referralsResource() *staffResource {
 func referralReasonForm(title, submit, intro string) func(context.Context, staffCtx, jobj) *domain.Form {
 	return func(context.Context, staffCtx, jobj) *domain.Form {
 		return &domain.Form{Title: title, SubmitLabel: submit, Intro: intro,
-			Fields: []domain.FormField{withMax(ff("reason", "Reason (at least 15 characters)", "textarea", true), 500)}}
+			Fields: []domain.FormField{withMax(withMin(ff("reason", "Reason (at least 15 characters)", "textarea", true), 15), 500)}}
 	}
 }
 
@@ -292,7 +292,7 @@ func referralSettingsResource() *staffResource {
 					section(withValue(withRange(ff("validityDays", "A friend can qualify for this many days after signing up", "number", true), 730), num(o, "validityDays")), rules),
 					section(withValue(withRange(ff("maxRewarded", "Most rewarded referrals per customer (0 = no limit)", "number", true), 10_000), num(o, "maxRewardedPerReferrer")), limits),
 					section(withValue(withRange(ff("maxCredit", "Most referral credit one customer can earn (dollars, 0 = no limit)", "number", true), 1_000_000), num(o, "maxCreditPerCustomerMinor")/100), limits),
-					section(withValue(withMax(ff("reason", "Why it changes (at least 15 characters)", "textarea", true), 500), ""), audit),
+					section(withValue(withMax(withMin(ff("reason", "Why it changes (at least 15 characters)", "textarea", true), 15), 500), ""), audit),
 				}
 				return domain.Form{Title: "Change the referral program", SubmitLabel: "Save",
 					ChangeKeys: []string{"enabled", "referrerType", "referrerCredit", "referrerDays", "referredType", "referredCredit", "referredDays", "qualifyingEvent",

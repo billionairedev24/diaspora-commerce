@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
+import { ReasonField } from '@/components/ui/ReasonField';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
@@ -141,9 +142,13 @@ export function DepartmentRequestSheet({ id, onClose }: { id: string | null; onC
                 {t('st.depts.missingBody', { items: missing.map((p) => t(PROMPT_LABEL[p.requirement])).join(', ') })}
               </Notice>
             ) : null}
-            <Field label={t(decision === 'approve' ? 'st.depts.noteOptional' : 'st.depts.reasonRequired')} help={t(decision === 'approve' ? 'st.depts.noteHelp' : 'st.depts.reasonHelp')} id="dept-decision-text">
-              {(a11y) => <textarea {...a11y} className={fieldStyles.control} rows={4} maxLength={500} value={text} onChange={(e) => setText(e.currentTarget.value)} />}
-            </Field>
+            {decision === 'approve' ? (
+              <Field label={t('st.depts.noteOptional')} help={t('st.depts.noteHelp')} id="dept-decision-text">
+                {(a11y) => <textarea {...a11y} className={fieldStyles.control} rows={4} maxLength={500} value={text} onChange={(e) => setText(e.currentTarget.value)} />}
+              </Field>
+            ) : (
+              <ReasonField id="dept-decision-text" label={t('st.depts.reasonRequired')} help={t('st.depts.reasonHelp')} min={MIN_REASON} max={500} rows={4} value={text} onChange={setText} />
+            )}
             {error ? (
               <Notice tone="danger" title={t('st.depts.notDone')} role="alert">
                 {error}

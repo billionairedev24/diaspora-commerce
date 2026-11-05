@@ -2258,5 +2258,8 @@
   "st.order.field.tags": "Étiquettes",
   "st.order.field.orderId": "ID de commande",
   "st.order.field.paymentId": "ID de paiement",
-  "st.order.field.customerId": "ID du client"
+  "st.order.field.customerId": "ID du client",
+  "st.reason.rule": "Au moins {min} caractères.",
+  "st.reason.more": "Ajoutez quelques mots : au moins {min} caractères ({count} sur {min})",
+  "st.depts.org.noChange": "Cochez ou décochez au moins un département pour enregistrer."
 }

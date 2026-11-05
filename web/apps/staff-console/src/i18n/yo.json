@@ -2258,5 +2258,8 @@
   "st.order.field.tags": "Àwọn àmì",
   "st.order.field.orderId": "ID ìbéèrè",
   "st.order.field.paymentId": "ID ìsanwó",
-  "st.order.field.customerId": "ID oníbàárà"
+  "st.order.field.customerId": "ID oníbàárà",
+  "st.reason.rule": "Ó kéré jù ni ohun kikọ {min}.",
+  "st.reason.more": "Fi ọ̀rọ̀ díẹ̀ sí i: ó kéré jù ni ohun kikọ {min} ({count} nínú {min})",
+  "st.depts.org.noChange": "Yan tàbí yọ ẹ̀ka kan kúrò kí o tó lè fipamọ́."
 }

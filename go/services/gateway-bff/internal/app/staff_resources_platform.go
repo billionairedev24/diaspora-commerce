@@ -129,7 +129,7 @@ func taxSettingsResource() *staffResource {
 					Intro: "Our own rules are always available. Stripe Tax can only be chosen once it is set up (its key is set and registrations are done in the Stripe dashboard). The change applies to new quotes; orders already placed keep their tax. It is recorded with your reason.",
 					Fields: []domain.FormField{
 						withValue(withOptions(ff("method", "Method", "select", true), taxMethodOptions), jstr(o, "method")),
-						withMax(ff("reason", "Why (at least 10 characters)", "textarea", true), 500),
+						withMax(withMin(ff("reason", "Why (at least 10 characters)", "textarea", true), 10), 500),
 					}, ChangeKeys: []string{"method"}}
 			},
 			save: func(ctx context.Context, sc staffCtx, _ jobj, v jobj, _ string) error {

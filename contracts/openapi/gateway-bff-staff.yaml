@@ -7664,6 +7664,17 @@ components:
           type: object
           additionalProperties: {$ref: '#/components/schemas/CellValue'}
         tone: {oneOf: [{$ref: '#/components/schemas/Tone'}, {type: 'null'}]}
+        actions:
+          type: array
+          description: 'The row''s "⋯" menu: actions this staff member may run on the record now (state and permission checked). Choosing one opens the same dialog as the record''s sheet (Sellers & providers: Suspend… for APPROVED, Reinstate… for SUSPENDED, permission sellers:enforce, run through trust-ops with an audited reason of at least 10 characters).'
+          items: {$ref: '#/components/schemas/RowAction'}
+    RowAction:
+      type: object
+      required: [key, label, tone]
+      properties:
+        key: {type: string, description: "The action key, the same as in the record's actions"}
+        label: {type: string}
+        tone: {type: string}
     FieldOption:
       type: object
       required: [value, label]
@@ -7705,6 +7716,7 @@ components:
         min: {type: number}
         max: {type: number}
         maxLength: {type: integer}
+        minLength: {type: integer, description: 'The fewest characters (trimmed) a text answer needs; the form counts them as staff type and says how many are missing (for example a reason of at least 10 characters)'}
         pattern: {type: string, description: ECMAScript regular expression the value must match}
         help: {type: string}
         placeholder: {type: string}

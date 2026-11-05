@@ -75,6 +75,27 @@ func organisationsResource() *staffResource {
 			return o, nil
 		},
 		idOf: func(o jobj) string { return jstr(o, "orgId") },
+		actions: []staffAction{
+			// trust-ops runs the suspension (seller-service hold: listings hidden and payouts paused; buy-box
+			// restriction) and writes the audit entry with who, what and why. sellers:enforce is the gate: Trust & Safety
+			// and Operations hold it with VIEW on this module, so the module level asked for is VIEW. One person decides;
+			// AfroTransact Retail is refused by trust-ops (retail-exempt).
+			{key: "suspend", label: "Suspend…", tone: "danger", permission: "sellers:enforce", level: domain.LevelView,
+				form: suspendOrgForm,
+				when: inState("APPROVED"),
+				run: func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {
+					return sc.post(ctx, sc.up.TrustOps, "/v1/seller-enforcement/"+url.PathEscape(jstr(o, "orgId"))+"/suspend",
+						jobj{"reason": vs(v, "reason"), "note": vs(v, "note")}, nil)
+				}},
+			{key: "reinstate", label: "Reinstate…", tone: "primary", permission: "sellers:enforce", level: domain.LevelView,
+				form: reinstateOrgForm,
+				when: inState("SUSPENDED"),
+				run: func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {
+					return sc.post(ctx, sc.up.TrustOps, "/v1/seller-enforcement/"+url.PathEscape(jstr(o, "orgId"))+"/reinstate",
+						jobj{"note": vs(v, "note")}, nil)
+				}},
+		},
+		rowActions: []string{"suspend", "reinstate"},
 		cells: func(o jobj) map[string]any {
 			return map[string]any{"displayName": cellValue(firstNonEmpty(jstr(o, "displayName"), jstr(o, "legalName")))}
 		},
@@ -92,6 +113,35 @@ func organisationsResource() *staffResource {
 			}
 		},
 	}
+}
+
+// suspendReasonCodes are trust-ops' suspension reasons.
+var suspendReasonCodes = []domain.FieldOption{
+	{Value: "POOR_PERFORMANCE", Label: "Poor performance"}, {Value: "PROHIBITED_ITEMS", Label: "Prohibited items"},
+	{Value: "COUNTERFEIT", Label: "Counterfeit goods"}, {Value: "FRAUD_RISK", Label: "Fraud risk"},
+	{Value: "POLICY_VIOLATION", Label: "Policy violation"}, {Value: "COMPLIANCE", Label: "Compliance"}, {Value: "OTHER", Label: "Other"},
+}
+
+// minEnforceReason is the fewest characters of the reason staff give for a suspension or reinstatement (the audit entry).
+const minEnforceReason = 10
+
+func suspendOrgForm(context.Context, staffCtx, jobj) *domain.Form {
+	return &domain.Form{Title: "Suspend this organisation", SubmitLabel: "Suspend",
+		Intro: "Its listings are hidden from the marketplace and its payouts are paused straight away, and it is restricted in the buy box. " +
+			"Open orders are not cancelled. The reason is kept in the audit log. Reinstating restores the listings and payouts.",
+		Fields: []domain.FormField{
+			withOptions(ff("reason", "Reason", "select", true), suspendReasonCodes),
+			withMax(withMin(ff("note", "What happened (at least 10 characters)", "textarea", true), minEnforceReason), 1000),
+		}}
+}
+
+func reinstateOrgForm(context.Context, staffCtx, jobj) *domain.Form {
+	return &domain.Form{Title: "Reinstate this organisation", SubmitLabel: "Reinstate",
+		Intro: "Its listings are shown again and its payouts resume. A payout hold from Stripe compliance, if there is one, stays until Stripe clears it. " +
+			"The reason is kept in the audit log.",
+		Fields: []domain.FormField{
+			withMax(withMin(ff("note", "Why it is safe to reinstate (at least 10 characters)", "textarea", true), minEnforceReason), 1000),
+		}}
 }
 
 // ---------------------------------------------------------------- Stripe Connect compliance (staff console)

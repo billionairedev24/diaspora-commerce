@@ -50,20 +50,20 @@ describe('Department requests screen', () => {
 
   it('opens a request with its compliance prompts, and approves with an optional note', async () => {
     const user = userEvent.setup();
-    nav.set('/department-requests?open=7d6b1d2a-0003-4a6e-9c11-000000000003');
+    nav.set('/department-requests?open=7d6b1d2a-0002-4a6e-9c11-000000000002');
     await renderScreen(<DepartmentRequestsView />);
-    expect(await screen.findByText('Food permit')).toBeInTheDocument();
+    expect(await screen.findByText('Beauty product labelling')).toBeInTheDocument();
     expect(screen.getByText(/Not on file yet/)).toBeInTheDocument();
     expect(screen.getAllByText('Fashion').length).toBeGreaterThan(0); // current departments by name
 
     await user.click(screen.getByRole('button', { name: 'Approve' }));
     const dialog = await screen.findByRole('dialog', { name: 'Approve this request?' });
     expect(within(dialog).getByText(/Not on file yet/)).toBeInTheDocument(); // warning about the missing permit
-    await user.type(within(dialog).getByRole('textbox'), 'Permit seen by phone.');
+    await user.type(within(dialog).getByRole('textbox'), 'Labels seen by phone.');
     await user.click(within(dialog).getByRole('button', { name: 'Approve' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Approve this request?' })).not.toBeInTheDocument());
-    const done = getStaffDb().departments.requests.find((r) => r.id.endsWith('3'));
-    expect(done).toMatchObject({ status: 'APPROVED', decisionNote: 'Permit seen by phone.' });
+    const done = getStaffDb().departments.requests.find((r) => r.id.endsWith('2'));
+    expect(done).toMatchObject({ status: 'APPROVED', decisionNote: 'Labels seen by phone.' });
   });
 
   it('will not reject without a reason, and sends the reason the seller reads', async () => {
@@ -149,8 +149,24 @@ describe('Organisation Departments section', () => {
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('checkbox', { name: 'Fashion' }));
     expect(within(dialog).getByRole('button', { name: 'Save departments' })).toBeDisabled();
-    await user.type(within(dialog).getByRole('textbox'), 'too short');
+    await user.type(within(dialog).getByRole('textbox'), 'updates');
     expect(within(dialog).getByRole('button', { name: 'Save departments' })).toBeDisabled();
+    // The rule is on screen while Save is off: how short it is, and what is needed.
+    expect(within(dialog).getByText('Add a few more words: at least 10 characters (7 of 10)')).toBeInTheDocument();
+    await user.type(within(dialog).getByRole('textbox'), ' too');
+    expect(within(dialog).queryByText(/Add a few more words/)).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Save departments' })).toBeEnabled();
+  });
+
+  it('says why Save is off when nothing changed, and never lists a food permit next to Groceries', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<OrgDepartmentsSection orgId="org-ade" />);
+    await user.click(await screen.findByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Tick or untick at least one department to save.')).toBeInTheDocument();
+    expect(within(dialog).queryByText(/permit/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('checkbox', { name: /Groceries/ })).toBeInTheDocument();
+    expect(within(dialog).getByRole('checkbox', { name: /Beauty/ })).toHaveAccessibleDescription('(Beauty product labelling)');
   });
 
   it('shows no Edit action without applications:approve, and nothing without applications:review', async () => {

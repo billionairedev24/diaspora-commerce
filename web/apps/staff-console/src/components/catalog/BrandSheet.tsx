@@ -14,6 +14,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, type ReactNode, useState } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
+import { ReasonField as RuleReasonField } from '@/components/ui/ReasonField';
 import { problemMessage, Spinner } from '@/components/ui/States';
 import { type MessageKey, useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
@@ -119,7 +120,7 @@ function FormShell({ intro, submit, busy, canSubmit, error, hint, onSubmit, onCa
 
 function ReasonField({ value, onChange, error }: { value: string; onChange: (v: string) => void; error?: string }) {
   const t = useT();
-  return <TextField label={t('st.catalog.field.reason')} help={t('st.catalog.reasonHelp')} value={value} maxLength={1000} error={error} onChange={(e) => onChange(e.currentTarget.value)} />;
+  return <RuleReasonField single label={t('st.catalog.field.reason')} help={t('st.catalog.reasonHelp')} min={3} value={value} onChange={onChange} error={error} />;
 }
 
 interface FormProps {

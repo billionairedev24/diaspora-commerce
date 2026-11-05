@@ -6941,6 +6941,14 @@ export interface components {
                 [key: string]: components["schemas"]["CellValue"];
             };
             tone: components["schemas"]["Tone"] | null;
+            /** @description The row's "⋯" menu: actions this staff member may run on the record now (state and permission checked). Choosing one opens the same dialog as the record's sheet (Sellers & providers: Suspend… for APPROVED, Reinstate… for SUSPENDED, permission sellers:enforce, run through trust-ops with an audited reason of at least 10 characters). */
+            actions?: components["schemas"]["RowAction"][];
+        };
+        RowAction: {
+            /** @description The action key, the same as in the record's actions */
+            key: string;
+            label: string;
+            tone: string;
         };
         FieldOption: {
             value: string;
@@ -6971,6 +6979,8 @@ export interface components {
             min?: number;
             max?: number;
             maxLength?: number;
+            /** @description The fewest characters (trimmed) a text answer needs; the form counts them as staff type and says how many are missing (for example a reason of at least 10 characters) */
+            minLength?: number;
             /** @description ECMAScript regular expression the value must match */
             pattern?: string;
             help?: string;

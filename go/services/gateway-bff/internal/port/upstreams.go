@@ -29,7 +29,7 @@ type SearchParams struct {
 	Size       int
 	// Ads blends sponsored products into the page (results pages only; S240).
 	Ads bool
-	// NoTrack keeps machine-made queries (home rails, Lola) out of search analytics (track=false).
+	// NoTrack keeps machine-made queries (home rails, Lola) out of search events (track=false).
 	NoTrack bool
 }
 

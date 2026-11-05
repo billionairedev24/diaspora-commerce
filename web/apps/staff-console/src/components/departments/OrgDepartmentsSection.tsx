@@ -1,21 +1,20 @@
 'use client';
 
 import { isApiError, staffDepartmentKeys, staffDepartmentQueries,type StaffOrgDepartments } from '@afrotransact/api-client';
-import { Button, Checkbox, Dialog, Field, fieldStyles, useToast } from '@afrotransact/ui';
+import { Button, Checkbox, Dialog, useToast } from '@afrotransact/ui';
 import { PencilSimple } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
+import { MIN_REASON, ReasonField, reasonRule } from '@/components/ui/ReasonField';
 import { ErrorState, problemMessage } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { useStaff } from '@/lib/session';
 
 import { PROMPT_LABEL } from './labels';
-
-const MIN_REASON = 10;
 
 /**
  * "Departments" on an organisation's sheet: the departments it may sell in, by name, and (with applications:approve)
@@ -82,7 +81,7 @@ function EditDepartments({ org, open, onClose }: { org: StaffOrgDepartments; ope
   const [error, setError] = useState<string | null>(null);
 
   const changed = chosen.length !== initial.length || chosen.some((c) => !initial.includes(c));
-  const reasonOk = reason.trim().length >= MIN_REASON;
+  const reasonOk = reasonRule(t, reason, MIN_REASON).ok;
   const reset = () => {
     setChosen(initial);
     setReason('');
@@ -144,9 +143,8 @@ function EditDepartments({ org, open, onClose }: { org: StaffOrgDepartments; ope
           ) : null}
         </fieldset>
         {changed && chosen.length === 0 ? <Notice tone="warning" title={t('st.depts.org.emptyTitle')}>{t('st.depts.org.emptyBody')}</Notice> : null}
-        <Field label={t('st.depts.org.reason')} help={t('st.depts.org.reasonHelp')} error={errors.reason ?? null} id="dept-set-reason">
-          {(a11y) => <textarea {...a11y} className={fieldStyles.control} rows={3} maxLength={1000} value={reason} onChange={(e) => setReason(e.currentTarget.value)} />}
-        </Field>
+        {!changed ? <p className="m-0 text-sm text-muted">{t('st.depts.org.noChange')}</p> : null}
+        <ReasonField id="dept-set-reason" label={t('st.depts.org.reason')} help={t('st.depts.org.reasonHelp')} min={MIN_REASON} value={reason} onChange={setReason} error={errors.reason} />
         {error && !errors.departments && !errors.reason ? (
           <Notice tone="danger" title={t('st.depts.notDone')} role="alert">
             {error}

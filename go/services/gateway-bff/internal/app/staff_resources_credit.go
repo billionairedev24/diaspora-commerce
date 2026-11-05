@@ -169,7 +169,7 @@ func creditAdjustmentsResource() *staffResource {
 					withValue(withOptions(ff("change", "What to do", "select", true), []domain.FieldOption{{Value: "ADD", Label: "Add credit"}, {Value: "TAKE_BACK", Label: "Take credit back"}}), "ADD"),
 					withRange(ff("amount", "Amount in dollars", "number", true), 100_000),
 					withValue(withOptions(ff("source", "Kind", "select", true), creditSources), "STAFF"),
-					withMax(ff("reason", "Why (at least 15 characters; the customer is not shown it)", "textarea", true), 500),
+					withMax(withMin(ff("reason", "Why (at least 15 characters; the customer is not shown it)", "textarea", true), 15), 500),
 				}}
 			},
 			create: func(ctx context.Context, sc staffCtx, v jobj) (string, error) {
@@ -301,7 +301,7 @@ func giftCardsResource() *staffResource {
 					withMax(ff("message", "Message", "textarea", false), 500),
 					ff("sendAt", "Email it on (empty = now)", "date", false),
 					withValue(withOptions(ff("locale", "Language of the email", "select", true), giftCardLocales), "en"),
-					withMax(ff("reason", "Why it is issued (at least 15 characters)", "textarea", true), 500),
+					withMax(withMin(ff("reason", "Why it is issued (at least 15 characters)", "textarea", true), 15), 500),
 				}}
 			},
 			create: func(ctx context.Context, sc staffCtx, v jobj) (string, error) {
@@ -323,7 +323,7 @@ func giftCardsResource() *staffResource {
 func noteFormReason(title, submit, intro string) func(context.Context, staffCtx, jobj) *domain.Form {
 	return func(context.Context, staffCtx, jobj) *domain.Form {
 		return &domain.Form{Title: title, SubmitLabel: submit, Intro: intro,
-			Fields: []domain.FormField{withMax(ff("reason", "Reason (at least 15 characters)", "textarea", true), 500)}}
+			Fields: []domain.FormField{withMax(withMin(ff("reason", "Reason (at least 15 characters)", "textarea", true), 15), 500)}}
 	}
 }
 
@@ -483,7 +483,7 @@ func moneySettingsResource() *staffResource {
 					fields = append(fields, withValue(withMax(ff("terms."+l, "Gift card terms · "+strings.ToUpper(l)+" (empty = built-in terms)", "textarea", false), 4000), jstr(o, "giftCardTerms."+l)))
 					changeKeys = append(changeKeys, "terms."+l)
 				}
-				fields = append(fields, withValue(withMax(ff("reason", "Why it changes (at least 15 characters)", "textarea", true), 500), ""))
+				fields = append(fields, withValue(withMax(withMin(ff("reason", "Why it changes (at least 15 characters)", "textarea", true), 15), 500), ""))
 				return domain.Form{Title: "Change the credit and gift card limits", SubmitLabel: "Save", ChangeKeys: changeKeys,
 					Intro: "Takes effect at once for new gift cards and staff credit. Every change is kept with who made it and why.", Fields: fields}
 			},

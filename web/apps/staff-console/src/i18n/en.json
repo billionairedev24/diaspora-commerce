@@ -2251,5 +2251,8 @@
   "st.order.field.tags": "Tags",
   "st.order.field.orderId": "Order ID",
   "st.order.field.paymentId": "Payment ID",
-  "st.order.field.customerId": "Customer ID"
+  "st.order.field.customerId": "Customer ID",
+  "st.reason.rule": "At least {min} characters.",
+  "st.reason.more": "Add a few more words: at least {min} characters ({count} of {min})",
+  "st.depts.org.noChange": "Tick or untick at least one department to save."
 }

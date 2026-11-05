@@ -41,14 +41,32 @@ Manager and Trust & Safety). The number of requests waiting is the badge on the 
 - **Pending** and **Decided** tabs; filter by department, by organisation name (the search box) and by the days the
   request was made. Click a row to open it.
 - The request shows who asked, the seller's note, the organisation's current departments and what the department asks
-  for (a food permit, beauty labelling) with whether the organisation's compliance data already has it.
+  for (for example beauty labelling; the list comes from each department's compliance data, and Groceries asks for no food
+  permit) with whether the organisation's compliance data already has it.
 - **Approve** (optional note) adds the department at once. **Reject** needs a reason; the seller reads it.
 - One person decides; unlike applications there is no second approver. Every decision is audited (who, what, why).
 
 To change an organisation's departments yourself, open it under **Partners, Sellers & providers**: the **Departments**
 section lists them by name, and **Edit** (with `applications:approve`) lets you choose from the catalog's departments.
-A reason of at least 10 characters is required and the button stays off until something changed. Live products in a
+A reason of at least 10 characters is required. While it is shorter, the field says how many characters are still missing
+("Add a few more words: at least 10 characters (7 of 10)"), and when nothing is ticked or unticked yet the dialog says so; **Save**
+is only off for one of those two reasons. Every reason box in the console works the same way. Live products in a
 department you remove stay live, but their category cannot be changed.
+
+## Suspend or reinstate a seller or provider
+
+Under **Partners, Sellers & providers**, the **⋯** menu of an approved organisation has **Suspend…**, and a suspended one
+has **Reinstate…**; the same two buttons are on the organisation's sheet. They need the `sellers:enforce` permission
+(Super Admin, Trust & Safety, Operations); without it the menu is empty and the sheet's buttons are greyed out with the
+reason.
+
+- **Suspend…** asks for a reason (a list) and what happened (at least 10 characters). At once the organisation's listings
+  are hidden from the marketplace, its payouts are paused and it is restricted in the buy box. Open orders are not
+  cancelled. The status shows as **Suspended**. AfroTransact Retail cannot be suspended.
+- **Reinstate…** asks why it is safe (at least 10 characters). The listings come back and payouts resume. A payout hold
+  from Stripe compliance, if there is one (see Stripe Connect), stays until Stripe clears it.
+- One person decides; trust-ops writes the audit entry (who, what, why) under Audit log. Suspending an organisation that
+  is already suspended changes nothing.
 
 ## Review moderation
 

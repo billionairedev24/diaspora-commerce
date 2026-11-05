@@ -248,7 +248,7 @@ func tierStatusRequest(o jobj, status, reason string) jobj {
 }
 
 func membershipReasonField() domain.FormField {
-	return withMax(ff("reason", "Why it changes (at least 15 characters; kept in the history)", "textarea", true), 500)
+	return withMax(withMin(ff("reason", "Why it changes (at least 15 characters; kept in the history)", "textarea", true), 15), 500)
 }
 
 func membershipTiersResource() *staffResource {
@@ -362,7 +362,7 @@ func membershipTiersResource() *staffResource {
 				fields[6] = withValue(fields[6], 14.0)
 				fields = append([]domain.FormField{withPattern(withMax(ff("code", "Code (lower case letters, numbers and dashes; cannot change later)", "text", true), 40),
 					`^[a-z][a-z0-9-]{1,39}$`, "Use 2 to 40 lower case letters, numbers or dashes, starting with a letter")}, fields...)
-				fields = append(fields, withValue(withMax(ff("reason", "Why this tier is added (at least 15 characters)", "textarea", true), 500), ""))
+				fields = append(fields, withValue(withMax(withMin(ff("reason", "Why this tier is added (at least 15 characters)", "textarea", true), 15), 500), ""))
 				return domain.Form{Title: "Add a membership tier", SubmitLabel: "Add tier", Fields: fields,
 					Intro: "Define the price, the trial and the benefits from the menu. Start it as a draft to review it, or publish it to open it to shoppers at once."}
 			},

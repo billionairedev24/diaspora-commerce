@@ -1,7 +1,7 @@
 'use client';
 
 import { type FieldValue, isApiError, type OneTimeSecret, type ResourceKey, type ResourceRow, staffKeys, staffQueries } from '@afrotransact/api-client';
-import { DataTable, type TableExportRequest, useTableState } from '@afrotransact/data-table';
+import { DataTable, rowActionsColumn, type TableExportRequest, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, useToast } from '@afrotransact/ui';
 import { Plus } from '@phosphor-icons/react/ssr';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -89,9 +89,25 @@ export function ResourceTable({ resource, urlPrefix, statusFilter = false }: { r
     }
   });
 
+  /** Opens the record's sheet with one of its actions already started (the row menu's entry): ?open=<id>&do=<action>. */
+  const openWithAction = (id: string, action: string) => {
+    const next = new URLSearchParams(params.toString());
+    next.set('open', id);
+    next.set('do', action);
+    router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+  };
+  const clearAction = () => {
+    if (!params.has('do')) return;
+    const next = new URLSearchParams(params.toString());
+    next.delete('do');
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+  const hasRowActions = (data?.rows ?? []).some((r) => (r.actions?.length ?? 0) > 0);
+
   const columns = useMemo<ColumnDef<ResourceRow>[]>(
-    () =>
-      (data?.columns ?? []).map((c) => ({
+    () => [
+      ...(data?.columns ?? []).map((c): ColumnDef<ResourceRow> => ({
         id: c.key,
         accessorFn: (r: ResourceRow) => r.cells[c.key] ?? undefined,
         header: columnLabel(t, c),
@@ -102,7 +118,20 @@ export function ResourceTable({ resource, urlPrefix, statusFilter = false }: { r
         cell: ({ row }) =>
           c.key === 'device' ? <DeviceCell value={row.original.cells[c.key]} /> : <Cell kind={c.kind} value={row.original.cells[c.key]} tone={row.original.tone} />
       })),
-    [data?.columns, t]
+      // The row's "⋯" menu: what the BFF says this staff member may do to this record now (Suspend… / Reinstate…).
+      ...(hasRowActions
+        ? [
+            rowActionsColumn<ResourceRow>({
+              header: t('st.rows.actionsHeader'),
+              name: (r) => String(r.cells[data?.columns[0]?.key ?? ''] ?? r.id),
+              label: (r) => t('st.rows.actionsFor', { name: String(r.cells[data?.columns[0]?.key ?? ''] ?? r.id) }),
+              items: (r) => (r.actions ?? []).map((a) => ({ label: a.label, danger: a.tone === 'danger', onSelect: () => openWithAction(r.id, a.key) }))
+            })
+          ]
+        : [])
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- openWithAction only reads the current URL when a menu entry is chosen
+    [data?.columns, hasRowActions, t]
   );
 
   const onExport = async (req: TableExportRequest) => {
@@ -179,6 +208,8 @@ export function ResourceTable({ resource, urlPrefix, statusFilter = false }: { r
           id={openId}
           onClose={() => setOpen(null)}
           sharedOpen={urlPrefix !== undefined}
+          autoAction={params.get('do')}
+          onAutoActionDone={clearAction}
           extra={resource === 'organisations' && openId ? <OrgDepartmentsSection orgId={openId} /> : undefined}
         />
       )}

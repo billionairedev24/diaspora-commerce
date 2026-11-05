@@ -51,7 +51,8 @@ export interface MockDepartmentsState {
 const DAY_MS = 86_400_000;
 
 export const MOCK_DEPARTMENT_CATALOG: StaffDepartment[] = [
-  { code: 'groceries', name: 'Groceries & Food', requires: ['FOOD_PERMIT'] },
+  // Groceries asks for no food permit any more (catalog migration V17): the requirements come from the department's compliance data.
+  { code: 'groceries', name: 'Groceries & Food', requires: [] },
   { code: 'beauty', name: 'Beauty & Personal Care', requires: ['BEAUTY_LABELLING'] },
   { code: 'fashion', name: 'Fashion', requires: [] },
   { code: 'home-art', name: 'Home & Art', requires: [] },
@@ -60,7 +61,7 @@ export const MOCK_DEPARTMENT_CATALOG: StaffDepartment[] = [
 ];
 
 export const MOCK_DEPARTMENT_ORGS: MockDeptOrg[] = [
-  { id: 'org-ade', name: "Ade's Kitchen", departments: ['groceries'], onFile: ['FOOD_PERMIT'] },
+  { id: 'org-ade', name: "Ade's Kitchen", departments: ['groceries'], onFile: [] },
   { id: 'org-mama-efe', name: 'Mama Efe Braids', departments: ['fashion'], onFile: [] },
   { id: 'org-kente', name: 'Kente Naturals', departments: ['fashion', 'home-art'], onFile: [] },
   { id: 'org-nile', name: 'Nile Beauty', departments: ['beauty'], onFile: ['BEAUTY_LABELLING'] },
@@ -90,7 +91,7 @@ export function seedDepartments(now: Date): MockDepartmentsState {
       req(2, 'org-mama-efe', 'beauty', 'PENDING', 'Efe Okonkwo', 2, { note: 'I want to list shea butter and hair oils alongside my braiding services.' }),
       req(3, 'org-kente', 'groceries', 'PENDING', 'Kofi Mensah', 7, { note: 'Dried hibiscus and spices from our cooperative in Kumasi.' }),
       req(4, 'org-nile', 'jewellery', 'APPROVED', 'Sara Hassan', 12, { decidedBy: 'Amara Diallo', decidedAt: ago(11), decisionNote: 'Beaded jewellery photos look good.' }),
-      req(5, 'org-mama-efe', 'groceries', 'REJECTED', 'Efe Okonkwo', 20, { decidedBy: 'Amara Diallo', decidedAt: ago(19), decisionNote: 'Upload your food permit first, then ask again.' }),
+      req(5, 'org-mama-efe', 'groceries', 'REJECTED', 'Efe Okonkwo', 20, { decidedBy: 'Amara Diallo', decidedAt: ago(19), decisionNote: 'Tell us more about what you will sell, then ask again.' }),
       req(6, 'org-kente', 'jewellery', 'APPROVED', 'Kofi Mensah', 30, { decidedBy: 'Tunde Bakare', decidedAt: ago(29) })
     ]
   };

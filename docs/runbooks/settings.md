@@ -19,6 +19,17 @@ The old addresses (`/fees`, `/markets`, `/site-content`, `/developers`, `/notifi
 Day-to-day money work stays where it was: Payouts & ledger (approvals, reconciliation, adjustments) and Plans & billing (plan
 catalogue, trials, rewards, each seller's billing).
 
+## Suspending or reinstating a seller or provider
+
+**Partners > Sellers & providers**, the row's **⋯** menu or the organisation's sheet: **Suspend…** (approved organisations) and
+**Reinstate…** (suspended ones), permission `sellers:enforce`. The console calls trust-ops
+(`POST /v1/seller-enforcement/{orgId}/suspend` with `{reason, note}`, `/reinstate` with `{note}`), which asks seller-service for the
+suspension hold (listings hidden, payouts paused), restricts the seller in the buy box (offers) and audits who, what and why;
+the note is at least 10 characters. Calling Suspend again retries a step that failed (seller-service hold or buy-box) and
+changes nothing that already worked. A Stripe compliance payout hold survives reinstatement until Stripe clears it
+(*Stripe Connect*, Release payout hold). AfroTransact Retail is refused (`trustops.retail-exempt`). Without the console:
+the same two calls with a staff token holding `sellers:enforce`.
+
 ## Who calculates sales tax
 
 Sales tax is worked out by **our own rules** by default: the state and local rates (Tax rates) and what each item is for tax

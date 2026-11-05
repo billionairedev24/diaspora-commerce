@@ -1,13 +1,14 @@
 'use client';
 
 import { staffKeys, staffQueries,type SupportShipment } from '@afrotransact/api-client';
-import { Button, Dialog, Field, fieldStyles, useToast } from '@afrotransact/ui';
+import { Button, Dialog, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type ReactNode, useState } from 'react';
 
 import { Card } from '@/components/ui/Card';
 import { Notice } from '@/components/ui/Notice';
+import { ReasonField } from '@/components/ui/ReasonField';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { staffApi } from '@/lib/api';
@@ -208,9 +209,7 @@ export function CustomerPanel({ customerId, caseId }: { customerId: string; case
           <p className="m-0 text-sm">
             {cancel?.shipment.label} of {cancel?.orderNumber} ({cancel ? money(cancel.shipment.totalMinor) : ''}). Shipments can be cancelled until they are packed.
           </p>
-          <Field label="Reason" error={reason.length > 0 && reason.trim().length < 3 ? 'Give a reason (3 characters or more)' : null}>
-            {(a11y) => <textarea {...a11y} className={fieldStyles.control} rows={3} maxLength={500} value={reason} onChange={(e) => setReason(e.currentTarget.value)} />}
-          </Field>
+          <ReasonField label="Reason" min={3} max={500} value={reason} onChange={setReason} />
           {cancelShipment.isError ? (
             <Notice tone="danger" title="Not cancelled." role="alert">
               {problemMessage(cancelShipment.error)}

@@ -143,7 +143,9 @@ func (s *staffRecordsImpl) page(r *staffResource, sc staffCtx, q staffQuery, lis
 		p.Facets = []domain.Facet{}
 	}
 	for _, it := range list.items {
-		p.Rows = append(p.Rows, rowOf(r, it))
+		row := rowOf(r, it)
+		row.Actions = r.rowMenu(sc, it)
+		p.Rows = append(p.Rows, row)
 	}
 	switch {
 	case list.next != nil:
@@ -247,6 +249,20 @@ func (s *staffRecordsImpl) detail(ctx context.Context, r *staffResource, sc staf
 		d.EditForm = &f
 	}
 	return d
+}
+
+// rowMenu is the entries of the row's "⋯" menu: the listed actions this staff member may run on this record now.
+func (r *staffResource) rowMenu(sc staffCtx, o jobj) []domain.RowAction {
+	var out []domain.RowAction
+	for _, a := range r.actionList(o) {
+		if !slices.Contains(r.rowActions, a.key) {
+			continue
+		}
+		if reason, _ := actionReason(r, sc, a, o); reason == "" {
+			out = append(out, domain.RowAction{Key: a.key, Label: a.label, Tone: a.tone})
+		}
+	}
+	return out
 }
 
 // actionReason says why the staff member may not run the action now ("" when they may).

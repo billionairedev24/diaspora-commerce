@@ -16,7 +16,8 @@ export interface MockDepartment {
 }
 
 export const MOCK_DEPARTMENTS: MockDepartment[] = [
-  { id: 'dep-groceries', code: 'groceries', name: 'Groceries', requires: ['FOOD_PERMIT'] },
+  // Groceries asks for no food permit any more (catalog migration V17): a permit is a food-service matter.
+  { id: 'dep-groceries', code: 'groceries', name: 'Groceries', requires: [] },
   { id: 'dep-fashion', code: 'fashion', name: 'Fashion', requires: [] },
   { id: 'dep-beauty', code: 'beauty', name: 'Beauty', requires: ['BEAUTY_LABELLING'] },
   { id: 'dep-books', code: 'books', name: 'Books', requires: [] }

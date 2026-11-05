@@ -295,7 +295,14 @@ function page(ctx: Ctx, resource: ResourceKey): ResourcePage {
     rows: rows.map((r) => ({
       id: r.id,
       cells: Object.fromEntries(def.columns.map((c) => [c.key, c.key === 'id' ? r.id : cellOf(r.fields[c.key] ?? null)])),
-      tone: toneOf(def.statusKey ? ((r.fields[def.statusKey] as string | null) ?? null) : null)
+      tone: toneOf(def.statusKey ? ((r.fields[def.statusKey] as string | null) ?? null) : null),
+      ...(def.rowActions
+        ? {
+            actions: def.actions
+              .filter((a) => def.rowActions?.includes(a.key) && actionView(ctx, resource, r, a).allowed)
+              .map((a) => ({ key: a.key, label: a.label, tone: a.tone }))
+          }
+        : {})
     })),
     page: cursor ? 0 : Number(qs.get('page') ?? 0) || 0,
     size,

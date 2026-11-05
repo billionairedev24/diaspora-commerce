@@ -127,9 +127,9 @@ describe('Need another department? Request it', () => {
     await waitFor(() => expect(within(choose).getAllByRole('option').length).toBeGreaterThan(1));
     // A department it already has is not offered.
     expect(within(choose).queryByRole('option', { name: 'Fashion' })).not.toBeInTheDocument();
-    fireEvent.change(choose, { target: { value: 'groceries' } });
+    fireEvent.change(choose, { target: { value: 'beauty' } });
     fireEvent.click(dialog.getByRole('button', { name: 'Send request' }));
-    expect(await dialog.findByText('To sell food you will also need to add your food permit.')).toBeInTheDocument();
-    expect((await mockApi().getCatalogScope()).requests).toMatchObject([{ departmentCode: 'groceries', status: 'PENDING' }]);
+    expect(await dialog.findByText("To sell beauty products you will also need to confirm full ingredient labelling.")).toBeInTheDocument();
+    expect((await mockApi().getCatalogScope()).requests).toMatchObject([{ departmentCode: 'beauty', status: 'PENDING' }]);
   });
 });

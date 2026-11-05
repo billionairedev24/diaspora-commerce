@@ -41,6 +41,7 @@ export function validateStaffForm(form: StaffForm, values: Record<string, FieldV
       return;
     }
     if (f.maxLength !== undefined && [...v].length > f.maxLength) errors[f.key] = `Keep it under ${f.maxLength} characters`;
+    else if (f.minLength !== undefined && [...v.trim()].length < f.minLength) errors[f.key] = `Add a few more words: at least ${f.minLength} characters`;
     else if (f.pattern && !new RegExp(f.pattern).test(v)) errors[f.key] = f.help ?? 'Invalid format';
     else if (f.type === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) errors[f.key] = 'Enter a valid email';
     else if (f.type === 'select' && f.options?.length && !f.options.some((o) => o.value === v)) errors[f.key] = 'Choose one of the options';

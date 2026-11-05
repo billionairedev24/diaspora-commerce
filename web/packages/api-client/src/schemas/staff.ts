@@ -101,7 +101,10 @@ export const ResourceColumnSchema = z.object({ key: z.string(), label: z.string(
 export type ResourceColumn = z.infer<typeof ResourceColumnSchema>;
 export const ResourceFacetSchema = z.object({ value: z.string(), label: z.string() });
 export type ResourceFacet = z.infer<typeof ResourceFacetSchema>;
-export const ResourceRowSchema = z.object({ id: z.string(), cells: z.record(z.string(), CellValueSchema), tone: RecordToneSchema.nullable() });
+/** One entry of a row's "⋯" menu: an action the staff member may run on the record now (its dialog is the sheet's). */
+export const RowActionSchema = z.object({ key: z.string(), label: z.string(), tone: z.string() });
+export type RowAction = z.infer<typeof RowActionSchema>;
+export const ResourceRowSchema = z.object({ id: z.string(), cells: z.record(z.string(), CellValueSchema), tone: RecordToneSchema.nullable(), actions: z.array(RowActionSchema).optional() });
 export type ResourceRow = z.infer<typeof ResourceRowSchema>;
 
 export const FieldValueSchema = z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()]);
@@ -131,6 +134,8 @@ export const FormFieldSchema = z.object({
   min: z.number().optional(),
   max: z.number().optional(),
   maxLength: z.number().int().optional(),
+  /** The fewest characters (trimmed) a text answer needs: the form counts them as staff type. */
+  minLength: z.number().int().optional(),
   pattern: z.string().optional(),
   help: z.string().optional(),
   placeholder: z.string().optional(),

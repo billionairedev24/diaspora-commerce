@@ -2258,5 +2258,8 @@
   "st.order.field.tags": "Etiquetas",
   "st.order.field.orderId": "ID del pedido",
   "st.order.field.paymentId": "ID del pago",
-  "st.order.field.customerId": "ID del cliente"
+  "st.order.field.customerId": "ID del cliente",
+  "st.reason.rule": "Al menos {min} caracteres.",
+  "st.reason.more": "Añada unas palabras más: al menos {min} caracteres ({count} de {min})",
+  "st.depts.org.noChange": "Marque o desmarque al menos un departamento para guardar."
 }

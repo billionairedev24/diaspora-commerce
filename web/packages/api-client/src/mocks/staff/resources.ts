@@ -67,6 +67,8 @@ export interface MockResource {
   sort?: (a: MockRecord, b: MockRecord) => number;
   cursor?: boolean;
   exportable: boolean;
+  /** Keys of `actions` that also appear in each row's "⋯" menu (when allowed for the record and the staff member). */
+  rowActions?: string[];
   titleOf: (r: MockRecord) => string;
   subtitleOf: (r: MockRecord) => string;
   /**
@@ -204,7 +206,7 @@ export function humanize(s: string): string {
 }
 
 const TONES: Record<string, RecordTone> = {
-  PENDING_REVIEW: 'brand', FLAGGED: 'bad', AWAITING_FINAL_APPROVAL: 'warn', INFO_REQUESTED: 'warn', APPROVED: 'good', REJECTED: 'bad', LIVE: 'good',
+  PENDING_REVIEW: 'brand', FLAGGED: 'bad', SUSPENDED: 'bad', AWAITING_FINAL_APPROVAL: 'warn', INFO_REQUESTED: 'warn', APPROVED: 'good', REJECTED: 'bad', LIVE: 'good',
   IN_REVIEW: 'brand', PAUSED: 'info', TAKEN_DOWN: 'bad', PENDING: 'warn', ESCALATED: 'bad', CLOSED: 'info', UNDER_REVIEW: 'brand', AWAITING_SELLER: 'warn',
   RESOLVED_REFUND: 'good', RESOLVED_DENIED: 'info', WITHDRAWN: 'info', REQUESTED: 'brand', ON_HOLD: 'bad', PAID: 'good', FAILED: 'bad', SELLABLE: 'good',
   QUARANTINED: 'bad', DRAFT: 'info', PENDING_APPROVAL: 'warn', SENT: 'info', CONFIRMED: 'info', RECEIVED: 'good', CANCELLED: 'bad', PLANNED: 'info',
@@ -1561,7 +1563,49 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     exportable: true,
     titleOf: (r) => str(r.fields.name),
     subtitleOf: (r) => str(r.fields.kind),
-    actions: []
+    rowActions: ['suspend', 'reinstate'],
+    // trust-ops runs these (audited reason); sellers:enforce is the gate, so VIEW on the module is enough.
+    actions: [
+      {
+        key: 'suspend',
+        label: 'Suspend…',
+        tone: 'danger',
+        permission: 'sellers:enforce',
+        level: 'VIEW',
+        form: () =>
+          form(
+            'Suspend this organisation',
+            'Suspend',
+            [
+              field('reason', 'Reason', 'select', true, { options: options('POOR_PERFORMANCE', 'PROHIBITED_ITEMS', 'COUNTERFEIT', 'FRAUD_RISK', 'POLICY_VIOLATION', 'COMPLIANCE', 'OTHER') }),
+              field('note', 'What happened (at least 10 characters)', 'textarea', true, { maxLength: 1000, minLength: 10 })
+            ],
+            'Its listings are hidden from the marketplace and its payouts are paused straight away, and it is restricted in the buy box. Open orders are not cancelled. The reason is kept in the audit log. Reinstating restores the listings and payouts.'
+          ),
+        when: (r) => (r.fields.status === 'APPROVED' ? null : `Not possible while ${humanize(String(r.fields.status ?? '')).toLowerCase()}.`),
+        apply: (r) => {
+          r.fields.status = 'SUSPENDED';
+        }
+      },
+      {
+        key: 'reinstate',
+        label: 'Reinstate…',
+        tone: 'primary',
+        permission: 'sellers:enforce',
+        level: 'VIEW',
+        form: () =>
+          form(
+            'Reinstate this organisation',
+            'Reinstate',
+            [field('note', 'Why it is safe to reinstate (at least 10 characters)', 'textarea', true, { maxLength: 1000, minLength: 10 })],
+            'Its listings are shown again and its payouts resume. A payout hold from Stripe compliance, if there is one, stays until Stripe clears it. The reason is kept in the audit log.'
+          ),
+        when: (r) => (r.fields.status === 'SUSPENDED' ? null : `Not possible while ${humanize(String(r.fields.status ?? '')).toLowerCase()}.`),
+        apply: (r) => {
+          r.fields.status = 'APPROVED';
+        }
+      }
+    ]
   },
   'connect-accounts': {
     title: 'Stripe Connect accounts',

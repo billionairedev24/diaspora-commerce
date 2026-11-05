@@ -16,6 +16,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ReactNode, useMemo, useState } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
+import { ReasonField } from '@/components/ui/ReasonField';
 import { EmptyState, ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { type MessageKey, useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
@@ -234,7 +235,7 @@ export function CategoriesView() {
             if (staged && reason.trim().length >= 3 && !save.isPending) save.mutate({ staged, reason: reason.trim() });
           }}
         >
-          <TextField label={t('st.catalog.field.reason')} help={t('st.catalog.reasonHelp')} value={reason} maxLength={1000} onChange={(e) => setReason(e.currentTarget.value)} />
+          <ReasonField single label={t('st.catalog.field.reason')} help={t('st.catalog.reasonHelp')} min={3} value={reason} onChange={setReason} />
           {reorderError ? (
             <Notice tone="danger" title={t('st.catalog.notSaved')} role="alert">
               {reorderError}

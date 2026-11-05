@@ -41,7 +41,7 @@ describe('the departments an organisation may sell in (mock BFF)', () => {
     const api = client();
     await api.setActiveOrg(MOCK_FASHION_ORG);
     const asked = await api.requestDepartment({ departmentCode: 'groceries', note: 'Spices too' });
-    expect(asked).toMatchObject({ status: 'PENDING', needs: ['FOOD_PERMIT'] });
+    expect(asked).toMatchObject({ status: 'PENDING', needs: [] });
     expect((await api.requestDepartment({ departmentCode: 'groceries' })).id).toBe(asked.id);
     expect((await api.getCatalogScope()).requests).toMatchObject([{ departmentCode: 'groceries', status: 'PENDING' }]);
     await expect(api.requestDepartment({ departmentCode: 'fashion' })).rejects.toSatisfy((e) => isApiError(e) && e.status === 409);
@@ -51,7 +51,8 @@ describe('the departments an organisation may sell in (mock BFF)', () => {
   it('onboarding offers the catalog departments with the evidence each asks for', async () => {
     const api = client();
     const departments = await api.listDepartments();
-    expect(departments.find((d) => d.code === 'groceries')?.requires).toEqual(['FOOD_PERMIT']);
+    expect(departments.find((d) => d.code === 'groceries')?.requires).toEqual([]);
+    expect(departments.find((d) => d.code === 'beauty')?.requires).toEqual(['BEAUTY_LABELLING']);
     expect(departments.find((d) => d.code === 'fashion')?.requires).toEqual([]);
   });
 });

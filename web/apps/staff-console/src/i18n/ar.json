@@ -2258,5 +2258,8 @@
   "st.order.field.tags": "الوسوم",
   "st.order.field.orderId": "معرّف الطلب",
   "st.order.field.paymentId": "معرّف الدفع",
-  "st.order.field.customerId": "معرّف العميل"
+  "st.order.field.customerId": "معرّف العميل",
+  "st.reason.rule": "{min} أحرف على الأقل.",
+  "st.reason.more": "أضف بضع كلمات أخرى: {min} أحرف على الأقل ({count} من {min})",
+  "st.depts.org.noChange": "اختر قسمًا واحدًا على الأقل أو ألغِ اختياره لتتمكن من الحفظ."
 }

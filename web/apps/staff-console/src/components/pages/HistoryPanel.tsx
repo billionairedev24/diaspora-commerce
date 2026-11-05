@@ -1,11 +1,12 @@
 'use client';
 
 import { type ContentKind, type ContentPage, type ContentVersionRef, staffContentQueries } from '@afrotransact/api-client';
-import { Button, Dialog, Select, TextField } from '@afrotransact/ui';
+import { Button, Dialog, Select } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 
 import { Card } from '@/components/ui/Card';
+import { ReasonField } from '@/components/ui/ReasonField';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
@@ -47,7 +48,7 @@ function RollbackDialog({ open, onClose, page, version, busy, errors, onConfirm 
     >
       <form noValidate onSubmit={submit} className="flex flex-col gap-3">
         {legal ? null : (
-          <TextField id="rollback-reason" label={t('st.pages.rollback.reason')} value={reason} maxLength={500} error={errors.reason} onChange={(e) => setReason(e.currentTarget.value)} />
+          <ReasonField single id="rollback-reason" label={t('st.pages.rollback.reason')} min={5} max={500} value={reason} onChange={setReason} error={errors.reason} />
         )}
         {errors._ ? <p role="alert" className="m-0 text-sm text-danger">{errors._}</p> : null}
         <div className="flex justify-end gap-2">

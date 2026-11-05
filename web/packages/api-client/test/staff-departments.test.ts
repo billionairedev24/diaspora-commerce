@@ -77,15 +77,17 @@ describe('department requests mock', () => {
     const page = await api().requests({});
     const id = (org: string) => page.items.find((r) => r.orgName === org)?.id ?? '';
     const kente = await api().request(id('Kente Naturals'));
-    expect(kente.prompts).toEqual([{ requirement: 'FOOD_PERMIT', label: 'Food permit on file', satisfied: false }]);
+    expect(kente.prompts).toEqual([]); // Groceries asks for nothing on file any more
+    const efe = await api().request(id('Mama Efe Braids'));
+    expect(efe.prompts).toEqual([{ requirement: 'BEAUTY_LABELLING', label: 'Beauty product labelling confirmed', satisfied: false }]);
     expect(kente.currentDepartments.map((d) => d.name)).toEqual(['Fashion', 'Home & Art']);
     const ade = await api().request(id("Ade's Kitchen"));
     expect(ade.prompts).toEqual([]);
     expect(ade.note).toContain('ankara tote bags');
     const decided = await api().requests({ status: 'REJECTED' });
     const rejected = await api().request(decided.items[0]?.id ?? '');
-    expect(rejected.prompts[0]).toMatchObject({ requirement: 'FOOD_PERMIT', satisfied: null });
-    expect(rejected.decisionNote).toBe('Upload your food permit first, then ask again.');
+    expect(rejected.prompts).toEqual([]);
+    expect(rejected.decisionNote).toBe('Tell us more about what you will sell, then ask again.');
   });
 
   it('approves with an optional note and the department joins the set', async () => {

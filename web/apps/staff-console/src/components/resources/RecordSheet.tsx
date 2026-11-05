@@ -5,7 +5,7 @@ import { Button, Dialog, DialogActions, Sheet, SheetTableScroll, useToast } from
 import { Check, Copy, LockSimple, PencilSimple } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
@@ -144,7 +144,24 @@ export function Details({ record }: { record: RecordDetail }) {
  * client, every action button disabled while one is in flight. When the BFF answers ALREADY_DONE the current state is
  * shown as information and the record and its table are refreshed.
  */
-export function RecordSheet({ resource, id, onClose, sharedOpen = false, extra }: { resource: ResourceKey; id: string | null; onClose: () => void; sharedOpen?: boolean; extra?: ReactNode }) {
+export function RecordSheet({
+  resource,
+  id,
+  onClose,
+  sharedOpen = false,
+  extra,
+  autoAction = null,
+  onAutoActionDone
+}: {
+  resource: ResourceKey;
+  id: string | null;
+  onClose: () => void;
+  sharedOpen?: boolean;
+  extra?: ReactNode;
+  /** An action key to start as soon as the record has loaded (the table row's "⋯" menu opens the sheet with it). */
+  autoAction?: string | null;
+  onAutoActionDone?: () => void;
+}) {
   const api = staffApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -230,6 +247,21 @@ export function RecordSheet({ resource, id, onClose, sharedOpen = false, extra }
     },
     onError: (e) => toast.show(problemMessage(e), 'error')
   });
+
+  // The row menu's choice starts the same dialog the sheet's own button does, once the record (and so its form) is here.
+  const started = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoAction || !record || started.current === `${record.id}:${autoAction}`) return;
+    started.current = `${record.id}:${autoAction}`;
+    const a = record.actions.find((x) => x.key === autoAction);
+    if (a?.allowed) {
+      setServerErrors({});
+      setFormError(null);
+      setInfo(null);
+      setPending({ kind: 'action', action: a, key: idempotencyKey() });
+    }
+    onAutoActionDone?.();
+  }, [autoAction, record, onAutoActionDone]);
 
   const open = (p: Pending) => {
     if (busy) return;

@@ -50,7 +50,7 @@ func recoveryProposalForm(title, submit, intro string, withReference bool) func(
 		if withReference {
 			fields = append(fields, withMax(ff("reference", "Bank reference of the money received", "text", true), 120))
 		}
-		fields = append(fields, withMax(ff("reason", "Why (at least 15 characters)", "textarea", true), 500))
+		fields = append(fields, withMax(withMin(ff("reason", "Why (at least 15 characters)", "textarea", true), 15), 500))
 		return &domain.Form{Title: title, SubmitLabel: submit, Fields: fields,
 			Intro: intro + " It covers the " + moneyText(num(o, "outstandingMinor")) + " still owed. Nothing is posted until a different person approves it."}
 	}
