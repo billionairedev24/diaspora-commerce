@@ -77,7 +77,8 @@ window for a campaign that should switch on and off by itself inside an approved
 
 The deliver-to ZIP (session cookie, or the signed-in profile's choice) reaches `Home` as `Location.Current`: the ZIP,
 and its city and state from the geo service. It steers the page in three ways, all by rule (nothing is written per
-category or ZIP).
+category or ZIP). How the location is detected on a first visit and chosen afterwards (city shown, ZIP internal, the
+`LOCATION_DETECT_ZIP` local override) is in [delivery-location.md](delivery-location.md).
 
 1. **Content targeting.** The gateway asks content for placements of that ZIP (`zipPrefixes` on a placement), so a hero
    slide, tile or rail can be shown to Texas ZIPs only. The gateway caches content per market and ZIP.
