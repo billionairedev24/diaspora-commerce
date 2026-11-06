@@ -130,9 +130,17 @@ func placementsFrom(in []servedPlacement) domain.Placements {
 				Href  string   `json:"href"`
 				Query string   `json:"query"`
 				SKUs  []string `json:"skus"`
+				// Optional rule (see domain.RailSource): near-you, deliverable-fast, community, ...
+				Kind       string `json:"kind"`
+				Department string `json:"department"`
+				MaxDays    int    `json:"maxDays"`
+				Community  string `json:"community"`
 			}
 			if json.Unmarshal(sp.Payload, &r) == nil && r.Title != "" {
 				src := domain.RailSource{Kind: "search", Query: r.Query, Limit: 12}
+				if r.Kind != "" {
+					src = domain.RailSource{Kind: r.Kind, Query: r.Query, Department: r.Department, MaxDays: r.MaxDays, Community: r.Community, Limit: 12}
+				}
 				if len(r.SKUs) > 0 {
 					src = domain.RailSource{Kind: "atins", ATINs: r.SKUs, Limit: 12}
 				}

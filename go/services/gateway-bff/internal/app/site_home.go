@@ -84,8 +84,10 @@ func validRuleSource(src *domain.RailSource) bool {
 		return strings.TrimSpace(src.Query) != "" || strings.TrimSpace(src.Department) != ""
 	case "department-bestsellers":
 		return strings.TrimSpace(src.Department) != ""
-	case "fulfilled-fastest":
+	case "fulfilled-fastest", "near-you", "deliverable-fast":
 		return true
+	case "community":
+		return strings.TrimSpace(src.Community) != ""
 	case "atins":
 		return len(src.ATINs) > 0
 	}
@@ -119,7 +121,7 @@ func parseBound(s *string) (time.Time, bool) {
 // resolveTiles turns rule cells into product cells. Candidates for every rule are fetched concurrently; they are then
 // assigned in page order so a product appears in one cell only. A rule with no eligible product drops its cell, and a
 // tile left with fewer than two cells (or none, for fixed tiles) is dropped rather than shown half empty.
-func (s *siteServiceImpl) resolveTiles(ctx context.Context, tiles []domain.Tile) []domain.Tile {
+func (s *siteServiceImpl) resolveTiles(ctx context.Context, tiles []domain.Tile, sc shopperScope) []domain.Tile {
 	type slot struct{ tile, cell int }
 	var rules []slot
 	for ti, t := range tiles {
@@ -135,7 +137,7 @@ func (s *siteServiceImpl) resolveTiles(ctx context.Context, tiles []domain.Tile)
 		wg.Go(func() {
 			src := *tiles[r.tile].Cells[r.cell].Source
 			src.Limit = ruleCandidates
-			items, err := s.railItems(ctx, src)
+			items, err := s.railItems(ctx, src, sc)
 			if err != nil {
 				s.d.Log.InfoContext(ctx, "tile rule not resolved", "tile", tiles[r.tile].ID, "cell", r.cell, "error", err)
 				return
@@ -202,7 +204,7 @@ func (s *siteServiceImpl) RecentlyViewed(ctx context.Context, atins []string) ([
 // basedOnOrders is the signed-in shopper's "Based on your orders" rail: the departments of what they bought most
 // (newest orders first), filled with the best-rated eligible products there that they have not bought yet. Nil when the
 // shopper is a guest, has no orders, or nothing eligible is found.
-func (s *siteServiceImpl) basedOnOrders(ctx context.Context, c *domain.Caller) *domain.Rail {
+func (s *siteServiceImpl) basedOnOrders(ctx context.Context, c *domain.Caller, sc shopperScope) *domain.Rail {
 	if s.d.Orders == nil || c == nil || !c.Authenticated() {
 		return nil
 	}
@@ -246,7 +248,7 @@ func (s *siteServiceImpl) basedOnOrders(ctx context.Context, c *domain.Caller) *
 	pools := make([][]domain.ProductSummary, len(top))
 	for i, d := range top {
 		wg.Go(func() {
-			items, err := s.railItems(ctx, domain.RailSource{Kind: "department-bestsellers", Department: d, Limit: ordersRailSize})
+			items, err := s.railItems(ctx, domain.RailSource{Kind: "department-bestsellers", Department: d, Limit: ordersRailSize}, sc)
 			if err != nil {
 				return
 			}

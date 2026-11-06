@@ -80,12 +80,19 @@ type Home struct {
 // RailSource says how a placement rail (or a rule-based tile cell) is filled: a search (query/department/fulfilment,
 // sorted), or explicit ATINs.
 type RailSource struct {
-	Kind       string   `json:"kind"` // search | department-bestsellers | fulfilled-fastest | atins
+	// Kind is search | department-bestsellers | fulfilled-fastest | atins, or one that reads the shopper's deliver-to
+	// location: near-you (ships from the shopper's city, state or region), deliverable-fast (promised within MaxDays
+	// to the shopper's ZIP) and community (a community's products).
+	Kind       string   `json:"kind"`
 	Query      string   `json:"query,omitempty"`
 	Department string   `json:"department,omitempty"`
 	Sort       string   `json:"sort,omitempty"`
 	ATINs      []string `json:"atins,omitempty"`
 	Limit      int      `json:"limit,omitempty"`
+	// MaxDays is the longest delivery promise a deliverable-fast source accepts (default 2).
+	MaxDays int `json:"maxDays,omitempty"`
+	// Community is the community key a community source filters by (nigerian, ghanaian, ...).
+	Community string `json:"community,omitempty"`
 }
 
 // RailPlacement is a rail as content publishes it, before products are resolved.

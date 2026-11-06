@@ -209,6 +209,7 @@ func withOffers(ctx context.Context, offers port.StorefrontOffersClient, cards [
 			o := offerFromPublic(*w, c.Delivery)
 			c.OfferID, c.PriceMinor, c.ListPriceMinor, c.Currency = o.OfferID, o.PriceMinor, o.ListPriceMinor, o.Currency
 			c.SellerName, c.SellerKind, c.SellerCity, c.Fulfilment = o.Seller.Name, o.Seller.Kind, o.Seller.City, o.Fulfilment
+			c.ShipsFrom, c.SellerID = w.ShipsFrom, o.Seller.ID
 			c.AvailableQty, c.StockStatus = o.AvailableQty, o.StockStatus
 			c.InStock, c.LowStock = o.StockStatus != domain.OutOfStock, o.StockStatus == domain.LowStock
 			c.MinOfferPriceMinor = min(c.MinOfferPriceMinor, c.PriceMinor)

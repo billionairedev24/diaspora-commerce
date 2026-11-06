@@ -84,6 +84,9 @@ type ProductSummary struct {
 	OfferCount         int             `json:"offerCount"`
 	MinOfferPriceMinor int64           `json:"minOfferPriceMinor"`
 	Sponsor            *Sponsor        `json:"sponsor"`
+	// ShipsFrom ("Houston, TX") and SellerID come from the buy box; the home rules read them (never serialised).
+	ShipsFrom string `json:"-"`
+	SellerID  string `json:"-"`
 }
 
 // VariantOption is one selectable variant on the product page.

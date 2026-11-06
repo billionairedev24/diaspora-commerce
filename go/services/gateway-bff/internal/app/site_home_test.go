@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -235,6 +236,7 @@ func TestBasedOnYourOrdersSuggestsUnboughtProducts(t *testing.T) {
 	for _, p := range home.Rails[0].Items {
 		got = append(got, p.ATIN)
 	}
+	sort.Strings(got) // the daily rotation orders neighbours; the set is what the rule decides
 	if strings.Join(got, ",") != "ATGARI0001,ATNEW00001" {
 		t.Errorf("items = %v", got)
 	}
@@ -248,16 +250,16 @@ func TestBasedOnYourOrdersIsHiddenWhenThereIsNothingToShow(t *testing.T) {
 		return newHomeService(domain.Placements{}, &rulesSearch{}, o).(*siteServiceImpl)
 	}
 	ctx := context.Background()
-	if svc(homeOrders{orders: []domain.OrderSummary{order("ATRICE0001")}}).basedOnOrders(ctx, &domain.Caller{}) != nil {
+	if svc(homeOrders{orders: []domain.OrderSummary{order("ATRICE0001")}}).basedOnOrders(ctx, &domain.Caller{}, shopperScope{}) != nil {
 		t.Error("guests get no personalised rail")
 	}
-	if svc(homeOrders{}).basedOnOrders(ctx, signedIn()) != nil {
+	if svc(homeOrders{}).basedOnOrders(ctx, signedIn(), shopperScope{}) != nil {
 		t.Error("no orders, no rail")
 	}
-	if svc(homeOrders{orders: []domain.OrderSummary{order("ATRICE0001")}}).basedOnOrders(ctx, signedIn()) != nil {
+	if svc(homeOrders{orders: []domain.OrderSummary{order("ATRICE0001")}}).basedOnOrders(ctx, signedIn(), shopperScope{}) != nil {
 		t.Error("nothing eligible to suggest, no rail")
 	}
-	if svc(nil).basedOnOrders(ctx, signedIn()) != nil {
+	if svc(nil).basedOnOrders(ctx, signedIn(), shopperScope{}) != nil {
 		t.Error("orders unavailable, no rail")
 	}
 }

@@ -57,7 +57,9 @@ type SiteDeps struct {
 	// Offers (optional) adds offer counts, lowest prices and the buy box winner to rail cards.
 	Offers port.StorefrontOffersClient
 	// Orders (optional) feeds the signed-in "Based on your orders" rail.
-	Orders    port.OrdersClient
+	Orders port.OrdersClient
+	// Promise (optional) feeds the deliverable-fast rule: the delivery promise to the shopper's ZIP.
+	Promise   port.PromiseClient
 	Location  LocationService
 	Estimator domain.Estimator
 	Sellers   SellerDirectory
@@ -156,6 +158,8 @@ func siteConfigBody(c port.ContentSiteConfig, enabled map[string]bool) map[strin
 // defaultPlacements keep the home page useful while content is unavailable: product rails only.
 func defaultPlacements() domain.Placements {
 	return domain.Placements{Rails: []domain.RailPlacement{
+		{ID: "deliverable-fast", Title: "Get it by {day}", Href: "/s?fulfilment=afrotransact", Source: domain.RailSource{Kind: "deliverable-fast", Limit: 12}},
+		{ID: "near-you", Title: "Shipping from near {city}", Href: "/s", Source: domain.RailSource{Kind: "near-you", Limit: 12}},
 		{ID: "fastest", Title: "Fast delivery to {city}", Href: "/s?fulfilment=afrotransact", Source: domain.RailSource{Kind: "fulfilled-fastest", Limit: 12}},
 		{ID: "popular", Title: "Popular right now", Href: "/s", Source: domain.RailSource{Kind: "search", Sort: domain.SortRating, Limit: 12}},
 	}}
@@ -168,19 +172,21 @@ func (s *siteServiceImpl) Home(ctx context.Context, c *domain.Caller) (domain.Ho
 		s.d.Log.InfoContext(ctx, "placements unavailable; serving default rails", "error", err)
 		pl = defaultPlacements()
 	}
+	now := s.d.Clock.now()
+	sc := newScope(loc, c, now)
 	rails := make([]*domain.Rail, len(pl.Rails))
 	var wg sync.WaitGroup
 	var personal *domain.Rail
-	wg.Go(func() { personal = s.basedOnOrders(ctx, c) })
+	wg.Go(func() { personal = s.basedOnOrders(ctx, c, sc) })
 	for i, r := range pl.Rails {
 		wg.Go(func() {
-			items, err := s.railItems(ctx, r.Source)
+			items, err := s.railItems(ctx, r.Source, sc)
 			if err != nil {
 				s.d.Log.InfoContext(ctx, "rail not resolved", "rail", r.ID, "error", err)
 				return
 			}
 			if len(items) > 0 {
-				rails[i] = &domain.Rail{ID: r.ID, Title: strings.ReplaceAll(r.Title, "{city}", firstNonEmpty(loc.City, "you")), Href: r.Href, Items: items}
+				rails[i] = &domain.Rail{ID: r.ID, Title: s.railTitle(r.Title, loc, items, now), Href: r.Href, Items: items}
 			}
 		})
 	}
@@ -190,14 +196,24 @@ func (s *siteServiceImpl) Home(ctx context.Context, c *domain.Caller) (domain.Ho
 			tiles[i].Cells = tiles[i].Cells[:4]
 		}
 	}
-	wg.Go(func() { tiles = s.resolveTiles(ctx, tiles) })
+	wg.Go(func() { tiles = s.resolveTiles(ctx, tiles, sc) })
 	wg.Wait()
-	home := domain.Home{Announcements: orEmpty(pl.Announcements), Hero: activeHero(pl.Hero, s.d.Clock.now()), Tiles: orEmpty(tiles),
+	home := domain.Home{Announcements: orEmpty(pl.Announcements), Hero: activeHero(pl.Hero, now), Tiles: orEmpty(tiles),
 		Banners: orEmpty(pl.Banners), Rails: []domain.Rail{}, DeliverTo: loc}
-	if personal != nil {
-		home.Rails = append(home.Rails, *personal)
+	// A product is on the page once: tiles first, then the personal rail, then the rails in page order.
+	used := map[string]bool{}
+	for _, t := range tiles {
+		for _, cell := range t.Cells {
+			if cell.ATIN != "" {
+				used[cell.ATIN] = true
+			}
+		}
 	}
-	for _, r := range rails {
+	all := dedupeRails(append([]*domain.Rail{personal}, rails...), used)
+	if all[0] != nil {
+		home.Rails = append(home.Rails, *all[0])
+	}
+	for _, r := range all[1:] {
 		if r != nil {
 			home.Rails = append(home.Rails, *r)
 		}
@@ -213,12 +229,12 @@ func (s *siteServiceImpl) CheckoutCrossSell(ctx context.Context, c *domain.Calle
 		return nil, err
 	}
 	r := pl.CheckoutCrossSell[0]
-	items, err := s.railItems(ctx, r.Source)
+	now := s.d.Clock.now()
+	items, err := s.railItems(ctx, r.Source, newScope(loc, c, now))
 	if err != nil || len(items) == 0 {
 		return nil, err
 	}
-	title := strings.ReplaceAll(r.Title, "{city}", firstNonEmpty(loc.City, "you"))
-	return &domain.Rail{ID: r.ID, Title: title, Href: r.Href, Items: items}, nil
+	return &domain.Rail{ID: r.ID, Title: s.railTitle(r.Title, loc, items, now), Href: r.Href, Items: items}, nil
 }
 
 func orEmpty[T any](v []T) []T {
@@ -228,7 +244,7 @@ func orEmpty[T any](v []T) []T {
 	return v
 }
 
-func (s *siteServiceImpl) railItems(ctx context.Context, src domain.RailSource) ([]domain.ProductSummary, error) {
+func (s *siteServiceImpl) railItems(ctx context.Context, src domain.RailSource, sc shopperScope) ([]domain.ProductSummary, error) {
 	limit := src.Limit
 	if limit <= 0 || limit > 24 {
 		limit = 12
@@ -237,19 +253,24 @@ func (s *siteServiceImpl) railItems(ctx context.Context, src domain.RailSource) 
 	if src.Kind == "atins" {
 		return eligibleOnly(s.byATIN(ctx, src.ATINs, limit, now)), nil
 	}
-	p := port.SearchParams{Q: src.Query, Market: s.d.Market, Department: src.Department, Sort: src.Sort, Size: min(limit*2, 48), InStock: true, NoTrack: true}
+	// Collect a pool larger than the rail so ranking by the shopper's place has something to choose from.
+	p := port.SearchParams{Q: src.Query, Market: s.d.Market, Department: src.Department, Sort: src.Sort, Size: 48, InStock: true, NoTrack: true}
 	switch src.Kind {
 	case "fulfilled-fastest":
 		p.Fulfilment = domain.FulfilledByAfroTransact
-	case "department-bestsellers":
-		p.Sort = domain.SortRating
+	case "department-bestsellers", "near-you":
+		if p.Sort == "" {
+			p.Sort = domain.SortRating
+		}
+	case "community":
+		p.Community = src.Community
 	}
 	if p.Sort == "" || p.Sort == domain.SortFastest {
 		p.Sort = domain.SortRelevance
 	}
 	// Content rails may say "rice OR gari OR fufu flour"; search requires every word, so run one query per term.
 	terms := strings.Split(p.Q, " OR ")
-	out := []domain.ProductSummary{}
+	pool := []domain.ProductSummary{}
 	seen := map[string]bool{}
 	var firstErr error
 	for _, term := range terms {
@@ -261,19 +282,33 @@ func (s *siteServiceImpl) railItems(ctx context.Context, src domain.RailSource) 
 			continue
 		}
 		for _, h := range res.Hits {
-			if seen[h.ATIN] || len(out) >= limit {
+			if seen[h.ATIN] || len(pool) >= localPool {
 				continue
 			}
 			seen[h.ATIN] = true
 			if card := summaryFromHit(h, s.d.Estimator, now); eligibleCard(card) {
-				out = append(out, card)
+				pool = append(pool, card)
 			}
 		}
 	}
-	if len(out) == 0 && firstErr != nil {
+	if len(pool) == 0 && firstErr != nil {
 		return nil, fmt.Errorf("rail search: %w", firstErr)
 	}
-	return withOffers(ctx, s.d.Offers, out), nil
+	out := eligibleOnly(withOffers(ctx, s.d.Offers, pool))
+	switch src.Kind {
+	case "near-you":
+		out = nearShopper(out, sc.loc)
+	case "deliverable-fast":
+		var err error
+		if out, err = s.withinDays(ctx, out, sc.loc.ZIP, src.MaxDays, now); err != nil {
+			return nil, err
+		}
+	}
+	out = rankForShopper(out, sc)
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }
 
 // byATIN builds cards for explicitly placed products from catalog + inventory (unknown products are skipped).
