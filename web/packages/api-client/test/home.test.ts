@@ -87,3 +87,39 @@ describe('mock personalised rails', () => {
     expect(recentlyViewed([], hou, now)).toEqual([]);
   });
 });
+
+describe('mock home follows the deliver-to ZIP', () => {
+  const nj = { zip: '08817', city: 'Edison', state: 'NJ', label: 'Edison 08817', serviceable: true };
+  const cells = (h: Home) => h.tiles.flatMap((t) => t.cells.map((c) => c.atin ?? c.label));
+  const near = (h: Home) => h.rails.find((r) => r.id === 'r-near');
+  const shownAtins = (h: Home) => [...h.tiles.flatMap((t) => t.cells.map((c) => c.atin)), ...h.rails.flatMap((r) => r.items.map((p) => p.atin))].filter(Boolean);
+
+  it('targets hero slides by ZIP prefix', () => {
+    const ids = (loc: typeof hou) => home(loc, now).hero.map((h) => h.id);
+    expect(ids(hou)).toContain('h-tx');
+    expect(ids(hou)).not.toContain('h-nj');
+    expect(ids(nj)).toContain('h-nj');
+    expect(ids(nj)).not.toContain('h-tx');
+  });
+
+  it('changes tiles and rails with the ZIP, and puts nearby sellers first', () => {
+    const a = home(hou, now);
+    const b = home(nj, now);
+    expect(cells(a)).not.toEqual(cells(b));
+    expect(near(a)?.title).toBe('Shipping from near Houston');
+    expect(near(b)?.title).toBe('Shipping from near Edison');
+    expect(near(a)?.items.map((p) => p.atin)).not.toEqual(near(b)?.items.map((p) => p.atin));
+    expect(near(a)?.items[0]?.sellerCity.endsWith('TX')).toBe(true);
+    expect(near(b)?.items[0]?.sellerCity.endsWith('NJ')).toBe(true);
+  });
+
+  it('is the same on every load of a visit, differs by day, and shows a product once', () => {
+    const visit = (d: Date) => JSON.stringify([cells(home(hou, d, 'u1')), home(hou, d, 'u1').rails.map((r) => r.items.map((p) => p.atin))]);
+    expect(visit(now)).toBe(visit(new Date('2026-11-04T20:00:00Z')));
+    expect(cells(home(hou, now))).not.toEqual(cells(home(hou, new Date('2026-11-05T12:00:00Z'))));
+    for (const loc of [hou, nj]) {
+      const atins = shownAtins(home(loc, now));
+      expect(new Set(atins).size).toBe(atins.length);
+    }
+  });
+});

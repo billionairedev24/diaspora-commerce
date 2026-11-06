@@ -1660,6 +1660,8 @@ function tileRules() {
     { value: 'bestsellers', label: 'Best sellers in a department' },
     { value: 'search', label: 'Search results for words' },
     { value: 'fastest', label: 'Fastest delivery from AfroTransact' },
+    { value: 'near-you', label: 'Ships from near the shopper (their city, state or region)' },
+    { value: 'deliverable-fast', label: "Delivered within 2 days to the shopper's ZIP" },
     { value: 'picked', label: 'Picked products (ATINs)' }
   ];
 }

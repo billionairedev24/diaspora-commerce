@@ -24,6 +24,8 @@ const (
 	ruleSearch     = "search"
 	ruleFastest    = "fastest"
 	rulePicked     = "picked"
+	ruleNear       = "near-you"
+	ruleDeliver    = "deliverable-fast"
 )
 
 var tileRuleOptions = []domain.FieldOption{
@@ -32,6 +34,8 @@ var tileRuleOptions = []domain.FieldOption{
 	{Value: ruleBestseller, Label: "Best sellers in a department"},
 	{Value: ruleSearch, Label: "Search results for words"},
 	{Value: ruleFastest, Label: "Fastest delivery from AfroTransact"},
+	{Value: ruleNear, Label: "Ships from near the shopper (their city, state or region)"},
+	{Value: ruleDeliver, Label: "Delivered within 2 days to the shopper's ZIP"},
 	{Value: rulePicked, Label: "Picked products (ATINs)"},
 }
 
@@ -69,6 +73,10 @@ func cellDefaults(cell jobj) map[string]string {
 		out["rule"] = ruleBestseller
 	case "fulfilled-fastest":
 		out["rule"] = ruleFastest
+	case "near-you":
+		out["rule"] = ruleNear
+	case "deliverable-fast":
+		out["rule"] = ruleDeliver
 	case "atins":
 		out["rule"] = rulePicked
 		if list, ok := src["atins"].([]any); ok {
@@ -161,6 +169,18 @@ func ruleSource(v jobj, n int) (map[string]any, string, string) {
 		return src, "", ""
 	case ruleFastest:
 		return map[string]any{"kind": "fulfilled-fastest"}, "", ""
+	case ruleNear:
+		src := map[string]any{"kind": "near-you"}
+		if dept != "" {
+			src["department"] = dept
+		}
+		return src, "", ""
+	case ruleDeliver:
+		src := map[string]any{"kind": "deliverable-fast", "maxDays": 2}
+		if dept != "" {
+			src["department"] = dept
+		}
+		return src, "", ""
 	case rulePicked:
 		var atins []string
 		for _, a := range strings.Split(vs(v, cellKey(n, "atins")), ",") {

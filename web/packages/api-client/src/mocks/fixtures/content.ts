@@ -7,7 +7,7 @@ import type { SiteConfig } from '../../schemas/site';
 
 /** A tile cell rule the mock BFF resolves to a product (the real gateway takes the same idea as a rail-shaped source). */
 export interface TileRule {
-  kind: 'top-rated' | 'new' | 'fulfilled-fastest';
+  kind: 'top-rated' | 'new' | 'fulfilled-fastest' | 'near-you';
   department?: string;
 }
 /** A fixed image-and-link cell, or a rule cell that is filled from the catalogue. */
@@ -25,6 +25,8 @@ export const PLACEMENTS: Omit<Placements, 'rails' | 'tiles'> & { tiles: MockTile
     { id: 'h1', theme: 'gold', kicker: 'AfroTransact Brand', title: 'Party jollof, sorted.', sub: 'Our own seasoning, rice and pepper sauce — sold and fulfilled by AfroTransact.', cta: 'Shop AfroTransact Brand', href: '/s?soldBy=platform', label: 'AfroTransact', imageUrl: null },
     { id: 'h2', theme: 'green', kicker: 'Diwali', title: 'Light up the table.', sub: 'Aged basmati, diyas and spices from Edison to your door.', cta: 'Shop Indian kitchen', href: '/s?community=Indian', label: 'AfroTransact', imageUrl: null },
     { id: 'h3', theme: 'ink', kicker: 'Kingston Kitchen', title: 'Jerk season is every season.', sub: 'Blue Mountain jerk paste, fulfilled by AfroTransact.', cta: 'Shop now', href: '/p/AT000000P9', label: 'Sponsored', imageUrl: null },
+    { id: 'h-tx', theme: 'green', kicker: 'Texas', title: 'Fresh from Texas kitchens.', sub: 'Houston and Dallas sellers ship same day across Texas.', cta: 'Shop Texas sellers', href: '/s?q=Houston', label: 'AfroTransact', imageUrl: null },
+    { id: 'h-nj', theme: 'gold', kicker: 'New Jersey', title: 'Edison to your door tomorrow.', sub: 'Spices, rice and sweets from the Garden State, fulfilled from Edison.', cta: 'Shop Edison', href: '/s?q=Edison', label: 'AfroTransact', imageUrl: null },
     { id: 'h4', theme: 'sand', kicker: 'Services', title: 'Book a braider for Saturday.', sub: 'Licensed stylists near you. Deposits protected.', cta: 'Find a stylist', href: '/services', label: 'AfroTransact', imageUrl: null }
   ],
   tiles: [
@@ -34,12 +36,6 @@ export const PLACEMENTS: Omit<Placements, 'rails' | 'tiles'> & { tiles: MockTile
     { id: 't2', title: 'Top rated by department', cta: 'See best sellers', href: '/s', cells: [
       { rule: { kind: 'top-rated', department: 'Groceries' } }, { rule: { kind: 'top-rated', department: 'Beauty' } },
       { rule: { kind: 'top-rated', department: 'Fashion' } }, { rule: { kind: 'top-rated', department: 'Books' } }] },
-    { id: 't3', title: 'Get it tomorrow', cta: 'See fast delivery', href: '/s?delivery=1', cells: [
-      { rule: { kind: 'fulfilled-fastest' } }, { rule: { kind: 'fulfilled-fastest' } },
-      { rule: { kind: 'fulfilled-fastest' } }, { rule: { kind: 'fulfilled-fastest' } }] },
-    { id: 't5', title: 'New in the shop', cta: 'See what is new', href: '/s?sort=newest', cells: [
-      { rule: { kind: 'new', department: 'Groceries' } }, { rule: { kind: 'new', department: 'Beauty' } },
-      { rule: { kind: 'new', department: 'Fashion' } }, { rule: { kind: 'new', department: 'Home & Art' } }] },
     { id: 't4', title: 'Book a service', cta: 'All services', href: '/services', cells: [
       { label: 'Hair & beauty', href: '/services', imageUrl: null }, { label: 'Catering', href: '/services', imageUrl: null },
       { label: 'Tailoring', href: '/services', imageUrl: null }, { label: 'Events & DJ', href: '/services', imageUrl: null }] }
@@ -48,15 +44,25 @@ export const PLACEMENTS: Omit<Placements, 'rails' | 'tiles'> & { tiles: MockTile
     { id: 'b1', slot: 'home-mid', advertiser: 'Bonwire Weavers Collective', title: 'Hand-woven kente for graduation season', sub: 'Each stole is tagged with its weaver’s name.', cta: 'Shop kente', href: '/p/AT00000P14', imageUrl: null }
   ],
   rails: [
+    { id: 'r-near', title: 'Shipping from near {city}', href: '/s', source: { kind: 'near-you', limit: 6 } },
+    { id: 'r-fast', title: 'Get it by {day}', href: '/s?fulfilment=afrotransact', source: { kind: 'deliverable-fast', maxDays: 2, limit: 6 } },
     { id: 'r1', title: 'Fulfilled by AfroTransact — fast to {city}', href: '/s?fulfilment=afrotransact', source: { kind: 'fulfilled-fastest', limit: 6 } },
     { id: 'r2', title: 'Best sellers in Groceries', href: '/s?dept=Groceries', source: { kind: 'department-bestsellers', department: 'Groceries', limit: 6 } },
     { id: 'r3', title: 'Discover other kitchens', href: '/s', source: { kind: 'curated', ids: ['p11', 'p9', 'p12', 'p22', 'p7', 'p10'] } }
   ]
 };
 
+/** ZIP prefixes a placement is targeted at (content's `targeting.zipPrefixes`); placements not listed show everywhere. */
+export const ZIP_TARGETING: Readonly<Record<string, readonly string[]>> = {
+  'h-tx': ['75', '76', '77', '78', '79'],
+  'h-nj': ['07', '08']
+};
+
 export type RailSource =
   | { kind: 'fulfilled-fastest'; limit: number }
   | { kind: 'department-bestsellers'; department: string; limit: number }
+  | { kind: 'near-you'; limit: number }
+  | { kind: 'deliverable-fast'; maxDays: number; limit: number }
   | { kind: 'curated'; ids: string[] };
 
 /** Sponsored search placements (ad slots on results pages). */

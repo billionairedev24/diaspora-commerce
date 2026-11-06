@@ -10,7 +10,7 @@ import { PRICE_BUCKETS, type SearchPage, type SearchQuery, type Suggestions } fr
 import { getDb, type MockOffer, type MockSession, nextId } from './db';
 import { deliveryOptions, deliveryPromise, etaDays, FREE_SHIPPING_THRESHOLD_MINOR, locationForZip, metroOf, nearestFc, SELLER_SHIPPING_MINOR } from './delivery';
 import { atinOf,DEPARTMENTS, type FixtureProduct, PLATFORM_SELLER } from './fixtures/catalog';
-import { PLACEMENTS, SPONSORED_SEARCH, type TileRule } from './fixtures/content';
+import { PLACEMENTS, SPONSORED_SEARCH, type TileRule, ZIP_TARGETING } from './fixtures/content';
 import { completePhrases, matchScore } from './matching';
 import { fixturePreorderEligible, withPreorderPackage } from './preorders';
 import { publicSizeChart, seedSizeCharts,SIZE_CHART_IDS } from './seller/size-charts';
@@ -311,17 +311,60 @@ export function activeHero(slides: Home['hero'], now: Date): Home['hero'] {
   return slides.filter((h) => (!h.startsAt || Date.parse(h.startsAt) <= t) && (!h.endsAt || t < Date.parse(h.endsAt)));
 }
 
+/** The states by census region: "nearest" when nothing ships from the shopper's state (mirrors the gateway). */
+const REGION: Record<string, string> = Object.fromEntries([
+  ...['CT', 'ME', 'MA', 'NH', 'RI', 'VT', 'NJ', 'NY', 'PA'].map((s) => [s, 'NE']),
+  ...['IL', 'IN', 'MI', 'OH', 'WI', 'IA', 'KS', 'MN', 'MO', 'NE', 'ND', 'SD'].map((s) => [s, 'MW']),
+  ...['DE', 'DC', 'FL', 'GA', 'MD', 'NC', 'SC', 'VA', 'WV', 'AL', 'KY', 'MS', 'TN', 'AR', 'LA', 'OK', 'TX'].map((s) => [s, 'S']),
+  ...['AZ', 'CO', 'ID', 'MT', 'NV', 'NM', 'UT', 'WY', 'AK', 'CA', 'HI', 'OR', 'WA'].map((s) => [s, 'W'])
+]);
+
+/** 0 ships from the shopper's city, 1 their state, 2 their region, 3 far or unknown ("Houston, TX" is the ship-from label). */
+export function locationTier(p: ProductSummary, loc: DeliveryLocation): number {
+  const [city = '', state = ''] = p.sellerCity.split(',').map((x) => x.trim());
+  if (city && loc.city && city.toLowerCase() === loc.city.toLowerCase()) return 0;
+  if (state && loc.state && state.toUpperCase() === loc.state.toUpperCase()) return 1;
+  if (state && REGION[state.toUpperCase()] && REGION[state.toUpperCase()] === REGION[loc.state.toUpperCase()]) return 2;
+  return 3;
+}
+
+/** A stable 32-bit hash of the seed and ATIN (cyrb53-style mixing), for the daily rotation. */
+function seeded(seed: string, atin: string): number {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (const ch of `${seed}|${atin}`) {
+    const c = ch.charCodeAt(0);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  return h1 >>> 0;
+}
+
+/** Closest first, then a rotation seeded by (day, ZIP, shopper) inside each group of four neighbouring ranks: the page
+    differs by ZIP and by day and is the same on every load of a visit. */
+export function rankForShopper(items: ProductSummary[], loc: DeliveryLocation, now: Date, userId: string | null): ProductSummary[] {
+  const seed = `${now.toISOString().slice(0, 10)}|${loc.zip}|${userId ?? ''}`;
+  return items
+    .map((p, i) => ({ p, tier: locationTier(p, loc), bucket: Math.floor(i / 4), h: seeded(seed, p.atin) }))
+    .sort((a, b) => a.tier - b.tier || a.bucket - b.bucket || a.h - b.h)
+    .map((x) => x.p);
+}
+
 /** Tile cells: fixed cells stay as they are; a rule cell becomes the best eligible product not shown elsewhere on the page. */
-function resolveTiles(all: ProductSummary[]): Home['tiles'] {
+function resolveTiles(all: ProductSummary[], rank: (items: ProductSummary[]) => ProductSummary[], near: (items: ProductSummary[]) => ProductSummary[]): Home['tiles'] {
   const used = new Set<string>();
   const pick = (rule: TileRule): ProductSummary | undefined => {
     const pool = all.filter((x) => eligibleForHome(x) && !used.has(x.atin) && (!rule.department || x.department === rule.department));
-    const ranked =
+    const sorted =
       rule.kind === 'top-rated'
         ? pool.sort((a, b) => b.rating - a.rating || b.reviewCount - a.reviewCount)
         : rule.kind === 'new'
           ? pool.reverse()
-          : pool.filter((x) => x.fulfilment === 'AFROTRANSACT').sort((a, b) => a.delivery.days - b.delivery.days);
+          : rule.kind === 'near-you'
+            ? near(pool.sort((a, b) => b.rating - a.rating))
+            : pool.filter((x) => x.fulfilment === 'AFROTRANSACT').sort((a, b) => a.delivery.days - b.delivery.days);
+    const ranked = rank(sorted);
     const found = ranked[0];
     if (found) used.add(found.atin);
     return found;
@@ -386,13 +429,22 @@ export function recentlyViewed(atins: string[], loc: DeliveryLocation, now: Date
   return out;
 }
 
+/** Placements targeted at ZIP prefixes show only to shoppers whose ZIP starts with one of them. */
+const targeted = (id: string, zip: string) => !ZIP_TARGETING[id] || ZIP_TARGETING[id].some((prefix) => zip.startsWith(prefix));
+
 export function home(loc: DeliveryLocation, now: Date, userId: string | null = null): Home {
   const db = getDb();
   const metro = metroOf(loc);
   const all = [...db.products.values()].filter((p) => !p.unlisted).map((p) => summarize(p, metro, now));
+  const rank = (items: ProductSummary[]) => rankForShopper(items, loc, now, userId);
+  const near = (items: ProductSummary[]) => items.filter((x) => locationTier(x, loc) < 3);
   const rails = PLACEMENTS.rails.map((r) => {
     let items: ProductSummary[] = [];
-    if (r.source.kind === 'fulfilled-fastest') items = all.filter((x) => x.fulfilment === 'AFROTRANSACT').sort((a, b) => a.delivery.days - b.delivery.days).slice(0, r.source.limit);
+    if (r.source.kind === 'near-you') items = near(all.filter(eligibleForHome).sort((a, b) => b.rating - a.rating));
+    else if (r.source.kind === 'deliverable-fast') {
+      const maxDays = r.source.maxDays;
+      items = all.filter((x) => x.delivery.days <= maxDays);
+    } else if (r.source.kind === 'fulfilled-fastest') items = all.filter((x) => x.fulfilment === 'AFROTRANSACT').sort((a, b) => a.delivery.days - b.delivery.days).slice(0, r.source.limit);
     else if (r.source.kind === 'department-bestsellers') {
       const dept = r.source.department;
       items = all.filter((x) => x.department === dept).sort((a, b) => b.reviewCount - a.reviewCount).slice(0, r.source.limit);
@@ -400,15 +452,25 @@ export function home(loc: DeliveryLocation, now: Date, userId: string | null = n
       const ids = r.source.ids;
       items = ids.map((id) => all.find((x) => x.atin === atinOf(id))).filter((x): x is ProductSummary => !!x);
     }
-    return { id: r.id, title: r.title.replace('{city}', loc.city), href: r.href, items: items.filter(eligibleForHome) };
+    const shown = rank(items.filter(eligibleForHome)).slice(0, r.source.kind === 'curated' ? undefined : r.source.limit);
+    const day = shown.reduce((d, x) => (x.delivery.days >= d.days ? x.delivery : d), shown[0]?.delivery ?? { days: 0, label: '' }).label;
+    return { id: r.id, title: r.title.replace('{city}', loc.city).replace('{state}', loc.state).replace('{day}', day), href: r.href, items: shown };
   });
   const personal = userId ? basedOnOrders(all, userId) : null;
+  const tiles = resolveTiles(all, rank, near).filter((t) => targeted(t.id, loc.zip));
+  // A product is on the page once: tiles first, then the personal rail, then the rails in page order.
+  const used = new Set(tiles.flatMap((t) => t.cells.map((c) => ('atin' in c ? c.atin : undefined)).filter((a): a is string => !!a)));
+  const dedupe = (r: Home['rails'][number]) => {
+    const items = r.items.filter((x) => !used.has(x.atin));
+    for (const x of items) used.add(x.atin);
+    return { ...r, items };
+  };
   return {
     announcements: PLACEMENTS.announcements,
-    hero: activeHero(PLACEMENTS.hero, now),
-    tiles: resolveTiles(all),
+    hero: activeHero(PLACEMENTS.hero, now).filter((h) => targeted(h.id, loc.zip)),
+    tiles,
     banners: PLACEMENTS.banners,
-    rails: [...(personal ? [personal] : []), ...rails.filter((r) => r.items.length > 0)],
+    rails: [...(personal ? [personal] : []), ...rails].map(dedupe).filter((r) => r.items.length > 0),
     deliverTo: loc
   };
 }

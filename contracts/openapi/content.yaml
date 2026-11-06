@@ -3910,12 +3910,14 @@ components:
         title and link from it. A product appears in one cell of the page only.
       required: [kind]
       properties:
-        kind: {type: string, enum: [search, department-bestsellers, fulfilled-fastest, atins]}
+        kind: {type: string, enum: [search, department-bestsellers, fulfilled-fastest, near-you, deliverable-fast, community, atins], description: 'near-you: ships from the shopper''s city, state or region; deliverable-fast: promised within maxDays to the shopper''s ZIP; community: products of one community'}
         query: {type: string, maxLength: 120}
         department: {type: string, maxLength: 60, description: 'Top-level department, e.g. Fashion'}
         sort: {type: string, enum: [relevance, rating, newest, price_asc, price_desc], description: 'rating = top rated, newest = new in'}
         atins: {type: array, maxItems: 24, items: {type: string}}
         limit: {type: integer, minimum: 1, maximum: 24}
+        maxDays: {type: integer, minimum: 1, maximum: 14, description: 'deliverable-fast: the longest delivery promise accepted (default 2)'}
+        community: {type: string, maxLength: 40, description: 'community: the community key, e.g. ghanaian'}
     HomeTileCell:
       type: object
       description: A cell of a home_tiles placement. Give either label + href (+ imageUrl) for a fixed cell, or a source rule.
