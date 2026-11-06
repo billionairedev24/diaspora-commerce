@@ -576,19 +576,22 @@ class Seeder:
         return self.svc["content"].get("/v1/placements") or []
 
     def _ensure_placement(self, slot: str, name: str, payload: dict[str, Any], priority: int,
-                          replaces: str | None = None, categories: list[str] | None = None) -> None:
+                          replaces: str | None = None, categories: list[str] | None = None,
+                          zip_prefixes: list[str] | None = None) -> None:
         """Creates (or replaces, when the payload changed) a LIVE placement named `name`; ends what it supersedes."""
         seeded = f"{name} · demo seed"
         current = self._placements()
         mine = [p for p in current if p.get("name") == seeded and p.get("status") in ("LIVE", "SCHEDULED", "IN_REVIEW", "DRAFT")]
-        same = next((p for p in mine if p.get("payload") == payload and p.get("status") in ("LIVE", "SCHEDULED")), None)
+        zips = sorted(zip_prefixes or [])
+        same = next((p for p in mine if p.get("payload") == payload and p.get("status") in ("LIVE", "SCHEDULED")
+                     and sorted((p.get("targeting") or {}).get("zipPrefixes") or []) == zips), None)
         if same:
             self.report.add("placements", "existing")
             keep = same["id"]
         else:
             body = {"slot": slot, "name": seeded, "payload": payload, "priority": priority, "paid": False,
                     "schedule": {"startsAt": _iso(_now() - dt.timedelta(minutes=5))},
-                    "targeting": {"markets": ["US"], "communities": [], "zipPrefixes": [], "dmas": [], "devices": [],
+                    "targeting": {"markets": ["US"], "communities": [], "zipPrefixes": zips, "dmas": [], "devices": [],
                                   "audience": "ALL", "categories": categories or []},
                     "frequencyCap": {"impressions": 0, "windowHours": 0}}
             created = self.svc["content"].post("/v1/placements", body)
@@ -628,7 +631,7 @@ class Seeder:
             key, queries = h["image"]
             url = self._upload_campaign_image(key, queries) or self._live_payload(h["name"]).get("imageUrl")
             self._ensure_placement("hero_carousel", h["name"], dict(h["payload"], imageUrl=url), h["priority"],
-                                   h["replaces"])
+                                   h["replaces"], zip_prefixes=h.get("zip"))
         for t in D.TILES:
             before = {c.get("label"): c.get("imageUrl") for c in self._live_payload(t["name"]).get("cells", [])}
             cells = []

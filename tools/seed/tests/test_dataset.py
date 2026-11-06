@@ -174,7 +174,7 @@ class DatasetTest(unittest.TestCase):
             self.assertTrue(2 <= len(t["rules"]) <= 4, "a tile with fewer than two resolved cells is not shown")
             self.assertLessEqual(len(t["payload"]["title"]), 60)
             for r in t["rules"]:
-                self.assertIn(r["kind"], ("search", "department-bestsellers", "fulfilled-fastest"))
+                self.assertIn(r["kind"], ("search", "department-bestsellers", "fulfilled-fastest", "near-you", "deliverable-fast"))
                 self.assertNotIn("imageUrl", r, "rule cells take their image from the product, never a pinned one")
                 if r.get("department"):
                     self.assertIn(r["department"], seeded_departments, "a rule on a department with no products shows nothing")
@@ -183,6 +183,14 @@ class DatasetTest(unittest.TestCase):
         # Enough distinct products for every cell (the page never repeats a product).
         self.assertGreaterEqual(len(D.PRODUCTS), 4 * len(D.TILE_RULES))
         self.assertIn("Shop by department", D.RETIRED_PLACEMENTS)
+        # Location demo: a Texas and a Northeast ZIP see different heroes, and the near/fast rails read the shopper's place.
+        texas = {h["name"] for h in D.HEROES if not h.get("zip") or any("77042".startswith(z) for z in h["zip"])}
+        jersey = {h["name"] for h in D.HEROES if not h.get("zip") or any("08817".startswith(z) for z in h["zip"])}
+        self.assertTrue(texas - jersey and jersey - texas, "Houston and Edison must see different heroes")
+        self.assertEqual({r["payload"].get("kind") for r in D.RAILS} - {None}, {"near-you", "deliverable-fast"})
+        for h in D.HEROES:
+            for z in h.get("zip", []):
+                self.assertRegex(z, r"^\d{1,5}$")
         self.assertNotIn("Shop by department", [t["name"] for t in D.TILES])
         for h in D.HEROES:
             self.assertLessEqual(len(h["payload"]["title"]), 60)

@@ -6,7 +6,7 @@ the photo APIs (and file names for SEED_IMAGES_DIR).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Union
 
 RETAIL_ORG = "org_afrotransact_retail"
@@ -454,8 +454,22 @@ PRODUCTS: list[Product] = [
       ["table runner", "sequin", "party table"], unit="12 × 108 in", stock=25, attrs={"material": "Sequin mesh", "dims": "12 × 108 in"}),
 ]
 
+# Products their seller ships itself (offer fulfilment SELLER, shipFrom the seller's city) rather than from an AfroTransact
+# fulfilment centre. Their ship-from place is what the home page's "ships from near you" rule reads; the rest stay FBA.
+SELF_SHIPPED = {
+    "ijebu-garri", "poundo-yam", "egusi", "suya-spice", "ground-crayfish", "kuli-kuli",  # Houston
+    "turmeric", "mango-pickle", "namkeen",  # Edison
+    "plantain-fufu", "shito", "red-palm-oil", "groundnut-paste",  # Bronx
+}
+PRODUCTS = [replace(p, fulfilment="SELLER") if p.key in SELF_SHIPPED else p for p in PRODUCTS]
+
 # ---------------------------------------------------------------------------------------- home content
 # Images: (key, queries). Campaigns replace the image-less placements of content's V2 migration (same copy).
+# ZIP prefixes a campaign is targeted at (content's targeting.zipPrefixes). Demo ZIPs: Houston 77042 and Dallas 75212 (TX),
+# Edison 08817 (NJ), Bronx 10453 (NY); see docs/engineering/home-page-content.md.
+TEXAS_ZIPS = ["75", "76", "77", "78", "79"]
+NORTHEAST_ZIPS = ["06", "07", "08", "10", "11", "12", "19"]
+
 HEROES = [
     {"replaces": "plc_hero_party_jollof", "name": "AfroTransact Brand jollof", "priority": 40,
      "payload": {"theme": "gold", "kicker": "AfroTransact Brand", "title": "Party jollof, sorted.",
@@ -463,7 +477,13 @@ HEROES = [
                  "cta": "Shop AfroTransact Brand", "href": "/s?q=AfroTransact+Brand", "label": "AfroTransact",
                  "imageAlt": "A pot of party jollof rice"},
      "image": ("hero-jollof", ["jollof rice", "party jollof rice", "nigerian jollof"])},
-    {"replaces": "plc_hero_diwali", "name": "Diwali table", "priority": 30,
+    {"replaces": None, "name": "Fresh from Houston kitchens", "priority": 35, "zip": TEXAS_ZIPS,
+     "payload": {"theme": "green", "kicker": "Texas", "title": "Fresh from Houston kitchens.",
+                 "sub": "Garri, egusi and pepper sauce from Houston sellers, in Texas by tomorrow.",
+                 "cta": "Shop pantry staples", "href": "/s?dept=Groceries", "label": "AfroTransact",
+                 "imageAlt": "Houston skyline at dusk"},
+     "image": ("hero-texas", ["houston skyline", "texas barbecue", "african food houston"])},
+    {"replaces": "plc_hero_diwali", "name": "Diwali table", "priority": 30, "zip": NORTHEAST_ZIPS,
      "payload": {"theme": "green", "kicker": "Diwali", "title": "Light up the table.",
                  "sub": "Aged basmati, diyas and spices from Edison to your door.", "cta": "Shop Indian kitchen",
                  "href": "/communities/indian", "label": "AfroTransact", "imageAlt": "Diya lamps lit for Diwali"},
@@ -522,11 +542,14 @@ TILE_RULES = [
      "rules": [_rule("newest", d) for d in _DEPARTMENTS]},
     {"replaces": None, "name": "Get it tomorrow", "priority": 6,
      "payload": {"title": "Get it tomorrow", "cta": "See fast delivery", "href": "/s?fulfilment=afrotransact"},
-     "rules": [_rule("", kind="fulfilled-fastest") for _ in range(4)]},
+     "rules": [{"kind": "deliverable-fast", "maxDays": 1} for _ in range(4)]},
+    {"replaces": None, "name": "Shipping near you", "priority": 8,
+     "payload": {"title": "Shipping from near you", "cta": "See more", "href": "/s"},
+     "rules": [{"kind": "near-you", "department": d} for d in _DEPARTMENTS]},
 ]
 
 # Seeded placements an earlier run made that the rules above replace (their fixed per-category images are dropped).
-RETIRED_PLACEMENTS = ["Shop by department"]
+RETIRED_PLACEMENTS = ["Shop by department", "Spice cupboard", "Fabrics & fashion"]
 
 BANNERS = [
     {"replaces": "plc_banner_kente", "name": "Bonwire kente banner", "priority": 10,
@@ -547,10 +570,10 @@ RAILS = [
      "deals": True},
     {"name": "AfroTransact Brand", "priority": 55, "payload": {"title": "AfroTransact Brand", "href": "/s?q=AfroTransact+Brand",
                                                                "query": "AfroTransact Brand"}},
-    {"name": "Spice cupboard", "priority": 45, "payload": {"title": "Spice cupboard", "href": "/s?q=spice",
-                                                           "query": "spice OR seasoning OR pepper"}},
-    {"name": "Fabrics & fashion", "priority": 40, "payload": {"title": "Fabrics & fashion", "href": "/s?dept=Fashion",
-                                                              "query": "ankara OR kente OR dashiki OR gele"}},
+    {"name": "Shipping from near {city}", "priority": 50,
+     "payload": {"title": "Shipping from near {city}", "href": "/s", "kind": "near-you"}},
+    {"name": "Get it by {day}", "priority": 48,
+     "payload": {"title": "Get it by {day}", "href": "/s?fulfilment=afrotransact", "kind": "deliverable-fast", "maxDays": 2}},
     {"name": "Beauty from the source", "priority": 35, "payload": {"title": "Beauty from the source",
                                                                    "href": "/s?dept=Beauty",
                                                                    "query": "shea OR soap OR oil"}},
