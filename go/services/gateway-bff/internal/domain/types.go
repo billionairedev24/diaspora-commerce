@@ -297,11 +297,27 @@ type Cart struct {
 
 // DeliveryLocation is the session's deliver-to location.
 type DeliveryLocation struct {
-	ZIP         string `json:"zip"`
-	City        string `json:"city"`
-	State       string `json:"state"`
+	ZIP   string `json:"zip"`
+	City  string `json:"city"`
+	State string `json:"state"`
+	// Label is the header value: the city (never the ZIP; the ZIP stays internal).
 	Label       string `json:"label"`
 	Serviceable bool   `json:"serviceable"`
+	// Source is "chosen" (the shopper picked it), "detected" (edge headers / override) or "default" (the market's).
+	Source string `json:"source"`
+}
+
+// Location sources.
+const (
+	LocationChosen   = "chosen"
+	LocationDetected = "detected"
+	LocationDefault  = "default"
+)
+
+// EdgeHints are the visitor-location headers an edge (Cloudflare) adds to a request.
+type EdgeHints struct {
+	Country, City, Region, ZIP string
+	Lat, Lon                   *float64
 }
 
 // PostalAddress is a structured address from autocomplete.

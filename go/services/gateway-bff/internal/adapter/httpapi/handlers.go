@@ -276,6 +276,7 @@ func (h *handlersImpl) siteConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlersImpl) home(w http.ResponseWriter, r *http.Request) {
+	h.detectLocation(r)
 	v, err := h.s.Site.Home(r.Context(), callerFrom(r.Context()))
 	h.reply(w, r, http.StatusOK, v, err)
 }
@@ -400,7 +401,15 @@ func (h *handlersImpl) applyToJob(w http.ResponseWriter, r *http.Request) {
 
 // ---------------------------------------------------------------- location
 
+// detectLocation silently sets an approximate deliver-to location on a first visit (no popup, no browser prompt).
+func (h *handlersImpl) detectLocation(r *http.Request) {
+	if c := callerFrom(r.Context()); c.ZIP() == "" && !isBackground(r) {
+		h.s.Location.Detect(r.Context(), c, edgeHints(r))
+	}
+}
+
 func (h *handlersImpl) getLocation(w http.ResponseWriter, r *http.Request) {
+	h.detectLocation(r)
 	h.reply(w, r, http.StatusOK, h.s.Location.Current(r.Context(), callerFrom(r.Context())), nil)
 }
 
@@ -409,6 +418,9 @@ func (h *handlersImpl) setLocation(w http.ResponseWriter, r *http.Request) {
 		ZIP *string  `json:"zip"`
 		Lat *float64 `json:"lat"`
 		Lon *float64 `json:"lon"`
+		// SuggestionID and SessionToken apply a picked place suggestion (city, ZIP or street).
+		SuggestionID string `json:"suggestionId"`
+		SessionToken string `json:"sessionToken"`
 	}
 	if err := decode(r, &b, false); err != nil {
 		h.reply(w, r, 0, nil, err)
@@ -418,6 +430,9 @@ func (h *handlersImpl) setLocation(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case b.ZIP != nil:
 		v, err := h.s.Location.SetZIP(r.Context(), c, *b.ZIP)
+		h.reply(w, r, http.StatusOK, v, err)
+	case b.SuggestionID != "":
+		v, err := h.s.Location.SetSuggestion(r.Context(), c, b.SuggestionID, b.SessionToken)
 		h.reply(w, r, http.StatusOK, v, err)
 	case b.Lat != nil && b.Lon != nil:
 		if *b.Lat < -90 || *b.Lat > 90 || *b.Lon < -180 || *b.Lon > 180 {
@@ -438,7 +453,7 @@ func (h *handlersImpl) addressSuggestions(w http.ResponseWriter, r *http.Request
 		h.reply(w, r, 0, nil, domain.ValidationProblem(map[string]string{"q": "Type 1–120 characters"}))
 		return
 	}
-	v, err := h.s.Location.Suggest(r.Context(), text, q.Get("country"), q.Get("sessionToken"))
+	v, err := h.s.Location.Suggest(r.Context(), text, q.Get("country"), q.Get("sessionToken"), q.Get("kind"))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

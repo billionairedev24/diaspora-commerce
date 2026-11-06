@@ -365,6 +365,10 @@ paths:
       operationId: getDeliveryLocation
       security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Current deliver-to location of the session
+      description: >-
+        A first visit with no stored location is detected silently from the edge's visitor-location headers
+        (CF-IPPostalCode, else CF-IPLatitude/CF-IPLongitude; the country must be the market's) or the configured local
+        override, stored as `source: detected`. A location the shopper chose is never replaced by detection.
       responses:
         '200':
           description: Location
@@ -376,7 +380,10 @@ paths:
       operationId: setDeliveryLocation
       security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Change the deliver-to location by ZIP or device coordinates (updates every delivery promise)
-      description: Coordinates come from "Use my current location" and are reverse-geocoded to a ZIP by the geo service; they are not stored.
+      description: >-
+        Coordinates come from an explicit click on "Use my current location" and are reverse-geocoded to a ZIP by the geo
+        service; they are not stored. `suggestionId` applies a place picked from `GET /v1/geo/address-suggestions?kind=place`
+        (a city has no ZIP of its own: the ZIP at its centre is used). The result is `source: chosen`.
       requestBody:
         required: true
         content:
@@ -392,6 +399,11 @@ paths:
                   properties:
                     lat: {type: number, minimum: -90, maximum: 90}
                     lon: {type: number, minimum: -180, maximum: 180}
+                - type: object
+                  required: [suggestionId]
+                  properties:
+                    suggestionId: {type: string, maxLength: 512}
+                    sessionToken: {type: string, pattern: '^[A-Za-z0-9_-]{8,36}$'}
       responses:
         '200':
           description: Updated location
@@ -416,9 +428,16 @@ paths:
         - {name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 120}}
         - {name: country, in: query, description: 'ISO 3166-1 alpha-2 country; default: the market''s (US)', schema: {type: string, pattern: '^[A-Za-z]{2}$'}}
         - {name: sessionToken, in: query, description: Session token of the previous answer of this address entry (omit on the first keystroke), schema: {type: string, pattern: '^[A-Za-z0-9_-]{8,36}$'}}
+        - name: kind
+          in: query
+          description: >-
+            `place` is the deliver-to picker: up to 4 cities (`label` the city, `secondary` its state, so "Georgetown, TX"
+            and "Georgetown, KY" are told apart), then streets (`label` the street line, `secondary` "City, ST"); a
+            five-digit ZIP answers its city. The ZIP is never the label. Omitted: street addresses and ZIP codes.
+          schema: {type: string, enum: [place]}
       responses:
         '200':
-          description: Up to 5 suggestions and the session token
+          description: Up to 5 suggestions (6 for `kind=place`) and the session token
           content:
             application/json:
               schema: {$ref: '#/components/schemas/AddressSuggestions'}
@@ -4422,13 +4441,17 @@ components:
         deliverTo: {$ref: '#/components/schemas/DeliveryLocation'}
     DeliveryLocation:
       type: object
-      required: [zip, city, state, label, serviceable]
+      required: [zip, city, state, label, serviceable, source]
       properties:
-        zip: {type: string}
+        zip: {type: string, description: 'Internal: delivery promises, runs and content targeting use it; never shown as the headline.'}
         city: {type: string}
         state: {type: string}
-        label: {type: string, examples: [Houston 77042]}
+        label: {type: string, examples: [Houston], description: 'The header value: the city only, never the ZIP.'}
         serviceable: {type: boolean}
+        source:
+          type: string
+          enum: [chosen, detected, default]
+          description: '`chosen` the shopper picked it; `detected` approximated from the request''s edge location headers (or the local override) on the first visit; `default` the market''s default.'
     PostalAddress:
       type: object
       required: [line1, line2, city, state, zip, country, lat, lon]
@@ -4455,7 +4478,7 @@ components:
               label: {type: string}
               secondary: {type: string}
               address: {$ref: '#/components/schemas/PostalAddress'}
-              source: {type: string, enum: [google, osm, fixture]}
+              source: {type: string, enum: [google, osm, fixture, geo]}
               resolved: {type: boolean, description: 'false: `address` holds the street line only; resolve the suggestion when picked'}
         attribution: {type: string, description: Required attribution text (e.g. © OpenStreetMap contributors)}
         sessionToken: {type: string, description: Autocomplete session of this address entry (Google Places billing)}

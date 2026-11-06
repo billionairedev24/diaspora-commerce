@@ -253,11 +253,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Current deliver-to location of the session */
+        /**
+         * Current deliver-to location of the session
+         * @description A first visit with no stored location is detected silently from the edge's visitor-location headers (CF-IPPostalCode, else CF-IPLatitude/CF-IPLongitude; the country must be the market's) or the configured local override, stored as `source: detected`. A location the shopper chose is never replaced by detection.
+         */
         get: operations["getDeliveryLocation"];
         /**
          * Change the deliver-to location by ZIP or device coordinates (updates every delivery promise)
-         * @description Coordinates come from "Use my current location" and are reverse-geocoded to a ZIP by the geo service; they are not stored.
+         * @description Coordinates come from an explicit click on "Use my current location" and are reverse-geocoded to a ZIP by the geo service; they are not stored. `suggestionId` applies a place picked from `GET /v1/geo/address-suggestions?kind=place` (a city has no ZIP of its own: the ZIP at its centre is used). The result is `source: chosen`.
          */
         put: operations["setDeliveryLocation"];
         post?: never;
@@ -3678,12 +3681,21 @@ export interface components {
             deliverTo: components["schemas"]["DeliveryLocation"];
         };
         DeliveryLocation: {
+            /** @description Internal: delivery promises, runs and content targeting use it; never shown as the headline. */
             zip: string;
             city: string;
             state: string;
-            /** @example Houston 77042 */
+            /**
+             * @description The header value: the city only, never the ZIP.
+             * @example Houston
+             */
             label: string;
             serviceable: boolean;
+            /**
+             * @description `chosen` the shopper picked it; `detected` approximated from the request's edge location headers (or the local override) on the first visit; `default` the market's default.
+             * @enum {string}
+             */
+            source: "chosen" | "detected" | "default";
         };
         PostalAddress: {
             line1: string;
@@ -3702,7 +3714,7 @@ export interface components {
                 secondary: string;
                 address: components["schemas"]["PostalAddress"];
                 /** @enum {string} */
-                source: "google" | "osm" | "fixture";
+                source: "google" | "osm" | "fixture" | "geo";
                 /** @description false: `address` holds the street line only; resolve the suggestion when picked */
                 resolved: boolean;
             }[];
@@ -5970,6 +5982,9 @@ export interface operations {
                 } | {
                     lat: number;
                     lon: number;
+                } | {
+                    suggestionId: string;
+                    sessionToken?: string;
                 };
             };
         };
@@ -5994,6 +6009,8 @@ export interface operations {
                 country?: string;
                 /** @description Session token of the previous answer of this address entry (omit on the first keystroke) */
                 sessionToken?: string;
+                /** @description `place` is the deliver-to picker: up to 4 cities (`label` the city, `secondary` its state, so "Georgetown, TX" and "Georgetown, KY" are told apart), then streets (`label` the street line, `secondary` "City, ST"); a five-digit ZIP answers its city. The ZIP is never the label. Omitted: street addresses and ZIP codes. */
+                kind?: "place";
             };
             header?: never;
             path?: never;
@@ -6001,7 +6018,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Up to 5 suggestions and the session token */
+            /** @description Up to 5 suggestions (6 for `kind=place`) and the session token */
             200: {
                 headers: {
                     [name: string]: unknown;

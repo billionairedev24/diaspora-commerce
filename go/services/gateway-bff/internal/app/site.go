@@ -244,7 +244,14 @@ func orEmpty[T any](v []T) []T {
 	return v
 }
 
+// railItems is the single way products reach a rail, a tile or a cross-sell: whatever the source kind (search,
+// department, brand, atins, near-you, community, ...), only eligible cards (in stock, a real photo) come out.
 func (s *siteServiceImpl) railItems(ctx context.Context, src domain.RailSource, sc shopperScope) ([]domain.ProductSummary, error) {
+	items, err := s.resolveRail(ctx, src, sc)
+	return eligibleOnly(items), err
+}
+
+func (s *siteServiceImpl) resolveRail(ctx context.Context, src domain.RailSource, sc shopperScope) ([]domain.ProductSummary, error) {
 	limit := src.Limit
 	if limit <= 0 || limit > 24 {
 		limit = 12

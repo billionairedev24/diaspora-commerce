@@ -40,11 +40,11 @@ type Upstreams struct {
 	Orders        Upstream `yaml:"orders"`
 	Notifications Upstream `yaml:"notifications"`
 	// Seller Center & Provider Hub upstreams.
-	Seller     Upstream `yaml:"seller"`
-	Offers     Upstream `yaml:"offers"`
-	Bookings   Upstream `yaml:"bookings"`
-	Media      Upstream `yaml:"media"`
-	Carrier    Upstream `yaml:"carrier"`
+	Seller   Upstream `yaml:"seller"`
+	Offers   Upstream `yaml:"offers"`
+	Bookings Upstream `yaml:"bookings"`
+	Media    Upstream `yaml:"media"`
+	Carrier  Upstream `yaml:"carrier"`
 	// Storefront account, returns and Lola upstreams (TAX_RETURNS_URL, AI_GATEWAY_URL).
 	TaxReturns Upstream `yaml:"taxReturns"`
 	AIGateway  Upstream `yaml:"aiGateway"`
@@ -101,13 +101,13 @@ type Config struct {
 	} `yaml:"web"`
 
 	Session struct {
-		CookieName   string        `yaml:"cookieName"`
-		CookieSecure bool          `yaml:"cookieSecure" env:"SESSION_COOKIE_SECURE"`
-		CookieDomain string        `yaml:"cookieDomain" env:"SESSION_COOKIE_DOMAIN"`
+		CookieName   string `yaml:"cookieName"`
+		CookieSecure bool   `yaml:"cookieSecure" env:"SESSION_COOKIE_SECURE"`
+		CookieDomain string `yaml:"cookieDomain" env:"SESSION_COOKIE_DOMAIN"`
 		// IdleTTL is the Valkey time-to-live of a session (refreshed on every write) and the cookie's Max-Age. It is
 		// only the upper bound: the per-audience sign-out policy (edited by staff at identity) ends sessions earlier,
 		// so it may not be shorter than the longest default session length (MinSessionTTL).
-		IdleTTL      time.Duration `yaml:"idleTtl"`
+		IdleTTL time.Duration `yaml:"idleTtl"`
 		// SigningKey signs the cookie value and derives the key that encrypts tokens at rest (secret).
 		SigningKey string `env:"SESSION_SIGNING_KEY"`
 	} `yaml:"session"`
@@ -152,9 +152,15 @@ type Config struct {
 	} `yaml:"cache"`
 
 	Commerce struct {
-		DefaultZip                 string            `yaml:"defaultZip"`
-		DefaultCity                string            `yaml:"defaultCity"`
-		DefaultState               string            `yaml:"defaultState"`
+		DefaultZip   string `yaml:"defaultZip"`
+		DefaultCity  string `yaml:"defaultCity"`
+		DefaultState string `yaml:"defaultState"`
+		// DetectOverrideZIP (env LOCATION_DETECT_ZIP) makes first-visit detection answer this ZIP whatever the request
+		// says: local development has no edge headers, so a demo city is "detected" instead.
+		DetectOverrideZIP string `yaml:"detectOverrideZip" env:"LOCATION_DETECT_ZIP"`
+		// TrustEdgeGeo (env TRUST_EDGE_GEO) reads Cloudflare's visitor-location headers (CF-IPPostalCode, CF-IPCity,
+		// CF-Region, CF-IPCountry, CF-IPLatitude/Longitude) for first-visit detection.
+		TrustEdgeGeo               bool              `yaml:"trustEdgeGeo" env:"TRUST_EDGE_GEO"`
 		TimeZone                   string            `yaml:"timeZone"`
 		SellerShippingMinor        int64             `yaml:"sellerShippingMinor"`
 		FreeShippingThresholdMinor int64             `yaml:"freeShippingThresholdMinor"`

@@ -155,6 +155,7 @@ func run() error {
 	sellerDeps.Sessions = sessions
 	location := app.NewLocationService(geo, content, sessions, app.LocationOptions{DefaultZIP: cfg.Commerce.DefaultZip,
 		DefaultCity: cfg.Commerce.DefaultCity, DefaultState: cfg.Commerce.DefaultState,
+		DetectOverrideZIP: cfg.Commerce.DetectOverrideZIP, TrustEdgeGeo: cfg.Commerce.TrustEdgeGeo,
 		Country: cfg.Market, // market codes are ISO countries (us): address suggestions are restricted to it
 		Log:     log})
 	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Selection: store,

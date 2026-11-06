@@ -47,8 +47,12 @@ type Session struct {
 	CreatedAt   time.Time `json:"createdAt"`
 	GuestCartID string    `json:"guestCartId,omitempty"`
 	ZIP         string    `json:"zip,omitempty"`
-	Tokens      *Tokens   `json:"tokens,omitempty"`
-	Profile     *Profile  `json:"profile,omitempty"`
+	// City, State and LocationSource describe the deliver-to ZIP: the place the shopper picked or the edge detected.
+	City           string   `json:"city,omitempty"`
+	State          string   `json:"state,omitempty"`
+	LocationSource string   `json:"locationSource,omitempty"`
+	Tokens         *Tokens  `json:"tokens,omitempty"`
+	Profile        *Profile `json:"profile,omitempty"`
 	// Audience is which sign-out policy applies (the web app the person signed in at); empty on sessions stored
 	// before the policy existed, which the service works out from the request and stamps.
 	Audience Audience `json:"audience,omitempty"`

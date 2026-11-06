@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -74,6 +75,30 @@ func clientIP(r *http.Request, trustForwarded bool) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// edgeHints reads the visitor-location headers Cloudflare adds ("Add visitor location headers" managed transform;
+// CF-IPCountry is always there). Missing headers leave the field empty.
+func edgeHints(r *http.Request) domain.EdgeHints {
+	get := func(names ...string) string {
+		for _, n := range names {
+			if v := strings.TrimSpace(r.Header.Get(n)); v != "" {
+				return v
+			}
+		}
+		return ""
+	}
+	num := func(v string) *float64 {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+			return nil
+		}
+		return &f
+	}
+	h := domain.EdgeHints{Country: get("CF-IPCountry"), City: get("CF-IPCity"), Region: get("CF-Region-Code", "CF-Region"),
+		ZIP: get("CF-IPPostalCode", "CF-Postal-Code")}
+	h.Lat, h.Lon = num(get("CF-IPLatitude")), num(get("CF-IPLongitude"))
+	return h
 }
 
 // originAllowed reports whether a browser Origin may call the BFF with its cookies.

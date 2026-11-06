@@ -190,17 +190,17 @@ func TestBodyLimitAndMalformedJSON(t *testing.T) {
 func TestDeliveryLocation(t *testing.T) {
 	bff, b := setup(t, testkit.Options{})
 	loc := b.do("GET", "/v1/delivery-location", nil).json(t)
-	if loc["label"] != "Houston 77042" || loc["serviceable"] != true {
+	if loc["label"] != "Houston" || loc["serviceable"] != true {
 		t.Fatalf("default = %v", loc)
 	}
 	loc = b.do("PUT", "/v1/delivery-location", map[string]any{"zip": "10456"}).json(t)
 	if loc["city"] != "Bronx" || loc["state"] != "NY" {
 		t.Fatalf("set = %v", loc)
 	}
-	if got := b.do("GET", "/v1/delivery-location", nil).json(t); got["label"] != "Bronx 10456" {
+	if got := b.do("GET", "/v1/delivery-location", nil).json(t); got["label"] != "Bronx" {
 		t.Fatalf("session zip not kept: %v", got)
 	}
-	if got := b.do("GET", "/v1/search?q=shea", nil).json(t); got["deliverToLabel"] != "Bronx 10456" {
+	if got := b.do("GET", "/v1/search?q=shea", nil).json(t); got["deliverToLabel"] != "Bronx" {
 		t.Fatalf("search deliverTo = %v", got["deliverToLabel"])
 	}
 	r := b.do("PUT", "/v1/delivery-location", map[string]any{"zip": "99999"})
@@ -212,7 +212,7 @@ func TestDeliveryLocation(t *testing.T) {
 	// Deliver-to by device location: geo GET /v1/reverse?lat=&lng= → ZIP, city, state.
 	r = b.do("PUT", "/v1/delivery-location", map[string]any{"lat": 29.7376, "lon": -95.5134})
 	mustStatus(t, r, 200)
-	if got := r.json(t); got["zip"] != "77042" || got["label"] != "Houston 77042" {
+	if got := r.json(t); got["zip"] != "77042" || got["label"] != "Houston" {
 		t.Fatalf("location by coordinates = %v", got)
 	}
 	if bff.Upstreams.CallCount("GET /v1/reverse") != 1 {
@@ -243,7 +243,7 @@ func TestSearchAndSuggest(t *testing.T) {
 		facets["community"].([]any)[0].(map[string]any)["value"] != "Nigerian" || facets["delivery"].([]any)[0].(map[string]any)["value"] != "1" {
 		t.Fatalf("facets = %v", facets)
 	}
-	if num(page, "pageCount") != 1 || page["deliverToLabel"] != "Houston 77042" {
+	if num(page, "pageCount") != 1 || page["deliverToLabel"] != "Houston" {
 		t.Fatalf("page = %v", page)
 	}
 	for _, bad := range []string{"sort=cheapest", "size=61", "price=cheap", "minRating=7", "fulfilment=DRONE"} {

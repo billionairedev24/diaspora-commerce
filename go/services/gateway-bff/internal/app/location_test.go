@@ -43,7 +43,7 @@ func TestDeliverToAsksMarketsAboutTheCity(t *testing.T) {
 	svc := NewLocationService(geo, content, nil, LocationOptions{DefaultZIP: "77042", DefaultCity: "Houston", DefaultState: "TX"})
 
 	houston := svc.Current(context.Background(), &domain.Caller{})
-	if !houston.Serviceable || houston.Label != "Houston 77042" {
+	if !houston.Serviceable || houston.Label != "Houston" {
 		t.Errorf("Houston = %+v", houston)
 	}
 	lubbock := svc.Current(context.Background(), &domain.Caller{Session: &domain.Session{ZIP: "79401"}})

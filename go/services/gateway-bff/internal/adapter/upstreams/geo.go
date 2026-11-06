@@ -24,13 +24,16 @@ func NewGeo(c httpclient.Client, cache port.Cache, zipTTL time.Duration) port.Ge
 	return &geoImpl{c: c, cache: cache, zipTTL: zipTTL}
 }
 
-func (g *geoImpl) Autocomplete(ctx context.Context, q, session, country string) ([]port.GeoSuggestion, error) {
+func (g *geoImpl) Autocomplete(ctx context.Context, q, session, country, kind string) ([]port.GeoSuggestion, error) {
 	v := url.Values{"q": {q}}
 	if session != "" {
 		v.Set("session", session)
 	}
 	if country != "" {
 		v.Set("country", country)
+	}
+	if kind != "" {
+		v.Set("kind", kind)
 	}
 	var out struct {
 		Suggestions []port.GeoSuggestion `json:"suggestions"`

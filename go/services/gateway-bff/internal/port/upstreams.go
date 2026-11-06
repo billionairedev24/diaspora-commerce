@@ -284,7 +284,8 @@ type GeoValidation struct {
 
 // GeoClient calls the geo service. Reverse geocoding is GET /v1/reverse?lat=&lng= (Google, then Nominatim).
 type GeoClient interface {
-	Autocomplete(ctx context.Context, q, session, country string) ([]GeoSuggestion, error)
+	// Autocomplete suggests places for q; kind narrows it to "address", "locality" or "postal_code" ("" = geo's default).
+	Autocomplete(ctx context.Context, q, session, country, kind string) ([]GeoSuggestion, error)
 	Resolve(ctx context.Context, id, session string) (GeoAddress, error)
 	Validate(ctx context.Context, a GeoAddress) (GeoValidation, error)
 	Zip(ctx context.Context, zip string) (GeoAddress, error)

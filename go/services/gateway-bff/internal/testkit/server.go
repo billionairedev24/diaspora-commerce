@@ -135,7 +135,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	sessions := app.NewSessionService(store, identity, verifier, app.SessionOptions{SigningKey: "test-signing-key-0123456789abcdef0123",
 		VerifyBearer: true, Clock: clock.Now, Log: log})
 	sellerDeps.Sessions = sessions
-	location := app.NewLocationService(geo, content, sessions, app.LocationOptions{DefaultZIP: "77042", DefaultCity: "Houston", DefaultState: "TX", Log: log})
+	location := app.NewLocationService(geo, content, sessions, app.LocationOptions{DefaultZIP: "77042", DefaultCity: "Houston", DefaultState: "TX", TrustEdgeGeo: true, Log: log})
 	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Selection: store, Sessions: sessions,
 		Estimator: estimator, Clock: clock.Now, Log: log})
 	services := httpapi.Services{
