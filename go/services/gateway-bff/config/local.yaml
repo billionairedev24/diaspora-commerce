@@ -159,7 +159,7 @@ commerce:
   defaultCity: Houston
   defaultState: TX
   trustEdgeGeo: true
-  detectOverrideZip: ""
+  detectOverrideZip: "77042"
   timeZone: America/Chicago
   sellerShippingMinor: 599
   freeShippingThresholdMinor: 4900

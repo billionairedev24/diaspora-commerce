@@ -34,6 +34,8 @@ function Star({ fill, size }: { fill: number; size: number }) {
 
 /** Rating stars in brand yellow with an accessible text equivalent. */
 export function Stars({ rating, reviewCount, showValue, size = 14, className, reviewsLabel = (c) => c, ratingLabel = (r) => `${r} out of 5 stars`, locale = 'en-US' }: StarsProps) {
+  // Never "0 reviews" / empty stars: with no reviews there is no rating row at all.
+  if (reviewCount !== undefined && reviewCount <= 0) return null;
   const one = (n: number) => n.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const r = Math.max(0, Math.min(5, rating));
   return (

@@ -1,0 +1,63 @@
+.heading { margin: 0 0 var(--at-space-1); font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); color: var(--at-color-text-muted); }
+.saved { display: flex; flex-direction: column; }
+.list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.row {
+  display: flex;
+  width: 100%;
+  gap: var(--at-space-2);
+  align-items: flex-start;
+  min-height: var(--at-size-touch);
+  padding: var(--at-space-2) 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--at-text-sm);
+  color: var(--at-color-text);
+  text-align: start;
+  cursor: pointer;
+}
+.row:disabled { cursor: default; opacity: 0.6; }
+@media (hover: hover) {
+  .row:hover .text { text-decoration: underline; }
+}
+.pin { flex: none; margin-top: 2px; color: var(--at-color-text-muted); }
+.text { min-width: 0; overflow-wrap: anywhere; }
+.muted { color: var(--at-color-text-muted); }
+
+.field { display: flex; flex-direction: column; gap: var(--at-space-1); }
+.input {
+  width: 100%;
+  min-height: var(--at-size-touch);
+  padding: 0 var(--at-space-3);
+  border: 1px solid var(--at-color-border-strong);
+  border-radius: var(--at-radius-sm);
+  background: var(--at-color-surface);
+  color: var(--at-color-text);
+  font: inherit;
+  font-size: max(16px, var(--at-text-base));
+}
+.input[aria-invalid='true'] { border-color: var(--at-color-danger); }
+.input:disabled { opacity: 0.7; }
+
+/* The suggestions flow under the input inside the popover: the popover grows, nothing is clipped. */
+.options { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.option {
+  display: flex;
+  gap: var(--at-space-2);
+  align-items: center;
+  min-height: var(--at-size-touch);
+  padding: var(--at-space-2) var(--at-space-2);
+  font-size: var(--at-text-sm);
+  color: var(--at-color-text);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.option[aria-selected='true'] { background: var(--at-color-surface-hover); }
+.status { padding: var(--at-space-2); font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
+.error { margin: 0; min-height: 0; font-size: var(--at-text-xs); color: var(--at-color-danger); }
+.error:empty { display: none; }
+
+.geo { display: inline-flex; align-items: center; gap: var(--at-space-2); align-self: flex-start; font-size: var(--at-text-sm); }
+.geo:disabled { opacity: 0.6; cursor: default; }
+.msg { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+.msg:empty { display: none; }

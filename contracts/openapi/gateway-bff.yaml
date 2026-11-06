@@ -4441,7 +4441,7 @@ components:
         deliverTo: {$ref: '#/components/schemas/DeliveryLocation'}
     DeliveryLocation:
       type: object
-      required: [zip, city, state, label, serviceable, source]
+      required: [zip, city, state, label, serviceable]
       properties:
         zip: {type: string, description: 'Internal: delivery promises, runs and content targeting use it; never shown as the headline.'}
         city: {type: string}

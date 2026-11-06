@@ -210,3 +210,38 @@
 .rowNameMeta { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
 
 .confirmActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--at-space-2); margin-top: var(--at-space-4); }
+
+/* Popover: anchored under its trigger on desktop, a bottom sheet on phones. Content flows inline (never clipped). */
+.popoverOverlay { position: fixed; inset: 0; z-index: var(--at-z-dialog); background: transparent; }
+.popover {
+  position: fixed;
+  top: var(--pop-top);
+  left: var(--pop-left);
+  z-index: var(--at-z-dialog);
+  width: min(var(--pop-width, 380px), calc(100vw - 2 * var(--at-space-2)));
+  max-height: calc(100dvh - var(--pop-top) - var(--at-space-2));
+  overflow-y: auto;
+  background: var(--at-color-surface);
+  color: var(--at-color-text);
+  border: 1px solid var(--at-color-border);
+  border-radius: var(--at-radius-md);
+  box-shadow: var(--at-shadow-lg);
+}
+.popover:focus { outline: none; }
+.popoverHead { display: flex; align-items: center; gap: var(--at-space-2); padding: var(--at-space-3) var(--at-space-4) 0; }
+.popoverTitle { flex: 1; margin: 0; font-size: var(--at-text-base); font-weight: var(--at-weight-bold); }
+.popoverBody { display: flex; flex-direction: column; gap: var(--at-space-3); padding: var(--at-space-3) var(--at-space-4) var(--at-space-4); }
+@media (max-width: 640px) {
+  .popoverOverlay { background: var(--at-color-overlay); }
+  .popover {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 85dvh;
+    border-width: 1px 0 0;
+    border-radius: var(--at-radius-md) var(--at-radius-md) 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}

@@ -6,8 +6,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useState } from 'react';
 
 import { FormErrors } from '@/components/common/FormErrors';
-import { bffAddressSearch } from '@/components/shell/DeliverToDialog';
 import { useT } from '@/i18n/t';
+import { bffAddressSearch } from '@/lib/api/addressSearch';
 import { browserApi } from '@/lib/api/browser';
 
 import styles from './Pages.module.css';

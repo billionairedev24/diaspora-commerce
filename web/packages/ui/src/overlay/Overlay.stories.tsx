@@ -1,12 +1,13 @@
 import { type Meta, type StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
-import { expect, screen, waitFor } from 'storybook/test';
+import { useRef, useState } from 'react';
+import { expect, screen, waitFor, within } from 'storybook/test';
 
 import { Button } from '../button/Button';
 import { Package, SignOut, Sparkle, User } from '../icons';
 import { mobile, rtl } from '../stories.helpers';
 import { Dialog, Sheet } from './Dialog';
 import { Menu, MenuGroup, MenuItem, MenuSeparator } from './Menu';
+import { Popover } from './Popover';
 import { Tabs } from './Tabs';
 import { ToastProvider, useToast } from './Toast';
 
@@ -132,3 +133,34 @@ export const ToastStory: Story = {
 export const Empty: Story = { render: () => <Menu trigger={<Button variant="neutral">Empty menu</Button>} inline label="Empty"><MenuItem>Nothing here yet</MenuItem></Menu> };
 export const RTL: Story = { ...rtl, render: () => <DialogDemo initial /> };
 export const Mobile: Story = { ...mobile, render: () => <SheetDemo /> };
+
+function PopoverDemo() {
+  const [open, setOpen] = useState(true);
+  const anchor = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <Button ref={anchor} variant="neutral" onClick={() => setOpen(true)}>Deliver to Georgetown</Button>
+      <Popover open={open} onOpenChange={setOpen} anchorRef={anchor} title="Choose your location">
+        <input aria-label="City, address or ZIP code" placeholder="City, address or ZIP code" />
+        <ul aria-label="Places" style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+          <li>Georgetown, TX</li>
+          <li>Georgetown, KY</li>
+          <li>Georgetown, DE</li>
+        </ul>
+      </Popover>
+    </>
+  );
+}
+/** Anchored under its trigger on desktop; content flows inline, so a suggestion list is never clipped. */
+export const PopoverStory: Story = {
+  name: 'Popover (anchored)',
+  render: () => <PopoverDemo />,
+  play: async ({ userEvent }) => {
+    const popover = await screen.findByRole('dialog', { name: 'Choose your location' });
+    await expect(within(popover).getByRole('list', { name: 'Places' })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  }
+};
+/** Phones: the same popover is a bottom sheet. */
+export const PopoverMobile: Story = { ...mobile, render: () => <PopoverDemo /> };

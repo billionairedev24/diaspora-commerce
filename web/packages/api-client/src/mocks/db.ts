@@ -25,6 +25,11 @@ export interface MockSession {
   sid: string;
   userId: string | null;
   zip: string;
+  /** The place behind the ZIP when the shopper picked a city (the header shows it instead of the ZIP's metro). */
+  city?: string;
+  state?: string;
+  /** true once the shopper chose the location; a fresh mock session is "detected" (the demo city), like localhost. */
+  locChosen?: boolean;
   lines: MockCartLine[];
   saved: MockSaved[];
   /** Door or pickup for the cart's pre-order package (S273). */

@@ -14,8 +14,24 @@ export function withCorrelationHeaders(headers: Record<string, string> = {}): Re
   return { ...headers, [CORRELATION_HEADER]: newCorrelationId() };
 }
 
+/**
+ * Cloudflare's visitor-location headers ("Add visitor location headers" transform): the BFF reads them to detect an
+ * approximate deliver-to city on the first visit (gateway-bff `edgeHints`; ignored unless TRUST_EDGE_GEO).
+ */
+export const EDGE_GEO_HEADERS = [
+  'cf-ipcountry',
+  'cf-ipcity',
+  'cf-ippostalcode',
+  'cf-postal-code',
+  'cf-region',
+  'cf-region-code',
+  'cf-iplatitude',
+  'cf-iplongitude'
+] as const;
+
 /** Header names the Next.js `/api/bff` proxy forwards to gateway-bff (lowercase). */
 export const BFF_PROXY_FORWARD_REQUEST = [
+  ...EDGE_GEO_HEADERS,
   'accept',
   'accept-language',
   'content-type',

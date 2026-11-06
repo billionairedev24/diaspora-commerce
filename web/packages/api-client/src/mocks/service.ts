@@ -65,7 +65,9 @@ export function stockStatus(qty: number): StockStatus {
 }
 
 export function sessionLocation(s: MockSession): DeliveryLocation {
-  return locationForZip(s.zip) ?? { zip: s.zip, city: 'Houston', state: 'TX', label: `Houston ${s.zip}`, serviceable: true };
+  const base = locationForZip(s.zip) ?? { zip: s.zip, city: 'Houston', state: 'TX', label: 'Houston', serviceable: true, source: 'chosen' as const };
+  const place = s.city ? { city: s.city, state: s.state ?? base.state, label: s.city } : {};
+  return { ...base, ...place, source: s.locChosen ? 'chosen' : 'detected' };
 }
 
 /** Cheapest in-stock offer, counting seller shipping like the prototype; falls back to the first offer. */

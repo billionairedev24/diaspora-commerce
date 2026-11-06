@@ -109,7 +109,7 @@ export function ProductRow({ p, onPress }: { p: ProductSummary; onPress: () => v
       <ProductImage title={p.title} uri={p.imageUrl} size={88} />
       <View style={{ flex: 1, gap: 2 }}>
         <AppText numberOfLines={2}>{p.title}</AppText>
-        <AppText variant="caption" color={c.textMuted}>{p.sellerName} · ★ {p.rating}</AppText>
+        <AppText variant="caption" color={c.textMuted}>{p.reviewCount > 0 ? `${p.sellerName} · ★ ${p.rating}` : p.sellerName}</AppText>
         <AppText variant="bodyStrong">{formatMoney(p.priceMinor, p.currency)}</AppText>
         <AppText variant="caption" color={c.success}>{p.delivery.label}</AppText>
         {p.availableQty === 0 ? <AppText variant="caption" color={c.textMuted}>Currently unavailable</AppText> : null}

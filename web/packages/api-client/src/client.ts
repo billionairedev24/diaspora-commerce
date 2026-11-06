@@ -86,12 +86,12 @@ export function createApiClient(options: ApiClientOptions) {
 
     /* Location */
     getDeliveryLocation: (signal?: AbortSignal): Promise<DeliveryLocation> => request('/v1/delivery-location', DeliveryLocationSchema, { signal }),
-    /** Set the deliver-to location by ZIP or by device coordinates ("Use my current location"). */
-    setDeliveryLocation: (input: { zip: string } | { lat: number; lon: number }): Promise<DeliveryLocation> =>
+    /** Set the deliver-to location by ZIP, a picked place suggestion, or device coordinates (explicit "Use my current location" only). */
+    setDeliveryLocation: (input: { zip: string } | { lat: number; lon: number } | { suggestionId: string; sessionToken?: string }): Promise<DeliveryLocation> =>
       request('/v1/delivery-location', DeliveryLocationSchema, { method: 'PUT', body: input }),
     /** One keystroke of an address field; pass the entry's session token (Google Places bills the entry as one session). */
     searchAddresses: (q: string, signal?: AbortSignal, options: AddressSearchOptions = {}): Promise<AddressSuggestions> =>
-      request('/v1/geo/address-suggestions', AddressSuggestionsSchema, { query: { q, sessionToken: options.sessionToken, country: options.country }, signal }),
+      request('/v1/geo/address-suggestions', AddressSuggestionsSchema, { query: { q, sessionToken: options.sessionToken, country: options.country, kind: options.kind }, signal }),
     /** Structured address of a picked suggestion (Google Place Details, closing the session). */
     resolveAddressSuggestion: (id: string, sessionToken?: string, signal?: AbortSignal): Promise<PostalAddress> =>
       request(`/v1/geo/address-suggestions/${encodeURIComponent(id)}`, PostalAddressSchema, { query: { sessionToken }, signal }),

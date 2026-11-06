@@ -6,11 +6,11 @@ import { Button, CheckCircle, FulfilmentBadge, ImagePlaceholder, MapPin, Price, 
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { PdpPreorderBanner, PdpPreorderBox, PdpStandardDelivery } from '@/components/preorder/PdpPreorder';
 import { ProductReviews } from '@/components/reviews/ProductReviews';
-import { DeliverToDialog } from '@/components/shell/DeliverToDialog';
+import { LocationPicker } from '@/components/shell/LocationPicker';
 import { LolaSheet } from '@/components/shell/LolaSheet';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
@@ -62,6 +62,7 @@ export function ProductView({ atin }: { atin: string }) {
   const [img, setImg] = useState(0);
   const [qty, setQty] = useState(1);
   const [locOpen, setLocOpen] = useState(false);
+  const locRef = useRef<HTMLButtonElement>(null);
   const [lolaOpen, setLolaOpen] = useState(false);
   const availability = useAvailability(data?.product.preorderEligible);
 
@@ -229,9 +230,9 @@ export function ProductView({ atin }: { atin: string }) {
                   )}
                 </>
               )}
-              <button type="button" className={`link-button ${styles.deliverTo}`} onClick={() => setLocOpen(true)}>
+              <button ref={locRef} type="button" className={`link-button ${styles.deliverTo}`} onClick={() => setLocOpen(true)} aria-haspopup="dialog">
                 <MapPin aria-hidden />
-                {t('header.deliverTo')} {location?.label}
+                {t('header.deliverTo')} {location?.label || t('header.setLocation')}
               </button>
               <p className={`${styles.stock} ${bb.stockStatus === 'LOW_STOCK' ? styles.lowStock : styles.inStock}`} data-testid="stock-label">
                 {bb.stockStatus === 'LOW_STOCK' ? t('pdp.onlyLeft', { n: bb.availableQty }) : t('pdp.inStock')}
@@ -303,7 +304,7 @@ export function ProductView({ atin }: { atin: string }) {
       </div>
       {pre && <PdpPreorderBanner live={pre} />}
       <ProductReviews atin={p.atin} title={p.title} />
-      <DeliverToDialog open={locOpen} onOpenChange={setLocOpen} />
+      <LocationPicker open={locOpen} onOpenChange={setLocOpen} anchorRef={locRef} />
       <LolaSheet open={lolaOpen} onOpenChange={setLolaOpen} />
     </div>
   );

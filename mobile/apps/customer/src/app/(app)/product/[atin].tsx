@@ -55,7 +55,7 @@ export default function ProductScreen() {
       <View style={{ gap: 4 }}>
         <AppText variant="small" color={c.link}>{d.soldBy}</AppText>
         <AppText variant="title" accessibilityRole="header">{d.product.title}</AppText>
-        <AppText variant="small" color={c.textMuted}>★ {d.product.rating} · {d.product.reviewCount.toLocaleString('en-US')} reviews</AppText>
+        {d.product.reviewCount > 0 ? <AppText variant="small" color={c.textMuted}>★ {d.product.rating} · {d.product.reviewCount.toLocaleString('en-US')} reviews</AppText> : null}
       </View>
       {dimensions.length > 0 ? <OptionChips dimensions={dimensions} onPick={openVariant} onOpenGuide={d.sizeChart ? () => setGuideOpen(true) : undefined} /> : null}
       {d.sizeChart && dimensions.length === 0 ? <Button kind="ghost" label={tr('cu.sizeGuide.open')} onPress={() => setGuideOpen(true)} /> : null}

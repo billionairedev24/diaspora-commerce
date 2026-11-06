@@ -16,7 +16,7 @@ export interface AddressSuggestionItem {
   /** Secondary line, e.g. "Houston, TX 77042". */
   secondary: string;
   address: AddressParts;
-  source: 'google' | 'osm' | 'fixture';
+  source: 'google' | 'osm' | 'fixture' | 'geo';
   /** false: `address` holds the street line only (Google Places); `resolve()` fetches the rest when picked. */
   resolved?: boolean;
   /** Structured address of this suggestion (Place Details); called once, when the suggestion is picked. */

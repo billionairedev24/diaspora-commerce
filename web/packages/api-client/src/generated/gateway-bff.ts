@@ -3695,7 +3695,7 @@ export interface components {
              * @description `chosen` the shopper picked it; `detected` approximated from the request's edge location headers (or the local override) on the first visit; `default` the market's default.
              * @enum {string}
              */
-            source: "chosen" | "detected" | "default";
+            source?: "chosen" | "detected" | "default";
         };
         PostalAddress: {
             line1: string;

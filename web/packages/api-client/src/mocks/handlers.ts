@@ -15,6 +15,7 @@ import { mockAddressSuggestions, mockResolveAddress } from './addresses';
 import { creditHandlers } from './credit';
 import { getDb, type MockChallenge, nextId, userById } from './db';
 import { locationForZip, nearestZip } from './delivery';
+import { mockPlaceOf, mockPlaceSuggestions } from './places';
 import { deliveryRunHandlers } from './delivery-run-handlers';
 import { DEMO_CODE, JOBS, SITE_CONFIG } from './fixtures/content';
 import { helpHandlers } from './help-handlers';
@@ -114,15 +115,21 @@ export const handlers = [
   /* Location */
   http.get('*/v1/delivery-location', route((ctx) => json(sessionLocation(ctx.session)))),
   http.put('*/v1/delivery-location', route(async (ctx) => {
-    const input = await body(ctx.request, z.union([z.object({ zip: ZipSchema }), z.object({ lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) })]));
-    const zip = 'zip' in input ? input.zip : nearestZip(input.lat, input.lon);
-    const loc = locationForZip(zip);
+    const input = await body(ctx.request, z.union([z.object({ zip: ZipSchema }), z.object({ lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) }), z.object({ suggestionId: z.string().min(1).max(512), sessionToken: z.string().optional() })]));
+    const place = 'suggestionId' in input ? mockPlaceOf(input.suggestionId) : null;
+    if ('suggestionId' in input && !place) throw new MockProblem(422, 'ZIP_NOT_SERVICEABLE', 'We don’t deliver there yet', 'We don’t deliver to that ZIP yet.', { errors: { zip: 'We don’t deliver to that ZIP yet.' } });
+    const zip = place ? place.zip : 'zip' in input ? input.zip : 'lat' in input ? nearestZip(input.lat, input.lon) : '';
+    const loc = locationForZip(zip) ?? (place ? { zip, city: place.city, state: place.state, label: place.city, serviceable: true, source: 'chosen' as const } : null);
     if (!loc) throw new MockProblem(422, 'ZIP_NOT_SERVICEABLE', 'We don’t deliver there yet', 'We don’t deliver to that ZIP yet.', { errors: { zip: 'We don’t deliver to that ZIP yet.' } });
     ctx.session.zip = zip;
-    return json(loc);
+    ctx.session.city = place?.city;
+    ctx.session.state = place?.state;
+    ctx.session.locChosen = true;
+    return json({ ...loc, ...(place ? { city: place.city, state: place.state, label: place.city } : {}), source: 'chosen' });
   })),
   http.get('*/v1/geo/address-suggestions', route((ctx) => {
     const p = new URL(ctx.request.url).searchParams;
+    if (p.get('kind') === 'place') return json(mockPlaceSuggestions(p.get('q') ?? '', p.get('sessionToken')));
     return json(mockAddressSuggestions(p.get('q') ?? '', p.get('sessionToken')));
   })),
   http.get('*/v1/geo/address-suggestions/:id', route((_ctx, params) => {

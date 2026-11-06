@@ -1,6 +1,6 @@
 export { type AddressLookup, addressLookup, type AddressLookupClient, type AddressSearchOptions, newAddressSessionToken, type ResolvableAddressSuggestion } from './address-lookup';
 export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike, type PutWithProgress, uploadHelpEvidence, uploadResume } from './client';
-export { CORRELATION_HEADER, newCorrelationId, withCorrelationHeaders } from './correlation';
+export { CORRELATION_HEADER, EDGE_GEO_HEADERS, newCorrelationId, withCorrelationHeaders } from './correlation';
 export * from './credit-client';
 export { creditSplit, MIN_CARD_MINOR } from './credit-split';
 export * from './custom-values';

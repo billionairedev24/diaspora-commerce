@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { type ApiClient, createApiClient } from '@afrotransact/api-client';
+import { type ApiClient, createApiClient, EDGE_GEO_HEADERS } from '@afrotransact/api-client';
 import { cookies, headers } from 'next/headers';
 
 import { bffOrigin, mocksEnabled } from '../config';
@@ -16,6 +16,11 @@ export async function serverApi(): Promise<ApiClient> {
   if (cookie) forwarded.cookie = cookie;
   const lang = h.get('accept-language');
   if (lang) forwarded['accept-language'] = lang;
+  // The edge's visitor location: a first visit's deliver-to city is detected on the server-rendered page too.
+  for (const name of EDGE_GEO_HEADERS) {
+    const v = h.get(name);
+    if (v) forwarded[name] = v;
+  }
   if (mocksEnabled()) {
     const { handleMockRequest } = await import('@afrotransact/api-client/mocks/runtime');
     return createApiClient({ baseUrl: 'http://storefront.internal/api/bff', headers: forwarded, fetch: (req) => handleMockRequest(req) });

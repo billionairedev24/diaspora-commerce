@@ -85,7 +85,7 @@ export function locationForZip(zip: string): DeliveryLocation | null {
   const metro = ZIP_PREFIXES_LONG[zip] ?? ZIP_PREFIXES_LONG[zip.slice(0, 3)] ?? ZIP_PREFIXES[zip.slice(0, 2)];
   if (!metro) return null;
   const [city = '', state = ''] = metro.split(', ');
-  return { zip, city, state, label: `${city} ${zip}`, serviceable: true };
+  return { zip, city, state, label: city, serviceable: true, source: 'chosen' };
 }
 
 /** ZIP of the nearest sample address to a coordinate (mock reverse geocoding). */

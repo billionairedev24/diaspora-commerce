@@ -60,7 +60,7 @@ export default function Services() {
                 <AppText variant="caption" color={c.textMuted}>{s.category}</AppText>
                 <AppText variant="bodyStrong">{s.providerName}</AppText>
                 <AppText variant="small">{s.name}</AppText>
-                <AppText variant="caption" color={c.textMuted}>★ {s.rating} · {s.location}</AppText>
+                <AppText variant="caption" color={c.textMuted}>{(s.ratingCount ?? 0) > 0 ? `★ ${s.rating} · ${s.location}` : s.location}</AppText>
                 <AppText variant="caption" color={c.success}>{nextLabel}</AppText>
               </View>
               <View style={{ alignItems: 'flex-end' }}>

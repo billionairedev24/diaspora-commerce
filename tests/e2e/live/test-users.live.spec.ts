@@ -79,7 +79,7 @@ test('customer.houston signs in on the storefront with email + password only and
 
   await page.waitForURL(`${STOREFRONT}/**`);
   await expect(page.getByRole('button', { name: /Account menu: Adaeze Okafor/ })).toBeVisible();
-  await expect(page.getByText('Houston 77042').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /Deliver to Houston/ })).toBeVisible();
   await shot(page, 'live-customer-houston.png');
   await page.goto(`${STOREFRONT}/account/addresses`);
   await expect(page.getByText('10200 Richmond Ave')).toBeVisible();

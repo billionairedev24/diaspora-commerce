@@ -16,8 +16,8 @@ import { useOpenPreorders, usePreorderResolution } from '@/lib/preorder/usePreor
 
 import { AccountMenu } from './AccountMenu';
 import { AnnouncementBar } from './AnnouncementBar';
-import { DeliverToDialog } from './DeliverToDialog';
 import styles from './Header.module.css';
+import { LocationPicker } from './LocationPicker';
 import { useLolaLauncher } from './LolaLauncher';
 import { SearchBox } from './SearchBox';
 
@@ -93,6 +93,7 @@ export function Header() {
   // The member badge (S323): the tier's name, only for a signed-in shopper who has the benefits now.
   const { data: member } = useQuery({ ...membershipQueries.account(api), enabled: me?.authenticated === true });
   const [locOpen, setLocOpen] = useState(false);
+  const locRef = useRef<HTMLButtonElement>(null);
   const lola = useLolaLauncher();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -111,11 +112,11 @@ export function Header() {
             <LogoMark size={32} />
             <span className={`${wordmarkClassName} ${styles.wordmark}`}>afrotransact</span>
           </Link>
-          <button type="button" className={`${styles.chromeBtn} ${styles.locBtn}`} onClick={() => setLocOpen(true)} aria-label={t('header.deliverToAria', { label })} aria-haspopup="dialog">
+          <button ref={locRef} type="button" className={`${styles.chromeBtn} ${styles.locBtn}`} onClick={() => setLocOpen(true)} aria-label={label ? t('header.deliverToAria', { label }) : t('header.setLocation')} aria-haspopup="dialog" aria-expanded={locOpen}>
             <MapPin size={20} aria-hidden />
             <span className={styles.locText}>
               <span className={styles.locSmall}>{t('header.deliverTo')}</span>
-              <span className={styles.locMain}>{label}</span>
+              <span className={styles.locMain}>{label || t('header.setLocation')}</span>
             </span>
           </button>
           <div className={styles.search} data-header-search>
@@ -209,7 +210,7 @@ export function Header() {
       <AnnouncementBar />
       <PreorderBanners />
       <AttributionCapture />
-      <DeliverToDialog open={locOpen} onOpenChange={setLocOpen} />
+      <LocationPicker open={locOpen} onOpenChange={setLocOpen} anchorRef={locRef} />
     </>
   );
 }

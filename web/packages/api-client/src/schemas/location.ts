@@ -6,9 +6,11 @@ export const DeliveryLocationSchema = z.object({
   zip: z.string(),
   city: z.string(),
   state: z.string(),
-  /** Header label, e.g. "Houston 77042". */
+  /** Header value: the city, e.g. "Houston" (never the ZIP). */
   label: z.string(),
-  serviceable: z.boolean()
+  serviceable: z.boolean(),
+  /** chosen: the shopper picked it; detected: approximated on the first visit (edge headers); default: the market's. */
+  source: z.enum(['chosen', 'detected', 'default']).optional()
 });
 export type DeliveryLocation = z.infer<typeof DeliveryLocationSchema>;
 
@@ -29,7 +31,7 @@ export const AddressSuggestionSchema = z.object({
   label: z.string(),
   secondary: z.string(),
   address: PostalAddressSchema,
-  source: z.enum(['google', 'osm', 'fixture']),
+  source: z.enum(['google', 'osm', 'fixture', 'geo']),
   /** false: `address` holds the street line only (Google Places); resolve the suggestion when it is picked. */
   resolved: z.boolean().default(true)
 });

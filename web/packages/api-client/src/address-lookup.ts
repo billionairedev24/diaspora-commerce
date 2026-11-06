@@ -6,6 +6,8 @@ export interface AddressSearchOptions {
   sessionToken?: string;
   /** ISO 3166-1 alpha-2 country the suggestions are restricted to; default: the market's (BFF). */
   country?: string;
+  /** place: the deliver-to picker (cities with their state, a ZIP as its city, streets); default: street addresses. */
+  kind?: 'place';
 }
 
 /** The BFF calls an address field needs (storefront, Seller Center, staff console and customer app clients). */
