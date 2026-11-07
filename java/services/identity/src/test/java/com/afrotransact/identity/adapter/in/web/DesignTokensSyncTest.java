@@ -65,4 +65,27 @@ class DesignTokensSyncTest {
         assertThat(css).as("raw hex colours in auth.css (use --at-* tokens)").doesNotContainPattern("#[0-9a-fA-F]{3,8}\\b");
         assertThat(css).contains("var(--at-");
     }
+
+    @Test
+    void faviconMatchesTheWebAppsLogoMark() throws IOException {
+        Path source = REPO.resolve("web/apps/storefront/public/logo-mark.svg");
+        Assumptions.assumeTrue(Files.exists(source), "web workspace not checked out");
+        assertThat(Files.readAllBytes(ASSETS.resolve("logo-mark.svg")))
+                .as("static/assets/logo-mark.svg is a copy of web/apps/storefront/public/logo-mark.svg")
+                .isEqualTo(Files.readAllBytes(source));
+    }
+
+    @Test
+    void everyPageLinksTheFaviconAndNoneUsesTheEmptyDataIcon() throws IOException {
+        try (Stream<Path> pages = Files.list(Path.of("src/main/resources/templates"))) {
+            for (Path page : pages.filter(p -> !p.getFileName().toString().equals("icons.html")).toList()) {
+                String html = Files.readString(page);
+                if (html.contains("<head")) {
+                    assertThat(html).as(page.toString()).doesNotContain("href=\"data:,\"");
+                }
+            }
+        }
+        assertThat(Files.readString(Path.of("src/main/resources/templates/layout.html")))
+                .contains("@{/assets/logo-mark.svg}");
+    }
 }

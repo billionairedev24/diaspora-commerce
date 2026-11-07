@@ -68,7 +68,8 @@ select.control { padding: 0 var(--at-space-2); cursor: pointer; }
 .addon[aria-pressed='true'] .when-shown { display: block; }
 .addon[aria-pressed='true'] .when-hidden { display: none; }
 .phone { display: flex; gap: var(--at-space-2); }
-.phone .country { flex: none; width: 128px; }
+.phone .country { flex: none; width: 112px; text-overflow: clip; }
+.phone input.control { flex: 1 1 auto; min-width: 0; }
 .code { height: 56px; text-align: center; font-size: var(--at-text-3xl); letter-spacing: 0.4em; }
 
 .rules { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px var(--at-space-3); margin: 0; padding: 0; list-style: none; font-size: var(--at-text-xs); }
@@ -137,7 +138,7 @@ select.control { padding: 0 var(--at-space-2); cursor: pointer; }
   .grid2 { grid-template-columns: 1fr; }
   .span2 { grid-column: auto; }
   .rules { grid-template-columns: 1fr; }
-  .phone .country { width: 112px; }
+  .phone .country { width: 104px; }
   .links { flex-direction: column; align-items: flex-start; }
   .btn, .social { white-space: normal; text-align: center; }
   .code { letter-spacing: 0.25em; }

@@ -25,7 +25,7 @@
         <form class="form" method="post" th:action="@{/login}" data-once novalidate>
           <div class="field">
             <label class="label" for="username" th:text="#{auth.email}">Email</label>
-            <input class="control" id="username" name="username" type="email" autocomplete="username webauthn"
+            <input class="control" id="username" name="username" type="email" autocapitalize="none" spellcheck="false" autocomplete="username webauthn"
                    required th:value="${email}" th:attr="aria-invalid=${error != null ? 'true' : null}">
           </div>
           <div class="field">

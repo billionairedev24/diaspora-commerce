@@ -17,8 +17,8 @@ final class PhoneCountries {
     private PhoneCountries() {
     }
 
-    /** One option: ISO region code, country name and label, for example {@code 🇺🇸 +1 United States}. */
-    record Country(String code, String name, String label) {
+    /** One option: ISO region code, country name and label, for example {@code 🇺🇸 +1 United States}; {@code shortLabel} is the closed-picker text {@code 🇺🇸 +1}. */
+    record Country(String code, String name, String label, String shortLabel) {
     }
 
     static List<Country> all() {
@@ -34,7 +34,8 @@ final class PhoneCountries {
         List<Country> out = new ArrayList<>();
         for (String region : util.getSupportedRegions()) {
             String name = Locale.of("", region).getDisplayCountry(Locale.ENGLISH);
-            out.add(new Country(region, name, flag(region) + " +" + util.getCountryCodeForRegion(region) + " " + name));
+            String shortLabel = flag(region) + " +" + util.getCountryCodeForRegion(region);
+            out.add(new Country(region, name, shortLabel + " " + name, shortLabel));
         }
         out.sort(Comparator.comparing((Country c) -> !DEFAULT_REGION.equals(c.code()))
                 .thenComparing(Country::name));

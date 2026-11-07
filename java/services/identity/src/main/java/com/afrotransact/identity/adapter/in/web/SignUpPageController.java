@@ -207,6 +207,7 @@ class SignUpPageController {
         model.addAttribute("errors", errors);
         model.addAttribute("formError", formError);
         model.addAttribute("countries", PhoneCountries.all());
+        model.addAttribute("phoneField", true);
         return VIEW;
     }
 

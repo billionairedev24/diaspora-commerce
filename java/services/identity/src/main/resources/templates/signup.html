@@ -45,20 +45,20 @@
             </div>
             <div class="field span2">
               <label class="label" for="email" th:text="#{auth.email}">Email</label>
-              <input class="control" id="email" name="email" type="email" autocomplete="email" required maxlength="254"
+              <input class="control" id="email" name="email" type="email" autocapitalize="none" spellcheck="false" autocomplete="email" required maxlength="254"
                      placeholder="you@example.com" th:value="${values['email']}"
                      th:attr="aria-invalid=${errors.containsKey('email') ? 'true' : null},aria-describedby=${errors.containsKey('email') ? 'email-error' : null}">
               <p class="message message-error" id="email-error" th:text="${errors['email']}"></p>
             </div>
             <div class="field span2">
               <label class="label" for="phone"><span th:text="#{auth.mobile}">Mobile phone</span> <span class="optional" th:text="#{auth.optional}">(optional)</span></label>
-              <div class="phone">
+              <div class="phone" data-phone>
                 <select class="control country" id="phoneRegion" name="phoneRegion" autocomplete="tel-country-code"
-                        th:attr="aria-label=#{auth.country}">
-                  <option th:each="c : ${countries}" th:value="${c.code}" th:text="${c.label}"
+                        data-default-region="US" th:attr="aria-label=#{auth.country}">
+                  <option th:each="c : ${countries}" th:value="${c.code}" th:text="${c.label}" th:attr="data-short=${c.shortLabel}"
                           th:selected="${c.code == values['phoneRegion']}"></option>
                 </select>
-                <input class="control" id="phone" name="phone" type="tel" autocomplete="tel-national" maxlength="20"
+                <input class="control" id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel-national" maxlength="20"
                        placeholder="(713) 249-0142" th:value="${values['phone']}"
                        th:attr="aria-invalid=${errors.containsKey('phone') ? 'true' : null},aria-describedby=${errors.containsKey('phone') ? 'phone-error' : 'phone-help'}">
               </div>

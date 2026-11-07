@@ -2,6 +2,7 @@ package com.afrotransact.identity.domain;
 
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import com.google.i18n.phonenumbers.NumberParseException;
 import com.google.i18n.phonenumbers.PhoneNumberUtil;
@@ -16,6 +17,9 @@ public class LibPhoneNumberPolicy implements PhoneNumberPolicy {
     private static final Set<PhoneNumberType> MOBILE = Set.of(PhoneNumberType.MOBILE,
             PhoneNumberType.FIXED_LINE_OR_MOBILE);
 
+    /** Digits plus the formatting characters people type; libphonenumber would otherwise read letters as a vanity number. */
+    private static final Pattern TYPED = Pattern.compile("[0-9+\\s().\\-]+");
+
     private final PhoneNumberUtil util = PhoneNumberUtil.getInstance();
 
     @Override
@@ -24,6 +28,9 @@ public class LibPhoneNumberPolicy implements PhoneNumberPolicy {
             return PhoneCheck.invalid("Enter a mobile number");
         }
         String trimmed = raw.trim();
+        if (!TYPED.matcher(trimmed).matches()) {
+            return PhoneCheck.invalid("Use digits only, for example (713) 249-0142");
+        }
         String defaultRegion = region == null || region.isBlank() ? "ZZ" : region.trim().toUpperCase(Locale.ROOT);
         if (!trimmed.startsWith("+") && "ZZ".equals(defaultRegion)) {
             return PhoneCheck.invalid("Include the country code, for example +1 713 249 0142");

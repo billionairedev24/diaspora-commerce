@@ -9,11 +9,13 @@
   <meta th:if="${_csrf != null}" name="_csrf" th:content="${_csrf.token}">
   <meta th:if="${_csrf != null}" name="_csrf_header" th:content="${_csrf.headerName}">
   <title th:text="${title} + ' · AfroTransact'">AfroTransact</title>
-  <link rel="icon" href="data:,">
+  <link rel="icon" type="image/svg+xml" th:href="@{/assets/logo-mark.svg}">
+  <link rel="apple-touch-icon" th:href="@{/assets/logo-mark.svg}">
   <link rel="stylesheet" th:href="@{/assets/fonts.css}">
   <link rel="stylesheet" th:href="@{/assets/tokens.css}">
   <link rel="stylesheet" th:href="@{/assets/auth.css}">
   <script th:src="@{/assets/auth.js}" defer></script>
+  <script th:if="${phoneField}" th:src="@{/assets/phone.js}" defer></script>
 </head>
 <body>
 
