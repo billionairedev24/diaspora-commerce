@@ -13,12 +13,14 @@ import com.afrotransact.identity.adapter.in.security.FederatedOAuth2UserService;
 import com.afrotransact.identity.adapter.in.security.FederatedOidcUserService;
 import com.afrotransact.identity.adapter.in.security.HostedLoginEntryPoint;
 import com.afrotransact.identity.adapter.in.security.HostedLoginProtection;
+import com.afrotransact.identity.adapter.in.security.HostedPageContentSecurityPolicy;
 import com.afrotransact.identity.adapter.in.security.LenientLogoutErrorHandler;
 import com.afrotransact.identity.adapter.in.security.LoginTicketAuthenticationFilter;
 import com.afrotransact.identity.adapter.in.security.LoginTicketAuthenticationProvider;
 import com.afrotransact.identity.adapter.in.security.MfaAwareAuthenticationSuccessHandler;
 import com.afrotransact.identity.adapter.in.security.MfaChallengeAccessDeniedHandler;
 import com.afrotransact.identity.adapter.in.security.PromptParameterFilter;
+import com.afrotransact.identity.adapter.in.security.SavedRequestFormActionTargets;
 import com.afrotransact.identity.adapter.in.security.SessionTimeoutFilter;
 import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAuthenticationConverter;
 import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAuthenticationProvider;
@@ -106,8 +108,10 @@ class SecurityConfiguration {
                                                  FirstPartySignInService firstParty, UserDetailsService accounts,
                                                  AuthorizationServerSettings settings,
                                                  IdentityProviderService identityProviders,
-                                                 AuthSettingsService authSettings, Clock clock)
+                                                 AuthSettingsService authSettings, Clock clock,
+                                                 HostedPageContentSecurityPolicy csp)
             throws Exception {
+        IdentitySecurityHeaders.apply(http, csp);
         http.oauth2AuthorizationServer(as -> {
             http.securityMatcher(as.getEndpointsMatcher());
             // RP-initiated logout (/connect/logout): an ID token that can no longer be matched (expired session,
@@ -142,7 +146,8 @@ class SecurityConfiguration {
 
     @Bean
     @Order(2)
-    SecurityFilterChain apiChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain apiChain(HttpSecurity http, HostedPageContentSecurityPolicy csp) throws Exception {
+        IdentitySecurityHeaders.apply(http, csp);
         http.securityMatcher("/v1/**")
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -164,8 +169,9 @@ class SecurityConfiguration {
                                      RequestCache requestCache, ClientRegistrationRepository registrations,
                                      IdentityProviderService providers, FederatedLoginService federated,
                                      SignInProtectionService protection, AuthSettingsService authSettings,
-                                     Clock clock)
+                                     Clock clock, HostedPageContentSecurityPolicy csp)
             throws Exception {
+        IdentitySecurityHeaders.apply(http, csp);
         HostedLoginProtection hostedProtection = new HostedLoginProtection(protection);
         MfaAwareAuthenticationSuccessHandler success = new MfaAwareAuthenticationSuccessHandler(signIn,
                 hostedProtection, trustedBrowser, contexts, props.homeUrl());
@@ -192,6 +198,15 @@ class SecurityConfiguration {
                 .logout(l -> l.logoutSuccessUrl("/login?logout"))
                 .cors(Customizer.withDefaults());
         return http.build();
+    }
+
+    /** The enforced CSP of every response; form-action also allows the pending sign-in's registered redirect target. */
+    @Bean
+    HostedPageContentSecurityPolicy hostedPageContentSecurityPolicy(RequestCache requestCache,
+                                                                    RegisteredClientRepository clients,
+                                                                    IdentityProperties props) {
+        return new HostedPageContentSecurityPolicy(
+                new SavedRequestFormActionTargets(requestCache, clients, props.homeUrl()));
     }
 
     @Bean

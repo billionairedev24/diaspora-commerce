@@ -96,6 +96,18 @@ class HostedPagesIT {
      * whose request expired) are neutral AfroTransact pages: never the staff console's (nor another app's) branding.
      */
     @Test
+    void everyHostedPageIsServedUnderTheStrictEnforcedCsp() {
+        for (String path : List.of("/login", "/login/forgot", "/signup", "/login/mfa", "/assets/auth.css")) {
+            HttpResponse<String> response = new BrowserSession(base()).get(base() + path);
+            assertThat(response.headers().firstValue("Content-Security-Policy")).as(path).hasValueSatisfying(csp ->
+                    assertThat(csp).startsWith("default-src 'none'; script-src 'self'; style-src 'self'")
+                            .contains("frame-ancestors 'none'", "base-uri 'none'", "form-action 'self'")
+                            .doesNotContain("unsafe-inline"));
+            assertThat(response.headers().firstValue("X-Content-Type-Options")).as(path).hasValue("nosniff");
+        }
+    }
+
+    @Test
     void pagesWithoutAnAppAreNeutralAndStaffBrandingNeedsTheStaffConsole() {
         for (String path : List.of("/login", "/login?logout", "/login/forgot", "/signup")) {
             String page = new BrowserSession(base()).get(base() + path).body();
