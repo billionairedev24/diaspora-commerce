@@ -66,7 +66,8 @@ and tick; "who" is the role that signs it off. Anything marked **blocker** must 
     the apex cannot serve them by redirecting). Links to the apex still open in the browser and redirect.
   - Search engines: canonical URLs are `https://www.afrotransact.com/...` (storefront `metadataBase` from `PUBLIC_WEB_URL`); Search Console property for `www`
     (or the domain property), and the old apex URLs are covered by the 301.
-- [ ] CORS, cookies (`Secure`, `HttpOnly`, `SameSite`) and CSP checked on the three web apps.
+- [ ] CORS and cookies (`Secure`, `HttpOnly`, `SameSite`) checked on the three web apps.
+- [ ] Security headers and CSP (`docs/engineering/security-headers.md`): identity serves its enforced CSP (check `curl -sI https://auth.<base>/login | grep -i content-security` and a full sign-in in Chrome and Firefox); each web app has run `CSP_MODE=report-only` in uat for 7 days with every `csp.violation` pair fixed, allowed or dismissed, then `CSP_MODE=enforce` in uat for 2 days; prod ran 7 days report-only, then `enforce` set in `web/apps/*/wrangler.jsonc` `env.prod.vars` (date: ____); HSTS 1 y + `includeSubDomains` at the edge (`curl -sI https://www.<base> | grep -i strict-transport`), preload still off; runbook `docs/runbooks/csp-violations-spike.md`.
 - [ ] Rate limits and the WAF ruleset are on for sign-in, checkout and the public APIs.
 - [ ] Penetration test or an equivalent review done for sign-in, payments, uploads and the staff console.
 

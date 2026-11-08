@@ -16,6 +16,7 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 | [Cost](cost.md) | a budget alert fired; the monthly cost review |
 | [Kafka dead letters, replay and recovery](kafka-replay.md) | an event was not applied by a consumer: inspect a DLQ, replay records, reset a consumer group's offsets, re-publish outbox rows, rebuild a read model (`tools/ops/kafka-replay`) |
 | [Carrier sandboxes](carrier-sandboxes.md) | proving USPS / UPS / FedEx / DHL against their sandboxes; carrier credentials |
+| [CSP violations spike](csp-violations-spike.md) | many `csp.violation` log lines, or blocked images / payment forms / sign-in after a release; rollback to Report-Only |
 
 ## Alerts
 
