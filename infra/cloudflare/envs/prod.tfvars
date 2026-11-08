@@ -17,6 +17,12 @@ storefront_host = "www"
 # The redirect ruleset is zone-wide and owned by this run: it covers afrotransact.com, dev.afrotransact.com, uat.afrotransact.com.
 apex_redirect_environments = ["dev", "uat", "prod"]
 
+# Edge response headers (zone-wide, owned by this run): HSTS 1 year + includeSubDomains (preload stays off until the
+# hstspreload.org submission), nosniff, and a baseline Referrer-Policy per environment. No CSP at the edge.
+hsts_enabled                      = true
+hsts_preload                      = false
+edge_response_header_environments = ["dev", "uat", "prod"]
+
 workers_routes_enabled = true
 
 # Zone-wide (manage_zone = true only)

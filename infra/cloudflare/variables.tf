@@ -110,6 +110,34 @@ variable "advanced_certificate_environments" {
   default     = ["dev", "uat"]
 }
 
+variable "hsts_enabled" {
+  description = "Send Strict-Transport-Security from the edge (zone-wide Cloudflare setting, owned by the manage_zone run). Over HTTPS only."
+  type        = bool
+  default     = true
+}
+
+variable "hsts_max_age" {
+  description = "HSTS max-age in seconds (1 year). Lower it (for example 300) for a first rollout, raise it back once every sub-domain serves HTTPS."
+  type        = number
+  default     = 31536000
+}
+
+variable "hsts_preload" {
+  description = "Add the preload token to HSTS. Keep false until the apex is submitted at hstspreload.org (docs/runbooks/production-readiness.md); the list is hard to leave."
+  type        = bool
+  default     = false
+}
+
+variable "edge_response_header_environments" {
+  description = "Environments whose hosts get the edge baseline Referrer-Policy (when the origin sends none). One zone-wide ruleset, owned by the manage_zone run; remove an environment to switch it off there."
+  type        = list(string)
+  default     = ["dev", "uat", "prod"]
+  validation {
+    condition     = alltrue([for e in var.edge_response_header_environments : contains(["dev", "uat", "prod"], e)])
+    error_message = "edge_response_header_environments may only contain dev, uat, prod."
+  }
+}
+
 variable "pages_projects_owner" {
   description = "This run creates the account-wide Cloudflare Pages projects (afrotransact-docs, afrotransact-storybook). Exactly one environment sets it (dev, the first one applied); every run attaches its own developers.<base> domain to the docs project."
   type        = bool

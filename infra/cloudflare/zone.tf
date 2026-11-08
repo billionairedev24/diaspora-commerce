@@ -25,20 +25,61 @@ resource "cloudflare_zone_setting" "this" {
   value      = each.value
 }
 
-# HSTS (1 year, subdomains, preload) + X-Content-Type-Options: nosniff.
+# HSTS + X-Content-Type-Options: nosniff, written by Cloudflare on every proxied HTTPS response of the zone (zone-wide, so
+# not switchable per environment; the baseline Referrer-Policy below is). HSTS is 1 year with includeSubDomains; preload
+# is OFF until hsts_preload is set (only when every sub-domain is HTTPS-only and the apex is about to be submitted at
+# hstspreload.org: a preloaded domain cannot be taken back quickly). Applications keep their own CSP: nothing here sets
+# Content-Security-Policy (docs/engineering/security-headers.md).
 resource "cloudflare_zone_setting" "hsts" {
   count      = local.zone_count
   zone_id    = local.zone_id
   setting_id = "security_header"
   value = {
     strict_transport_security = {
-      enabled            = true
-      max_age            = 31536000
+      enabled            = var.hsts_enabled
+      max_age            = var.hsts_max_age
       include_subdomains = true
-      preload            = true
+      preload            = var.hsts_preload
       nosniff            = true
     }
   }
+}
+
+# Baseline Referrer-Policy for the hosts of the environments in edge_response_header_environments, only when the origin
+# sent none (the three Next.js apps and identity send strict-origin-when-cross-origin themselves), so an app's own stricter
+# value always wins. A zone has one response-header ruleset, so the manage_zone run owns the rules of all environments.
+locals {
+  # Hosts of an environment: <base> and *.<base>. Prod's base is the zone apex, so it excludes the dev. and uat. hosts.
+  edge_header_host_expressions = {
+    for env in var.edge_response_header_environments :
+    env => env == "prod" ? join(" and ", [
+      "(http.host eq \"${var.zone_name}\" or ends_with(http.host, \".${var.zone_name}\"))",
+      "not (http.host eq \"dev.${var.zone_name}\" or ends_with(http.host, \".dev.${var.zone_name}\"))",
+      "not (http.host eq \"uat.${var.zone_name}\" or ends_with(http.host, \".uat.${var.zone_name}\"))",
+    ]) : "(http.host eq \"${env}.${var.zone_name}\" or ends_with(http.host, \".${env}.${var.zone_name}\"))"
+  }
+}
+
+resource "cloudflare_ruleset" "response_headers" {
+  count   = local.zone_count
+  zone_id = local.zone_id
+  name    = "baseline response headers"
+  kind    = "zone"
+  phase   = "http_response_headers_transform"
+  rules = [for env, host_expression in local.edge_header_host_expressions : {
+    description = "${env}: Referrer-Policy when the origin sent none"
+    expression  = "${host_expression} and not any(http.response.headers.names[*] eq \"referrer-policy\")"
+    action      = "rewrite"
+    enabled     = true
+    action_parameters = {
+      headers = {
+        "Referrer-Policy" = {
+          operation = "set"
+          value     = "strict-origin-when-cross-origin"
+        }
+      }
+    }
+  }]
 }
 
 # Authenticated Origin Pulls (zone-level, Cloudflare origin-pull CA): the cluster ingress (Envoy) must

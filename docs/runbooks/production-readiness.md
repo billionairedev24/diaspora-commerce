@@ -58,7 +58,7 @@ and tick; "who" is the role that signs it off. Anything marked **blocker** must 
   - Config: `global.storefrontHost: www` in `infra/argocd/envs/prod/platform-values.yaml` (so `PUBLIC_WEB_URL` is `https://www.afrotransact.com` in every
     pod, identity redirect URIs and CORS follow) and the seller-center / staff-console `PUBLIC_WEB_URL` Worker vars; roll identity and gateway-bff
     together with the edge change, then verify a sign-in on `www`, a passkey sign-in (RP id stays `afrotransact.com`) and a sign-out round trip.
-  - HSTS preload: the zone setting is `max-age` 1 year, `includeSubDomains`, `preload`, so one submission of `afrotransact.com` at
+  - HSTS preload: the zone setting is `max-age` 1 year, `includeSubDomains` and, once `hsts_preload = true` is applied (`infra/cloudflare/envs/prod.tfvars`; it is `false` today), `preload`, so one submission of `afrotransact.com` at
     hstspreload.org covers `www` and every sub-domain. Submit it only when every sub-domain (including `mail.`, `developers.`, `grafana.`) is HTTPS-only;
     removal from the preload list takes months.
   - Mobile: the associated-domains entitlement is `applinks:www.afrotransact.com` (the prod build's `EXPO_PUBLIC_WEB_URL`);

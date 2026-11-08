@@ -204,7 +204,7 @@ apex are signed out once; the redirect lands them on `www.` and they sign in aga
 Apple does not follow redirects for the association file). A new app build is needed for the entitlement to change; links
 that still point at the apex open in the browser and reach `www.` through the redirect.
 
-**Edge.** HSTS (1 y, subdomains, preload) is zone-wide and covers both names. The apex needs a proxied DNS record for the
+**Edge.** HSTS (1 y, subdomains; preload only once `hsts_preload` is set) is zone-wide and covers both names. The apex needs a proxied DNS record for the
 redirect rule to answer (`infra/cloudflare/environment.tf` creates it). The redirect ruleset is zone-wide (one per zone and phase), so the prod (`manage_zone`)
 run owns the rules for every environment's base domain (`apex_redirect_environments`); each environment's run creates its
 own proxied placeholder record. Certificates: `www.dev.` and `www.uat.` are covered by the existing `*.dev` / `*.uat` advanced certificates.
