@@ -5,6 +5,15 @@ sidebar_position: 4
 
 You only see the menus your role allows. If a page says you have no access, ask an admin to add the permission.
 
+## Your home page
+
+The console opens on one section per area your permissions cover: **Orders & shipments**, **Applications**,
+**Payments & payouts**, **Trust & safety**, **Support**, **Catalog** and **Platform health**. Each shows one headline
+number, a small chart and quick actions that open the matching filtered list (for example **Review queue** opens the
+applications waiting for review). Choose **7**, **30** or **90 days** at the top; your choice is remembered. A queue
+that is empty shows a short prompt instead of zeros, and a section whose data could not be loaded offers **Try again**.
+Reports with PDF, Excel and CSV export are below the sections.
+
 ## Review a seller application
 
 Open **Applications** and pick one. The page shows the business, documents, Stripe verification and the timeline.

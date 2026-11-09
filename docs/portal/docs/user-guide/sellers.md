@@ -5,6 +5,16 @@ sidebar_position: 2
 
 Sellers and service providers run their business from **Seller Center**.
 
+## Your home page
+
+Home shows one section per area you can open: **Sales**, **Orders**, **Listings**, **Payouts**, **Inventory**,
+**Reviews**, **Account health** and **Promotions** (service providers see **Bookings**, **Revenue**, **Availability**,
+**Payouts** and **Account health**). Each section has one headline number with its period, a small chart, a line of
+totals and up to three quick actions. Pick **7**, **30** or **90 days** at the top; we remember your choice. A section
+you have not set up yet shows a short prompt with one button (for example **Add your first product**) instead of
+zeros. Sections your role or plan cannot open are not shown. Exportable reports (PDF, Excel, CSV) sit below the
+sections.
+
 ## 1. Apply to sell
 
 1. Sign in and choose **Sell on AfroTransact**. Pick whether you sell products, offer services, or both.
