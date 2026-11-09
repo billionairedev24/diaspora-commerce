@@ -1,5 +1,8 @@
 # Test environment on one OVHcloud server: step by step
 
+> **Start here: run `make deploy-guide`.** A guided, resumable wizard walks through everything below, asks for each value with its
+> help, checks each step and prints PASS/FAIL ([deploy-guide.md](deploy-guide.md)). The manual steps on this page stay as the reference.
+
 **What you get:** the whole backend (26 services, Kafka, Temporal, OpenFGA, Valkey, Meilisearch, optionally Postgres) on **one**
 OVHcloud Public Cloud instance running k3s, behind Traefik with Let's Encrypt certificates, created and deployed by one manual
 GitHub workflow. **You give the values once to a script; the pipeline creates the server and does everything else.**

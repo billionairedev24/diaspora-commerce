@@ -1,5 +1,8 @@
 # Cloudflare for the OVH test environment: step by step
 
+> **Start here: run `make deploy-guide`.** A guided, resumable wizard walks through everything below, asks for each value with its
+> help, checks each step and prints PASS/FAIL ([deploy-guide.md](deploy-guide.md)). The manual steps on this page stay as the reference.
+
 What this sets up: your domain on Cloudflare, the DNS records of the backend (made by the `ovh-vps` workflow), and the three web
 apps (storefront, Seller Center, staff console) running as **Cloudflare Workers** on your domain through the **`ovh-web`**
 workflow. The per-app pipelines (`web-*.yml`) are wired to the `afrotransact.com` hosts of dev, uat and prod; `ovh-web` takes the
