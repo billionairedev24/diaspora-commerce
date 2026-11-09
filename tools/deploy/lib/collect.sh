@@ -102,6 +102,26 @@ live_ovh() { # with the values of this run: the token works, and which Public Cl
   ) >"$GUIDE_TMP/projects" 2>"$GUIDE_TMP/ovh.err"
 }
 
+h_webhosts() { # flat web hosts: offered when OVH_DOMAIN is not the zone itself (OVH_SELLER_HOST, OVH_ADMIN_HOST, OVH_STOREFRONT_HOST=apex)
+  local dom zone label cs ca
+  dom=$(gh_var OVH_DOMAIN); zone=$(gh_var CLOUDFLARE_ZONE)
+  [ -n "$dom" ] && [ -n "$zone" ] || return 0
+  [ "$dom" != "$zone" ] || return 0   # the zone itself: www./seller./admin. are one label deep, covered by the free certificate
+  cs=$(gh_var OVH_SELLER_HOST); ca=$(gh_var OVH_ADMIN_HOST)
+  if [ -n "$cs$ca" ]; then
+    ok "explicit web hosts already set: seller ${cs:-default}, admin ${ca:-default}, storefront-host $(gh_var OVH_STOREFRONT_HOST)"
+    confirm_yn "Keep them?" y && return 0
+  fi
+  label=${dom%".$zone"}; label=$(printf '%s' "$label" | tr . -)
+  { echo "$dom is below your Cloudflare zone ($zone). Cloudflare's free certificate covers only the zone and ONE label under it, so www.$dom, seller.$dom and admin.$dom (two labels) would get a certificate error unless you pay for an Advanced Certificate."
+    echo "The flat layout keeps the web apps one label under the zone: storefront https://$dom, Seller Center https://seller-$label.$zone, staff console https://admin-$label.$zone. The backend (api., auth., mcp., grafana.) stays on $dom with Let's Encrypt."; } | panel "FREE CERTIFICATE LAYOUT" yellow
+  choose "Which layout?" 1 "Flat (free certificate): storefront-host apex, seller-$label.$zone, admin-$label.$zone" "Nested (www./seller./admin.$dom; needs a paid Advanced Certificate)"
+  if [ "$CHOICE" = 1 ]; then
+    gh_put var OVH_STOREFRONT_HOST apex && gh_put var OVH_SELLER_HOST "seller-$label.$zone" && gh_put var OVH_ADMIN_HOST "admin-$label.$zone" \
+      && ok "OVH_STOREFRONT_HOST = apex, OVH_SELLER_HOST = seller-$label.$zone, OVH_ADMIN_HOST = admin-$label.$zone"
+  else warn "nested layout kept: the web hosts are two labels deep, so the browser shows a certificate error until an Advanced Certificate covers them"; fi
+}
+
 h_ovhcreds() {
   cat_load OVH_APPLICATION_KEY; show_card
   if is_set OVH_APPLICATION_KEY && is_set OVH_APPLICATION_SECRET && is_set OVH_CONSUMER_KEY; then
@@ -185,7 +205,7 @@ h_ssh() {
 # collect_phase P [optional: walk|skip]: every entry of the phase, in catalogue order
 collect_phase() {
   local p=$1 n opt_total=0 walk=1 skipped=''
-  for n in $(cat_names_phase "$p"); do cat_load "$n"; { [ "$C_NEED" = optional ] && ! is_set "$n"; } && opt_total=$((opt_total + 1)); done
+  for n in $(cat_names_phase "$p"); do cat_load "$n"; case "$n" in (OVH_SELLER_HOST | OVH_ADMIN_HOST) continue ;; esac; { [ "$C_NEED" = optional ] && ! is_set "$n"; } && opt_total=$((opt_total + 1)); done
   if [ "$opt_total" -gt 0 ]; then
     blank
     if confirm_yn "$opt_total optional values are not set (email, AI, maps, carriers, webhooks...). Walk through them now? (No = skip them all; you can add them any time by running this phase again)" n; then walk=1; else walk=0; fi
@@ -200,6 +220,8 @@ collect_phase() {
       (TF_STATE_ACCESS_KEY) h_statekeys ;;
       (OVH_VPS_SSH_PRIVATE_KEY) h_ssh ;;
       (DB_MODE) ;;
+      (OVH_SELLER_HOST) h_webhosts ;;
+      (OVH_ADMIN_HOST) ;;
       (*)
         if [ "$C_NEED" = optional ] && [ "$walk" = 0 ] && ! is_set "$n"; then skipped="$skipped $n"; continue; fi
         if [ "$C_NEED" = external ] && [ "$(db_mode_now)" != external ]; then continue; fi
@@ -221,6 +243,7 @@ set_one() {
     (OVH_SERVICE_NAME) h_project ;;
     (TF_STATE_ACCESS_KEY | TF_STATE_SECRET_KEY) h_statekeys ;;
     (OVH_VPS_SSH_PRIVATE_KEY | OVH_SSH_PUBLIC_KEY) h_ssh ;;
+    (OVH_SELLER_HOST) if [ -n "$(gh_var CLOUDFLARE_ZONE)" ] && [ "$(gh_var OVH_DOMAIN)" != "$(gh_var CLOUDFLARE_ZONE)" ]; then h_webhosts; else collect_one "$1"; fi ;;
     (DB_MODE) bad "DB_MODE is chosen in the database phase: make deploy-guide ARGS='--only database'"; return 1 ;;
     (*) collect_one "$1" ;;
   esac

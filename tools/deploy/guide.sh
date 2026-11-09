@@ -27,7 +27,7 @@ STATE=${GUIDE_STATE:-$GUIDE_ROOT/.ovh/deploy-guide.state}
 PHASES="preflight accounts values database flavor server dns cloudflare smoke stop"
 NPH=9
 DRY=0 MODE=run FROM='' ONLY='' SETNAME=''
-REPO='' DOMAIN='' SFH=www SHA='' SERVER_IP=''
+REPO='' DOMAIN='' SFH=www SELLER_X='' ADMIN_X='' ZONE='' SHA='' SERVER_IP=''
 GUIDE_TMP=$(mktemp -d "${TMPDIR:-/tmp}/deploy-guide.XXXXXX") || exit 1
 trap 'rm -rf "$GUIDE_TMP"' EXIT
 
@@ -148,6 +148,7 @@ ensure_ctx() {
   [ "$GH_LISTED" = 1 ] || gh_refresh
   DOMAIN=$(state_get domain); [ -n "$DOMAIN" ] || DOMAIN=$(gh_var OVH_DOMAIN)
   SFH=$(gh_var OVH_STOREFRONT_HOST); [ -n "$SFH" ] || SFH=www
+  SELLER_X=$(gh_var OVH_SELLER_HOST); ADMIN_X=$(gh_var OVH_ADMIN_HOST); ZONE=$(gh_var CLOUDFLARE_ZONE)
   SHA=$(state_get image_sha)
   SERVER_IP=$(state_get server.ip)
   [ -z "$(state_get location)" ] || OVH_LOCATION=$(state_get location)
@@ -261,7 +262,40 @@ chk_api() {
   if [ "$HTTP_CODE" = 200 ] && [ "$iss" = "https://auth.$DOMAIN" ]; then verdict_pass "identity issuer is $iss"; return 0; fi
   verdict_fail "identity answered $HTTP_CODE, issuer '${iss:-none}' (expected https://auth.$DOMAIN)"; hint "ovh-vps.md row 'Authorization errors' / identity pod logs"; return 1
 }
-web_host() { case "$1" in (storefront) [ "$SFH" = apex ] && echo "$DOMAIN" || echo "www.$DOMAIN" ;; (seller) echo "seller.$DOMAIN" ;; (admin) echo "admin.$DOMAIN" ;; esac; }
+web_host() { case "$1" in (storefront) [ "$SFH" = apex ] && echo "$DOMAIN" || echo "www.$DOMAIN" ;; (seller) echo "${SELLER_X:-seller.$DOMAIN}" ;; (admin) echo "${ADMIN_X:-admin.$DOMAIN}" ;; esac; }
+# The final host list, validated by tools/ovh/web-hosts.sh (the same script the workflows run); prints the plan and any warning.
+show_web_hosts() {
+  local a h err
+  err=$(OVH_DOMAIN="$DOMAIN" OVH_STOREFRONT_HOST="$SFH" OVH_SELLER_HOST="$SELLER_X" OVH_ADMIN_HOST="$ADMIN_X" CLOUDFLARE_ZONE="$ZONE" bash tools/ovh/web-hosts.sh 2>&1 >/dev/null)
+  { for a in storefront seller admin; do printf '%-14s https://%s\n' "$a" "$(web_host "$a")"; done
+    printf '%-14s https://api.%s/bff   https://auth.%s   (Let'"'"'s Encrypt on the server, grey cloud)\n' backend "$DOMAIN" "$DOMAIN"
+    [ -z "$SELLER_X$ADMIN_X" ] || echo "Flat web hosts (OVH_SELLER_HOST / OVH_ADMIN_HOST): one label under the zone, covered by Cloudflare's free certificate."; } | panel "WEB HOSTS" cyan
+  if [ -n "$err" ]; then
+    case "$err" in
+      (*error:*) verdict_fail "the host settings are invalid: ${err#*error: }"; return 1 ;;
+      (*) printf '%s\n' "$err" | sed 's/^warning: //' | while IFS= read -r h; do warn "$h"; done
+          warn "free plan: two-label web hosts need a paid Advanced Certificate. Use the flat layout (OVH_STOREFRONT_HOST=apex, OVH_SELLER_HOST, OVH_ADMIN_HOST): cloudflare-setup.md, 'Free certificate layout'." ;;
+    esac
+  fi
+  return 0
+}
+# chk_web_cert HOST: the certificate served for HOST must list HOST (exact or one-label wildcard) in its subject alternative names.
+chk_web_cert() {
+  local h=$1 pem sans s ok=0 rest
+  pem=$(openssl s_client -connect "$h:443" -servername "$h" </dev/null 2>/dev/null)
+  sans=$(printf '%s' "$pem" | openssl x509 -noout -ext subjectAltName 2>/dev/null | grep -o 'DNS:[^, ]*' | sed 's/^DNS://')
+  if [ -z "$sans" ]; then verdict_fail "$h: no certificate served (a two-label host without an Advanced Certificate fails the TLS handshake)"; return 1; fi
+  rest=${h#*.}
+  for s in $sans; do
+    if [ "$s" = "$h" ] || { case "$s" in (\*.*) [ "${s#\*.}" = "$rest" ] ;; (*) false ;; esac; }; then ok=1; break; fi
+  done
+  if [ "$ok" = 1 ]; then verdict_pass "$h: certificate covers it ($(printf '%s' "$sans" | tr '\n' ' '))"; return 0; fi
+  verdict_fail "$h: the certificate does not cover it (it lists: $(printf '%s' "$sans" | tr '\n' ' ')). Cloudflare's free certificate covers the zone and one label under it: use the flat layout or buy an Advanced Certificate"
+  hint "cloudflare-setup.md, 'Free certificate layout (flat web hosts)'"; return 1
+}
+chk_web_certs() { local a rc=0 ips; for a in storefront seller admin; do
+  ips=$(a_lookup "$(web_host "$a")" | tr '\n' ' '); [ -n "$ips" ] || { verdict_warn "$(web_host "$a") has no A record yet (a Worker custom domain creates it)"; }
+  chk_web_cert "$(web_host "$a")" || rc=1; done; return $rc; }
 chk_hosts() {
   local a h bad=0
   for a in storefront seller admin; do
@@ -467,7 +501,10 @@ p_values() {
   m=$(missing_phase 2)
   if [ -n "$m" ]; then verdict_fail "required values still missing: $m"; hint "Run again: make deploy-guide ARGS='--only values'"; return 1; fi
   local z; z=$(gh_var CLOUDFLARE_ZONE); DOMAIN=$(gh_var OVH_DOMAIN); state_set domain "$DOMAIN"
-  [ -z "$z" ] || [ "$z" = "$DOMAIN" ] || warn "OVH_DOMAIN ($DOMAIN) differs from the Cloudflare zone ($z): names below the zone need a paid Advanced Certificate (cloudflare-setup.md step 2.7)"
+  if [ -n "$z" ] && [ "$z" != "$DOMAIN" ]; then
+    if [ -n "$(gh_var OVH_SELLER_HOST)" ] && [ -n "$(gh_var OVH_ADMIN_HOST)" ]; then ok "OVH_DOMAIN ($DOMAIN) is below the zone ($z): flat web hosts are set, the free certificate covers them"
+    else warn "OVH_DOMAIN ($DOMAIN) differs from the Cloudflare zone ($z): www./seller./admin. under it need a paid Advanced Certificate. Use the flat layout (OVH_SELLER_HOST, OVH_ADMIN_HOST, OVH_STOREFRONT_HOST=apex; cloudflare-setup.md, 'Free certificate layout')"; fi
+  fi
   verdict_pass "every required value of phase 2 is set"; return 0
 }
 missing_phase() {
@@ -621,6 +658,7 @@ p_cloudflare() {
   ensure_ctx || return 1; need_domain || return 1
   gate web || { verdict_fail "required values missing"; return 1; }
   ok "Cloudflare values are set"
+  show_web_hosts || return 1
   blank; bold "Zone settings the apps rely on"
   if cf_token_prompt; then
     local zone; zone=$(gh_var CLOUDFLARE_ZONE); cf_get "/zones?name=$zone"; zid=$(body | jq -r '.result[0].id // empty')
@@ -633,7 +671,7 @@ p_cloudflare() {
       cf_get "/zones/$zid/managed_headers"
       v=$(body | jq -r '[.result.managed_request_headers[]? | select(.id == "add_visitor_location_headers") | .enabled] | .[0] // empty')
       if [ "$v" = true ]; then verdict_pass "Add visitor location headers is ON (city detection works)"; elif [ "$v" = false ]; then verdict_fail "Add visitor location headers is OFF: turn it on (Rules > Settings > Managed Transforms)"; else hint "managed transforms not readable with this token"; fi
-      for h in "$DOMAIN" "www.$DOMAIN" "seller.$DOMAIN" "admin.$DOMAIN"; do
+      for h in "$DOMAIN" "www.$DOMAIN" "$(web_host seller)" "$(web_host admin)"; do
         cf_get "/zones/$zid/dns_records?name=$h"
         m=$(body | jq -r '[.result[]? | select(.type == "A" or .type == "AAAA" or .type == "CNAME") | .type] | join(",")')
         if [ -n "$m" ]; then
@@ -652,7 +690,7 @@ p_cloudflare() {
   choose "Which Workers plan is the account on?" 1 "Free (start here; upgrade only if the deploy says too large)" "Paid" "Not sure"
   case "$CHOICE" in (1) plan=free ;; (2) plan=paid ;; (*) plan=unknown ;; esac
   state_set workers_plan "$plan"
-  { echo "Deploys storefront, Seller Center and staff console as Cloudflare Workers on $DOMAIN (www./seller./admin.; storefront-host=$SFH) and, with www, the small apex redirect Worker."
+  { echo "Deploys storefront, Seller Center and staff console as Cloudflare Workers on $DOMAIN ($(web_host storefront), $(web_host seller), $(web_host admin); storefront-host=$SFH) and, with www, the small apex redirect Worker."
     echo "Outward-facing: the sites go live on your domain. Cost: free plan, or Workers Paid if needed. Each app takes 5 to 10 minutes."
     echo "storefront-host must equal OVH_STOREFRONT_HOST ($SFH), which the backend was deployed with."; } | panel "EFFECT - public deploy" yellow
   confirm_type deploy "Deploy the web apps?" || { warn "cancelled"; return 1; }
@@ -665,9 +703,10 @@ p_cloudflare() {
   local rc=0
   chk_hosts || rc=1
   chk_apex || rc=1
-  http "http://www.$DOMAIN/"; case "$HTTP_CODE" in (301 | 302 | 307 | 308) verdict_pass "http:// redirects to https (Always Use HTTPS)" ;; (*) verdict_warn "http://www.$DOMAIN answered $HTTP_CODE: turn on Always Use HTTPS" ;; esac
+  chk_web_certs || rc=1
+  http "http://$(web_host storefront)/"; case "$HTTP_CODE" in (301 | 302 | 307 | 308) verdict_pass "http:// redirects to https (Always Use HTTPS)" ;; (*) verdict_warn "http://$(web_host storefront) answered $HTTP_CODE: turn on Always Use HTTPS" ;; esac
   [ "$rc" = 0 ] || return 1
-  info "  Not checkable from outside: open https://www.$DOMAIN in a browser: the deliver-to city should be your own (needs the location headers)."
+  info "  Not checkable from outside: open https://$(web_host storefront) in a browser: the deliver-to city should be your own (needs the location headers)."
   verdict_pass "three web apps are up"; return 0
 }
 
@@ -737,14 +776,14 @@ p_stop() {
 print_summary() {
   local sf web
   ensure_ctx >/dev/null 2>&1; [ -n "$DOMAIN" ] || DOMAIN='<your-domain>'
-  sf="https://www.$DOMAIN"; [ "$SFH" != apex ] || sf="https://$DOMAIN"
+  sf="https://$(web_host storefront)"
   blank; rule; bold "  Summary"; rule
-  printf '  %-22s %s\n' "Storefront" "$sf" "Seller Center" "https://seller.$DOMAIN" "Staff console" "https://admin.$DOMAIN" \
+  printf '  %-22s %s\n' "Storefront" "$sf" "Seller Center" "https://$(web_host seller)" "Staff console" "https://$(web_host admin)" \
     "API (gateway-bff)" "https://api.$DOMAIN/bff" "Sign-in (identity)" "https://auth.$DOMAIN" "MCP" "https://mcp.$DOMAIN" "Grafana" "https://grafana.$DOMAIN"
   [ -z "$(state_get server.ip)" ] || { printf '  %-22s %s\n' "Server" "$(state_get server.ip)  (ssh -i .ovh/ovh-vps-deploy-key ubuntu@$(state_get server.ip))"; printf '  %s%s%s\n' "$C_YELLOW" "  Billing: the server bills by the hour until destroyed." "$C_RESET"; }
   [ -z "$SHA" ] || printf '  %-22s %s\n' "Images" "$(printf '%s' "$SHA" | cut -c1-12)"
   blank; bold "  Next three things"
-  say "   1. Sign in at https://admin.$DOMAIN as ADMIN_EMAIL (the password you set or the one shown once)."
+  say "   1. Sign in at https://$(web_host admin) as ADMIN_EMAIL (the password you set or the one shown once)."
   say "   2. Add the Stripe webhooks (three URLs, docs/runbooks/stripe-webhooks.md), then re-run phase 8; watch csp.violation lines in Workers Logs for a week."
   say "   3. When you stop for the day: make deploy-guide ARGS='--only stop'   (destroy; 'down' does not stop billing)."
 }

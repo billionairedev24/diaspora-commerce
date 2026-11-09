@@ -6,9 +6,9 @@ name: deploy-guide
 on:
   push:
     branches: [main]
-    paths: [tools/deploy/**, tools/ovh/**, infra/ovh-vps/terraform/locations.json, .github/workflows/ovh-*.yml, .github/workflows/deploy-guide.yml]
+    paths: [tools/deploy/**, tools/ovh/**, infra/helm/library/at-service/**, infra/ovh-vps/*.sh, infra/ovh-vps/terraform/locations.json, .github/workflows/ovh-*.yml, .github/workflows/deploy-guide.yml]
   pull_request:
-    paths: [tools/deploy/**, tools/ovh/**, infra/ovh-vps/terraform/locations.json, .github/workflows/ovh-*.yml, .github/workflows/deploy-guide.yml]
+    paths: [tools/deploy/**, tools/ovh/**, infra/helm/library/at-service/**, infra/ovh-vps/*.sh, infra/ovh-vps/terraform/locations.json, .github/workflows/ovh-*.yml, .github/workflows/deploy-guide.yml]
 
 permissions:
   contents: read
@@ -20,3 +20,6 @@ jobs:
       - uses: actions/checkout@v7
       - name: Wizard tests (stubbed environment)
         run: bash tools/deploy/test/test-guide.sh   # SHELLCHECK=1 adds shellcheck (not run yet: it was not installed where this was written)
+      - uses: azure/setup-helm@v5
+      - name: Web host tests (host computation, validation, render-config, at-service chart)
+        run: bash tools/ovh/test/web-hosts.test.sh

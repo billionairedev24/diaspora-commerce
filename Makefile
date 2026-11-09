@@ -35,8 +35,9 @@ ovh-gh-setup: ## One-time set-up of the single-server OVHcloud environment: asks
 deploy-guide: ## Guided, resumable deploy of the OVH + Cloudflare test environment (ARGS="--status|--explain|--doctor|--dry-run|--from N|--only N|--set NAME", docs/runbooks/deploy-guide.md)
 	tools/deploy/guide.sh $(ARGS)
 
-deploy-guide-test: ## Static tests of the deploy guide with stubbed gh/curl/dig/openssl (no network, nothing is deployed)
+deploy-guide-test: ## Static tests of the deploy guide with stubbed gh/curl/dig/openssl (no network, nothing is deployed), and of the OVH web host logic
 	bash tools/deploy/test/test-guide.sh
+	bash tools/ovh/test/web-hosts.test.sh
 
 up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — the web apps run as production builds (DEV=1 for Next dev servers, REBUILD=1 to force a rebuild), MOBILE_HOST=lan serves it all on your Wi-Fi address for a phone, OBS=0 leaves out Grafana/Prometheus/Loki/Tempo
 	PROD=$(PROD) DEV=$(DEV) REBUILD=$(REBUILD) tools/dev/local.sh up $(SERVICES)

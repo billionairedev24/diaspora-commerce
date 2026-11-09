@@ -127,7 +127,7 @@ new_env() {
   echo '{"nameWithOwner":"acme/shop","viewerPermission":"ADMIN","defaultBranchRef":{"name":"main"}}' > "$F/repo.json"
   echo '[{"name":"ovh-images"},{"name":"ovh-vps"},{"name":"ovh-web"}]' > "$F/workflows.json"
   echo "[{\"databaseId\":50,\"headSha\":\"$SHA\",\"conclusion\":\"success\",\"status\":\"completed\"}]" > "$F/runs/ovh-images.yml.json"
-  printf 'subject=CN=x\nissuer=C=US, O=Let'"'"'s Encrypt, CN=R11\nnotAfter=Feb  1 00:00:00 2027 GMT\n' > "$F/cert.txt"
+  printf 'subject=CN=x\nissuer=C=US, O=Let'"'"'s Encrypt, CN=R11\nnotAfter=Feb  1 00:00:00 2027 GMT\nX509v3 Subject Alternative Name:\n    DNS:example.com, DNS:*.example.com\n' > "$F/cert.txt"
   sed -i.bak 's/^issuer=/issuer= /' "$F/cert.txt" 2>/dev/null; rm -f "$F/cert.txt.bak"
   STATE=$T/root/.ovh/deploy-guide.state; mkdir -p "$T/root/.ovh"
 }
@@ -188,7 +188,7 @@ bad_lines=$(awk -F'|' '!/^#/ && NF > 0 && NF != 11 { print NR": "NF" fields" }' 
 [ -z "$bad_lines" ] && t_ok "every catalogue line has 11 fields" || t_fail "catalogue field count" "$bad_lines"
 dups=$(awk -F'|' '!/^#/ && NF == 11 { print $1 }' "$CAT" | sort | uniq -d)
 [ -z "$dups" ] && t_ok "no duplicate names in the catalogue" || t_fail "duplicate names" "$dups"
-unknown=$(awk -F'|' '!/^#/ && NF == 11 { if ($2 != "secret" && $2 != "var") print $1 ": kind " $2; if ($3 !~ /^(required|optional|generated|external|managed)$/) print $1 ": need " $3; if ($6 !~ /^(server|web|none)$/) print $1 ": gate " $6; if ($8 !~ /^(-|cf_token|cf_account|cf_zone|stripe|gh_pull|ovh|ovh_project)$/) print $1 ": live " $8; if ($7 !~ /^(-|hex32|bucket|domain|email|phone|sk_test|pk_test|whsec|resend|cftoken|ghpat|ovhkey|location|flavor|host|user|nonempty|minlen12|choice:.*)$/) print $1 ": validator " $7 }' "$CAT")
+unknown=$(awk -F'|' '!/^#/ && NF == 11 { if ($2 != "secret" && $2 != "var") print $1 ": kind " $2; if ($3 !~ /^(required|optional|generated|external|managed)$/) print $1 ": need " $3; if ($6 !~ /^(server|web|none)$/) print $1 ": gate " $6; if ($8 !~ /^(-|cf_token|cf_account|cf_zone|stripe|gh_pull|ovh|ovh_project)$/) print $1 ": live " $8; if ($7 !~ /^(-|hex32|bucket|domain|email|phone|sk_test|pk_test|whsec|resend|cftoken|ghpat|ovhkey|location|flavor|host|fullhost|httpsurl|user|nonempty|minlen12|choice:.*)$/) print $1 ": validator " $7 }' "$CAT")
 [ -z "$unknown" ] && t_ok "kinds, needs, gates, validators and live checks are all known" || t_fail "catalogue vocabulary" "$unknown"
 missing_names=''
 for n in $(cat "$REAL"/.github/workflows/ovh-vps.yml "$REAL"/.github/workflows/ovh-web.yml "$REAL"/.github/workflows/ovh-images.yml | grep -oE '(secrets|vars)\.[A-Z][A-Z0-9_]+' | sed 's/^[a-z]*\.//' | sort -u); do
@@ -418,6 +418,62 @@ assert_has "...with the row" "$OUT" "The bare domain does not redirect"
 new_env; fill_required; printf 'domain=example.com\n' > "$STATE"; healthy_world; answers n y 1 nodeploy
 run_g cf-cancel --only cloudflare
 assert_rc "a wrong word cancels the web deploy" 1
+assert_lacks "...nothing was deployed" "$F/calls.log" "ovh-web.yml"
+
+echo "== flat web hosts (free certificate layout)"
+new_env; printf '%s\n' OVH_DOMAIN=test.example.com CLOUDFLARE_ZONE=example.com >> "$F/vars"; answers 1
+run_g flat-offer --set OVH_SELLER_HOST
+assert_rc "the flat layout is offered below the zone and accepted" 0
+assert_has "...explained" "$OUT" "FREE CERTIFICATE LAYOUT"
+assert_has "...storing the apex storefront" "$F/calls.log" "gh variable set OVH_STOREFRONT_HOST"
+assert_has "...the seller host" "$F/vars" "OVH_SELLER_HOST=seller-test.example.com"
+assert_has "...and the admin host" "$F/vars" "OVH_ADMIN_HOST=admin-test.example.com"
+assert_has "...and apex" "$F/vars" "OVH_STOREFRONT_HOST=apex"
+
+new_env; printf '%s\n' OVH_DOMAIN=test.example.com CLOUDFLARE_ZONE=example.com >> "$F/vars"; answers 2
+run_g flat-declined --set OVH_SELLER_HOST
+assert_lacks "declining stores no explicit host" "$F/vars" "OVH_SELLER_HOST"
+assert_has "...with the certificate warning" "$OUT" "certificate error"
+
+new_env; printf '%s\n' OVH_DOMAIN=example.com CLOUDFLARE_ZONE=example.com >> "$F/vars"; answers "Seller.example.com" "seller.example.com"
+run_g flat-zone --set OVH_SELLER_HOST
+assert_has "at the zone apex the host is typed and validated (lower-case only)" "$OUT" "full lower-case host name"
+assert_has "...then stored" "$F/vars" "OVH_SELLER_HOST=seller.example.com"
+
+setvars() { local kv k; for kv in "$@"; do k=${kv%%=*}; grep -v "^$k=" "$F/vars" > "$F/vars.n"; mv "$F/vars.n" "$F/vars"; echo "$kv" >> "$F/vars"; done; }
+flat_world() { # flat layout on test.example.com: storefront at the apex of the base, web hosts one label under the zone
+  new_env; fill_required; setvars OVH_DOMAIN=test.example.com OVH_STOREFRONT_HOST=apex OVH_SELLER_HOST=seller-test.example.com OVH_ADMIN_HOST=admin-test.example.com CLOUDFLARE_ZONE=example.com
+  printf 'domain=test.example.com\n' > "$STATE"
+  local h
+  for h in test.example.com seller-test.example.com admin-test.example.com; do
+    HTTP_BODY=page http_fake "https://$h/" 200 "content-security-policy-report-only: script-src 'self' 'nonce-abc123' 'strict-dynamic'"
+    HTTP_BODY='' http_fake "https://$h/api/csp-report" 405
+    echo 204 > "$F/http/$(printf '%s' "$h/api/csp-report" | tr -c 'A-Za-z0-9\n' '_').POST.code"
+    dns_fake "$h" 198.51.100.7
+  done
+  HTTP_BODY='' http_fake 'http://test.example.com/' 301 'location: https://test.example.com/'
+  printf 'subject=CN=example.com\nissuer=C=US, O=Google Trust Services, CN=WE1\nnotAfter=Feb  1 00:00:00 2027 GMT\nX509v3 Subject Alternative Name:\n    DNS:example.com, DNS:*.example.com\n' > "$F/cert.txt"
+}
+flat_world; answers n y 1 deploy
+run_g cf-flat --only cloudflare
+assert_rc "flat layout: cloudflare phase passes" 0
+assert_has "the host list is shown" "$OUT" "https://seller-test.example.com"
+assert_has "ovh-web started for the base domain with apex" "$F/calls.log" "-f domain=test.example.com -f storefront-host=apex"
+assert_has "the certificate coverage is proven for the seller host" "$OUT" "seller-test.example.com: certificate covers it"
+assert_lacks "no apex redirect is demanded" "$OUT" "apex answered"
+assert_lacks "no two-label warning" "$OUT" "two-label web hosts"
+
+flat_world; setvars OVH_SELLER_HOST=seller.test.example.com OVH_ADMIN_HOST=admin.test.example.com
+for h in seller.test.example.com admin.test.example.com; do HTTP_BODY=page http_fake "https://$h/" 200; dns_fake "$h" 198.51.100.7; done
+answers n y 1 deploy
+run_g cf-twolabel --only cloudflare
+assert_rc "two-label hosts: the certificate check fails" 1
+assert_has "...with the plain warning about the free plan" "$OUT" "two-label web hosts need a paid Advanced Certificate"
+assert_has "...naming the uncovered host" "$OUT" "seller.test.example.com: the certificate does not cover it"
+
+flat_world; setvars OVH_SELLER_HOST=test.example.com; answers n y 1 deploy
+run_g cf-badhost --only cloudflare
+assert_rc "a web host equal to another host is refused before anything runs" 1
 assert_lacks "...nothing was deployed" "$F/calls.log" "ovh-web.yml"
 
 echo "== phase 8: smoke"
