@@ -1,8 +1,7 @@
 'use client';
 
 import { staffTaxQueries, type TaxShadow, type TaxShadowGroup, type TaxShadowRow } from '@afrotransact/api-client';
-import { Select, StatStrip, TextField } from '@afrotransact/ui';
-import { CheckCircle, XCircle } from '@phosphor-icons/react/ssr';
+import { Checklist, Select, StatStrip, TextField } from '@afrotransact/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
@@ -81,19 +80,7 @@ function Report({ d, page, onPage }: { d: TaxShadow; page: number; onPage: (n: n
           <Notice tone={r.ready ? 'success' : 'warning'} title={r.ready ? 'Ready to cut over' : 'Not ready to cut over'}>
             {r.headline}
           </Notice>
-          <ul className="m-0 flex list-none flex-col gap-1.5 p-0 text-sm">
-            {r.checks.map((c) => (
-              <li key={c.key} className="flex items-start gap-2">
-                {c.ok ? <CheckCircle size={18} weight="fill" aria-hidden className="mt-px flex-none text-success" /> : <XCircle size={18} weight="fill" aria-hidden className="mt-px flex-none text-danger" />}
-                <span>
-                  <strong className="font-semibold">{c.title}</strong>
-                  <span className="at-visually-hidden">{c.ok ? ': passes' : ': needs work'}</span>
-                  {' — '}
-                  {c.detail}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <Checklist label="Cutover checks" items={r.checks.map((c) => ({ key: c.key, title: c.title, ok: c.ok, detail: c.detail }))} />
           <p className="m-0 text-xs text-muted">
             {r.thresholdSource === 'DEFAULT' ? 'These thresholds are placeholders until the tax adviser sets the real ones.' : 'Thresholds come from the tax service.'} {r.rateNote}
           </p>

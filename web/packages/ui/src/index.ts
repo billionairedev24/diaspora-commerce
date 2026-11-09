@@ -25,6 +25,7 @@ export * from './dashboard';
 export { Alert, AlertAction, type AlertProps, alertRole, type AlertVariant } from './feedback/Alert';
 export { MaintenancePage, type MaintenancePageProps } from './feedback/MaintenancePage';
 export { PendingNavigation, type PendingNavigationProps } from './feedback/PendingNavigation';
+export { Checklist, type ChecklistItem, type ChecklistProps, ProgressMeter, type ProgressMeterProps } from './feedback/ProgressMeter';
 export { Spinner, type SpinnerProps, type SpinnerSize, type SpinnerVariant } from './feedback/Spinner';
 export {
   BigFigure,

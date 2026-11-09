@@ -1,0 +1,15 @@
+/* ProgressMeter and Checklist: flat, no boxes. Progress is always also written as words. */
+.meter { display: flex; flex-direction: column; gap: 6px; max-inline-size: 60ch; }
+.head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--at-space-3); font-size: var(--at-text-sm); }
+.label { font-weight: var(--at-weight-semibold); }
+.track { block-size: 8px; overflow: hidden; border-radius: 999px; background: var(--at-color-border); }
+.bar { block-size: 100%; border-radius: 999px; background: var(--at-color-success); }
+.attention .bar { background: var(--at-color-warning); }
+.help { margin: 0; color: var(--at-color-text-muted); font-size: var(--at-text-xs); }
+
+.list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: var(--at-text-sm); }
+.item { display: flex; align-items: flex-start; gap: var(--at-space-2); }
+.icon { flex: none; margin-block-start: 1px; }
+.ok { color: var(--at-color-success); }
+.fail { color: var(--at-color-danger); }
+.title { font-weight: var(--at-weight-semibold); }

@@ -2,7 +2,7 @@
 
 import { isApiError, staffTaxKeys, staffTaxQueries, type TaxCodeEntry, type TaxCodeMapImportResult, type TaxCompleteness, type TaxProvider } from '@afrotransact/api-client';
 import { DataTable, rowActionsColumn, useTableState } from '@afrotransact/data-table';
-import { Button, ChipGroup, Select, TextField, useToast } from '@afrotransact/ui';
+import { Button, ChipGroup, ProgressMeter, Select, TextField, useToast } from '@afrotransact/ui';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -23,22 +23,18 @@ const PROVIDERS: { value: TaxProvider; label: string }[] = [
 /** How far along a provider is: outcomes with a verified code over outcomes that need one. */
 export function CompletenessMeter({ c, label }: { c: TaxCompleteness; label: string }) {
   return (
-    <div className="flex max-w-[60ch] flex-col gap-1.5">
-      <div className="flex items-baseline justify-between gap-3 text-sm">
-        <strong className="font-semibold">{label}</strong>
-        <span>
-          {c.verified} of {c.needed} outcomes verified
-        </span>
-      </div>
-      <div role="progressbar" aria-label={`${label}: outcomes with a verified code`} aria-valuemin={0} aria-valuemax={c.needed} aria-valuenow={c.verified} aria-valuetext={`${c.verified} of ${c.needed} outcomes verified`} className="h-2 overflow-hidden rounded-pill bg-surface-sunken">
-        <div className="h-full rounded-pill bg-success" style={{ width: `${c.percent}%` }} />
-      </div>
-      <p className="m-0 text-xs text-muted">
-        {c.complete
+    <ProgressMeter
+      label={label}
+      value={c.verified}
+      max={c.needed}
+      valueText={`${c.verified} of ${c.needed} outcomes verified`}
+      attention={!c.complete}
+      help={
+        c.complete
           ? 'Every outcome has a verified code. This provider can be chosen once it is set up.'
-          : `${c.unmapped} outcome${c.unmapped === 1 ? ' has' : 's have'} no code yet and ${c.unverified} ${c.unverified === 1 ? 'has a code that is' : 'have codes that are'} not verified. A line with no verified code is blocked at checkout, never guessed.`}
-      </p>
-    </div>
+          : `${c.unmapped} outcome${c.unmapped === 1 ? ' has' : 's have'} no code yet and ${c.unverified} ${c.unverified === 1 ? 'has a code that is' : 'have codes that are'} not verified. A line with no verified code is blocked at checkout, never guessed.`
+      }
+    />
   );
 }
 
