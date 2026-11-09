@@ -17,10 +17,14 @@ import java.util.UUID;
  * @param retiredReason why it was retired
  * @param compliance    evidence sellers must have on file to sell in this department ({@code FOOD_PERMIT},
  *                      {@code BEAUTY_LABELLING}); data on the node, empty below departments and for most of them
+ * @param taxProfileId the tax profile (the category code of tax-returns) of a category node; null elsewhere
+ * @param taxStatus   gate of that profile (ACTIVE, NEEDS_APPROVAL, BLOCKED_BUNDLE, REFINE_CODE, CONFLICT_OPEN); null
+ *                    elsewhere. Sellers can publish into a category only when it is ACTIVE.
  */
 public record CategoryNode(UUID id, UUID parentId, String code, String name, CategoryLevel level,
                            String productTypeCode, String path, int position, boolean active, long version,
-                           Instant retiredAt, String retiredReason, Set<String> compliance) {
+                           Instant retiredAt, String retiredReason, Set<String> compliance,
+                           String taxProfileId, String taxStatus) {
 
     public CategoryNode {
         compliance = compliance == null ? Set.of() : Set.copyOf(compliance);
@@ -31,6 +35,20 @@ public record CategoryNode(UUID id, UUID parentId, String code, String name, Cat
         if (level == CategoryLevel.PRODUCT_TYPE && productTypeCode == null) {
             throw new IllegalArgumentException("Product-type nodes need a product type code");
         }
+    }
+
+    /** A node without tax data. */
+    public CategoryNode(UUID id, UUID parentId, String code, String name, CategoryLevel level,
+                        String productTypeCode, String path, int position, boolean active, long version,
+                        Instant retiredAt, String retiredReason, Set<String> compliance) {
+        this(id, parentId, code, name, level, productTypeCode, path, position, active, version, retiredAt,
+                retiredReason, compliance, null, null);
+    }
+
+    /** This node with its tax profile and gate status. */
+    public CategoryNode withTax(String profileId, String status) {
+        return new CategoryNode(id, parentId, code, name, level, productTypeCode, path, position, active, version,
+                retiredAt, retiredReason, compliance, profileId, status);
     }
 
     /** A node without compliance data. */
@@ -49,36 +67,36 @@ public record CategoryNode(UUID id, UUID parentId, String code, String name, Cat
 
     public CategoryNode withCode(String newCode) {
         return new CategoryNode(id, parentId, newCode, name, level, productTypeCode, path, position, active, version,
-                retiredAt, retiredReason, compliance);
+                retiredAt, retiredReason, compliance, taxProfileId, taxStatus);
     }
 
     public CategoryNode withName(String newName, String newPath) {
         return new CategoryNode(id, parentId, code, newName, level, productTypeCode, newPath, position, active,
-                version, retiredAt, retiredReason, compliance);
+                version, retiredAt, retiredReason, compliance, taxProfileId, taxStatus);
     }
 
     public CategoryNode withPlacement(UUID newParentId, String newPath, int newPosition) {
         return new CategoryNode(id, newParentId, code, name, level, productTypeCode, newPath, newPosition, active,
-                version, retiredAt, retiredReason, compliance);
+                version, retiredAt, retiredReason, compliance, taxProfileId, taxStatus);
     }
 
     public CategoryNode withPath(String newPath) {
         return new CategoryNode(id, parentId, code, name, level, productTypeCode, newPath, position, active,
-                version, retiredAt, retiredReason, compliance);
+                version, retiredAt, retiredReason, compliance, taxProfileId, taxStatus);
     }
 
     public CategoryNode withPosition(int newPosition) {
         return new CategoryNode(id, parentId, code, name, level, productTypeCode, path, newPosition, active,
-                version, retiredAt, retiredReason, compliance);
+                version, retiredAt, retiredReason, compliance, taxProfileId, taxStatus);
     }
 
     public CategoryNode retired(String reason, Instant now) {
         return new CategoryNode(id, parentId, code, name, level, productTypeCode, path, position, false, version,
-                now, reason, compliance);
+                now, reason, compliance, taxProfileId, taxStatus);
     }
 
     public CategoryNode restored() {
         return new CategoryNode(id, parentId, code, name, level, productTypeCode, path, position, true, version,
-                null, null, compliance);
+                null, null, compliance, taxProfileId, taxStatus);
     }
 }

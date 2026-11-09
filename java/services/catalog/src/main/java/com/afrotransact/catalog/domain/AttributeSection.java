@@ -7,5 +7,7 @@ public enum AttributeSection {
     /** Food and perishables: shelf life, storage, ingredients, allergens (product types with the food trait). */
     FOOD,
     /** Regulated items: permit, licence and certificate references. */
-    REGULATED
+    REGULATED,
+    /** Plain-word questions that decide how the item is taxed (tax facts); never shown with tax jargon. */
+    TAX
 }

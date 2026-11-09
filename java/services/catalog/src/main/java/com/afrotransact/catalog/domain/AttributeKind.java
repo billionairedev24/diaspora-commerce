@@ -15,5 +15,15 @@ public enum AttributeKind {
      * {@code options} are the no-brand choices the type allows ({@code UNBRANDED}, {@code HANDMADE}); none means a
      * brand is always needed when it is required.
      */
-    BRAND
+    BRAND,
+    /** Yes or no (tax fact). */
+    BOOLEAN,
+    /** A decimal number in the attribute's {@code unit} (tax fact: net weight in oz). */
+    DECIMAL,
+    /** A whole number (tax fact: servings per package). */
+    INTEGER,
+    /** A percentage from 0 to 100 (tax fact: juice content). */
+    PERCENT,
+    /** An evidence file (label photo, Drug Facts); the value is the stored evidence reference. */
+    FILE
 }

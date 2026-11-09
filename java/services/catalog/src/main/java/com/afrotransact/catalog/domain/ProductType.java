@@ -41,8 +41,21 @@ public record ProductType(String code, String label, List<AttributeDefinition> a
         return themes.stream().filter(t -> t.name().equals(name)).findFirst();
     }
 
-    /** What the product form, the upload template and the validators ask for (attributes that apply). */
+    /**
+     * The product details the form, the upload template and the validators ask for (attributes that apply, tax facts
+     * left out: those are answered per variant and per listing, see {@link #taxFacts()}).
+     */
     public List<AttributeDefinition> applicableAttributes() {
+        return attributes.stream().filter(a -> a.applies() && !a.taxFact()).toList();
+    }
+
+    /** The tax facts of this type (plain-word questions), in form order. */
+    public List<AttributeDefinition> taxFacts() {
+        return attributes.stream().filter(a -> a.applies() && a.taxFact()).toList();
+    }
+
+    /** Everything the seller form renders: the details and the tax facts. */
+    public List<AttributeDefinition> formAttributes() {
         return attributes.stream().filter(AttributeDefinition::applies).toList();
     }
 
@@ -57,6 +70,6 @@ public record ProductType(String code, String label, List<AttributeDefinition> a
 
     /** The applicable attribute with this key. */
     public Optional<AttributeDefinition> attribute(String key) {
-        return attributes.stream().filter(a -> a.applies() && a.key().equals(key)).findFirst();
+        return attributes.stream().filter(a -> a.applies() && !a.taxFact() && a.key().equals(key)).findFirst();
     }
 }

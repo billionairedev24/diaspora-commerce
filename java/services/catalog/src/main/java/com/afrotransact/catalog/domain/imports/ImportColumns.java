@@ -274,7 +274,10 @@ public final class ImportColumns {
             case ENUM -> ColumnKind.ENUM;
             case NUMBER -> ColumnKind.DECIMAL;
             case MULTILINE -> ColumnKind.LONG_TEXT;
-            case TEXT, BRAND -> ColumnKind.TEXT;
+            case BOOLEAN -> ColumnKind.BOOLEAN;
+            case INTEGER -> ColumnKind.INTEGER;
+            case DECIMAL, PERCENT -> ColumnKind.DECIMAL;
+            case TEXT, BRAND, FILE -> ColumnKind.TEXT;
         };
         String description = a.help() != null ? a.help() + "." : a.label() + ".";
         if (a.kind() == AttributeKind.ENUM) {
