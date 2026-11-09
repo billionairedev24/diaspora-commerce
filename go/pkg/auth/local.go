@@ -27,6 +27,12 @@ func LocalActor(authorization string) Actor {
 	}
 	pt := strings.ToUpper(strings.TrimSpace(claimString(c["pt"])))
 	sub := claimString(c["sub"])
+	if pt == "STAFF" && strings.TrimSpace(sub) != "" {
+		// Staff keep the super admin's permissions but act as themselves (their own subject), so their own shopper
+		// data (cart, orders) is keyed by who they are locally too. Mirrors LocalActorResolver.
+		roles := slices.Compact(append(claimStrings(c["roles"]), LocalSuperAdmin().Roles...))
+		return Actor{Subject: sub, Type: pt, Roles: roles, Permissions: []string{"*"}}
+	}
 	if !slices.Contains(actsAsThemselves, pt) || strings.TrimSpace(sub) == "" {
 		return LocalSuperAdmin()
 	}

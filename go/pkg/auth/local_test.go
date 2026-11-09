@@ -19,7 +19,6 @@ func TestLocalActorIsTheSuperAdminWithoutAPersonalToken(t *testing.T) {
 		"none":    "",
 		"basic":   "Basic Zm9vOmJhcg==",
 		"garbage": "Bearer not-a-jwt",
-		"staff":   "Bearer " + unsigned(`{"sub":"s1","pt":"STAFF","perms":["orders:read"]}`),
 		"service": "Bearer " + unsigned(`{"sub":"cart-service","pt":"SERVICE","scope":"cart:service"}`),
 		"no sub":  "Bearer " + unsigned(`{"pt":"CUSTOMER"}`),
 	} {
@@ -27,6 +26,13 @@ func TestLocalActorIsTheSuperAdminWithoutAPersonalToken(t *testing.T) {
 		if a.Subject != "local-dev" || !a.Can("orders:manage") {
 			t.Errorf("%s: got %+v, want the local super admin", name, a)
 		}
+	}
+}
+
+func TestLocalActorStaffKeepsTheirSubjectAndSuperAdminPermissions(t *testing.T) {
+	a := LocalActor("Bearer " + unsigned(`{"sub":"s1","pt":"STAFF","roles":["platform.ops_manager"],"perms":["orders:read"]}`))
+	if a.Subject != "s1" || a.Type != "STAFF" || !a.Can("orders:manage") || !slices.Contains(a.Roles, "platform.ops_manager") {
+		t.Fatalf("got %+v, want staff acting as themselves with every permission", a)
 	}
 }
 

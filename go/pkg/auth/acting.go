@@ -16,9 +16,13 @@ const ActingAsHeader = "X-Acting-As"
 // ActingAsCustomer is the only acting context: the person as a shopper.
 const ActingAsCustomer = "CUSTOMER"
 
-// actsAsCustomer are the principal types that are people who may shop. Staff, services, partner apps and AI agents
-// keep their own type: a header never turns them into a shopper.
-var actsAsCustomer = []string{"CUSTOMER", "SELLER_MEMBER", "PROVIDER_MEMBER", "DRIVER"}
+// actsAsCustomer are the principal types that are people who may shop: every signed-in person, staff and platform
+// admins included. Services, partner apps and AI agents keep their own type: a header never turns them into a shopper.
+var actsAsCustomer = []string{"CUSTOMER", "SELLER_MEMBER", "PROVIDER_MEMBER", "DRIVER", "STAFF"}
+
+// shopperPermissions are the only token permissions a staff member keeps while shopping (what account.customer
+// holds). Staff permissions (orders:read, users:read, the local "*" wildcard...) never reach customer endpoints.
+var shopperPermissions = []string{"mcp:shopper"}
 
 // ActingAs returns the actor a request acts as. With actingAs "CUSTOMER" a person becomes a CUSTOMER of their own
 // subject, without an organisation and without organisation or platform roles (account.* roles stay). The token's
@@ -37,5 +41,10 @@ func ActingAs(a Actor, actingAs string) Actor {
 			roles = append(roles, r)
 		}
 	}
-	return Actor{Subject: a.Subject, Type: ActingAsCustomer, Roles: roles, Permissions: slices.Clone(a.Permissions)}
+	perms := slices.Clone(a.Permissions)
+	if a.Type == "STAFF" {
+		// Shopping is not an elevation: staff keep none of their staff permissions.
+		perms = slices.DeleteFunc(perms, func(p string) bool { return !slices.Contains(shopperPermissions, p) })
+	}
+	return Actor{Subject: a.Subject, Type: ActingAsCustomer, Roles: roles, Permissions: perms}
 }

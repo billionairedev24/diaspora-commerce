@@ -38,7 +38,49 @@ func TestActingAsCustomerMakesAMemberShopAsThemselves(t *testing.T) {
 	}
 }
 
-func TestActingAsNeverChangesStaffServicesOrMissingContext(t *testing.T) {
+// Table: which principal types shop as themselves under X-Acting-As: CUSTOMER, and what they keep.
+func TestActingAsRuleByPrincipalType(t *testing.T) {
+	staffPerms := []string{"orders:read", "users:read", "mcp:shopper", "*"}
+	for _, tc := range []struct {
+		name     string
+		actor    Actor
+		header   string
+		wantType string
+		wantOrg  string
+		wantPerm []string
+	}{
+		{"customer", Actor{Subject: "u1", Type: "CUSTOMER", Roles: []string{"account.customer"}}, "CUSTOMER", "CUSTOMER", "", nil},
+		{"seller member", Actor{Subject: "u1", Type: "SELLER_MEMBER", OrgID: "o1", Permissions: []string{"catalog:write"}}, "CUSTOMER", "CUSTOMER", "", []string{"catalog:write"}},
+		{"provider member", Actor{Subject: "u1", Type: "PROVIDER_MEMBER", OrgID: "o1"}, "CUSTOMER", "CUSTOMER", "", nil},
+		{"driver", Actor{Subject: "u1", Type: "DRIVER"}, "CUSTOMER", "CUSTOMER", "", nil},
+		{"staff", Actor{Subject: "u1", Type: "STAFF", Roles: []string{"platform.ops_manager", "account.customer"}, Permissions: staffPerms}, "CUSTOMER", "CUSTOMER", "", []string{"mcp:shopper"}},
+		{"staff without header", Actor{Subject: "u1", Type: "STAFF", Permissions: staffPerms}, "", "STAFF", "", staffPerms},
+		{"staff other context", Actor{Subject: "u1", Type: "STAFF", Permissions: staffPerms}, "STAFF", "STAFF", "", staffPerms},
+		{"staff without subject", Actor{Type: "STAFF"}, "CUSTOMER", "STAFF", "", nil},
+		{"service", Actor{Subject: "svc", Type: "SERVICE", Permissions: []string{"cart:service"}}, "CUSTOMER", "SERVICE", "", []string{"cart:service"}},
+		{"partner app", Actor{Subject: "app", Type: "PARTNER_APP"}, "CUSTOMER", "PARTNER_APP", "", nil},
+		{"ai agent", Actor{Subject: "agent", Type: "AI_AGENT"}, "CUSTOMER", "AI_AGENT", "", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ActingAs(tc.actor, tc.header)
+			if got.Type != tc.wantType || got.OrgID != tc.wantOrg || got.Subject != tc.actor.Subject {
+				t.Fatalf("got %+v, want type %s org %q subject %q", got, tc.wantType, tc.wantOrg, tc.actor.Subject)
+			}
+			if !slices.Equal(got.Permissions, tc.wantPerm) {
+				t.Fatalf("permissions %v, want %v", got.Permissions, tc.wantPerm)
+			}
+			if got.Type == "CUSTOMER" {
+				for _, r := range got.Roles {
+					if r != "account.customer" && r != "account.seller_applicant" {
+						t.Fatalf("role %q leaked into the customer context", r)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestActingAsNeverChangesServicesOrMissingContext(t *testing.T) {
 	member := sellerOwner()
 	if got := ActingAs(member, ""); got.Type != "SELLER_MEMBER" || got.OrgID != "org_malo" {
 		t.Fatalf("no header: Seller Center keeps the organisation, got %+v", got)
@@ -47,10 +89,8 @@ func TestActingAsNeverChangesStaffServicesOrMissingContext(t *testing.T) {
 		t.Fatalf("unknown context: got %+v", got)
 	}
 	for _, a := range []Actor{
-		{Subject: "s1", Type: "STAFF", Roles: []string{"platform.ops_manager"}, Permissions: []string{"orders:read"}},
 		{Subject: "orders-service", Type: "SERVICE", Permissions: []string{"cart:service"}},
 		{Subject: "agent", Type: "AI_AGENT"},
-		LocalSuperAdmin(),
 		{Type: "SELLER_MEMBER", OrgID: "org_malo"},
 	} {
 		if got := ActingAs(a, "CUSTOMER"); got.Type != a.Type || got.OrgID != a.OrgID {
