@@ -31,7 +31,9 @@ type StaffAssistantDeps struct {
 	Counter   port.DailyCounter
 	Records   StaffRecordsService
 	Dashboard StaffDashboardService
-	Now       func() time.Time
+	// Tax reads the tax review queue and the shadow report (read only); nil leaves those two tools out.
+	Tax StaffTaxService
+	Now func() time.Time
 }
 
 type staffAssistantImpl struct {
@@ -234,6 +236,18 @@ var staffTools = []staffToolDef{
 		schema: `{"type":"object","properties":{"resource":{"type":"string","enum":` + resourceSchemaEnum + `},"id":{"type":"string"},"label":{"type":"string","maxLength":80}},"required":["resource","id"],"additionalProperties":false}`,
 		label:  func(map[string]any) string { return "Preparing a link to the record" },
 		run:    staffToolOpen,
+	},
+	{
+		name: domain.StaffToolTaxReviews, description: "Product variants waiting for tax review (or, with status APPROVED, REJECTED or STALE, the decisions already made): product, seller and category by name, why each needs a person, the proposed tax, and for decisions who decided and when. Read only; needs the tax:read permission.",
+		schema: `{"type":"object","properties":{"status":{"type":"string","enum":["PENDING_REVIEW","APPROVED","REJECTED","STALE"],"default":"PENDING_REVIEW"},"query":{"type":"string","description":"Product name, ATIN or GTIN"},"limit":{"type":"integer","minimum":1,"maximum":10,"default":8}},"additionalProperties":false}`,
+		label:  func(map[string]any) string { return "Checking the tax review queue" },
+		run:    staffToolTaxReviews,
+	},
+	{
+		name: domain.StaffToolTaxShadow, description: "The tax shadow report: a payment provider's tax quote against ours on real orders over the last 7, 30 or 90 days, whether it is ready to cut over (each check with its result), and where the two disagree by category. Read only; needs the tax:read permission.",
+		schema: `{"type":"object","properties":{"days":{"type":"integer","enum":[7,30,90],"default":30}},"additionalProperties":false}`,
+		label:  func(map[string]any) string { return "Checking the tax shadow report" },
+		run:    staffToolTaxShadow,
 	},
 }
 
