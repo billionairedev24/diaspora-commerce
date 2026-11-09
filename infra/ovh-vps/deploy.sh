@@ -105,6 +105,9 @@ YAML
   route api /bff gateway-bff "" ; route api /identity identity "" ; route api /bookings bookings "" ; route api /fulfilment fulfilment ""
   route api /media media "" ; route api /notifications notifications "" ; route api /carrier-gateway carrier-gateway ""
   route api /payments/v1/webhooks payments "/v1/webhooks"
+  # seller Stripe webhooks: these two exact paths only (docs/runbooks/stripe-webhooks.md); the service verifies Stripe-Signature
+  route api /seller/v1/webhooks/stripe-connect seller "/v1/webhooks/stripe-connect"
+  route api /seller/v1/webhooks/stripe-billing seller "/v1/webhooks/stripe-billing"
   route auth / identity "" ; route mcp / mcp-server ""
 }
 

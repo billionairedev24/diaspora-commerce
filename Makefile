@@ -131,6 +131,7 @@ observability-check: ## Check generated rules are fresh, promtool-check rules, v
 env-check: ## Environment guards: no hard-coded hosts, profiles + docs pages + trace sampling + sizing per env
 	python3 tools/ci/check_env_urls.py
 	python3 tools/ci/check_env_config.py
+	python3 tools/ci/check_webhook_routes.py
 
 render: ## Render one service as Argo CD would for an env: make render SERVICE=cart ENV=uat
 	@[ -n "$(SERVICE)" ] || { echo "usage: make render SERVICE=<service> [ENV=dev|uat|prod]"; exit 2; }

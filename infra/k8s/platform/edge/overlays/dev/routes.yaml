@@ -57,6 +57,18 @@ spec:
         - type: URLRewrite
           urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /v1/webhooks}}
       backendRefs: [{name: payments, port: 80}]
+    # seller Stripe webhook, Connect (account.updated, payouts: STRIPE_CONNECT_WEBHOOK_SECRET): this exact path only, signature-verified by the service
+    - matches: [{path: {type: PathPrefix, value: /seller/v1/webhooks/stripe-connect}}]
+      filters:
+        - type: URLRewrite
+          urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /v1/webhooks/stripe-connect}}
+      backendRefs: [{name: seller, port: 80}]
+    # seller Stripe webhook, plan-fee PaymentIntent results (STRIPE_BILLING_WEBHOOK_SECRET): this exact path only, signature-verified by the service
+    - matches: [{path: {type: PathPrefix, value: /seller/v1/webhooks/stripe-billing}}]
+      filters:
+        - type: URLRewrite
+          urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /v1/webhooks/stripe-billing}}
+      backendRefs: [{name: seller, port: 80}]
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
