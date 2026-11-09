@@ -1,0 +1,950 @@
+{
+ "_comment": "Appendix A of 'AfroTransact Product Categories and Rules for Creating Products' (DRAFT, Nov 9 2026), source workbook AfroTransact_Category_Tax_Map_With_Rates.xlsm, verbatim. Input to build_map.py; do not edit by hand.",
+ "scenarios": [
+  {
+   "n": 1,
+   "department": "Groceries & Food",
+   "subcategory": "Rice & grains",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_40010002",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 2,
+   "department": "Groceries & Food",
+   "subcategory": "Beans, pantry foods & sauces",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_40040000",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 3,
+   "department": "Groceries & Food",
+   "subcategory": "Flours & starches",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_40020005",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 4,
+   "department": "Groceries & Food",
+   "subcategory": "Pasta & noodles",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_40010001",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 5,
+   "department": "Groceries & Food",
+   "subcategory": "Cooking oils",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_40020002",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 6,
+   "department": "Groceries & Food",
+   "subcategory": "Spices & seasonings",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_40020007",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 7,
+   "department": "Groceries & Food",
+   "subcategory": "Nuts & seeds",
+   "condition": "Plain nuts/seeds; package >1 serving AND ≥2.5 oz",
+   "stripeCode": "txcd_40040016",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 8,
+   "department": "Groceries & Food",
+   "subcategory": "Nuts & seeds",
+   "condition": "Plain nuts/seeds; individual serving / <2.5 oz",
+   "stripeCode": "txcd_40040016",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 9,
+   "department": "Groceries & Food",
+   "subcategory": "Nuts & seeds",
+   "condition": "Candy-coated / confectionery nuts",
+   "stripeCode": "txcd_40100001",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 10,
+   "department": "Groceries & Food",
+   "subcategory": "Bakery products",
+   "condition": "Unheated bakery item without eating utensils",
+   "stripeCode": "txcd_40040021",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 11,
+   "department": "Groceries & Food",
+   "subcategory": "Bakery products",
+   "condition": "Seller heats item or non-bakery seller provides eating utensils",
+   "stripeCode": "txcd_40040021",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 12,
+   "department": "Groceries & Food",
+   "subcategory": "Packaged snacks",
+   "condition": "Multi-serving pack or ≥2.5 oz with >1 serving",
+   "stripeCode": "txcd_40070005",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 13,
+   "department": "Groceries & Food",
+   "subcategory": "Packaged snacks",
+   "condition": "Individual serving, ≤1 serving, or <2.5 oz",
+   "stripeCode": "txcd_40070005",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 14,
+   "department": "Groceries & Food",
+   "subcategory": "Packaged snacks",
+   "condition": "Candy item (regardless of size)",
+   "stripeCode": "txcd_40100001",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 15,
+   "department": "Groceries & Food",
+   "subcategory": "Candy & gum",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_40100001",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 16,
+   "department": "Groceries & Food",
+   "subcategory": "Prepared meals",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_40060003",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 17,
+   "department": "Groceries & Food",
+   "subcategory": "Fresh produce",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_40040019",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 18,
+   "department": "Groceries & Food",
+   "subcategory": "Meat, poultry & fish",
+   "condition": "Raw, frozen or unheated food sold for home cooking",
+   "stripeCode": "txcd_40040013",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 19,
+   "department": "Groceries & Food",
+   "subcategory": "Meat, poultry & fish",
+   "condition": "Cooked hot or served as prepared meal",
+   "stripeCode": "txcd_40060003",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 20,
+   "department": "Groceries & Food",
+   "subcategory": "Frozen meals",
+   "condition": "Sold frozen for reheating by buyer",
+   "stripeCode": "txcd_40040000",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 21,
+   "department": "Groceries & Food",
+   "subcategory": "Frozen meals",
+   "condition": "Heated by seller or sold as prepared meal",
+   "stripeCode": "txcd_40060003",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 22,
+   "department": "Groceries & Food",
+   "subcategory": "Dairy & eggs",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_40040000",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 23,
+   "department": "Groceries & Food",
+   "subcategory": "Baby food & formula",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_40090005",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 24,
+   "department": "Beverages",
+   "subcategory": "Plain water",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_41030001",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 25,
+   "department": "Beverages",
+   "subcategory": "Flavored water & soda",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_41040002",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 26,
+   "department": "Beverages",
+   "subcategory": "Fruit & vegetable juice",
+   "condition": "More than 50% fruit/vegetable juice",
+   "stripeCode": "txcd_41040027",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 27,
+   "department": "Beverages",
+   "subcategory": "Fruit & vegetable juice",
+   "condition": "50% or less juice and sweetened soft drink",
+   "stripeCode": "txcd_41040025",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 28,
+   "department": "Beverages",
+   "subcategory": "Fruit & vegetable juice",
+   "condition": "Unsweetened beverage not classified as soft drink",
+   "stripeCode": "txcd_41040024",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 29,
+   "department": "Beverages",
+   "subcategory": "Coffee & tea, dry",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_41050006",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 30,
+   "department": "Beverages",
+   "subcategory": "Ready-to-drink coffee & tea",
+   "condition": "Unsweetened and sold unheated without utensils",
+   "stripeCode": "txcd_41050003",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 31,
+   "department": "Beverages",
+   "subcategory": "Ready-to-drink coffee & tea",
+   "condition": "Sweetened bottled/canned, served hot, or with utensils",
+   "stripeCode": "txcd_41050002",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 32,
+   "department": "Beverages",
+   "subcategory": "Ready-to-drink coffee & tea",
+   "condition": "Qualifying beverage containing milk/milk substitute",
+   "stripeCode": "txcd_41050001",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 33,
+   "department": "Beverages",
+   "subcategory": "Energy, protein & drink mixes",
+   "condition": "Qualifying Supplement Facts supplement",
+   "stripeCode": "txcd_41053001",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 34,
+   "department": "Beverages",
+   "subcategory": "Energy, protein & drink mixes",
+   "condition": "Contains milk/milk substitute or >50% fruit/vegetable juice",
+   "stripeCode": "txcd_41053001",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 35,
+   "department": "Beverages",
+   "subcategory": "Energy, protein & drink mixes",
+   "condition": "Sweetened soft/energy/sports drink",
+   "stripeCode": "txcd_41053001",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 36,
+   "department": "Beverages",
+   "subcategory": "Energy, protein & drink mixes",
+   "condition": "Ordinary food ingredient such as unsweetened drink mix",
+   "stripeCode": "txcd_41053001",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 37,
+   "department": "Beauty & Personal Care",
+   "subcategory": "Skincare & cosmetics",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_32050013",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 38,
+   "department": "Beauty & Personal Care",
+   "subcategory": "Medicated skincare",
+   "condition": "Qualifying OTC medicine with FDA Drug Facts",
+   "stripeCode": "txcd_32050014",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 39,
+   "department": "Beauty & Personal Care",
+   "subcategory": "Medicated skincare",
+   "condition": "Cosmetic or skin product without qualifying drug exemption",
+   "stripeCode": "txcd_32050014",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 40,
+   "department": "Beauty & Personal Care",
+   "subcategory": "Haircare",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_32050036",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 41,
+   "department": "Beauty & Personal Care",
+   "subcategory": "Wigs & extensions",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_30060014",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 42,
+   "department": "Beauty & Personal Care",
+   "subcategory": "Hair accessories",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_30060005",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 43,
+   "department": "Beauty & Personal Care",
+   "subcategory": "Perfumes & fragrances",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_32050006",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 44,
+   "department": "Fashion & Accessories",
+   "subcategory": "Adult clothing & footwear",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_30011000",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 45,
+   "department": "Fashion & Accessories",
+   "subcategory": "Children’s clothing",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_30011200",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 46,
+   "department": "Fashion & Accessories",
+   "subcategory": "Bags & purses",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_30060001",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 47,
+   "department": "Fashion & Accessories",
+   "subcategory": "Jewelry & accessories",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_30060007",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 48,
+   "department": "Home & Household",
+   "subcategory": "Cleaning & paper products",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_99999999",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 49,
+   "department": "Home & Household",
+   "subcategory": "Kitchenware & cookware",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_99999999",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 50,
+   "department": "Home & Household",
+   "subcategory": "Bedding & linens",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_33080301",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 51,
+   "department": "Home & Household",
+   "subcategory": "Decor & candles",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_33110005",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 52,
+   "department": "Home & Household",
+   "subcategory": "Furniture & small appliances",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_99999999",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 53,
+   "department": "Electronics",
+   "subcategory": "Phones",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_34021000",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 54,
+   "department": "Electronics",
+   "subcategory": "Computers & laptops",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_37010000",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 55,
+   "department": "Electronics",
+   "subcategory": "TVs, audio & accessories",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_34020006",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 56,
+   "department": "Electronics",
+   "subcategory": "Gaming",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_34022000",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 57,
+   "department": "Books & Media",
+   "subcategory": "Printed books",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_35010000",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 58,
+   "department": "Books & Media",
+   "subcategory": "Magazines",
+   "condition": "Ordinary magazines and periodicals",
+   "stripeCode": "txcd_35020200",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 59,
+   "department": "Books & Media",
+   "subcategory": "Magazines",
+   "condition": "Qualifying exempt newspaper or other specific exemption",
+   "stripeCode": "txcd_35020100",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 60,
+   "department": "Health & Wellness",
+   "subcategory": "Dietary supplements",
+   "condition": "Qualifying dietary supplement / Supplement Facts",
+   "stripeCode": "txcd_40090001",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 61,
+   "department": "Health & Wellness",
+   "subcategory": "Dietary supplements",
+   "condition": "Ordinary nonexempt goods sold as wellness products",
+   "stripeCode": "txcd_40090001",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 62,
+   "department": "Health & Wellness",
+   "subcategory": "Dietary supplements",
+   "condition": "Actual food or qualifying food product",
+   "stripeCode": "txcd_40090001",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 63,
+   "department": "Health & Wellness",
+   "subcategory": "OTC medicines",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_32020002",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 64,
+   "department": "Health & Wellness",
+   "subcategory": "First aid & wound care",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_32070003",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 65,
+   "department": "Health & Wellness",
+   "subcategory": "Personal hygiene",
+   "condition": "Qualifying OTC medicine or exempt feminine hygiene item",
+   "stripeCode": "txcd_32050019",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 66,
+   "department": "Health & Wellness",
+   "subcategory": "Personal hygiene",
+   "condition": "Ordinary soap, toothpaste, nonmedicated hygiene goods",
+   "stripeCode": "txcd_32050019",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 67,
+   "department": "Health & Wellness",
+   "subcategory": "Feminine hygiene",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_32040005",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 68,
+   "department": "Health & Wellness",
+   "subcategory": "Medical devices",
+   "condition": "Qualifying exempt medical device or prescribed eligible device",
+   "stripeCode": "txcd_32010001",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 69,
+   "department": "Health & Wellness",
+   "subcategory": "Medical devices",
+   "condition": "Nonqualifying consumer device",
+   "stripeCode": "txcd_32010001",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 70,
+   "department": "Baby & Kids",
+   "subcategory": "Diapers & wipes",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_31031202",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 71,
+   "department": "Baby & Kids",
+   "subcategory": "Baby bottles",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_31040001",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 72,
+   "department": "Baby & Kids",
+   "subcategory": "Car seats",
+   "condition": "Ordinary sale outside special qualifying exemption",
+   "stripeCode": "txcd_31070001",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 73,
+   "department": "Baby & Kids",
+   "subcategory": "Car seats",
+   "condition": "Qualifying, legislatively authorized tax holiday or exemption",
+   "stripeCode": "txcd_31070001",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 74,
+   "department": "Baby & Kids",
+   "subcategory": "Toys & games",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_99999999",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 75,
+   "department": "Pets",
+   "subcategory": "Pet food",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_36010004",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 76,
+   "department": "Pets",
+   "subcategory": "Grooming & accessories",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_99999999",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 77,
+   "department": "Digital Products",
+   "subcategory": "Downloadable e-books",
+   "condition": "Digitally transferred book treated as taxable digital good",
+   "stripeCode": "txcd_10302000",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 78,
+   "department": "Digital Products",
+   "subcategory": "Downloadable e-books",
+   "condition": "Transaction confirmed legally exempt",
+   "stripeCode": "txcd_10302000",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 79,
+   "department": "Digital Products",
+   "subcategory": "Audiobooks",
+   "condition": "Download or access treated as taxable digital good",
+   "stripeCode": "txcd_10301000",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 80,
+   "department": "Digital Products",
+   "subcategory": "Audiobooks",
+   "condition": "Transaction confirmed exempt",
+   "stripeCode": "txcd_10301000",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 81,
+   "department": "Digital Products",
+   "subcategory": "Online courses",
+   "condition": "Live instructor-led education, not otherwise a taxable service",
+   "stripeCode": "txcd_20060158",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 82,
+   "department": "Digital Products",
+   "subcategory": "Online courses",
+   "condition": "Taxable digital service / taxable recorded deliverable",
+   "stripeCode": "txcd_20060158",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 83,
+   "department": "Digital Products",
+   "subcategory": "Downloadable software",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_10202000",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 84,
+   "department": "Digital Products",
+   "subcategory": "Digital art & downloads",
+   "condition": "Taxable downloaded digital artwork / photo deliverable",
+   "stripeCode": "txcd_10501000",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 85,
+   "department": "Digital Products",
+   "subcategory": "Digital art & downloads",
+   "condition": "Exempt personal service without taxable deliverable",
+   "stripeCode": "txcd_10501000",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 86,
+   "department": "Services",
+   "subcategory": "Hair & beauty appointments",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_20040001",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 87,
+   "department": "Services",
+   "subcategory": "Residential cleaning",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_20010006",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 88,
+   "department": "Services",
+   "subcategory": "Tutoring & consulting",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_20060059",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 89,
+   "department": "Services",
+   "subcategory": "Repairs",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_20080010",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 90,
+   "department": "Services",
+   "subcategory": "Laundry & dry cleaning",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_20090004",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 91,
+   "department": "Services",
+   "subcategory": "Photography & media",
+   "condition": "Taxable photos/prints or taxable digital deliverables",
+   "stripeCode": "txcd_20030000",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 92,
+   "department": "Services",
+   "subcategory": "Photography & media",
+   "condition": "Separately provided nontaxable service without taxable deliverable",
+   "stripeCode": "txcd_20030000",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 93,
+   "department": "Services",
+   "subcategory": "Event tickets",
+   "condition": "Taxable amusement admission",
+   "stripeCode": "txcd_50013001",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 94,
+   "department": "Services",
+   "subcategory": "Event tickets",
+   "condition": "Qualifying nontaxable admission or exempt event",
+   "stripeCode": "txcd_50013001",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 95,
+   "department": "Services",
+   "subcategory": "Fitness classes",
+   "condition": "Gym membership / taxable amusement access",
+   "stripeCode": "txcd_50021003",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 96,
+   "department": "Services",
+   "subcategory": "Fitness classes",
+   "condition": "Qualifying instructor-led training or class",
+   "stripeCode": "txcd_50021003",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 97,
+   "department": "Other & Specialty",
+   "subcategory": "School & office supplies",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_37060012",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 98,
+   "department": "Other & Specialty",
+   "subcategory": "Sports goods",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_30071000",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 99,
+   "department": "Other & Specialty",
+   "subcategory": "Gift baskets / bundles",
+   "condition": "Taxable goods separately itemized",
+   "stripeCode": "txcd_99999999",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 100,
+   "department": "Other & Specialty",
+   "subcategory": "Gift baskets / bundles",
+   "condition": "Exempt food separately itemized",
+   "stripeCode": "txcd_40040000",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 101,
+   "department": "Other & Specialty",
+   "subcategory": "Gift baskets / bundles",
+   "condition": "Unitemized mixed bundle",
+   "stripeCode": "txcd_40050004",
+   "rate": "Not set",
+   "outcome": "Blocked"
+  },
+  {
+   "n": 102,
+   "department": "Other & Specialty",
+   "subcategory": "Handmade products",
+   "condition": "Standard qualifying item",
+   "stripeCode": "txcd_99999999",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 103,
+   "department": "Other & Specialty",
+   "subcategory": "Gift cards",
+   "condition": "Sale of qualifying multipurpose stored-value card",
+   "stripeCode": "txcd_10502000",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  },
+  {
+   "n": 104,
+   "department": "Other & Specialty",
+   "subcategory": "Gift cards",
+   "condition": "Redemption against taxable item",
+   "stripeCode": "txcd_10502000",
+   "rate": "6.25%–8.25%",
+   "outcome": "Taxable"
+  },
+  {
+   "n": 105,
+   "department": "Other & Specialty",
+   "subcategory": "Gift cards",
+   "condition": "Redemption against exempt item",
+   "stripeCode": "txcd_10502000",
+   "rate": "0%",
+   "outcome": "Exempt / not taxed"
+  }
+ ]
+}
