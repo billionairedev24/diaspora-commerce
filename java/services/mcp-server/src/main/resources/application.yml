@@ -135,3 +135,4 @@ at:
       seller-url: ${SELLER_URL:http://localhost:8106}
       payments-url: ${PAYMENTS_URL:http://localhost:8105}
       bookings-url: ${BOOKINGS_URL:http://localhost:8109}
+      tax-url: ${TAX_URL:http://localhost:8111}

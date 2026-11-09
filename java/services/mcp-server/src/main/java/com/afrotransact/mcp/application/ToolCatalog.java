@@ -41,6 +41,8 @@ public final class ToolCatalog {
     public static final String ORDER_LOOKUP = "order_lookup";
     public static final String SELLER_PAYOUT_STATUS = "seller_payout_status";
     public static final String SELLER_ACCOUNT_HEALTH = "seller_account_health";
+    public static final String TAX_REVIEW_QUEUE = "tax_review_queue";
+    public static final String TAX_SHADOW_REPORT = "tax_shadow_report";
 
     private static final Map<String, ToolDescriptor> TOOLS = index(List.of(
             new ToolDescriptor(SEARCH_PRODUCTS, Toolset.SHOPPER, null, true),
@@ -71,7 +73,9 @@ public final class ToolCatalog {
             new ToolDescriptor(ORDER_PAYMENT_SPLIT, Toolset.STAFF, McpPermissions.LEDGER_READ, true),
             new ToolDescriptor(ORDER_LOOKUP, Toolset.STAFF, McpPermissions.ORDERS_READ, true),
             new ToolDescriptor(SELLER_PAYOUT_STATUS, Toolset.STAFF, McpPermissions.LEDGER_READ, true),
-            new ToolDescriptor(SELLER_ACCOUNT_HEALTH, Toolset.STAFF, McpPermissions.APPLICATIONS_REVIEW, true)));
+            new ToolDescriptor(SELLER_ACCOUNT_HEALTH, Toolset.STAFF, McpPermissions.APPLICATIONS_REVIEW, true),
+            new ToolDescriptor(TAX_REVIEW_QUEUE, Toolset.STAFF, McpPermissions.TAX_READ, true),
+            new ToolDescriptor(TAX_SHADOW_REPORT, Toolset.STAFF, McpPermissions.TAX_READ, true)));
 
     private ToolCatalog() {
     }

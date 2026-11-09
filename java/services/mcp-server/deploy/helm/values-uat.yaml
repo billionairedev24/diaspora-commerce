@@ -28,3 +28,4 @@ extraEnv:
   SELLER_URL: http://seller:8080
   PAYMENTS_URL: http://payments:8080
   BOOKINGS_URL: http://bookings:8080
+  TAX_URL: http://tax-returns:8080

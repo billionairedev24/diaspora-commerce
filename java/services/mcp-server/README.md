@@ -79,6 +79,8 @@ layer.
 | | `order_lookup` | `orders:read` | orders `GET /v1/orders/{id}` — PII masked |
 | | `seller_payout_status` | `ledger:read` | payments `GET /v1/payouts/balance?orgId=` — why a seller has not been paid |
 | | `seller_account_health` | `applications:review` | seller `GET /v1/orgs/{orgId}/account-health` — PII masked |
+| | `tax_review_queue` | `tax:read` | tax-returns `GET /v1/tax/variant-classifications?status=` — variants waiting for tax review (default PENDING_REVIEW) or the decisions made (APPROVED, REJECTED, STALE) with who decided and when; read-only (staff decide in the console under Fees & commissions > Sales tax > Tax review) |
+| | `tax_shadow_report` | `tax:read` | tax-returns `GET /v1/tax/shadow/report` — a provider's tax quote against ours on real orders over the last 7, 30 or 90 days, grouped by internal tax code; never charged |
 
 > **Changed:** `update_shipment_status` and `list_my_orders` now call orders-service's real routes (they called ones
 > that do not exist). `list_my_orders` takes `cursor` instead of `page`; `update_shipment_status` takes `handoverCode`
@@ -128,7 +130,7 @@ register a public MCP client, for example:
 | `REDIS_URL` | Valkey (`redis://host:6379`): rate-limit buckets and the audit spool |
 | `MCP_AUDIT_SPOOL_MAX`, `MCP_AUDIT_REPLAY_INTERVAL` | audit spool cap (default 1,000,000) and replay delay (5 s) |
 | `KAFKA_BOOTSTRAP` | audit events |
-| `SEARCH_URL`, `CATALOG_URL`, `CART_URL`, `INVENTORY_URL`, `GEO_URL`, `PROMISE_URL`, `ORDERS_URL`, `SELLER_URL`, `PAYMENTS_URL`, `BOOKINGS_URL` | platform APIs |
+| `SEARCH_URL`, `CATALOG_URL`, `CART_URL`, `INVENTORY_URL`, `GEO_URL`, `PROMISE_URL`, `ORDERS_URL`, `SELLER_URL`, `PAYMENTS_URL`, `BOOKINGS_URL`, `TAX_URL` | platform APIs |
 
 Profiles: `local` (security off; `X-MCP-Client` header simulates OAuth clients), `dev`, `uat`, `prod`.
 

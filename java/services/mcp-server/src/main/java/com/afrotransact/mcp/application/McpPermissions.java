@@ -11,6 +11,7 @@ public final class McpPermissions {
     public static final String INVENTORY_READ = "inventory:read";
     public static final String APPLICATIONS_REVIEW = "applications:review";
     public static final String LEDGER_READ = "ledger:read";
+    public static final String TAX_READ = "tax:read";
 
     private McpPermissions() {
     }
