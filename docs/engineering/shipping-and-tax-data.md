@@ -60,7 +60,7 @@ flowchart TD
 | **`productType` on quote line** | **Catalog** on the variant/product (cart/checkout line; orders enriches from catalog if missing on events) | Mapped to category when `taxCategory` absent |
 | **Category → rate** | State + local tables | **`GROCERY`** may be **reduced or 0%** (exempt) in a state; **`PREPARED_FOOD`** often general rate; unknown types → **`GENERAL`** |
 | **Line money** | Cart/order | `unitPriceMinor`, `quantity`, `discountMinor` — zero base ⇒ zero tax even if rate > 0 |
-| **Shipping on line** | Checkout allocation | Only the **first line of each shipment/package** carries that package’s **shipping** in the quote; shipping is added to the taxable base only if **`shippingTaxable`** on the state rule **and** the line’s combined rate > 0 |
+| **Shipping on line** | Checkout allocation | Each line carries **its share** of its package’s **shipping** in the quote (allocated by item value, [checkout-tax-estimate.md](./checkout-tax-estimate.md); the mixed-basket method is open legal decision 5); shipping is added to the taxable base only if **`shippingTaxable`** on the state rule **and** the line’s combined rate > 0 |
 
 ### How we know **product type** (feeds category)
 
@@ -151,7 +151,7 @@ BFF wiring: `shopper_checkout.Summary` (delivery facts, local delivery, tax quot
 | **Delivery selections** | `PlaceOrderRequest.deliverySelections` |
 | **Shipping per shipment** | orders `ShippingPolicy.fee(method, serviceLevel, itemsMinor)` or ATD quote snapshot |
 | **Promised dates** | promise (or fallback estimates) |
-| **Tax lines** | tax-returns quote (same line shape: shipping on first line per shipment) |
+| **Tax lines** | tax-returns quote (same line shape: each line carries its allocated share of the shipment’s shipping) |
 
 ### Post-checkout (operations)
 
