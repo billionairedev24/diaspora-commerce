@@ -78,6 +78,21 @@
     </dependencies>
 
     <build>
+        <!-- The golden fixtures are read straight from the repository (tools/taxonomy), so they cannot drift from a copy:
+             CategoryTaxGoldenTest finds them on the test classpath under taxonomy/. -->
+        <testResources>
+            <testResource>
+                <directory>src/test/resources</directory>
+            </testResource>
+            <testResource>
+                <directory>${project.basedir}/../../../tools/taxonomy</directory>
+                <targetPath>taxonomy</targetPath>
+                <includes>
+                    <include>category_tax_map.json</include>
+                    <include>scenarios.json</include>
+                </includes>
+            </testResource>
+        </testResources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
