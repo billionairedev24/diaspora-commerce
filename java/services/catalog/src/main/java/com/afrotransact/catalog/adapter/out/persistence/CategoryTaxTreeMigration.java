@@ -1,8 +1,7 @@
-package db.migration;
+package com.afrotransact.catalog.adapter.out.persistence;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,12 +13,14 @@ import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.taxonomy.imports.TaxonomyPlanner;
 import com.afrotransact.catalog.domain.taxonomy.imports.TaxonomyPlanner.Plan;
 import com.afrotransact.catalog.domain.taxonomy.imports.TaxonomyPlanner.PlannedNode;
+import org.flywaydb.core.api.MigrationVersion;
 import org.flywaydb.core.api.migration.BaseJavaMigration;
 import org.flywaydb.core.api.migration.Context;
+import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Loads the department > category > product type tree of docs/engineering/category-tax-design.md (13 departments, 73
+ * V20: loads the department > category > product type tree of docs/engineering/category-tax-design.md (13 departments, 73
  * categories, their product types and tax questions, plus the provisional "Fabrics &amp; textiles") for a new database.
  *
  * <p>It is the one-time replacement of the initial tree that V2 seeded (retired by V19), the owner's decision because
@@ -27,7 +28,8 @@ import tools.jackson.databind.json.JsonMapper;
  * (by code). Every later change goes through the staff console or the importer ({@code POST /v1/taxonomy/import}),
  * never through a migration. See docs/engineering/taxonomy.md.
  */
-public class V20__LoadCategoryTaxTree extends BaseJavaMigration {
+@Component
+class CategoryTaxTreeMigration extends BaseJavaMigration {
 
     private static final String INSERT_TYPE = """
             insert into product_type (code, label, identifier_rule, attributes, themes, traits, version, updated_at)
@@ -40,6 +42,17 @@ public class V20__LoadCategoryTaxTree extends BaseJavaMigration {
             values (?::uuid, ?::uuid, ?, ?, ?, ?, ?, ?, true, 0, now(), ?, ?, ?)
             on conflict (code) do nothing
             """;
+
+    /** Registered as a Spring bean (Flyway runs it as V20): Java migration class names would break the naming rules. */
+    @Override
+    public MigrationVersion getVersion() {
+        return MigrationVersion.fromVersion("20");
+    }
+
+    @Override
+    public String getDescription() {
+        return "load category tax tree";
+    }
 
     @Override
     public void migrate(Context context) throws Exception {

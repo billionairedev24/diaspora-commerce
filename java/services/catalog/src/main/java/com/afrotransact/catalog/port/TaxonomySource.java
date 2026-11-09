@@ -14,6 +14,9 @@ public interface TaxonomySource {
     /** The dataset bundled with this build. */
     TaxonomyDataset bundled();
 
+    /** The bundled dataset as the parsed JSON document (decision tables included, for the local tax fake). */
+    Map<String, Object> bundledDocument();
+
     /** A dataset document (the JSON of category_tax_map.json) read from a request. */
     TaxonomyDataset parse(Map<String, Object> document);
 

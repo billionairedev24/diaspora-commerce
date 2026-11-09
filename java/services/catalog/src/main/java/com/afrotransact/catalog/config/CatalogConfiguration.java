@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.afrotransact.catalog.adapter.out.tax.HttpTaxResolver;
+import com.afrotransact.catalog.adapter.out.tax.LocalDatasetTaxResolver;
 import com.afrotransact.catalog.application.ImportSettings;
 import com.afrotransact.catalog.application.LabelSettings;
 import com.afrotransact.catalog.application.ListingEnforcementSettings;
@@ -27,15 +29,29 @@ import com.afrotransact.catalog.domain.prefill.CategoryHintPolicy;
 import com.afrotransact.catalog.domain.prefill.DefaultCategoryHintPolicy;
 import com.afrotransact.catalog.domain.sizing.DefaultSizeChartPolicy;
 import com.afrotransact.catalog.domain.sizing.SizeChartPolicy;
+import com.afrotransact.catalog.port.ServiceTokens;
+import com.afrotransact.catalog.port.TaxResolver;
+import com.afrotransact.catalog.port.TaxonomySource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestClient;
 
 /** Explicit wiring of framework-free domain policies and configurable collaborators. */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(ProductDataProperties.class)
 class CatalogConfiguration {
+
+    /** tax-returns' resolve endpoint, or the local fake built from the dataset (`at.catalog.tax.resolver=local`). */
+    @Bean
+    TaxResolver taxResolver(RestClient.Builder builder, ServiceTokens tokens, TaxonomySource source,
+                            @Value("${at.catalog.tax.resolver:http}") String mode,
+                            @Value("${at.catalog.tax.base-url:http://localhost:8111}") String baseUrl,
+                            @Value("${at.catalog.tax.timeout:5s}") Duration timeout) {
+        return "local".equals(mode) ? new LocalDatasetTaxResolver(source)
+                : new HttpTaxResolver(builder, tokens, baseUrl, timeout);
+    }
 
     @Bean
     ProductDraftPolicy productDraftPolicy() {

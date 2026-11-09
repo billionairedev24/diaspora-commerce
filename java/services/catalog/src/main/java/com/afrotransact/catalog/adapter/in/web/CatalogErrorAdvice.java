@@ -3,6 +3,9 @@ package com.afrotransact.catalog.adapter.in.web;
 import java.util.Map;
 
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
+import com.afrotransact.catalog.domain.tax.TaxNotReady;
+import com.afrotransact.catalog.port.TaxResolver.TaxProfileNotFound;
+import com.afrotransact.catalog.port.TaxResolver.TaxServiceUnavailable;
 import com.afrotransact.catalog.domain.DepartmentNotAllowed;
 import com.afrotransact.catalog.port.SellerScopes.ScopeUnavailable;
 import com.afrotransact.catalog.domain.PreconditionRequiredException;
@@ -35,6 +38,39 @@ class CatalogErrorAdvice {
         pd.setTitle("Catalog rule violated");
         pd.setProperty("code", "catalog.rule-violation");
         pd.setProperty("fieldErrors", ex.fieldErrors());
+        return pd;
+    }
+
+    @ExceptionHandler(TaxNotReady.class)
+    ProblemDetail taxNotReady(TaxNotReady ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+        pd.setType(ProblemTypes.of("catalog.tax-not-ready"));
+        pd.setTitle("Tax details not complete");
+        pd.setProperty("code", "catalog.tax-not-ready");
+        pd.setProperty("fieldErrors", ex.fieldErrors());
+        pd.setProperty("taxReadiness", ex.readiness());
+        return pd;
+    }
+
+    @ExceptionHandler(TaxServiceUnavailable.class)
+    ProblemDetail taxUnavailable(TaxServiceUnavailable ex) {
+        LOG.warn("tax resolve unavailable: {}", ex.getMessage(), ex.getCause());
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "We could not check the tax details of this product right now; try again in a minute. Your answers are not lost.");
+        pd.setType(ProblemTypes.of("catalog.tax-unavailable"));
+        pd.setTitle("Tax check unavailable");
+        pd.setProperty("code", "catalog.tax-unavailable");
+        return pd;
+    }
+
+    @ExceptionHandler(TaxProfileNotFound.class)
+    ProblemDetail taxProfileMissing(TaxProfileNotFound ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT,
+                "This category cannot be published into yet: it has no tax rules");
+        pd.setType(ProblemTypes.of("catalog.tax-profile-missing"));
+        pd.setTitle("Category not ready");
+        pd.setProperty("code", "catalog.tax-profile-missing");
+        pd.setProperty("fieldErrors", Map.of("category", "This category has no tax rules yet; please try later"));
         return pd;
     }
 

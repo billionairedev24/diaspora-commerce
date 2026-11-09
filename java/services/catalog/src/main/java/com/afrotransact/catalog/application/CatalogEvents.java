@@ -19,6 +19,12 @@ public final class CatalogEvents {
      * form or bulk update), or added variants: offers-service updates the seller's offers (S307).
      */
     public static final String PRODUCT_TERMS_CHANGED = "catalog.product.terms_changed";
+    /**
+     * Tax facts or the category of a product changed (a variant's product facts, the seller's behaviour facts, an
+     * evidence file or the category). Published together with {@code catalog.product.updated}; tax-returns re-resolves
+     * the stored classification of every variant and queues it for review.
+     */
+    public static final String PRODUCT_TAX_FACTS_CHANGED = "catalog.product.tax-facts-changed";
     /** A rejected listing was edited and is back in review (trust-ops queues it like a new listing). */
     public static final String PRODUCT_RESUBMITTED = "catalog.product.resubmitted";
     public static final String AGGREGATE_IMPORT = "product-import";

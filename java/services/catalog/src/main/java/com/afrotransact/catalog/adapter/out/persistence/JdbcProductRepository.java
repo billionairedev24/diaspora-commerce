@@ -21,6 +21,7 @@ import com.afrotransact.catalog.domain.ListingOwnerKind;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
+import com.afrotransact.catalog.domain.tax.VariantTax;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.platform.web.error.ConflictException;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -118,7 +119,10 @@ class JdbcProductRepository implements ProductRepository {
                         update product_variant set seller_sku = :sku, gtin = :gtin, gtin_exempt = :exempt,
                                options = cast(:options as jsonb), price_minor = :price, currency = :currency,
                                quantity = :quantity, position = :position, compare_at_minor = :compareAt,
-                               images = cast(:images as jsonb)
+                               images = cast(:images as jsonb), seller_sku_generated = :skuGenerated,
+                               tax_facts = cast(:taxFacts as jsonb), tax_status = :taxStatus,
+                               missing_tax_facts = cast(:missingTaxFacts as jsonb),
+                               tax_decision = cast(:taxDecision as jsonb)
                         where id = :id
                         """)
                         .params(variantParams(p, v, position++))
@@ -128,6 +132,25 @@ class JdbcProductRepository implements ProductRepository {
             }
         }
         return update(p);
+    }
+
+    @Override
+    public void saveVariantTax(UUID variantId, VariantTax tax) {
+        jdbc.sql("""
+                update product_variant set tax_facts = cast(:facts as jsonb), tax_status = :status,
+                       missing_tax_facts = cast(:missing as jsonb), tax_decision = cast(:decision as jsonb)
+                where id = :id
+                """)
+                .param("id", variantId).param("facts", json.write(tax.facts())).param("status", tax.status().name())
+                .param("missing", json.write(tax.missing()))
+                .param("decision", tax.decision() == null ? null : json.write(tax.decision())).update();
+    }
+
+    @Override
+    public List<Product> findByTaxProfile(String taxProfileId, int limit) {
+        return withVariants(jdbc.sql(SELECT + " where category_id in (select id from category where tax_profile_id = :profile) "
+                + "order by id limit :limit").param("profile", taxProfileId).param("limit", limit)
+                .query(this::mapProduct).list());
     }
 
     @Override
@@ -376,9 +399,12 @@ class JdbcProductRepository implements ProductRepository {
         jdbc.sql("""
                 insert into product_variant (id, product_id, atin, owner_org, seller_sku, gtin, gtin_exempt,
                                              options, price_minor, currency, quantity, position, compare_at_minor,
-                                             images)
+                                             images, seller_sku_generated, tax_facts, tax_status, missing_tax_facts,
+                                             tax_decision)
                 values (:id, :productId, :atin, :org, :sku, :gtin, :exempt, cast(:options as jsonb),
-                        :price, :currency, :quantity, :position, :compareAt, cast(:images as jsonb))
+                        :price, :currency, :quantity, :position, :compareAt, cast(:images as jsonb), :skuGenerated,
+                        cast(:taxFacts as jsonb), :taxStatus, cast(:missingTaxFacts as jsonb),
+                        cast(:taxDecision as jsonb))
                 """)
                 .params(variantParams(p, v, position))
                 .update();
@@ -400,6 +426,11 @@ class JdbcProductRepository implements ProductRepository {
         m.put("position", position);
         m.put("compareAt", v.compareAtMinor());
         m.put("images", json.write(v.images()));
+        m.put("skuGenerated", v.sellerSkuGenerated());
+        m.put("taxFacts", json.write(v.tax().facts()));
+        m.put("taxStatus", v.tax().status().name());
+        m.put("missingTaxFacts", json.write(v.tax().missing()));
+        m.put("taxDecision", v.tax().decision() == null ? null : json.write(v.tax().decision()));
         return m;
     }
 
@@ -410,7 +441,9 @@ class JdbcProductRepository implements ProductRepository {
         Map<UUID, List<Variant>> byProduct = new LinkedHashMap<>();
         jdbc.sql("""
                 select id, product_id, atin, seller_sku, gtin, gtin_exempt, options::text as options, price_minor,
-                       currency, quantity, compare_at_minor, images::text as images
+                       currency, quantity, compare_at_minor, images::text as images, seller_sku_generated,
+                       tax_facts::text as tax_facts, tax_status, missing_tax_facts::text as missing_tax_facts,
+                       tax_decision::text as tax_decision
                 from product_variant where product_id in (:ids) order by position
                 """)
                 .param("ids", products.stream().map(Product::id).toList())
@@ -419,7 +452,9 @@ class JdbcProductRepository implements ProductRepository {
                             rs.getString("seller_sku"), rs.getString("gtin"), rs.getBoolean("gtin_exempt"),
                             json.stringMap(rs.getString("options")), rs.getLong("price_minor"),
                             rs.getString("currency"), rs.getInt("quantity"),
-                            rs.getObject("compare_at_minor", Long.class), json.images(rs.getString("images")));
+                            rs.getObject("compare_at_minor", Long.class), json.images(rs.getString("images")),
+                            rs.getBoolean("seller_sku_generated"), json.variantTax(rs.getString("tax_facts"),
+                            rs.getString("tax_status"), rs.getString("missing_tax_facts"), rs.getString("tax_decision")));
                     byProduct.computeIfAbsent(rs.getObject("product_id", UUID.class), k -> new ArrayList<>()).add(v);
                     return v;
                 })

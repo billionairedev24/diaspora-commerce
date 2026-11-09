@@ -18,6 +18,7 @@ import com.afrotransact.catalog.domain.ProductFlag;
 import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ShipFromRef;
 import com.afrotransact.catalog.domain.Variant;
+import com.afrotransact.catalog.domain.tax.MissingTaxFact;
 import com.afrotransact.catalog.domain.VariantDraft;
 import com.afrotransact.catalog.domain.sizing.FitNote;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -63,7 +64,7 @@ final class ProductDtos {
     }
 
     @Schema(name = "UpdateProductRequest", description = "The whole editable content of a product (one-step form in "
-            + "edit mode). Variants are matched by sellerSku; a published listing keeps its category and variants")
+            + "edit mode). Variants are matched by sellerSku, else GTIN, else ATIN; a published listing keeps its category and variants")
     record UpdateProductRequest(
             UUID categoryId,
             @NotBlank @Size(min = 10, max = 200) String title,
@@ -128,18 +129,22 @@ final class ProductDtos {
                       UUID sizeChartId,
                       @Schema(description = "How the sizes fit; shown beside the size chart (defaults to the "
                               + "chart's own fit note)")
-                      FitNote fitNote) {
+                      FitNote fitNote,
+                      @Schema(description = "How this seller sells the item, answering the category's behaviour "
+                              + "questions (sold_heated, heated_by_seller, utensils_provided): fact id to answer. "
+                              + "Part of \"Your listing\"; never a tax code.")
+                      Map<String, Object> sellerBehaviour) {
 
         ListingDetails toDomain() {
             return new ListingDetails(description, condition, keywords, fulfilment,
                     packaging == null ? null : packaging.toDomain(), handlingDays == null ? 0 : handlingDays,
-                    shipFrom == null ? null : shipFrom.toDomain(), sizeChartId, fitNote);
+                    shipFrom == null ? null : shipFrom.toDomain(), sizeChartId, fitNote, sellerBehaviour);
         }
 
         static ListingDto of(ListingDetails d) {
             return new ListingDto(d.description(), d.condition(), d.keywords(), d.fulfilment(),
                     PackageDto.of(d.packaging()), d.handlingDays(), ShipFromDto.of(d.shipFrom()), d.sizeChartId(),
-                    d.fitNote());
+                    d.fitNote(), d.sellerBehaviour());
         }
     }
 
@@ -163,28 +168,38 @@ final class ProductDtos {
     }
 
     @Schema(name = "VariantRequest")
-    record VariantRequest(@NotNull Map<String, String> options, @NotBlank String sellerSku, String gtin,
+    record VariantRequest(@NotNull Map<String, String> options,
+                          @Schema(description = "Optional: when empty a stable, organisation-prefixed SKU is generated")
+                          String sellerSku, String gtin,
                           boolean gtinExempt, @PositiveOrZero long priceMinor, @PositiveOrZero int quantity,
                           @Schema(description = "\"Was\" price shown struck through; above priceMinor")
                           @Positive Long compareAtMinor,
                           @Schema(description = "Images of this variant only (e.g. its colour)")
-                          @Size(max = 5) List<@Valid ImageDto> images) {
+                          @Size(max = 5) List<@Valid ImageDto> images,
+                          @Schema(description = "Existing variant ATIN: matches the variant when sellerSku and gtin "
+                                  + "are absent (edit and bulk update)")
+                          String atin,
+                          @Schema(description = "Product facts of this variant by fact id (net_weight_oz, "
+                                  + "servings_per_package, ...): the category's tax questions in plain words")
+                          Map<String, Object> taxFacts) {
 
         VariantDraft toDomain() {
             return new VariantDraft(options, sellerSku, gtin, gtinExempt, priceMinor, quantity, compareAtMinor,
-                    images == null ? List.of() : images.stream().map(ImageDto::toDomain).toList());
+                    images == null ? List.of() : images.stream().map(ImageDto::toDomain).toList(), atin, taxFacts);
         }
     }
 
     @Schema(name = "Variant")
     record VariantResponse(UUID id, String atin, String sellerSku, String gtin, boolean gtinExempt,
                            Map<String, String> options, long priceMinor, String currency, int quantity,
-                           Long compareAtMinor, List<ImageDto> images) {
+                           Long compareAtMinor, List<ImageDto> images, boolean sellerSkuGenerated,
+                           Map<String, Object> taxFacts, String taxStatus, List<MissingTaxFact> missingTaxFacts) {
 
         static VariantResponse of(Variant v) {
             return new VariantResponse(v.id(), v.atin().value(), v.sellerSku(), v.gtin(), v.gtinExempt(),
                     v.options(), v.priceMinor(), v.currency(), v.quantity(), v.compareAtMinor(),
-                    v.images().stream().map(ImageDto::of).toList());
+                    v.images().stream().map(ImageDto::of).toList(), v.sellerSkuGenerated(), v.tax().facts(),
+                    v.tax().status().name(), v.tax().missing());
         }
     }
 

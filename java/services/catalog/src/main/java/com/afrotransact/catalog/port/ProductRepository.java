@@ -11,6 +11,7 @@ import java.util.UUID;
 import com.afrotransact.catalog.domain.Atin;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
+import com.afrotransact.catalog.domain.tax.VariantTax;
 
 /** Persistence port for {@link Product} aggregates (optimistic locking on {@code version}). */
 public interface ProductRepository {
@@ -27,6 +28,15 @@ public interface ProductRepository {
     Product updateWithVariants(Product product);
 
     Optional<Product> findById(UUID id);
+
+    /**
+     * Stores a variant's tax state (facts, status, missing facts, decision summary) without touching the product or its
+     * version: tax re-checks and tax-returns events must not make a form that is open fail with a stale version.
+     */
+    void saveVariantTax(UUID variantId, VariantTax tax);
+
+    /** Variants of this category (tax profile code) with their tax status, for re-checks after a status change. */
+    List<Product> findByTaxProfile(String taxProfileId, int limit);
 
     /** The organisation's product that has a variant with this seller SKU. */
     Optional<Product> findBySellerSku(String orgId, String sellerSku);

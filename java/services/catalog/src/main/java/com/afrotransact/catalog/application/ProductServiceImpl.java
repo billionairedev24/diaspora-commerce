@@ -9,10 +9,14 @@ import java.util.function.UnaryOperator;
 
 import com.afrotransact.catalog.domain.Atin;
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
+import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
+import com.afrotransact.catalog.domain.tax.TaxNotReady;
+import com.afrotransact.catalog.domain.tax.TaxReadiness;
+import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
@@ -34,11 +38,12 @@ class ProductServiceImpl implements ProductService {
     private final ActorResolver actors;
     private final OwnerResolver owners;
     private final ProductEvents events;
+    private final CategoryRepository categories;
     private final Clock clock;
 
     ProductServiceImpl(ProductRepository products, ProductWriter writer, PermissionChecker permissions,
                        ResourceAccessChecker access, ActorResolver actors, OwnerResolver owners,
-                       ProductEvents events, Clock clock) {
+                       ProductEvents events, CategoryRepository categories, Clock clock) {
         this.products = products;
         this.writer = writer;
         this.permissions = permissions;
@@ -46,6 +51,7 @@ class ProductServiceImpl implements ProductService {
         this.actors = actors;
         this.owners = owners;
         this.events = events;
+        this.categories = categories;
         this.clock = clock;
     }
 
@@ -121,7 +127,10 @@ class ProductServiceImpl implements ProductService {
     @Transactional
     public Product approve(UUID id) {
         permissions.require(CatalogPermissions.MODERATE);
-        return transition(id, p -> p.approve(Instant.now(clock)), CatalogEvents.PRODUCT_APPROVED);
+        return transition(id, p -> {
+            requireTaxReady(p);
+            return p.approve(Instant.now(clock));
+        }, CatalogEvents.PRODUCT_APPROVED);
     }
 
     @Override
@@ -161,6 +170,17 @@ class ProductServiceImpl implements ProductService {
         Product updated = products.update(change.apply(current));
         publish(eventType, updated);
         return updated;
+    }
+
+    /** Never guess: a product goes live only when every variant's tax gate is READY. */
+    private void requireTaxReady(Product p) {
+        CategoryNode node = p.categoryId() == null ? null : categories.findById(p.categoryId()).orElse(null);
+        TaxReadiness readiness = TaxReadiness.of(p, node == null ? null : node.taxProfileId(),
+                node == null ? null : node.taxStatus());
+        if (!readiness.ready()) {
+            throw new TaxNotReady("This product cannot go live yet: its tax details are not complete",
+                    readiness.blockers(), readiness);
+        }
     }
 
     private void ensureVisible(Product p) {

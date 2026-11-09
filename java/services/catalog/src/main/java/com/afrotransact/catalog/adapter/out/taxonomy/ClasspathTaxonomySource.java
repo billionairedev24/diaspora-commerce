@@ -39,6 +39,11 @@ public class ClasspathTaxonomySource implements TaxonomySource {
     }
 
     @Override
+    public Map<String, Object> bundledDocument() {
+        return read(DATASET);
+    }
+
+    @Override
     public TaxonomyDataset parse(Map<String, Object> document) {
         return TaxonomyDataset.of(document);
     }

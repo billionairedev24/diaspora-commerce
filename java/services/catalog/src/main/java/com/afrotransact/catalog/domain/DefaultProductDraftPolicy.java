@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import com.afrotransact.catalog.domain.brand.BrandKeys;
+import com.afrotransact.catalog.domain.tax.SellerSkus;
 
 /** The catalog rules from the product builder design, applied server-side so no client can skip them. */
 public class DefaultProductDraftPolicy implements ProductDraftPolicy {
@@ -121,10 +122,10 @@ public class DefaultProductDraftPolicy implements ProductDraftPolicy {
             if (!combos.add(comboKey(dims, v.options()))) {
                 errors.put(p + "options", "Duplicate variation");
             }
-            String sku = v.sellerSku() == null ? "" : v.sellerSku().trim().toUpperCase(Locale.ROOT);
-            if (!sku.matches("[A-Z0-9][A-Z0-9._-]{1,39}")) {
-                errors.put(p + "sellerSku", "2–40 letters, digits, dot, dash or underscore");
-            } else if (!skus.add(sku)) {
+            String sku = SellerSkus.normalise(v.sellerSku());
+            if (!sku.isEmpty() && !SellerSkus.VALID.matcher(sku).matches()) {
+                errors.put(p + "sellerSku", "2–40 letters, digits, dot, dash or underscore, or leave it empty to get one");
+            } else if (!sku.isEmpty() && !skus.add(sku)) {
                 errors.put(p + "sellerSku", "SKU must be unique");
             }
             checkIdentifier(v, type.identifierRule(), p, errors);

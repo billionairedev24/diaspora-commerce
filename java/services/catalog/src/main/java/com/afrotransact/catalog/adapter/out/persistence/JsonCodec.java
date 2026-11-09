@@ -10,6 +10,10 @@ import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.ProductTypeTraits;
 import com.afrotransact.catalog.domain.VariationTheme;
 import com.afrotransact.catalog.domain.sizing.ChartColumn;
+import com.afrotransact.catalog.domain.tax.MissingTaxFact;
+import com.afrotransact.catalog.domain.tax.TaxDecision;
+import com.afrotransact.catalog.domain.tax.TaxStatus;
+import com.afrotransact.catalog.domain.tax.VariantTax;
 import com.afrotransact.catalog.domain.sizing.ChartRow;
 import com.afrotransact.catalog.domain.sizing.SizingTrait;
 import com.afrotransact.catalog.domain.prefill.ProductData;
@@ -29,12 +33,21 @@ class JsonCodec {
     private static final TypeReference<List<ChartColumn>> CHART_COLUMNS = new TypeReference<>() { };
     private static final TypeReference<List<ChartRow>> CHART_ROWS = new TypeReference<>() { };
     private static final TypeReference<List<ProductData>> PRODUCT_DATA = new TypeReference<>() { };
+    private static final TypeReference<List<MissingTaxFact>> MISSING_FACTS = new TypeReference<>() { };
     private static final TypeReference<List<String>> STRINGS = new TypeReference<>() { };
 
     private final JsonMapper mapper;
 
     JsonCodec(JsonMapper mapper) {
         this.mapper = mapper;
+    }
+
+    /** A variant's tax state as stored in its columns. */
+    VariantTax variantTax(String facts, String status, String missing, String decision) {
+        TaxStatus parsed = TaxStatus.parse(status);
+        return new VariantTax(objectMap(facts), parsed == null ? TaxStatus.MISSING_FACTS : parsed,
+                missing == null || missing.isBlank() ? List.of() : mapper.readValue(missing, MISSING_FACTS),
+                decision == null || decision.isBlank() ? null : mapper.readValue(decision, TaxDecision.class));
     }
 
     String write(Object value) {

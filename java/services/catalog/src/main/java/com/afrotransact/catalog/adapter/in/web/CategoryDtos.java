@@ -13,6 +13,7 @@ import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.CategoryRequest;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductType;
+import com.afrotransact.catalog.domain.tax.TaxGate;
 import com.afrotransact.catalog.domain.ProductTypeTraits;
 import com.afrotransact.catalog.domain.VariationTheme;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -29,11 +30,15 @@ final class CategoryDtos {
 
     @Schema(name = "CategoryNode")
     record CategoryNodeResponse(UUID id, UUID parentId, String code, String name, String level, String productType,
-                                String path, List<String> compliance) {
+                                String path, List<String> compliance, String taxProfileId, String taxStatus,
+                                @Schema(description = "Plain words for sellers when the category cannot take a "
+                                        + "submission (yet): why, and what happens next. Absent for open categories.")
+                                String taxStatusMessage) {
 
         static CategoryNodeResponse of(CategoryNode n) {
             return new CategoryNodeResponse(n.id(), n.parentId(), n.code(), n.name(), n.level().name(),
-                    n.productTypeCode(), n.path(), n.compliance().stream().sorted().toList());
+                    n.productTypeCode(), n.path(), n.compliance().stream().sorted().toList(), n.taxProfileId(),
+                    n.taxStatus(), TaxGate.message(n.taxStatus()));
         }
     }
 
@@ -43,7 +48,7 @@ final class CategoryDtos {
                                List<VariationTheme> themes, ProductTypeTraits traits) {
 
         static ProductTypeResponse of(ProductType t) {
-            return new ProductTypeResponse(t.code(), t.label(), t.identifierRule().name(), t.applicableAttributes(), t.themes(),
+            return new ProductTypeResponse(t.code(), t.label(), t.identifierRule().name(), t.formAttributes(), t.themes(),
                     t.traits());
         }
     }
