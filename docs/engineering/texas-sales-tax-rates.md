@@ -18,46 +18,28 @@ These are the three columns on `tax_state_rule` for **TX**. They map to `TaxCate
 
 **Shipping:** Texas taxes delivery charges when the underlying sale is taxable; `tax_state_rule.shipping_taxable = true` for TX.
 
-## How catalog types become categories
+## How a line gets its tax (category tax build)
 
-tax-returns resolves category at quote time (`TaxServiceImpl`):
+The three-column category (`GENERAL`, `GROCERY`, `PREPARED_FOOD`) no longer comes from the catalog product type. The **stored decision** of the
+variant ATIN says EXEMPT or TAXABLE (see [category-tax-design.md](./category-tax-design.md)); this rate table only supplies the **rate**:
 
-1. Explicit `taxCategory` on the quote line, else  
-2. `productType` → `at.taxreturns.tax.category-by-product-type` in `application.yml`
+- EXEMPT lines are priced at zero and never reach the calculator, whatever the ZIP says (TX-02).
+- TAXABLE lines are taxed at the `GENERAL` rate: the state rate plus the local rate of the ZIP.
+- A line with no definite decision (missing facts, not approved, gated profile, ship-to outside Texas) gets no rate at all and comes back blocked.
 
-For Texas grocery exemption to work, staples must map to **GROCERY** (e.g. `pantry`, `fresh-produce`). Prepared items must map to **PREPARED_FOOD** or **GENERAL**.  
+Soft drinks, candy and ice are decided by their categories' decision rows (flavored water and soda are held as CONFLICT_OPEN until the
+owner decides), not by mapping `beverages` to a rate column; the old "gap to watch" about `productType` mappings no longer applies to quotes.
+The `GROCERY` and `PREPARED_FOOD` columns and `at.taxreturns.tax.category-by-product-type` are used only by callers that still send an explicit `taxCategory`.
 
-**Gap to watch:** Texas taxes **soft drinks, candy, and ice** as taxable items even in grocery stores (Pub 96-280). If catalog `productType` is `beverages` mapped to **GROCERY**, quotes will **under-collect** until those types are mapped to **GENERAL** or quoted with an explicit category.
+## Jurisdiction resolver and the TX-03 launch limitation
 
-## Local add-on rates (stored in `tax_local_rate`)
+`JurisdictionResolver.resolve(shipTo, saleDate)` finds the state and local rates of an address. The default adapter,
+`ZipTableJurisdictionResolver`, reads this table by exact 5-digit ZIP, then by 3-digit prefix, and reports `addressPrecision = ZIP`.
 
-We store **local only** (city + special purpose districts + MTA), not the 6.25% state piece. **Combined rate** = state category rate + matching local row (exact ZIP5 beats ZIP3 prefix).
+**TX-03 says never to calculate from city or ZIP alone, and one ZIP can span several local jurisdictions.** Until a provider (Stripe Tax or
+Avalara) or the Comptroller address locator computes the rate from the exact address (`addressPrecision = ADDRESS`), the ZIP table is used for
+the in-house engine, every quote line records `addressPrecision`, and the gap is on the launch checklist for the tax professional. It is a known
+limitation, not a silent one. Closing it means another adapter of the same port (cutover runbook step 7), not a change of rules.
 
-| ZIP prefix | Market | Local add-on | Typical combined (GENERAL) | Comptroller EDI basis (2025 Q4 file) |
-|------------|--------|--------------|------------------------------|--------------------------------------|
-| 770*, 77019, 77042 | Houston | 2.00% | **8.25%** | Houston 1% + Houston MTA 1% (Harris) |
-| 752*, 750*, 751* | Dallas | 2.00% | **8.25%** | Dallas 1% + Dallas MTA 1% |
-| 787*, 786* | Austin | 2.00% | **8.25%** | Austin 1% + Austin MTA 1% |
-| 761* | Fort Worth | 2.00% | **8.25%** | Fort Worth 1% + Crime Control 0.5% + FW MTA 0.5% |
-| 782*, 781* | San Antonio | 1.75% | **8.00%** | San Antonio 1.25% + San Antonio MTA 0.5% (Bexar) |
-
-Official machine-readable updates: [Sales Tax Rate Files](https://comptroller.texas.gov/taxes/file-pay/edi/sales-tax-rates.php) (`taxrates254.txt` and successors).
-
-## Example quote (matches `TaxLedgerIT`)
-
-Ship-to **77019**, lines:
-
-- Dress (`GENERAL`): $64.99 → tax $5.36 (825 × $64.99, half-up per line)  
-- Pantry (`GROCERY`): $18.50 → **$0**  
-- Prepared meal (`PREPARED_FOOD`): $12.00 → $0.99  
-
-## Refreshing data
-
-1. **One-off / new ZIPs:** Staff API `PUT /v1/tax/rates/local/TX/{zipPrefix}` (`tax:configure`) or a new Flyway migration.  
-2. **Bulk from Comptroller:** Run `tools/tax/texas_comptroller_rates.py` (downloads the current quarterly TXT and prints local stacks for major cities — use output to draft SQL).  
-3. **After migration:** Restart or migrate tax-returns; local dev: `./mvnw -pl java/services/tax-returns flyway:migrate` (or full stack seed).
-
-## Related
-
-- [shipping-and-tax-data.md](./shipping-and-tax-data.md) — end-to-end tax/shipping data points  
-- [checkout-tax-estimate.md](./checkout-tax-estimate.md) — checkout estimate flow  
+The local rate is the table's value; the combined-rate cap of 8.25% (TX-01) is not enforced in code, only by the data (finance reconciles the
+table against the Comptroller each quarter).
