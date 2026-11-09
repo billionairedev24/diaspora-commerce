@@ -27,7 +27,7 @@ Resend: missing → email to Mailpit · OpenRouter: missing → AI assistant off
 
 | Provider | Powers | Create it at | Variables | Read by |
 |---|---|---|---|---|
-| **Stripe** (required) | checkout, saved cards, refunds, Connect, plans | Dashboard → Test mode → Developers → API keys; `stripe listen` for the webhook secret | `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` | payments, seller, gateway-bff |
+| **Stripe** (required) | checkout, saved cards, refunds, Connect, plans | Dashboard → Test mode → Developers → API keys; `stripe listen` for the webhook secret | `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` (payments), `STRIPE_CONNECT_WEBHOOK_SECRET` (seller), `STRIPE_BILLING_WEBHOOK_SECRET` (seller, optional) | payments, seller, gateway-bff |
 | Twilio | SMS codes, order and delivery texts | Console → Account Info (SID, Auth Token); buy a number or create a Messaging Service | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` or `TWILIO_MESSAGING_SERVICE_SID` | notifications |
 | Resend | email to real inboxes | resend.com → API Keys; verify a domain or use `onboarding@resend.dev` | `RESEND_API_KEY`, `EMAIL_FROM` | notifications |
 | OpenRouter | Lola assistant, semantic search, AI moderation | openrouter.ai → Keys | `OPENROUTER_API_KEY` | ai-gateway |

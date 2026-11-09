@@ -269,11 +269,11 @@ Stripe's test redirect pages. Orders are authorised (manual capture) and capture
    **Connect → Get started** (enables connected accounts; no platform profile is needed: sellers' accounts are
    Stripe-liable, see `payments-idempotency.md` → Seller accounts and liability).
 2. `make stripe-setup`: checks the keys, Connect and the seller account settings. It creates no plan Prices: the seller service owns the plan catalogue and syncs a Product per plan and a Price per plan version and cadence to Stripe when it starts or a plan is published (staff console › Plans & billing › Sync with Stripe); Prices an older `make stripe-setup` made are adopted.
-3. Webhooks, three terminals (each prints a `whsec_…`; on one machine it is usually the same secret for all three):
+3. Webhooks (what each endpoint is for, and the deployed equivalent: [stripe-webhooks](../runbooks/stripe-webhooks.md)), three terminals (each prints a `whsec_…`; on one machine it is usually the same secret for all three):
    ```bash
    stripe listen --forward-to localhost:8105/v1/webhooks/stripe                   # STRIPE_WEBHOOK_SECRET
    stripe listen --forward-connect-to localhost:8106/v1/webhooks/stripe-connect   # STRIPE_CONNECT_WEBHOOK_SECRET
-   stripe listen --events customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.created,invoice.finalized,invoice.paid,invoice.payment_failed,invoice.voided,invoice.deleted,credit_note.created \
+   stripe listen --events payment_intent.succeeded,payment_intent.payment_failed \
      --forward-to localhost:8106/v1/webhooks/stripe-billing                       # STRIPE_BILLING_WEBHOOK_SECRET
    ```
    Put them in `.local/secrets.env`; `make secrets-check`; then `make up` (or `tools/dev/local.sh restart payments seller gateway-bff`).

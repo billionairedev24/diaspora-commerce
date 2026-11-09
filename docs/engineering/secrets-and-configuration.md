@@ -105,22 +105,26 @@ Prices and free tiers change: check the provider's pricing page.
   delivery answers 400) and `--all-snapshot` only works if you accept noisy 200s for events we ignore. It prints
   `Your webhook signing secret is whsec_…` → `STRIPE_WEBHOOK_SECRET`, then `tools/dev/local.sh restart payments`. The secret
   stays the same for your machine across runs. For seller events run a second listener:
-  `stripe listen --events account.updated,capability.updated,person.created,person.updated,account.external_account.created,account.external_account.updated,account.external_account.deleted,payout.failed --forward-connect-to localhost:8106/v1/webhooks/stripe-connect` → `STRIPE_CONNECT_WEBHOOK_SECRET`, and, for bank debits of plan fees that settle days later,
+  `stripe listen --events account.updated,capability.updated,person.created,person.updated,account.external_account.created,account.external_account.updated,account.external_account.deleted,payout.failed,account.application.deauthorized --forward-connect-to localhost:8106/v1/webhooks/stripe-connect` → `STRIPE_CONNECT_WEBHOOK_SECRET`, and, for bank debits of plan fees that settle days later,
   `stripe listen --events payment_intent.succeeded,payment_intent.payment_failed --forward-to localhost:8106/v1/webhooks/stripe-billing` → `STRIPE_BILLING_WEBHOOK_SECRET` (each listener prints its own secret).
-- **Deployed:** Developers → **Webhooks** → Add endpoint `https://<api host>/payments/v1/webhooks/stripe` (and the two
-  seller endpoints); the endpoint's *Signing secret* goes into the secret store. Events per endpoint:
+- **Deployed:** Developers → **Webhooks** → **Add destination** (older layout: **Add endpoint**), **Snapshot** payload (never
+  Thin), one endpoint per signing secret; the endpoint's *Signing secret* goes into the secret store. The complete guide
+  (click paths for both dashboard layouts, verification, rotation, troubleshooting) is
+  [docs/runbooks/stripe-webhooks.md](../runbooks/stripe-webhooks.md). Public URLs are on the API host
+  (`https://api.<domain>`, the OVH test environment `https://api.test.afrotransact.com`); events per endpoint, as handled by the code:
 
-  | Endpoint | Listen to | Events |
-  |---|---|---|
-  | payments `/v1/webhooks/stripe` | Your account | `payment_intent.succeeded`, `payment_intent.amount_capturable_updated`, `payment_intent.payment_failed`, `payment_intent.requires_action`, `payment_intent.canceled`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, `payout.paid`, `payout.failed`, `setup_intent.succeeded`, `setup_intent.requires_action` |
-  | seller `/v1/webhooks/stripe-connect` | Connected accounts | `account.updated`, `capability.updated`, `person.created`, `person.updated`, `account.external_account.created`, `account.external_account.updated`, `account.external_account.deleted`, `payout.failed`, `account.application.deauthorized` |
-  | seller `/v1/webhooks/stripe-billing` | Your account | `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.created`, `invoice.finalized`, `invoice.paid`, `invoice.payment_failed`, `invoice.voided`, `invoice.deleted`, `credit_note.created` |
-- **Plan fees paid from sales (S298):** `invoice.created` lets the seller service pay a renewal invoice from the
-  seller's earnings before Stripe finalises it (it answers 503 while that is still pending, so Stripe redelivers and
-  keeps the draft); `invoice.voided` / `invoice.deleted` / `credit_note.created` give it back. The kill switch is plain
-  configuration, `COLLECT_PLAN_FEES_FROM_EARNINGS` (seller; on in local and dev, off in uat / prod until operations
-  switch it on in Helm `values-<env>.yaml`), with `PAYMENTS_URL` and the seller-service client's `payments:plan-fees`
-  scope at identity (no new secret). See docs/engineering/plans-and-billing.md.
+  | Endpoint (URL on `https://api.<domain>`) | Listen to | Events | Variable |
+  |---|---|---|---|
+  | payments `/payments/v1/webhooks/stripe` | Your account | `payment_intent.succeeded`, `payment_intent.amount_capturable_updated`, `payment_intent.payment_failed`, `payment_intent.requires_action`, `payment_intent.canceled`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, `transfer.reversed`, `payout.paid`, `payout.failed`, `setup_intent.succeeded`, `setup_intent.requires_action`, `payment_method.attached`, `payment_method.detached` (15) | `STRIPE_WEBHOOK_SECRET` (required) |
+  | seller `/seller/v1/webhooks/stripe-connect` | Connected accounts | `account.updated`, `capability.updated`, `person.created`, `person.updated`, `account.external_account.created`, `account.external_account.updated`, `account.external_account.deleted`, `payout.failed`, `account.application.deauthorized` (9) | `STRIPE_CONNECT_WEBHOOK_SECRET` (required for sellers) |
+  | seller `/seller/v1/webhooks/stripe-billing` | Your account | `payment_intent.succeeded`, `payment_intent.payment_failed` (2) | `STRIPE_BILLING_WEBHOOK_SECRET` (optional) |
+- **The "billing" endpoint:** Stripe Billing (subscriptions, Stripe invoices) is replaced by our own billing. The endpoint
+  remains only for plan-fee PaymentIntents (metadata `purpose=plan_fee`) that were still processing when charged, a bank
+  debit that settles days later (S298); the `invoice.*`, `credit_note.*` and `customer.subscription.*` events listed here
+  before are no longer handled and must not be selected. Paying a plan fee from sales is plain configuration,
+  `COLLECT_PLAN_FEES_FROM_EARNINGS` (seller; on in local and dev, off in uat / prod until operations switch it on in Helm
+  `values-<env>.yaml`), with `PAYMENTS_URL` and the seller-service client's `payments:plan-fees` scope at identity (no new
+  secret). See docs/engineering/plans-and-billing.md.
 - **Test cards:** `4242 4242 4242 4242` (any future date, any CVC, any ZIP), `4000 0027 6000 3184` (3-D Secure),
   `4000 0000 0000 9995` (declined).
 - **Guards:** payments refuses live keys outside prod; gateway-bff refuses `pk_live_` locally; `make secrets-check`

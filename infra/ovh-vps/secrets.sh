@@ -111,6 +111,9 @@ service_keys() {
     notifications)    out+=("RESEND_API_KEY=${RESEND_API_KEY:-}" "UNSUBSCRIBE_SIGNING_KEY=$(gen UNSUBSCRIBE_SIGNING_KEY)" "NOTIFICATIONS_CLIENT_SECRET=$(gen NOTIFICATIONS_CLIENT_SECRET)") ;;
     offers)           out+=("${common[@]}" "OFFERS_CLIENT_SECRET=$(gen OFFERS_CLIENT_SECRET)" "FGA_API_TOKEN=$FGA_TOKEN") ;;
     orders)           out+=("${common[@]}" "ORDERS_CLIENT_SECRET=$(gen ORDERS_CLIENT_SECRET)" "TEMPORAL_TARGET=$TEMPORAL_TARGET" "TEMPORAL_NAMESPACE=afrotransact" "TEMPORAL_TLS_CERT=" "TEMPORAL_TLS_KEY=" "HANDOVER_CODE_KEY=$(gen HANDOVER_CODE_KEY)" "PAY_LINK_KEY=$(gen PAY_LINK_KEY)" "FGA_API_TOKEN=$FGA_TOKEN") ;;
+    # Stripe webhook secrets (one whsec_ per Stripe endpoint; docs/runbooks/stripe-webhooks.md). A changed value reaches the pod only
+    # after the services action AND a restart: kubectl -n $NS rollout restart deploy/payments (STRIPE_WEBHOOK_SECRET) or deploy/seller
+    # (STRIPE_CONNECT_WEBHOOK_SECRET: required for sellers; STRIPE_BILLING_WEBHOOK_SECRET: optional, bank-debit plan fees only).
     payments)         out+=("${common[@]}" "STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}" "STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}" "FGA_API_TOKEN=$FGA_TOKEN" "PAYMENTS_CLIENT_SECRET=$(gen PAYMENTS_CLIENT_SECRET)") ;;
     promise)          out+=("REDIS_URL=$REDIS_URL") ;;
     retail)           out+=("${common[@]}" "RETAIL_CLIENT_SECRET=$(gen RETAIL_CLIENT_SECRET)") ;;

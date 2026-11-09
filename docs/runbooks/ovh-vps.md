@@ -154,8 +154,13 @@ pointing at the server). Do not create a manual A/CNAME record for `www.<domain>
   workflow, step by step in [cloudflare-setup.md](cloudflare-setup.md) (storefront at `https://www.<domain>`, the bare domain redirecting to it, `seller.<domain>`, `admin.<domain>`,
   all talking to `https://api.<domain>/bff`; the images of the backend come from the `ovh-images` workflow when the per-service pipelines are red).
 - Sign in as the staff admin (`ADMIN_EMAIL` and the password step 4 showed).
-- Stripe: add the webhook `https://api.<domain>/payments/v1/webhooks/stripe`, put its `whsec_...` in `STRIPE_WEBHOOK_SECRET` (re-run
-  `make ovh-gh-setup`, then the `services` action).
+- Stripe webhooks (without them payments never confirm and sellers never finish onboarding): create the endpoints
+  `https://api.<domain>/payments/v1/webhooks/stripe` (`STRIPE_WEBHOOK_SECRET`, required),
+  `https://api.<domain>/seller/v1/webhooks/stripe-connect` (`STRIPE_CONNECT_WEBHOOK_SECRET`, required for sellers) and optionally
+  `.../seller/v1/webhooks/stripe-billing` (`STRIPE_BILLING_WEBHOOK_SECRET`). Click paths, event lists, verification and troubleshooting:
+  [stripe-webhooks.md](stripe-webhooks.md). Store each `whsec_...` (wizard phase 8, or re-run `make ovh-gh-setup`), run the `services`
+  action, then `rollout restart deploy/payments` / `deploy/seller` (a running pod keeps the old value). Check with
+  `make deploy-guide ARGS=--doctor`: an unsigned POST to each URL must answer 400.
 - Search starts empty: run the `reindex-search` action of the `ovh-vps` workflow (or `deploy.sh reindex-search` on the server). It rebuilds the
   index from catalog, offers and inventory, takes minutes for a test catalog, and is safe to repeat.
 - Look inside: `ssh -i .ovh/ovh-vps-deploy-key ubuntu@<ip>` then `sudo k3s kubectl -n afrotransact-dev get pods` and

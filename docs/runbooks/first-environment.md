@@ -157,11 +157,11 @@ The keys each chart expects (from the `Secret keys expected` comment in every `d
 | notifications | `DB_URL`, `RESEND_API_KEY`, `SENDGRID_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `VONAGE_API_KEY`, `VONAGE_API_SECRET`, `FCM_SERVICE_ACCOUNT_JSON`, `APNS_KEY_P8`, `WHATSAPP_TOKEN`, `RESEND_WEBHOOK_SECRET`, `SENDGRID_WEBHOOK_PUBLIC_KEY`, `UNSUBSCRIBE_SIGNING_KEY`, `NOTIFICATIONS_CLIENT_SECRET` | Resend (domain `mail.BASE` verified), SendGrid, Twilio, Vonage, Firebase, Apple, Meta; generated |
 | offers | `DB_*`, `KAFKA_BOOTSTRAP`, `OFFERS_CLIENT_SECRET`, `FGA_API_TOKEN` | identity client, OpenFGA key |
 | orders | `DB_*`, `KAFKA_BOOTSTRAP`, `ORDERS_CLIENT_SECRET`, `TEMPORAL_TLS_CERT`, `TEMPORAL_TLS_KEY`, `HANDOVER_CODE_KEY`, `FGA_API_TOKEN` | identity client; Temporal client certificate (step 7); generated; OpenFGA key |
-| payments | `DB_*`, `KAFKA_BOOTSTRAP`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `FGA_API_TOKEN` | Stripe (test mode keys outside prod; webhook endpoint `https://api.BASE/payments/v1/webhooks/stripe`) |
+| payments | `DB_*`, `KAFKA_BOOTSTRAP`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `FGA_API_TOKEN` | Stripe (test mode keys outside prod; webhook endpoint `https://api.BASE/payments/v1/webhooks/stripe`; full guide [stripe-webhooks.md](stripe-webhooks.md)) |
 | promise | `REDIS_URL` | `tofu output cache` |
 | retail | `DB_*`, `KAFKA_BOOTSTRAP`, `RETAIL_CLIENT_SECRET` | identity client |
 | search | `ES_URLS`, `ES_API_KEY`, `KAFKA_BOOTSTRAP`, `ADS_TOKEN_KEY` (32+ chars), `SEARCH_CLIENT_SECRET` | `elastic-ilm.sh`; generated; identity client |
-| seller | `DB_*`, `KAFKA_BOOTSTRAP`, `STRIPE_SECRET_KEY`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_BILLING_WEBHOOK_SECRET`, `FIELD_ENCRYPTION_KEY` | Stripe Connect + Billing webhook endpoints; generated |
+| seller | `DB_*`, `KAFKA_BOOTSTRAP`, `STRIPE_SECRET_KEY`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_BILLING_WEBHOOK_SECRET`, `FIELD_ENCRYPTION_KEY` | Stripe Connect webhook `https://api.BASE/seller/v1/webhooks/stripe-connect` and the optional plan-fee webhook `.../seller/v1/webhooks/stripe-billing` (Stripe Billing itself is removed; [stripe-webhooks.md](stripe-webhooks.md)); generated |
 | storefront | `DB_URL`, `CLOUDFLARE_API_TOKEN` | Cloudflare token with Zone: Cache Purge |
 | tax-returns | `DB_*`, `KAFKA_BOOTSTRAP`, `TAX_RETURNS_CLIENT_SECRET` | identity client |
 | trust-ops | `DB_*`, `KAFKA_BOOTSTRAP`, `TRUSTOPS_CLIENT_SECRET` | identity client |

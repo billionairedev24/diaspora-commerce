@@ -9,6 +9,7 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 |---|---|
 | [First environment](first-environment.md) | bootstrapping dev / uat / prod on AWS, Google Cloud or Azure (state, OIDC, secrets, apply, Argo CD, Temporal, Pages, smoke) |
 | [Test environment on one OVHcloud server](ovh-vps.md) | creating and deploying the whole stack on one OVHcloud instance from a pipeline (`make ovh-gh-setup`, then Actions > ovh-vps); not production |
+| [Stripe webhooks](stripe-webhooks.md) | creating, verifying, rotating and troubleshooting the three Stripe webhook endpoints (payments, seller Connect, seller plan fees) for the OVH test environment and the real ones |
 | [Finance: payouts, reconciliation and ledger adjustments](finance-reconciliation.md) | approving a payout, the daily Stripe reconciliation, four-eyes ledger corrections, Stripe lookups |
 | [Maintenance mode](maintenance-mode.md) | turn on the maintenance page before planned work, what it pauses, how to clear it without the console |
 | [Settings in the staff console](settings.md) | where every platform setting lives, who calculates sales tax (our rules or Stripe Tax), finding a transfer in Stripe |
