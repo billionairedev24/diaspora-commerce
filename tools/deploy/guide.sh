@@ -64,7 +64,7 @@ phase_what() {
     (server) echo "Runs the ovh-vps workflow: first plan (nothing created), then provision-and-deploy: creates the Public Cloud instance, the DNS records (if a Cloudflare token is set), installs k3s and deploys the 26 services. You approve each run on GitHub." ;;
     (dns) echo "Proves the four backend host names (api, auth, mcp, grafana) point at the server, the Let's Encrypt certificates are real and valid, and the API and sign-in answer over https." ;;
     (cloudflare) echo "Checks the Cloudflare zone settings the apps rely on (Add visitor location headers, Always Use HTTPS, SSL Full strict), asks about the Workers plan, then runs the ovh-web workflow that deploys storefront, Seller Center and staff console as Workers on your domain and the apex redirect." ;;
-    (smoke) echo "Checks health endpoints, the sign-in page and its enforced CSP, the web apps' Report-Only CSP header, the CSP report endpoint, rebuilds the search index, and tells you how seeding works for this environment." ;;
+    (smoke) echo "Checks health endpoints, that the three Stripe webhook URLs exist and enforce the signature (an unsigned POST must answer 400), the sign-in page and its enforced CSP, the web apps' Report-Only CSP header, the CSP report endpoint, rebuilds the search index, and tells you how seeding works for this environment." ;;
     (stop) echo "Explains how to stop the billing (destroy the server, not scale it down) and what is kept; can run the destroy for you after a typed confirmation." ;;
   esac
 }
@@ -106,7 +106,7 @@ phase_verify() {
     (server) echo "PASS when the provision-and-deploy run succeeded and the server address is known." ;;
     (dns) echo "PASS when the four hosts resolve to the server (grey cloud), the certificates are Let's Encrypt and not near expiry, and api/auth answer." ;;
     (cloudflare) echo "PASS when www, seller and admin answer over https and the bare domain 301-redirects to www with path and query kept." ;;
-    (smoke) echo "PASS when health, sign-in CSP, report-only CSP and the CSP report endpoint all check out." ;;
+    (smoke) echo "PASS when health, the three webhook routes (400 to an unsigned POST), sign-in CSP, report-only CSP and the CSP report endpoint all check out." ;;
     (stop) echo "Done when you have read it (or destroyed the server)." ;;
   esac
 }
@@ -120,7 +120,7 @@ phase_dry() {
     (server) echo "completeness gate: refuse while a required value is missing|gh workflow run ovh-vps.yml -f action=plan (after typing 'plan')|gh workflow run ovh-vps.yml -f action=provision-and-deploy -f image-tag=<sha> (after typing 'create'): BILLING STARTS|wait for your approval on GitHub, poll the run, summarise a failure from its log|read the server IPv4 from the run log" ;;
     (dns) echo "A lookup for api/auth/mcp/grafana vs the server IP|openssl s_client: issuer, expiry|curl https://api.<domain>/bff/healthz and auth openid-configuration" ;;
     (cloudflare) echo "optionally read zone settings with your token (managed transform, always HTTPS, SSL mode)|ask about the Workers plan|gh workflow run ovh-web.yml -f apps=... -f domain=... -f storefront-host=... (after typing 'deploy')|curl www/seller/admin and the apex redirect" ;;
-    (smoke) echo "curl health, sign-in page (CSP header), web CSP-Report-Only header|POST a labelled sample to /api/csp-report (expects 204)|gh workflow run ovh-vps.yml -f action=reindex-search (after typing 'reindex')|explain seeding" ;;
+    (smoke) echo "curl health, sign-in page (CSP header), web CSP-Report-Only header|POST an UNSIGNED body to each Stripe webhook URL (expects 400)|POST a labelled sample to /api/csp-report (expects 204)|gh workflow run ovh-vps.yml -f action=reindex-search (after typing 'reindex')|explain seeding" ;;
     (stop) echo "print how to destroy and what is kept|optionally: gh workflow run ovh-vps.yml -f action=destroy -f confirm-destroy=ovh-vps (after typing the word)" ;;
   esac
 }
@@ -134,7 +134,7 @@ phase_after() { # what just happened | if it failed
     (server) echo "GitHub Actions created the instance, the DNS records, installed k3s and deployed the services. The server is billing now.|ovh-vps.md troubleshooting table (flavor, authentication, 'no image at', cannot SSH, ImagePullBackOff, CrashLoopBackOff)." ;;
     (dns) echo "The wizard proved names, certificates and the API from the outside, like a visitor.|ovh-vps.md step 6 and rows 'Certificate stays False', and cloudflare-setup.md row '522/525 on api. or auth.'." ;;
     (cloudflare) echo "The three web apps are Workers on your domain and the bare domain redirects to www.|cloudflare-setup.md troubleshooting: size limit, 'already has a DNS record', error 10000, redirect rows." ;;
-    (smoke) echo "Health, sign-in, CSP and search were exercised from the outside.|docs/runbooks/csp-violations-spike.md; ovh-vps.md rows 'CrashLoopBackOff' and 'Authorization errors'." ;;
+    (smoke) echo "Health, the Stripe webhook routes, sign-in, CSP and search were exercised from the outside.|docs/runbooks/stripe-webhooks.md (a webhook row: 404 = route missing); docs/runbooks/csp-violations-spike.md; ovh-vps.md rows 'CrashLoopBackOff' and 'Authorization errors'." ;;
     (stop) echo "You know how to stop the billing.|ovh-vps.md step 9: check the Public Cloud project shows no instance." ;;
   esac
 }
@@ -298,6 +298,20 @@ chk_web_csp() {
     if [ -n "$ro" ] && printf '%s' "$ro" | grep -q "nonce-"; then verdict_pass "$h: nonce CSP in Report-Only (violations are logged, nothing is blocked)"
     elif [ -n "$enf" ]; then verdict_warn "$h: CSP is ENFORCED (CSP_MODE=enforce): expected report-only for a first deploy"
     else verdict_fail "$h: no CSP header (HTTP $HTTP_CODE); expected Content-Security-Policy-Report-Only with a nonce"; bad=1; fi
+  done
+  [ "$bad" = 0 ]
+}
+WEBHOOK_PATHS="payments/v1/webhooks/stripe seller/v1/webhooks/stripe-connect seller/v1/webhooks/stripe-billing"
+chk_webhooks() { # an UNSIGNED POST must answer 400: the route exists and the Stripe signature is enforced (docs/runbooks/stripe-webhooks.md)
+  local p bad=0
+  for p in $WEBHOOK_PATHS; do
+    http "https://api.$DOMAIN/$p" -X POST -H 'Content-Type: application/json' --data '{}'
+    case "$HTTP_CODE" in
+      (400) verdict_pass "https://api.$DOMAIN/$p: unsigned POST refused (400): route exists, signature enforced" ;;
+      (404) verdict_fail "https://api.$DOMAIN/$p answered 404: the route is missing, so Stripe can never reach it"; hint "Re-run the ovh-vps action 'edge' (or 'deploy'). docs/runbooks/stripe-webhooks.md, section 10, row 404"; bad=1 ;;
+      (000) verdict_fail "https://api.$DOMAIN/$p: no connection or certificate error"; hint "Run  make deploy-guide ARGS=--doctor  (DNS and certificate rows). docs/runbooks/stripe-webhooks.md, section 10, rows Certificate / Failed to connect"; bad=1 ;;
+      (*) verdict_fail "https://api.$DOMAIN/$p answered $HTTP_CODE (expected 400 for an unsigned request)"; hint "502/503: the service pod is down (kubectl logs deploy/payments or deploy/seller). 401/403: something other than the service answers. docs/runbooks/stripe-webhooks.md, section 10"; bad=1 ;;
+    esac
   done
   [ "$bad" = 0 ]
 }
@@ -662,6 +676,7 @@ p_smoke() {
   ensure_ctx || return 1; need_domain || return 1
   SERVER_IP=$(state_get server.ip)
   chk_api || rc=1
+  chk_webhooks || rc=1
   chk_signin_csp || rc=1
   chk_web_csp || rc=1
   chk_csp_report post || rc=1
@@ -677,13 +692,20 @@ p_smoke() {
   { echo "The demo seeder (tools/seed/seed.py, make seed) refuses to run against non-local service URLs unless SEED_ALLOW_REMOTE=1, and always refuses APP_ENV=prod or uat."
     echo "Only set SEED_ALLOW_REMOTE=1 on purpose, for this test environment, and never for anything with real customers."
     echo "GAP: the seeder talks to each service directly (catalog, offers, ...) and those are NOT exposed on public hosts; only /bff, /identity and a few paths are. Seeding this environment needs an SSH tunnel plus kubectl port-forward and a SEED_TOKEN; that is not automated or verified here."; } | panel "DEMO DATA" yellow
-  if ! is_set STRIPE_WEBHOOK_SECRET; then
-    { echo "Stripe webhook: Developers > Webhooks > Add endpoint: https://api.$DOMAIN/payments/v1/webhooks/stripe, then copy its signing secret (whsec_). Without it payments never confirm."; } | panel "STRIPE WEBHOOK" cyan
-    if confirm_yn "Add the whsec_ secret now?" n; then
-      collect_one STRIPE_WEBHOOK_SECRET
-      if confirm_type apply "Apply it to the server now (ovh-vps action services)?"; then
-        sha=$(state_get server.sha); start_run ovh-vps.yml -f action=services -f "image-tag=${sha:-$(state_get image_sha)}" && watch_run "$RUN_ID" "re-deploying the services" && ok "services updated"
-      fi
+  if ! is_set STRIPE_WEBHOOK_SECRET || ! is_set STRIPE_CONNECT_WEBHOOK_SECRET; then
+    { echo "Stripe webhooks (test mode, payload style Snapshot, NOT Thin): Developers > Webhooks > Add destination (older layout: Add endpoint), then copy each Signing secret (whsec_)."
+      echo "  1. https://api.$DOMAIN/payments/v1/webhooks/stripe  Listen to: Your account, 15 events.  REQUIRED: without it payments never confirm.  -> STRIPE_WEBHOOK_SECRET"
+      echo "  2. https://api.$DOMAIN/seller/v1/webhooks/stripe-connect  Listen to: Connected accounts, 9 events.  Required for sellers.  -> STRIPE_CONNECT_WEBHOOK_SECRET"
+      echo "  3. https://api.$DOMAIN/seller/v1/webhooks/stripe-billing  Listen to: Your account, 2 events.  Optional (bank-debit plan fees).  -> STRIPE_BILLING_WEBHOOK_SECRET (make deploy-guide ARGS='--set STRIPE_BILLING_WEBHOOK_SECRET')"
+      echo "Exact event lists and click paths: docs/runbooks/stripe-webhooks.md."; } | panel "STRIPE WEBHOOKS" cyan
+    local w got=0
+    for w in STRIPE_WEBHOOK_SECRET STRIPE_CONNECT_WEBHOOK_SECRET; do
+      is_set "$w" && continue
+      if confirm_yn "Add the whsec_ secret $w now?" n; then collect_one "$w"; got=1; fi
+    done
+    if [ "$got" = 1 ] && confirm_type apply "Apply it to the server now (ovh-vps action services)?"; then
+      sha=$(state_get server.sha); start_run ovh-vps.yml -f action=services -f "image-tag=${sha:-$(state_get image_sha)}" && watch_run "$RUN_ID" "re-deploying the services" && ok "services updated"
+      warn "A running pod keeps its old secret: restart it (docs/runbooks/stripe-webhooks.md section 5): kubectl -n afrotransact-dev rollout restart deploy/payments deploy/seller"
     fi
   fi
   verdict_pass "smoke checks"; return 0
@@ -723,7 +745,7 @@ print_summary() {
   [ -z "$SHA" ] || printf '  %-22s %s\n' "Images" "$(printf '%s' "$SHA" | cut -c1-12)"
   blank; bold "  Next three things"
   say "   1. Sign in at https://admin.$DOMAIN as ADMIN_EMAIL (the password you set or the one shown once)."
-  say "   2. Add the Stripe webhook (https://api.$DOMAIN/payments/v1/webhooks/stripe), then re-run phase 8; watch csp.violation lines in Workers Logs for a week."
+  say "   2. Add the Stripe webhooks (three URLs, docs/runbooks/stripe-webhooks.md), then re-run phase 8; watch csp.violation lines in Workers Logs for a week."
   say "   3. When you stop for the day: make deploy-guide ARGS='--only stop'   (destroy; 'down' does not stop billing)."
 }
 
@@ -791,7 +813,7 @@ doctor() {
   say "  domain $DOMAIN   server ${SERVER_IP:-unknown}   storefront-host $SFH"
   blank; bold "DNS and certificates"
   chk_dns || rc=1; chk_cert "api.$DOMAIN" || rc=1; chk_cert "auth.$DOMAIN" || rc=1
-  blank; bold "Backend"; chk_api || rc=1
+  blank; bold "Backend"; chk_api || rc=1; chk_webhooks || rc=1
   blank; bold "Web apps"; chk_hosts || rc=1; chk_apex || rc=1
   blank; bold "Headers"; chk_signin_csp || rc=1; chk_web_csp || rc=1; chk_csp_report get || rc=1
   if [ "$GH_LISTED" = 1 ]; then blank; bold "Values"; checklist missing; fi

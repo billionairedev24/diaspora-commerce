@@ -143,11 +143,15 @@ http_fake() { # http_fake URL CODE [header...]  (body from $HTTP_BODY)
   key=$(printf '%s' "${url#*://}" | tr -c 'A-Za-z0-9\n' '_'); case "$url" in (http://*) key="plain_$key" ;; esac
   echo "$code" > "$F/http/$key.code"; printf '%s\r\n' "HTTP/2 $code" "$@" > "$F/http/$key.headers"; printf '%s' "${HTTP_BODY:-}" > "$F/http/$key.body"
 }
+webhook_fake() { # webhook_fake PATH CODE: what api.example.com answers to an unsigned POST there
+  echo "$2" > "$F/http/$(printf '%s' "api.example.com/$1" | tr -c 'A-Za-z0-9\n' '_').POST.code"
+}
 dns_fake() { echo "$2" > "$F/dns/A_$1"; }
 healthy_world() {
   local h a
   for h in api auth mcp grafana; do dns_fake "$h.example.com" 203.0.113.10; done
   HTTP_BODY=ok http_fake https://api.example.com/bff/healthz 200 'server: traefik'
+  for h in payments/v1/webhooks/stripe seller/v1/webhooks/stripe-connect seller/v1/webhooks/stripe-billing; do webhook_fake "$h" 400; done
   HTTP_BODY='{"issuer":"https://auth.example.com"}' http_fake https://auth.example.com/.well-known/openid-configuration 200
   HTTP_BODY=login http_fake https://auth.example.com/login 200 "content-security-policy: default-src 'none'; script-src 'self'; frame-ancestors 'none'"
   for h in www.example.com seller.example.com admin.example.com; do
@@ -417,6 +421,29 @@ assert_rc "a wrong word cancels the web deploy" 1
 assert_lacks "...nothing was deployed" "$F/calls.log" "ovh-web.yml"
 
 echo "== phase 8: smoke"
+new_env; fill_required; echo STRIPE_WEBHOOK_SECRET >> "$F/secrets"; printf 'domain=example.com\nserver.sha=%s\n' "$SHA" > "$STATE"; healthy_world; answers reindex
+run_g smoke-hooks --only smoke
+assert_has "smoke posts an unsigned body to the payments webhook" "$F/calls.log" "curl POST https://api.example.com/payments/v1/webhooks/stripe"
+assert_has "...to the seller Connect webhook" "$F/calls.log" "curl POST https://api.example.com/seller/v1/webhooks/stripe-connect"
+assert_has "...and to the seller plan-fee webhook" "$F/calls.log" "curl POST https://api.example.com/seller/v1/webhooks/stripe-billing"
+assert_has "a 400 is reported as route exists, signature enforced" "$OUT" "unsigned POST refused (400)"
+
+new_env; fill_required; echo STRIPE_WEBHOOK_SECRET >> "$F/secrets"; printf 'domain=example.com\n' > "$STATE"; healthy_world; webhook_fake seller/v1/webhooks/stripe-connect 404; no_answers
+run_g smoke-hook404 --only smoke
+assert_rc "smoke fails when a webhook route is missing (404)" 1
+assert_has "...naming the URL" "$OUT" "seller/v1/webhooks/stripe-connect answered 404"
+assert_has "...with the runbook pointer" "$OUT" "docs/runbooks/stripe-webhooks.md, section 10, row 404"
+
+new_env; fill_required; echo STRIPE_WEBHOOK_SECRET >> "$F/secrets"; printf 'domain=example.com\n' > "$STATE"; healthy_world; webhook_fake payments/v1/webhooks/stripe 502; no_answers
+run_g smoke-hook502 --only smoke
+assert_rc "smoke fails when a webhook answers 502" 1
+assert_has "...saying what was expected" "$OUT" "answered 502 (expected 400"
+
+new_env; fill_required; echo STRIPE_WEBHOOK_SECRET >> "$F/secrets"; printf 'domain=example.com\n' > "$STATE"; healthy_world; rm -f "$F/http/api_example_com_seller_v1_webhooks_stripe_billing.POST.code"; no_answers
+run_g smoke-hookcert --only smoke
+assert_rc "smoke fails when a webhook cannot be reached (connection or certificate error)" 1
+assert_has "...pointing at the runbook rows" "$OUT" "no connection or certificate error"
+
 new_env; fill_required; echo STRIPE_WEBHOOK_SECRET >> "$F/secrets"; printf 'domain=example.com\nserver.sha=%s\n' "$SHA" > "$STATE"; healthy_world; answers reindex
 run_g smoke-ok --only smoke
 assert_rc "smoke passes" 0
