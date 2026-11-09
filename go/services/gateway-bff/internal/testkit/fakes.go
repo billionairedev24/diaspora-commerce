@@ -138,6 +138,12 @@ type Upstreams struct {
 	// MemberOrgs are the organisations of every signed-in member; ActiveOrgID is identity's active org.
 	MemberOrgs  []MemberOrg
 	ActiveOrgID string
+	// StaffSubjects are signed-in users whose token says pt STAFF with staff roles and permissions (a staff or platform
+	// admin account shopping on the storefront). CartOwners and CheckoutCustomers record, per request, the cart key and
+	// the customer id the cart and orders fakes resolved for the caller.
+	StaffSubjects     []string
+	CartOwners        []string
+	CheckoutCustomers []string
 	// GuestStockAlerts records what notifications received on POST /v1/stock-alerts/guest (service token required).
 	GuestStockAlerts []map[string]string
 	// ServiceTokenRequests records the scopes of client-credentials token requests.
@@ -580,6 +586,7 @@ func subjectOf(r *http.Request) string {
 
 func (u *Upstreams) owner(w http.ResponseWriter, r *http.Request) string {
 	if s := customerSubject(r); s != "" {
+		u.CartOwners = append(u.CartOwners, "user:"+s)
 		return "user:" + s
 	}
 	g := r.Header.Get("X-Guest-Cart")
@@ -930,6 +937,11 @@ func (u *Upstreams) Token(claims jwt.MapClaims) string {
 // and the org role), whichever app asked for the token; everyone else is a CUSTOMER. Callers hold u.mu.
 func (u *Upstreams) accessClaims(sub string) jwt.MapClaims {
 	claims := jwt.MapClaims{"sub": sub, "pt": "CUSTOMER", "roles": []string{"account.customer"}}
+	if slices.Contains(u.StaffSubjects, sub) {
+		claims["pt"], claims["roles"] = "STAFF", []string{"account.customer", "platform.ops_manager"}
+		claims["perms"] = []string{"orders:read", "orders:manage", "users:read"}
+		return claims
+	}
 	active, ok := u.orgByID(u.ActiveOrgID)
 	if !ok && len(u.MemberOrgs) > 0 {
 		active, ok = u.MemberOrgs[0], true

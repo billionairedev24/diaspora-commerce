@@ -215,6 +215,9 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 			return
 		}
 		body := readJSON(r)
+		u.mu.Lock()
+		u.CheckoutCustomers = append(u.CheckoutCustomers, actorOf(r).Subject)
+		u.mu.Unlock()
 		st.mu.Lock()
 		st.lastCheckout = body
 		n, ok := st.checkouts[key]
