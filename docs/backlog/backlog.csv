@@ -148,7 +148,7 @@
 "S039","Story","Search relevance tuning and analytics","Click-through and zero-result logging, ranking boosts for buy-box price, delivery promise and seller health.","- Zero-result queries are logged for synonym curation
 - Ranking boosts in-stock and Fulfilled-by-AfroTransact items
 - A relevance test set runs in CI","E04","","Medium","5","search","search","Done"
-"E05","Epic","Offers, pricing & buy box","Seller offers on shared product pages, price rules, coupons and buy-box selection.","","","Offers, pricing & buy box","High","","offers","offers","Done"
+"E05","Epic","Offers, pricing & buy box","Seller offers on shared product pages, price rules, coupons and buy-box selection.","","","Offers, pricing & buy box","High","","offers","offers","In Progress"
 "S040","Story","Offers service: create offer on existing product","Sellers attach price, stock and condition to an existing ATIN instead of duplicating the page.","- Offer created from catalog.product.created for the creating seller
 - Other sellers can add an offer by ATIN or GTIN
 - Offer price, handling time and fulfilment type are stored","E05","","Highest","5","offers java","offers","Done"
@@ -220,7 +220,7 @@
 - Right panel shows recommendations / delivery map / help instead of blank space","E08","","Medium","5","orders web","orders","Done"
 "S061","Story","Driver events update order status live","Driver pickup/delivery scans move shipment statuses in the back office immediately.","- 'Picked up' and 'Delivered' scans update the shipment within 5 seconds
 - Staff console reflects updates without refresh (SSE)","E08","","High","5","orders delivery","orders","Done"
-"E09","Epic","Inventory: platform & FBA stock, lots and concurrency","Strongly consistent stock positions, reservations, lots (FEFO) and an append-only ledger.","","","Inventory: platform & FBA stock, lots and concurrency","High","","inventory","inventory","In Progress"
+"E09","Epic","Inventory: platform & FBA stock, lots and concurrency","Strongly consistent stock positions, reservations, lots (FEFO) and an append-only ledger.","","","Inventory: platform & FBA stock, lots and concurrency","High","","inventory","inventory","Done"
 "S062","Story","Inventory positions and append-only ledger","inventory_position(sku, node, on_hand, reserved, inbound, damaged, version) + ledger.","- available = on_hand − reserved is published via events, never computed in clients
 - Every movement writes a ledger row with actor and reason
 - Nightly job reconciles ledger sums to positions and alerts on drift","E09","","Highest","8","inventory java","inventory","Done"
@@ -240,7 +240,7 @@
 - Movement history traceable per lot for recalls","E09","","High","8","inventory staff-console","inventory","Done"
 "S067","Story","Seller FBA inventory","Sellers send stock into AfroTransact FCs with seller-specific unit labels.","- Inbound shipment plan with carton labels
 - Units labelled per seller so stock never mixes","E09","","Medium","5","inventory seller-center","inventory","Done"
-"E10","Epic","AfroTransact Retail (1P) purchasing & receiving","Nine-step workflow: product master → PO → approval → shipment/ASN → transit & customs → receiving → validation → lots & GL → sale.","","","AfroTransact Retail (1P) purchasing & receiving","High","","retail","retail","In Progress"
+"E10","Epic","AfroTransact Retail (1P) purchasing & receiving","Nine-step workflow: product master → PO → approval → shipment/ASN → transit & customs → receiving → validation → lots & GL → sale.","","","AfroTransact Retail (1P) purchasing & receiving","High","","retail","retail","Done"
 "S068","Story","Product master for platform products","Category managers create 1P products with supplier, HTS code, duty, shelf life, storage, reorder point and price.","- SKU and GTIN (AfroTransact GS1 prefix, check digit) assigned automatically
 - Listing starts as Draft","E10","","High","3","retail java","retail","Done"
 "S069","Story","Suppliers","Supplier records with lead time, on-time %, defect %, certifications and status.","- Supplier scorecards update from receipts
@@ -272,7 +272,7 @@
 - Push tracking mapped to shipment states","E11","","Medium","5","carriers go","carriers","Done"
 "S080","Story","Pickup points and seller pickup","Platform pickup points/lockers and seller-configured pickup with address and hours.","- Sellers set their pickup address and hours in Seller Center
 - Pickup ready notifications sent to customers","E11","","Medium","5","carriers delivery","carriers","Done"
-"E12","Epic","AfroTransact Delivery & driver app","Internal delivery from sellers and FCs to customers with an offline-first driver app.","","","AfroTransact Delivery & driver app","High","","delivery","delivery","In Progress"
+"E12","Epic","AfroTransact Delivery & driver app","Internal delivery from sellers and FCs to customers with an offline-first driver app.","","","AfroTransact Delivery & driver app","High","","delivery","delivery","Done"
 "S081","Story","Driver app sign-in with access check","Email + password + 6-digit code; only users with delivery:operate get in.","- Users without delivery:operate see 'No driver access' with who can grant it
 - Revoking access signs the driver out without losing unsynced events","E12","","High","5","delivery mobile","delivery","Done"
 "S082","Story","Vehicle inspection","10 checks with critical items, odometer, fuel, cold-box temperature, 4 live photos and signature.","- Failing brakes, tyres or lights blocks the route and reports a defect to dispatch
@@ -294,7 +294,7 @@
 - SOS alerts dispatch immediately","E12","","High","8","delivery mobile","delivery","Done"
 "S088","Story","Dispatch console","Plan routes per zone, assign drivers and reassign failed stops.","- Driver events stream into Delivery dispatch
 - Failed stops can be reassigned to another route","E12","","Medium","8","delivery staff-console","delivery","Done"
-"E13","Epic","Seller & provider onboarding with two-step review","Account first, then a resumable, entity-aware application reviewed by two different staff members.","","","Seller & provider onboarding with two-step review","High","","onboarding","onboarding","Done"
+"E13","Epic","Seller & provider onboarding with two-step review","Account first, then a resumable, entity-aware application reviewed by two different staff members.","","","Seller & provider onboarding with two-step review","High","","onboarding","onboarding","In Progress"
 "S089","Story","Resumable application with autosave","Applicants can save, sign out and resume exactly where they left off.","- Draft autosaves after every change
 - Save & sign out returns to 'Welcome back' and resumes on sign-in
 - No sidebar or back-office navigation while applying","E13","","Highest","5","onboarding java web","onboarding","Done"
@@ -381,7 +381,7 @@
 - Filter by actor, entity and date","E18","","High","3","trust java","trust","Done"
 "S120","Story","Seller health, suspend and reinstate","Health metrics (late shipment, cancellations, disputes) and account actions.","- Suspension hides listings and holds payouts
 - Reinstatement restores them","E18","","Medium","5","trust","trust","Done"
-"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","Done"
+"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","In Progress"
 "S121","Story","Notification service with provider ports","EmailSender, SmsSender, PushSender, ChatSender interfaces with adapters.","- Email adapters: Resend (primary), SendGrid, Amazon SES
 - SMS adapters: Twilio, Vonage, AWS End User Messaging
 - Push: FCM and APNs; WhatsApp: Meta Cloud API
@@ -395,7 +395,7 @@
 - Test-send goes only to the editor","E19","","Medium","5","notifications staff-console","notifications","Done"
 "S125","Story","Delivery receipts and notification log","Provider webhooks update status; staff can see every message sent.","- Bounces and complaints add to suppression list
 - Log shows channel, provider, status and template version","E19","","Medium","3","notifications","notifications","Done"
-"E20","Epic","Content, ads, announcements, markets & site config","Nothing promotional or legal is hard-coded: placements, campaigns, markets and site settings are data.","","","Content, ads, announcements, markets & site config","High","","content","content","Done"
+"E20","Epic","Content, ads, announcements, markets & site config","Nothing promotional or legal is hard-coded: placements, campaigns, markets and site settings are data.","","","Content, ads, announcements, markets & site config","High","","content","content","In Progress"
 "S126","Story","Placements: announcement bar, hero, banners","Slots with schemas and targeting edited in the back office and cached at the edge.","- Draft → review → scheduled → live → ended workflow
 - Publishing purges the CDN cache
 - Storefront renders placements server-side","E20","","High","5","content java","content","Done"
@@ -542,7 +542,7 @@
 - Elasticsearch ILM hot-warm-frozen policies defined","E29","","Medium","5","infra finops","infra","Done"
 "S183","Story","Secrets via External Secrets Operator","AWS Secrets Manager, GCP Secret Manager or Azure Key Vault behind ESO.","- No secret values in git
 - Same ExternalSecret manifests work on all three clouds","E29","","High","3","infra security","infra","Done"
-"E30","Epic","CI/CD, environments & Kubernetes deployment","Each service built, tested, signed and deployed independently to local/dev/uat/prod on the chosen cloud.","","","CI/CD, environments & Kubernetes deployment","High","","cicd","cicd","Done"
+"E30","Epic","CI/CD, environments & Kubernetes deployment","Each service built, tested, signed and deployed independently to local/dev/uat/prod on the chosen cloud.","","","CI/CD, environments & Kubernetes deployment","High","","cicd","cicd","In Progress"
 "S184","Story","Helm library chart and per-service charts","Shared at-service library chart; every service has its own chart and values per environment.","- helm template works for every service and environment
 - Charts include Deployment, Service, HPA, PDB, ServiceMonitor, NetworkPolicy and ExternalSecret","E30","","Highest","5","cicd k8s","cicd","Done"
 "S185","Story","Per-service GitHub Actions workflows","Path-filtered workflows calling reusable Java/Go pipelines.","- A change to one service builds and tests only that service
@@ -568,7 +568,7 @@
 - Dates and currency localised","E31","","Medium","8","legal i18n","legal","In Progress"
 "S194","Story","Accessibility WCAG 2.2 AA","Skip links, focus management, live regions, 44px targets and reduced motion.","- axe checks pass in CI with no serious violations
 - Every form lists errors and links to fields","E31","","High","5","legal a11y","legal","Done"
-"E32","Epic","Dashboards, charts & exports","Charts for platform, sellers and providers with PDF, CSV and Excel exports.","","","Dashboards, charts & exports","High","","exports","exports","To Do"
+"E32","Epic","Dashboards, charts & exports","Charts for platform, sellers and providers with PDF, CSV and Excel exports.","","","Dashboards, charts & exports","High","","exports","exports","Done"
 "S195","Story","Dashboard data feeds per portal","One dashboard endpoint per portal returning chart series.","- Feeds are cached for 60 seconds
 - Respect the caller's org and permissions","E32","","Medium","5","exports","exports","Done"
 "S196","Story","Export service (PDF, CSV, XLSX with native charts)","Server-side generation for tables and dashboards.","- XLSX includes native Excel charts linked to data
@@ -1153,7 +1153,7 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Staff record a state's thresholds and registration (number, effective date); changes are attributed
 - Seller Center → Payouts → Sales tax statement shows tax collected, refunded and net per state for a chosen month, with totals and a CSV
 - Verified: unit tests, Testcontainers PostgreSQL integration test (TaxNexusIT), BFF contract tests, web tests. Remaining: browser check; the default nexus threshold is a placeholder for a tax advisor to set per state; the tracker does not register anyone; no warning is sent when a state is crossed","E14","","Medium","5","tax staff-console seller-center gateway-bff tax-returns","tax-returns","In Progress"
-"E35","Epic","Shopper wallet, gift cards, referrals and membership","Ways for customers to hold, give and earn value on AfroTransact and to get free delivery: AfroTransact credit (store credit), gift cards, a referral program and a membership. Decisions and defaults: docs/adr/0006-credit-gift-cards-referral-membership.md.","","","Shopper wallet and membership","High","","wallet membership","payments","To Do"
+"E35","Epic","Shopper wallet, gift cards, referrals and membership","Ways for customers to hold, give and earn value on AfroTransact and to get free delivery: AfroTransact credit (store credit), gift cards, a referral program and a membership. Decisions and defaults: docs/adr/0006-credit-gift-cards-referral-membership.md.","","","Shopper wallet and membership","High","","wallet membership","payments","In Progress"
 "S320","Story","AfroTransact credit: shopper balance ledger, spend at checkout, refund to credit","Each customer has a USD credit balance kept as an append-only ledger, spendable at checkout before the card. Store credit can only be used to buy products and services: it can never be converted to cash, paid out, refunded to a card or transferred. Staff grant and adjust it with a reason.","- Balance is the sum of an append-only ledger; every entry has a reason and an actor
 - Credit can only be spent on purchases: no cash-out, payout, card refund of credit or transfer anywhere in the product or API
 - Checkout applies credit first (partial or full) and charges the card for the rest; a full credit order needs no card
@@ -1188,7 +1188,7 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Seller can reply once per review from Seller Center; sellers cannot edit or hide reviews
 - Average and count flow to catalog, search (rating filter and sort) and listing cards; booking reviews keep working
 - Customer mobile app can rate a delivered item
-- Contracts first, tests, i18n in all five locales, docs","E05","","High","13","reviews ratings","catalog orders trust-ops","To Do"
+- Contracts first, tests, i18n in all five locales, docs","E05","","High","13","reviews ratings","catalog orders trust-ops","In Progress"
 "S325","Story","Staff manage categories, product types and their details; category requests are reviewed in the console","The category tree (department, category, product type) and what each product type asks sellers for (brand, material, allergens, permits...) could only be created by SQL seed migrations. Sellers could request a category but no staff screen reviewed the request. Staff now create, rename, move, reorder and retire categories and edit each product type's details in the console, and approving a request creates its category and product type in one step.","- Catalog taxonomy API under catalog:taxonomy: create, rename, move, reorder, retire and restore departments, categories and product types; edit a product type's label, identifier rule (GTIN/ISBN), traits (food, perishable, regulated, pre-order) and attributes (key, label, kind, units, choices, required, section DETAILS/FOOD/REGULATED, whether it applies)
 - Every change carries a reason and writes an audit row (who, what, why, before and after); edits use If-Match (412 on a stale version, 428 without one); every change publishes catalog.taxonomy.changed
 - Unique codes and sibling names, three levels, a node cannot move inside itself, a category that products still use is never retired (409), a retired category stays on existing products but cannot be chosen for new ones and is hidden from /v1/categories (includeRetired=true lists it; the indexer reads it)
@@ -1197,3 +1197,72 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Staff console, Catalog: a tree with product counts, add, rename, move, retire and restore sheets, up/down reordering saved with a reason, a details editor with a live preview of the seller's form, and a Category requests tab showing the seller by name; Save is disabled until something changed; gated by catalog:taxonomy; five locales
 - Gateway BFF routes under /v1/staff/taxonomy and the category-requests table, contract first, with a conformance test for every operation; MCP staff tool category_requests_queue (read-only)
 - Seed migrations are the initial data only; docs say how taxonomy is managed and where brand and other attributes come from","E03","","High","13","catalog taxonomy categories staff-console","catalog gateway-bff staff-console","Done"
+"S326","Story","Size charts are a reusable library chosen inside the product form","Sellers own size charts. The product form shows a size guide step only for product types with sizing; the seller picks a saved chart, creates one in a sheet from the category template, or manages charts from the picker. Storefront and mobile show the size guide. Built and merged; waiting for the browser pass and a re-seed.","- Size guide step appears only for categories whose product type has sizing, nothing hard-coded per category
+- A chart is required for clothing and shoes and only nudged elsewhere; the server refuses a submit without one where required
+- Seller can search saved charts, see a preview, create a chart from the category template in a sheet and have it selected
+- Manage charts opens a table with edit, duplicate and retire; retire shows how many products use the chart; bulk chart import is reachable from it
+- No sidebar entry, listings button or standalone page
+- Storefront and mobile show the size guide; seed links charts to existing fashion products","E03","","High","13","catalog size-charts seller-center","catalog","In Progress"
+"S327","Story","Sellers sell only in approved departments, with a request flow","Each seller organisation has an allowed set of departments. Catalog enforces it on every write and on the category tree; the UI fails closed. Sellers request a department from the category list or Preferences; staff review requests and edit departments with a reason. Groceries no longer needs a food permit (catalog V17); Beauty still asks for labelling confirmation. Built and merged; the 503 on seller/catalog/categories on the owner's machine is still being diagnosed.","- Catalog refuses products and charts outside the seller's departments and returns 403 catalog.department-not-allowed or catalog.no-departments
+- The seller category tree only lists allowed departments; a failed scope lookup shows a plain message with Retry, never an endless spinner
+- Category list always ends with Request a department; a store with no departments gets it as the main action; Preferences shows approved, pending and declined departments
+- Staff Department requests screen approves or declines with a reason; staff can edit an organisation's departments with a reason of at least 10 characters
+- Groceries asks for no food permit; a permit is only for food services
+- Staff and service accounts and the platform owner are exempt","E13","","Highest","13","catalog seller staff-console compliance","onboarding","In Progress"
+"S328","Story","Guests can ask for back-in-stock alerts without signing in","Back-in-stock alerts work for signed-out shoppers with an email address, with rate limits, a one-click unsubscribe link and purge of old records. Merged; identity migration V37 carries the notification tables.","- Guest creates an alert with an email and receives 201 without a token
+- Rate limits per address and per client
+- Unsubscribe link works without signing in and its page sets a strict CSP
+- Old alerts are purged on schedule
+- Counsel review question Q33 recorded","E19","","High","5","notifications stock-alerts guests","notifications","In Progress"
+"S329","Story","Idle and absolute session timeouts per audience, with a warning","Per-audience idle and absolute timeouts in identity, enforced in the BFF (background requests do not extend a session), a warning dialog on the web before sign-out, and on-device enforcement in the mobile apps with lock and sign-in.","- Identity holds an idle and absolute policy per audience, readable at GET /v1/session/policy
+- Requests marked X-Background do not extend the idle timer; POST /v1/session/activity does
+- Web shows a warning dialog before sign-out and signs out at the limit
+- Mobile apps lock and sign out on device at the configured limits
+- Defaults documented","E02","","High","8","identity security sessions web mobile","identity","In Progress"
+"S330","Story","Meilisearch is the default search provider, with a reindex command and embeddings switch","SEARCH_PROVIDER defaults to Meilisearch; a reindex command rebuilds products-<market> from catalog, offers, inventory and sellers (Kafka retention is only 7 days); embeddings can be switched on by configuration. Merged; owner still checking that fashion and Caribbean products appear after reindex.","- Local stack starts Meilisearch and no Elasticsearch or Kibana by default
+- make reindex-search fills the index and reports counts
+- Index settings, facets and synonyms are defined in code
+- Embeddings switch documented and off by default
+- Fashion and Caribbean seed products are searchable after seed and reindex (owner to verify)","E04","","High","8","search meilisearch indexer","search","In Progress"
+"S331","Story","Table and layout standards: row actions menu, Drafts tab, alerts and stat strips","Shared RowActions, RowName, ConfirmDelete, InlineEdit, Alert, StatStrip and PageStack replace per-screen buttons, full-width alerts and cards. Listings and Drafts are separate server-driven tables with a count on the tab. Merged; owner browser pass pending.","- Every Seller Center and staff table uses the kebab row actions menu with confirm for destructive actions
+- Drafts are their own table with paging and search, not a block above the listings
+- Alerts use semantic colours and are not full width; stat strips replace big-number cards
+- Unchanged forms cannot be saved; sheets share width and close on outside click
+- No visible scrollbars, flat Amazon-style layout without cards","E24","","High","8","ui seller-center staff-console standards","seller-center","In Progress"
+"S332","Story","Staff can suspend and reinstate a seller or provider, and reason fields say what is missing","Suspend and reinstate in the Organisations row menu and sheet, through trust-ops, with a reason code and a note of at least 10 characters; listings are hidden and payouts paused until reinstated. All staff reason fields show the length rule as you type. The staff Search analytics page was removed (developers use Meilisearch's dashboard). Merged; permission level for sellers:enforce is VIEW on the module and awaits the owner's decision.","- Suspend appears on APPROVED rows and Reinstate on SUSPENDED rows, in the menu and the sheet
+- Dialog states the effect: listings hidden and payouts paused, restored on reinstate
+- Action is audited with reason code and note
+- Reason field shows the rule as the person types and Save is only disabled for a stated reason
+- Staff Search analytics page, route and BFF handlers removed; search events kept for sponsored click billing","E25","","High","8","staff-console trust-ops sellers","staff-console","In Progress"
+"S333","Story","Home page: rule-based tiles, scheduled hero slides and personal rails","A home tile cell can be a product rule (top rated or new in a department, best sellers, search, fastest delivery, picked ATINs) resolved to the best in-stock product with a real photo; hero slides take start and end dates; signed-in shoppers get Based on your orders and everyone gets Recently viewed. Every rail and tile shows only in-stock products with real photos. Merged; owner browser pass pending.","- Tile cells can carry a source rule and the BFF fills image, title and link; fixed-image cells still work
+- A product appears once per page; a rule with nothing eligible drops its cell
+- Hero slides show only between startsAt and endsAt, in order
+- Based on your orders and Recently viewed are hidden when empty
+- Placeholders, icons, data URLs and out-of-stock products never appear on any rail
+- Seed creates product-driven tiles without pinned images","E20","","High","8","storefront content home placements","content","In Progress"
+"S334","Story","Home page follows the shopper's deliver-to location","Rails and tiles gain near-you, deliverable-fast and community rules; results are ordered by closeness and rotated daily by ZIP and shopper; heroes can be targeted by ZIP prefix. Demo ZIPs 77042 (Houston), 75212 (Dallas), 08817 (Edison) and 10453 (Bronx) show different content. Merged; needs the content V17 migration and re-seed, then the owner's browser pass.","- Changing the ZIP changes the hero, tiles and rails
+- near-you, deliverable-fast and community rules exist; titles take city, state and day
+- Page is stable within a visit and differs by ZIP and by day; each product appears once
+- Empty rails are hidden
+- Demo ZIPs 77042 and 08817 show different content","E20","","High","8","storefront content home location","content","In Progress"
+"S335","Story","Deliver-to shows the city, is detected silently and is changed in a popover","The header shows the city, never the ZIP. A first visit is detected from Cloudflare visitor-location headers (or a local override) with no popup; the browser location is asked only on an explicit click; changing location uses an anchored popover or bottom sheet with saved addresses and one city, address or ZIP combobox. Merged; real Cloudflare headers untested.","- Header shows Deliver to <City>; ZIP stays internal
+- No popup on load; navigator.geolocation only on an explicit click, denial shows a message
+- Detected location is marked detected and a chosen location is never overwritten
+- Picker shows saved addresses for signed-in shoppers and one ARIA combobox with city and state for ambiguous names
+- Cards never show a 0 reviews rating row
+- Verified on a deployment with Cloudflare headers","E22","","High","8","storefront geo location cloudflare","geo","In Progress"
+"S336","Story","Identity sign-up: standard phone field and favicon","The server-rendered sign-up page gets format-as-you-type phone entry per region with libphonenumber-js, letters blocked on input and paste, a flag and calling-code picker, and server-side rejection of letters; identity pages get the logo favicon and /favicon.ico redirect. Merged; Docker integration tests not run.","- Letters cannot be typed or pasted; numbers format per region; maxlength per region
+- Server rejects letters and invalid numbers and stores E.164; blank is allowed
+- Country picker shows flag and calling code in full
+- Identity pages show the logo icon and /favicon.ico is answered without a login redirect","E02","","Medium","3","identity phone favicon","identity","In Progress"
+"S337","Story","Content-Security-Policy and security headers across identity, web apps and edge","Identity serves an enforced strict CSP with HSTS, Referrer-Policy and Permissions-Policy; the three web apps ship a per-request nonce CSP in Report-Only with a report endpoint; Cloudflare gets HSTS and a baseline Referrer-Policy. Merged; rollout is seven days Report-Only in uat, then enforce.","- Identity pages carry an enforced CSP; a test scans templates for inline script and style
+- Sign-in redirect through form-action works end to end in a real browser
+- Storefront, Seller Center and Staff console send Content-Security-Policy-Report-Only with a nonce and report to /api/csp-report
+- CSP_MODE switches report-only, enforce and off per app
+- Edge sets HSTS and a baseline Referrer-Policy
+- Seven days of Report-Only in uat reviewed, then enforce shipped to production","E30","","High","8","security csp headers identity web cloudflare","cicd","In Progress"
+"S338","Story","Guided deploy wizard for the OVHcloud and Cloudflare test environment","make deploy-guide takes an owner from nothing to a verified environment: it teaches each value, validates it, checks it live where safe, gates billable steps behind typed words, and offers explain, doctor and dry-run modes. One value catalogue feeds the wizard, gh-setup and a workflow test. Has never run against real accounts.","- One value catalogue is read by the wizard, gh-setup.sh and the workflows test
+- Billable steps need a typed word and refuse to start while a required value is missing
+- Secrets never reach output, logs or the state file
+- explain, status and dry-run make no outward calls
+- One real run reaches a verified test environment","E30","","High","13","deploy ovh cloudflare tooling","cicd","In Progress"
