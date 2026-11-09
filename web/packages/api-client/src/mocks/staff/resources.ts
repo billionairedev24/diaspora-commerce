@@ -824,16 +824,6 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       }
     }
   },
-  'tax-codes': {
-    title: 'Tax codes',
-    columns: [col('code', 'Code', 'mono', 18), col('label', 'What it is', 'strong', 30), col('category', 'Rate column', 'text', 16), col('providerCode', 'Provider code', 'mono', 18), col('taxableLabel', 'Taxable', 'text', 12), col('exemptStates', 'Exempt in', 'mono', 14), col('state', 'State', 'status', 10)],
-    statusKey: 'state',
-    facets: facets('ACTIVE', 'INACTIVE'),
-    exportable: true,
-    titleOf: (r) => str(r.fields.label),
-    subtitleOf: (r) => str(r.fields.code),
-    actions: []
-  },
   reconciliation: {
     title: 'Differences',
     columns: [col('stripeRef', 'Stripe object', 'mono', 20), col('windowStart', 'Day', 'date', 11), col('ledgerMinor', 'Ledger', 'money', 12), col('stripeMinor', 'Stripe', 'money', 12), col('differenceMinor', 'Difference', 'money', 12), col('note', 'Why', 'text', 21), col('status', 'Status', 'status', 12)],
@@ -1474,48 +1464,6 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
         r.fields.message = str(v.message);
       }
     }
-  },
-  'tax-settings': {
-    title: 'Sales tax method',
-    columns: [col('setting', 'Setting', 'strong', 30), col('methodLabel', 'In force', 'text', 24), col('stripeLabel', 'Stripe Tax', 'text', 18), col('changedByName', 'Changed by', 'text', 16), col('changedAt', 'Changed', 'datetime', 12)],
-    facets: [],
-    exportable: false,
-    titleOf: () => 'Who calculates sales tax',
-    subtitleOf: (r) => `${str(r.fields.methodLabel)} is in force`,
-    sections: [['In force', ['methodLabel', 'stripeLabel', 'configuredDefault', 'changedByName', 'changedAt']]],
-    actions: [],
-    edit: {
-      permission: 'tax:configure',
-      form: (r) => form('Change who calculates sales tax', 'Change method', [
-        field('method', 'Method', 'select', true, { options: [{ value: 'RULES', label: 'Our own rules (rate tables and tax codes)' }, { value: 'STRIPE_TAX', label: 'Stripe Tax (needs to be set up)' }], value: str(r.fields.method) }),
-        field('reason', 'Why (at least 10 characters)', 'textarea', true, { maxLength: 500 })
-      ], 'Our own rules are always available. Stripe Tax can only be chosen once it is set up. The change applies to new quotes; orders already placed keep their tax.', ['method']),
-      apply: (r, v) => {
-        if (str(v.method) === 'STRIPE_TAX') throw new Error('Stripe Tax is not set up yet');
-        r.fields.method = str(v.method);
-        r.fields.methodLabel = 'Our own rules';
-      }
-    }
-  },
-  'tax-rules': {
-    title: 'Tax classification rules',
-    columns: [col('productType', 'Product type', 'mono', 16), col('attrKey', 'Question', 'mono', 14), col('attrValue', "Seller's answer", 'text', 28), col('taxCode', 'Tax code', 'strong', 18), col('kind', 'Rule', 'status', 10), col('note', 'Why', 'text', 24)],
-    statusKey: 'kind',
-    facets: facets('TYPE', 'ANSWER'),
-    exportable: true,
-    titleOf: (r) => `${str(r.fields.productType)} ${str(r.fields.attrValue)}`.trim(),
-    subtitleOf: (r) => `→ ${str(r.fields.taxCode)}`,
-    actions: []
-  },
-  'tax-review': {
-    title: 'Tax review queue',
-    columns: [col('productType', 'Product type', 'mono', 16), col('answer', "Seller's answer", 'text', 28), col('taxCode', 'Taxed as', 'strong', 18), col('count', 'Order lines', 'number', 10), col('lastSeen', 'Last seen', 'datetime', 16), col('state', 'State', 'status', 12)],
-    statusKey: 'state',
-    facets: facets('OPEN', 'REVIEWED'),
-    exportable: true,
-    titleOf: (r) => `${str(r.fields.productType)} ${str(r.fields.answer)}`.trim(),
-    subtitleOf: () => 'Taxed as general goods because no rule matched. Add a rule, or mark it reviewed if general goods is right.',
-    actions: []
   },
   'tax-rates': {
     title: 'Tax rates',

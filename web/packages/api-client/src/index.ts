@@ -78,6 +78,7 @@ export {
 export * from './staff-plans';
 export { createStaffPreordersApi, staffPreorderKeys, staffPreorderQueries, type StaffPreordersApi } from './staff-preorders';
 export * from './staff-runs';
+export * from './staff-tax';
 export * from './staff-taxonomy';
 export { tableSearchParams } from './table-query';
 export { US_STATES } from './us-states';

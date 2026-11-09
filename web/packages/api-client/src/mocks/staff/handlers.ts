@@ -66,6 +66,7 @@ import { ordersOf, PREORDER_ORDER_COLUMNS, preorderHandlers, preorderOrderRow } 
 import { type ActionCtx, detailKind, humanize, type MockAction, RESOURCES, toneOf } from './resources';
 import { runHandlers } from './runs';
 import { staffSettingsHandlers } from './settings';
+import { taxHandlers } from './tax';
 import { taxonomyHandlers } from './taxonomy';
 import { MockRenderError, renderPart, type TemplatePart } from './template-render';
 
@@ -1329,6 +1330,8 @@ export const staffHandlers = [
   ...departmentHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Settings → Published pages: the legal and help editors, drafts, publication and rollback */
   ...contentPageHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
+  /* Fees & commissions → Sales tax: category profiles, review queue, provider code maps, method, shadow report */
+  ...taxHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   ...taxonomyHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Plans & billing (S292–S297): the seller service's catalogue, trials, rewards and per-seller billing */
   ...planHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),

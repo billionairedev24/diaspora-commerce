@@ -2908,6 +2908,304 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/tax/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The 73 category tax profiles (server-driven table)
+         * @description tax-returns `GET /v1/tax/profiles` (and each profile for its Stripe codes). Filters by department and status; facets count the whole list. Status is shown as a plain gate label.
+         */
+        get: operations["listStaffTaxProfiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/profiles/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One category profile: facts, decision table in words, flagged notes, history
+         * @description tax-returns `GET /v1/tax/profiles/{categoryCode}`. Rows are read-only here: rules change through the dataset and a seed migration.
+         */
+        get: operations["getStaffTaxProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/profiles/{code}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a category approved or reopen it for approval
+         * @description tax-returns `PUT /v1/tax/profiles/{categoryCode}/status` (`tax:classify-admin`). A reason of 10+ characters is required; lifting NEEDS_APPROVAL, CONFLICT_OPEN or BLOCKED_BUNDLE also needs the tax professional's name (`approvedBy`) and the decision reference (`decisionRef`). REFINE_CODE is lifted per product, never here (409).
+         */
+        post: operations["changeStaffTaxProfileStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Variants waiting for tax review, or the decisions already made
+         * @description tax-returns `GET /v1/tax/variant-classifications`. `status` defaults to PENDING_REVIEW (the queue); APPROVED, REJECTED and STALE list decisions with who decided, when and under which rule version. Sellers and people by name.
+         */
+        get: operations["listStaffTaxReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/reviews/{atin}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One variant in tax review: facts as entered, evidence, proposed decision, history
+         * @description tax-returns `GET /v1/tax/variant-classifications/{atin}` with the category profile for fact labels. `ordersAffected` appears when tax-returns reports it.
+         */
+        get: operations["getStaffTaxReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/reviews/{atin}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve the classification
+         * @description tax-returns `POST /v1/tax/variant-classifications/{atin}/approve` (`tax:classify-admin`). 422 while the answers give no chargeable decision. Staff-owned facts and the verified provider codes of a REFINE_CODE category are set here.
+         */
+        post: operations["approveStaffTaxReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/reviews/{atin}/reclassify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move the variant to another category
+         * @description tax-returns `POST /v1/tax/variant-classifications/{atin}/reclassify` (`tax:classify-admin`). The old decision stays in the history; the record goes back to review. Placed orders keep the tax they were charged.
+         */
+        post: operations["reclassifyStaffTaxReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/reviews/{atin}/request-information": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask the seller for more information
+         * @description tax-returns `POST /v1/tax/variant-classifications/{atin}/request-information` (`tax:classify-admin`): proposed addition to the tax-returns contract. The message is stored and sent to the seller by tax-returns; until that route is live this answers 503.
+         */
+        post: operations["requestStaffTaxInformation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/code-map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Outcome code to provider code map for one provider, with completeness
+         * @description tax-returns `GET /v1/tax/provider-code-map`. `provider` defaults to the one in use (charging, else shadow). Completeness counts the outcomes that still need a verified code (blocked outcomes need none).
+         */
+        get: operations["listStaffTaxCodeMap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/code-map/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The map of one provider as CSV text
+         * @description Columns `internal_tax_code,category,outcome,provider,provider_code,verified`. Cells that start like a formula are prefixed with an apostrophe.
+         */
+        get: operations["exportStaffTaxCodeMap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/code-map/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview or apply a CSV of provider codes
+         * @description `dryRun: true` validates and shows what would change; otherwise a valid file is applied code by code (tax-returns `PUT /v1/tax/provider-code-map/{internalTaxCode}`, `tax:classify-admin`) with one reason. A file with any invalid row is not applied at all.
+         */
+        post: operations["importStaffTaxCodeMap"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/code-map/{internalTaxCode}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                internalTaxCode: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set, verify or clear one provider code
+         * @description tax-returns `PUT /v1/tax/provider-code-map/{internalTaxCode}` (`tax:classify-admin`). Stripe codes look like txcd_40040016. A code that is not set cannot be verified.
+         */
+        put: operations["updateStaffTaxCode"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/method": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who calculates tax, the SHADOW provider, what can be chosen and the history
+         * @description tax-returns `GET /v1/tax/settings` plus each provider's code-map completeness. A provider that is not set up, or a charging provider whose codes are not all verified, is not available (with the reason).
+         */
+        get: operations["getStaffTaxMethod"];
+        /**
+         * Change who calculates tax and the shadow provider
+         * @description tax-returns `PUT /v1/tax/settings` (`tax:configure`). A reason of 10+ characters is required. Applies to new quotes; placed orders keep the tax they were charged. 422 for a provider that is not set up, an incomplete code map, or a shadow provider equal to the charging one.
+         */
+        put: operations["changeStaffTaxMethod"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/tax/shadow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Shadow report: provider quote against ours, with a ready-to-cut-over summary
+         * @description tax-returns `GET /v1/tax/shadow/report`, every difference read (up to 1000) so tallies by category, outcome and kind are exact. The summary checks `thresholds` from tax-returns when sent, otherwise the BFF defaults (`thresholdSource`). Shadow quotes are never charged.
+         */
+        get: operations["getStaffTaxShadow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/markets/countries": {
         parameters: {
             query?: never;
@@ -6980,7 +7278,7 @@ export interface components {
             empty?: components["schemas"]["ModuleEmpty"] | null;
         };
         /** @enum {string} */
-        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "category-requests" | "moderation" | "product-reviews" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "careers-jobs" | "cookie-definitions" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "tax-codes" | "tax-rules" | "tax-review" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons" | "reconciliation" | "reconciliation-runs" | "ledger-adjustments" | "recoveries" | "credit-adjustments" | "gift-cards" | "credit-liabilities" | "money-settings" | "membership-tiers" | "memberships" | "membership-settings" | "membership-report" | "referrals" | "referral-settings" | "stripe-lookup" | "payment-settings" | "tax-settings" | "maintenance" | "tax-filings" | "tax-nexus" | "oauth-clients" | "identity-sessions" | "signing-keys" | "auth-settings" | "session-policy" | "exchange-rates";
+        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "category-requests" | "moderation" | "product-reviews" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "careers-jobs" | "cookie-definitions" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons" | "reconciliation" | "reconciliation-runs" | "ledger-adjustments" | "recoveries" | "credit-adjustments" | "gift-cards" | "credit-liabilities" | "money-settings" | "membership-tiers" | "memberships" | "membership-settings" | "membership-report" | "referrals" | "referral-settings" | "stripe-lookup" | "payment-settings" | "maintenance" | "tax-filings" | "tax-nexus" | "oauth-clients" | "identity-sessions" | "signing-keys" | "auth-settings" | "session-policy" | "exchange-rates";
         /** @enum {string} */
         Tone: "good" | "warn" | "bad" | "info" | "brand";
         CellValue: string | number | null;
@@ -9810,6 +10108,325 @@ export interface components {
             departments: string[];
             /** @description Why the departments change (audited) */
             reason: string;
+        };
+        StaffTaxDoc: {
+            [key: string]: unknown;
+        };
+        StaffTaxProfilePage: {
+            items: components["schemas"]["StaffTaxProfileRow"][];
+            total: number;
+            page: number;
+            size: number;
+            departments: {
+                code: string;
+                name: string;
+                count: number;
+            }[];
+            statuses: {
+                value: string;
+                label: string;
+                count: number;
+            }[];
+            ruleVersion?: string;
+            canChange: boolean;
+        };
+        StaffTaxProfileRow: {
+            categoryCode: string;
+            name: string;
+            department: string;
+            departmentName: string;
+            /** @enum {string} */
+            status: "ACTIVE" | "NEEDS_APPROVAL" | "BLOCKED_BUNDLE" | "REFINE_CODE" | "CONFLICT_OPEN";
+            statusLabel: string;
+            statusExplain?: string;
+            stripeCodes?: string[];
+            stripeCodeList?: string;
+            defaultOutcome?: string;
+            defaultOutcomeLabel?: string;
+            scenarioCount: number;
+            ruleVersion?: string;
+            openDecision?: number | null;
+        };
+        StaffTaxProfile: components["schemas"]["StaffTaxProfileRow"] & {
+            conflictingCodes?: string[];
+            facts: {
+                [key: string]: unknown;
+            }[];
+            decisions: {
+                [key: string]: unknown;
+            }[];
+            /** @description Notes flagged for the tax professional */
+            notes: {
+                [key: string]: unknown;
+            }[];
+            history: {
+                [key: string]: unknown;
+            }[];
+            changedByName?: string;
+            changedAt?: string;
+            canChange: boolean;
+            actions: {
+                [key: string]: unknown;
+            }[];
+            readOnlyReason?: string;
+        };
+        StaffTaxProfileStatusChange: {
+            /** @enum {string} */
+            status: "ACTIVE" | "NEEDS_APPROVAL";
+            reason: string;
+            /** @description The tax professional or firm who signed off; required when lifting a gate */
+            approvedBy?: string;
+            /** @description Reference of the signed-off decision or opinion letter; required when lifting a gate */
+            decisionRef?: string;
+        };
+        StaffTaxReviewPage: {
+            items: components["schemas"]["StaffTaxReviewRow"][];
+            total: number;
+            page: number;
+            size: number;
+            status: string;
+            statuses?: {
+                [key: string]: unknown;
+            }[];
+            canDecide: boolean;
+        };
+        StaffTaxReviewRow: {
+            atin: string;
+            gtin?: string;
+            title: string;
+            /** @description Seller names */
+            sellers: string[];
+            categoryCode: string;
+            categoryName: string;
+            status: string;
+            statusLabel: string;
+            /** @description Plain reason this needs a person */
+            why: string;
+            proposed: {
+                [key: string]: unknown;
+            };
+            classifiedAt?: string;
+            classifiedByName?: string;
+            reviewedAt?: string;
+            reviewedByName?: string;
+            ruleVersion?: string;
+        };
+        StaffTaxReview: components["schemas"]["StaffTaxReviewRow"] & {
+            departmentName?: string;
+            profileStatus?: string;
+            profileStatusLabel?: string;
+            facts: {
+                [key: string]: unknown;
+            }[];
+            sellerListings?: {
+                [key: string]: unknown;
+            }[];
+            evidence: {
+                [key: string]: unknown;
+            }[];
+            decision?: {
+                [key: string]: unknown;
+            };
+            audit: {
+                [key: string]: unknown;
+            }[];
+            canDecide: boolean;
+            canApprove: boolean;
+            approve: {
+                [key: string]: unknown;
+            };
+            refinedProviderCodes?: {
+                [key: string]: unknown;
+            };
+            /** @description Present only when tax-returns reports it */
+            ordersAffected?: number;
+        };
+        StaffTaxApprove: {
+            reason: string;
+            staffFacts?: {
+                [key: string]: unknown;
+            };
+            refinedProviderCodes?: {
+                [key: string]: string;
+            };
+        };
+        StaffTaxReclassify: {
+            categoryCode: string;
+            productTypeCode?: string;
+            reason: string;
+        };
+        StaffTaxRequestInformation: {
+            /** @description What the seller is asked to provide */
+            message: string;
+        };
+        StaffTaxCodeMap: {
+            /** @enum {string} */
+            provider: "STRIPE" | "AVALARA";
+            providerLabel?: string;
+            activeProvider?: string;
+            items: components["schemas"]["StaffTaxCodeEntry"][];
+            total: number;
+            page: number;
+            size: number;
+            completeness: components["schemas"]["StaffTaxCompleteness"];
+            canEdit: boolean;
+            states?: {
+                [key: string]: unknown;
+            }[];
+        };
+        StaffTaxCompleteness: {
+            needed: number;
+            mapped: number;
+            verified: number;
+            unmapped: number;
+            unverified: number;
+            percent: number;
+            complete: boolean;
+        };
+        StaffTaxCodeEntry: {
+            internalTaxCode: string;
+            categoryCode?: string;
+            categoryName?: string;
+            outcome: string;
+            outcomeLabel?: string;
+            outcomeName?: string;
+            provider: string;
+            providerCode: string | null;
+            verified: boolean;
+            /** @enum {string} */
+            state: "NOT_NEEDED" | "UNMAPPED" | "UNVERIFIED" | "VERIFIED";
+            stateLabel: string;
+            note?: string;
+            mapVersion?: number;
+            changedByName?: string;
+            changedAt?: string;
+        };
+        StaffTaxCodeUpdate: {
+            /** @enum {string} */
+            provider: "STRIPE" | "AVALARA";
+            /** @description Empty or null clears the code */
+            providerCode?: string | null;
+            verified?: boolean;
+            reason: string;
+        };
+        StaffTaxCodeMapExport: {
+            filename: string;
+            csv: string;
+            rows: number;
+        };
+        StaffTaxCodeMapImport: {
+            /** @enum {string} */
+            provider: "STRIPE" | "AVALARA";
+            csv: string;
+            dryRun?: boolean;
+            /** @description Required unless dryRun */
+            reason?: string;
+        };
+        StaffTaxCodeMapImportResult: {
+            provider: string;
+            rows: number;
+            changed: number;
+            unchanged: number;
+            applied: number;
+            dryRun: boolean;
+            /** @description The file has invalid rows so nothing was applied */
+            blocked?: boolean;
+            problems: {
+                [key: string]: unknown;
+            }[];
+            preview: {
+                [key: string]: unknown;
+            }[];
+        };
+        StaffTaxMethod: {
+            /** @enum {string} */
+            method: "RULES" | "STRIPE_TAX" | "AVALARA";
+            methodLabel: string;
+            methodExplain: string;
+            shadowProvider?: string;
+            shadowLabel?: string;
+            activeProvider?: string;
+            options: {
+                [key: string]: unknown;
+            }[];
+            shadowOptions: {
+                [key: string]: unknown;
+            }[];
+            providers: {
+                [key: string]: unknown;
+            }[];
+            history: {
+                [key: string]: unknown;
+            }[];
+            changedByName?: string;
+            changedAt?: string;
+            runbookPath: string;
+            canConfigure: boolean;
+            draftNotice?: string;
+        };
+        StaffTaxMethodChange: {
+            /** @enum {string} */
+            method: "RULES" | "STRIPE_TAX" | "AVALARA";
+            /** @enum {string|null} */
+            shadowProvider?: "STRIPE" | "AVALARA" | null | "";
+            reason: string;
+        };
+        StaffTaxShadow: {
+            provider: string;
+            providerLabel?: string;
+            from: string;
+            to: string;
+            shadowOff: boolean;
+            message?: string;
+            linesCompared?: number;
+            linesDiffering?: number;
+            differingPct?: number;
+            absoluteDifferenceText?: string;
+            netDifferenceText?: string;
+            byCode?: {
+                [key: string]: unknown;
+            }[];
+            byCategory?: {
+                [key: string]: unknown;
+            }[];
+            byOutcome?: {
+                [key: string]: unknown;
+            }[];
+            /** @description Only when tax-returns sends shipToState on a difference */
+            byState?: {
+                [key: string]: unknown;
+            }[];
+            kinds?: {
+                [key: string]: unknown;
+            }[];
+            /** @description Sample differences with both quotes */
+            items?: {
+                [key: string]: unknown;
+            }[];
+            total?: number;
+            page?: number;
+            size?: number;
+            /** @description More differences exist than were read */
+            partial?: boolean;
+            readiness?: components["schemas"]["StaffTaxReadiness"];
+            runbookPath?: string;
+            canConfigure: boolean;
+        };
+        StaffTaxReadiness: {
+            ready: boolean;
+            headline: string;
+            checks: {
+                key: string;
+                title: string;
+                ok: boolean;
+                detail: string;
+            }[];
+            /** @enum {string} */
+            thresholdSource: "DEFAULT" | "TAX_RETURNS";
+            thresholds: {
+                [key: string]: unknown;
+            };
+            rateNote?: string;
         };
     };
     responses: {
@@ -14568,6 +15185,450 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffTaxProfiles: {
+        parameters: {
+            query?: {
+                department?: string;
+                status?: string;
+                q?: string;
+                /** @description `<column>,asc|desc` */
+                sort?: string[];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxProfilePage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffTaxProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxProfile"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    changeStaffTaxProfileStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxProfileStatusChange"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxProfile"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffTaxReviews: {
+        parameters: {
+            query?: {
+                status?: string;
+                categoryCode?: string;
+                sellerOrgId?: string;
+                q?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxReviewPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffTaxReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxReview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    approveStaffTaxReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxApprove"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxReview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    reclassifyStaffTaxReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxReclassify"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxReview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    requestStaffTaxInformation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxRequestInformation"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxReview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffTaxCodeMap: {
+        parameters: {
+            query?: {
+                provider?: string;
+                state?: string;
+                categoryCode?: string;
+                unmappedOnly?: boolean;
+                q?: string;
+                /** @description `<column>,asc|desc` */
+                sort?: string[];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxCodeMap"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    exportStaffTaxCodeMap: {
+        parameters: {
+            query?: {
+                provider?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxCodeMapExport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    importStaffTaxCodeMap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxCodeMapImport"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxCodeMapImportResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffTaxCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                internalTaxCode: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxCodeUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxCodeEntry"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffTaxMethod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxMethod"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    changeStaffTaxMethod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTaxMethodChange"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxMethod"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffTaxShadow: {
+        parameters: {
+            query?: {
+                /** @description Date, default 30 days ago */
+                from?: string;
+                /** @description Date, default today */
+                to?: string;
+                provider?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTaxShadow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };

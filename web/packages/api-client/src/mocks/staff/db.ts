@@ -13,6 +13,7 @@ import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
 import { seedIdentityAdmin } from './identity';
 import { type MockMarketsState, seedMarkets } from './markets';
+import { type MockTaxState, seedTax } from './tax';
 import { tierBenefitDetails } from './membership-tiers';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
 import { seedShipments, syncOrder } from './order-shipments';
@@ -60,6 +61,8 @@ export interface MockStaffDb {
   preorders: MockPreorderState;
   /** content's draft markets: countries → states → cities (Markets & locations). */
   markets: MockMarketsState;
+  /** The category tax tools: profile gates, the review queue, provider code maps, the method and SHADOW provider. */
+  tax: MockTaxState;
   /** seller's department requests and organisations' departments (Department requests). */
   departments: MockDepartmentsState;
   /** content's legal and help authoring: versions, revisions and working drafts (Settings → Published pages). */
@@ -516,18 +519,6 @@ function seed(now: Date): MockStaffDb {
     rec('local:TX:770', { kind: 'LOCAL', country: 'US', state: 'TX', zipPrefix: '770', name: 'Houston', generalRate: 0.02, groceryRate: null, preparedFoodRate: null, shippingTaxable: null, facilitator: null, version: null })
   ];
 
-  const taxCodes = [
-    rec('GENERAL_GOODS', { code: 'GENERAL_GOODS', label: 'General taxable goods', category: 'GENERAL', providerCode: 'txcd_99999999', taxableLabel: 'Yes', exemptStates: '', state: 'ACTIVE' }),
-    rec('CLOTHING', { code: 'CLOTHING', label: 'Clothing and accessories', category: 'GENERAL', providerCode: null, taxableLabel: 'Yes', exemptStates: '', state: 'ACTIVE' }),
-    rec('NON_TAXABLE', { code: 'NON_TAXABLE', label: 'Not taxable (gift cards, donations, exempt items)', category: 'GENERAL', providerCode: null, taxableLabel: 'Never', exemptStates: '', state: 'ACTIVE' }),
-    rec('PACKAGED_FOOD', { code: 'PACKAGED_FOOD', label: 'Packaged food (shelf-stable)', category: 'GROCERY', providerCode: null, taxableLabel: 'Yes', exemptStates: 'NJ,TX', state: 'ACTIVE' }),
-    rec('PREPARED_FOOD', { code: 'PREPARED_FOOD', label: 'Hot or ready-to-eat food', category: 'PREPARED_FOOD', providerCode: null, taxableLabel: 'Yes', exemptStates: '', state: 'ACTIVE' })
-  ];
-  const taxRules = [
-    rec('dress||', { rowId: 'dress||', productType: 'dress', attrKey: null, attrValue: null, taxCode: 'CLOTHING', kind: 'TYPE', note: 'Clothing' }),
-    rec('grocery|tax_class|Packaged, shelf-stable', { rowId: 'grocery|tax_class|Packaged, shelf-stable', productType: 'grocery', attrKey: 'tax_class', attrValue: 'Packaged, shelf-stable', taxCode: 'PACKAGED_FOOD', kind: 'ANSWER', note: 'Food for home consumption' }),
-    rec('grocery|tax_class|Hot or ready-to-eat', { rowId: 'grocery|tax_class|Hot or ready-to-eat', productType: 'grocery', attrKey: 'tax_class', attrValue: 'Hot or ready-to-eat', taxCode: 'PREPARED_FOOD', kind: 'ANSWER', note: 'Prepared food' })
-  ];
   const reconciliation = [
     rec('rec-1', { stripeRef: 'ch_3Q8xK2', windowStart: ago(1, 0), ledgerMinor: 10_000, stripeMinor: 9_750, differenceMinor: 250, status: 'OPEN', note: null, resolvedByName: null, resolvedAt: null,
       meaning: 'The ledger shows $2.50 more than Stripe reports for this object.' }),
@@ -642,7 +633,6 @@ function seed(now: Date): MockStaffDb {
     rec('payout.minimum', { label: 'Smallest payout a seller can request', value: '$25.00', source: 'PAYOUT_MINIMUM_MINOR', help: 'Requests below this are refused.' }),
     rec('payout.daily', { label: 'Payout requests', value: 'One per seller per day (America/Chicago time), then approved by Finance', source: 'built in', help: 'Each request is approved, held or released by Finance staff.' })
   ];
-  const taxSettings = [rec('method', { setting: 'Who calculates sales tax', method: 'RULES', methodLabel: 'Our own rules', stripeLabel: 'Not set up yet', changedByName: 'Platform Admin', changedAt: ago(3, 0), configuredDefault: 'RULES' })];
   const maintenance = [rec('mode', { setting: 'Maintenance mode', state: 'OFF', stateLabel: 'Off: the platform is open', scope: 'SHOPPERS', title: '', message: '', updatedByName: 'Platform Admin', updatedAt: ago(9, 0) })];
   const taxFilings = [
     rec('2026-09|US-TX|USD', { month: '2026-09', jurisdiction: 'US-TX', currency: 'USD', dueMinor: 133_600, paidMinor: null, outstandingMinor: 133_600, filedOn: null, confirmationRef: null, state: 'NOT_FILED', statusLabel: 'Not filed', remittanceId: null }),
@@ -655,10 +645,6 @@ function seed(now: Date): MockStaffDb {
     rec('US-GA', { jurisdiction: 'US-GA', name: 'Georgia', facilitator: true, facilitatorLabel: 'Yes', salesMinor: 11_000_000, salesThresholdMinor: 10_000_000, orders: 300, percent: 110, percentLabel: '110%', status: 'REGISTERED', registered: true, registrationNumber: 'GA-4411-22' }),
     rec('US-NJ', { jurisdiction: 'US-NJ', name: 'New Jersey', facilitator: true, facilitatorLabel: 'Yes', salesMinor: 900_000, salesThresholdMinor: 10_000_000, orders: 30, percent: 9, percentLabel: '9%', status: 'BELOW', registered: false, registrationNumber: null })
   ];
-  const taxReview = [
-    rec('grocery|abc123', { rowId: 'grocery|abc123', productType: 'grocery', attrHash: 'abc123', answer: null, taxCode: 'GENERAL_GOODS', count: 4, sampleAtin: 'AT10000001', lastSeen: ago(0, 3), state: 'OPEN', reviewedBy: null, reviewNote: null })
-  ];
-
   const notifications: MockNotification[] = customers.flatMap((c, i) => [
     { id: `ntf-${i}-1`, recipientId: c.id, channel: 'email', templateKey: 'order.shipped', subject: 'Your order is on its way', status: 'DELIVERED', address: c.email, createdAt: ago(i, 2) },
     { id: `ntf-${i}-2`, recipientId: c.id, channel: 'sms', templateKey: 'delivery.otp', subject: null, status: i % 3 === 0 ? 'FAILED' : 'SENT', address: '+1832555010' + String(i), createdAt: ago(i, 1) }
@@ -681,7 +667,7 @@ function seed(now: Date): MockStaffDb {
     records: {
       users, roles, applications, organisations: MOCK_DEPARTMENT_ORGS.map((o, i) => rec(o.id, { name: o.name, kind: 'SELLER', plan: o.exempt ? 'Platform' : pick(['STARTER', 'GROWTH', 'PRO']), createdAt: ago(60 + i * 20), status: 'APPROVED' })).concat([rec('org-lagos-spice', { name: 'Lagos Spice Co', kind: 'SELLER', plan: 'STARTER', createdAt: ago(120), status: 'SUSPENDED' })]), 'connect-accounts': [], orders, products, 'category-requests': seedCategoryRequests(now), moderation, 'product-reviews': productReviews, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'careers-jobs': careers, 'cookie-definitions': cookieDefinitions, 'privacy-requests': privacyRequests, announcements, placements,
-      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, recoveries, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
+      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, recoveries, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'membership-tiers': membershipTiers, memberships, 'membership-settings': membershipSettings, 'membership-report': membershipReport, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now),
       ...seedIdentityAdmin(now)
@@ -694,6 +680,7 @@ function seed(now: Date): MockStaffDb {
     templates: { rows: seedTemplateRows(), samples: seedTemplateSamples() },
     preorders: seedPreorders(now),
     markets: seedMarkets(),
+    tax: seedTax(),
     departments: seedDepartments(now),
     content: seedContent(now, helpArticles.map((r) => ({ slug: r.id, title: String(r.fields.title), summary: String(r.fields.summary), topic: String(r.fields.topic), status: String(r.fields.status), body: String(r.fields.sections), updatedAt: String(r.fields.updatedAt) }))),
     taxonomy: seedTaxonomy(),
@@ -709,6 +696,7 @@ export function getStaffDb(): MockStaffDb {
   // A database seeded before pre-orders existed (dev server kept across reloads) gets them on first use.
   g[KEY].preorders ??= seedPreorders(g[KEY].now);
   g[KEY].markets ??= seedMarkets();
+  g[KEY].tax ??= seedTax();
   g[KEY].departments ??= seedDepartments(g[KEY].now);
   g[KEY].content ??= seedContent(g[KEY].now, []);
   g[KEY].taxonomy ??= seedTaxonomy();

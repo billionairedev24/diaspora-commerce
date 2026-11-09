@@ -78,6 +78,7 @@ import { createStaffContentApi } from './staff-content';
 import { createStaffDeliveryFeesApi } from './staff-delivery-fees';
 import { createStaffDepartmentsApi } from './staff-departments';
 import { createStaffMarketsApi } from './staff-markets';
+import { createStaffTaxApi } from './staff-tax';
 import { createStaffPlansApi } from './staff-plans';
 import { createStaffPreordersApi } from './staff-preorders';
 import { createStaffRunsApi } from './staff-runs';
@@ -206,6 +207,8 @@ export function createStaffApiClient(options: ApiClientOptions) {
 
     /* Settings → Markets & locations: /v1/staff/markets/** (location tree) and /v1/staff/places (gazetteer) */
     markets: createStaffMarketsApi(request),
+    /* Fees & commissions → Sales tax: /v1/staff/tax/** (category profiles, review queue, provider code maps, method, shadow report) */
+    tax: createStaffTaxApi(request),
     /* Settings → Published pages: /v1/staff/content/** (index, legal and help editors, drafts, publication, rollback) */
     content: createStaffContentApi(request),
     /* Catalog → Categories: /v1/staff/taxonomy/** (category tree, product-type details, audit trail, approval preview) */

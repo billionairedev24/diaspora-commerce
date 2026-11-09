@@ -63,10 +63,10 @@ export const RESOURCE_MODULE: Record<ResourceKey, StaffModuleKey> = {
   users: 'rbac', roles: 'rbac', applications: 'apps', orders: 'orders', products: 'catalog', 'category-requests': 'catalog', moderation: 'catalog', 'product-reviews': 'catalog', claims: 'disputes', returns: 'disputes',
   payouts: 'payouts', inventory: 'inventory', 'purchase-orders': 'retail', routes: 'dispatch', 'support-cases': 'support', audit: 'audit', markets: 'markets',
   'site-settings': 'siteCfg', 'legal-documents': 'siteCfg', 'help-articles': 'siteCfg', 'careers-jobs': 'siteCfg', 'cookie-definitions': 'siteCfg', 'privacy-requests': 'siteCfg', announcements: 'marketing', placements: 'marketing', 'identity-providers': 'dev',
-  'fee-schedules': 'fees', 'tax-rates': 'fees', 'tax-codes': 'fees', 'tax-rules': 'fees', 'tax-review': 'fees', 'dispatch-shipments': 'dispatch', 'sos-alerts': 'dispatch', 'vehicle-defects': 'dispatch', 'driver-events': 'dispatch', 'pickup-locations': 'dispatch',
+  'fee-schedules': 'fees', 'tax-rates': 'fees', 'dispatch-shipments': 'dispatch', 'sos-alerts': 'dispatch', 'vehicle-defects': 'dispatch', 'driver-events': 'dispatch', 'pickup-locations': 'dispatch',
   coupons: 'marketing', organisations: 'orgs', 'connect-accounts': 'orgs',
   reconciliation: 'payouts', 'reconciliation-runs': 'payouts', 'ledger-adjustments': 'payouts', recoveries: 'payouts', 'credit-adjustments': 'payouts', 'gift-cards': 'payouts', 'credit-liabilities': 'payouts', 'money-settings': 'payouts', 'membership-tiers': 'payouts', memberships: 'payouts', 'membership-settings': 'payouts', 'membership-report': 'payouts', referrals: 'payouts', 'referral-settings': 'payouts', 'stripe-lookup': 'payouts',
-  'payment-settings': 'payouts', 'tax-settings': 'fees', maintenance: 'siteCfg', 'tax-filings': 'fees', 'tax-nexus': 'fees',
+  'payment-settings': 'payouts', maintenance: 'siteCfg', 'tax-filings': 'fees', 'tax-nexus': 'fees',
   'oauth-clients': 'identity', 'identity-sessions': 'identity', 'signing-keys': 'identity', 'auth-settings': 'identity', 'session-policy': 'identity',
   'exchange-rates': 'inventory'
 };
@@ -110,6 +110,10 @@ PENDING_PERMISSIONS['platform.super_admin']?.push('plans:manage', 'billing:adjus
 
 /* Identity admin console (identity migration V31, S291): Super Admin only. */
 PENDING_PERMISSIONS['platform.super_admin']?.push('identity:admin');
+
+/* Category tax tools (docs/engineering/category-tax-design.md section 9): tax:classify-admin approves, reclassifies, changes profile status and edits the
+   code maps. Identity does not seed it yet (proposed migration in the Phase D PR); the mock gives it to Super Admin. */
+PENDING_PERMISSIONS['platform.super_admin']?.push('tax:classify', 'tax:classify-admin');
 
 /* Ledger adjustments, credit corrections and gift card issue/void (identity migration V30): Super Admin and Finance. */
 PENDING_PERMISSIONS['platform.super_admin']?.push('ledger:adjust', 'ledger:approve');

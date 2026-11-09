@@ -1,0 +1,4659 @@
+{
+ "ruleVersion": "tx-2026.11.09-draft.1",
+ "decisions": [
+  {
+   "id": 1,
+   "title": "Flavored water Stripe code conflict",
+   "detail": "txcd_41040002 vs txcd_41040004 for flavored water; does soda keep txcd_41040002?",
+   "affects": [
+    "flavored-water-soda"
+   ]
+  },
+  {
+   "id": 2,
+   "title": "Tutoring / consulting code split",
+   "detail": "txcd_20060059 vs txcd_20060048: two subcategories or one with a service-type field.",
+   "affects": [
+    "tutoring-consulting"
+   ]
+  },
+  {
+   "id": 3,
+   "title": "Refine every generic-code subcategory at SKU level",
+   "detail": "txcd_99999999 on 7 subcategories: owner and deadline for verified SKU-level codes.",
+   "affects": [
+    "cleaning-paper-products",
+    "furniture-small-appliances",
+    "gift-baskets-bundles",
+    "handmade-products",
+    "kitchenware-cookware",
+    "pet-grooming-accessories",
+    "toys-games"
+   ]
+  },
+  {
+   "id": 4,
+   "title": "Approve the digital and services rules before launch",
+   "detail": "E-books, audiobooks, online courses, digital art, photography deliverables, event tickets (and gift cards, held conservatively): name the approver for each.",
+   "affects": [
+    "audiobooks",
+    "digital-art-downloads",
+    "downloadable-ebooks",
+    "online-courses",
+    "photography-media",
+    "event-tickets",
+    "gift-cards"
+   ]
+  },
+  {
+   "id": 5,
+   "title": "Delivery-fee attribution for mixed baskets",
+   "detail": "TX-07: legally reviewed method for splitting delivery between taxable and exempt portions; interacts with the open delivery price.",
+   "affects": []
+  }
+ ],
+ "departments": [
+  {
+   "code": "groceries-food",
+   "name": "Groceries & Food",
+   "position": 0
+  },
+  {
+   "code": "beverages",
+   "name": "Beverages",
+   "position": 1
+  },
+  {
+   "code": "beauty-personal-care",
+   "name": "Beauty & Personal Care",
+   "position": 2
+  },
+  {
+   "code": "fashion-accessories",
+   "name": "Fashion & Accessories",
+   "position": 3
+  },
+  {
+   "code": "home-household",
+   "name": "Home & Household",
+   "position": 4
+  },
+  {
+   "code": "electronics",
+   "name": "Electronics",
+   "position": 5
+  },
+  {
+   "code": "books-media",
+   "name": "Books & Media",
+   "position": 6
+  },
+  {
+   "code": "health-wellness",
+   "name": "Health & Wellness",
+   "position": 7
+  },
+  {
+   "code": "baby-kids",
+   "name": "Baby & Kids",
+   "position": 8
+  },
+  {
+   "code": "pets",
+   "name": "Pets",
+   "position": 9
+  },
+  {
+   "code": "digital-products",
+   "name": "Digital Products",
+   "position": 10
+  },
+  {
+   "code": "services",
+   "name": "Services",
+   "position": 11
+  },
+  {
+   "code": "other-specialty",
+   "name": "Other & Specialty",
+   "position": 12
+  }
+ ],
+ "facts": [
+  {
+   "id": "net_weight_oz",
+   "label": "Net weight (oz)",
+   "kind": "DECIMAL",
+   "unit": "oz",
+   "owner": "VARIANT",
+   "help": "The net weight of one package in ounces, as printed on the label.",
+   "evidence": false
+  },
+  {
+   "id": "servings_per_package",
+   "label": "Servings per package",
+   "kind": "INTEGER",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "How many servings the label says one package holds.",
+   "evidence": false
+  },
+  {
+   "id": "individual_serving",
+   "label": "Sold as a single serving",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Yes if the package is one portion meant for one person at one time.",
+   "evidence": false
+  },
+  {
+   "id": "is_candy",
+   "label": "Candy or confectionery",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Yes if this is candy, chocolate, gum or a sweet confection. Candy is taxed at any size.",
+   "evidence": false
+  },
+  {
+   "id": "candy_coated",
+   "label": "Coated or sugar-glazed",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Yes if the nuts or seeds are candy-coated, chocolate-covered, honey-glazed or otherwise confectionery.",
+   "evidence": false
+  },
+  {
+   "id": "sold_heated",
+   "label": "Sold hot or heated",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "OFFER",
+   "help": "Yes if you serve or sell this warm, or warm it before the customer gets it.",
+   "evidence": false
+  },
+  {
+   "id": "heated_by_seller",
+   "label": "You heat it",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "OFFER",
+   "help": "Yes if you (not the customer) do the heating.",
+   "evidence": false
+  },
+  {
+   "id": "utensils_provided",
+   "label": "You provide eating utensils",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "OFFER",
+   "help": "Yes if forks, spoons, straws or plates for eating it are included with the order.",
+   "evidence": false
+  },
+  {
+   "id": "seller_is_bakery",
+   "label": "Your shop is a bakery",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "SELLER",
+   "help": "Taken from your seller profile: yes if your business is a bakery.",
+   "evidence": false
+  },
+  {
+   "id": "prepared_meal",
+   "label": "Sold as a prepared meal",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Yes if it is ready to eat as a meal (cooked and portioned), not raw or for cooking at home.",
+   "evidence": false
+  },
+  {
+   "id": "cooked_hot",
+   "label": "Sold cooked and hot",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "OFFER",
+   "help": "Yes if you sell it freshly cooked and hot.",
+   "evidence": false
+  },
+  {
+   "id": "juice_percent",
+   "label": "Fruit or vegetable juice content",
+   "kind": "PERCENT",
+   "unit": "%",
+   "owner": "VARIANT",
+   "help": "The percentage of real fruit or vegetable juice, as stated on the label.",
+   "evidence": false
+  },
+  {
+   "id": "sweetened",
+   "label": "Sweetened",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Yes if sugar, syrup, honey or another sweetener is added.",
+   "evidence": false
+  },
+  {
+   "id": "soft_drink",
+   "label": "Classified as a soft drink",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Yes if it is a carbonated or sweetened drink in the soft-drink style (soda, sports or energy drink).",
+   "evidence": false
+  },
+  {
+   "id": "contains_milk",
+   "label": "Contains milk or a milk substitute",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Yes if milk, cream or a plant milk (oat, soy, almond...) is an ingredient.",
+   "evidence": false
+  },
+  {
+   "id": "label_type",
+   "label": "Label on the package",
+   "kind": "CHOICE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "The panel printed on the package: Drug Facts, Supplement Facts or Nutrition Facts.",
+   "evidence": false,
+   "choices": [
+    {
+     "value": "DRUG_FACTS",
+     "label": "Drug Facts"
+    },
+    {
+     "value": "SUPPLEMENT_FACTS",
+     "label": "Supplement Facts"
+    },
+    {
+     "value": "NUTRITION_FACTS",
+     "label": "Nutrition Facts"
+    },
+    {
+     "value": "NONE",
+     "label": "No such label"
+    }
+   ]
+  },
+  {
+   "id": "qualifying_label",
+   "label": "Qualifies as a labelled drug or supplement",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Yes only if the label is on the package and the product fits that label's definition. Our tax team checks this.",
+   "evidence": false
+  },
+  {
+   "id": "label_evidence",
+   "label": "Photo or PDF of the label",
+   "kind": "FILE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Upload a clear picture of the whole label. It is kept as the proof for the exemption.",
+   "evidence": true
+  },
+  {
+   "id": "hygiene_kind",
+   "label": "Kind of hygiene product",
+   "kind": "CHOICE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Pick what the product is.",
+   "evidence": false,
+   "choices": [
+    {
+     "value": "ORDINARY_NONMEDICATED",
+     "label": "Soap, toothpaste or other non-medicated item"
+    },
+    {
+     "value": "OTC_MEDICINE",
+     "label": "Over-the-counter medicine with Drug Facts"
+    },
+    {
+     "value": "FEMININE_HYGIENE",
+     "label": "Feminine hygiene product"
+    }
+   ]
+  },
+  {
+   "id": "device_kind",
+   "label": "Kind of device",
+   "kind": "CHOICE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Pick what fits best. Prescribed or medically qualifying devices need proof.",
+   "evidence": false,
+   "choices": [
+    {
+     "value": "QUALIFYING_EXEMPT_DEVICE",
+     "label": "Qualifying medical device"
+    },
+    {
+     "value": "PRESCRIBED_ELIGIBLE_DEVICE",
+     "label": "Prescribed eligible device"
+    },
+    {
+     "value": "NONQUALIFYING_CONSUMER_DEVICE",
+     "label": "Ordinary consumer device"
+    }
+   ]
+  },
+  {
+   "id": "device_evidence",
+   "label": "Proof the device qualifies",
+   "kind": "FILE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Upload the product listing, FDA clearance or the prescription rule that shows it qualifies.",
+   "evidence": true
+  },
+  {
+   "id": "publication_type",
+   "label": "Type of publication",
+   "kind": "CHOICE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Pick what the publication is.",
+   "evidence": false,
+   "choices": [
+    {
+     "value": "ORDINARY_MAGAZINE_PERIODICAL",
+     "label": "Magazine or periodical"
+    },
+    {
+     "value": "QUALIFYING_EXEMPT_NEWSPAPER_OR_OTHER",
+     "label": "Newspaper or other publication with a specific exemption"
+    }
+   ]
+  },
+  {
+   "id": "publication_evidence",
+   "label": "Proof of the exemption",
+   "kind": "FILE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Upload the page or notice that shows why it is exempt.",
+   "evidence": true
+  },
+  {
+   "id": "wellness_class",
+   "label": "What this product is",
+   "kind": "CHOICE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Pick what the product is under its label.",
+   "evidence": false,
+   "choices": [
+    {
+     "value": "SUPPLEMENT",
+     "label": "Dietary supplement (Supplement Facts)"
+    },
+    {
+     "value": "FOOD",
+     "label": "Food or food product"
+    },
+    {
+     "value": "ORDINARY_GOODS",
+     "label": "Other wellness goods"
+    }
+   ]
+  },
+  {
+   "id": "delivery_mode",
+   "label": "How the course is delivered",
+   "kind": "CHOICE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Live classes taught by an instructor, or a recording or other digital deliverable.",
+   "evidence": false,
+   "choices": [
+    {
+     "value": "LIVE_INSTRUCTOR_LED",
+     "label": "Live, led by an instructor"
+    },
+    {
+     "value": "RECORDED_OR_DIGITAL_DELIVERABLE",
+     "label": "Recorded or a digital file or access"
+    }
+   ]
+  },
+  {
+   "id": "delivery_method",
+   "label": "How the customer gets it",
+   "kind": "CHOICE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Download of a file, or online access only.",
+   "evidence": false,
+   "choices": [
+    {
+     "value": "DOWNLOAD",
+     "label": "Download"
+    },
+    {
+     "value": "STREAM_OR_ACCESS",
+     "label": "Online access or streaming"
+    }
+   ]
+  },
+  {
+   "id": "exemption_confirmed",
+   "label": "Exemption confirmed by tax review",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "STAFF",
+   "help": "Set only by our tax team after review. Sellers do not fill this in.",
+   "evidence": false
+  },
+  {
+   "id": "deliverable_kind",
+   "label": "What the buyer receives",
+   "kind": "CHOICE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "A file or artwork to keep, or only a personal service.",
+   "evidence": false,
+   "choices": [
+    {
+     "value": "DOWNLOADED_FILE",
+     "label": "A downloaded file, artwork or photo"
+    },
+    {
+     "value": "PERSONAL_SERVICE_NO_DELIVERABLE",
+     "label": "A personal service with no file delivered"
+    }
+   ]
+  },
+  {
+   "id": "output_kind",
+   "label": "What the customer gets",
+   "kind": "CHOICE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Photos or prints and files to keep, or only the service.",
+   "evidence": false,
+   "choices": [
+    {
+     "value": "TAXABLE_PRINTS_OR_DIGITAL_DELIVERABLE",
+     "label": "Photos, prints or digital files"
+    },
+    {
+     "value": "SERVICE_ONLY_NO_TAXABLE_DELIVERABLE",
+     "label": "Service only, nothing to keep"
+    }
+   ]
+  },
+  {
+   "id": "admission_kind",
+   "label": "Kind of event",
+   "kind": "CHOICE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Pick what fits the event. Exempt events need proof.",
+   "evidence": false,
+   "choices": [
+    {
+     "value": "TAXABLE_AMUSEMENT_ADMISSION",
+     "label": "Entertainment or amusement admission"
+    },
+    {
+     "value": "NONTAXABLE_ADMISSION_OR_EXEMPT_EVENT",
+     "label": "Admission that is not taxable, or an exempt event"
+    }
+   ]
+  },
+  {
+   "id": "admission_evidence",
+   "label": "Proof the event is exempt",
+   "kind": "FILE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Upload the organiser's exemption letter or event details.",
+   "evidence": true
+  },
+  {
+   "id": "fitness_kind",
+   "label": "Class or membership",
+   "kind": "CHOICE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "A class led by an instructor, or access to a gym or facility.",
+   "evidence": false,
+   "choices": [
+    {
+     "value": "INSTRUCTOR_LED_CLASS",
+     "label": "Class or training led by an instructor"
+    },
+    {
+     "value": "MEMBERSHIP_OR_FACILITY_ACCESS",
+     "label": "Membership or facility access"
+    }
+   ]
+  },
+  {
+   "id": "holiday_eligible",
+   "label": "Eligible for a tax holiday or special exemption",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Yes only if this item is listed for a legislated tax holiday or exemption. Our tax team checks this.",
+   "evidence": false
+  },
+  {
+   "id": "exemption_window_active",
+   "label": "Sale date inside an exemption window",
+   "kind": "BOOLEAN",
+   "unit": null,
+   "owner": "CONTEXT",
+   "help": "Worked out by the system from the sale date and the exemption calendar; never typed by a person.",
+   "evidence": false
+  },
+  {
+   "id": "bundle_line_kind",
+   "label": "How the bundle is itemised",
+   "kind": "CHOICE",
+   "unit": null,
+   "owner": "VARIANT",
+   "help": "Each item in a gift basket must be its own line with its own category and price.",
+   "evidence": false,
+   "choices": [
+    {
+     "value": "EXEMPT_FOOD_LINE_ITEMIZED",
+     "label": "Exempt food, listed as its own line"
+    },
+    {
+     "value": "TAXABLE_GOODS_LINE_ITEMIZED",
+     "label": "Taxable goods, listed as their own line"
+    },
+    {
+     "value": "UNITEMIZED_MIXED_BUNDLE",
+     "label": "Mixed items sold as one price, not itemised"
+    }
+   ]
+  },
+  {
+   "id": "gift_card_event",
+   "label": "Gift card transaction",
+   "kind": "CHOICE",
+   "unit": null,
+   "owner": "CONTEXT",
+   "help": "Set by the order system: the sale of the card, or its use to buy a taxable or an exempt item.",
+   "evidence": false,
+   "choices": [
+    {
+     "value": "SALE_MULTIPURPOSE_CARD",
+     "label": "Sale of a multipurpose card"
+    },
+    {
+     "value": "REDEMPTION_TAXABLE_ITEM",
+     "label": "Used to buy a taxable item"
+    },
+    {
+     "value": "REDEMPTION_EXEMPT_ITEM",
+     "label": "Used to buy an exempt item"
+    }
+   ]
+  }
+ ],
+ "categories": [
+  {
+   "code": "baby-food-formula",
+   "department": "groceries-food",
+   "name": "Baby food & formula",
+   "stripeCodes": [
+    "txcd_40090005"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S023",
+     "scenario": 23,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.BABY_FOOD_FORMULA.STANDARD",
+     "stripeCode": "txcd_40090005",
+     "providerCodes": {
+      "STRIPE": "txcd_40090005",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "bakery-products",
+   "department": "groceries-food",
+   "name": "Bakery products",
+   "stripeCodes": [
+    "txcd_40040021"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "sold_heated",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "heated_by_seller",
+     "required": true,
+     "requiredWhen": {
+      "op": "isTrue",
+      "fact": "sold_heated"
+     }
+    },
+    {
+     "fact": "utensils_provided",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "seller_is_bakery",
+     "required": true,
+     "requiredWhen": {
+      "op": "isTrue",
+      "fact": "utensils_provided"
+     }
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S011",
+     "scenario": 11,
+     "when": {
+      "any": [
+       {
+        "all": [
+         {
+          "op": "isTrue",
+          "fact": "sold_heated"
+         },
+         {
+          "op": "isTrue",
+          "fact": "heated_by_seller"
+         }
+        ]
+       },
+       {
+        "all": [
+         {
+          "op": "isTrue",
+          "fact": "utensils_provided"
+         },
+         {
+          "op": "isFalse",
+          "fact": "seller_is_bakery"
+         }
+        ]
+       }
+      ]
+     },
+     "condition": "Seller heats item or non-bakery seller provides eating utensils",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.BAKERY_PRODUCTS.SELLER_HEATS_OR_NONBAKERY_UTENSILS",
+     "stripeCode": "txcd_40040021",
+     "providerCodes": {
+      "STRIPE": "txcd_40040021",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S010",
+     "scenario": 10,
+     "when": {
+      "all": [
+       {
+        "not": {
+         "all": [
+          {
+           "op": "isTrue",
+           "fact": "sold_heated"
+          },
+          {
+           "op": "isTrue",
+           "fact": "heated_by_seller"
+          }
+         ]
+        }
+       },
+       {
+        "not": {
+         "all": [
+          {
+           "op": "isTrue",
+           "fact": "utensils_provided"
+          },
+          {
+           "op": "isFalse",
+           "fact": "seller_is_bakery"
+          }
+         ]
+        }
+       }
+      ]
+     },
+     "condition": "Unheated bakery item without eating utensils",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.BAKERY_PRODUCTS.UNHEATED_NO_UTENSILS",
+     "stripeCode": "txcd_40040021",
+     "providerCodes": {
+      "STRIPE": "txcd_40040021",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "beans-pantry-sauces",
+   "department": "groceries-food",
+   "name": "Beans, pantry foods & sauces",
+   "stripeCodes": [
+    "txcd_40040000"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S002",
+     "scenario": 2,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.BEANS_PANTRY_SAUCES.STANDARD",
+     "stripeCode": "txcd_40040000",
+     "providerCodes": {
+      "STRIPE": "txcd_40040000",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "candy-gum",
+   "department": "groceries-food",
+   "name": "Candy & gum",
+   "stripeCodes": [
+    "txcd_40100001"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S015",
+     "scenario": 15,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.CANDY_GUM.STANDARD",
+     "stripeCode": "txcd_40100001",
+     "providerCodes": {
+      "STRIPE": "txcd_40100001",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "cooking-oils",
+   "department": "groceries-food",
+   "name": "Cooking oils",
+   "stripeCodes": [
+    "txcd_40020002"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S005",
+     "scenario": 5,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.COOKING_OILS.STANDARD",
+     "stripeCode": "txcd_40020002",
+     "providerCodes": {
+      "STRIPE": "txcd_40020002",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "dairy-eggs",
+   "department": "groceries-food",
+   "name": "Dairy & eggs",
+   "stripeCodes": [
+    "txcd_40040000"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S022",
+     "scenario": 22,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.DAIRY_EGGS.STANDARD",
+     "stripeCode": "txcd_40040000",
+     "providerCodes": {
+      "STRIPE": "txcd_40040000",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "flours-starches",
+   "department": "groceries-food",
+   "name": "Flours & starches",
+   "stripeCodes": [
+    "txcd_40020005"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S003",
+     "scenario": 3,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.FLOURS_STARCHES.STANDARD",
+     "stripeCode": "txcd_40020005",
+     "providerCodes": {
+      "STRIPE": "txcd_40020005",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "fresh-produce",
+   "department": "groceries-food",
+   "name": "Fresh produce",
+   "stripeCodes": [
+    "txcd_40040019"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S017",
+     "scenario": 17,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.FRESH_PRODUCE.STANDARD",
+     "stripeCode": "txcd_40040019",
+     "providerCodes": {
+      "STRIPE": "txcd_40040019",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "frozen-meals",
+   "department": "groceries-food",
+   "name": "Frozen meals",
+   "stripeCodes": [
+    "txcd_40040000",
+    "txcd_40060003"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "sold_heated",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "heated_by_seller",
+     "required": true,
+     "requiredWhen": {
+      "op": "isTrue",
+      "fact": "sold_heated"
+     }
+    },
+    {
+     "fact": "prepared_meal",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "utensils_provided",
+     "required": false,
+     "requiredWhen": null
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S021",
+     "scenario": 21,
+     "when": {
+      "any": [
+       {
+        "all": [
+         {
+          "op": "isTrue",
+          "fact": "sold_heated"
+         },
+         {
+          "op": "isTrue",
+          "fact": "heated_by_seller"
+         }
+        ]
+       },
+       {
+        "op": "isTrue",
+        "fact": "prepared_meal"
+       }
+      ]
+     },
+     "condition": "Heated by seller or sold as prepared meal",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.FROZEN_MEALS.HEATED_BY_SELLER_OR_PREPARED",
+     "stripeCode": "txcd_40060003",
+     "providerCodes": {
+      "STRIPE": "txcd_40060003",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S020",
+     "scenario": 20,
+     "when": {
+      "all": [
+       {
+        "not": {
+         "all": [
+          {
+           "op": "isTrue",
+           "fact": "sold_heated"
+          },
+          {
+           "op": "isTrue",
+           "fact": "heated_by_seller"
+          }
+         ]
+        }
+       },
+       {
+        "op": "isFalse",
+        "fact": "prepared_meal"
+       }
+      ]
+     },
+     "condition": "Sold frozen for reheating by buyer",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.FROZEN_MEALS.FROZEN_FOR_BUYER_REHEAT",
+     "stripeCode": "txcd_40040000",
+     "providerCodes": {
+      "STRIPE": "txcd_40040000",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "meat-poultry-fish",
+   "department": "groceries-food",
+   "name": "Meat, poultry & fish",
+   "stripeCodes": [
+    "txcd_40040013",
+    "txcd_40060003"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "prepared_meal",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "cooked_hot",
+     "required": true,
+     "requiredWhen": null
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S019",
+     "scenario": 19,
+     "when": {
+      "any": [
+       {
+        "op": "isTrue",
+        "fact": "cooked_hot"
+       },
+       {
+        "op": "isTrue",
+        "fact": "prepared_meal"
+       }
+      ]
+     },
+     "condition": "Cooked hot or served as prepared meal",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.MEAT_POULTRY_FISH.COOKED_HOT_OR_PREPARED",
+     "stripeCode": "txcd_40060003",
+     "providerCodes": {
+      "STRIPE": "txcd_40060003",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S018",
+     "scenario": 18,
+     "when": {
+      "all": [
+       {
+        "op": "isFalse",
+        "fact": "cooked_hot"
+       },
+       {
+        "op": "isFalse",
+        "fact": "prepared_meal"
+       }
+      ]
+     },
+     "condition": "Raw, frozen or unheated food sold for home cooking",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.MEAT_POULTRY_FISH.RAW_OR_FROZEN_FOR_HOME_COOKING",
+     "stripeCode": "txcd_40040013",
+     "providerCodes": {
+      "STRIPE": "txcd_40040013",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "nuts-seeds",
+   "department": "groceries-food",
+   "name": "Nuts & seeds",
+   "stripeCodes": [
+    "txcd_40040016",
+    "txcd_40100001"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "is_candy",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "candy_coated",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "net_weight_oz",
+     "required": true,
+     "requiredWhen": {
+      "all": [
+       {
+        "op": "isFalse",
+        "fact": "is_candy"
+       },
+       {
+        "op": "isFalse",
+        "fact": "candy_coated"
+       }
+      ]
+     }
+    },
+    {
+     "fact": "servings_per_package",
+     "required": true,
+     "requiredWhen": {
+      "all": [
+       {
+        "op": "isFalse",
+        "fact": "is_candy"
+       },
+       {
+        "op": "isFalse",
+        "fact": "candy_coated"
+       }
+      ]
+     }
+    },
+    {
+     "fact": "individual_serving",
+     "required": true,
+     "requiredWhen": {
+      "all": [
+       {
+        "op": "isFalse",
+        "fact": "is_candy"
+       },
+       {
+        "op": "isFalse",
+        "fact": "candy_coated"
+       }
+      ]
+     }
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S009",
+     "scenario": 9,
+     "when": {
+      "any": [
+       {
+        "op": "isTrue",
+        "fact": "is_candy"
+       },
+       {
+        "op": "isTrue",
+        "fact": "candy_coated"
+       }
+      ]
+     },
+     "condition": "Candy-coated / confectionery nuts",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.NUTS_SEEDS.CANDY_COATED_OR_CONFECTIONERY",
+     "stripeCode": "txcd_40100001",
+     "providerCodes": {
+      "STRIPE": "txcd_40100001",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S007",
+     "scenario": 7,
+     "when": {
+      "all": [
+       {
+        "all": [
+         {
+          "op": "isFalse",
+          "fact": "is_candy"
+         },
+         {
+          "op": "isFalse",
+          "fact": "candy_coated"
+         }
+        ]
+       },
+       {
+        "all": [
+         {
+          "op": "gt",
+          "fact": "servings_per_package",
+          "value": 1
+         },
+         {
+          "op": "isFalse",
+          "fact": "individual_serving"
+         },
+         {
+          "op": "gte",
+          "fact": "net_weight_oz",
+          "value": 2.5
+         }
+        ]
+       }
+      ]
+     },
+     "condition": "Plain nuts/seeds; package >1 serving AND ≥2.5 oz",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.NUTS_SEEDS.PLAIN_MULTI_SERVING_2_5OZ_PLUS",
+     "stripeCode": "txcd_40040016",
+     "providerCodes": {
+      "STRIPE": "txcd_40040016",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": "Interpretation: exempt only when servings > 1 AND net weight >= 2.5 oz AND not a single serving; the document words 'multi-serving pack' and '>= 2.5 oz with > 1 serving' differently for snacks. Confirm with the tax professional."
+    },
+    {
+     "id": "S008",
+     "scenario": 8,
+     "when": {
+      "all": [
+       {
+        "all": [
+         {
+          "op": "isFalse",
+          "fact": "is_candy"
+         },
+         {
+          "op": "isFalse",
+          "fact": "candy_coated"
+         }
+        ]
+       },
+       {
+        "any": [
+         {
+          "op": "lte",
+          "fact": "servings_per_package",
+          "value": 1
+         },
+         {
+          "op": "isTrue",
+          "fact": "individual_serving"
+         },
+         {
+          "op": "lt",
+          "fact": "net_weight_oz",
+          "value": 2.5
+         }
+        ]
+       }
+      ]
+     },
+     "condition": "Plain nuts/seeds; individual serving / <2.5 oz",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.NUTS_SEEDS.PLAIN_SINGLE_OR_UNDER_2_5OZ",
+     "stripeCode": "txcd_40040016",
+     "providerCodes": {
+      "STRIPE": "txcd_40040016",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "packaged-snacks",
+   "department": "groceries-food",
+   "name": "Packaged snacks",
+   "stripeCodes": [
+    "txcd_40070005",
+    "txcd_40100001"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "is_candy",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "net_weight_oz",
+     "required": true,
+     "requiredWhen": {
+      "op": "isFalse",
+      "fact": "is_candy"
+     }
+    },
+    {
+     "fact": "servings_per_package",
+     "required": true,
+     "requiredWhen": {
+      "op": "isFalse",
+      "fact": "is_candy"
+     }
+    },
+    {
+     "fact": "individual_serving",
+     "required": true,
+     "requiredWhen": {
+      "op": "isFalse",
+      "fact": "is_candy"
+     }
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S014",
+     "scenario": 14,
+     "when": {
+      "op": "isTrue",
+      "fact": "is_candy"
+     },
+     "condition": "Candy item (regardless of size)",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.PACKAGED_SNACKS.CANDY_ITEM",
+     "stripeCode": "txcd_40100001",
+     "providerCodes": {
+      "STRIPE": "txcd_40100001",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S012",
+     "scenario": 12,
+     "when": {
+      "all": [
+       {
+        "op": "isFalse",
+        "fact": "is_candy"
+       },
+       {
+        "all": [
+         {
+          "op": "gt",
+          "fact": "servings_per_package",
+          "value": 1
+         },
+         {
+          "op": "isFalse",
+          "fact": "individual_serving"
+         },
+         {
+          "op": "gte",
+          "fact": "net_weight_oz",
+          "value": 2.5
+         }
+        ]
+       }
+      ]
+     },
+     "condition": "Multi-serving pack or ≥2.5 oz with >1 serving",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.PACKAGED_SNACKS.MULTI_SERVING_2_5OZ_PLUS",
+     "stripeCode": "txcd_40070005",
+     "providerCodes": {
+      "STRIPE": "txcd_40070005",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": "Interpretation: exempt only when servings > 1 AND net weight >= 2.5 oz AND not a single serving; the document words 'multi-serving pack' and '>= 2.5 oz with > 1 serving' differently for snacks. Confirm with the tax professional."
+    },
+    {
+     "id": "S013",
+     "scenario": 13,
+     "when": {
+      "all": [
+       {
+        "op": "isFalse",
+        "fact": "is_candy"
+       },
+       {
+        "any": [
+         {
+          "op": "lte",
+          "fact": "servings_per_package",
+          "value": 1
+         },
+         {
+          "op": "isTrue",
+          "fact": "individual_serving"
+         },
+         {
+          "op": "lt",
+          "fact": "net_weight_oz",
+          "value": 2.5
+         }
+        ]
+       }
+      ]
+     },
+     "condition": "Individual serving, ≤1 serving, or <2.5 oz",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.PACKAGED_SNACKS.SINGLE_OR_UNDER_2_5OZ",
+     "stripeCode": "txcd_40070005",
+     "providerCodes": {
+      "STRIPE": "txcd_40070005",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "pasta-noodles",
+   "department": "groceries-food",
+   "name": "Pasta & noodles",
+   "stripeCodes": [
+    "txcd_40010001"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S004",
+     "scenario": 4,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.PASTA_NOODLES.STANDARD",
+     "stripeCode": "txcd_40010001",
+     "providerCodes": {
+      "STRIPE": "txcd_40010001",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "prepared-meals",
+   "department": "groceries-food",
+   "name": "Prepared meals",
+   "stripeCodes": [
+    "txcd_40060003"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S016",
+     "scenario": 16,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.PREPARED_MEALS.STANDARD",
+     "stripeCode": "txcd_40060003",
+     "providerCodes": {
+      "STRIPE": "txcd_40060003",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "rice-grains",
+   "department": "groceries-food",
+   "name": "Rice & grains",
+   "stripeCodes": [
+    "txcd_40010002"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S001",
+     "scenario": 1,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.RICE_GRAINS.STANDARD",
+     "stripeCode": "txcd_40010002",
+     "providerCodes": {
+      "STRIPE": "txcd_40010002",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "spices-seasonings",
+   "department": "groceries-food",
+   "name": "Spices & seasonings",
+   "stripeCodes": [
+    "txcd_40020007"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S006",
+     "scenario": 6,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.SPICES_SEASONINGS.STANDARD",
+     "stripeCode": "txcd_40020007",
+     "providerCodes": {
+      "STRIPE": "txcd_40020007",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "coffee-tea-dry",
+   "department": "beverages",
+   "name": "Coffee & tea, dry",
+   "stripeCodes": [
+    "txcd_41050006"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S029",
+     "scenario": 29,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.COFFEE_TEA_DRY.STANDARD",
+     "stripeCode": "txcd_41050006",
+     "providerCodes": {
+      "STRIPE": "txcd_41050006",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "energy-protein-drink-mixes",
+   "department": "beverages",
+   "name": "Energy, protein & drink mixes",
+   "stripeCodes": [
+    "txcd_41053001"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "label_type",
+     "required": true,
+     "requiredWhen": null,
+     "choices": [
+      "SUPPLEMENT_FACTS",
+      "NUTRITION_FACTS"
+     ]
+    },
+    {
+     "fact": "qualifying_label",
+     "required": true,
+     "requiredWhen": {
+      "op": "eq",
+      "fact": "label_type",
+      "value": "SUPPLEMENT_FACTS"
+     }
+    },
+    {
+     "fact": "label_evidence",
+     "required": true,
+     "requiredWhen": {
+      "all": [
+       {
+        "op": "eq",
+        "fact": "label_type",
+        "value": "SUPPLEMENT_FACTS"
+       },
+       {
+        "op": "isTrue",
+        "fact": "qualifying_label"
+       }
+      ]
+     }
+    },
+    {
+     "fact": "contains_milk",
+     "required": true,
+     "requiredWhen": {
+      "any": [
+       {
+        "op": "eq",
+        "fact": "label_type",
+        "value": "NUTRITION_FACTS"
+       },
+       {
+        "op": "isFalse",
+        "fact": "qualifying_label"
+       }
+      ]
+     }
+    },
+    {
+     "fact": "juice_percent",
+     "required": true,
+     "requiredWhen": {
+      "any": [
+       {
+        "op": "eq",
+        "fact": "label_type",
+        "value": "NUTRITION_FACTS"
+       },
+       {
+        "op": "isFalse",
+        "fact": "qualifying_label"
+       }
+      ]
+     }
+    },
+    {
+     "fact": "sweetened",
+     "required": true,
+     "requiredWhen": {
+      "any": [
+       {
+        "op": "eq",
+        "fact": "label_type",
+        "value": "NUTRITION_FACTS"
+       },
+       {
+        "op": "isFalse",
+        "fact": "qualifying_label"
+       }
+      ]
+     }
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S033",
+     "scenario": 33,
+     "when": {
+      "all": [
+       {
+        "op": "eq",
+        "fact": "label_type",
+        "value": "SUPPLEMENT_FACTS"
+       },
+       {
+        "op": "isTrue",
+        "fact": "qualifying_label"
+       }
+      ]
+     },
+     "condition": "Qualifying Supplement Facts supplement",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.ENERGY_PROTEIN_DRINK_MIXES.QUALIFYING_SUPPLEMENT_FACTS",
+     "stripeCode": "txcd_41053001",
+     "providerCodes": {
+      "STRIPE": "txcd_41053001",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    },
+    {
+     "id": "S034",
+     "scenario": 34,
+     "when": {
+      "all": [
+       {
+        "not": {
+         "all": [
+          {
+           "op": "eq",
+           "fact": "label_type",
+           "value": "SUPPLEMENT_FACTS"
+          },
+          {
+           "op": "isTrue",
+           "fact": "qualifying_label"
+          }
+         ]
+        }
+       },
+       {
+        "any": [
+         {
+          "op": "isTrue",
+          "fact": "contains_milk"
+         },
+         {
+          "op": "gt",
+          "fact": "juice_percent",
+          "value": 50
+         }
+        ]
+       }
+      ]
+     },
+     "condition": "Contains milk/milk substitute or >50% fruit/vegetable juice",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.ENERGY_PROTEIN_DRINK_MIXES.MILK_OR_OVER_50_PERCENT_JUICE",
+     "stripeCode": "txcd_41053001",
+     "providerCodes": {
+      "STRIPE": "txcd_41053001",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    },
+    {
+     "id": "S035",
+     "scenario": 35,
+     "when": {
+      "all": [
+       {
+        "not": {
+         "all": [
+          {
+           "op": "eq",
+           "fact": "label_type",
+           "value": "SUPPLEMENT_FACTS"
+          },
+          {
+           "op": "isTrue",
+           "fact": "qualifying_label"
+          }
+         ]
+        }
+       },
+       {
+        "not": {
+         "all": [
+          {
+           "not": {
+            "all": [
+             {
+              "op": "eq",
+              "fact": "label_type",
+              "value": "SUPPLEMENT_FACTS"
+             },
+             {
+              "op": "isTrue",
+              "fact": "qualifying_label"
+             }
+            ]
+           }
+          },
+          {
+           "any": [
+            {
+             "op": "isTrue",
+             "fact": "contains_milk"
+            },
+            {
+             "op": "gt",
+             "fact": "juice_percent",
+             "value": 50
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "op": "isTrue",
+        "fact": "sweetened"
+       }
+      ]
+     },
+     "condition": "Sweetened soft/energy/sports drink",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.ENERGY_PROTEIN_DRINK_MIXES.SWEETENED_SOFT_ENERGY_SPORTS_DRINK",
+     "stripeCode": "txcd_41053001",
+     "providerCodes": {
+      "STRIPE": "txcd_41053001",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S036",
+     "scenario": 36,
+     "when": {
+      "all": [
+       {
+        "not": {
+         "all": [
+          {
+           "op": "eq",
+           "fact": "label_type",
+           "value": "SUPPLEMENT_FACTS"
+          },
+          {
+           "op": "isTrue",
+           "fact": "qualifying_label"
+          }
+         ]
+        }
+       },
+       {
+        "not": {
+         "all": [
+          {
+           "not": {
+            "all": [
+             {
+              "op": "eq",
+              "fact": "label_type",
+              "value": "SUPPLEMENT_FACTS"
+             },
+             {
+              "op": "isTrue",
+              "fact": "qualifying_label"
+             }
+            ]
+           }
+          },
+          {
+           "any": [
+            {
+             "op": "isTrue",
+             "fact": "contains_milk"
+            },
+            {
+             "op": "gt",
+             "fact": "juice_percent",
+             "value": 50
+            }
+           ]
+          }
+         ]
+        }
+       },
+       {
+        "op": "isFalse",
+        "fact": "sweetened"
+       }
+      ]
+     },
+     "condition": "Ordinary food ingredient such as unsweetened drink mix",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.ENERGY_PROTEIN_DRINK_MIXES.ORDINARY_FOOD_INGREDIENT_MIX",
+     "stripeCode": "txcd_41053001",
+     "providerCodes": {
+      "STRIPE": "txcd_41053001",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "flavored-water-soda",
+   "department": "beverages",
+   "name": "Flavored water & soda",
+   "stripeCodes": [
+    "txcd_41040002"
+   ],
+   "conflictingCodes": [
+    "txcd_41040002",
+    "txcd_41040004"
+   ],
+   "defaultOutcome": "TAXABLE",
+   "status": "CONFLICT_OPEN",
+   "statusReasons": [
+    {
+     "status": "CONFLICT_OPEN",
+     "decision": 1,
+     "text": "Open decision 1: the row carries txcd_41040002 but its own note says flavored water uses txcd_41040004. Confirm which code applies to flavored water and whether soda keeps txcd_41040002."
+    }
+   ],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S025",
+     "scenario": 25,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.FLAVORED_WATER_SODA.STANDARD",
+     "stripeCode": "txcd_41040002",
+     "providerCodes": {
+      "STRIPE": "txcd_41040002",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "fruit-vegetable-juice",
+   "department": "beverages",
+   "name": "Fruit & vegetable juice",
+   "stripeCodes": [
+    "txcd_41040024",
+    "txcd_41040025",
+    "txcd_41040027"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "juice_percent",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "sweetened",
+     "required": true,
+     "requiredWhen": {
+      "op": "lte",
+      "fact": "juice_percent",
+      "value": 50
+     }
+    },
+    {
+     "fact": "soft_drink",
+     "required": true,
+     "requiredWhen": {
+      "op": "lte",
+      "fact": "juice_percent",
+      "value": 50
+     }
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S026",
+     "scenario": 26,
+     "when": {
+      "op": "gt",
+      "fact": "juice_percent",
+      "value": 50
+     },
+     "condition": "More than 50% fruit/vegetable juice",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.FRUIT_VEGETABLE_JUICE.OVER_50_PERCENT_JUICE",
+     "stripeCode": "txcd_41040027",
+     "providerCodes": {
+      "STRIPE": "txcd_41040027",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    },
+    {
+     "id": "S027",
+     "scenario": 27,
+     "when": {
+      "all": [
+       {
+        "op": "lte",
+        "fact": "juice_percent",
+        "value": 50
+       },
+       {
+        "any": [
+         {
+          "op": "isTrue",
+          "fact": "sweetened"
+         },
+         {
+          "op": "isTrue",
+          "fact": "soft_drink"
+         }
+        ]
+       }
+      ]
+     },
+     "condition": "50% or less juice and sweetened soft drink",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.FRUIT_VEGETABLE_JUICE.UP_TO_50_PERCENT_SWEETENED_SOFT_DRINK",
+     "stripeCode": "txcd_41040025",
+     "providerCodes": {
+      "STRIPE": "txcd_41040025",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": "Interpretation: a drink at 50% juice or less is taxable when it is sweetened OR classified as a soft drink; confirm with the tax professional."
+    },
+    {
+     "id": "S028",
+     "scenario": 28,
+     "when": {
+      "all": [
+       {
+        "op": "lte",
+        "fact": "juice_percent",
+        "value": 50
+       },
+       {
+        "op": "isFalse",
+        "fact": "sweetened"
+       },
+       {
+        "op": "isFalse",
+        "fact": "soft_drink"
+       }
+      ]
+     },
+     "condition": "Unsweetened beverage not classified as soft drink",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.FRUIT_VEGETABLE_JUICE.UNSWEETENED_NOT_SOFT_DRINK",
+     "stripeCode": "txcd_41040024",
+     "providerCodes": {
+      "STRIPE": "txcd_41040024",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "plain-water",
+   "department": "beverages",
+   "name": "Plain water",
+   "stripeCodes": [
+    "txcd_41030001"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S024",
+     "scenario": 24,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.PLAIN_WATER.STANDARD",
+     "stripeCode": "txcd_41030001",
+     "providerCodes": {
+      "STRIPE": "txcd_41030001",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "ready-to-drink-coffee-tea",
+   "department": "beverages",
+   "name": "Ready-to-drink coffee & tea",
+   "stripeCodes": [
+    "txcd_41050001",
+    "txcd_41050002",
+    "txcd_41050003"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "contains_milk",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "sweetened",
+     "required": true,
+     "requiredWhen": {
+      "op": "isFalse",
+      "fact": "contains_milk"
+     }
+    },
+    {
+     "fact": "sold_heated",
+     "required": true,
+     "requiredWhen": {
+      "op": "isFalse",
+      "fact": "contains_milk"
+     }
+    },
+    {
+     "fact": "utensils_provided",
+     "required": true,
+     "requiredWhen": {
+      "op": "isFalse",
+      "fact": "contains_milk"
+     }
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S032",
+     "scenario": 32,
+     "when": {
+      "op": "isTrue",
+      "fact": "contains_milk"
+     },
+     "condition": "Qualifying beverage containing milk/milk substitute",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.READY_TO_DRINK_COFFEE_TEA.CONTAINS_MILK_OR_SUBSTITUTE",
+     "stripeCode": "txcd_41050001",
+     "providerCodes": {
+      "STRIPE": "txcd_41050001",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": "Document says 'qualifying' beverage containing milk; the qualifying threshold is not defined in the workbook. Confirm with the tax professional."
+    },
+    {
+     "id": "S031",
+     "scenario": 31,
+     "when": {
+      "all": [
+       {
+        "op": "isFalse",
+        "fact": "contains_milk"
+       },
+       {
+        "any": [
+         {
+          "op": "isTrue",
+          "fact": "sweetened"
+         },
+         {
+          "op": "isTrue",
+          "fact": "sold_heated"
+         },
+         {
+          "op": "isTrue",
+          "fact": "utensils_provided"
+         }
+        ]
+       }
+      ]
+     },
+     "condition": "Sweetened bottled/canned, served hot, or with utensils",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.READY_TO_DRINK_COFFEE_TEA.SWEETENED_HOT_OR_WITH_UTENSILS",
+     "stripeCode": "txcd_41050002",
+     "providerCodes": {
+      "STRIPE": "txcd_41050002",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S030",
+     "scenario": 30,
+     "when": {
+      "all": [
+       {
+        "op": "isFalse",
+        "fact": "contains_milk"
+       },
+       {
+        "op": "isFalse",
+        "fact": "sweetened"
+       },
+       {
+        "op": "isFalse",
+        "fact": "sold_heated"
+       },
+       {
+        "op": "isFalse",
+        "fact": "utensils_provided"
+       }
+      ]
+     },
+     "condition": "Unsweetened and sold unheated without utensils",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.READY_TO_DRINK_COFFEE_TEA.UNSWEETENED_UNHEATED_NO_UTENSILS",
+     "stripeCode": "txcd_41050003",
+     "providerCodes": {
+      "STRIPE": "txcd_41050003",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "hair-accessories",
+   "department": "beauty-personal-care",
+   "name": "Hair accessories",
+   "stripeCodes": [
+    "txcd_30060005"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S042",
+     "scenario": 42,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.HAIR_ACCESSORIES.STANDARD",
+     "stripeCode": "txcd_30060005",
+     "providerCodes": {
+      "STRIPE": "txcd_30060005",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "haircare",
+   "department": "beauty-personal-care",
+   "name": "Haircare",
+   "stripeCodes": [
+    "txcd_32050036"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S040",
+     "scenario": 40,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.HAIRCARE.STANDARD",
+     "stripeCode": "txcd_32050036",
+     "providerCodes": {
+      "STRIPE": "txcd_32050036",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": "Medicated Drug Facts products are classified separately: list them under Medicated skincare or OTC medicines."
+  },
+  {
+   "code": "medicated-skincare",
+   "department": "beauty-personal-care",
+   "name": "Medicated skincare",
+   "stripeCodes": [
+    "txcd_32050014"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "label_type",
+     "required": true,
+     "requiredWhen": null,
+     "choices": [
+      "DRUG_FACTS",
+      "NONE"
+     ]
+    },
+    {
+     "fact": "qualifying_label",
+     "required": true,
+     "requiredWhen": {
+      "op": "eq",
+      "fact": "label_type",
+      "value": "DRUG_FACTS"
+     }
+    },
+    {
+     "fact": "label_evidence",
+     "required": true,
+     "requiredWhen": {
+      "all": [
+       {
+        "op": "eq",
+        "fact": "label_type",
+        "value": "DRUG_FACTS"
+       },
+       {
+        "op": "isTrue",
+        "fact": "qualifying_label"
+       }
+      ]
+     }
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S038",
+     "scenario": 38,
+     "when": {
+      "all": [
+       {
+        "op": "eq",
+        "fact": "label_type",
+        "value": "DRUG_FACTS"
+       },
+       {
+        "op": "isTrue",
+        "fact": "qualifying_label"
+       }
+      ]
+     },
+     "condition": "Qualifying OTC medicine with FDA Drug Facts",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.MEDICATED_SKINCARE.QUALIFYING_OTC_DRUG_FACTS",
+     "stripeCode": "txcd_32050014",
+     "providerCodes": {
+      "STRIPE": "txcd_32050014",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    },
+    {
+     "id": "S039",
+     "scenario": 39,
+     "when": {
+      "not": {
+       "all": [
+        {
+         "op": "eq",
+         "fact": "label_type",
+         "value": "DRUG_FACTS"
+        },
+        {
+         "op": "isTrue",
+         "fact": "qualifying_label"
+        }
+       ]
+      }
+     },
+     "condition": "Cosmetic or skin product without qualifying drug exemption",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.MEDICATED_SKINCARE.COSMETIC_NO_DRUG_EXEMPTION",
+     "stripeCode": "txcd_32050014",
+     "providerCodes": {
+      "STRIPE": "txcd_32050014",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "perfumes-fragrances",
+   "department": "beauty-personal-care",
+   "name": "Perfumes & fragrances",
+   "stripeCodes": [
+    "txcd_32050006"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S043",
+     "scenario": 43,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.PERFUMES_FRAGRANCES.STANDARD",
+     "stripeCode": "txcd_32050006",
+     "providerCodes": {
+      "STRIPE": "txcd_32050006",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": "Exact fragrance code must be verified at SKU level (workbook note)."
+  },
+  {
+   "code": "skincare-cosmetics",
+   "department": "beauty-personal-care",
+   "name": "Skincare & cosmetics",
+   "stripeCodes": [
+    "txcd_32050013"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S037",
+     "scenario": 37,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.SKINCARE_COSMETICS.STANDARD",
+     "stripeCode": "txcd_32050013",
+     "providerCodes": {
+      "STRIPE": "txcd_32050013",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": "Medicated Drug Facts products are classified separately: list them under Medicated skincare."
+  },
+  {
+   "code": "wigs-extensions",
+   "department": "beauty-personal-care",
+   "name": "Wigs & extensions",
+   "stripeCodes": [
+    "txcd_30060014"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S041",
+     "scenario": 41,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.WIGS_EXTENSIONS.STANDARD",
+     "stripeCode": "txcd_30060014",
+     "providerCodes": {
+      "STRIPE": "txcd_30060014",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "adult-clothing-footwear",
+   "department": "fashion-accessories",
+   "name": "Adult clothing & footwear",
+   "stripeCodes": [
+    "txcd_30011000"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S044",
+     "scenario": 44,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.ADULT_CLOTHING_FOOTWEAR.STANDARD",
+     "stripeCode": "txcd_30011000",
+     "providerCodes": {
+      "STRIPE": "txcd_30011000",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": "Footwear/product subtype needs an exact Stripe code (workbook note); provider code map per product type can refine it."
+  },
+  {
+   "code": "bags-purses",
+   "department": "fashion-accessories",
+   "name": "Bags & purses",
+   "stripeCodes": [
+    "txcd_30060001"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S046",
+     "scenario": 46,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.BAGS_PURSES.STANDARD",
+     "stripeCode": "txcd_30060001",
+     "providerCodes": {
+      "STRIPE": "txcd_30060001",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "childrens-clothing",
+   "department": "fashion-accessories",
+   "name": "Children’s clothing",
+   "stripeCodes": [
+    "txcd_30011200"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S045",
+     "scenario": 45,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.CHILDRENS_CLOTHING.STANDARD",
+     "stripeCode": "txcd_30011200",
+     "providerCodes": {
+      "STRIPE": "txcd_30011200",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "jewelry-accessories",
+   "department": "fashion-accessories",
+   "name": "Jewelry & accessories",
+   "stripeCodes": [
+    "txcd_30060007"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S047",
+     "scenario": 47,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.JEWELRY_ACCESSORIES.STANDARD",
+     "stripeCode": "txcd_30060007",
+     "providerCodes": {
+      "STRIPE": "txcd_30060007",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": "Accessory subtype needs an exact Stripe code (workbook note)."
+  },
+  {
+   "code": "bedding-linens",
+   "department": "home-household",
+   "name": "Bedding & linens",
+   "stripeCodes": [
+    "txcd_33080301"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S050",
+     "scenario": 50,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.BEDDING_LINENS.STANDARD",
+     "stripeCode": "txcd_33080301",
+     "providerCodes": {
+      "STRIPE": "txcd_33080301",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "cleaning-paper-products",
+   "department": "home-household",
+   "name": "Cleaning & paper products",
+   "stripeCodes": [
+    "txcd_99999999"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "REFINE_CODE",
+   "statusReasons": [
+    {
+     "status": "REFINE_CODE",
+     "decision": 3,
+     "text": "Generic Stripe code txcd_99999999: verify the specific code at SKU level before it goes live."
+    }
+   ],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S048",
+     "scenario": 48,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.CLEANING_PAPER_PRODUCTS.STANDARD",
+     "stripeCode": "txcd_99999999",
+     "providerCodes": {
+      "STRIPE": "txcd_99999999",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "decor-candles",
+   "department": "home-household",
+   "name": "Decor & candles",
+   "stripeCodes": [
+    "txcd_33110005"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S051",
+     "scenario": 51,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.DECOR_CANDLES.STANDARD",
+     "stripeCode": "txcd_33110005",
+     "providerCodes": {
+      "STRIPE": "txcd_33110005",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "furniture-small-appliances",
+   "department": "home-household",
+   "name": "Furniture & small appliances",
+   "stripeCodes": [
+    "txcd_99999999"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "REFINE_CODE",
+   "statusReasons": [
+    {
+     "status": "REFINE_CODE",
+     "decision": 3,
+     "text": "Generic Stripe code txcd_99999999: verify the specific code at SKU level before it goes live."
+    }
+   ],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S052",
+     "scenario": 52,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.FURNITURE_SMALL_APPLIANCES.STANDARD",
+     "stripeCode": "txcd_99999999",
+     "providerCodes": {
+      "STRIPE": "txcd_99999999",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "kitchenware-cookware",
+   "department": "home-household",
+   "name": "Kitchenware & cookware",
+   "stripeCodes": [
+    "txcd_99999999"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "REFINE_CODE",
+   "statusReasons": [
+    {
+     "status": "REFINE_CODE",
+     "decision": 3,
+     "text": "Generic Stripe code txcd_99999999: verify the specific code at SKU level before it goes live."
+    }
+   ],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S049",
+     "scenario": 49,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.KITCHENWARE_COOKWARE.STANDARD",
+     "stripeCode": "txcd_99999999",
+     "providerCodes": {
+      "STRIPE": "txcd_99999999",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "computers-laptops",
+   "department": "electronics",
+   "name": "Computers & laptops",
+   "stripeCodes": [
+    "txcd_37010000"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S054",
+     "scenario": 54,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.COMPUTERS_LAPTOPS.STANDARD",
+     "stripeCode": "txcd_37010000",
+     "providerCodes": {
+      "STRIPE": "txcd_37010000",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "gaming",
+   "department": "electronics",
+   "name": "Gaming",
+   "stripeCodes": [
+    "txcd_34022000"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S056",
+     "scenario": 56,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.GAMING.STANDARD",
+     "stripeCode": "txcd_34022000",
+     "providerCodes": {
+      "STRIPE": "txcd_34022000",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "phones",
+   "department": "electronics",
+   "name": "Phones",
+   "stripeCodes": [
+    "txcd_34021000"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S053",
+     "scenario": 53,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.PHONES.STANDARD",
+     "stripeCode": "txcd_34021000",
+     "providerCodes": {
+      "STRIPE": "txcd_34021000",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "tvs-audio-accessories",
+   "department": "electronics",
+   "name": "TVs, audio & accessories",
+   "stripeCodes": [
+    "txcd_34020006"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S055",
+     "scenario": 55,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.TVS_AUDIO_ACCESSORIES.STANDARD",
+     "stripeCode": "txcd_34020006",
+     "providerCodes": {
+      "STRIPE": "txcd_34020006",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": "Audio and accessory subtypes need their own codes (workbook note)."
+  },
+  {
+   "code": "magazines",
+   "department": "books-media",
+   "name": "Magazines",
+   "stripeCodes": [
+    "txcd_35020100",
+    "txcd_35020200"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "publication_type",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "publication_evidence",
+     "required": true,
+     "requiredWhen": {
+      "op": "eq",
+      "fact": "publication_type",
+      "value": "QUALIFYING_EXEMPT_NEWSPAPER_OR_OTHER"
+     }
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S058",
+     "scenario": 58,
+     "when": {
+      "op": "eq",
+      "fact": "publication_type",
+      "value": "ORDINARY_MAGAZINE_PERIODICAL"
+     },
+     "condition": "Ordinary magazines and periodicals",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.MAGAZINES.ORDINARY_MAGAZINE_PERIODICAL",
+     "stripeCode": "txcd_35020200",
+     "providerCodes": {
+      "STRIPE": "txcd_35020200",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S059",
+     "scenario": 59,
+     "when": {
+      "op": "eq",
+      "fact": "publication_type",
+      "value": "QUALIFYING_EXEMPT_NEWSPAPER_OR_OTHER"
+     },
+     "condition": "Qualifying exempt newspaper or other specific exemption",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.MAGAZINES.QUALIFYING_EXEMPT_NEWSPAPER_OR_OTHER",
+     "stripeCode": "txcd_35020100",
+     "providerCodes": {
+      "STRIPE": "txcd_35020100",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "printed-books",
+   "department": "books-media",
+   "name": "Printed books",
+   "stripeCodes": [
+    "txcd_35010000"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S057",
+     "scenario": 57,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.PRINTED_BOOKS.STANDARD",
+     "stripeCode": "txcd_35010000",
+     "providerCodes": {
+      "STRIPE": "txcd_35010000",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": "Textbooks and religious books may have specific codes (workbook note)."
+  },
+  {
+   "code": "dietary-supplements",
+   "department": "health-wellness",
+   "name": "Dietary supplements",
+   "stripeCodes": [
+    "txcd_40090001"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "wellness_class",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "qualifying_label",
+     "required": true,
+     "requiredWhen": {
+      "op": "eq",
+      "fact": "wellness_class",
+      "value": "SUPPLEMENT"
+     }
+    },
+    {
+     "fact": "label_evidence",
+     "required": true,
+     "requiredWhen": {
+      "any": [
+       {
+        "all": [
+         {
+          "op": "eq",
+          "fact": "wellness_class",
+          "value": "SUPPLEMENT"
+         },
+         {
+          "op": "isTrue",
+          "fact": "qualifying_label"
+         }
+        ]
+       },
+       {
+        "op": "eq",
+        "fact": "wellness_class",
+        "value": "FOOD"
+       }
+      ]
+     }
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S060",
+     "scenario": 60,
+     "when": {
+      "all": [
+       {
+        "op": "eq",
+        "fact": "wellness_class",
+        "value": "SUPPLEMENT"
+       },
+       {
+        "op": "isTrue",
+        "fact": "qualifying_label"
+       }
+      ]
+     },
+     "condition": "Qualifying dietary supplement / Supplement Facts",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.DIETARY_SUPPLEMENTS.QUALIFYING_SUPPLEMENT_FACTS",
+     "stripeCode": "txcd_40090001",
+     "providerCodes": {
+      "STRIPE": "txcd_40090001",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    },
+    {
+     "id": "S062",
+     "scenario": 62,
+     "when": {
+      "op": "eq",
+      "fact": "wellness_class",
+      "value": "FOOD"
+     },
+     "condition": "Actual food or qualifying food product",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.DIETARY_SUPPLEMENTS.ACTUAL_FOOD_OR_QUALIFYING_FOOD",
+     "stripeCode": "txcd_40090001",
+     "providerCodes": {
+      "STRIPE": "txcd_40090001",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    },
+    {
+     "id": "S061",
+     "scenario": 61,
+     "when": {
+      "any": [
+       {
+        "op": "eq",
+        "fact": "wellness_class",
+        "value": "ORDINARY_GOODS"
+       },
+       {
+        "all": [
+         {
+          "op": "eq",
+          "fact": "wellness_class",
+          "value": "SUPPLEMENT"
+         },
+         {
+          "op": "isFalse",
+          "fact": "qualifying_label"
+         }
+        ]
+       }
+      ]
+     },
+     "condition": "Ordinary nonexempt goods sold as wellness products",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.DIETARY_SUPPLEMENTS.ORDINARY_NONEXEMPT_WELLNESS_GOODS",
+     "stripeCode": "txcd_40090001",
+     "providerCodes": {
+      "STRIPE": "txcd_40090001",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "feminine-hygiene",
+   "department": "health-wellness",
+   "name": "Feminine hygiene",
+   "stripeCodes": [
+    "txcd_32040005"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S067",
+     "scenario": 67,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.FEMININE_HYGIENE.STANDARD",
+     "stripeCode": "txcd_32040005",
+     "providerCodes": {
+      "STRIPE": "txcd_32040005",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "first-aid-wound-care",
+   "department": "health-wellness",
+   "name": "First aid & wound care",
+   "stripeCodes": [
+    "txcd_32070003"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S064",
+     "scenario": 64,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.FIRST_AID_WOUND_CARE.STANDARD",
+     "stripeCode": "txcd_32070003",
+     "providerCodes": {
+      "STRIPE": "txcd_32070003",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": "Only qualifying wound-care products (workbook note)."
+  },
+  {
+   "code": "medical-devices",
+   "department": "health-wellness",
+   "name": "Medical devices",
+   "stripeCodes": [
+    "txcd_32010001"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "device_kind",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "device_evidence",
+     "required": true,
+     "requiredWhen": {
+      "op": "in",
+      "fact": "device_kind",
+      "values": [
+       "QUALIFYING_EXEMPT_DEVICE",
+       "PRESCRIBED_ELIGIBLE_DEVICE"
+      ]
+     }
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S068",
+     "scenario": 68,
+     "when": {
+      "op": "in",
+      "fact": "device_kind",
+      "values": [
+       "QUALIFYING_EXEMPT_DEVICE",
+       "PRESCRIBED_ELIGIBLE_DEVICE"
+      ]
+     },
+     "condition": "Qualifying exempt medical device or prescribed eligible device",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.MEDICAL_DEVICES.QUALIFYING_OR_PRESCRIBED_DEVICE",
+     "stripeCode": "txcd_32010001",
+     "providerCodes": {
+      "STRIPE": "txcd_32010001",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    },
+    {
+     "id": "S069",
+     "scenario": 69,
+     "when": {
+      "op": "eq",
+      "fact": "device_kind",
+      "value": "NONQUALIFYING_CONSUMER_DEVICE"
+     },
+     "condition": "Nonqualifying consumer device",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.MEDICAL_DEVICES.NONQUALIFYING_CONSUMER_DEVICE",
+     "stripeCode": "txcd_32010001",
+     "providerCodes": {
+      "STRIPE": "txcd_32010001",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "otc-medicines",
+   "department": "health-wellness",
+   "name": "OTC medicines",
+   "stripeCodes": [
+    "txcd_32020002"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "label_evidence",
+     "required": true,
+     "requiredWhen": null
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S063",
+     "scenario": 63,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.OTC_MEDICINES.STANDARD",
+     "stripeCode": "txcd_32020002",
+     "providerCodes": {
+      "STRIPE": "txcd_32020002",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": "Drug Facts evidence is mandatory (workbook: FDA Drug Facts / qualifying medicine)."
+  },
+  {
+   "code": "personal-hygiene",
+   "department": "health-wellness",
+   "name": "Personal hygiene",
+   "stripeCodes": [
+    "txcd_32050019"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "hygiene_kind",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "label_evidence",
+     "required": true,
+     "requiredWhen": {
+      "op": "eq",
+      "fact": "hygiene_kind",
+      "value": "OTC_MEDICINE"
+     }
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S065",
+     "scenario": 65,
+     "when": {
+      "op": "in",
+      "fact": "hygiene_kind",
+      "values": [
+       "OTC_MEDICINE",
+       "FEMININE_HYGIENE"
+      ]
+     },
+     "condition": "Qualifying OTC medicine or exempt feminine hygiene item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.PERSONAL_HYGIENE.OTC_MEDICINE_OR_FEMININE_HYGIENE",
+     "stripeCode": "txcd_32050019",
+     "providerCodes": {
+      "STRIPE": "txcd_32050019",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    },
+    {
+     "id": "S066",
+     "scenario": 66,
+     "when": {
+      "op": "eq",
+      "fact": "hygiene_kind",
+      "value": "ORDINARY_NONMEDICATED"
+     },
+     "condition": "Ordinary soap, toothpaste, nonmedicated hygiene goods",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.PERSONAL_HYGIENE.ORDINARY_NONMEDICATED",
+     "stripeCode": "txcd_32050019",
+     "providerCodes": {
+      "STRIPE": "txcd_32050019",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "baby-bottles",
+   "department": "baby-kids",
+   "name": "Baby bottles",
+   "stripeCodes": [
+    "txcd_31040001"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S071",
+     "scenario": 71,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.BABY_BOTTLES.STANDARD",
+     "stripeCode": "txcd_31040001",
+     "providerCodes": {
+      "STRIPE": "txcd_31040001",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "car-seats",
+   "department": "baby-kids",
+   "name": "Car seats",
+   "stripeCodes": [
+    "txcd_31070001"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "holiday_eligible",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "exemption_window_active",
+     "required": true,
+     "requiredWhen": null
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S073",
+     "scenario": 73,
+     "when": {
+      "all": [
+       {
+        "op": "isTrue",
+        "fact": "holiday_eligible"
+       },
+       {
+        "op": "isTrue",
+        "fact": "exemption_window_active"
+       }
+      ]
+     },
+     "condition": "Qualifying, legislatively authorized tax holiday or exemption",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.CAR_SEATS.TAX_HOLIDAY_OR_EXEMPTION",
+     "stripeCode": "txcd_31070001",
+     "providerCodes": {
+      "STRIPE": "txcd_31070001",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    },
+    {
+     "id": "S072",
+     "scenario": 72,
+     "when": {
+      "not": {
+       "all": [
+        {
+         "op": "isTrue",
+         "fact": "holiday_eligible"
+        },
+        {
+         "op": "isTrue",
+         "fact": "exemption_window_active"
+        }
+       ]
+      }
+     },
+     "condition": "Ordinary sale outside special qualifying exemption",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.CAR_SEATS.ORDINARY_SALE",
+     "stripeCode": "txcd_31070001",
+     "providerCodes": {
+      "STRIPE": "txcd_31070001",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": "The exemption calendar is not built yet (TX-08): until it is, exemption_window_active is always false."
+  },
+  {
+   "code": "diapers-wipes",
+   "department": "baby-kids",
+   "name": "Diapers & wipes",
+   "stripeCodes": [
+    "txcd_31031202"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S070",
+     "scenario": 70,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.DIAPERS_WIPES.STANDARD",
+     "stripeCode": "txcd_31031202",
+     "providerCodes": {
+      "STRIPE": "txcd_31031202",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "toys-games",
+   "department": "baby-kids",
+   "name": "Toys & games",
+   "stripeCodes": [
+    "txcd_99999999"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "REFINE_CODE",
+   "statusReasons": [
+    {
+     "status": "REFINE_CODE",
+     "decision": 3,
+     "text": "Generic Stripe code txcd_99999999: verify the specific code at SKU level before it goes live."
+    }
+   ],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S074",
+     "scenario": 74,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.TOYS_GAMES.STANDARD",
+     "stripeCode": "txcd_99999999",
+     "providerCodes": {
+      "STRIPE": "txcd_99999999",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "pet-grooming-accessories",
+   "department": "pets",
+   "name": "Grooming & accessories",
+   "stripeCodes": [
+    "txcd_99999999"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "REFINE_CODE",
+   "statusReasons": [
+    {
+     "status": "REFINE_CODE",
+     "decision": 3,
+     "text": "Generic Stripe code txcd_99999999: verify the specific code at SKU level before it goes live."
+    }
+   ],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S076",
+     "scenario": 76,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.PET_GROOMING_ACCESSORIES.STANDARD",
+     "stripeCode": "txcd_99999999",
+     "providerCodes": {
+      "STRIPE": "txcd_99999999",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": "Generic tangible goods; classify the actual SKU (workbook note)."
+  },
+  {
+   "code": "pet-food",
+   "department": "pets",
+   "name": "Pet food",
+   "stripeCodes": [
+    "txcd_36010004"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S075",
+     "scenario": 75,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.PET_FOOD.STANDARD",
+     "stripeCode": "txcd_36010004",
+     "providerCodes": {
+      "STRIPE": "txcd_36010004",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "audiobooks",
+   "department": "digital-products",
+   "name": "Audiobooks",
+   "stripeCodes": [
+    "txcd_10301000"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "NEEDS_APPROVAL",
+   "statusReasons": [
+    {
+     "status": "NEEDS_APPROVAL",
+     "decision": 4,
+     "text": "Workbook notes require the rule to be verified and approved before launch (open decision 4)."
+    }
+   ],
+   "facts": [
+    {
+     "fact": "delivery_method",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "exemption_confirmed",
+     "required": true,
+     "requiredWhen": null
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S079",
+     "scenario": 79,
+     "when": {
+      "op": "isFalse",
+      "fact": "exemption_confirmed"
+     },
+     "condition": "Download or access treated as taxable digital good",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.AUDIOBOOKS.TAXABLE_DIGITAL_GOOD",
+     "stripeCode": "txcd_10301000",
+     "providerCodes": {
+      "STRIPE": "txcd_10301000",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S080",
+     "scenario": 80,
+     "when": {
+      "op": "isTrue",
+      "fact": "exemption_confirmed"
+     },
+     "condition": "Transaction confirmed exempt",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.AUDIOBOOKS.CONFIRMED_EXEMPT",
+     "stripeCode": "txcd_10301000",
+     "providerCodes": {
+      "STRIPE": "txcd_10301000",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "digital-art-downloads",
+   "department": "digital-products",
+   "name": "Digital art & downloads",
+   "stripeCodes": [
+    "txcd_10501000"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "NEEDS_APPROVAL",
+   "statusReasons": [
+    {
+     "status": "NEEDS_APPROVAL",
+     "decision": 4,
+     "text": "Workbook notes require the rule to be verified and approved before launch (open decision 4)."
+    }
+   ],
+   "facts": [
+    {
+     "fact": "deliverable_kind",
+     "required": true,
+     "requiredWhen": null
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S084",
+     "scenario": 84,
+     "when": {
+      "op": "eq",
+      "fact": "deliverable_kind",
+      "value": "DOWNLOADED_FILE"
+     },
+     "condition": "Taxable downloaded digital artwork / photo deliverable",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.DIGITAL_ART_DOWNLOADS.DOWNLOADED_ARTWORK_OR_PHOTO",
+     "stripeCode": "txcd_10501000",
+     "providerCodes": {
+      "STRIPE": "txcd_10501000",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S085",
+     "scenario": 85,
+     "when": {
+      "op": "eq",
+      "fact": "deliverable_kind",
+      "value": "PERSONAL_SERVICE_NO_DELIVERABLE"
+     },
+     "condition": "Exempt personal service without taxable deliverable",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.DIGITAL_ART_DOWNLOADS.PERSONAL_SERVICE_NO_DELIVERABLE",
+     "stripeCode": "txcd_10501000",
+     "providerCodes": {
+      "STRIPE": "txcd_10501000",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "downloadable-ebooks",
+   "department": "digital-products",
+   "name": "Downloadable e-books",
+   "stripeCodes": [
+    "txcd_10302000"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "NEEDS_APPROVAL",
+   "statusReasons": [
+    {
+     "status": "NEEDS_APPROVAL",
+     "decision": 4,
+     "text": "Workbook notes require the rule to be verified and approved before launch (open decision 4)."
+    }
+   ],
+   "facts": [
+    {
+     "fact": "delivery_method",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "exemption_confirmed",
+     "required": true,
+     "requiredWhen": null
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S077",
+     "scenario": 77,
+     "when": {
+      "op": "isFalse",
+      "fact": "exemption_confirmed"
+     },
+     "condition": "Digitally transferred book treated as taxable digital good",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.DOWNLOADABLE_EBOOKS.TAXABLE_DIGITAL_GOOD",
+     "stripeCode": "txcd_10302000",
+     "providerCodes": {
+      "STRIPE": "txcd_10302000",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S078",
+     "scenario": 78,
+     "when": {
+      "op": "isTrue",
+      "fact": "exemption_confirmed"
+     },
+     "condition": "Transaction confirmed legally exempt",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.DOWNLOADABLE_EBOOKS.CONFIRMED_EXEMPT",
+     "stripeCode": "txcd_10302000",
+     "providerCodes": {
+      "STRIPE": "txcd_10302000",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "downloadable-software",
+   "department": "digital-products",
+   "name": "Downloadable software",
+   "stripeCodes": [
+    "txcd_10202000"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S083",
+     "scenario": 83,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.DOWNLOADABLE_SOFTWARE.STANDARD",
+     "stripeCode": "txcd_10202000",
+     "providerCodes": {
+      "STRIPE": "txcd_10202000",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "online-courses",
+   "department": "digital-products",
+   "name": "Online courses",
+   "stripeCodes": [
+    "txcd_20060158"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "NEEDS_APPROVAL",
+   "statusReasons": [
+    {
+     "status": "NEEDS_APPROVAL",
+     "decision": 4,
+     "text": "Workbook notes require the rule to be verified and approved before launch (open decision 4)."
+    }
+   ],
+   "facts": [
+    {
+     "fact": "delivery_mode",
+     "required": true,
+     "requiredWhen": null
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S081",
+     "scenario": 81,
+     "when": {
+      "op": "eq",
+      "fact": "delivery_mode",
+      "value": "LIVE_INSTRUCTOR_LED"
+     },
+     "condition": "Live instructor-led education, not otherwise a taxable service",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.ONLINE_COURSES.LIVE_INSTRUCTOR_LED",
+     "stripeCode": "txcd_20060158",
+     "providerCodes": {
+      "STRIPE": "txcd_20060158",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    },
+    {
+     "id": "S082",
+     "scenario": 82,
+     "when": {
+      "op": "eq",
+      "fact": "delivery_mode",
+      "value": "RECORDED_OR_DIGITAL_DELIVERABLE"
+     },
+     "condition": "Taxable digital service / taxable recorded deliverable",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.ONLINE_COURSES.RECORDED_OR_DIGITAL_DELIVERABLE",
+     "stripeCode": "txcd_20060158",
+     "providerCodes": {
+      "STRIPE": "txcd_20060158",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "event-tickets",
+   "department": "services",
+   "name": "Event tickets",
+   "stripeCodes": [
+    "txcd_50013001"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "NEEDS_APPROVAL",
+   "statusReasons": [
+    {
+     "status": "NEEDS_APPROVAL",
+     "decision": 4,
+     "text": "Workbook notes require the rule to be verified and approved before launch (open decision 4)."
+    }
+   ],
+   "facts": [
+    {
+     "fact": "admission_kind",
+     "required": true,
+     "requiredWhen": null
+    },
+    {
+     "fact": "admission_evidence",
+     "required": true,
+     "requiredWhen": {
+      "op": "eq",
+      "fact": "admission_kind",
+      "value": "NONTAXABLE_ADMISSION_OR_EXEMPT_EVENT"
+     }
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S093",
+     "scenario": 93,
+     "when": {
+      "op": "eq",
+      "fact": "admission_kind",
+      "value": "TAXABLE_AMUSEMENT_ADMISSION"
+     },
+     "condition": "Taxable amusement admission",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.EVENT_TICKETS.TAXABLE_AMUSEMENT_ADMISSION",
+     "stripeCode": "txcd_50013001",
+     "providerCodes": {
+      "STRIPE": "txcd_50013001",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S094",
+     "scenario": 94,
+     "when": {
+      "op": "eq",
+      "fact": "admission_kind",
+      "value": "NONTAXABLE_ADMISSION_OR_EXEMPT_EVENT"
+     },
+     "condition": "Qualifying nontaxable admission or exempt event",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.EVENT_TICKETS.NONTAXABLE_ADMISSION_OR_EXEMPT_EVENT",
+     "stripeCode": "txcd_50013001",
+     "providerCodes": {
+      "STRIPE": "txcd_50013001",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "fitness-classes",
+   "department": "services",
+   "name": "Fitness classes",
+   "stripeCodes": [
+    "txcd_50021003"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [
+    {
+     "fact": "fitness_kind",
+     "required": true,
+     "requiredWhen": null
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S095",
+     "scenario": 95,
+     "when": {
+      "op": "eq",
+      "fact": "fitness_kind",
+      "value": "MEMBERSHIP_OR_FACILITY_ACCESS"
+     },
+     "condition": "Gym membership / taxable amusement access",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.FITNESS_CLASSES.MEMBERSHIP_OR_FACILITY_ACCESS",
+     "stripeCode": "txcd_50021003",
+     "providerCodes": {
+      "STRIPE": "txcd_50021003",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S096",
+     "scenario": 96,
+     "when": {
+      "op": "eq",
+      "fact": "fitness_kind",
+      "value": "INSTRUCTOR_LED_CLASS"
+     },
+     "condition": "Qualifying instructor-led training or class",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.FITNESS_CLASSES.INSTRUCTOR_LED_CLASS",
+     "stripeCode": "txcd_50021003",
+     "providerCodes": {
+      "STRIPE": "txcd_50021003",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "hair-beauty-appointments",
+   "department": "services",
+   "name": "Hair & beauty appointments",
+   "stripeCodes": [
+    "txcd_20040001"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "EXEMPT",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S086",
+     "scenario": 86,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.HAIR_BEAUTY_APPOINTMENTS.STANDARD",
+     "stripeCode": "txcd_20040001",
+     "providerCodes": {
+      "STRIPE": "txcd_20040001",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": "Standalone service; goods are sold on separate lines (rule 7)."
+  },
+  {
+   "code": "laundry-dry-cleaning",
+   "department": "services",
+   "name": "Laundry & dry cleaning",
+   "stripeCodes": [
+    "txcd_20090004"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S090",
+     "scenario": 90,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.LAUNDRY_DRY_CLEANING.STANDARD",
+     "stripeCode": "txcd_20090004",
+     "providerCodes": {
+      "STRIPE": "txcd_20090004",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "photography-media",
+   "department": "services",
+   "name": "Photography & media",
+   "stripeCodes": [
+    "txcd_20030000"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "NEEDS_APPROVAL",
+   "statusReasons": [
+    {
+     "status": "NEEDS_APPROVAL",
+     "decision": 4,
+     "text": "Workbook notes require the rule to be verified and approved before launch (open decision 4)."
+    }
+   ],
+   "facts": [
+    {
+     "fact": "output_kind",
+     "required": true,
+     "requiredWhen": null
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S091",
+     "scenario": 91,
+     "when": {
+      "op": "eq",
+      "fact": "output_kind",
+      "value": "TAXABLE_PRINTS_OR_DIGITAL_DELIVERABLE"
+     },
+     "condition": "Taxable photos/prints or taxable digital deliverables",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.PHOTOGRAPHY_MEDIA.TAXABLE_PRINTS_OR_DIGITAL_DELIVERABLE",
+     "stripeCode": "txcd_20030000",
+     "providerCodes": {
+      "STRIPE": "txcd_20030000",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S092",
+     "scenario": 92,
+     "when": {
+      "op": "eq",
+      "fact": "output_kind",
+      "value": "SERVICE_ONLY_NO_TAXABLE_DELIVERABLE"
+     },
+     "condition": "Separately provided nontaxable service without taxable deliverable",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.PHOTOGRAPHY_MEDIA.SERVICE_ONLY_NO_TAXABLE_DELIVERABLE",
+     "stripeCode": "txcd_20030000",
+     "providerCodes": {
+      "STRIPE": "txcd_20030000",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "repairs",
+   "department": "services",
+   "name": "Repairs",
+   "stripeCodes": [
+    "txcd_20080010"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S089",
+     "scenario": 89,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.REPAIRS.STANDARD",
+     "stripeCode": "txcd_20080010",
+     "providerCodes": {
+      "STRIPE": "txcd_20080010",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "residential-cleaning",
+   "department": "services",
+   "name": "Residential cleaning",
+   "stripeCodes": [
+    "txcd_20010006"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S087",
+     "scenario": 87,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.RESIDENTIAL_CLEANING.STANDARD",
+     "stripeCode": "txcd_20010006",
+     "providerCodes": {
+      "STRIPE": "txcd_20010006",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "tutoring-consulting",
+   "department": "services",
+   "name": "Tutoring & consulting",
+   "stripeCodes": [
+    "txcd_20060059"
+   ],
+   "conflictingCodes": [
+    "txcd_20060059",
+    "txcd_20060048"
+   ],
+   "defaultOutcome": "EXEMPT",
+   "status": "CONFLICT_OPEN",
+   "statusReasons": [
+    {
+     "status": "CONFLICT_OPEN",
+     "decision": 2,
+     "text": "Open decision 2: the row carries txcd_20060059 but its note says consulting uses txcd_20060048. Decide two subcategories, or one with a service-type field that selects the code."
+    }
+   ],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S088",
+     "scenario": 88,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.TUTORING_CONSULTING.STANDARD",
+     "stripeCode": "txcd_20060059",
+     "providerCodes": {
+      "STRIPE": "txcd_20060059",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "gift-baskets-bundles",
+   "department": "other-specialty",
+   "name": "Gift baskets / bundles",
+   "stripeCodes": [
+    "txcd_40040000",
+    "txcd_40050004",
+    "txcd_99999999"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "BLOCKED_BUNDLE",
+   "statusReasons": [
+    {
+     "status": "BLOCKED_BUNDLE",
+     "decision": null,
+     "text": "Unitemised mixed bundles have no rate in the workbook. Require full component itemisation or a tax-approved bundle rule before publishing or checkout."
+    },
+    {
+     "status": "REFINE_CODE",
+     "decision": 3,
+     "text": "The taxable-goods line uses the generic code txcd_99999999."
+    }
+   ],
+   "facts": [
+    {
+     "fact": "bundle_line_kind",
+     "required": true,
+     "requiredWhen": null
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S100",
+     "scenario": 100,
+     "when": {
+      "op": "eq",
+      "fact": "bundle_line_kind",
+      "value": "EXEMPT_FOOD_LINE_ITEMIZED"
+     },
+     "condition": "Exempt food separately itemized",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.GIFT_BASKETS_BUNDLES.EXEMPT_FOOD_ITEMIZED",
+     "stripeCode": "txcd_40040000",
+     "providerCodes": {
+      "STRIPE": "txcd_40040000",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    },
+    {
+     "id": "S099",
+     "scenario": 99,
+     "when": {
+      "op": "eq",
+      "fact": "bundle_line_kind",
+      "value": "TAXABLE_GOODS_LINE_ITEMIZED"
+     },
+     "condition": "Taxable goods separately itemized",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.GIFT_BASKETS_BUNDLES.TAXABLE_GOODS_ITEMIZED",
+     "stripeCode": "txcd_99999999",
+     "providerCodes": {
+      "STRIPE": "txcd_99999999",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S101",
+     "scenario": 101,
+     "when": {
+      "op": "eq",
+      "fact": "bundle_line_kind",
+      "value": "UNITEMIZED_MIXED_BUNDLE"
+     },
+     "condition": "Unitemized mixed bundle",
+     "outcome": "BLOCKED",
+     "internalTaxCode": "AT.GIFT_BASKETS_BUNDLES.UNITEMIZED_MIXED_BUNDLE",
+     "stripeCode": "txcd_40050004",
+     "providerCodes": {
+      "STRIPE": "txcd_40050004",
+      "AVALARA": null
+     },
+     "rateDisplay": "Not set",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "gift-cards",
+   "department": "other-specialty",
+   "name": "Gift cards",
+   "stripeCodes": [
+    "txcd_10502000"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "CONDITIONAL",
+   "status": "NEEDS_APPROVAL",
+   "statusReasons": [
+    {
+     "status": "NEEDS_APPROVAL",
+     "decision": 4,
+     "text": "The workbook notes say 'approve rule before launch' on all gift card rows; the document's gate list does not name gift cards. Held conservatively until approved."
+    }
+   ],
+   "facts": [
+    {
+     "fact": "gift_card_event",
+     "required": true,
+     "requiredWhen": null
+    }
+   ],
+   "decisionTable": [
+    {
+     "id": "S103",
+     "scenario": 103,
+     "when": {
+      "op": "eq",
+      "fact": "gift_card_event",
+      "value": "SALE_MULTIPURPOSE_CARD"
+     },
+     "condition": "Sale of qualifying multipurpose stored-value card",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.GIFT_CARDS.SALE_OF_MULTIPURPOSE_CARD",
+     "stripeCode": "txcd_10502000",
+     "providerCodes": {
+      "STRIPE": "txcd_10502000",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    },
+    {
+     "id": "S104",
+     "scenario": 104,
+     "when": {
+      "op": "eq",
+      "fact": "gift_card_event",
+      "value": "REDEMPTION_TAXABLE_ITEM"
+     },
+     "condition": "Redemption against taxable item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.GIFT_CARDS.REDEMPTION_TAXABLE_ITEM",
+     "stripeCode": "txcd_10502000",
+     "providerCodes": {
+      "STRIPE": "txcd_10502000",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    },
+    {
+     "id": "S105",
+     "scenario": 105,
+     "when": {
+      "op": "eq",
+      "fact": "gift_card_event",
+      "value": "REDEMPTION_EXEMPT_ITEM"
+     },
+     "condition": "Redemption against exempt item",
+     "outcome": "EXEMPT",
+     "internalTaxCode": "AT.GIFT_CARDS.REDEMPTION_EXEMPT_ITEM",
+     "stripeCode": "txcd_10502000",
+     "providerCodes": {
+      "STRIPE": "txcd_10502000",
+      "AVALARA": null
+     },
+     "rateDisplay": "0%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "handmade-products",
+   "department": "other-specialty",
+   "name": "Handmade products",
+   "stripeCodes": [
+    "txcd_99999999"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "REFINE_CODE",
+   "statusReasons": [
+    {
+     "status": "REFINE_CODE",
+     "decision": 3,
+     "text": "Generic Stripe code txcd_99999999: verify the specific code at SKU level before it goes live."
+    }
+   ],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S102",
+     "scenario": 102,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.HANDMADE_PRODUCTS.STANDARD",
+     "stripeCode": "txcd_99999999",
+     "providerCodes": {
+      "STRIPE": "txcd_99999999",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "school-office-supplies",
+   "department": "other-specialty",
+   "name": "School & office supplies",
+   "stripeCodes": [
+    "txcd_37060012"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S097",
+     "scenario": 97,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.SCHOOL_OFFICE_SUPPLIES.STANDARD",
+     "stripeCode": "txcd_37060012",
+     "providerCodes": {
+      "STRIPE": "txcd_37060012",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  },
+  {
+   "code": "sports-goods",
+   "department": "other-specialty",
+   "name": "Sports goods",
+   "stripeCodes": [
+    "txcd_30071000"
+   ],
+   "conflictingCodes": [],
+   "defaultOutcome": "TAXABLE",
+   "status": "ACTIVE",
+   "statusReasons": [],
+   "facts": [],
+   "decisionTable": [
+    {
+     "id": "S098",
+     "scenario": 98,
+     "when": null,
+     "condition": "Standard qualifying item",
+     "outcome": "TAXABLE",
+     "internalTaxCode": "AT.SPORTS_GOODS.STANDARD",
+     "stripeCode": "txcd_30071000",
+     "providerCodes": {
+      "STRIPE": "txcd_30071000",
+      "AVALARA": null
+     },
+     "rateDisplay": "6.25%–8.25%",
+     "note": null
+    }
+   ],
+   "note": null
+  }
+ ]
+}
