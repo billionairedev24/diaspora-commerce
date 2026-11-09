@@ -1,5 +1,12 @@
 # Local developer profile: docker compose stack from infra/local, security off, human-readable logs.
 at:
+  catalog:
+    taxonomy:
+      import-on-start: true
+    tax:
+      # No tax-returns in the stack: resolve with the local fake built from the dataset, and no review step.
+      resolver: ${CATALOG_TAX_RESOLVER:local}
+      review-required: false
   security:
     enabled: false
     # Security is off locally (every call is the local super admin), so relationship checks stay off too. To try

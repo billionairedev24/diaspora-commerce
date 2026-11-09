@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 
 import com.afrotransact.catalog.domain.CategoryLevel;
@@ -100,9 +101,10 @@ class JdbcCategoryRepository implements CategoryRepository {
     public CategoryNode insert(CategoryNode n) {
         jdbc.sql("""
                 insert into category (id, parent_id, code, name, level, product_type_code, path, position, active,
-                                      version, retired_at, retired_reason, updated_at)
+                                      version, retired_at, retired_reason, updated_at, compliance, tax_profile_id,
+                                      tax_status)
                 values (:id, :parentId, :code, :name, :level, :type, :path, :position, :active, :version,
-                        :retiredAt, :retiredReason, now())
+                        :retiredAt, :retiredReason, now(), :compliance, :taxProfile, :taxStatus)
                 """)
                 .param("id", n.id())
                 .param("parentId", n.parentId())
@@ -116,6 +118,9 @@ class JdbcCategoryRepository implements CategoryRepository {
                 .param("version", n.version())
                 .param("retiredAt", n.retiredAt() == null ? null : Timestamp.from(n.retiredAt()))
                 .param("retiredReason", n.retiredReason())
+                .param("compliance", n.compliance().isEmpty() ? null : String.join(",", new TreeSet<>(n.compliance())))
+                .param("taxProfile", n.taxProfileId())
+                .param("taxStatus", n.taxStatus())
                 .update();
         return n;
     }
@@ -125,6 +130,7 @@ class JdbcCategoryRepository implements CategoryRepository {
         int rows = jdbc.sql("""
                 update category set parent_id = :parentId, name = :name, path = :path, position = :position,
                        active = :active, retired_at = :retiredAt, retired_reason = :retiredReason,
+                       tax_profile_id = :taxProfile, tax_status = :taxStatus,
                        version = version + 1, updated_at = now()
                 where id = :id and version = :version
                 """)
@@ -136,6 +142,8 @@ class JdbcCategoryRepository implements CategoryRepository {
                 .param("active", n.active())
                 .param("retiredAt", n.retiredAt() == null ? null : Timestamp.from(n.retiredAt()))
                 .param("retiredReason", n.retiredReason())
+                .param("taxProfile", n.taxProfileId())
+                .param("taxStatus", n.taxStatus())
                 .param("version", n.version())
                 .update();
         if (rows == 0) {
@@ -203,7 +211,8 @@ class JdbcCategoryRepository implements CategoryRepository {
                 rs.getString("code"), rs.getString("name"), CategoryLevel.valueOf(rs.getString("level")),
                 rs.getString("product_type_code"), rs.getString("path"), rs.getInt("position"),
                 rs.getBoolean("active"), rs.getLong("version"), retired == null ? null : retired.toInstant(),
-                rs.getString("retired_reason"), compliance(rs.getString("compliance")));
+                rs.getString("retired_reason"), compliance(rs.getString("compliance")), rs.getString("tax_profile_id"),
+                rs.getString("tax_status"));
     }
 
     private static Set<String> compliance(String csv) {

@@ -121,6 +121,19 @@
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!-- The category tax dataset is the single source of the tree and the tax questions (tools/taxonomy). -->
+            <resource>
+                <directory>${project.basedir}/../../../tools/taxonomy</directory>
+                <targetPath>taxonomy</targetPath>
+                <includes>
+                    <include>category_tax_map.json</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
