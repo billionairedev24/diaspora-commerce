@@ -53,11 +53,68 @@ type TodoItem struct {
 
 // Dashboard is GET /v1/seller/dashboard.
 type Dashboard struct {
-	Portal    string      `json:"portal"`
-	RangeDays int         `json:"rangeDays"`
-	Kpis      []Kpi       `json:"kpis"`
-	Charts    []ChartSpec `json:"charts"`
-	Todo      []TodoItem  `json:"todo"`
+	Portal    string          `json:"portal"`
+	RangeDays int             `json:"rangeDays"`
+	Kpis      []Kpi           `json:"kpis"`
+	Charts    []ChartSpec     `json:"charts"`
+	Todo      []TodoItem      `json:"todo"`
+	Modules   []ModuleSummary `json:"modules"`
+}
+
+// Module states of a home module: Ready shows figures, Empty shows the prompt instead of zeros, Unavailable offers a retry.
+const (
+	ModuleReady       = "ready"
+	ModuleEmpty       = "empty"
+	ModuleUnavailable = "unavailable"
+)
+
+// ModulePoint is one value of a module chart (money in major units).
+type ModulePoint struct {
+	Label string  `json:"label"`
+	Value float64 `json:"value"`
+	Tone  string  `json:"tone,omitempty"`
+}
+
+// ModuleChart is the compact chart of a home module: sparkline, bars or donut, with its text alternative as Label.
+type ModuleChart struct {
+	Kind        string        `json:"kind"`
+	Label       string        `json:"label"`
+	ValueFormat string        `json:"valueFormat"`
+	Points      []ModulePoint `json:"points"`
+}
+
+// ModuleHeadline is the one headline figure of a module, already formatted.
+type ModuleHeadline struct {
+	Value  string  `json:"value"`
+	Label  string  `json:"label"`
+	Period *string `json:"period"`
+	Tone   string  `json:"tone"`
+}
+
+// ModuleAction is a quick action: an existing route of the app.
+type ModuleAction struct {
+	Label string `json:"label"`
+	Href  string `json:"href"`
+}
+
+// ModuleEmptyPrompt is the friendly empty state of a module that has nothing yet.
+type ModuleEmptyPrompt struct {
+	Prompt string       `json:"prompt"`
+	Action ModuleAction `json:"action"`
+	Art    string       `json:"art"`
+}
+
+// ModuleSummary is one module of the landing page (seller, provider or staff).
+type ModuleSummary struct {
+	ID        string             `json:"id"`
+	Icon      string             `json:"icon"`
+	Title     string             `json:"title"`
+	State     string             `json:"state"`
+	Headline  *ModuleHeadline    `json:"headline"`
+	Chart     *ModuleChart       `json:"chart"`
+	TotalLine *string            `json:"totalLine"`
+	Actions   []ModuleAction     `json:"actions"`
+	Empty     *ModuleEmptyPrompt `json:"empty"`
 }
 
 // UnavailableChart is a chart placeholder whose data source is down.

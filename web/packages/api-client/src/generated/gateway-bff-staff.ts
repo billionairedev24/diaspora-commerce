@@ -38,7 +38,9 @@ export interface paths {
          *     `GET /v1/admin/orders`, lines' category), applications by status (seller `GET /v1/applications`), payouts
          *     (payments `GET /v1/payouts/requests`) versus claim refunds (trust-ops `GET /v1/claims?status=RESOLVED_REFUND`)
          *     by week. Each chart reports `available: false` when its upstream cannot answer. Chart exports (PDF, Excel with a
-         *     native chart, CSV) are built from these rows. Needs VIEW on the dashboard module.
+         *     native chart, CSV) are built from these rows. `modules` are the landing page's module summaries (orders, applications,
+         *     payments, trust and safety, support, catalog, platform health), only for modules the staff member's permissions open.
+         *     Needs VIEW on the dashboard module.
          */
         get: operations["getStaffDashboard"];
         put?: never;
@@ -6914,6 +6916,68 @@ export interface components {
             generatedAt: string;
             kpis: components["schemas"]["Kpi"][];
             charts: components["schemas"]["ChartSpec"][];
+            /** @description Module summaries for the landing page, only for modules the staff member may open */
+            modules: components["schemas"]["ModuleSummary"][];
+        };
+        /** @enum {string} */
+        ModuleIcon: "sales" | "orders" | "listings" | "payouts" | "inventory" | "reviews" | "health" | "promotions" | "bookings" | "revenue" | "calendar" | "applications" | "payments" | "trust" | "support" | "catalog" | "platform";
+        /**
+         * @description ready = figures to show; empty = nothing set up yet (the page shows `empty` instead of zeros); unavailable = the source could not answer (the page offers Try again)
+         * @enum {string}
+         */
+        ModuleState: "ready" | "empty" | "unavailable";
+        /** @enum {string} */
+        ModuleChartKind: "sparkline" | "bars" | "donut";
+        ModulePoint: {
+            label: string;
+            /** @description Money points are in major currency units (dollars) */
+            value: number;
+            tone?: components["schemas"]["ChartTone"];
+        };
+        ModuleChart: {
+            kind: components["schemas"]["ModuleChartKind"];
+            /** @description Text alternative of the chart, e.g. Revenue per day, last 30 days */
+            label: string;
+            /** @enum {string} */
+            valueFormat: "money" | "count";
+            points: components["schemas"]["ModulePoint"][];
+        };
+        ModuleHeadline: {
+            /** @description Already formatted ("$4,820.50", "7") */
+            value: string;
+            label: string;
+            /** @description e.g. "Last 30 days"; null for a figure that is true right now */
+            period?: string | null;
+            /** @enum {string} */
+            tone: "neutral" | "positive" | "attention" | "negative";
+        };
+        ModuleAction: {
+            label: string;
+            /** @description App-relative route of an existing page, filtered where the list supports it (e.g. /applications?status=PENDING_REVIEW) */
+            href: string;
+        };
+        ModuleEmpty: {
+            /** @description One friendly line */
+            prompt: string;
+            action: components["schemas"]["ModuleAction"];
+            /** @enum {string} */
+            art: "listings" | "chart" | "calendar" | "inbox" | "payout" | "star";
+        };
+        /**
+         * @description One module of the home page: one headline figure with its period, a compact chart, a total line, up to three
+         *     quick actions and, when nothing is set up, an empty prompt. Only modules the caller may open are returned.
+         *     Figures come from the upstream services; a figure that cannot be computed is left out, never invented.
+         */
+        ModuleSummary: {
+            id: string;
+            icon: components["schemas"]["ModuleIcon"];
+            title: string;
+            state: components["schemas"]["ModuleState"];
+            headline?: components["schemas"]["ModuleHeadline"] | null;
+            chart?: components["schemas"]["ModuleChart"] | null;
+            totalLine?: string | null;
+            actions: components["schemas"]["ModuleAction"][];
+            empty?: components["schemas"]["ModuleEmpty"] | null;
         };
         /** @enum {string} */
         ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "category-requests" | "moderation" | "product-reviews" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "careers-jobs" | "cookie-definitions" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "tax-codes" | "tax-rules" | "tax-review" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons" | "reconciliation" | "reconciliation-runs" | "ledger-adjustments" | "recoveries" | "credit-adjustments" | "gift-cards" | "credit-liabilities" | "money-settings" | "membership-tiers" | "memberships" | "membership-settings" | "membership-report" | "referrals" | "referral-settings" | "stripe-lookup" | "payment-settings" | "tax-settings" | "maintenance" | "tax-filings" | "tax-nexus" | "oauth-clients" | "identity-sessions" | "signing-keys" | "auth-settings" | "session-policy" | "exchange-rates";

@@ -86,6 +86,12 @@ func (s *sellerDashboardImpl) Dashboard(ctx context.Context, c *domain.Caller, r
 }
 
 type dashSources struct {
+	mu        sync.Mutex
+	listings  *listingCounts
+	reviews   *reviewSample
+	coupons   []port.SellerCouponUp
+	couponsOK bool
+	calendar  *port.BookingsCalendar
 	sales     *port.SalesAnalytics
 	positions []domain.StockPosition
 	posOK     bool
@@ -95,14 +101,13 @@ type dashSources struct {
 	requests  *int
 }
 
-func (s *sellerDashboardImpl) gather(ctx context.Context, c *domain.Caller, sc sellerCtx, from, to time.Time) dashSources {
+func (s *sellerDashboardImpl) gather(ctx context.Context, c *domain.Caller, sc sellerCtx, from, to time.Time) *dashSources {
 	var (
 		wg  sync.WaitGroup
-		mu  sync.Mutex
-		src dashSources
+		src = &dashSources{}
 		b   = c.BearerToken
 	)
-	lock := func(f func()) { mu.Lock(); f(); mu.Unlock() }
+	lock := func(f func()) { src.mu.Lock(); f(); src.mu.Unlock() }
 	if domain.AtLeast(sc.access.Level("payouts"), domain.LevelView) {
 		wg.Go(func() {
 			if v, err := s.r.d.Payouts.Balance(ctx, b, sc.org.ID); err == nil {
@@ -141,6 +146,7 @@ func (s *sellerDashboardImpl) gather(ctx context.Context, c *domain.Caller, sc s
 			}
 		})
 	}
+	wg.Go(func() { s.gatherModules(ctx, c, sc, src, from, to) })
 	wg.Wait()
 	return src
 }
@@ -164,7 +170,7 @@ func balanceKpi(b *port.PayoutBalanceResponse) domain.Kpi {
 
 func (s *sellerDashboardImpl) seller(ctx context.Context, c *domain.Caller, sc sellerCtx, from, to time.Time, days int) domain.Dashboard {
 	src := s.gather(ctx, c, sc, from, to)
-	d := domain.Dashboard{Portal: domain.PortalSeller, RangeDays: days, Kpis: []domain.Kpi{}, Charts: []domain.ChartSpec{}, Todo: []domain.TodoItem{}}
+	d := domain.Dashboard{Portal: domain.PortalSeller, RangeDays: days, Kpis: []domain.Kpi{}, Charts: []domain.ChartSpec{}, Todo: []domain.TodoItem{}, Modules: []domain.ModuleSummary{}}
 	trendSeries := []domain.ChartSeries{{Key: "sales", Label: "Sales", Tone: "ink", Format: "money"}, {Key: "units", Label: "Units", Tone: "gold", Format: "count"}}
 	topSeries := []domain.ChartSeries{{Key: "revenue", Label: "Revenue", Tone: "ink", Format: "money"}}
 	ffSeries := []domain.ChartSeries{{Key: "orders", Label: "Orders", Tone: "ink", Format: "count"}}
@@ -250,12 +256,13 @@ func (s *sellerDashboardImpl) seller(ctx context.Context, c *domain.Caller, sc s
 			d.Todo = append(d.Todo, domain.TodoItem{Label: "Stripe needs more information — open Account health", Module: "account-health", Tone: "warning"})
 		}
 	}
+	d.Modules = s.sellerModules(sc, src, days)
 	return d
 }
 
 func (s *sellerDashboardImpl) provider(ctx context.Context, c *domain.Caller, sc sellerCtx, from, to time.Time, days int) domain.Dashboard {
 	src := s.gather(ctx, c, sc, from, to)
-	d := domain.Dashboard{Portal: domain.PortalProvider, RangeDays: days, Kpis: []domain.Kpi{}, Charts: []domain.ChartSpec{}, Todo: []domain.TodoItem{}}
+	d := domain.Dashboard{Portal: domain.PortalProvider, RangeDays: days, Kpis: []domain.Kpi{}, Charts: []domain.ChartSpec{}, Todo: []domain.TodoItem{}, Modules: []domain.ModuleSummary{}}
 	trendSeries := []domain.ChartSeries{{Key: "bookings", Label: "Bookings", Tone: "ink", Format: "count"}, {Key: "deposits", Label: "Deposits ($)", Tone: "gold", Format: "money"}}
 	svcSeries := []domain.ChartSeries{{Key: "bookings", Label: "Bookings", Tone: "ink", Format: "count"}}
 	statusSeries := []domain.ChartSeries{{Key: "count", Label: "Bookings", Tone: "ink", Format: "count"}}
@@ -304,5 +311,6 @@ func (s *sellerDashboardImpl) provider(ctx context.Context, c *domain.Caller, sc
 	if domain.AtLeast(sc.access.Level("account-health"), domain.LevelView) {
 		d.Kpis = append(d.Kpis, healthKpi(src.health))
 	}
+	d.Modules = s.providerModules(sc, src, days, s.r.d.Clock.now())
 	return d
 }

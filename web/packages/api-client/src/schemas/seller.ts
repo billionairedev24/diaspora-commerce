@@ -404,12 +404,36 @@ export const KpiSchema = z.object({ label: z.string(), value: z.string(), detail
 export type Kpi = z.infer<typeof KpiSchema>;
 export const TodoItemSchema = z.object({ label: z.string(), module: ModuleKeySchema, tone: z.enum(['info', 'warning', 'success', 'danger']) });
 export type TodoItem = z.infer<typeof TodoItemSchema>;
+export const ModuleIconSchema = z.enum(['sales', 'orders', 'listings', 'payouts', 'inventory', 'reviews', 'health', 'promotions', 'bookings', 'revenue', 'calendar', 'applications', 'payments', 'trust', 'support', 'catalog', 'platform']);
+export type ModuleIcon = z.infer<typeof ModuleIconSchema>;
+export const ModuleActionSchema = z.object({ label: z.string(), href: z.string() });
+export type ModuleAction = z.infer<typeof ModuleActionSchema>;
+export const ModuleSummarySchema = z.object({
+  id: z.string(),
+  icon: ModuleIconSchema,
+  title: z.string(),
+  state: z.enum(['ready', 'empty', 'unavailable']),
+  headline: z.object({ value: z.string(), label: z.string(), period: z.string().nullish(), tone: z.enum(['neutral', 'positive', 'attention', 'negative']) }).nullish(),
+  chart: z
+    .object({
+      kind: z.enum(['sparkline', 'bars', 'donut']),
+      label: z.string(),
+      valueFormat: ValueFormatSchema,
+      points: z.array(z.object({ label: z.string(), value: z.number(), tone: ChartToneSchema.optional() }))
+    })
+    .nullish(),
+  totalLine: z.string().nullish(),
+  actions: z.array(ModuleActionSchema).max(3),
+  empty: z.object({ prompt: z.string(), action: ModuleActionSchema, art: z.enum(['listings', 'chart', 'calendar', 'inbox', 'payout', 'star']) }).nullish()
+});
+export type ModuleSummary = z.infer<typeof ModuleSummarySchema>;
 export const DashboardSchema = z.object({
   portal: PortalSchema,
   rangeDays: z.number().int(),
   kpis: z.array(KpiSchema),
   charts: z.array(ChartSpecSchema),
-  todo: z.array(TodoItemSchema)
+  todo: z.array(TodoItemSchema),
+  modules: z.array(ModuleSummarySchema)
 });
 export type Dashboard = z.infer<typeof DashboardSchema>;
 

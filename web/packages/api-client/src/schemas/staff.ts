@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { type FeeConnectionDraft, FeeConnectionFeeSchema, type FeeDraftPlanRate, FeePlanRateSchema, FeePlanSchema } from '../fee-rates';
 import { type ExportDataset, type ExportFormat, type TableExportQuery } from './exports';
-import { AccessLevelSchema, ChartSpecSchema, KpiSchema } from './seller';
+import { AccessLevelSchema, ChartSpecSchema, KpiSchema, ModuleSummarySchema } from './seller';
 
 /* Zod schemas for contracts/openapi/gateway-bff-staff.yaml (staff console, the platform back office). Every response
    is validated at runtime; test/staff-contract.test.ts keeps them assignable to the generated contract types. */
@@ -76,7 +76,8 @@ export const StaffDashboardSchema = z.object({
   rangeDays: z.number().int(),
   generatedAt: z.string(),
   kpis: z.array(KpiSchema),
-  charts: z.array(ChartSpecSchema)
+  charts: z.array(ChartSpecSchema),
+  modules: z.array(ModuleSummarySchema)
 });
 export type StaffDashboard = z.infer<typeof StaffDashboardSchema>;
 

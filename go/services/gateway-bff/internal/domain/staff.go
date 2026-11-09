@@ -905,10 +905,11 @@ type SupportActionResult struct {
 
 // StaffDashboard is GET /v1/staff/dashboard.
 type StaffDashboard struct {
-	RangeDays   int         `json:"rangeDays"`
-	GeneratedAt time.Time   `json:"generatedAt"`
-	Kpis        []Kpi       `json:"kpis"`
-	Charts      []ChartSpec `json:"charts"`
+	RangeDays   int             `json:"rangeDays"`
+	GeneratedAt time.Time       `json:"generatedAt"`
+	Kpis        []Kpi           `json:"kpis"`
+	Charts      []ChartSpec     `json:"charts"`
+	Modules     []ModuleSummary `json:"modules"`
 }
 
 // FormChanged reports whether the submitted values differ from the form's initial values in a field the form says

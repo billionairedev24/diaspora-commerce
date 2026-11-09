@@ -1041,6 +1041,18 @@ func TestStaffContractConformance(t *testing.T) {
 		t.Fatalf("charts = %v", dash["charts"])
 	}
 	do("admin", "GET", "/v1/staff/dashboard?rangeDays=5", nil, 422)
+	// Module summaries follow the staff member's permissions; every one is contract-valid (checked above) and an empty one
+	// shows a prompt, never zeros.
+	adminMods := modulesOf(t, dash)
+	t.Logf("admin modules: %v", ids(adminMods))
+	for id, m := range adminMods {
+		if m["state"] == "empty" && (m["empty"] == nil || m["headline"] != nil) {
+			t.Fatalf("%s: empty module with figures or without a prompt: %v", id, m)
+		}
+		if len(m["actions"].([]any)) > 3 {
+			t.Fatalf("%s: more than three quick actions", id)
+		}
+	}
 
 	// Every table and its first sheet.
 	for _, res := range domain.ResourceKeys {

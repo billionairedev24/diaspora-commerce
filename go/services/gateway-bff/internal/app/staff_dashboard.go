@@ -44,6 +44,7 @@ type orderStats struct {
 	count   int
 	gross   int64
 	byDay   map[string][2]int64
+	perDay  map[string]int
 	byDept  map[string]int
 }
 
@@ -79,14 +80,16 @@ func (s *staffDashboardImpl) build(ctx context.Context, sc staffCtx, rangeDays i
 		queuedN              int
 		openClaims           int64
 	)
-	wg.Add(4)
+	var q staffQueues
+	wg.Add(5)
+	go func() { defer wg.Done(); q = s.queues(ctx, sc) }()
 	go func() { defer wg.Done(); orders = s.orders(ctx, sc, from, to) }()
 	go func() { defer wg.Done(); apps, appsOK = s.applications(ctx, sc) }()
 	go func() { defer wg.Done(); payouts, queued, queuedN, payoutsOK = s.payouts(ctx, sc, from) }()
 	go func() { defer wg.Done(); refunds, openClaims, refundsOK = s.refunds(ctx, sc, from) }()
 	wg.Wait()
 
-	d := domain.StaffDashboard{RangeDays: rangeDays, GeneratedAt: sc.now, Kpis: []domain.Kpi{}, Charts: []domain.ChartSpec{}}
+	d := domain.StaffDashboard{RangeDays: rangeDays, GeneratedAt: sc.now, Kpis: []domain.Kpi{}, Charts: []domain.ChartSpec{}, Modules: []domain.ModuleSummary{}}
 	salesSeries := []domain.ChartSeries{{Key: "sales", Label: "Gross sales", Tone: "ink"}, {Key: "net", Label: "Net sales", Tone: "gold"}}
 	deptSeries := []domain.ChartSeries{{Key: "orders", Label: "Orders", Tone: "gold"}}
 	if orders.ok {
@@ -141,6 +144,7 @@ func (s *staffDashboardImpl) build(ctx context.Context, sc staffCtx, rangeDays i
 	if payoutsOK {
 		d.Kpis = append(d.Kpis, domain.Kpi{Label: "Payouts to approve", Value: moneyLabel(queued), Detail: fmt.Sprintf("%d requests", queuedN), Tone: "neutral"})
 	}
+	d.Modules = s.modules(ctx, sc, rangeDays, from, to, staffFigures{orders: orders, apps: apps, appsOK: appsOK, payouts: payouts, payoutsOK: payoutsOK, queued: queued, queuedN: queuedN, refunds: refunds, refundsOK: refundsOK, openClaims: openClaims, q: q})
 	return d, nil
 }
 
@@ -172,7 +176,7 @@ func sortedByCount(m map[string]int) []string {
 
 // orders pages through orders `GET /v1/admin/orders` in the range (up to 2,000 orders).
 func (s *staffDashboardImpl) orders(ctx context.Context, sc staffCtx, from, to time.Time) orderStats {
-	st := orderStats{byDay: map[string][2]int64{}, byDept: map[string]int{}}
+	st := orderStats{byDay: map[string][2]int64{}, perDay: map[string]int{}, byDept: map[string]int{}}
 	if !sc.access.Can("orders:read") {
 		return st
 	}
@@ -196,6 +200,7 @@ func (s *staffDashboardImpl) orders(ctx context.Context, sc staffCtx, from, to t
 			total, net := int64(num(o, "totalMinor")), int64(num(o, "itemsMinor")-num(o, "discountMinor"))
 			v := st.byDay[day]
 			st.byDay[day] = [2]int64{v[0] + total, v[1] + net}
+			st.perDay[day]++
 			st.gross += total
 			st.count++
 			seen := map[string]bool{}
@@ -295,7 +300,7 @@ func (s *staffDashboardImpl) refunds(ctx context.Context, sc staffCtx, from time
 		}
 		byWeek[weekStart(at).Format(time.DateOnly)] += int64(num(c, "refundMinor"))
 	}
-	if err := sc.get(ctx, sc.up.TrustOps, "/v1/claims", url.Values{"size": {"1"}}, &open); err != nil {
+	if err := sc.get(ctx, sc.up.TrustOps, "/v1/claims", url.Values{"status": {"UNDER_REVIEW"}, "size": {"1"}}, &open); err != nil {
 		var p *domain.Problem
 		if pp, ok := domain.AsProblem(err); ok {
 			p = pp
