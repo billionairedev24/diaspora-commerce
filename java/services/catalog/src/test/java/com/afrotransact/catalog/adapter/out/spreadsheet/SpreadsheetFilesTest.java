@@ -76,19 +76,19 @@ class SpreadsheetFilesTest {
             XSSFSheet products = wb.getSheet("Products");
             List<String> header = new ArrayList<>();
             products.getRow(0).forEach(c -> header.add(c.getStringCellValue()));
-            assertThat(header).startsWith("Parent SKU", "SKU *", "Category *", "Title *", "Brand *")
+            assertThat(header).startsWith("Parent SKU", "SKU", "ATIN", "Category *", "Title *", "Brand *")
                     .contains("Price (USD) *", "Quantity *", "Net weight", "Allergens *", "Shelf life *",
                             "Shelf life unit", "Pre-order eligible", "Main image URL", "Other image URL 1", "Swatch image URL")
                     .doesNotContain("Image URLs *");
             Cell sku = products.getRow(0).getCell(1);
-            assertThat(sku.getCellComment().getString().getString()).contains("Your unique code", "Required.");
+            assertThat(sku.getCellComment().getString().getString()).contains("Your own code", "Optional.");
             assertThat(products.getPaneInformation().isFreezePane()).isTrue();
             // Dropdowns for every list column (category, condition, variation, net weight, allergens, unit, no
             // barcode, fulfilment, pre-order) and number checks for price, quantity, package, shelf life ...
             assertThat(products.getDataValidations()).hasSizeGreaterThanOrEqualTo(14);
             assertThat(wb.getName("list_0").getRefersToFormula()).startsWith("Lists!$A$2");
             Sheet example = wb.getSheet("Example");
-            assertThat(example.getRow(1).getCell(header.indexOf("SKU *")).getStringCellValue())
+            assertThat(example.getRow(1).getCell(header.indexOf("SKU")).getStringCellValue())
                     .isEqualTo("EXAMPLE-GROCERY-1");
             assertThat(example.getRow(2).getCell(header.indexOf("Net weight")).getStringCellValue()).isEqualTo("1 lb");
             assertThat(wb.getSheet("Instructions").getRow(0).getCell(0).getStringCellValue())
@@ -145,12 +145,12 @@ class SpreadsheetFilesTest {
         byte[] file = writer.template(ImportTemplates.forType(GROCERY, CATEGORIES), SpreadsheetFormat.CSV);
         String text = new String(file, StandardCharsets.UTF_8);
         assertThat(text).startsWith("\uFEFF# One row per item you sell");
-        String withRow = text + "SUYA-1,,\"Groceries › Pantry › Snacks\",\"Suya, the spice\"\r\n";
+        String withRow = text + "SUYA-1,,,\"Groceries › Pantry › Snacks\",\"Suya, the spice\"\r\n";
         ParsedSheet sheet = reader.read(withRow.getBytes(StandardCharsets.UTF_8), SpreadsheetFormat.CSV);
-        assertThat(sheet.header()).startsWith("Parent SKU", "SKU *");
+        assertThat(sheet.header()).startsWith("Parent SKU", "SKU", "ATIN");
         assertThat(sheet.rows()).singleElement().satisfies(r -> {
             assertThat(r.cell(0)).isEqualTo("SUYA-1");
-            assertThat(r.cell(3)).isEqualTo("Suya, the spice");
+            assertThat(r.cell(4)).isEqualTo("Suya, the spice");
             assertThat(r.rowNumber()).isEqualTo(8);
         });
     }

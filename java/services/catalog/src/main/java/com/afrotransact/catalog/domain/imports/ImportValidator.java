@@ -32,6 +32,8 @@ import com.afrotransact.catalog.domain.VariantDraft;
 import com.afrotransact.catalog.domain.VariationDimension;
 import com.afrotransact.catalog.domain.VariationTheme;
 import com.afrotransact.catalog.domain.brand.BrandKeys;
+import com.afrotransact.catalog.domain.tax.TaxFactRules;
+import com.afrotransact.catalog.domain.tax.TaxGate;
 import com.afrotransact.catalog.domain.brand.UnbrandedReason;
 import com.afrotransact.catalog.domain.sizing.DefaultSizeChartPolicy;
 import com.afrotransact.catalog.domain.sizing.FitNote;
@@ -191,7 +193,15 @@ public final class ImportValidator {
             String sku = text(r, ImportColumns.SKU).toUpperCase(Locale.ROOT);
             out.put(r.rowNumber(), sku);
             if (sku.isEmpty()) {
-                add(r, err(ImportColumns.SKU, "Required"));
+                if (ctx.mode() == ImportMode.UPDATE) {
+                    ExistingListing byIdentity = byIdentity(r);
+                    if (byIdentity == null || byIdentity.sellerSku() == null) {
+                        add(r, err(ImportColumns.SKU, "Give the SKU, the barcode or the ATIN of the listing to change"));
+                    } else {
+                        out.put(r.rowNumber(), byIdentity.sellerSku());
+                    }
+                }
+                // Create mode: no SKU is fine, the catalog generates a stable one for the item.
                 continue;
             }
             if (!SKU.matcher(sku).matches()) {
@@ -212,6 +222,16 @@ public final class ImportValidator {
             }
         }
         return out;
+    }
+
+    /** Update mode: the listing a row without SKU names by its barcode, else its ATIN. */
+    private ExistingListing byIdentity(SheetRow r) {
+        String gtin = Gtin.digits(text(r, ImportColumns.GTIN));
+        if (!gtin.isEmpty() && ctx.existing().containsKey(ExistingListing.GTIN_KEY + gtin)) {
+            return ctx.existing().get(ExistingListing.GTIN_KEY + gtin);
+        }
+        String atin = text(r, ImportColumns.ATIN).toUpperCase(Locale.ROOT);
+        return atin.isEmpty() ? null : ctx.existing().get(ExistingListing.ATIN_KEY + atin);
     }
 
     private String groupKey(SheetRow r, String sku) {
@@ -282,9 +302,69 @@ public final class ImportValidator {
         }
         checkCustomCount(rows, vt);
         Sizing sizing = sizing(rows, type, vt, variants, true);
+        Map<String, Object> behaviour = new LinkedHashMap<>();
+        variants = taxFacts(rows, type, category, variants, behaviour);
         return new ImportedProduct(key, null, category, type.code(), title, d.description(), attributes, images,
                 d.keywords(), d.condition(), d.fulfilment(), d.handlingDays(), d.packaging(), d.preorder(),
-                vt == null ? "" : vt.name(), variants, sizing.chartId(), sizing.chartName(), sizing.fit());
+                vt == null ? "" : vt.name(), variants, sizing.chartId(), sizing.chartName(), sizing.fit(), behaviour);
+    }
+
+    /**
+     * The answers to the category's tax questions, checked with the rules of the product form: wrong or missing answers
+     * are errors on the question's column in plain words; a closed category refuses the row. Proof files follow the
+     * upload. Returns the variants with their facts; {@code behaviour} receives the seller's answers.
+     */
+    private List<ImportedVariant> taxFacts(List<SheetRow> rows, ProductType type, ImportCategory category,
+                                           List<ImportedVariant> variants, Map<String, Object> behaviour) {
+        List<AttributeDefinition> defs = type.taxFacts();
+        if (category != null && TaxGate.closed(category.taxStatus())) {
+            rows.forEach(r -> add(r, err(ImportColumns.CATEGORY, TaxGate.message(category.taxStatus()))));
+        }
+        if (defs.isEmpty()) {
+            return variants;
+        }
+        List<ImportedVariant> out = new ArrayList<>();
+        Map<String, Object> shared = new LinkedHashMap<>();
+        for (AttributeDefinition a : defs) {
+            if (TaxFactRules.OWNER_OFFER.equals(a.owner())) {
+                String v = productText(rows, ImportColumns.FACT_PREFIX + a.key());
+                if (!v.isEmpty()) {
+                    shared.put(a.key(), factValue(a, v));
+                }
+            }
+        }
+        for (int i = 0; i < rows.size(); i++) {
+            SheetRow r = rows.get(i);
+            Map<String, Object> raw = new LinkedHashMap<>(shared);
+            for (AttributeDefinition a : defs) {
+                if (TaxFactRules.OWNER_VARIANT.equals(a.owner()) && a.kind() != AttributeKind.FILE) {
+                    String v = text(r, ImportColumns.FACT_PREFIX + a.key());
+                    if (!v.isEmpty()) {
+                        raw.put(a.key(), factValue(a, v));
+                    }
+                }
+            }
+            TaxFactRules.Result res = TaxFactRules.check(defs, raw);
+            res.problems().forEach((k, m) -> add(r, err(ImportColumns.FACT_PREFIX + k, m)));
+            res.missing().stream().filter(m -> defs.stream().noneMatch(d -> d.key().equals(m.factId())
+                    && d.kind() == AttributeKind.FILE))
+                    .forEach(m -> add(r, err(ImportColumns.FACT_PREFIX + m.factId(), m.message())));
+            List<Map<String, Object>> split = TaxFactRules.split(defs, res.facts());
+            behaviour.putAll(split.get(1));
+            ImportedVariant v = variants.get(i);
+            out.add(new ImportedVariant(v.rowNumber(), v.sku(), v.options(), v.gtin(), v.gtinExempt(), v.priceMinor(),
+                    v.compareAtMinor(), v.quantity(), split.get(0)));
+        }
+        return out;
+    }
+
+    /** A cell as a fact answer: a choice's label reads as its value, everything else as typed. */
+    private static Object factValue(AttributeDefinition a, String cell) {
+        if (a.kind() == AttributeKind.ENUM) {
+            return a.options().stream().filter(o -> o.equalsIgnoreCase(cell) || a.optionLabel(o).equalsIgnoreCase(cell))
+                    .findFirst().orElse(cell);
+        }
+        return cell;
     }
 
     private ImportCategory category(SheetRow r, boolean create) {
@@ -349,7 +429,7 @@ public final class ImportValidator {
             return null;
         }
         for (String ignored : List.of(ImportColumns.CATEGORY, ImportColumns.PARENT_SKU, ImportColumns.THEME,
-                ImportColumns.GTIN, ImportColumns.GTIN_EXEMPT, ImportColumns.FULFILMENT)) {
+                ImportColumns.GTIN_EXEMPT, ImportColumns.FULFILMENT)) {
             for (SheetRow r : rows) {
                 if (!text(r, ignored).isEmpty()) {
                     add(r, RowMessage.warning(ignored, idx(ignored), "Ignored in Update mode"));

@@ -29,6 +29,9 @@ public final class ImportColumns {
 
     public static final String PARENT_SKU = "parent_sku";
     public static final String SKU = "sku";
+    public static final String ATIN = "atin";
+    /** Prefix of the template columns of the category's tax questions: {@code fact:net_weight_oz}. */
+    public static final String FACT_PREFIX = "fact:";
     public static final String CATEGORY = "category";
     public static final String TITLE = "title";
     public static final String BRAND = "brand";
@@ -122,6 +125,7 @@ public final class ImportColumns {
                                 + " when blank.", false, ColumnKind.ENUM, a.units(), a.units().getFirst(), true));
             }
         }
+        cols.addAll(factColumns(type));
         cols.addAll(fulfilmentColumns());
         if (type.traits().preorder()) {
             cols.add(new ImportColumn(PREORDER, "Pre-order eligible", "Yes to let community pre-order windows sell "
@@ -146,6 +150,36 @@ public final class ImportColumns {
     private static String customExample(VariationDimension d) {
         String lower = d.name().toLowerCase(Locale.ROOT);
         return lower.contains("color") || lower.contains("colour") ? "\"Indigo adire\"" : "\"UK 12\", \"Free size\"";
+    }
+
+    /**
+     * One column per tax question the seller answers (plain words, with the unit in the label): the product facts of
+     * every row, and the seller's behaviour answers read from the product's first row. Proof files are not a column:
+     * they are uploaded for each item after the upload.
+     */
+    private static List<ImportColumn> factColumns(ProductType type) {
+        List<ImportColumn> out = new ArrayList<>();
+        for (AttributeDefinition a : type.taxFacts()) {
+            if (a.kind() == AttributeKind.FILE) {
+                continue;
+            }
+            String help = (a.help() == null ? a.label() : a.help()) + (a.required() ? "" : " Optional.");
+            String when = a.requiredWhen() == null ? "" : " Needed only when it applies to your item.";
+            boolean variantLevel = "VARIANT".equals(a.owner());
+            switch (a.kind()) {
+                case BOOLEAN -> out.add(new ImportColumn(FACT_PREFIX + a.key(), a.label(), help + when, false,
+                        ColumnKind.BOOLEAN, YES_NO, NO, variantLevel ? false : true));
+                case ENUM -> out.add(new ImportColumn(FACT_PREFIX + a.key(), a.label(), help + when + " Choose from the list.",
+                        false, ColumnKind.ENUM, a.options().stream().map(a::optionLabel).toList(),
+                        a.optionLabel(a.options().getFirst()), !variantLevel));
+                case INTEGER -> out.add(new ImportColumn(FACT_PREFIX + a.key(), a.label(), help + when + " A whole number.",
+                        false, ColumnKind.INTEGER, List.of(), "2", !variantLevel));
+                default -> out.add(new ImportColumn(FACT_PREFIX + a.key(), a.label(), help + when + " A number"
+                        + (a.unit() == null ? "." : " in " + a.unit() + "."), false, ColumnKind.DECIMAL, List.of(), "8.5",
+                        !variantLevel));
+            }
+        }
+        return out;
     }
 
     /** The size chart columns of a sized product type's template. */
@@ -201,9 +235,13 @@ public final class ImportColumns {
                 new ImportColumn(PARENT_SKU, "Parent SKU", "Groups the variants of one product: give every size or "
                         + "colour of the same product the same Parent SKU. Leave blank for a product without "
                         + "variations.", false, ColumnKind.TEXT, List.of(), "ANKARA-WRAP", false),
-                new ImportColumn(SKU, "SKU", "Your unique code for this item (2–40 letters, digits, dot, dash or "
-                        + "underscore). In Update mode, the SKU of the listing to change.", true, ColumnKind.TEXT,
+                new ImportColumn(SKU, "SKU", "Your own code for this item (2–40 letters, digits, dot, dash or "
+                        + "underscore). Optional: leave it empty and we give the item a code. In Update mode, the SKU of "
+                        + "the listing to change; when empty, the barcode or the ATIN finds it.", false, ColumnKind.TEXT,
                         List.of(), "ANKARA-WRAP-M-GLD", false),
+                new ImportColumn(ATIN, "ATIN", "AfroTransact's code for the item, from your SKU list. Only needed in "
+                        + "Update mode when a row has neither a SKU nor a barcode.", false, ColumnKind.TEXT, List.of(),
+                        "", false),
                 new ImportColumn(CATEGORY, "Category", "Where the product is listed. Choose from the list.",
                         categoryRequired, ColumnKind.ENUM, categoryPaths,
                         categoryPaths.isEmpty() ? "" : categoryPaths.getFirst(), true),

@@ -14,7 +14,9 @@ import java.util.concurrent.Executor;
 import com.afrotransact.catalog.domain.CategoryLevel;
 import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.DepartmentScope;
+import com.afrotransact.catalog.domain.Atin;
 import com.afrotransact.catalog.domain.Gtin;
+import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.imports.ExistingListing;
@@ -151,6 +153,41 @@ class ProductImportServiceImpl implements ProductImportService {
         return imports.findById(upload.id()).orElseThrow();
     }
 
+    /**
+     * Update mode: rows without a SKU name their listing by barcode, else by ATIN. Adds the listings those name, keyed
+     * {@code gtin:<digits>} and {@code atin:<ATIN>} and by their own SKU, so the update writes by the real SKU.
+     */
+    private void addIdentityEntries(Map<String, ExistingListing> existing, String orgId, ParsedSheet sheet,
+                                    Map<String, Integer> index) {
+        Integer gtinCol = index.get(ImportColumns.GTIN);
+        Integer atinCol = index.get(ImportColumns.ATIN);
+        for (SheetRow r : sheet.rows()) {
+            if (gtinCol != null && !r.cell(gtinCol).isBlank()) {
+                String gtin = Gtin.digits(r.cell(gtinCol));
+                products.findByVariantGtin(gtin).filter(p -> p.owner().orgId().equals(orgId)).ifPresent(p -> p.variants()
+                        .stream().filter(v -> gtin.equals(v.gtin())).findFirst().ifPresent(v -> remember(existing,
+                                ExistingListing.GTIN_KEY + gtin, p, v.sellerSku())));
+            }
+            if (atinCol != null && !r.cell(atinCol).isBlank()) {
+                String atin = r.cell(atinCol).strip().toUpperCase(Locale.ROOT);
+                try {
+                    products.findByVariantAtin(new Atin(atin)).filter(p -> p.owner().orgId().equals(orgId))
+                            .flatMap(p -> p.variants().stream().filter(v -> v.atin().value().equals(atin)).findFirst()
+                                    .map(v -> Map.entry(p, v.sellerSku())))
+                            .ifPresent(e -> remember(existing, ExistingListing.ATIN_KEY + atin, e.getKey(), e.getValue()));
+                } catch (IllegalArgumentException ex) {
+                    // Not an ATIN: the row's own validation says so.
+                }
+            }
+        }
+    }
+
+    private static void remember(Map<String, ExistingListing> existing, String key, Product p, String sku) {
+        ExistingListing listing = new ExistingListing(p.id(), p.productTypeCode(), sku);
+        existing.put(key, listing);
+        existing.putIfAbsent(sku, listing);
+    }
+
     /** What validation needs from the catalog, for the SKUs and barcodes in the sheet only. */
     private ImportContext context(ParsedSheet sheet, ImportMode mode, ProductType fixed, ListingOwner owner) {
         String orgId = owner.orgId();
@@ -191,7 +228,10 @@ class ProductImportServiceImpl implements ProductImportService {
         }
         Map<String, ProductRepository.SkuOwner> owned = products.productsBySku(orgId, skus);
         Map<String, ExistingListing> existing = new HashMap<>();
-        owned.forEach((sku, o) -> existing.put(sku, new ExistingListing(o.productId(), o.productTypeCode())));
+        owned.forEach((sku, o) -> existing.put(sku, new ExistingListing(o.productId(), o.productTypeCode(), sku)));
+        if (mode == ImportMode.UPDATE) {
+            addIdentityEntries(existing, orgId, sheet, index);
+        }
         Set<String> existingGtins = mode == ImportMode.CREATE ? products.existingGtins(gtins) : Set.of();
         Set<String> librarySkus = new LinkedHashSet<>(skus);
         librarySkus.addAll(parents);
@@ -359,7 +399,7 @@ class ProductImportServiceImpl implements ProductImportService {
         return categories.findAllActive().stream()
                 .filter(n -> n.level() == CategoryLevel.PRODUCT_TYPE && n.productTypeCode() != null)
                 .filter(n -> typeCode == null || typeCode.equals(n.productTypeCode()))
-                .map(n -> new ImportCategory(n.id(), n.path(), n.productTypeCode()))
+                .map(n -> new ImportCategory(n.id(), n.path(), n.productTypeCode(), n.taxStatus()))
                 .toList();
     }
 

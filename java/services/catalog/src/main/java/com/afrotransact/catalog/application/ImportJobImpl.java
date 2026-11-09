@@ -198,7 +198,7 @@ class ImportJobImpl implements ImportJob {
         List<ImportCategory> every = categories.findAllActive().stream()
                 .filter(n -> n.level() == CategoryLevel.PRODUCT_TYPE && n.productTypeCode() != null)
                 .filter(n -> fixed == null || fixed.code().equals(n.productTypeCode()))
-                .map(n -> new ImportCategory(n.id(), n.path(), n.productTypeCode()))
+                .map(n -> new ImportCategory(n.id(), n.path(), n.productTypeCode(), n.taxStatus()))
                 .toList();
         List<ImportCategory> cats = every.stream().filter(c -> scope.allowsPath(c.path())).toList();
         List<ImportCategory> blocked = every.stream().filter(c -> !scope.allowsPath(c.path())).toList();
@@ -296,9 +296,10 @@ class ImportJobImpl implements ImportJob {
     private static CreateProductCommand toCreate(ImportedProduct p, List<ProductImage> imgs) {
         List<VariantDraft> variants = p.variants().stream().map(v -> new VariantDraft(v.options(), v.sku(), v.gtin(),
                 v.gtinExempt(), v.priceMinor() == null ? 0 : v.priceMinor(), v.quantity() == null ? 0 : v.quantity(),
-                v.compareAtMinor(), List.of())).toList();
+                v.compareAtMinor(), List.of(), null, v.taxFacts())).toList();
         ListingDetails details = new ListingDetails(p.description(), p.condition(), p.keywords(), p.fulfilment(),
-                p.packaging(), p.handlingDays() == null ? 0 : p.handlingDays(), null, p.sizeChartId(), p.fitNote());
+                p.packaging(), p.handlingDays() == null ? 0 : p.handlingDays(), null, p.sizeChartId(), p.fitNote(),
+                p.sellerBehaviour());
         return new CreateProductCommand(p.category().id(), null, p.title(), p.attributes(), imgs, p.variationTheme(),
                 variants, "USD", p.preorderEligible(), null, details, null);
     }

@@ -1,6 +1,7 @@
 package com.afrotransact.catalog.application;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -50,6 +51,20 @@ class ImageLibraryServiceImpl implements ImageLibraryService {
         this.access = access;
         this.owners = owners;
         this.tx = new TransactionTemplate(transactions);
+    }
+
+    @Override
+    public List<SkuLine> skuList() {
+        String org = owner(CatalogRelations.ORG_VIEW_PRODUCTS).orgId();
+        List<SkuLine> out = new ArrayList<>();
+        for (Product p : products.findByOwnerOrg(org)) {
+            for (Variant v : p.variants()) {
+                out.add(new SkuLine(v.sellerSku(), v.sellerSkuGenerated(), v.atin().value(), v.gtin(), p.title(),
+                        v.optionLabel()));
+            }
+        }
+        out.sort(Comparator.comparing(SkuLine::sku));
+        return out;
     }
 
     @Override

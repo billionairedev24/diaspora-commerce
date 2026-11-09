@@ -23,7 +23,20 @@ public record ImportedProduct(String groupKey, UUID productId, ImportCategory ca
                               List<String> imageUrls, List<String> keywords, ItemCondition condition,
                               FulfilmentMode fulfilment, Integer handlingDays, PackageDimensions packaging,
                               Boolean preorderEligible, String variationTheme, List<ImportedVariant> variants,
-                              UUID sizeChartId, String sizeChartName, FitNote fitNote) {
+                              UUID sizeChartId, String sizeChartName, FitNote fitNote,
+                              Map<String, Object> sellerBehaviour) {
+
+    /** A product without seller behaviour answers. */
+    public ImportedProduct(String groupKey, UUID productId, ImportCategory category, String productTypeCode,
+                           String title, String description, Map<String, String> attributes, List<String> imageUrls,
+                           List<String> keywords, ItemCondition condition, FulfilmentMode fulfilment,
+                           Integer handlingDays, PackageDimensions packaging, Boolean preorderEligible,
+                           String variationTheme, List<ImportedVariant> variants, UUID sizeChartId,
+                           String sizeChartName, FitNote fitNote) {
+        this(groupKey, productId, category, productTypeCode, title, description, attributes, imageUrls, keywords,
+                condition, fulfilment, handlingDays, packaging, preorderEligible, variationTheme, variants, sizeChartId,
+                sizeChartName, fitNote, null);
+    }
 
     /** A product without a size chart. */
     public ImportedProduct(String groupKey, UUID productId, ImportCategory category, String productTypeCode,
@@ -41,6 +54,7 @@ public record ImportedProduct(String groupKey, UUID productId, ImportCategory ca
         imageUrls = imageUrls == null ? List.of() : List.copyOf(imageUrls);
         keywords = keywords == null ? null : List.copyOf(keywords);
         variants = List.copyOf(variants);
+        sellerBehaviour = sellerBehaviour == null ? Map.of() : Map.copyOf(sellerBehaviour);
     }
 
     public List<Integer> rowNumbers() {

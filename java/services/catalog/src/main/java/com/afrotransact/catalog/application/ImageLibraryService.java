@@ -22,6 +22,15 @@ public interface ImageLibraryService {
     /** Which of the organisation's SKUs use these image URLs, and which of these SKUs exist. */
     Usage usage(List<String> urls, List<String> skus);
 
+    /**
+     * The organisation's SKU list for naming library images: one line per variant with its SKU (the file name stem:
+     * SKU.MAIN.jpg, SKU.PT01.jpg), whether the SKU was generated, its ATIN, barcode, product title and options.
+     */
+    List<SkuLine> skuList();
+
+    record SkuLine(String sku, boolean generated, String atin, String gtin, String title, String options) {
+    }
+
     record AttachResult(int productsUpdated, int imagesAttached, List<Skipped> skipped) {
     }
 
