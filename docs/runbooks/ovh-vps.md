@@ -103,6 +103,8 @@ which keys are set). To skip the questions, put `KEY=value` lines in `.ovh/ovh-v
 | `TF_STATE_BUCKET` | a name for the Object Storage bucket that holds the Terraform state (the default is fine) |
 | `OVH_DOMAIN`, `ACME_EMAIL` | your test domain and an email for certificate notices |
 | `OVH_STOREFRONT_HOST` | `www` (default): the storefront is `https://www.<domain>` and the bare domain redirects to it; `apex`: the storefront is `https://<domain>`. The backend is deployed with `global.storefrontHost` from it (identity redirect URIs, CORS, links in emails), and the `ovh-web` input `storefront-host` must say the same |
+| `OVH_SELLER_HOST`, `OVH_ADMIN_HOST` (optional) | **full** hostnames of the Seller Center and the staff console; empty = `seller.<domain>` / `admin.<domain>`. See "Free certificate layout (flat web hosts)" below |
+| `OVH_MEDIA_PUBLIC_URL` (optional) | public base URL of the media bucket; empty = `https://media.<domain>`. Given to the services (`global.urls.MEDIA_PUBLIC_URL`) and to the Workers' CSP by `ovh-web` |
 | `OVH_INSTANCE_FLAVOR` | `b3-32` (8 vCPU / 32 GB). 16 GB is too small |
 | `DB_MODE` | `cluster` for a throwaway test, `external` for a managed Postgres (then host, admin user, admin password, sslmode) |
 | `ADMIN_EMAIL`, `ADMIN_PHONE` | the first staff admin; the password is generated and shown **once**: keep it |
@@ -194,6 +196,19 @@ the only thing that bills.
 | Certificate stays `False` | DNS not pointing at the server yet, grey cloud off, or a `CAA` record; `kubectl describe certificate -n afrotransact-dev` |
 | Orders cannot start a workflow | orders must use the in-cluster Temporal (`infra/ovh-vps/overrides/orders.yaml`, no mTLS); check `kubectl -n afrotransact-dev logs deploy/orders` for the target it connects to |
 | Authorization errors | `kubectl -n afrotransact-dev logs deploy/authz-sync` and the openfga pod; the store is created on first start |
+
+## Free certificate layout (flat web hosts)
+
+Cloudflare's free certificate covers the zone apex and one label under it. With `OVH_DOMAIN=test.afrotransact.com` the default web hosts
+(`www.`, `seller.`, `admin.` of it) are two labels deep and would need a paid certificate, so use flat names for the three web apps only.
+The backend (`api.`, `auth.`, `mcp.`, `grafana.`) stays under the base domain with Let's Encrypt on the server.
+
+'''+TABLE+'''
+`ovh-vps` validates the hosts before it creates anything (`tools/ovh/web-hosts.sh`, warns about hosts deeper than one label under the zone),
+writes them to the server's `config.env` (`SELLER_HOST`, `ADMIN_HOST`, `MEDIA_PUBLIC_URL`) and deploys every service with
+`global.sellerHost` / `global.adminHost`, which the at-service chart turns into `SELLER_CENTER_URL` / `STAFF_CONSOLE_URL` (identity's redirect URIs,
+CORS, gateway-bff's CSRF/CORS allowlist, email links). After changing them run `services`, then `ovh-web`. Full explanation, cookie/OIDC/passkey
+notes and the caveat that two-label hosts need a paid certificate: `docs/runbooks/cloudflare-setup.md`, `docs/engineering/environments.md`.
 
 ## Monitoring and backups
 

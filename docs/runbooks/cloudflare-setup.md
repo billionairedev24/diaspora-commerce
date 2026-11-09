@@ -54,9 +54,64 @@ To keep the storefront at the bare domain instead, set `OVH_STOREFRONT_HOST=apex
 6. *Rules* > *Settings* > *Managed Transforms* > turn ON **Add visitor location headers**. The home page detects the visitor's city from
    `CF-IPCity`, `CF-IPPostalCode` and friends (`docs/engineering/delivery-location.md`); without it the deliver-to city stays empty.
    (`LOCATION_DETECT_ZIP` is a local-only override: do not set it here.) This is not in `infra/cloudflare` yet.
-7. *SSL/TLS* > *Edge Certificates*: *Always Use HTTPS* on. **Use the registered domain as `OVH_DOMAIN`**: Cloudflare's free Universal
+7. *SSL/TLS* > *Edge Certificates*: *Always Use HTTPS* on. **Use the registered domain as `OVH_DOMAIN`**, or the flat layout below it: Cloudflare's free Universal
    certificate covers `example.com` and `*.example.com` only, so with `OVH_DOMAIN=test.example.com` the hosts `www.test.example.com`
-   and `seller.test.example.com` have no certificate unless you buy an Advanced Certificate (paid).
+   and `seller.test.example.com` have no certificate unless you buy an Advanced Certificate (paid) or use
+   [Free certificate layout (flat web hosts)](#free-certificate-layout-flat-web-hosts).
+
+## Free certificate layout (flat web hosts)
+
+**Why.** Cloudflare's free Universal certificate covers the zone apex and **one** label under it (`afrotransact.com` and
+`*.afrotransact.com`). When the test environment lives at `test.afrotransact.com` (a name below the zone), the default web hosts
+`www.test.afrotransact.com`, `seller.test.afrotransact.com` and `admin.test.afrotransact.com` are two labels deep and get **no** free
+certificate: the browser shows a certificate error. A two-label web host needs a paid Advanced Certificate. The flat layout avoids
+that by giving the three Workers hosts that are one label under the zone, while the backend keeps `<name>.test.afrotransact.com`
+(those are grey-cloud DNS-only records served with Let's Encrypt on the server, so Cloudflare's certificate is not involved).
+
+Set these variables (`make ovh-gh-setup`, or the deploy wizard, which offers the flat layout whenever `OVH_DOMAIN` is not the zone itself):
+
+| Variable (GitHub Environment `ovh-vps`) | Value for `test.afrotransact.com` |
+|---|---|
+| `OVH_DOMAIN` | `test.afrotransact.com` |
+| `CLOUDFLARE_ZONE` | `afrotransact.com` |
+| `OVH_STOREFRONT_HOST` | `apex` |
+| `OVH_SELLER_HOST` | `seller-test.afrotransact.com` |
+| `OVH_ADMIN_HOST` | `admin-test.afrotransact.com` |
+| `OVH_MEDIA_PUBLIC_URL` (only if product images are served; see below) | `https://media-test.afrotransact.com` |
+
+| Host | Served by | Certificate |
+|---|---|---|
+| `test.afrotransact.com` (storefront) | Worker `storefront-ovh`, Custom Domain | Cloudflare free Universal (`*.afrotransact.com`) |
+| `seller-test.afrotransact.com` (Seller Center & Provider Hub) | Worker `seller-center-ovh` | Cloudflare free Universal (`*.afrotransact.com`) |
+| `admin-test.afrotransact.com` (staff console) | Worker `staff-console-ovh` | Cloudflare free Universal (`*.afrotransact.com`) |
+| `api.test.afrotransact.com`, `auth.test.afrotransact.com`, `mcp.test.afrotransact.com`, `grafana.test.afrotransact.com` | the OVH server (grey-cloud A records made by `ovh-vps`) | Let's Encrypt on the server (cert-manager), not Cloudflare |
+| `media-test.afrotransact.com` (optional) | R2 custom domain / CDN | Cloudflare free Universal |
+
+Nothing changes when `OVH_SELLER_HOST` and `OVH_ADMIN_HOST` are empty (defaults `seller.<domain>`, `admin.<domain>`) and nothing changes for
+dev, uat, prod or local. Rules, checked by `tools/ovh/web-hosts.sh` in both workflows before anything runs: lower-case DNS names, under the
+Cloudflare zone, all different from each other and from the backend hosts. The script prints a warning when a web host is more than one label
+under the zone. Do the same for the media host if you serve images: a Cloudflare-proxied `media.test.afrotransact.com` is two labels deep
+too, so name it `media-test.afrotransact.com`, give the R2 bucket that custom domain and set `OVH_MEDIA_PUBLIC_URL`.
+
+**Order.** Change the variables, run `ovh-vps` with `services` (the backend derives identity's redirect URIs, CORS origins and email links from
+them), then `ovh-web` (it reads the same variables; there is no separate input for the hosts, so the two cannot disagree). With
+`OVH_STOREFRONT_HOST=apex` there is no redirect Worker. The wizard's Cloudflare phase prints the final host list and proves, with `dig` and
+`openssl`, that the certificate served for each of the three web hosts lists that host.
+
+**What this does to sessions and sign-in** (details and what is unverified: `docs/engineering/environments.md`, "Free certificate layout"):
+each app signs in on its **own** origin (`<app>/api/bff` proxies the BFF, host-only session cookie, its own OIDC callback registered at identity),
+so a seller-test or admin-test session never needs a cookie on the base domain. All hosts are still the same *site* (`afrotransact.com`), so
+`SameSite=Lax` cookies and redirects behave as before. Passkeys keep the relying-party id `test.afrotransact.com` and run on `auth.` and the
+storefront only.
+
+**A two-label host on the free plan** (for example the defaults with `OVH_DOMAIN=test.afrotransact.com`) fails the TLS handshake or shows a
+certificate name mismatch. The fix is the flat layout above or Cloudflare Advanced Certificate Manager (paid), which can cover `*.test.afrotransact.com`.
+
+**Images.** The `ovh-web` workflow now sets `MEDIA_PUBLIC_URL` on all three Workers (the Content-Security-Policy `img-src`/`media-src` allow exactly that
+origin). It is `OVH_MEDIA_PUBLIC_URL` when set, otherwise `https://media.<OVH_DOMAIN>`, which is also what the services put in image URLs, so the two
+agree; `ovh-vps` passes `OVH_MEDIA_PUBLIC_URL` to the services as `global.urls.MEDIA_PUBLIC_URL`. Create the public bucket's custom domain with that exact host
+(Cloudflare R2 > the bucket > Settings > Custom Domains) and set the media service's `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` secrets; until then product
+images are not served and the CSP report-only log names the blocked host.
 
 ## 3. Find the account id (browser)
 
@@ -129,7 +184,8 @@ domain of the environment: the storefront will be at `https://www.<OVH_DOMAIN>` 
 - **Docs portal and Storybook** (`developers.<domain>`): Cloudflare Pages projects defined in `infra/cloudflare/pages.tf`; not needed for the test.
 - **Turnstile bot protection, WAF rules, rate limits, HSTS, the `admin.` allow-list rule:** defined in `infra/cloudflare` (OpenTofu) for the real
   environments. For this test environment they are off. When you want them, run `infra/cloudflare` (see its README) against your zone.
-- **Media CDN** (`media.<domain>`) and **mail** (`mail.<domain>`): separate; the OVH runbook covers the media bucket and Resend.
+- **Media CDN** (`media.<domain>`, or `OVH_MEDIA_PUBLIC_URL`) and **mail** (`mail.<domain>`): the Workers only need the media origin
+  (set by `ovh-web`, see "Images" above); creating the bucket's custom domain is yours. The OVH runbook covers Resend.
 - **Production:** the real domains use the `web-*.yml` pipelines and `infra/cloudflare`; this runbook is the test setup.
 
 ## Troubleshooting
@@ -145,7 +201,8 @@ domain of the environment: the storefront will be at `https://www.<OVH_DOMAIN>` 
 | Sign-in loops or "redirect_uri mismatch" | identity's redirect URIs are derived from `global.domain` and `global.storefrontHost`; the app host must be exactly `www.<domain>` (or `<domain>` with `apex`), `seller.<domain>`, `admin.<domain>` over https. The usual cause is a storefront deployed with another `storefront-host` than the backend's `OVH_STOREFRONT_HOST`: make them equal, redeploy the services (`ovh-vps`, action `services`) and the storefront. `status` action of `ovh-vps` shows the identity pod; its logs show the rejected URI |
 | 522/525 on `api.` or `auth.` | The A records must be DNS only (grey cloud) and the server's certificates Ready (`status` action of `ovh-vps`) |
 | Old content after a deploy | Hard refresh; the Worker versions switch at once, assets are cached by hash |
-| Images do not load | `MEDIA_PUBLIC_URL`: the media bucket and its public host belong to the OVH side (see ovh-vps.md) |
+| Images do not load | The Worker's `MEDIA_PUBLIC_URL` (see the `wrangler.ovh.json` printed by the `ovh-web` run) must equal the host the bucket is served from and that the services emit (`OVH_MEDIA_PUBLIC_URL`, default `https://media.<domain>`); the host needs a certificate too (one label under the zone on the free plan) |
+| Browser certificate error on `seller.`/`admin.`/`www.` of a `test.` domain | Two labels under the zone: use the flat layout above (`OVH_SELLER_HOST`, `OVH_ADMIN_HOST`, `OVH_STOREFRONT_HOST=apex`) |
 
 ## Costs
 
