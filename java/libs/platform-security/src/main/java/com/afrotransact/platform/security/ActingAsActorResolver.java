@@ -21,8 +21,9 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  *
  * <p>Acting as a customer keeps the subject, drops the organisation and every role but the {@code account.*} ones,
  * and keeps the token's permissions (the person's own; without an organisation the org-scoped ones grant nothing).
- * Only people (customers, organisation members, drivers) switch; staff, services, partner apps and AI agents keep
- * their type. The header can therefore only narrow a caller to a shopper, which every account already is
+ * Every signed-in person switches (customers, organisation members, drivers, staff and platform admins); services,
+ * partner apps and AI agents keep their type. Shopping is not an elevation: staff keep none of their staff roles or
+ * permissions (only {@code account.*} roles and {@code mcp:shopper}). The header can therefore only narrow a caller to a shopper, which every account already is
  * ({@code account.customer}), never widen what it may do. Mirrors go/pkg/auth ActingAs.
  */
 public class ActingAsActorResolver implements ActorResolver {
@@ -33,7 +34,9 @@ public class ActingAsActorResolver implements ActorResolver {
     public static final String CUSTOMER = "CUSTOMER";
 
     private static final Set<PrincipalType> PEOPLE = Set.of(PrincipalType.CUSTOMER, PrincipalType.SELLER_MEMBER,
-            PrincipalType.PROVIDER_MEMBER, PrincipalType.DRIVER);
+            PrincipalType.PROVIDER_MEMBER, PrincipalType.DRIVER, PrincipalType.STAFF);
+    /** What account.customer holds: the only permissions a staff member keeps while shopping. */
+    private static final Set<String> SHOPPER_PERMISSIONS = Set.of("mcp:shopper");
     private static final String ACCOUNT_ROLE_PREFIX = "account.";
 
     private final ActorResolver delegate;
@@ -61,6 +64,9 @@ public class ActingAsActorResolver implements ActorResolver {
         Set<String> roles = actor.roles().stream()
                 .filter(r -> r.startsWith(ACCOUNT_ROLE_PREFIX))
                 .collect(Collectors.toSet());
-        return new Actor(actor.subject(), PrincipalType.CUSTOMER, Optional.empty(), roles, actor.permissions());
+        Set<String> permissions = actor.type() == PrincipalType.STAFF
+                ? actor.permissions().stream().filter(SHOPPER_PERMISSIONS::contains).collect(Collectors.toSet())
+                : actor.permissions();
+        return new Actor(actor.subject(), PrincipalType.CUSTOMER, Optional.empty(), roles, permissions);
     }
 }

@@ -96,15 +96,32 @@ class ActingAsActorResolverTest {
     }
 
     @Test
-    void staffServicesAndTheLocalSuperAdminNeverBecomeShoppers() {
-        Actor staff = new Actor("s1", PrincipalType.STAFF, Optional.empty(), Set.of("platform.ops_manager"),
-                Set.of("orders:read"));
+    void staffShopAsThemselvesWithoutStaffPrivileges() {
+        Actor staff = new Actor("s1", PrincipalType.STAFF, Optional.empty(),
+                Set.of("platform.ops_manager", "account.customer"), Set.of("orders:read", "mcp:shopper", "*"));
+
+        Actor shopper = ActingAsActorResolver.actingAs(staff, "CUSTOMER");
+
+        assertThat(shopper.subject()).isEqualTo("s1");
+        assertThat(shopper.type()).isEqualTo(PrincipalType.CUSTOMER);
+        assertThat(shopper.roles()).containsExactly("account.customer");
+        assertThat(shopper.permissions()).containsExactly("mcp:shopper");
+        assertThat(shopper.can("orders:read")).isFalse();
+        assertThat(ActingAsActorResolver.actingAs(staff, null)).isEqualTo(staff);
+        assertThat(ActingAsActorResolver.actingAs(LocalActorResolver.LOCAL_SUPER_ADMIN, "CUSTOMER").can("orders:read"))
+                .isFalse();
+    }
+
+    @Test
+    void servicesPartnerAppsAndAgentsNeverBecomeShoppers() {
         Actor service = new Actor("orders", PrincipalType.SERVICE, Optional.empty(), Set.of(), Set.of("cart:service"));
 
-        assertThat(ActingAsActorResolver.actingAs(staff, "CUSTOMER")).isEqualTo(staff);
+        Actor partner = new Actor("app", PrincipalType.PARTNER_APP, Optional.empty(), Set.of(), Set.of());
+        Actor agent = new Actor("agent", PrincipalType.AI_AGENT, Optional.empty(), Set.of(), Set.of());
+
         assertThat(ActingAsActorResolver.actingAs(service, "CUSTOMER")).isEqualTo(service);
-        assertThat(ActingAsActorResolver.actingAs(LocalActorResolver.LOCAL_SUPER_ADMIN, "CUSTOMER"))
-                .isEqualTo(LocalActorResolver.LOCAL_SUPER_ADMIN);
+        assertThat(ActingAsActorResolver.actingAs(partner, "CUSTOMER")).isEqualTo(partner);
+        assertThat(ActingAsActorResolver.actingAs(agent, "CUSTOMER")).isEqualTo(agent);
     }
 
     @Test
