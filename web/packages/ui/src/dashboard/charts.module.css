@@ -1,0 +1,27 @@
+/* Dashboard charts: inline SVG, colours from design tokens only. Tone classes set `color`; marks use currentColor. */
+.ink { color: var(--at-ink-900); }
+.gold { color: var(--at-gold-700); }
+.green { color: var(--at-green-600); }
+.blue { color: var(--at-blue-600); }
+.red { color: var(--at-red-600); }
+.grey { color: var(--at-ink-400); }
+
+.figure { margin: 0; min-inline-size: 0; }
+.svg { display: block; inline-size: 100%; block-size: 2.75rem; overflow: visible; }
+.line { stroke: currentColor; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.area { fill: currentColor; opacity: 0.08; }
+.dot { fill: currentColor; }
+.bar { fill: currentColor; opacity: 0.85; }
+.baseline { stroke: var(--at-color-border); stroke-width: 1; }
+
+.donut { display: flex; align-items: center; gap: var(--at-space-4); margin: 0; min-inline-size: 0; }
+.ring { position: relative; flex: none; inline-size: 5.5rem; block-size: 5.5rem; }
+.donutSvg { inline-size: 100%; block-size: 100%; }
+.track { stroke: var(--at-color-surface-sunken); }
+.slice { stroke: currentColor; }
+.centre { position: absolute; inset: 0; display: grid; place-items: center; font-size: var(--at-text-md); font-weight: var(--at-weight-bold); font-variant-numeric: tabular-nums; color: var(--at-color-text); }
+.legend { display: flex; flex-direction: column; gap: var(--at-space-1); min-inline-size: 0; margin: 0; padding: 0; list-style: none; font-size: var(--at-text-xs); }
+.legend li { display: flex; align-items: center; gap: var(--at-space-2); min-inline-size: 0; }
+.swatch { flex: none; inline-size: 0.5rem; block-size: 0.5rem; border-radius: var(--at-radius-pill); background: currentColor; }
+.legendLabel { overflow: hidden; color: var(--at-color-text-muted); text-overflow: ellipsis; white-space: nowrap; }
+.legendValue { margin-inline-start: auto; padding-inline-start: var(--at-space-2); font-weight: var(--at-weight-semibold); font-variant-numeric: tabular-nums; color: var(--at-color-text); }

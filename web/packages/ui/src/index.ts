@@ -21,6 +21,7 @@ export { QuantityStepper, type QuantityStepperProps } from './commerce/QuantityS
 export { cardExpired, SavedPaymentCard, type SavedPaymentCardLabels, type SavedPaymentCardProps } from './commerce/SavedPaymentCard';
 export { Stars, type StarsProps } from './commerce/Stars';
 export { cx } from './cx';
+export * from './dashboard';
 export { Alert, AlertAction, type AlertProps, alertRole, type AlertVariant } from './feedback/Alert';
 export { MaintenancePage, type MaintenancePageProps } from './feedback/MaintenancePage';
 export { PendingNavigation, type PendingNavigationProps } from './feedback/PendingNavigation';
@@ -80,8 +81,8 @@ export { PageStack, type PageStackProps } from './layout/PageStack';
 export { SheetTableScroll, type SheetTableScrollProps } from './layout/SheetTableScroll';
 export { type StatItem, StatStrip, type StatStripProps, type StatTone } from './layout/StatStrip';
 export { Dialog, DialogActions, type DialogProps, Sheet, type SheetProps } from './overlay/Dialog';
-export { Popover, type PopoverProps } from './overlay/Popover';
 export { Menu, MenuGroup, MenuItem, type MenuItemProps, type MenuProps, MenuSeparator } from './overlay/Menu';
+export { Popover, type PopoverProps } from './overlay/Popover';
 export { ConfirmDelete, type ConfirmDeleteProps, type RowAction, type RowActionItem, RowActions, type RowActionsProps, RowName, type RowNameProps } from './overlay/RowActions';
 export { type TabItem, Tabs, type TabsProps } from './overlay/Tabs';
 export { type ToastAction, type ToastMessage, ToastProvider, useToast } from './overlay/Toast';
