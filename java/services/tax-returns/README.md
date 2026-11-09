@@ -85,8 +85,9 @@ amount of a line's items and / or shipping; tax follows proportionally.
 ## Marketplace-facilitator sales tax (S116)
 
 `TaxCalculator` port; the default adapter `RulesTaxCalculator` runs the domain `DefaultTaxRules` over the rate table
-(no external calls). `at.taxreturns.tax.provider` is `RULES`; `STRIPE_TAX`, `TAXJAR` and `AVALARA` are reserved for
-adapters of the same port (startup fails if one is selected without its adapter).
+(no external calls). `at.taxreturns.tax.provider` is the default method until staff choose in Settings: `RULES`, `STRIPE_TAX`
+or `AVALARA` (a skeleton adapter); `TAXJAR` is reserved (startup fails if selected without its adapter). **What is taxed is decided
+by the stored classification decision of the variant ATIN, see "Category tax engine" below**; this section is about the rate.
 
 - **Rate** = state rate for the line's category (`GENERAL`, `GROCERY` — reduced or exempt, `PREPARED_FOOD`) + local
   rate for the ship-to ZIP (exact 5-digit ZIP wins over a 3-digit prefix; a local rate applies to grocery only when
@@ -97,8 +98,9 @@ adapters of the same port (startup fails if one is selected without its adapter)
   never per invoice); the order's tax is the sum of its lines, which is what refunds reverse.
 - **Facilitator**: only states with `facilitator=true` are collected (`collectedBy=MARKETPLACE`); other states,
   unknown states and non-US addresses get no tax (`NOT_COLLECTED`).
-- **Category**: from the request (`taxCategory`), else catalog product type via
-  the classification rules below (`tax_classification_rule`), else `GENERAL`.
+- **Category**: EXEMPT lines (stored decision) never reach the calculator; TAXABLE lines are taxed at the `GENERAL` rate; lines
+  with no definite decision get no rate and come back blocked. A caller's explicit `taxCategory` (legacy) still picks the rate column
+  and skips the decision.
 - **Seed** (`V2__seed_tax_rates.sql`): TX, NY, NJ, GA, MD, CA, IL, MN (facilitator) and DE (no sales tax) with a few
   city ZIP prefixes. The seeded rates are illustrative: finance must confirm them before production and keep them
   current through `PUT /v1/tax/rates/**`.
@@ -154,6 +156,8 @@ New keys for identity to seed (this service does not edit identity):
 | `tax:quote` | tax | client scope of `orders-service` (and `gateway-bff` if carts show tax); `platform.super_admin` |
 | `tax:read` | tax | `platform.super_admin`, `platform.finance`, `platform.auditor` |
 | `tax:configure` | tax | `platform.super_admin`, `platform.finance` |
+| `tax:classify` | tax | client scope of `catalog-service` (resolve at publish time); staff previews |
+| `tax:classify-admin` | tax | `platform.super_admin`, Tax Reviewer, Catalog Manager (approve, reclassify, profile gates, code map) |
 
 New confidential client **`tax-returns-service`** (client credentials, secret `TAX_RETURNS_CLIENT_SECRET`), scopes
 `payments:service` (payment lookup and refunds), `inventory:adjust` (`POST /v1/returns`), `shipping:label`
@@ -235,7 +239,50 @@ pickup with seller decision and failed inspection, seller SLA auto-approval, par
 
 Deploy: `deploy/helm` (depends on `infra/helm/library/at-service`), one Argo CD Application per environment.
 
-## Tax classification (what an item is for tax)
+## Category tax engine (what an item is for tax, and who says)
+
+Spec: [`docs/engineering/category-tax-design.md`](../../../docs/engineering/category-tax-design.md); where the code is:
+[`tax-classification-design.md`](../../../docs/engineering/tax-classification-design.md) ("What the engine does today"); cutover:
+[`docs/runbooks/tax-provider-cutover.md`](../../../docs/runbooks/tax-provider-cutover.md). **Draft rules: a Texas tax professional must
+approve before production use.** Never guess: no definite decision means a status (MISSING_FACTS, BLOCKED, NEEDS_APPROVAL,
+REFINE_CODE, CONFLICT_OPEN) and no rate; there is no default rate and no default outcome.
+
+| Table (V10 to V12) | Holds |
+|---|---|
+| `tax_fact_definition`, `tax_profile`, `tax_profile_fact` | 36 typed facts, 73 category profiles with their status gate, the facts each uses (`required_when` conditions) |
+| `tax_outcome_code`, `tax_decision_row` | 105 outcome-level internal codes (`AT.<CATEGORY>.<OUTCOME>`), the ordered decision rows (first match wins, mutually exclusive) |
+| `provider_code_map` | per outcome code and provider (STRIPE filled from the document, unverified; AVALARA empty): code, active, verified, note, version |
+| `tax_rule_version`, `tax_profile_audit` | every profile status or map change starts a rule version; append-only audit |
+| `variant_classification` (+ `_audit`, `_evidence`) | per variant ATIN: category, facts, staff facts, refined provider codes, review state, audit |
+| `listing_tax_decision` | stored decision per (variant ATIN, behaviour hash) |
+| `tax_shadow_quote` | SHADOW comparisons |
+
+V12 is generated: `python3 tools/taxonomy/gen_seed_sql.py` (and `--check`; `make taxonomy-check`). A rule change is a new migration made from the changed dataset, never an edit of V12.
+
+**Endpoints** (contract `contracts/openapi/tax-returns.yaml`): `POST /v1/tax/classifications/resolve` (`tax:classify`, also `tax:read`, `tax:classify-admin`);
+`GET /v1/tax/profiles`, `GET /v1/tax/profiles/{code}` (`tax:read`), `PUT /v1/tax/profiles/{code}/status` (`tax:classify-admin`);
+`GET /v1/tax/provider-code-map`, `PUT /v1/tax/provider-code-map/{internalTaxCode}`; `GET /v1/tax/variant-classifications[?status=PENDING_REVIEW]`,
+`GET .../{atin}`, `POST .../{atin}/approve`, `POST .../{atin}/reclassify`; `GET /v1/tax/shadow/report`; `GET|PUT /v1/tax/settings` (method + `shadowProvider`).
+`tax:configure` holders are accepted for the admin actions until identity grants `tax:classify-admin`.
+
+**Events**: consumes `catalog.product.tax-facts-changed` (topic `at.product.events`); publishes `tax.classification.changed` (kinds PROFILE_STATUS, PROVIDER_CODE_MAP, VARIANT_CLASSIFICATION) on `at.taxreturns.events`.
+
+**Quote path**: per line, the approved record of the ATIN + the seller's `sellerBehaviour` + ship-to state + sale date, resolved under today's rules. EXEMPT lines are priced at zero and skip the calculator; TAXABLE lines go to the
+calculator with the provider code of their outcome; anything else is blocked with `decisionStatus`, `blockedReason` and no rate. Each line returns `outcome`, `internalTaxCode`, `providerTaxCode`, `ruleVersion`, `addressPrecision`. A provider
+that cannot take a quote (not set up, unreachable, a line without a code) answers through `provider = RULES-FALLBACK` with `fallbackLines`, a counter and a warning (never silent). Delivery fee tax keeps the per-line `shippingMinor` semantics.
+
+**SHADOW mode**: `shadowProvider` set in Settings; for quotes that carry an `orderId` the provider is asked the same lines in the background (timeout `at.taxreturns.tax.shadow.timeout`), compared, stored; never charged, never blocks.
+
+**Metrics**: `tax_quote_lines_total{status,reason}`, `tax_provider_fallback_total{provider,why}`, `tax_provider_fallback_lines_total`, `tax_shadow_lines_total{provider,kind}`, `tax_shadow_failures_total{provider,why}`,
+`tax_classification_resolve_total{status}`, `tax_classification_changes_total{kind}`.
+
+**Not built (open)**: Stripe tax transactions for captured payments and refund reversals (calculation only, as before); the Avalara call itself; the holiday calendar (the exemption window is always false); the 8.25% combined-rate cap
+(TX-01); exact-address resolution (TX-03, the ZIP table is the default, precision `ZIP`); bundle itemisation (TX-09); TX-07 mixed-basket shipping attribution; TX-12 fee classification; shadowing the in-house engine behind a provider method.
+
+## Legacy tax classification (V5, no longer used by quotes)
+
+The 13 coarse codes, the product-type rule table and the old review queue below are kept (Flyway-valid, staff endpoints still answer) but **the quote path does not read them any more**. The old classifier still stamps
+`order_line_snapshot.tax_code` on placed orders until orders sends the internal code on `orders.order.placed` lines.
 
 Design: [`docs/engineering/tax-classification-design.md`](../../../docs/engineering/tax-classification-design.md).
 
