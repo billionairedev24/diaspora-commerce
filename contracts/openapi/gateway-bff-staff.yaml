@@ -119,6 +119,15 @@ tags:
       a live closing countdown while ordering is open and end when the window closes or is cancelled; results are views,
       clicks and orders. Mirrors delivery-runs with the staff member's token; part of the `preorders` module (view to read,
       EDIT with `preorders:manage` to change).
+  - name: Tax
+    description: |
+      Category tax tools of Fees & commissions → Sales tax (docs/engineering/category-tax-design.md): the 73 category profiles
+      (facts, readable decision table, status gate), the tax review queue and decisions, the provider code maps with their
+      completeness, the tax method with its SHADOW provider and the shadow report. Mirrors tax-returns
+      (contracts/openapi/tax-returns.yaml) with the staff member's token, in plain words and with people and sellers by name.
+      Reads need the `fees` module (VIEW) and `tax:read`; approving, reclassifying, status changes and code-map edits need
+      `tax:classify-admin`; the method needs `tax:configure`. Every change needs a reason of at least 10 characters and is
+      audited with the person's name. The rules are a draft until a Texas tax professional signs them off.
   - name: Markets
     description: |
       Settings → Markets & locations as one location tree (country → states → cities). Mirrors content's draft markets
@@ -3304,6 +3313,273 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── S281 inventory
+  /v1/staff/tax/profiles:
+    get:
+      tags: [Tax]
+      operationId: listStaffTaxProfiles
+      security: [{sessionCookie: []}]
+      summary: 'The 73 category tax profiles (server-driven table)'
+      description: 'tax-returns `GET /v1/tax/profiles` (and each profile for its Stripe codes). Filters by department and status; facets count the whole list. Status is shown as a plain gate label.'
+      parameters:
+        - {name: department, in: query, required: false, schema: {type: string}}
+        - {name: status, in: query, required: false, schema: {type: string}}
+        - {name: q, in: query, required: false, schema: {type: string}}
+        - {name: sort, in: query, required: false, description: '`<column>,asc|desc`', schema: {type: array, items: {type: string}}}
+        - {name: page, in: query, required: false, schema: {type: integer}}
+        - {name: size, in: query, required: false, schema: {type: integer}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxProfilePage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/profiles/{code}:
+    parameters:
+      - {name: code, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Tax]
+      operationId: getStaffTaxProfile
+      security: [{sessionCookie: []}]
+      summary: 'One category profile: facts, decision table in words, flagged notes, history'
+      description: 'tax-returns `GET /v1/tax/profiles/{categoryCode}`. Rows are read-only here: rules change through the dataset and a seed migration.'
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxProfile'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/profiles/{code}/status:
+    parameters:
+      - {name: code, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Tax]
+      operationId: changeStaffTaxProfileStatus
+      security: [{sessionCookie: []}]
+      summary: 'Mark a category approved or reopen it for approval'
+      description: 'tax-returns `PUT /v1/tax/profiles/{categoryCode}/status` (`tax:classify-admin`). A reason of 10+ characters is required; lifting NEEDS_APPROVAL, CONFLICT_OPEN or BLOCKED_BUNDLE also needs the tax professional''s name (`approvedBy`) and the decision reference (`decisionRef`). REFINE_CODE is lifted per product, never here (409).'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxProfileStatusChange'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxProfile'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/reviews:
+    get:
+      tags: [Tax]
+      operationId: listStaffTaxReviews
+      security: [{sessionCookie: []}]
+      summary: 'Variants waiting for tax review, or the decisions already made'
+      description: 'tax-returns `GET /v1/tax/variant-classifications`. `status` defaults to PENDING_REVIEW (the queue); APPROVED, REJECTED and STALE list decisions with who decided, when and under which rule version. Sellers and people by name.'
+      parameters:
+        - {name: status, in: query, required: false, schema: {type: string}}
+        - {name: categoryCode, in: query, required: false, schema: {type: string}}
+        - {name: sellerOrgId, in: query, required: false, schema: {type: string}}
+        - {name: q, in: query, required: false, schema: {type: string}}
+        - {name: page, in: query, required: false, schema: {type: integer}}
+        - {name: size, in: query, required: false, schema: {type: integer}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxReviewPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/reviews/{atin}:
+    parameters:
+      - {name: atin, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Tax]
+      operationId: getStaffTaxReview
+      security: [{sessionCookie: []}]
+      summary: 'One variant in tax review: facts as entered, evidence, proposed decision, history'
+      description: 'tax-returns `GET /v1/tax/variant-classifications/{atin}` with the category profile for fact labels. `ordersAffected` appears when tax-returns reports it.'
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxReview'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/reviews/{atin}/approve:
+    parameters:
+      - {name: atin, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Tax]
+      operationId: approveStaffTaxReview
+      security: [{sessionCookie: []}]
+      summary: 'Approve the classification'
+      description: 'tax-returns `POST /v1/tax/variant-classifications/{atin}/approve` (`tax:classify-admin`). 422 while the answers give no chargeable decision. Staff-owned facts and the verified provider codes of a REFINE_CODE category are set here.'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxApprove'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxReview'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/reviews/{atin}/reclassify:
+    parameters:
+      - {name: atin, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Tax]
+      operationId: reclassifyStaffTaxReview
+      security: [{sessionCookie: []}]
+      summary: 'Move the variant to another category'
+      description: 'tax-returns `POST /v1/tax/variant-classifications/{atin}/reclassify` (`tax:classify-admin`). The old decision stays in the history; the record goes back to review. Placed orders keep the tax they were charged.'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxReclassify'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxReview'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/reviews/{atin}/request-information:
+    parameters:
+      - {name: atin, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Tax]
+      operationId: requestStaffTaxInformation
+      security: [{sessionCookie: []}]
+      summary: 'Ask the seller for more information'
+      description: 'tax-returns `POST /v1/tax/variant-classifications/{atin}/request-information` (`tax:classify-admin`): proposed addition to the tax-returns contract. The message is stored and sent to the seller by tax-returns; until that route is live this answers 503.'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxRequestInformation'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxReview'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/code-map:
+    get:
+      tags: [Tax]
+      operationId: listStaffTaxCodeMap
+      security: [{sessionCookie: []}]
+      summary: 'Outcome code to provider code map for one provider, with completeness'
+      description: 'tax-returns `GET /v1/tax/provider-code-map`. `provider` defaults to the one in use (charging, else shadow). Completeness counts the outcomes that still need a verified code (blocked outcomes need none).'
+      parameters:
+        - {name: provider, in: query, required: false, schema: {type: string}}
+        - {name: state, in: query, required: false, schema: {type: string}}
+        - {name: categoryCode, in: query, required: false, schema: {type: string}}
+        - {name: unmappedOnly, in: query, required: false, schema: {type: boolean}}
+        - {name: q, in: query, required: false, schema: {type: string}}
+        - {name: sort, in: query, required: false, description: '`<column>,asc|desc`', schema: {type: array, items: {type: string}}}
+        - {name: page, in: query, required: false, schema: {type: integer}}
+        - {name: size, in: query, required: false, schema: {type: integer}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxCodeMap'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/code-map/export:
+    get:
+      tags: [Tax]
+      operationId: exportStaffTaxCodeMap
+      security: [{sessionCookie: []}]
+      summary: 'The map of one provider as CSV text'
+      description: 'Columns `internal_tax_code,category,outcome,provider,provider_code,verified`. Cells that start like a formula are prefixed with an apostrophe.'
+      parameters:
+        - {name: provider, in: query, required: false, schema: {type: string}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxCodeMapExport'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/code-map/import:
+    post:
+      tags: [Tax]
+      operationId: importStaffTaxCodeMap
+      security: [{sessionCookie: []}]
+      summary: 'Preview or apply a CSV of provider codes'
+      description: '`dryRun: true` validates and shows what would change; otherwise a valid file is applied code by code (tax-returns `PUT /v1/tax/provider-code-map/{internalTaxCode}`, `tax:classify-admin`) with one reason. A file with any invalid row is not applied at all.'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxCodeMapImport'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxCodeMapImportResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/code-map/{internalTaxCode}:
+    parameters:
+      - {name: internalTaxCode, in: path, required: true, schema: {type: string}}
+    put:
+      tags: [Tax]
+      operationId: updateStaffTaxCode
+      security: [{sessionCookie: []}]
+      summary: 'Set, verify or clear one provider code'
+      description: 'tax-returns `PUT /v1/tax/provider-code-map/{internalTaxCode}` (`tax:classify-admin`). Stripe codes look like txcd_40040016. A code that is not set cannot be verified.'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxCodeUpdate'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxCodeEntry'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/method:
+    get:
+      tags: [Tax]
+      operationId: getStaffTaxMethod
+      security: [{sessionCookie: []}]
+      summary: 'Who calculates tax, the SHADOW provider, what can be chosen and the history'
+      description: 'tax-returns `GET /v1/tax/settings` plus each provider''s code-map completeness. A provider that is not set up, or a charging provider whose codes are not all verified, is not available (with the reason).'
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxMethod'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Tax]
+      operationId: changeStaffTaxMethod
+      security: [{sessionCookie: []}]
+      summary: 'Change who calculates tax and the shadow provider'
+      description: 'tax-returns `PUT /v1/tax/settings` (`tax:configure`). A reason of 10+ characters is required. Applies to new quotes; placed orders keep the tax they were charged. 422 for a provider that is not set up, an incomplete code map, or a shadow provider equal to the charging one.'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxMethodChange'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxMethod'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax/shadow:
+    get:
+      tags: [Tax]
+      operationId: getStaffTaxShadow
+      security: [{sessionCookie: []}]
+      summary: 'Shadow report: provider quote against ours, with a ready-to-cut-over summary'
+      description: 'tax-returns `GET /v1/tax/shadow/report`, every difference read (up to 1000) so tallies by category, outcome and kind are exact. The summary checks `thresholds` from tax-returns when sent, otherwise the BFF defaults (`thresholdSource`). Shadow quotes are never charged.'
+      parameters:
+        - {name: from, in: query, required: false, schema: {type: string}, description: 'Date, default 30 days ago'}
+        - {name: to, in: query, required: false, schema: {type: string}, description: 'Date, default today'}
+        - {name: provider, in: query, required: false, schema: {type: string}}
+        - {name: page, in: query, required: false, schema: {type: integer}}
+        - {name: size, in: query, required: false, schema: {type: integer}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTaxShadow'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/markets/countries:
     get:
       tags: [Markets]
@@ -7698,8 +7974,8 @@ components:
       type: string
       enum: [users, roles, applications, organisations, connect-accounts, orders, products, category-requests, moderation, product-reviews, claims, returns, payouts, inventory, purchase-orders,
         routes, support-cases, audit, markets, site-settings, legal-documents, help-articles, careers-jobs, cookie-definitions, privacy-requests, announcements,
-        placements, identity-providers, fee-schedules, tax-rates, tax-codes, tax-rules, tax-review, dispatch-shipments, sos-alerts, vehicle-defects,
-        driver-events, pickup-locations, coupons, reconciliation, reconciliation-runs, ledger-adjustments, recoveries, credit-adjustments, gift-cards, credit-liabilities, money-settings, membership-tiers, memberships, membership-settings, membership-report, referrals, referral-settings, stripe-lookup, payment-settings, tax-settings, maintenance, tax-filings, tax-nexus,
+        placements, identity-providers, fee-schedules, tax-rates, dispatch-shipments, sos-alerts, vehicle-defects,
+        driver-events, pickup-locations, coupons, reconciliation, reconciliation-runs, ledger-adjustments, recoveries, credit-adjustments, gift-cards, credit-liabilities, money-settings, membership-tiers, memberships, membership-settings, membership-report, referrals, referral-settings, stripe-lookup, payment-settings, maintenance, tax-filings, tax-nexus,
         oauth-clients, identity-sessions, signing-keys, auth-settings, session-policy, exchange-rates]
     Tone: {type: string, enum: [good, warn, bad, info, brand]}
     CellValue:
@@ -10257,3 +10533,271 @@ components:
       properties:
         departments: {type: array, items: {type: string}, description: Catalog department codes; the complete new set}
         reason: {type: string, minLength: 10, maxLength: 1000, description: Why the departments change (audited)}
+    # ── tax (Fees & commissions → Sales tax)
+    StaffTaxDoc: {type: object, additionalProperties: true}
+    StaffTaxProfilePage:
+      type: object
+      required: [items, total, page, size, departments, statuses, canChange]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffTaxProfileRow'}}
+        total: {type: integer}
+        page: {type: integer}
+        size: {type: integer}
+        departments: {type: array, items: {type: object, required: [code, name, count], properties: {code: {type: string}, name: {type: string}, count: {type: integer}}}}
+        statuses: {type: array, items: {type: object, required: [value, label, count], properties: {value: {type: string}, label: {type: string}, count: {type: integer}}}}
+        ruleVersion: {type: string}
+        canChange: {type: boolean}
+    StaffTaxProfileRow:
+      type: object
+      required: [categoryCode, name, department, departmentName, status, statusLabel, scenarioCount]
+      properties:
+        categoryCode: {type: string}
+        name: {type: string}
+        department: {type: string}
+        departmentName: {type: string}
+        status: {type: string, enum: [ACTIVE, NEEDS_APPROVAL, BLOCKED_BUNDLE, REFINE_CODE, CONFLICT_OPEN]}
+        statusLabel: {type: string}
+        statusExplain: {type: string}
+        stripeCodes: {type: array, items: {type: string}}
+        stripeCodeList: {type: string}
+        defaultOutcome: {type: string}
+        defaultOutcomeLabel: {type: string}
+        scenarioCount: {type: integer}
+        ruleVersion: {type: string}
+        openDecision: {type: [integer, 'null']}
+    StaffTaxProfile:
+      allOf:
+        - $ref: '#/components/schemas/StaffTaxProfileRow'
+        - type: object
+          required: [facts, decisions, notes, history, canChange, actions]
+          properties:
+            conflictingCodes: {type: array, items: {type: string}}
+            facts: {type: array, items: {type: object, additionalProperties: true, description: 'id, label, kind, unit, help, ownerLabel, needed (plain words), evidence'}}
+            decisions: {type: array, items: {type: object, additionalProperties: true, description: 'id, sentence ("If net weight is at least 2.5 oz, then exempt"), outcomeLabel, internalTaxCode, stripeCode, rateDisplay'}}
+            notes: {type: array, description: Notes flagged for the tax professional, items: {type: object, additionalProperties: true}}
+            history: {type: array, items: {type: object, additionalProperties: true}}
+            changedByName: {type: string}
+            changedAt: {type: string}
+            canChange: {type: boolean}
+            actions: {type: array, items: {type: object, additionalProperties: true, description: 'key, label, status, needsSignOff, explain, available, why'}}
+            readOnlyReason: {type: string}
+    StaffTaxProfileStatusChange:
+      type: object
+      required: [status, reason]
+      properties:
+        status: {type: string, enum: [ACTIVE, NEEDS_APPROVAL]}
+        reason: {type: string, minLength: 10, maxLength: 1000}
+        approvedBy: {type: string, description: The tax professional or firm who signed off; required when lifting a gate}
+        decisionRef: {type: string, description: Reference of the signed-off decision or opinion letter; required when lifting a gate}
+    StaffTaxReviewPage:
+      type: object
+      required: [items, total, page, size, status, canDecide]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffTaxReviewRow'}}
+        total: {type: integer}
+        page: {type: integer}
+        size: {type: integer}
+        status: {type: string}
+        statuses: {type: array, items: {type: object, additionalProperties: true}}
+        canDecide: {type: boolean}
+    StaffTaxReviewRow:
+      type: object
+      required: [atin, title, sellers, categoryCode, categoryName, status, statusLabel, why, proposed]
+      properties:
+        atin: {type: string}
+        gtin: {type: string}
+        title: {type: string}
+        sellers: {type: array, items: {type: string}, description: Seller names}
+        categoryCode: {type: string}
+        categoryName: {type: string}
+        status: {type: string}
+        statusLabel: {type: string}
+        why: {type: string, description: Plain reason this needs a person}
+        proposed: {type: object, additionalProperties: true}
+        classifiedAt: {type: string}
+        classifiedByName: {type: string}
+        reviewedAt: {type: string}
+        reviewedByName: {type: string}
+        ruleVersion: {type: string}
+    StaffTaxReview:
+      allOf:
+        - $ref: '#/components/schemas/StaffTaxReviewRow'
+        - type: object
+          required: [facts, evidence, audit, canDecide, canApprove, approve]
+          properties:
+            departmentName: {type: string}
+            profileStatus: {type: string}
+            profileStatusLabel: {type: string}
+            facts: {type: array, items: {type: object, additionalProperties: true, description: 'label, value, owner'}}
+            sellerListings: {type: array, items: {type: object, additionalProperties: true}}
+            evidence: {type: array, items: {type: object, additionalProperties: true, description: 'factLabel, fileName, url, isImage, uploadedByName, uploadedAt'}}
+            decision: {type: object, additionalProperties: true}
+            audit: {type: array, items: {type: object, additionalProperties: true}}
+            canDecide: {type: boolean}
+            canApprove: {type: boolean}
+            approve: {type: object, additionalProperties: true}
+            refinedProviderCodes: {type: object, additionalProperties: true}
+            ordersAffected: {type: integer, description: Present only when tax-returns reports it}
+    StaffTaxApprove:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 10, maxLength: 1000}
+        staffFacts: {type: object, additionalProperties: true}
+        refinedProviderCodes: {type: object, additionalProperties: {type: string}}
+    StaffTaxReclassify:
+      type: object
+      required: [categoryCode, reason]
+      properties:
+        categoryCode: {type: string}
+        productTypeCode: {type: string}
+        reason: {type: string, minLength: 10, maxLength: 1000}
+    StaffTaxRequestInformation:
+      type: object
+      required: [message]
+      properties:
+        message: {type: string, minLength: 10, maxLength: 1000, description: What the seller is asked to provide}
+    StaffTaxCodeMap:
+      type: object
+      required: [provider, items, total, page, size, completeness, canEdit]
+      properties:
+        provider: {type: string, enum: [STRIPE, AVALARA]}
+        providerLabel: {type: string}
+        activeProvider: {type: string}
+        items: {type: array, items: {$ref: '#/components/schemas/StaffTaxCodeEntry'}}
+        total: {type: integer}
+        page: {type: integer}
+        size: {type: integer}
+        completeness: {$ref: '#/components/schemas/StaffTaxCompleteness'}
+        canEdit: {type: boolean}
+        states: {type: array, items: {type: object, additionalProperties: true}}
+    StaffTaxCompleteness:
+      type: object
+      required: [needed, mapped, verified, unmapped, unverified, percent, complete]
+      properties:
+        needed: {type: integer}
+        mapped: {type: integer}
+        verified: {type: integer}
+        unmapped: {type: integer}
+        unverified: {type: integer}
+        percent: {type: integer}
+        complete: {type: boolean}
+    StaffTaxCodeEntry:
+      type: object
+      required: [internalTaxCode, outcome, provider, providerCode, verified, state, stateLabel]
+      properties:
+        internalTaxCode: {type: string}
+        categoryCode: {type: string}
+        categoryName: {type: string}
+        outcome: {type: string}
+        outcomeLabel: {type: string}
+        outcomeName: {type: string}
+        provider: {type: string}
+        providerCode: {type: [string, 'null']}
+        verified: {type: boolean}
+        state: {type: string, enum: [NOT_NEEDED, UNMAPPED, UNVERIFIED, VERIFIED]}
+        stateLabel: {type: string}
+        note: {type: string}
+        mapVersion: {type: integer}
+        changedByName: {type: string}
+        changedAt: {type: string}
+    StaffTaxCodeUpdate:
+      type: object
+      required: [provider, reason]
+      properties:
+        provider: {type: string, enum: [STRIPE, AVALARA]}
+        providerCode: {type: [string, 'null'], description: Empty or null clears the code}
+        verified: {type: boolean}
+        reason: {type: string, minLength: 10, maxLength: 1000}
+    StaffTaxCodeMapExport:
+      type: object
+      required: [filename, csv, rows]
+      properties:
+        filename: {type: string}
+        csv: {type: string}
+        rows: {type: integer}
+    StaffTaxCodeMapImport:
+      type: object
+      required: [provider, csv]
+      properties:
+        provider: {type: string, enum: [STRIPE, AVALARA]}
+        csv: {type: string, maxLength: 262144}
+        dryRun: {type: boolean}
+        reason: {type: string, minLength: 10, maxLength: 1000, description: Required unless dryRun}
+    StaffTaxCodeMapImportResult:
+      type: object
+      required: [provider, rows, changed, unchanged, problems, preview, applied, dryRun]
+      properties:
+        provider: {type: string}
+        rows: {type: integer}
+        changed: {type: integer}
+        unchanged: {type: integer}
+        applied: {type: integer}
+        dryRun: {type: boolean}
+        blocked: {type: boolean, description: The file has invalid rows so nothing was applied}
+        problems: {type: array, items: {type: object, additionalProperties: true, description: 'line, internalTaxCode, message'}}
+        preview: {type: array, items: {type: object, additionalProperties: true}}
+    StaffTaxMethod:
+      type: object
+      required: [method, methodLabel, methodExplain, options, shadowOptions, providers, history, runbookPath, canConfigure]
+      properties:
+        method: {type: string, enum: [RULES, STRIPE_TAX, AVALARA]}
+        methodLabel: {type: string}
+        methodExplain: {type: string}
+        shadowProvider: {type: string}
+        shadowLabel: {type: string}
+        activeProvider: {type: string}
+        options: {type: array, items: {type: object, additionalProperties: true, description: 'method, label, explain, available, blockedReason, current'}}
+        shadowOptions: {type: array, items: {type: object, additionalProperties: true}}
+        providers: {type: array, items: {type: object, additionalProperties: true}}
+        history: {type: array, items: {type: object, additionalProperties: true}}
+        changedByName: {type: string}
+        changedAt: {type: string}
+        runbookPath: {type: string}
+        canConfigure: {type: boolean}
+        draftNotice: {type: string}
+    StaffTaxMethodChange:
+      type: object
+      required: [method, reason]
+      properties:
+        method: {type: string, enum: [RULES, STRIPE_TAX, AVALARA]}
+        shadowProvider: {type: [string, 'null'], enum: [STRIPE, AVALARA, null, '']}
+        reason: {type: string, minLength: 10, maxLength: 1000}
+    StaffTaxShadow:
+      type: object
+      required: [provider, from, to, shadowOff, canConfigure]
+      properties:
+        provider: {type: string}
+        providerLabel: {type: string}
+        from: {type: string}
+        to: {type: string}
+        shadowOff: {type: boolean}
+        message: {type: string}
+        linesCompared: {type: number}
+        linesDiffering: {type: number}
+        differingPct: {type: number}
+        absoluteDifferenceText: {type: string}
+        netDifferenceText: {type: string}
+        byCode: {type: array, items: {type: object, additionalProperties: true}}
+        byCategory: {type: array, items: {type: object, additionalProperties: true}}
+        byOutcome: {type: array, items: {type: object, additionalProperties: true}}
+        byState: {type: array, items: {type: object, additionalProperties: true}, description: Only when tax-returns sends shipToState on a difference}
+        kinds: {type: array, items: {type: object, additionalProperties: true}}
+        items: {type: array, description: Sample differences with both quotes, items: {type: object, additionalProperties: true}}
+        total: {type: integer}
+        page: {type: integer}
+        size: {type: integer}
+        partial: {type: boolean, description: More differences exist than were read}
+        readiness: {$ref: '#/components/schemas/StaffTaxReadiness'}
+        runbookPath: {type: string}
+        canConfigure: {type: boolean}
+    StaffTaxReadiness:
+      type: object
+      required: [ready, headline, checks, thresholdSource, thresholds]
+      properties:
+        ready: {type: boolean}
+        headline: {type: string}
+        checks: {type: array, items: {type: object, required: [key, title, ok, detail], properties: {key: {type: string}, title: {type: string}, ok: {type: boolean}, detail: {type: string}}}}
+        thresholdSource: {type: string, enum: [DEFAULT, TAX_RETURNS]}
+        thresholds: {type: object, additionalProperties: true}
+        rateNote: {type: string}

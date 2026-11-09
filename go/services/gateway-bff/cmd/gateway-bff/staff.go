@@ -86,6 +86,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 	out.Preorders = app.NewStaffPreordersService(d)
 	out.Inventory = app.NewStaffInventoryService(d)
 	out.Markets = app.NewStaffMarketsService(d)
+	out.Tax = app.NewStaffTaxService(d)
 	out.ContentPages = app.NewStaffContentPagesService(d)
 	out.Taxonomy = app.NewStaffTaxonomyService(d)
 	out.Plans = app.NewStaffPlansService(d)

@@ -39,6 +39,9 @@ type StaffServices struct {
 	// Taxonomy serves Catalog → Categories: the category tree, product-type schemas and the audit trail; routes are
 	// registered when it is set.
 	Taxonomy app.StaffTaxonomyService
+	// Tax serves the category tax tools of Fees & commissions → Sales tax (profiles, review queue, provider code maps,
+	// method with SHADOW provider, shadow report); routes are registered when it is set.
+	Tax app.StaffTaxService
 	// Inventory serves the Inventory hub and AfroTransact Retail (1P) workspace (S281); routes are registered when it is set.
 	Inventory app.StaffInventoryService
 	// Plans serves Plans & billing (S292–S297); routes are registered when it is set.
@@ -126,6 +129,9 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	}
 	if s.Markets != nil {
 		h.registerStaffMarkets(route)
+	}
+	if s.Tax != nil {
+		h.registerStaffTax(route)
 	}
 	if s.Departments != nil {
 		h.registerStaffDepartments(route)
