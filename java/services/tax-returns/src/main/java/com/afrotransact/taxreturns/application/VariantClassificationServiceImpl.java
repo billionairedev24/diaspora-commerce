@@ -84,7 +84,9 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
                         "Approved by policy " + props.tax().classification().approvalPolicy(), rules, null,
                         summary(saved, r)));
             }
-            remember(saved, r, e.ownerOrgId(), actor, now);
+            if (r != null) {
+                remember(saved, r, e.ownerOrgId(), actor, now);
+            }
             events.variant(saved, null, r, "Facts reported by catalog", actor, now);
             return;
         }

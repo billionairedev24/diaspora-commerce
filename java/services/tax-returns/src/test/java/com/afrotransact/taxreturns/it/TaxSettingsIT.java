@@ -55,10 +55,10 @@ class TaxSettingsIT {
         assertThat(settings.current().method()).as("our own rules until staff choose").isEqualTo(TaxMethod.RULES);
         assertThat(settings.current().stripeAvailable()).isTrue();
 
-        assertThatThrownBy(() -> settings.change(TaxMethod.STRIPE_TAX, "short"))
+        assertThatThrownBy(() -> settings.change(TaxMethod.STRIPE_TAX, null, "short"))
                 .isInstanceOf(ReturnRuleViolation.class).hasMessageContaining("at least");
 
-        TaxSettings on = settings.change(TaxMethod.STRIPE_TAX, "Registrations are done in Stripe");
+        TaxSettings on = settings.change(TaxMethod.STRIPE_TAX, null, "Registrations are done in Stripe");
         assertThat(on.method()).isEqualTo(TaxMethod.STRIPE_TAX);
         assertThat(resolver.method()).isEqualTo(TaxMethod.STRIPE_TAX);
         assertThat(on.changedBy()).isEqualTo("staff_1");
@@ -68,10 +68,10 @@ class TaxSettingsIT {
             assertThat(h.reason()).isEqualTo("Registrations are done in Stripe");
         });
 
-        assertThat(settings.change(TaxMethod.STRIPE_TAX, "Choosing the same thing again").history())
+        assertThat(settings.change(TaxMethod.STRIPE_TAX, null, "Choosing the same thing again").history())
                 .as("no change, no history row").hasSize(1);
 
-        TaxSettings off = settings.change(TaxMethod.RULES, "Falling back to our own rules");
+        TaxSettings off = settings.change(TaxMethod.RULES, null, "Falling back to our own rules");
         assertThat(off.method()).isEqualTo(TaxMethod.RULES);
         assertThat(off.history()).extracting(h -> h.to()).containsExactly(TaxMethod.RULES, TaxMethod.STRIPE_TAX);
         assertThat(off.history().getFirst().from()).isEqualTo(TaxMethod.STRIPE_TAX);
@@ -83,7 +83,7 @@ class TaxSettingsIT {
         assertThatThrownBy(settings::current).isInstanceOf(ForbiddenActionException.class);
         actors.service("tax:read");
         assertThat(settings.current()).isNotNull();
-        assertThatThrownBy(() -> settings.change(TaxMethod.RULES, "Not allowed with read only"))
+        assertThatThrownBy(() -> settings.change(TaxMethod.RULES, null, "Not allowed with read only"))
                 .isInstanceOf(ForbiddenActionException.class);
     }
 }
