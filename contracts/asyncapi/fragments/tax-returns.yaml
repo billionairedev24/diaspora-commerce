@@ -21,6 +21,7 @@ channels:
       returnsRefundFailed: {$ref: '#/components/messages/returnsRefundFailed'}
       taxSaleRecorded: {$ref: '#/components/messages/taxSaleRecorded'}
       taxRefundReversed: {$ref: '#/components/messages/taxRefundReversed'}
+      taxClassificationChanged: {$ref: '#/components/messages/taxClassificationChanged'}
 operations:
   publishTaxReturnsEvents:
     action: send
@@ -117,7 +118,34 @@ components:
       title: 'Tax given back by a refund (booked negative in the month of the refund)'
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/TaxLedgerEntry'}
+    taxClassificationChanged:
+      name: tax.classification.changed
+      title: A category tax profile, the provider code map or a variant's classification changed
+      summary: >-
+        Key = variant ATIN for kind VARIANT_CLASSIFICATION and categoryCode for the profile kinds. catalog-service
+        re-evaluates the publish gate of the affected products (a profile that is no longer ACTIVE, or a variant that
+        is no longer READY, takes live listings out of checkout until fixed); the staff console and search do not need it.
+        ruleVersion changes whenever a profile's table, status or a code map entry changes.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/TaxClassificationChanged'}
   schemas:
+    TaxClassificationChanged:
+      type: object
+      required: [kind, ruleVersion, changedBy, occurredAt]
+      properties:
+        kind: {type: string, enum: [PROFILE_STATUS, PROFILE_RULES, PROVIDER_CODE_MAP, VARIANT_CLASSIFICATION]}
+        categoryCode: {type: string}
+        atin: {type: [string, 'null'], description: 'Variant ATIN (kind VARIANT_CLASSIFICATION)'}
+        productId: {type: [string, 'null'], format: uuid}
+        status: {type: string, description: 'New profile status (PROFILE_STATUS) or record/resolve status (VARIANT_CLASSIFICATION)'}
+        previousStatus: {type: [string, 'null']}
+        outcome: {type: [string, 'null'], enum: [EXEMPT, TAXABLE, BLOCKED, null]}
+        internalTaxCode: {type: [string, 'null']}
+        provider: {type: [string, 'null'], enum: [STRIPE, AVALARA, null], description: 'Set for PROVIDER_CODE_MAP'}
+        ruleVersion: {type: string}
+        reason: {type: [string, 'null']}
+        changedBy: {type: string}
+        occurredAt: {type: string, format: date-time}
     ReturnsRma:
       type: object
       required: [rmaId, number, orderId, orderNumber, shipmentId, customerId, sellerOrgId, fulfilmentType, method,

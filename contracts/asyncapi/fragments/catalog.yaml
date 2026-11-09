@@ -16,6 +16,7 @@ channels:
       catalogProductTakenDown: {$ref: '#/components/messages/catalogProductTakenDown'}
       catalogProductReinstated: {$ref: '#/components/messages/catalogProductReinstated'}
       catalogProductTermsChanged: {$ref: '#/components/messages/catalogProductTermsChanged'}
+      catalogProductTaxFactsChanged: {$ref: '#/components/messages/catalogProductTaxFactsChanged'}
       catalogProductResubmitted: {$ref: '#/components/messages/catalogProductResubmitted'}
       catalogProductRatingChanged: {$ref: '#/components/messages/catalogProductRatingChanged'}
   catalogProductReviewEvents:
@@ -174,6 +175,16 @@ components:
       summary: trust-ops-service queues it for moderation again, like catalog.product.created with status IN_REVIEW.
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/CatalogProductEvent'}
+    catalogProductTaxFactsChanged:
+      name: catalog.product.tax-facts-changed
+      title: Tax facts or the category of a product changed (category tax build)
+      summary: >-
+        Published, together with catalog.product.updated, when a seller or staff change a variant's tax facts (owner
+        VARIANT), the seller's behaviour facts (owner OFFER, listing.sellerBehaviour), an evidence file or the product's
+        category or product type. tax-returns-service re-resolves the stored classification of every variant and the
+        seller's decision, marks an approved record STALE when the outcome could change, and queues it for review.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogProductTaxFactsChanged'}
     catalogImportCompleted:
       name: catalog.import.completed
       title: A bulk upload finished importing (S308)
@@ -273,6 +284,34 @@ components:
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/CatalogCategoryRequestEvent'}
   schemas:
+    CatalogProductTaxFactsChanged:
+      type: object
+      required: [productId, ownerOrgId, categoryCode, variants, occurredAt]
+      properties:
+        productId: {type: string, format: uuid}
+        atin: {type: string, pattern: '^AT[0-9A-Z]{8}$'}
+        ownerOrgId: {type: string}
+        categoryCode: {type: string, description: 'Tax profile (category) code, e.g. nuts-seeds'}
+        productTypeCode: {type: string}
+        previousCategoryCode: {type: [string, 'null']}
+        sellerBehaviour:
+          type: object
+          description: Behaviour facts of the owner's listing (owner OFFER), by fact id
+          additionalProperties: true
+        variants:
+          type: array
+          items:
+            type: object
+            required: [atin, facts, changedFactIds]
+            properties:
+              atin: {type: string, description: The variant ATIN (the tax decision attaches here)}
+              sellerSku: {type: string}
+              gtin: {type: [string, 'null']}
+              facts: {type: object, description: 'All current VARIANT facts by fact id', additionalProperties: true}
+              changedFactIds: {type: array, items: {type: string}}
+              evidenceChanged: {type: boolean}
+        changedBy: {type: string}
+        occurredAt: {type: string, format: date-time}
     CatalogProductEvent:
       type: object
       required: [productId, atin, ownerKind, ownerOrgId, status, title, variants]
