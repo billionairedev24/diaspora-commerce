@@ -1,5 +1,11 @@
 # Sales tax classification — design spec (draft for CPA review)
 
+> **Superseded in part (draft):** [category-tax-design.md](./category-tax-design.md) replaces the mapping table, the listing questions,
+> the "safe default: general taxable" principle (now: never guess, block) and the build order below. Still valid: tax code separate from browse
+> category, sellers never type a code, provider neutrality, the staff review/reclassify/report ideas, never-taxable codes, the seller
+> responsibility wording (needs legal review) and the out-of-scope list.
+
+
 **Status:** implemented in tax-returns (V5), catalog (V9) and the staff console (Fees & commissions › Tax classification); see the tax-returns README. Open: Stripe tax transactions and refunds, nexus tracker, remittance record, seller statement screen, making the listing question required. **Owner:** finance + tax-returns. **Not legal or tax advice:** a CPA must approve the code map, the state list and the seller wording before launch.
 
 ## Problem

@@ -1,5 +1,10 @@
 # Taxonomy: how categories, product types and their details are managed (S325)
 
+> **Superseded in part (draft):** the 13 > 73 > product type tree, its tax profiles and the form facts are specified in
+> [category-tax-design.md](./category-tax-design.md). That design replaces the seed taxonomy described here (7 departments, ~29 product
+> types) and the "Seed migrations are the initial data only" seed; the staff tools, audit, requests and brand registry below stay.
+
+
 The catalogue has a browse tree of three levels, **department › category › product type** (for example
 *Fashion › Women › Dresses*), and every product type points at a **schema**: the details sellers fill in (material,
 allergens, a permit number…), the barcode rule (GTIN or ISBN) and the traits that switch form sections on (food,
