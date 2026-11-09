@@ -209,6 +209,7 @@
         "indexer",
         "inventory",
         "offers",
+        "tax-returns",
         "trust-ops"
       ]
     },

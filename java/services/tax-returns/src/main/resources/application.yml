@@ -83,13 +83,35 @@ at:
     tax:
       # RULES = built-in rules engine over the tax_state_rule / tax_local_rate tables (no external calls).
       # STRIPE_TAX also needs STRIPE_SECRET_KEY and Stripe Tax set up (registrations) in the Stripe dashboard.
-      # TAXJAR | AVALARA would need an adapter of the TaxCalculator port (not installed).
+      # AVALARA is a skeleton adapter (config keys and request mapping; the AvaTax call is not written yet).
+      # TAXJAR would need an adapter of the TaxCalculator port (not installed).
+      # This is only the default until staff choose in Settings (PUT /v1/tax/settings).
       provider: ${TAX_PROVIDER:RULES}
-      # What an item is for tax is decided by the tax_classification_rule table (staff-maintained, see
-      # docs/engineering/tax-classification-design.md), not by configuration.
+      # What an item is for tax is decided by the category tax profiles (V10-V12, docs/engineering/category-tax-design.md)
+      # and the variant's approved classification record, never by configuration.
+      classification:
+        # States the rules (dataset) cover; a ship-to elsewhere is blocked at checkout, never guessed.
+        rule-states: [TX]
+        # ALL = every variant record is reviewed by an admin before it is charged (design default).
+        # SENSITIVE = plain taxable, evidence-free records in ACTIVE profiles are approved by the system.
+        approval-policy: ${TAX_APPROVAL_POLICY:ALL}
+        # true = a provider code is sent only after staff marked the mapping verified (set true in prod).
+        require-verified-codes: ${TAX_REQUIRE_VERIFIED_CODES:false}
+        zone: America/Chicago
+      shadow:
+        # A shadow provider that takes longer is dropped (never blocks checkout); at most this many comparisons in flight.
+        timeout: ${TAX_SHADOW_TIMEOUT:4s}
+        max-pending: 50
+        # Also compare cart estimates (quotes without an order id). Off: the report reflects real orders.
+        cart-quotes: false
       stripe:
         secret-key: ${STRIPE_SECRET_KEY:}
         # shipping-tax-code: txcd_92010001   # verify against Stripe's product tax code list
+      avalara:
+        account-id: ${AVALARA_ACCOUNT_ID:}
+        license-key: ${AVALARA_LICENSE_KEY:}
+        company-code: ${AVALARA_COMPANY_CODE:}
+        base-url: ${AVALARA_BASE_URL:https://sandbox-rest.avatax.com}
     returns:
       default-window-days: ${RETURN_WINDOW_DAYS:30}
       window-days-by-product-type:
@@ -142,6 +164,8 @@ at:
       order-topic: at.order.events
       payment-topic: at.payment.events
       carrier-topic: at.carrier-shipment.events
+      # catalog.product.tax-facts-changed arrives on the product topic
+      catalog-topic: at.product.events
     jobs:
       enabled: ${TAX_RETURNS_JOBS_ENABLED:true}
       interval: ${TAX_RETURNS_JOBS_INTERVAL:60s}

@@ -1272,6 +1272,7 @@ components:
         method: {type: string, enum: [RULES, STRIPE_TAX, AVALARA]}
         configuredDefault: {type: string, enum: [RULES, STRIPE_TAX], description: What applies until staff choose (TAX_PROVIDER)}
         stripeAvailable: {type: boolean, description: Stripe Tax can be chosen (its key is set)}
+        avalaraAvailable: {type: boolean, description: 'Avalara can be chosen (account id, license key and company code are set)'}
         shadowProvider: {type: [string, 'null'], enum: [STRIPE, AVALARA, null], description: 'SHADOW mode: this provider is quoted next to the in-house engine on real orders; differences are logged (GET /v1/tax/shadow/report) and the shadow quote is never charged. Null = off.'}
         changedBy: {type: string}
         changedAt: {type: string, format: date-time}
@@ -1284,7 +1285,7 @@ components:
       required: [method, reason]
       properties:
         method: {type: string, enum: [RULES, STRIPE_TAX, AVALARA]}
-        shadowProvider: {type: [string, 'null'], enum: [STRIPE, AVALARA, null], description: Turn SHADOW mode on for this provider, or null to turn it off. Independent of method.}
+        shadowProvider: {type: [string, 'null'], enum: [STRIPE, AVALARA, null], description: 'Turn SHADOW mode on for this provider, or null/absent to turn it off. A PUT replaces both method and shadowProvider. The provider must be configured and differ from the method''s provider (422 tax.shadow-same-as-method); a method that is a provider needs at least one mapped code (422 tax.provider-not-mapped).'}
         reason: {type: string}
     StateTaxRule:
       type: object
@@ -1471,14 +1472,18 @@ components:
           minLength: 0
         taxCategory:
           type: string
-          description: GENERAL | GROCERY | PREPARED_FOOD; when absent productType decides
+          description: 'Legacy: GENERAL | GROCERY | PREPARED_FOOD chosen by the caller. When absent the stored decision of the variant ATIN decides; a line with no definite decision comes back BLOCKED with no rate (there is no default).'
           maxLength: 30
           minLength: 0
         productType:
           type: string
-          description: catalog product type (mapped by at.taxreturns.tax.category-by-product-type)
+          description: catalog product type (no longer decides tax)
           maxLength: 80
           minLength: 0
+        sellerBehaviour:
+          type: object
+          description: 'The seller''s behaviour facts for this listing (sold_heated, heated_by_seller, utensils_provided, seller_is_bakery ...). The stored decision is per (variant ATIN, behaviour); a required behaviour fact that is missing gives MISSING_FACTS and a blocked line.'
+          additionalProperties: {}
         quantity:
           type: integer
           format: int32
@@ -1511,6 +1516,14 @@ components:
             $ref: '#/components/schemas/TaxQuoteLine'
           maxItems: 500
           minItems: 0
+        saleDate:
+          type: string
+          format: date
+          description: Sale date; defaults to today in the rules' jurisdiction. Decides date-bound exemptions (none are open until the holiday calendar exists).
+        orderId:
+          type: string
+          maxLength: 80
+          description: Order or cart id. SHADOW mode compares only quotes that carry one (real orders).
       required:
       - currency
       - lines
@@ -1552,6 +1565,11 @@ components:
           format: int64
         provider:
           type: string
+          description: 'rules, STRIPE_TAX, AVALARA, EXEMPT, or RULES-FALLBACK when a chosen provider could not take the quote and the rules engine answered instead (never hidden; see fallbackLines)'
+        fallbackLines:
+          type: array
+          items: {type: string}
+          description: Line ids the provider could not take when provider is RULES-FALLBACK
         lines:
           type: array
           items:
@@ -1570,7 +1588,7 @@ components:
           format: int64
         rate:
           type: number
-          description: Combined rate applied (fraction, 0.0825 = 8.25 %)
+          description: Combined rate applied (fraction, 0.0825 = 8.25 %); absent on a blocked line
         taxMinor:
           type: integer
           format: int64
@@ -1590,6 +1608,7 @@ components:
         providerTaxCode: {type: string, description: The code sent to the provider for this outcome}
         ruleVersion: {type: string}
         blockedReason: {type: string, description: Plain message for the shopper when the line cannot be taxed}
+        addressPrecision: {type: string, enum: [ZIP, ADDRESS], description: 'How exactly the address was resolved: ZIP (rate table, the documented TX-03 launch limitation) or ADDRESS (a provider resolved the exact address)'}
     CreateReturn:
       type: object
       description: Items of one delivered shipment, the reason per item and the method
@@ -2264,7 +2283,8 @@ components:
       properties:
         categoryCode: {type: string}
         name: {type: string}
-        department: {type: string}
+        department: {type: string, description: Department code}
+        departmentName: {type: string}
         status: {$ref: '#/components/schemas/ProfileStatus'}
         defaultOutcome: {type: string, enum: [EXEMPT, TAXABLE, BLOCKED, CONDITIONAL]}
         scenarioCount: {type: integer}
@@ -2313,6 +2333,8 @@ components:
         provider: {$ref: '#/components/schemas/TaxProvider'}
         providerCode: {type: [string, 'null']}
         verified: {type: boolean, description: A person confirmed the provider treats this code as this outcome}
+        active: {type: boolean, description: The mapping may be used for a quote}
+        verifiedNote: {type: string}
         mapVersion: {type: integer}
         changedBy: {type: string}
         changedAt: {type: string, format: date-time}
@@ -2335,6 +2357,8 @@ components:
         productTypeCode: {type: string}
         status: {$ref: '#/components/schemas/ClassificationRecordStatus'}
         facts: {type: object, additionalProperties: {}}
+        staffFacts: {type: object, additionalProperties: {}, description: Facts set by tax review (owner STAFF)}
+        ownerOrgId: {type: string}
         evidence:
           type: array
           items:
@@ -2386,6 +2410,7 @@ components:
         reason: {type: string}
         staffFacts: {type: object, additionalProperties: {}, description: Facts owned by STAFF, such as exemption_confirmed}
         refinedProviderCodes: {type: object, additionalProperties: {type: string}}
+        decisionRef: {type: string, description: Reference of the tax professional's sign-off}
     ClassificationReclassifyRequest:
       type: object
       required: [categoryCode, reason]
@@ -2406,22 +2431,34 @@ components:
         byInternalTaxCode:
           type: array
           items:
-            type: object
-            properties:
-              internalTaxCode: {type: string}
-              providerCode: {type: string}
-              lines: {type: integer, format: int64}
-              differing: {type: integer, format: int64}
-              absoluteDifferenceMinor: {type: integer, format: int64}
+            $ref: '#/components/schemas/ShadowGroup'
+        byCategory: {type: array, items: {$ref: '#/components/schemas/ShadowGroup'}}
+        byOutcome: {type: array, items: {$ref: '#/components/schemas/ShadowGroup'}, description: 'Per in-house outcome (EXEMPT, TAXABLE or NONE)'}
+        byState: {type: array, items: {$ref: '#/components/schemas/ShadowGroup'}}
+        byKind: {type: array, items: {$ref: '#/components/schemas/ShadowGroup'}, description: 'MATCH, OUTCOME, RATE, PROVIDER_ERROR, NO_DECISION'}
         differences:
           type: array
           items:
             $ref: '#/components/schemas/ShadowDifference'
         page: {type: integer}
         size: {type: integer}
+    ShadowGroup:
+      type: object
+      description: A group of compared lines and how many of them disagree
+      properties:
+        key: {type: string, description: 'The internal tax code, category, outcome, state or kind'}
+        internalTaxCode: {type: string, description: Set for byInternalTaxCode groups}
+        providerCode: {type: string}
+        lines: {type: integer, format: int64}
+        differing: {type: integer, format: int64}
+        disagreementRate: {type: number, description: differing divided by lines}
+        absoluteDifferenceMinor: {type: integer, format: int64}
     ShadowDifference:
       type: object
       properties:
+        orderRef: {type: string, description: The order or cart id the quote carried}
+        categoryCode: {type: string}
+        state: {type: string}
         orderId: {type: string, format: uuid}
         lineId: {type: string}
         atin: {type: string}
