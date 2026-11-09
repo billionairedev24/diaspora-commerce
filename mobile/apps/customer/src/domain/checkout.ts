@@ -12,8 +12,12 @@ export type Wallet = NonNullable<PlaceOrderRequest['wallet']>;
     plain "your cart changed" with a way back to the cart, never the problem's detail, which can name an internal ATIN. */
 export const CART_CHANGED_MESSAGE = 'Your cart changed, please review it.';
 
+/** Placing was refused because an item can't be sold yet (no definite tax decision): plain words, never the server's detail. */
+export const ITEM_BLOCKED_MESSAGE = 'Some items in your order can’t be sold yet. Remove them to place your order.';
+
 export function checkoutFailure(e: unknown): { message: string; cartChanged: boolean } {
   if (isCartMismatch(e)) return { message: CART_CHANGED_MESSAGE, cartChanged: true };
+  if (isApiError(e) && e.code === 'CHECKOUT_ITEM_BLOCKED') return { message: ITEM_BLOCKED_MESSAGE, cartChanged: false };
   return { message: isApiError(e) ? e.message : e instanceof Error ? e.message : 'Payment failed. Try again.', cartChanged: false };
 }
 
@@ -22,6 +26,35 @@ export const DEVICE_AUTH_THRESHOLD_MINOR = 100_00;
 
 export function requiresDeviceAuth(totalMinor: number, wallet?: Wallet | null): boolean {
   return totalMinor > DEVICE_AUTH_THRESHOLD_MINOR || wallet === 'apple_pay';
+}
+
+export type BlockedLine = NonNullable<CheckoutSummary['blockedLines']>[number];
+
+/** Items that can't be sold yet: the order can't be placed while one remains; the shopper removes it. */
+export function blockedLines(summary: CheckoutSummary): BlockedLine[] {
+  return summary.blockedLines ?? [];
+}
+
+export function canPlaceOrder(summary: CheckoutSummary): boolean {
+  return blockedLines(summary).length === 0 && summary.canPlaceOrder !== false;
+}
+
+/** Plain words naming the item and what happens next: no ids and no tax terms (the server's own message is English only). */
+export function blockedItemText(line: Pick<BlockedLine, 'title'>): string {
+  return `We can’t sell ${line.title || 'an item'} yet. We’re still checking its details. Remove it from this order to continue, or try again later.`;
+}
+
+/** "Estimated tax" with where it was worked out, e.g. "Estimated tax · Houston, TX". */
+export function taxLabel(summary: CheckoutSummary): string {
+  return summary.taxJurisdictionLabel ? `Estimated tax · ${summary.taxJurisdictionLabel}` : 'Estimated tax';
+}
+
+/** Says when some or all items carry no tax (mixed or exempt baskets); null when there is nothing to say. */
+export function taxNote(summary: CheckoutSummary): string | null {
+  const lines = summary.taxLines ?? [];
+  const exempt = lines.filter((l) => l.status === 'EXEMPT').length;
+  if (exempt === 0) return null;
+  return lines.some((l) => l.status === 'TAXABLE') ? 'No tax on some of your items, or on their delivery.' : 'No tax on these items, or on their delivery.';
 }
 
 export interface PackageChoice {

@@ -1,7 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { ApiError } from '@afrotransact/api-client';
 import { describe, expect, it } from 'vitest';
 
-import { buildPlaceOrderRequest, type CheckoutSummary, defaultChoices, idempotencyKey, checkoutFailure, CART_CHANGED_MESSAGE, keyAfterFailure, paymentSheetIntent, requiresDeviceAuth, totalFor, validateChoices } from '../src/domain/checkout';
+import { blockedItemText, blockedLines, buildPlaceOrderRequest, canPlaceOrder, CART_CHANGED_MESSAGE, checkoutFailure, type CheckoutSummary, defaultChoices, idempotencyKey, ITEM_BLOCKED_MESSAGE, keyAfterFailure, paymentSheetIntent, requiresDeviceAuth, taxLabel, taxNote, totalFor, validateChoices } from '../src/domain/checkout';
+import { allocateShipping, type AllocationMethod } from '../src/domain/shippingAllocation';
 
 const promise = { days: 0, label: 'Today', prefix: 'FREE delivery', free: true, feeMinor: 0, expressLabel: null, cutoff: null };
 const summary = {
@@ -105,5 +109,49 @@ describe('checkoutFailure', () => {
     expect(checkoutFailure(problem('orders.address-not-found', 'Address a1 is not in your address book'))).toEqual({ message: 'Address a1 is not in your address book', cartChanged: false });
     expect(checkoutFailure(new Error('Your card was declined.')).message).toBe('Your card was declined.');
     expect(checkoutFailure('boom').message).toBe('Payment failed. Try again.');
+  });
+});
+
+describe('items that can’t be sold yet and the tax lines', () => {
+  const held = {
+    ...summary,
+    taxMinor: 0,
+    taxJurisdictionLabel: 'Houston, TX',
+    taxLines: [{ lineId: 'l1', status: 'BLOCKED', taxMinor: 0, shippingMinor: 0 }],
+    blockedLines: [{ lineId: 'l1', offerId: 'of-1', atin: 'ATIN-1', title: 'Gift card', packageId: 'pkg-1', message: 'English from the server', action: 'REMOVE' }],
+    canPlaceOrder: false
+  } as unknown as CheckoutSummary;
+
+  it('blocks placing while a line remains and names the item without ids or tax terms', () => {
+    expect(canPlaceOrder(summary)).toBe(true);
+    expect(canPlaceOrder(held)).toBe(false);
+    expect(blockedLines(held)).toHaveLength(1);
+    const text = blockedItemText(blockedLines(held)[0] as NonNullable<typeof held.blockedLines>[number]);
+    expect(text).toBe('We can’t sell Gift card yet. We’re still checking its details. Remove it from this order to continue, or try again later.');
+    expect(text).not.toMatch(/tax|ATIN|of-1/i);
+  });
+
+  it('a refused placement reads as plain words, never the server detail', () => {
+    const e = new ApiError({ type: 'about:blank', title: 'x', status: 422, code: 'CHECKOUT_ITEM_BLOCKED', detail: 'We can’t sell ATG0000123 (orders)' });
+    expect(checkoutFailure(e)).toEqual({ message: ITEM_BLOCKED_MESSAGE, cartChanged: false });
+  });
+
+  it('words the tax row with where it was worked out and says when items carry no tax', () => {
+    expect(taxLabel(summary)).toBe('Estimated tax');
+    expect(taxLabel(held)).toBe('Estimated tax · Houston, TX');
+    expect(taxNote(summary)).toBeNull();
+    const lines = (...status: string[]) => ({ ...summary, taxLines: status.map((s, i) => ({ lineId: `l${i}`, status: s, taxMinor: 0, shippingMinor: 0 })) }) as unknown as CheckoutSummary;
+    expect(taxNote(lines('EXEMPT', 'TAXABLE'))).toBe('No tax on some of your items, or on their delivery.');
+    expect(taxNote(lines('EXEMPT', 'EXEMPT'))).toBe('No tax on these items, or on their delivery.');
+    expect(taxNote(lines('TAXABLE'))).toBeNull();
+  });
+});
+
+describe('shipping allocation (shared vectors with orders, gateway-bff and the web mock)', () => {
+  const vectors = JSON.parse(readFileSync(resolve(__dirname, '../../../../tools/checkout/shipping-allocation-vectors.json'), 'utf8')) as {
+    cases: { name: string; method: AllocationMethod; totalMinor: number; weightsMinor: number[]; expectedMinor: number[] }[];
+  };
+  it.each(vectors.cases)('$name', (c) => {
+    expect(allocateShipping(c.totalMinor, c.weightsMinor, c.method)).toEqual(c.expectedMinor);
   });
 });

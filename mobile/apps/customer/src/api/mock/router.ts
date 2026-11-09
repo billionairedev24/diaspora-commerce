@@ -2,6 +2,7 @@
    bookings routes from in-memory fixtures. It only runs when env.mocks is true (never in prod builds). */
 import { bffProblemType, type Cart, type CartPackage, type DeliveryPromise, type ProductDetail, type ProductSummary, type SearchPage } from '@afrotransact/api-client';
 
+import { allocateShipping } from '../../domain/shippingAllocation';
 import { type Booking, type CheckoutSummary, type OrderConfirmation, type OrderTracking } from '../types';
 import { mockDb, type MockLine, type MockReview, type MockShipment, nextId, productByAtin } from './db';
 import { DRESS_SIZE_CHART, type FixtureProduct, PRODUCTS, PROVIDERS, USER } from './fixtures';
@@ -160,11 +161,42 @@ function checkoutSummary(): CheckoutSummary | null {
   if (!packages.length) return null;
   const subtotal = packages.reduce((a, p) => a + p.subtotalMinor, 0);
   const shipping = packages.reduce((a, p) => a + (p.deliveryOptions.find((o) => o.free) ?? p.deliveryOptions[0] ?? { feeMinor: 0 }).feeMinor, 0);
-  const tax = Math.round(subtotal * TAX_RATE);
+  const t = mockTax(packages, shipping);
   return {
-    packages, addresses: db.addresses, paymentMethods: db.paymentMethods, subtotalMinor: subtotal, shippingMinor: shipping, taxMinor: tax,
-    taxRateLabel: '8.25% TX', totalMinor: subtotal + shipping + tax, currency: 'USD', sellerCount: new Set(packages.map((p) => p.seller.id)).size
+    packages, addresses: db.addresses, paymentMethods: db.paymentMethods, subtotalMinor: subtotal, shippingMinor: shipping, taxMinor: t.taxMinor,
+    taxRateLabel: '8.25% TX', taxJurisdictionLabel: 'Houston, TX', taxLines: t.taxLines, blockedLines: t.blockedLines, canPlaceOrder: t.blockedLines.length === 0,
+    shippingTaxAllocation: { method: 'PROPORTIONAL', approved: false, note: 'Open legal decision: the mixed-basket delivery attribution method must be approved by the tax adviser before production.' },
+    totalMinor: subtotal + shipping + t.taxMinor, currency: 'USD', sellerCount: new Set(packages.map((p) => p.seller.id)).size
   } as CheckoutSummary;
+}
+
+/** Departments whose tax decision isn't definite yet (held for approval): a line of one is blocked at checkout. */
+const HELD_DEPARTMENTS = new Set(['Gift cards', 'Digital downloads', 'Event tickets']);
+
+/** The stored decision per line (the mock stands in for tax-returns): groceries are exempt, held departments blocked,
+    the rest taxable; each package's delivery is allocated over its lines by item value, as orders does. */
+function mockTax(packages: Array<{ packageId: string; lines: Array<{ lineId: string; offerId: string; atin: string; title: string; lineTotalMinor: number }> ; deliveryOptions: Array<{ free: boolean; feeMinor: number }> }>, _shipping: number) {
+  const taxLines: NonNullable<CheckoutSummary['taxLines']> = [];
+  const blockedLines: NonNullable<CheckoutSummary['blockedLines']> = [];
+  let taxMinor = 0;
+  for (const p of packages) {
+    const fee = (p.deliveryOptions.find((o) => o.free) ?? p.deliveryOptions[0] ?? { feeMinor: 0 }).feeMinor;
+    const ship = allocateShipping(fee, p.lines.map((l) => l.lineTotalMinor));
+    p.lines.forEach((l, i) => {
+      const dept = productByAtin(l.atin)?.department ?? '';
+      const shippingMinor = ship[i] ?? 0;
+      if (HELD_DEPARTMENTS.has(dept)) {
+        taxLines.push({ lineId: l.lineId, status: 'BLOCKED', taxMinor: 0, shippingMinor });
+        blockedLines.push({ lineId: l.lineId, offerId: l.offerId, atin: l.atin, title: l.title, packageId: p.packageId, message: `We can't sell ${l.title} yet.`, action: 'REMOVE' });
+        return;
+      }
+      const exempt = dept === 'Groceries';
+      const tax = exempt ? 0 : Math.round((l.lineTotalMinor + shippingMinor) * TAX_RATE);
+      taxMinor += tax;
+      taxLines.push({ lineId: l.lineId, status: exempt ? 'EXEMPT' : 'TAXABLE', taxMinor: tax, shippingMinor });
+    });
+  }
+  return { taxMinor, taxLines, blockedLines };
 }
 
 function placeOrder(body: { addressId?: string; paymentMethodId?: string; wallet?: string; deliverySelections?: Array<{ packageId: string; option: MockShipment['method']; preferences?: { handover?: 'hand' | 'door' | 'desk' } }> }): Response {
@@ -172,6 +204,8 @@ function placeOrder(body: { addressId?: string; paymentMethodId?: string; wallet
   const summary = checkoutSummary();
   if (!summary) return problem(409, 'Your cart is empty', 'CART_EMPTY');
   if (!body.addressId || !db.addresses.some((a) => a.id === body.addressId)) return problem(422, 'Choose an address', 'VALIDATION');
+  const held = summary.blockedLines?.[0];
+  if (held) return problem(422, 'We can’t sell this item yet', 'CHECKOUT_ITEM_BLOCKED', held.message);
   if (!body.paymentMethodId && !body.wallet) return problem(422, 'Choose a payment method', 'VALIDATION');
   if (body.paymentMethodId === 'pm_card_declined') return problem(402, 'Your card was declined.', 'PAYMENT_DECLINED');
   const orderNumber = `AT-${1050 + (db.seq % 900)}-${1000 + ((db.seq * 7919) % 9000)}`;

@@ -15,7 +15,7 @@ import { accountKeys, cartKeys, checkoutKeys } from '@/api/keys';
 import { useCheckoutSummary } from '@/api/queries';
 import { type CheckoutSummary } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
-import { buildPlaceOrderRequest, checkoutFailure, defaultChoices, idempotencyKey, keyAfterFailure, type PackageChoice, paymentSheetIntent, requiresDeviceAuth, totalFor, validateChoices } from '@/domain/checkout';
+import { blockedItemText, blockedLines, buildPlaceOrderRequest, canPlaceOrder, checkoutFailure, defaultChoices, idempotencyKey, keyAfterFailure, type PackageChoice, paymentSheetIntent, requiresDeviceAuth, taxLabel, taxNote, totalFor, validateChoices } from '@/domain/checkout';
 import { usePayments } from '@/payments/usePayments';
 import { c, sp, t } from '@/theme';
 import { PaymentMark } from '@/ui/PaymentMarks';
@@ -56,13 +56,18 @@ export default function Checkout() {
   const [err, setErr] = useState('');
   const [cartChanged, setCartChanged] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
   const key = useRef<string | null>(null);
   /** The order the current key created (asked about after a failure before a new key is made). */
   const placedNumber = useRef<string | null>(null);
 
   useEffect(() => {
     if (!s) return;
-    setChoices((cur) => (Object.keys(cur).length ? cur : defaultChoices(s)));
+    // Keep the shopper's choices for the packages still in the order (a removed item can drop a package).
+    setChoices((cur) => {
+      const defaults = defaultChoices(s);
+      return Object.fromEntries(Object.entries(defaults).map(([id, d]) => [id, cur[id] ?? d]));
+    });
     setAddressId((cur) => cur ?? s.addresses.find((a) => a.isDefault)?.id ?? s.addresses[0]?.id ?? null);
     setPay((cur) => cur ?? (s.paymentMethods.find((p) => p.isDefault) ? { kind: 'saved', id: s.paymentMethods.find((p) => p.isDefault)?.id ?? '' } : { kind: 'sheet', wallet: Platform.OS === 'ios' ? 'apple_pay' : 'google_pay' }));
   }, [s]);
@@ -85,9 +90,23 @@ export default function Checkout() {
 
   const setChoice = (pkgId: string, patch: Partial<PackageChoice>) => setChoices((cur) => ({ ...cur, [pkgId]: { ...(cur[pkgId] ?? { option: 'carrier' }), ...patch } }));
 
+  /** Takes an item that can't be sold yet out of this order (it stays in the cart) and reads the summary again. */
+  const removeBlocked = async (lineId: string) => {
+    setRemoving(lineId);
+    try {
+      await api.bff.updateCartLine(lineId, { selected: false });
+      await Promise.all([qc.invalidateQueries({ queryKey: cartKeys.all }), qc.invalidateQueries({ queryKey: checkoutKeys.all })]);
+    } catch (e) {
+      setErr(isApiError(e) ? e.message : 'Couldn’t remove it. Try again.');
+    } finally {
+      setRemoving(null);
+    }
+  };
+
   const place = async (sum: CheckoutSummary) => {
     setErr('');
     setCartChanged(false);
+    if (!canPlaceOrder(sum)) return setErr('Remove the items that can’t be sold yet to place your order.');
     if (!address) return setErr('Add a delivery address first.');
     const invalid = validateChoices(sum, choices);
     if (invalid) return setErr(invalid);
@@ -150,6 +169,7 @@ export default function Checkout() {
       icon={isWallet ? (Platform.OS === 'ios' ? AppleLogo : GoogleLogo) : LockSimple}
       label={isWallet ? `Pay with ${walletLabel} · ${formatMoney(total, s.currency)}` : `Place order · ${formatMoney(total, s.currency)}`}
       loading={busy}
+      disabled={!canPlaceOrder(s)}
       onPress={() => void place(s)}
     />
   );
@@ -167,6 +187,20 @@ export default function Checkout() {
           </View>
         ) : <AppText>Add an address</AppText>}
       </Card>
+
+      {blockedLines(s).length ? (
+        <View style={{ gap: sp['2'] }} accessibilityRole="alert" testID="checkout-blocked">
+          <Banner tone="danger" icon={WarningCircle}>Some items can’t be sold yet</Banner>
+          {blockedLines(s).map((l) => (
+            <Card key={l.lineId} accessibilityLabel={`${l.title} can’t be sold yet`}>
+              <View style={styles.between}>
+                <AppText style={{ flex: 1 }}>{blockedItemText(l)}</AppText>
+                <Button kind="dark" size="md" label="Remove" accessibilityLabel={`Remove ${l.title} from this order`} loading={removing === l.lineId} onPress={() => void removeBlocked(l.lineId)} />
+              </View>
+            </Card>
+          ))}
+        </View>
+      ) : null}
 
       {s.packages.map((p) => {
         const ch = choices[p.packageId];
@@ -256,7 +290,8 @@ export default function Checkout() {
       <View style={styles.summary}>
         <KeyValue k="Items" v={formatMoney(s.subtotalMinor, s.currency)} />
         <KeyValue k="Delivery" v={total - s.subtotalMinor - s.taxMinor ? formatMoney(total - s.subtotalMinor - s.taxMinor, s.currency) : 'Free'} />
-        <KeyValue k={`Estimated tax (${s.taxRateLabel})`} v={formatMoney(s.taxMinor, s.currency)} />
+        <KeyValue k={taxLabel(s)} v={formatMoney(s.taxMinor, s.currency)} />
+        {taxNote(s) ? <AppText variant="caption" color={c.textMuted}>{taxNote(s)}</AppText> : null}
         <KeyValue k="Total" v={formatMoney(total, s.currency)} strong />
         <AppText variant="caption" color={c.textMuted}>One charge, split automatically between AfroTransact and each seller.</AppText>
       </View>
