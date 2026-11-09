@@ -7,6 +7,11 @@ import { ModulePage } from '@/components/module/ModulePage';
 import { ResourceTable } from '@/components/resources/ResourceTable';
 import { useT } from '@/i18n/t';
 
+import { TaxCodeMapPanel } from '../tax/TaxCodeMapPanel';
+import { TaxMethodPanel } from '../tax/TaxMethodPanel';
+import { TaxProfilesPanel } from '../tax/TaxProfilesPanel';
+import { TaxReviewPanel } from '../tax/TaxReviewPanel';
+import { TaxShadowPanel } from '../tax/TaxShadowPanel';
 import { FeeSchedulesPanel } from './FeeSchedulesPanel';
 import { NegotiatedRatesPanel } from './NegotiatedRatesPanel';
 import { RateCalculator } from './RateCalculator';
@@ -29,18 +34,11 @@ export function FeesView({ scope = 'all' }: { scope?: 'all' | 'fees' | 'tax' } =
           { value: 'connection-fees', label: t('st.rates.tab.connection'), content: <RateMatrixPanel kind="SERVICE" /> },
           { value: 'negotiated', label: t('st.rates.tab.negotiated'), content: <NegotiatedRatesPanel /> },
           { value: 'calculator', label: t('st.rates.tab.calculator'), content: <RateCalculator /> },
-          {
-            value: 'tax-method',
-            label: 'Who calculates tax',
-            content: (
-              <div className="flex flex-col gap-3">
-                <p className="m-0 max-w-[80ch] text-sm text-muted">
-                  Until Stripe Tax is set up, AfroTransact works out the tax itself from the rates and tax codes in the next tabs. Open the row to change the method.
-                </p>
-                <ResourceTable resource="tax-settings" urlPrefix="tax-settings" />
-              </div>
-            )
-          },
+          { value: 'tax-method', label: 'Who calculates tax', content: <TaxMethodPanel /> },
+          { value: 'tax-profiles', label: 'Tax profiles', content: <TaxProfilesPanel /> },
+          { value: 'tax-review', label: 'Tax review', content: <TaxReviewPanel /> },
+          { value: 'tax-codes', label: 'Provider codes', content: <TaxCodeMapPanel /> },
+          { value: 'tax-shadow', label: 'Shadow report', content: <TaxShadowPanel /> },
           {
             value: 'tax-filings',
             label: 'Tax filings',
@@ -74,32 +72,9 @@ export function FeesView({ scope = 'all' }: { scope?: 'all' | 'fees' | 'tax' } =
                 <ResourceTable resource="tax-rates" urlPrefix="tax-rates" />
               </div>
             )
-          },
-          {
-            value: 'tax-classification',
-            label: 'Tax classification',
-            content: (
-              <div className="flex flex-col gap-8">
-                <section className="flex flex-col gap-2">
-                  <h3 className="m-0 text-md">Review queue</h3>
-                  <p className="m-0 text-sm text-muted">
-                    Items taxed as general goods because no rule matched (an unanswered question, a custom category or a new product type). Add a rule below, or mark the item reviewed.
-                  </p>
-                  <ResourceTable resource="tax-review" urlPrefix="tax-review" />
-                </section>
-                <section className="flex flex-col gap-2">
-                  <h3 className="m-0 text-md">Rules</h3>
-                  <ResourceTable resource="tax-rules" urlPrefix="tax-rules" />
-                </section>
-                <section className="flex flex-col gap-2">
-                  <h3 className="m-0 text-md">Tax codes</h3>
-                  <ResourceTable resource="tax-codes" urlPrefix="tax-codes" />
-                </section>
-              </div>
-            )
           }
   ];
-  const taxTabs = ['tax-method', 'tax-filings', 'tax-nexus', 'tax-rates', 'tax-classification'];
+  const taxTabs = ['tax-method', 'tax-profiles', 'tax-review', 'tax-codes', 'tax-shadow', 'tax-filings', 'tax-nexus', 'tax-rates'];
   const items = all.filter((it) => (scope === 'all' ? it.value !== 'tax-method' : scope === 'tax' ? taxTabs.includes(it.value) : !taxTabs.includes(it.value)));
   return (
     <ModulePage module="fees">

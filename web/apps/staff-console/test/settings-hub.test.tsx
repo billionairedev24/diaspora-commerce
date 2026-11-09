@@ -51,8 +51,8 @@ describe('Settings', () => {
         <SettingsHub />
       </ConsoleShell>
     );
-    expect(await screen.findByText('Our own rules')).toBeInTheDocument();
-    expect(await screen.findByText('Not set up yet')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Our own rules works out the tax now' })).toBeInTheDocument();
+    expect(await screen.findByText(/Can’t be chosen yet: Avalara isn’t set up yet/)).toBeInTheDocument();
   });
 
   const hub = () =>
