@@ -45,6 +45,7 @@ Local ports come from `infra/local/PORTS.md`.
 | `PLATFORM_ENV` | `local` / `dev` / `uat` / `prod` (same as `APP_ENV`) | everything |
 | `PLATFORM_DOMAIN` | the environment's base domain (`dev.afrotransact.com`, ..., `afrotransact.com`), never `www.` | identity WebAuthn RP id, mcp-server docs-portal origin |
 | `global.storefrontHost` (Helm, not an env var) | `www` (default, set explicitly in dev, uat and prod) or `apex` (explicit opt-out): where the storefront lives | the at-service library, which derives `PUBLIC_WEB_URL` from it |
+| `global.sellerHost`, `global.adminHost` (Helm, optional) | a FULL host name (e.g. `seller-test.example.com`) replacing `seller.<domain>` / `admin.<domain>`; default empty = unchanged. Only the OVH test pipeline sets them (`OVH_SELLER_HOST`, `OVH_ADMIN_HOST`) | the at-service library, which derives `SELLER_CENTER_URL` / `STAFF_CONSOLE_URL` from them |
 | `PUBLIC_WEB_URL` | storefront origin: `https://www.<domain>` when `storefrontHost: www` (default), else `https://<domain>` | identity (home, redirect URIs, CORS, WebAuthn), content newsletter links, bookings manage link, notifications links, storefront cache purges, ai-gateway OpenRouter referer, mcp-server allowed origins |
 | `SELLER_CENTER_URL` | Seller Center & Provider Hub origin | identity (invitation link, redirect URIs, CORS), notifications links |
 | `STAFF_CONSOLE_URL` | staff console origin | identity (redirect URIs, CORS) |
@@ -208,6 +209,73 @@ that still point at the apex open in the browser and reach `www.` through the re
 redirect rule to answer (`infra/cloudflare/environment.tf` creates it). The redirect ruleset is zone-wide (one per zone and phase), so the prod (`manage_zone`)
 run owns the rules for every environment's base domain (`apex_redirect_environments`); each environment's run creates its
 own proxied placeholder record. Certificates: `www.dev.` and `www.uat.` are covered by the existing `*.dev` / `*.uat` advanced certificates.
+
+## Free certificate layout (flat web hosts)
+
+Cloudflare's free Universal certificate covers the zone apex and **one** label under it. The platform builds every public host as
+`<name>.<base>`; for a base that is itself below the zone (the OVH test environment at `test.afrotransact.com`, zone `afrotransact.com`) the
+web hosts `www.`/`seller.`/`admin.<base>` are two labels deep and get no free certificate. Owner decision: flat names for the **three web apps
+only**; the backend keeps `<name>.<base>` (grey-cloud DNS-only records, Let's Encrypt on the server). Nothing changes for dev, uat, prod, local or
+anyone who does not set the new variables.
+
+| Setting | Where | Value for `test.afrotransact.com` |
+|---|---|---|
+| `OVH_DOMAIN` (`PLATFORM_DOMAIN`, `global.domain`) | GitHub Environment `ovh-vps` | `test.afrotransact.com` |
+| `CLOUDFLARE_ZONE` | same | `afrotransact.com` |
+| `OVH_STOREFRONT_HOST` (`global.storefrontHost`) | same | `apex` |
+| `OVH_SELLER_HOST` (`global.sellerHost`) | same | `seller-test.afrotransact.com` |
+| `OVH_ADMIN_HOST` (`global.adminHost`) | same | `admin-test.afrotransact.com` |
+| `OVH_MEDIA_PUBLIC_URL` (`global.urls.MEDIA_PUBLIC_URL`, Workers `MEDIA_PUBLIC_URL`) | same, optional | `https://media-test.afrotransact.com` (default `https://media.<domain>`) |
+
+| Host | Value |
+|---|---|
+| Storefront (`PUBLIC_WEB_URL`) | `https://test.afrotransact.com` |
+| Seller Center & Provider Hub (`SELLER_CENTER_URL`) | `https://seller-test.afrotransact.com` |
+| Staff console (`STAFF_CONSOLE_URL`) | `https://admin-test.afrotransact.com` |
+| API / identity / MCP / Grafana | `https://api.test.afrotransact.com`, `https://auth.test.afrotransact.com`, `https://mcp.test.afrotransact.com`, `https://grafana.test.afrotransact.com` |
+
+**Where the explicit host is read.** One place derives everything: the Helm library chart (`at-service.platformEnvVars`) turns `global.sellerHost` /
+`global.adminHost` into `SELLER_CENTER_URL` / `STAFF_CONSOLE_URL`; the OVH pipeline gives the Workers the same three origins as Worker vars
+(`ovh-web.yml`, host logic and validation in `tools/ovh/web-hosts.sh`, shared with `ovh-vps.yml`, `render-config.sh`, `infra/ovh-vps/lib.sh`,
+`deploy.sh` and the deploy wizard). Everything below was already driven by those three URLs, so it needed no code change and now simply follows
+them: gateway-bff CORS/CSRF origins, per-app OIDC callback and post-logout URIs (`Config.Resolve`, `RedirectURIs`, `AppOrigins`); identity's
+`gateway-bff` client redirect and post-logout URIs, `cors-allowed-origins`, `pages.*`, invitation link, `home-url`; links in emails (notifications,
+content, bookings, delivery-runs); storefront `/sell` and staff-console links; CSP. Origin allowlists stay **exact**: only the explicit origins are
+registered; the default `seller.<base>` / `admin.<base>` stop being registered once an explicit host is set; nothing is a wildcard or suffix match
+(tests: gateway-bff `flat_hosts_test.go`, identity `ExplicitWebHostsConfigurationTest`, `tools/ovh/test/web-hosts.test.sh`).
+`infra/cloudflare`, `infra/argocd/envs/*` and `infra/tofu` (dev/uat/prod) are untouched: they keep `seller.<base>` / `admin.<base>`; an Argo
+environment that wants flat names could set `global.sellerHost` / `global.adminHost` in its `platform-values.yaml`, but would then also need its Worker
+routes (`wrangler.jsonc`), the WAF admin allow-list rule and the R2 CORS list (`infra/tofu/envs/*`, derived from `web_domain`) changed by hand.
+
+**Verified (code and tests, no browser).**
+- *Cookies.* The only session cookie is gateway-bff's `at_session`, set with `Domain=` = `SESSION_COOKIE_DOMAIN`, which is empty in every
+  `config/<env>.yaml` and not set by Helm: host-only. Each web app keeps its session on its **own** origin (the browser calls `<app>/api/bff`, proxied to
+  the BFF), so nothing depends on a cookie shared across `<base>`; `seller-test.` and `admin-test.` need none on the base domain. Nothing in the web
+  apps or services sets a cookie with `Domain=<PLATFORM_DOMAIN>`.
+- *OIDC.* Each app starts the login on its own origin and gets its own callback `<origin>/api/bff/v1/auth/oidc/callback`; identity registers exactly
+  those three for the `gateway-bff` client (and the matching post-logout URIs), from the same three variables, so the redirect works per origin.
+  Identity's hosted sign-in form's CSP `form-action` allows only `'self'`, the home origin and the registered redirect target of the pending request,
+  so it follows the explicit origins and an unregistered origin never widens it (`SecurityHeadersTest`, `ExplicitWebHostsConfigurationTest`).
+- *SameSite.* `seller-test.`, `admin-test.`, `test.` and `auth.test.afrotransact.com` are all the same *site* (`afrotransact.com`, the registrable
+  domain), so `SameSite=Lax` (and `Strict` for same-site navigations) behave exactly as with `seller.<base>`; they are different *origins*, which the exact
+  CORS/CSRF lists handle. The BFF's CSRF check is an Origin check against the exact list, not a cookie property.
+- *WebAuthn.* `PLATFORM_DOMAIN` is only used as identity's default RP id and for the mcp-server docs-portal origin. It stays `test.afrotransact.com`.
+  The RP id must be the origin's host or a parent of it: `auth.test.afrotransact.com` (hosted sign-in, where passkeys are used) and the storefront at
+  `test.afrotransact.com` satisfy it; `seller-test.` / `admin-test.` do **not** (they are not below `test.afrotransact.com`), so they are deliberately not in
+  identity's `webauthn.allowed-origins`, and no web app calls `navigator.credentials` (adding a passkey in account settings opens an identity-hosted page on `auth.` in a new tab; browser sign-in is the OIDC
+  redirect to `auth.`). If a passkey ceremony is ever added to the Seller Center or the staff console, set `WEBAUTHN_RP_ID=afrotransact.com` (the zone) so all hosts share it,
+  and add their origins to `allowed-origins`; passkeys already registered with RP id `test.afrotransact.com` would then not work, so decide before users enrol.
+- *CSP.* `connect-src` is `'self'` (+ telemetry and Stripe), `form-action` is `'self'`, nothing names another app host, so no per-host allowance is
+  needed; the report endpoint is a relative path. `img-src`/`media-src` need the media origin: `ovh-web` now sets `MEDIA_PUBLIC_URL` on the Workers.
+- *Mobile.* Not affected: the OVH test environment has no app build, and the apps use the storefront host (`apex` here) and the API/auth hosts, none of which changed.
+
+**Not verifiable without a real browser and real Cloudflare/OVH.** That the three Custom Domains get the free certificate and serve; that a full
+sign-in round trip on `seller-test.` and `admin-test.` lands back on the right app and that sign-out returns to the right page; that the browsers keep
+the host-only cookie across the redirect to `auth.test.`; that a passkey sign-in on `auth.test.afrotransact.com` still succeeds (same RP id as before, expected
+to); that product images load from the media host under the enforced (not report-only) CSP. The deploy wizard's certificate check and the first
+sign-in on each host are the manual checks.
+
+**A two-label web host on the free plan** has no certificate: use this layout or buy an Advanced Certificate (`docs/runbooks/cloudflare-setup.md`).
 
 ## The guard
 
