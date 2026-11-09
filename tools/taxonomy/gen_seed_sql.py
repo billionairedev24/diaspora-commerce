@@ -56,12 +56,13 @@ def generate(tax_map):
     w(",\n".join(rows) + ";")
     w("")
     depts = {d["code"]: d["name"] for d in tax_map["departments"]}
-    w("insert into tax_profile (category_code, name, department_code, department_name, position, status, status_reasons,")
-    w("                         default_outcome, stripe_codes, conflicting_codes, fact_groups, note) values")
+    w("insert into tax_profile (category_code, name, department_code, department_name, department_position, position, status,")
+    w("                         status_reasons, default_outcome, stripe_codes, conflicting_codes, fact_groups, note) values")
+    dpos = {d["code"]: d["position"] for d in tax_map["departments"]}
     rows = []
     for c in tax_map["categories"]:
-        rows.append("    (%s, %s, %s, %s, %d, %s, %s, %s, %s, %s, %s, %s)" % (
-            q(c["code"]), q(c["name"]), q(c["department"]), q(depts[c["department"]]), c["position"], q(c["status"]),
+        rows.append("    (%s, %s, %s, %s, %d, %d, %s, %s, %s, %s, %s, %s, %s)" % (
+            q(c["code"]), q(c["name"]), q(c["department"]), q(depts[c["department"]]), dpos[c["department"]], c["position"], q(c["status"]),
             j(c["statusReasons"]), q(c["defaultOutcome"]), j(c["stripeCodes"]), j(c["conflictingCodes"]), j(c["factGroups"]),
             q(c["note"])))
     w(",\n".join(rows) + ";")

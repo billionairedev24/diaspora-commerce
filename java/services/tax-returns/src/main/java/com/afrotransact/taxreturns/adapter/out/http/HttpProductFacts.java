@@ -19,7 +19,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * catalog-service {@code GET /v1/public/variants/{atin}} (public): product type, {@code perishable} and the attribute
- * answers (cached for five minutes: checkout quotes call this for every line).
+ * answers and, when catalog reports them, the tax category and typed tax facts (cached for five minutes: checkout quotes call this for every line).
  * Missing or failing answers are left out.
  */
 @Component
@@ -52,14 +52,19 @@ class HttpProductFacts implements ProductFacts {
                 continue;
             }
             try {
-                JsonNode product = catalog.call(c -> c.get().uri("/v1/public/variants/{atin}", atin).retrieve()
-                        .body(JsonNode.class)).path("product");
+                JsonNode variant = catalog.call(c -> c.get().uri("/v1/public/variants/{atin}", atin).retrieve()
+                        .body(JsonNode.class));
+                JsonNode product = variant.path("product");
                 String type = product.path("productType").asString(null);
                 JsonNode attributes = product.path("attributes");
                 boolean perishable = "true".equalsIgnoreCase(attributes.path("perishable").asString(""));
                 Map<String, String> answers = new LinkedHashMap<>();
                 attributes.properties().forEach(e -> answers.put(e.getKey(), e.getValue().asString("")));
-                Facts facts = new Facts(atin, type, perishable, answers);
+                String category = firstText(product.path("taxCategoryCode"), product.path("categoryCode"),
+                        variant.path("categoryCode"));
+                Map<String, Object> taxFacts = plain(variant.path("taxFacts"));
+                Map<String, Object> behaviour = plain(product.path("listing").path("sellerBehaviour"));
+                Facts facts = new Facts(atin, type, perishable, answers, category, taxFacts, behaviour);
                 if (cache.size() >= MAX_CACHED) {
                     cache.clear();
                 }
@@ -69,6 +74,33 @@ class HttpProductFacts implements ProductFacts {
                 LOG.debug("No catalog facts for {}: {}", atin, ex.getMessage());
             }
         }
+        return out;
+    }
+
+    private static String firstText(JsonNode... nodes) {
+        for (JsonNode n : nodes) {
+            if (n.isString() && !n.asString().isBlank()) {
+                return n.asString();
+            }
+        }
+        return null;
+    }
+
+    /** Typed values as catalog sent them: booleans, numbers and text; anything nested is ignored. */
+    private static Map<String, Object> plain(JsonNode node) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        node.properties().forEach(e -> {
+            JsonNode v = e.getValue();
+            if (v.isBoolean()) {
+                out.put(e.getKey(), v.asBoolean());
+            } else if (v.isIntegralNumber()) {
+                out.put(e.getKey(), v.asLong());
+            } else if (v.isNumber()) {
+                out.put(e.getKey(), v.decimalValue());
+            } else if (v.isString()) {
+                out.put(e.getKey(), v.asString());
+            }
+        });
         return out;
     }
 }

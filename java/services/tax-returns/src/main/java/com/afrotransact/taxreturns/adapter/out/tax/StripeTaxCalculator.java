@@ -12,11 +12,14 @@ import com.afrotransact.taxreturns.config.TaxReturnsProperties;
 import com.afrotransact.taxreturns.domain.tax.CollectedBy;
 import com.afrotransact.taxreturns.domain.tax.TaxAddress;
 import com.afrotransact.taxreturns.domain.tax.TaxLineInput;
+import com.afrotransact.taxreturns.domain.tax.Jurisdiction;
 import com.afrotransact.taxreturns.domain.tax.TaxLineResult;
+import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
 import com.afrotransact.taxreturns.domain.tax.TaxQuote;
-import com.afrotransact.taxreturns.port.TaxCalculator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.afrotransact.taxreturns.port.InHouseTaxCalculator;
+import com.afrotransact.taxreturns.port.ProviderTaxCalculator;
+import com.afrotransact.taxreturns.port.TaxProviderException;
+import com.afrotransact.taxreturns.port.TaxTelemetry;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
@@ -26,26 +29,26 @@ import org.springframework.web.client.RestClientException;
 import tools.jackson.databind.JsonNode;
 
 /**
- * {@link TaxCalculator} over Stripe Tax ({@code POST /v1/tax/calculations}). Stripe taxes each line by its provider tax
- * code in the places the account is registered. When Stripe is unreachable, or any line has no provider tax code yet,
- * the rules engine answers instead and the quote says so in {@code provider}; checkout is never blocked by tax.
+ * {@link ProviderTaxCalculator} over Stripe Tax ({@code POST /v1/tax/calculations}). Stripe taxes each line by the
+ * provider code the code map holds for the line's OUTCOME code. When Stripe is unreachable, not set up, or any line has no
+ * provider code, the rules engine answers instead and the quote says so: provider {@code RULES-FALLBACK}, the lines
+ * listed, a counter and a warning. SHADOW mode asks strictly ({@link #quoteStrict}) so a fallback never hides Stripe's
+ * answer.
  *
  * <p>This adapter only calculates. Recording the sale with Stripe (tax transactions) and refunds is a separate step.
  */
 @Component
-class StripeTaxCalculator implements TaxCalculator {
+class StripeTaxCalculator implements ProviderTaxCalculator {
 
     static final String PROVIDER = "STRIPE_TAX";
-    static final String FALLBACK = "RULES-FALLBACK";
-
-    private static final Logger LOG = LoggerFactory.getLogger(StripeTaxCalculator.class);
 
     private final RestClient stripe;
     private final String shippingTaxCode;
-    private final RulesTaxCalculator fallback;
+    private final ProviderFallback fallback;
     private final boolean configured;
 
-    StripeTaxCalculator(RestClient.Builder builder, TaxReturnsProperties props, RulesTaxCalculator fallback) {
+    StripeTaxCalculator(RestClient.Builder builder, TaxReturnsProperties props, InHouseTaxCalculator rules,
+                        TaxTelemetry telemetry) {
         TaxReturnsProperties.StripeTax cfg = props.tax().stripe();
         this.configured = cfg.secretKey() != null && !cfg.secretKey().isBlank();
         this.stripe = builder.clone().baseUrl(cfg.baseUrl()).defaultHeaders(h -> {
@@ -54,34 +57,67 @@ class StripeTaxCalculator implements TaxCalculator {
             }
         }).build();
         this.shippingTaxCode = cfg.shippingTaxCode();
-        this.fallback = fallback;
+        this.fallback = new ProviderFallback(rules, telemetry);
+    }
+
+    @Override
+    public TaxProviderId provider() {
+        return TaxProviderId.STRIPE;
     }
 
     /** Whether Stripe Tax can be asked at all (its key is set). */
-    boolean configured() {
+    @Override
+    public boolean configured() {
         return configured;
     }
 
     @Override
     public TaxQuote quote(TaxAddress shipTo, String currency, List<TaxLineInput> lines) {
-        if (!"US".equals(shipTo.country())) {
-            return fallback.quote(shipTo, currency, lines);
+        List<String> all = lines.stream().map(TaxLineInput::lineId).toList();
+        if (!configured) {
+            return fallback.quote(PROVIDER, "not-configured", "no Stripe key", shipTo, currency, lines, all);
         }
-        for (TaxLineInput l : lines) {
-            if (l.providerTaxCode() == null || l.providerTaxCode().isBlank()) {
-                LOG.warn("Line {} has no Stripe tax code ({}); the rules engine quotes this order", l.lineId(),
-                        l.taxCode());
-                return withProvider(fallback.quote(shipTo, currency, lines), FALLBACK);
-            }
+        if (!"US".equals(shipTo.country())) {
+            return fallback.quote(PROVIDER, "non-us", shipTo.country(), shipTo, currency, lines, all);
+        }
+        List<String> uncoded = lines.stream().filter(l -> l.codeFor(TaxProviderId.STRIPE) == null)
+                .map(TaxLineInput::lineId).toList();
+        if (!uncoded.isEmpty()) {
+            return fallback.quote(PROVIDER, "no-code", "no Stripe code for the outcome of " + uncoded, shipTo, currency,
+                    lines, uncoded);
         }
         try {
-            JsonNode response = stripe.post().uri("/v1/tax/calculations").contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                    .body(form(shipTo, currency, lines)).retrieve().body(JsonNode.class);
-            return parse(response, shipTo, currency, lines);
+            return call(shipTo, currency, lines);
         } catch (RestClientException | IllegalStateException ex) {
-            LOG.warn("Stripe Tax unavailable ({}); the rules engine quotes this order", ex.getClass().getSimpleName());
-            return withProvider(fallback.quote(shipTo, currency, lines), FALLBACK);
+            return fallback.quote(PROVIDER, "unavailable", ex.getClass().getSimpleName(), shipTo, currency, lines, all);
         }
+    }
+
+    @Override
+    public TaxQuote quoteStrict(TaxAddress shipTo, String currency, List<TaxLineInput> lines) {
+        if (!configured) {
+            throw new TaxProviderException("Stripe Tax is not configured (no key)");
+        }
+        if (!"US".equals(shipTo.country())) {
+            throw new TaxProviderException("Stripe Tax is asked for US addresses only");
+        }
+        List<String> uncoded = lines.stream().filter(l -> l.codeFor(TaxProviderId.STRIPE) == null)
+                .map(TaxLineInput::lineId).toList();
+        if (!uncoded.isEmpty()) {
+            throw new TaxProviderException("No Stripe code for lines " + uncoded);
+        }
+        try {
+            return call(shipTo, currency, lines);
+        } catch (RestClientException | IllegalStateException ex) {
+            throw new TaxProviderException("Stripe Tax failed: " + ex.getClass().getSimpleName() + ": "
+                    + ex.getMessage(), ex);
+        }
+    }
+
+    private TaxQuote call(TaxAddress shipTo, String currency, List<TaxLineInput> lines) {
+        JsonNode response = stripe.post().uri("/v1/tax/calculations").contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(form(shipTo, currency, lines)).retrieve().body(JsonNode.class);
+        return parse(response, shipTo, currency, lines);
     }
 
     MultiValueMap<String, String> form(TaxAddress shipTo, String currency, List<TaxLineInput> lines) {
@@ -96,7 +132,7 @@ class StripeTaxCalculator implements TaxCalculator {
         f.add("customer_details[address_source]", "shipping");
         int i = 0;
         for (TaxLineInput l : lines) {
-            line(f, i++, l.lineId(), l.taxableItemsMinor(), l.quantity(), l.providerTaxCode());
+            line(f, i++, l.lineId(), l.taxableItemsMinor(), l.quantity(), l.codeFor(TaxProviderId.STRIPE));
             if (l.shippingMinor() > 0) {
                 line(f, i++, "ship:" + l.lineId(), l.shippingMinor(), 1, shippingTaxCode);
             }
@@ -143,13 +179,9 @@ class StripeTaxCalculator implements TaxCalculator {
             long taxable = l.taxableItemsMinor() + (shipTax > 0 ? l.shippingMinor() : 0L);
             out.add(new TaxLineResult(l.lineId(), l.sellerOrgId(), l.category(), taxable, rate, total,
                     shipTo.stateJurisdiction(), null, total > 0 ? CollectedBy.MARKETPLACE : CollectedBy.NOT_COLLECTED,
-                    shipTax, l.taxCode()));
+                    shipTax, l.taxCode(), null, Jurisdiction.ADDRESS));
         }
         return new TaxQuote(currency, shipTo.stateJurisdiction(),
                 collected ? CollectedBy.MARKETPLACE : CollectedBy.NOT_COLLECTED, out, PROVIDER);
-    }
-
-    private static TaxQuote withProvider(TaxQuote q, String provider) {
-        return new TaxQuote(q.currency(), q.jurisdiction(), q.collectedBy(), q.lines(), provider);
     }
 }

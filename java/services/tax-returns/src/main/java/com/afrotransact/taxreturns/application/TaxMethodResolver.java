@@ -3,9 +3,11 @@ package com.afrotransact.taxreturns.application;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 
 import com.afrotransact.taxreturns.config.TaxReturnsProperties;
 import com.afrotransact.taxreturns.domain.tax.TaxMethod;
+import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
 import com.afrotransact.taxreturns.port.TaxMethodSource;
 import com.afrotransact.taxreturns.port.TaxSettingsRepository;
 import org.springframework.stereotype.Component;
@@ -32,14 +34,23 @@ public class TaxMethodResolver implements TaxMethodSource {
 
     @Override
     public TaxMethod method() {
+        return current().method;
+    }
+
+    @Override
+    public Optional<TaxProviderId> shadowProvider() {
+        return current().shadow;
+    }
+
+    private Cached current() {
         Cached c = cached;
         Instant now = clock.instant();
         if (c == null || now.isAfter(c.expires)) {
             TaxMethod chosen = settings.method().orElseGet(this::configuredDefault);
-            c = new Cached(chosen, now.plus(TTL));
+            c = new Cached(chosen, settings.shadowProvider(), now.plus(TTL));
             cached = c;
         }
-        return c.method;
+        return c;
     }
 
     /** Forgets the remembered method (after a change on this replica). */
@@ -48,10 +59,13 @@ public class TaxMethodResolver implements TaxMethodSource {
     }
 
     private TaxMethod configuredDefault() {
-        return props.tax().provider() == TaxReturnsProperties.TaxProvider.STRIPE_TAX ? TaxMethod.STRIPE_TAX
-                : TaxMethod.RULES;
+        return switch (props.tax().provider()) {
+            case STRIPE_TAX -> TaxMethod.STRIPE_TAX;
+            case AVALARA -> TaxMethod.AVALARA;
+            default -> TaxMethod.RULES;
+        };
     }
 
-    private record Cached(TaxMethod method, Instant expires) {
+    private record Cached(TaxMethod method, Optional<TaxProviderId> shadow, Instant expires) {
     }
 }

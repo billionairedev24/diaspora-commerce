@@ -20,6 +20,7 @@ create table tax_profile (
     name             varchar(120) not null,
     department_code  varchar(80)  not null,
     department_name  varchar(120) not null,
+    department_position int       not null default 0,
     position         int          not null default 0,
     status           varchar(20)  not null
         check (status in ('ACTIVE', 'NEEDS_APPROVAL', 'BLOCKED_BUNDLE', 'REFINE_CODE', 'CONFLICT_OPEN')),
@@ -33,7 +34,7 @@ create table tax_profile (
     changed_at       timestamptz  not null default now(),
     version          bigint       not null default 0
 );
-create index tax_profile_department on tax_profile (department_code, position);
+create index tax_profile_department on tax_profile (department_position, position);
 
 create table tax_profile_fact (
     category_code varchar(80) not null references tax_profile (category_code),

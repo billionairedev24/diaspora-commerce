@@ -58,6 +58,17 @@ class Access {
         return a;
     }
 
+    /** Staff or a service principal holding at least one of {@code permissions}; the first is named in the refusal. */
+    Actor staffAny(String... permissions) {
+        Actor a = actors.current();
+        for (String p : permissions) {
+            if (a.can(p) && (a.type() == PrincipalType.STAFF || a.type() == PrincipalType.SERVICE)) {
+                return a;
+            }
+        }
+        return staff(permissions[0]);
+    }
+
     boolean isStaff(Actor a) {
         return a.type() == PrincipalType.STAFF || a.type() == PrincipalType.SERVICE;
     }

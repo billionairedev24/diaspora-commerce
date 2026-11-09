@@ -3,6 +3,7 @@ package com.afrotransact.taxreturns.adapter.in.web;
 import com.afrotransact.platform.web.error.ProblemTypes;
 import com.afrotransact.taxreturns.domain.returns.ReturnRuleViolation;
 import com.afrotransact.taxreturns.port.UpstreamException;
+import com.afrotransact.taxreturns.port.VariantClassificationRepository;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,11 @@ class TaxReturnsErrorAdvice {
             pd.setProperty("fieldErrors", ex.fieldErrors());
         }
         return pd;
+    }
+
+    @ExceptionHandler(VariantClassificationRepository.StaleRecordException.class)
+    ProblemDetail staleRecord(VariantClassificationRepository.StaleRecordException ex) {
+        return problem(HttpStatus.CONFLICT, "tax.classification-changed", ex.getMessage());
     }
 
     @ExceptionHandler(IllegalStateException.class)

@@ -33,4 +33,11 @@ public final class TaxRateTable {
         LocalTaxRate exact = locals.get(to.state() + ":" + zip);
         return exact != null ? Optional.of(exact) : Optional.ofNullable(locals.get(to.state() + ":" + zip.substring(0, 3)));
     }
+
+    /** The jurisdiction the ZIP table gives for the address (precision ZIP: see {@link Jurisdiction}). */
+    public Jurisdiction jurisdiction(TaxAddress to) {
+        Optional<StateTaxRule> state = "US".equals(to.country()) ? state(to) : Optional.empty();
+        boolean collects = state.map(StateTaxRule::facilitator).orElse(false);
+        return new Jurisdiction(state, collects ? local(to) : Optional.empty(), Jurisdiction.ZIP, "zip-table");
+    }
 }

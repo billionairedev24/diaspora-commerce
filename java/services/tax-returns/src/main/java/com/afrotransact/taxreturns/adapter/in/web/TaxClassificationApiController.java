@@ -1,0 +1,160 @@
+package com.afrotransact.taxreturns.adapter.in.web;
+
+import java.time.LocalDate;
+import java.util.List;
+
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ApproveRequest;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ProfileDetail;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ProfileSummary;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ProviderCodeEntry;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ProviderCodeUpdate;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ReclassifyRequest;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ResolveRequest;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ResolveResponse;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ShadowReportDto;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.StatusChangeRequest;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.VariantDto;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.VariantPage;
+import com.afrotransact.taxreturns.application.ClassificationResolveService;
+import com.afrotransact.taxreturns.application.ProviderCodeService;
+import com.afrotransact.taxreturns.application.TaxProfileService;
+import com.afrotransact.taxreturns.application.TaxShadowService;
+import com.afrotransact.taxreturns.application.VariantClassificationService;
+import com.afrotransact.taxreturns.domain.profile.ProfileStatus;
+import com.afrotransact.taxreturns.domain.profile.RecordStatus;
+import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
+import com.afrotransact.taxreturns.port.VariantClassificationRepository;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * The category tax engine's API (contracts/openapi/tax-returns.yaml, tags Tax classification and Tax shadow): resolve,
+ * profiles, the provider code map, variant classification records with their review queue, and the shadow report.
+ */
+@Tag(name = "Tax classification", description = "Category tax profiles, outcome-level internal codes, provider code maps, "
+        + "variant classification records and review; DRAFT rules, a Texas tax professional must approve before use")
+@RestController
+class TaxClassificationApiController {
+
+    private final ClassificationResolveService resolve;
+    private final TaxProfileService profiles;
+    private final ProviderCodeService providerCodes;
+    private final VariantClassificationService variants;
+    private final TaxShadowService shadow;
+
+    TaxClassificationApiController(ClassificationResolveService resolve, TaxProfileService profiles,
+                                   ProviderCodeService providerCodes, VariantClassificationService variants,
+                                   TaxShadowService shadow) {
+        this.resolve = resolve;
+        this.profiles = profiles;
+        this.providerCodes = providerCodes;
+        this.variants = variants;
+        this.shadow = shadow;
+    }
+
+    @Operation(summary = "Resolve the tax outcome of a category and its facts, without charging (tax:classify)",
+            description = "Never guesses: missing facts give MISSING_FACTS with plain messages and no outcome. Act on "
+                    + "status, not on outcome: only RESOLVED may be published or charged.")
+    @PostMapping("/v1/tax/classifications/resolve")
+    ResolveResponse resolve(@Valid @RequestBody ResolveRequest body) {
+        return ResolveResponse.of(resolve.resolve(body.toCommand()));
+    }
+
+    @Operation(summary = "Category tax profiles with their status (tax:read)")
+    @GetMapping("/v1/tax/profiles")
+    List<ProfileSummary> listProfiles(@RequestParam(required = false) String department,
+                                      @RequestParam(required = false) ProfileStatus status,
+                                      @RequestParam(required = false) String q) {
+        return profiles.list(department, status, q).stream().map(ProfileSummary::of).toList();
+    }
+
+    @Operation(summary = "One category tax profile with its facts and the ordered decision table (tax:read)")
+    @GetMapping("/v1/tax/profiles/{categoryCode}")
+    ProfileDetail getProfile(@PathVariable String categoryCode) {
+        return ProfileDetail.of(profiles.get(categoryCode));
+    }
+
+    @Operation(summary = "Change a profile's status gate, with a reason (tax:classify-admin)")
+    @PutMapping("/v1/tax/profiles/{categoryCode}/status")
+    ProfileDetail changeStatus(@PathVariable String categoryCode, @Valid @RequestBody StatusChangeRequest body) {
+        return ProfileDetail.of(profiles.changeStatus(categoryCode, new TaxProfileService.StatusChange(body.status(),
+                body.reason(), body.approvedBy(), body.decisionRef())));
+    }
+
+    @Operation(summary = "The internal outcome code to provider code map (tax:read)")
+    @GetMapping("/v1/tax/provider-code-map")
+    List<ProviderCodeEntry> providerCodeMap(@RequestParam(required = false) TaxProviderId provider,
+                                            @RequestParam(required = false) String categoryCode,
+                                            @RequestParam(required = false, defaultValue = "false") boolean unmappedOnly) {
+        return providerCodes.list(provider, categoryCode, unmappedOnly).stream().map(ProviderCodeEntry::of).toList();
+    }
+
+    @Operation(summary = "Set or clear one provider's code for an internal outcome code (tax:classify-admin)",
+            description = "Mapping is per outcome, never per category, because a provider code can carry different "
+                    + "outcomes in different scenarios. A change is versioned and audited and starts a new rule version.")
+    @PutMapping("/v1/tax/provider-code-map/{internalTaxCode}")
+    ProviderCodeEntry updateProviderCode(@PathVariable String internalTaxCode,
+                                         @Valid @RequestBody ProviderCodeUpdate body) {
+        return ProviderCodeEntry.of(providerCodes.update(internalTaxCode, new ProviderCodeService.Update(body.provider(),
+                body.providerCode(), body.verified(), body.reason())));
+    }
+
+    @Operation(summary = "Variant classification records; the review queue is status=PENDING_REVIEW (tax:read)")
+    @GetMapping("/v1/tax/variant-classifications")
+    VariantPage listVariants(@RequestParam(required = false) RecordStatus status,
+                             @RequestParam(required = false) String categoryCode,
+                             @RequestParam(required = false) String sellerOrgId, @RequestParam(required = false) String q,
+                             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "25") int size) {
+        int s = Math.min(Math.max(size, 1), 200);
+        int p = Math.max(page, 0);
+        VariantClassificationRepository.Page result = variants.list(status, categoryCode, sellerOrgId, q, p, s);
+        return new VariantPage(result.items().stream().map(VariantDto::light).toList(), p, s, result.total());
+    }
+
+    @Operation(summary = "The classification record of one variant ATIN with its audit trail (tax:read)")
+    @GetMapping("/v1/tax/variant-classifications/{atin}")
+    VariantDto getVariant(@PathVariable String atin) {
+        return VariantDto.of(variants.get(atin));
+    }
+
+    @Operation(summary = "Approve a classification after review (tax:classify-admin)",
+            description = "422 tax.classification-not-resolvable unless the profile resolves to a chargeable decision. A "
+                    + "REFINE_CODE profile needs the verified provider code in refinedProviderCodes; staff-owned facts "
+                    + "(for example exemption_confirmed) are set here.")
+    @PostMapping("/v1/tax/variant-classifications/{atin}/approve")
+    VariantDto approve(@PathVariable String atin, @RequestBody(required = false) ApproveRequest body) {
+        ApproveRequest b = body == null ? new ApproveRequest(null, null, null, null) : body;
+        return VariantDto.of(variants.approve(atin, b.toCommand()));
+    }
+
+    @Operation(summary = "Move a variant to another category or product type, with a reason (tax:classify-admin)",
+            description = "The previous decision stays in the audit trail; the record returns to review and "
+                    + "tax.classification.changed is published.")
+    @PostMapping("/v1/tax/variant-classifications/{atin}/reclassify")
+    VariantDto reclassify(@PathVariable String atin, @Valid @RequestBody ReclassifyRequest body) {
+        return VariantDto.of(variants.reclassify(atin, body.toCommand()));
+    }
+
+    @Tag(name = "Tax shadow")
+    @Operation(summary = "Shadow mode report: provider quote vs in-house quote on real orders (tax:read)",
+            description = "Lines where the two engines disagree on outcome or amount, grouped by internal tax code, "
+                    + "category, outcome, state and kind, with disagreement rates. Shadow quotes are logged and never charged.")
+    @GetMapping("/v1/tax/shadow/report")
+    ShadowReportDto shadowReport(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+                                 @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+                                 @RequestParam(required = false) TaxProviderId provider,
+                                 @RequestParam(defaultValue = "true") boolean onlyDifferences,
+                                 @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "50") int size) {
+        return ShadowReportDto.of(shadow.report(from, to, provider, onlyDifferences, Math.max(page, 0),
+                Math.min(Math.max(size, 1), 200)));
+    }
+}

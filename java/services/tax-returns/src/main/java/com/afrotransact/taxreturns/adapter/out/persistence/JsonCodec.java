@@ -15,6 +15,8 @@ class JsonCodec {
     private static final TypeReference<List<String>> STRINGS = new TypeReference<>() { };
     private static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() { };
 
+    private static final TypeReference<Map<String, Object>> OBJECT_MAP = new TypeReference<>() { };
+
     private final JsonMapper mapper;
 
     JsonCodec(JsonMapper mapper) {
@@ -31,6 +33,20 @@ class JsonCodec {
 
     Map<String, String> readStringMap(String json) {
         return json == null ? Map.of() : mapper.readValue(json, STRING_MAP);
+    }
+
+    /** A JSON object as a map (numbers as Integer, Long or BigDecimal, booleans, text); null reads as an empty map. */
+    Map<String, Object> readMap(String json) {
+        return json == null ? Map.of() : mapper.readValue(json, OBJECT_MAP);
+    }
+
+    /** A JSON value as plain maps, lists and scalars; null reads as null. */
+    Object readTree(String json) {
+        return json == null ? null : mapper.readValue(json, Object.class);
+    }
+
+    <T> T read(String json, Class<T> type) {
+        return json == null ? null : mapper.readValue(json, type);
     }
 
     ReturnAddress address(String json) {

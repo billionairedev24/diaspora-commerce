@@ -1,28 +1,33 @@
 package com.afrotransact.taxreturns.application;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 import com.afrotransact.platform.web.error.NotFoundException;
+import com.afrotransact.taxreturns.config.TaxReturnsProperties;
 import com.afrotransact.taxreturns.domain.returns.ReturnRuleViolation;
 import com.afrotransact.taxreturns.domain.tax.CollectedBy;
+import com.afrotransact.taxreturns.domain.tax.LineDecision;
 import com.afrotransact.taxreturns.domain.tax.LocalTaxRate;
 import com.afrotransact.taxreturns.domain.tax.StateTaxRule;
 import com.afrotransact.taxreturns.domain.tax.TaxAddress;
 import com.afrotransact.taxreturns.domain.tax.TaxCategory;
-import com.afrotransact.taxreturns.domain.tax.TaxClassification;
-import com.afrotransact.taxreturns.domain.tax.TaxClassifier;
 import com.afrotransact.taxreturns.domain.tax.TaxLineInput;
 import com.afrotransact.taxreturns.domain.tax.TaxLineResult;
+import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
 import com.afrotransact.taxreturns.domain.tax.TaxQuote;
-import com.afrotransact.taxreturns.port.ProductFacts;
 import com.afrotransact.taxreturns.port.TaxCalculator;
+import com.afrotransact.taxreturns.port.TaxMethodSource;
 import com.afrotransact.taxreturns.port.TaxRateRepository;
+import com.afrotransact.taxreturns.port.TaxTelemetry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,21 +38,33 @@ class TaxServiceImpl implements TaxService {
 
     private final TaxCalculator calculator;
     private final TaxRateRepository rates;
-    private final TaxClassifierProvider classifier;
-    private final ProductFacts productFacts;
+    private final LineDecisionService lineDecisions;
+    private final TaxShadowService shadow;
+    private final TaxMethodSource methods;
+    private final TaxTelemetry telemetry;
+    private final TaxReturnsProperties props;
     private final Access access;
+    private final Clock clock;
 
-    TaxServiceImpl(TaxCalculator calculator, TaxRateRepository rates,
-                   TaxClassifierProvider classifier, ProductFacts productFacts, Access access) {
+    TaxServiceImpl(TaxCalculator calculator, TaxRateRepository rates, LineDecisionService lineDecisions,
+                   TaxShadowService shadow, TaxMethodSource methods, TaxTelemetry telemetry,
+                   TaxReturnsProperties props, Access access, Clock clock) {
         this.calculator = calculator;
         this.rates = rates;
-        this.classifier = classifier;
-        this.productFacts = productFacts;
+        this.lineDecisions = lineDecisions;
+        this.shadow = shadow;
+        this.methods = methods;
+        this.telemetry = telemetry;
+        this.props = props;
         this.access = access;
+        this.clock = clock;
     }
 
+    /**
+     * Not one transaction: the reads and the rare write of a stored decision each commit on their own, so a slow provider
+     * call never holds a connection.
+     */
     @Override
-    @Transactional(readOnly = true)
     public TaxQuote quote(TaxQuoteCommand c) {
         access.staff(TaxReturnsPermissions.TAX_QUOTE);
         Map<String, String> errors = new LinkedHashMap<>();
@@ -60,34 +77,37 @@ class TaxServiceImpl implements TaxService {
         if (c.lines().isEmpty() || c.lines().size() > MAX_LINES) {
             errors.put("lines", "Between 1 and " + MAX_LINES + " lines");
         }
-        List<TaxLineInput> inputs = new ArrayList<>();
-        List<Boolean> exempt = new ArrayList<>();
-        Map<String, ProductFacts.Facts> facts = needsFacts(c) ? productFacts.lookup(atinsOf(c)) : Map.of();
-        TaxClassifier rules = classifier.current();
+        if (!errors.isEmpty()) {
+            throw new ReturnRuleViolation("tax-returns.invalid-quote", "The tax quote request is invalid", errors);
+        }
+        String currency = c.currency().toUpperCase(Locale.ROOT);
+        LocalDate saleDate = c.saleDate() == null
+                ? LocalDate.now(clock.withZone(props.tax().classification().zone())) : c.saleDate();
+        List<LineDecisionService.Request> toDecide = new ArrayList<>();
         for (int i = 0; i < c.lines().size(); i++) {
             TaxQuoteCommand.Line l = c.lines().get(i);
-            boolean explicit = l.taxCategory() != null && !l.taxCategory().isBlank();
-            TaxCategory category;
-            String taxCode = null;
-            String providerCode = null;
-            boolean known = false;
-            if (explicit) {
-                category = TaxCategory.parse(l.taxCategory());
-            } else {
-                ProductFacts.Facts f = l.atin() == null ? null : facts.get(l.atin());
-                String type = l.productType() != null && !l.productType().isBlank() ? l.productType()
-                        : f == null ? null : f.productType();
-                TaxClassification classification = rules.classify(type, f == null ? Map.of() : f.attributes());
-                category = classification.category();
-                taxCode = classification.taxCode();
-                providerCode = classification.providerCode();
-                known = c.shipTo() != null && classification.exemptIn(c.shipTo().state());
+            if (!explicit(l)) {
+                toDecide.add(new LineDecisionService.Request(key(l, i), l.atin(), l.sellerOrgId(), l.sellerBehaviour()));
             }
+        }
+        Map<String, LineDecision> decisions = toDecide.isEmpty() ? Map.of()
+                : lineDecisions.decide(toDecide, c.shipTo(), saleDate);
+        List<Item> items = new ArrayList<>();
+        for (int i = 0; i < c.lines().size(); i++) {
+            TaxQuoteCommand.Line l = c.lines().get(i);
+            String key = key(l, i);
             try {
-                inputs.add(new TaxLineInput(l.lineId() == null ? String.valueOf(i + 1) : l.lineId(), l.atin(),
-                        l.sellerOrgId(), category, l.quantity(), l.unitPriceMinor(), l.discountMinor(),
-                        l.shippingMinor(), taxCode, providerCode));
-                exempt.add(known);
+                if (explicit(l)) {
+                    telemetry.quoteLine("EXPLICIT", "CATEGORY");
+                    items.add(new Item(new TaxLineInput(key, l.atin(), l.sellerOrgId(), TaxCategory.parse(l.taxCategory()),
+                            l.quantity(), l.unitPriceMinor(), l.discountMinor(), l.shippingMinor()), null));
+                    continue;
+                }
+                LineDecision d = decisions.get(key);
+                TaxLineInput in = new TaxLineInput(key, l.atin(), l.sellerOrgId(), TaxCategory.GENERAL, l.quantity(),
+                        l.unitPriceMinor(), l.discountMinor(), l.shippingMinor(), d.internalTaxCode(), null,
+                        d.providerCodes(), d.exempt());
+                items.add(new Item(in, d));
             } catch (IllegalArgumentException ex) {
                 errors.put("lines[" + i + "]", ex.getMessage());
             }
@@ -95,48 +115,74 @@ class TaxServiceImpl implements TaxService {
         if (!errors.isEmpty()) {
             throw new ReturnRuleViolation("tax-returns.invalid-quote", "The tax quote request is invalid", errors);
         }
-        return quoteSkippingExempt(c.shipTo(), c.currency().toUpperCase(Locale.ROOT), inputs, exempt);
+        TaxQuote quote = assemble(c.shipTo(), currency, items);
+        compareInShadow(c, currency, items);
+        return quote;
     }
 
     /**
-     * Lines known to be non-taxable (or exempt in the ship-to state) are priced at zero here and never reach the
-     * calculator, so a provider is not billed for them and the customer is not charged; an order of only such lines
-     * makes no provider call at all.
+     * Blocked lines carry no figure; EXEMPT lines are priced at zero and never reach the calculator (a provider is not
+     * billed for them and the shopper is not charged); the rest go to the calculator in one call. An order of only
+     * exempt or blocked lines makes no provider call at all.
      */
-    private TaxQuote quoteSkippingExempt(TaxAddress shipTo, String currency, List<TaxLineInput> inputs,
-                                         List<Boolean> exempt) {
-        List<TaxLineInput> taxable = new ArrayList<>();
-        for (int i = 0; i < inputs.size(); i++) {
-            if (!exempt.get(i)) {
-                taxable.add(inputs.get(i));
-            }
-        }
-        if (taxable.size() == inputs.size()) {
-            return calculator.quote(shipTo, currency, inputs);
-        }
+    private TaxQuote assemble(TaxAddress shipTo, String currency, List<Item> items) {
+        List<TaxLineInput> taxable = items.stream().filter(Item::goesToCalculator).map(Item::input).toList();
         TaxQuote quoted = taxable.isEmpty() ? null : calculator.quote(shipTo, currency, taxable);
         Iterator<TaxLineResult> results = quoted == null ? null : quoted.lines().iterator();
-        List<TaxLineResult> lines = new ArrayList<>(inputs.size());
-        for (int i = 0; i < inputs.size(); i++) {
-            TaxLineInput in = inputs.get(i);
-            lines.add(exempt.get(i)
-                    ? new TaxLineResult(in.lineId(), in.sellerOrgId(), in.category(), 0L, BigDecimal.ZERO, 0L,
-                            shipTo.stateJurisdiction(), null, CollectedBy.NOT_COLLECTED, 0L, in.taxCode())
-                    : results.next());
+        String jurisdiction = shipTo.stateJurisdiction();
+        List<TaxLineResult> lines = new ArrayList<>(items.size());
+        for (Item item : items) {
+            TaxLineInput in = item.input();
+            LineDecision d = item.decision();
+            if (item.goesToCalculator()) {
+                TaxLineResult r = results.next();
+                lines.add(d == null ? r : r.withDecision(d));
+            } else if (d.isBlocked()) {
+                lines.add(TaxLineResult.blocked(in, jurisdiction, d));
+            } else {
+                lines.add(new TaxLineResult(in.lineId(), in.sellerOrgId(), in.category(), 0L, BigDecimal.ZERO, 0L,
+                        jurisdiction, null, CollectedBy.NOT_COLLECTED, 0L, in.taxCode()).withDecision(d)
+                        .withAddressPrecision(null));
+            }
         }
-        return quoted == null
-                ? new TaxQuote(currency, shipTo.stateJurisdiction(), CollectedBy.NOT_COLLECTED, lines, "EXEMPT")
-                : new TaxQuote(currency, quoted.jurisdiction(), quoted.collectedBy(), lines, quoted.provider());
+        if (quoted == null) {
+            return new TaxQuote(currency, jurisdiction, CollectedBy.NOT_COLLECTED, lines, "EXEMPT");
+        }
+        return new TaxQuote(currency, quoted.jurisdiction(), quoted.collectedBy(), lines, quoted.provider(),
+                quoted.fallbackLines());
     }
 
-    private static boolean needsFacts(TaxQuoteCommand c) {
-        return c.lines().stream().anyMatch(l -> l.atin() != null
-                && (l.taxCategory() == null || l.taxCategory().isBlank()));
+    /** SHADOW mode: asks the shadow provider about the same lines in the background; never changes this quote. */
+    private void compareInShadow(TaxQuoteCommand c, String currency, List<Item> items) {
+        Optional<TaxProviderId> provider = methods.shadowProvider();
+        boolean real = c.reference() != null && !c.reference().isBlank();
+        if (provider.isEmpty() || !(real || props.tax().shadow().cartQuotes())) {
+            return;
+        }
+        List<TaxShadowService.Line> lines = items.stream().filter(i -> i.decision() != null)
+                .map(i -> new TaxShadowService.Line(i.input(), i.decision())).toList();
+        if (!lines.isEmpty()) {
+            shadow.compare(new TaxShadowService.Compare(provider.get(), c.shipTo(), currency, c.reference(), lines));
+        }
     }
 
-    private static List<String> atinsOf(TaxQuoteCommand c) {
-        return c.lines().stream().filter(l -> l.atin() != null && (l.taxCategory() == null || l.taxCategory().isBlank()))
-                .map(TaxQuoteCommand.Line::atin).distinct().toList();
+    private static boolean explicit(TaxQuoteCommand.Line l) {
+        return l.taxCategory() != null && !l.taxCategory().isBlank();
+    }
+
+    private static String key(TaxQuoteCommand.Line l, int index) {
+        return l.lineId() == null ? String.valueOf(index + 1) : l.lineId();
+    }
+
+    /**
+     * @param input    the line
+     * @param decision the stored decision, null for a line whose caller chose the category
+     */
+    private record Item(TaxLineInput input, LineDecision decision) {
+
+        boolean goesToCalculator() {
+            return decision == null || decision.taxable();
+        }
     }
 
     @Override

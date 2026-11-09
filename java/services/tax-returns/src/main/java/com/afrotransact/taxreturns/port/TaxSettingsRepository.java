@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import com.afrotransact.taxreturns.domain.tax.TaxMethod;
 import com.afrotransact.taxreturns.domain.tax.TaxMethodChange;
+import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
 
 /** Platform tax settings changed at runtime. */
 public interface TaxSettingsRepository {
@@ -21,6 +22,12 @@ public interface TaxSettingsRepository {
 
     /** Newest first. */
     List<TaxMethodChange> history(int limit);
+
+    /** The SHADOW provider staff chose; empty when off. */
+    Optional<TaxProviderId> shadowProvider();
+
+    /** Stores the shadow provider (null = off) and records the change in the history. */
+    void changeShadowProvider(TaxProviderId to, String reason, String by, Instant at);
 
     record Stamp(String by, Instant at) {
     }

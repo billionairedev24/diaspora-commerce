@@ -24,9 +24,9 @@ class TaxReturnsConfiguration {
     @Bean
     TaxRules taxRules(TaxReturnsProperties props) {
         TaxReturnsProperties.TaxProvider provider = props.tax().provider();
-        if (provider != TaxReturnsProperties.TaxProvider.RULES && provider != TaxReturnsProperties.TaxProvider.STRIPE_TAX) {
+        if (provider == TaxReturnsProperties.TaxProvider.TAXJAR) {
             throw new IllegalStateException("at.taxreturns.tax.provider=" + provider
-                    + " needs an external TaxCalculator adapter, which is not installed; use RULES or STRIPE_TAX");
+                    + " needs an external TaxCalculator adapter, which is not installed; use RULES, STRIPE_TAX or AVALARA");
         }
         return new DefaultTaxRules();
     }

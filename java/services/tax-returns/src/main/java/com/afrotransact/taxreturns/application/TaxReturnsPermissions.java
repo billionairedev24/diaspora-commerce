@@ -18,6 +18,18 @@ public final class TaxReturnsPermissions {
     /** New key: edit the rate table. */
     public static final String TAX_CONFIGURE = "tax:configure";
 
+    /**
+     * New key: resolve a category's tax outcome from facts without charging (service clients such as catalog-service,
+     * staff previews). The identity client scope {@code tax:classify} must be granted to the catalog-service client.
+     */
+    public static final String TAX_CLASSIFY = "tax:classify";
+    /**
+     * New key: approve and reclassify variant classifications, change a profile's status gate and edit the provider code
+     * map (Tax Reviewer, Catalog Manager, Super Admin). {@code tax:configure} holders are accepted until identity
+     * grants the new key.
+     */
+    public static final String TAX_CLASSIFY_ADMIN = "tax:classify-admin";
+
     private TaxReturnsPermissions() {
     }
 }

@@ -12,6 +12,7 @@ create table variant_classification (
     product_type_code       varchar(80),
     facts                   jsonb        not null default '{}'::jsonb,
     staff_facts             jsonb        not null default '{}'::jsonb,
+    seller_behaviour        jsonb        not null default '{}'::jsonb,
     refined_provider_codes  jsonb        not null default '{}'::jsonb,
     status                  varchar(20)  not null
         check (status in ('DRAFT', 'MISSING_FACTS', 'PENDING_REVIEW', 'APPROVED', 'REJECTED', 'STALE')),

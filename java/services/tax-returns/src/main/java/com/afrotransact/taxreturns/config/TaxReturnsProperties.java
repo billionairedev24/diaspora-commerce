@@ -1,9 +1,11 @@
 package com.afrotransact.taxreturns.config;
 
 import java.time.Duration;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
+import com.afrotransact.taxreturns.domain.profile.ApprovalPolicy;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -23,7 +25,7 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
         returns = returns == null ? new Returns(0, null, null, 0, 0, null, 0, 0, 0, null, null, null) : returns;
         upstreams = upstreams == null ? new Upstreams(null, null, null, null, null, null, null, null, null, null)
                 : upstreams;
-        consumers = consumers == null ? new Consumers(null, null, null) : consumers;
+        consumers = consumers == null ? new Consumers(null, null, null, null) : consumers;
         jobs = jobs == null ? new Jobs(null, null, 0) : jobs;
     }
 
@@ -40,11 +42,80 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
      *                 fallback when Stripe is unreachable or an item has no Stripe tax code yet)
      * @param stripe   Stripe Tax settings (used only with STRIPE_TAX)
      */
-    public record Tax(TaxProvider provider, StripeTax stripe) {
+    public record Tax(TaxProvider provider, StripeTax stripe, AvalaraTax avalara, Classification classification,
+                      Shadow shadow) {
 
         public Tax {
             provider = provider == null ? TaxProvider.RULES : provider;
             stripe = stripe == null ? new StripeTax(null, null, null) : stripe;
+            avalara = avalara == null ? new AvalaraTax(null, null, null, null, null) : avalara;
+            classification = classification == null ? new Classification(null, null, false, null) : classification;
+            shadow = shadow == null ? new Shadow(null, null) : shadow;
+        }
+
+        public Tax(TaxProvider provider, StripeTax stripe) {
+            this(provider, stripe, null, null, null);
+        }
+    }
+
+    /**
+     * Avalara AvaTax skeleton settings (the adapter maps requests but does not call AvaTax yet).
+     *
+     * @param accountId   AvaTax account id (env AVALARA_ACCOUNT_ID)
+     * @param licenseKey  AvaTax license key (env AVALARA_LICENSE_KEY); never logged
+     * @param companyCode AvaTax company code the transactions belong to (env AVALARA_COMPANY_CODE)
+     * @param baseUrl     sandbox-rest.avatax.com or rest.avatax.com
+     * @param timeout     per-request timeout
+     */
+    public record AvalaraTax(String accountId, String licenseKey, String companyCode, String baseUrl, Duration timeout) {
+
+        public AvalaraTax {
+            baseUrl = baseUrl == null || baseUrl.isBlank() ? "https://sandbox-rest.avatax.com" : baseUrl;
+            timeout = timeout == null ? Duration.ofSeconds(5) : timeout;
+        }
+
+        /** The three credentials are set. */
+        public boolean configured() {
+            return accountId != null && !accountId.isBlank() && licenseKey != null && !licenseKey.isBlank()
+                    && companyCode != null && !companyCode.isBlank();
+        }
+    }
+
+    /**
+     * Classification engine settings.
+     *
+     * @param ruleStates           states the tax rules (dataset) cover; a ship-to elsewhere is blocked, never guessed
+     * @param approvalPolicy       ALL (every record is reviewed, the design default) or SENSITIVE
+     * @param requireVerifiedCodes a provider code is sent only once staff marked it verified
+     * @param zone                 time zone of the rules' jurisdiction (the sale date's day)
+     */
+    public record Classification(List<String> ruleStates, ApprovalPolicy approvalPolicy, boolean requireVerifiedCodes,
+                                 ZoneId zone) {
+
+        public Classification {
+            ruleStates = ruleStates == null || ruleStates.isEmpty() ? List.of("TX") : List.copyOf(ruleStates);
+            approvalPolicy = approvalPolicy == null ? ApprovalPolicy.ALL : approvalPolicy;
+            zone = zone == null ? ZoneId.of("America/Chicago") : zone;
+        }
+    }
+
+    /**
+     * SHADOW mode settings.
+     *
+     * @param timeout    how long the provider may take before the comparison is dropped (never blocks checkout)
+     * @param maxPending comparisons allowed in flight; further ones are skipped and counted
+     * @param cartQuotes also compare quotes that carry no order reference (cart estimates); off by default so the
+     *                   report reflects real orders
+     */
+    public record Shadow(Duration timeout, Integer maxPending, boolean cartQuotes) {
+
+        public Shadow {
+            timeout = timeout == null ? Duration.ofSeconds(4) : timeout;
+            maxPending = maxPending == null ? 50 : maxPending;
+        }
+
+        public Shadow(Duration timeout, Integer maxPending) {
+            this(timeout, maxPending, false);
         }
     }
 
@@ -134,12 +205,17 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
     }
 
     /** Consumed topics. */
-    public record Consumers(String orderTopic, String paymentTopic, String carrierTopic) {
+    public record Consumers(String orderTopic, String paymentTopic, String carrierTopic, String catalogTopic) {
 
         public Consumers {
             orderTopic = orderTopic == null ? "at.order.events" : orderTopic;
             paymentTopic = paymentTopic == null ? "at.payment.events" : paymentTopic;
             carrierTopic = carrierTopic == null ? "at.carrier-shipment.events" : carrierTopic;
+            catalogTopic = catalogTopic == null ? "at.product.events" : catalogTopic;
+        }
+
+        public Consumers(String orderTopic, String paymentTopic, String carrierTopic) {
+            this(orderTopic, paymentTopic, carrierTopic, null);
         }
     }
 

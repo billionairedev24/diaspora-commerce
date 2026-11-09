@@ -7,6 +7,7 @@ import java.util.Optional;
 
 import com.afrotransact.taxreturns.domain.tax.TaxMethod;
 import com.afrotransact.taxreturns.domain.tax.TaxMethodChange;
+import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
 import com.afrotransact.taxreturns.port.TaxSettingsRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -15,6 +16,8 @@ import org.springframework.stereotype.Repository;
 class JdbcTaxSettingsRepository implements TaxSettingsRepository {
 
     private static final String METHOD = "tax.method";
+    private static final String SHADOW = "tax.shadow_provider";
+    private static final String OFF = "OFF";
 
     private final JdbcClient jdbc;
 
@@ -49,6 +52,30 @@ class JdbcTaxSettingsRepository implements TaxSettingsRepository {
                 values (:k, :old, :new, :reason, :by, :at)
                 """)
                 .param("k", METHOD).param("old", before).param("new", to.name()).param("reason", reason)
+                .param("by", by).param("at", Timestamp.from(at)).update();
+    }
+
+    @Override
+    public Optional<TaxProviderId> shadowProvider() {
+        return jdbc.sql("select value from tax_setting where key = :k").param("k", SHADOW).query(String.class)
+                .optional().filter(v -> !OFF.equals(v)).map(TaxProviderId::valueOf);
+    }
+
+    @Override
+    public void changeShadowProvider(TaxProviderId to, String reason, String by, Instant at) {
+        String before = jdbc.sql("select value from tax_setting where key = :k").param("k", SHADOW)
+                .query(String.class).optional().orElse(null);
+        String value = to == null ? OFF : to.name();
+        jdbc.sql("""
+                insert into tax_setting (key, value, updated_by, updated_at) values (:k, :v, :by, :at)
+                on conflict (key) do update set value = :v, updated_by = :by, updated_at = :at
+                """)
+                .param("k", SHADOW).param("v", value).param("by", by).param("at", Timestamp.from(at)).update();
+        jdbc.sql("""
+                insert into tax_setting_history (key, old_value, new_value, reason, changed_by, changed_at)
+                values (:k, :old, :new, :reason, :by, :at)
+                """)
+                .param("k", SHADOW).param("old", before).param("new", value).param("reason", reason)
                 .param("by", by).param("at", Timestamp.from(at)).update();
     }
 

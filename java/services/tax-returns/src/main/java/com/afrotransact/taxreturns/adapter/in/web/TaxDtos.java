@@ -2,13 +2,16 @@ package com.afrotransact.taxreturns.adapter.in.web;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.afrotransact.taxreturns.application.LiabilityReport;
 import com.afrotransact.taxreturns.application.TaxQuoteCommand;
 import com.afrotransact.taxreturns.application.TaxRatesImportResult;
 import com.afrotransact.taxreturns.domain.tax.LiabilityRow;
+import com.afrotransact.taxreturns.domain.tax.LineDecision;
 import com.afrotransact.taxreturns.domain.tax.LocalTaxRate;
 import com.afrotransact.taxreturns.domain.tax.StateTaxRule;
 import com.afrotransact.taxreturns.domain.tax.TaxAddress;
@@ -38,49 +41,82 @@ final class TaxDtos {
     }
 
     @Schema(name = "TaxQuoteLine")
-    record QuoteLine(@Size(max = 80) String lineId, @Size(max = 40) String atin, @Size(max = 80) String sellerOrgId,
-                     @Schema(description = "GENERAL | GROCERY | PREPARED_FOOD; when absent productType decides")
+    record QuoteLine(@Size(max = 80) String lineId,
+                     @Schema(description = "Variant ATIN: the stored tax decision attaches to it") @Size(max = 40)
+                     String atin, @Size(max = 80) String sellerOrgId,
+                     @Schema(description = "Legacy: GENERAL | GROCERY | PREPARED_FOOD chosen by the caller. When absent the "
+                             + "stored decision of the ATIN decides; there is no default.")
                      @Size(max = 30) String taxCategory,
-                     @Schema(description = "catalog product type; the tax code comes from the classification rules (and the product's answers)")
+                     @Schema(description = "catalog product type (no longer decides tax)")
                      @Size(max = 80) String productType, @Min(1) int quantity, @Min(0) long unitPriceMinor,
-                     @Min(0) long discountMinor, @Min(0) long shippingMinor) {
+                     @Min(0) long discountMinor, @Min(0) long shippingMinor,
+                     @Schema(description = "The seller's behaviour facts for this listing (sold_heated, utensils_provided, "
+                             + "seller_is_bakery ...); part of the decision beside the variant's facts")
+                     Map<String, Object> sellerBehaviour) {
     }
 
     @Schema(name = "TaxQuoteRequest", description = "Cart or order lines shipped to one address")
     record QuoteRequest(@NotBlank @Pattern(regexp = "[A-Za-z]{3}") String currency, @NotNull @Valid ShipTo shipTo,
-                        @NotEmpty @Size(max = 500) List<@Valid QuoteLine> lines) {
+                        @NotEmpty @Size(max = 500) List<@Valid QuoteLine> lines,
+                        @Schema(description = "Sale date, default today in the rules' jurisdiction (decides date-bound "
+                                + "exemptions)") LocalDate saleDate,
+                        @Schema(description = "Order or cart id; SHADOW mode compares only quotes that carry one")
+                        @Size(max = 80) String orderId) {
 
         TaxQuoteCommand toCommand() {
             return new TaxQuoteCommand(currency, new TaxAddress(shipTo.country(), shipTo.state(), shipTo.postalCode(),
                     shipTo.city()), lines.stream().map(l -> new TaxQuoteCommand.Line(l.lineId(), l.atin(),
                     l.sellerOrgId(), l.taxCategory(), l.productType(), l.quantity(), l.unitPriceMinor(),
-                    l.discountMinor(), l.shippingMinor())).toList());
+                    l.discountMinor(), l.shippingMinor(), l.sellerBehaviour())).toList(), saleDate, orderId);
         }
     }
 
     @Schema(name = "TaxQuoteLineResult")
     record QuoteLineResponse(String lineId, String sellerOrgId, String taxCategory, long taxableMinor,
-                             @Schema(description = "Combined rate applied (fraction, 0.0825 = 8.25 %)") BigDecimal rate,
+                             @Schema(description = "Combined rate applied (fraction, 0.0825 = 8.25 %); absent on a "
+                                     + "blocked line") BigDecimal rate,
                              long taxMinor, String jurisdiction, String localJurisdiction, String collectedBy,
                              @Schema(description = "Part of taxMinor charged on the line's shipping")
                              long shippingTaxMinor,
-                             @Schema(description = "Tax code of ours the line was taxed under (GENERAL_GOODS, CLOTHING ...)")
-                             String taxCode) {
+                             @Schema(description = "Internal outcome code the line was taxed under (AT.NUTS_SEEDS...); "
+                                     + "legacy callers see their own tax code") String taxCode,
+                             @Schema(description = "Status of the stored decision; anything but RESOLVED means the line "
+                                     + "carries no tax figure and checkout must block it") String decisionStatus,
+                             String outcome, String internalTaxCode,
+                             @Schema(description = "The code sent to the provider for this outcome") String providerTaxCode,
+                             String ruleVersion,
+                             @Schema(description = "Plain message for the shopper when the line cannot be taxed")
+                             String blockedReason,
+                             @Schema(description = "ZIP (rate table) or ADDRESS (a provider resolved the exact address)")
+                             String addressPrecision) {
 
-        static QuoteLineResponse of(TaxLineResult r) {
+        static QuoteLineResponse of(TaxLineResult r, String quoteProvider) {
+            LineDecision d = r.decision();
+            String providerCode = d == null ? null : d.providerCodes().get(providerId(quoteProvider));
             return new QuoteLineResponse(r.lineId(), r.sellerOrgId(), r.category().name(), r.taxableMinor(), r.rate(),
                     r.taxMinor(), r.jurisdiction(), r.localJurisdiction(), r.collectedBy().name(),
-                    r.shippingTaxMinor(), r.taxCode());
+                    r.shippingTaxMinor(), r.taxCode(), d == null ? null : d.status().name(),
+                    d == null || d.outcome() == null ? null : d.outcome().name(), d == null ? null : d.internalTaxCode(),
+                    providerCode, d == null ? null : d.ruleVersion(), d == null ? null : d.blockedReason(),
+                    r.addressPrecision());
+        }
+
+        private static String providerId(String quoteProvider) {
+            return "STRIPE_TAX".equals(quoteProvider) ? "STRIPE" : "AVALARA".equals(quoteProvider) ? "AVALARA" : "";
         }
     }
 
     @Schema(name = "TaxQuote", description = "Tax per line, rounded half up to the minor unit once per line")
     record QuoteResponse(String currency, String jurisdiction, String collectedBy, long totalTaxMinor,
-                         String provider, List<QuoteLineResponse> lines) {
+                         @Schema(description = "rules, STRIPE_TAX, AVALARA, EXEMPT or RULES-FALLBACK (a chosen provider "
+                                 + "could not take the quote; see fallbackLines)") String provider,
+                         @Schema(description = "Lines the provider could not take when provider is RULES-FALLBACK")
+                         List<String> fallbackLines, List<QuoteLineResponse> lines) {
 
         static QuoteResponse of(TaxQuote q) {
             return new QuoteResponse(q.currency(), q.jurisdiction(), q.collectedBy().name(), q.totalTaxMinor(),
-                    q.provider(), q.lines().stream().map(QuoteLineResponse::of).toList());
+                    q.provider(), q.fallbackLines(),
+                    q.lines().stream().map(l -> QuoteLineResponse.of(l, q.provider())).toList());
         }
     }
 

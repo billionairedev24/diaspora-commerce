@@ -24,6 +24,9 @@ public final class TaxReturnsEvents {
     public static final String TAX_SALE_RECORDED = "tax.sale.recorded";
     public static final String TAX_REFUND_REVERSED = "tax.refund.reversed";
 
+    /** Key: variant ATIN for VARIANT_CLASSIFICATION, category code for the profile and code map kinds. */
+    public static final String TAX_CLASSIFICATION_CHANGED = "tax.classification.changed";
+
     private TaxReturnsEvents() {
     }
 }

@@ -7,6 +7,7 @@ import com.afrotransact.taxreturns.application.TaxSettingsService;
 import com.afrotransact.taxreturns.application.TaxSettingsService.TaxSettings;
 import com.afrotransact.taxreturns.domain.tax.TaxMethod;
 import com.afrotransact.taxreturns.domain.tax.TaxMethodChange;
+import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -39,18 +40,27 @@ class TaxSettingsController {
     }
 
     @Schema(name = "TaxSettings")
-    record SettingsDto(@Schema(allowableValues = {"RULES", "STRIPE_TAX"}) String method,
+    record SettingsDto(@Schema(allowableValues = {"RULES", "STRIPE_TAX", "AVALARA"}) String method,
                        @Schema(description = "What applies until staff choose (TAX_PROVIDER)") String configuredDefault,
                        @Schema(description = "Stripe Tax can be chosen: its key is set") boolean stripeAvailable,
+                       @Schema(description = "Avalara can be chosen: account, license key and company code are set")
+                       boolean avalaraAvailable,
+                       @Schema(description = "SHADOW mode: this provider is quoted next to the charging method on real "
+                               + "orders and never charged; null = off", allowableValues = {"STRIPE", "AVALARA"})
+                       String shadowProvider,
                        String changedBy, Instant changedAt, List<ChangeDto> history) {
 
         static SettingsDto of(TaxSettings s) {
             return new SettingsDto(s.method().name(), s.configuredDefault().name(), s.stripeAvailable(),
+                    s.avalaraAvailable(), s.shadowProvider() == null ? null : s.shadowProvider().name(),
                     s.changedBy(), s.changedAt(), s.history().stream().map(ChangeDto::of).toList());
         }
     }
 
-    record ChangeRequest(@NotNull TaxMethod method, @NotBlank String reason) {
+    record ChangeRequest(@NotNull TaxMethod method,
+                         @Schema(description = "Turn SHADOW mode on for this provider, or null/absent to turn it off. "
+                                 + "A PUT replaces both the method and the shadow provider.")
+                         TaxProviderId shadowProvider, @NotBlank String reason) {
     }
 
     @Operation(summary = "The tax method in force and its history (tax:read)")
@@ -59,12 +69,14 @@ class TaxSettingsController {
         return SettingsDto.of(settings.current());
     }
 
-    @Operation(summary = "Switch who calculates sales tax (tax:configure)",
-            description = "RULES is our own rules over the rate tables and tax codes; STRIPE_TAX needs Stripe Tax set up "
-                    + "(422 tax.stripe-not-set-up otherwise). A reason is required and the change is recorded. It "
-                    + "applies to new quotes; placed orders keep the tax they were charged.")
+    @Operation(summary = "Switch who calculates sales tax and set the SHADOW provider (tax:configure)",
+            description = "RULES is our own rules over the rate tables and outcome codes; STRIPE_TAX and AVALARA need "
+                    + "the provider set up (422 tax.stripe-not-set-up / tax.avalara-not-set-up otherwise) and at least "
+                    + "one mapped code (422 tax.provider-not-mapped). shadowProvider turns SHADOW mode on for a "
+                    + "configured provider other than the method's. A reason is required and the change is recorded. "
+                    + "It applies to new quotes; placed orders keep the tax they were charged.")
     @PutMapping("/v1/tax/settings")
     SettingsDto change(@Valid @RequestBody ChangeRequest body) {
-        return SettingsDto.of(settings.change(body.method(), body.reason()));
+        return SettingsDto.of(settings.change(body.method(), body.shadowProvider(), body.reason()));
     }
 }
