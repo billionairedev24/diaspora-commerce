@@ -194,7 +194,35 @@ Careers roles and the cookie table are tabs of Site content. The About page stil
 
 All configuration lives in one place: **Settings** (sidebar). Sections include General (including the Help
 center articles), Fees, Markets, Notifications, Developers and Tax. See the [settings runbook](../runbooks/settings.md).
-The **Tax** section switches between our own rules and Stripe Tax.
+The **Sales tax** section holds the tax tools (below).
+
+## Sales tax: classification, review and providers
+
+**Settings → Sales tax** has one tab per job. Reading needs `tax:read`; approving, moving a product to another category,
+changing a category's status and editing provider codes need `tax:classify-admin`; changing who calculates tax needs
+`tax:configure`. Every change asks for a reason of at least 10 characters (the rule shows as you type) and is kept with your
+name. The tax rules are a **draft** until a Texas tax professional signs them off: nothing here goes to real customers before that.
+
+- **Who calculates tax** explains each choice in plain words (our own rules, Stripe Tax, Avalara) and the **shadow mode**: a
+  provider that is asked for the same lines on real orders and compared, never charged. A provider that is not set up, or whose
+  codes are not all verified, cannot be chosen, and the page says why.
+- **Tax profiles** lists the 73 categories with a plain status: *Ready*, *Needs tax sign-off*, *Needs a specific provider code*,
+  *Blocked until bundles are itemised* or *Waiting on a decision*. Filter by department and status. Open one to read the questions
+  sellers are asked, the rules as sentences (for example "If net weight is at least 2.5 oz and servings per package is more than 1,
+  then exempt"), the notes flagged for the tax professional and the history. **Mark approved** needs the tax professional's name
+  and the reference of their sign-off; **Reopen for approval** takes a category back. A category that needs a specific provider
+  code is lifted product by product in Tax review, so the profile is read only.
+- **Tax review** is the queue of products whose tax waits for a person: the product, the seller, the category, what the seller
+  entered, the proof they attached, the proposed decision and why it needs review. **Approve**, **Move to another category** or
+  **Ask the seller for more**. The **Decisions** view lists who decided, when and under which rule version.
+- **Provider codes** shows, for Stripe and Avalara, the code for each outcome with whether a person verified it, and how many
+  outcomes still need a code. A line with no verified code is blocked at checkout, never guessed. Export the map to CSV, or import a
+  CSV: you see what would change first, and a file with a bad row is not applied at all.
+- **Shadow report** compares a provider's quote with ours on real orders and says whether it is ready to cut over, check by check
+  (long enough, enough orders, same exempt or taxable answer, reliable, every code verified). The steps to move to a provider are in
+  the cutover runbook (`docs/runbooks/tax-provider-cutover.md`).
+
+Lola can answer questions about the review queue and the shadow report; she only reads, she never approves.
 
 ## Maintenance mode
 

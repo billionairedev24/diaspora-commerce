@@ -12,7 +12,7 @@ decided by their access to that module; a role that can only view a section sees
 | Sign-in & integrations | which social sign-in buttons appear | Developers |
 | Payments & payouts | hold before a seller can be paid, smallest payout, retry of a blocked transfer, Stripe mode (**read-only**: set by the deployment) | Payouts |
 | Fees & commissions | fee schedule versions, commission by category and plan, connection fees, negotiated rates, calculator, delivery pricing | Fees |
-| Sales tax | **who calculates tax** (switch), state and local rates, what each item is for tax | Fees |
+| Sales tax | **who calculates tax** (our own rules, Stripe Tax or Avalara, with shadow mode), tax profiles, tax review, provider codes, shadow report, state and local rates | Fees |
 | Plans & billing | how sellers pay their plan fee | Plans |
 
 The old addresses (`/fees`, `/markets`, `/site-content`, `/developers`, `/notifications`) open the matching section.
@@ -33,12 +33,16 @@ the same two calls with a staff token holding `sellers:enforce`.
 ## Who calculates sales tax
 
 Sales tax is worked out by **our own rules** by default: the state and local rates (Tax rates) and what each item is for tax
-(Tax classification, including items that are never taxed). Nothing is sent to a tax service and nothing costs per order.
+(the category tax profiles and each product's reviewed classification, including items that are never taxed). Nothing is sent to
+a tax service and nothing costs per order.
 
-Settings → Sales tax → *Who calculates tax* shows the method in force. To switch, open the row, choose the method and give a
-reason (10+ characters); the change is recorded in the history. **Stripe Tax** can only be chosen once it is set up (its key is set
-and registrations are done in the Stripe dashboard); until then it is refused and our own rules keep answering. A change applies
-to new quotes within seconds; placed orders keep the tax they were charged. Needs `tax:configure`.
+Settings → Sales tax → *Who calculates tax* shows the method in force, explains each choice, and has the **shadow provider**
+(compared with our rules on real orders, never charged). To change either, pick it and give a reason (10+ characters); the change
+is recorded in the history. **Stripe Tax** and **Avalara** can only be chosen once they are set up *and* every outcome has a
+verified code in *Provider codes*; until then they are refused (the page says why) and our own rules keep answering. A change
+applies to new quotes within seconds; placed orders keep the tax they were charged. Needs `tax:configure`. How to move to a
+provider: `docs/runbooks/tax-provider-cutover.md`. Profiles, review and provider codes need `tax:read` to read and
+`tax:classify-admin` to change; see the [staff guide](../user-guide/staff.md).
 
 `TAX_PROVIDER` (`RULES` by default) is only the starting value before anyone chooses.
 
