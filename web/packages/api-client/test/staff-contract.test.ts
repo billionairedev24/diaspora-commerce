@@ -131,6 +131,19 @@ describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
     vi.useRealTimers();
   });
 
+  it('home modules follow the roles and never show zeros', async () => {
+    const dash = await client().getDashboard(30);
+    expect(dash.modules.map((m) => m.id)).toEqual(['orders', 'applications', 'payments', 'trust', 'support', 'catalog', 'platform']);
+    expect(dash.modules.find((m) => m.id === 'orders')?.headline?.period).toBe('Last 30 days');
+    for (const m of dash.modules) {
+      expect(m.actions.length).toBeLessThanOrEqual(3);
+      if (m.state === 'empty') expect(m).toMatchObject({ headline: null, empty: { prompt: expect.any(String) } });
+    }
+    const marketing = await client('platform.marketing').getDashboard(30);
+    expect(marketing.modules.map((m) => m.id)).not.toContain('payments');
+    expect(marketing.modules.map((m) => m.id)).not.toContain('applications');
+  });
+
   it('filters the sidebar by role and lands on the dashboard', async () => {
     const admin = await client().getSession();
     expect(admin.landing).toBe('dash');

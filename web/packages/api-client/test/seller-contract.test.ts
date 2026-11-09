@@ -145,6 +145,14 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     await expect(api.createSellerStripeSession()).resolves.toMatchObject({ localTest: true });
     const dash = await api.getDashboard(30);
     expect(dash.charts.map((c) => c.id)).toEqual(['sales', 'top-products', 'fulfilment', 'stock']);
+    // Home modules: one headline per module with its period, at most three quick actions, empty states carry a prompt and no figures.
+    expect(dash.modules.map((m) => m.id)).toEqual(['sales', 'orders', 'listings', 'payouts', 'inventory', 'reviews', 'health', 'promotions']);
+    expect(dash.modules.find((m) => m.id === 'sales')?.headline?.period).toBe('Last 30 days');
+    for (const m of dash.modules) {
+      expect(m.actions.length).toBeLessThanOrEqual(3);
+      if (m.state === 'empty') expect(m).toMatchObject({ headline: null, empty: { action: { href: expect.stringMatching(/^\//) } } });
+    }
+    expect((await api.getDashboard(7)).modules.find((m) => m.id === 'sales')?.chart?.points).toHaveLength(7);
     const orders = await api.listOrders({ limit: 10 });
     expect(orders.items).toHaveLength(10);
     expect(orders.nextCursor).toBe('10');

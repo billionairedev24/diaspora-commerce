@@ -65,6 +65,7 @@ import { sessionHandlers } from '../session';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
 import { capabilitiesOf, CATEGORY_TREE, departmentsOf, getSellerDb, MOCK_BRANDS, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, resetSellerDb, SELLER_ORG } from './db';
 import { MOCK_DEPARTMENTS, MOCK_ORG_DEPARTMENTS } from './departments';
+import { homeModules } from './home-modules';
 import {
   advanceImport,
   categoryLeaves,
@@ -402,6 +403,7 @@ function dashboard(ctx: Ctx, rangeDays: number): Dashboard {
           series: [{ key: 'paidOut', label: 'Paid out', tone: 'green', format: 'money' }, { key: 'pending', label: 'Pending', tone: 'gold', format: 'money' }],
           rows: ['W1', 'W2', 'W3', 'W4', 'W5', 'W6'].map((w, i) => ({ category: w, values: { paidOut: wave(2400, 500, i, 2), pending: wave(600, 200, i, 3) } })) })
       ],
+      modules: homeModules({ db, org, role, now, rangeDays, rows, toShip: 0, requests: reqs }),
       todo: [
         ...(reqs > 0 ? [{ label: `${reqs} booking requests to confirm within 4 h`, module: 'requests' as const, tone: 'info' as const }] : []),
         { label: 'Set holiday hours for Thanksgiving week', module: 'hours', tone: 'info' }
@@ -430,6 +432,7 @@ function dashboard(ctx: Ctx, rangeDays: number): Dashboard {
         series: [{ key: 'available', label: 'Available', tone: 'green' }, { key: 'reserved', label: 'Reserved', tone: 'blue' }, { key: 'inbound', label: 'Inbound', tone: 'gold' }],
         rows: [['HOU1', 820, 64, 40], ['ATL1', 540, 41, 0], ['NJ1', 610, 38, 120], ['DFW1', 330, 25, 12]].map(([c, a, r, n]) => ({ category: String(c), values: { available: Number(a), reserved: Number(r), inbound: Number(n) } })) })
     ],
+    modules: homeModules({ db, org, role, now, rangeDays, rows, toShip: ship, requests: 0 }),
     todo: [
       ...(ship > 0 ? [{ label: `${ship} orders to ship — buy labels`, module: 'orders' as const, tone: 'info' as const }] : []),
       { label: '2 listings suppressed — missing ingredients', module: 'listings', tone: 'warning' },

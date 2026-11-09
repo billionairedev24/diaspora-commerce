@@ -55,6 +55,7 @@ import { departmentHandlers, pendingDepartmentRequests } from './departments';
 import { canAdvance, planRun } from './dispatch';
 import { feeRateHandlers } from './fee-rates';
 import { activeFeeSchedule, createFeeSchedule, FEE_ORGS, feeRecords, feesOverview, feeView, MOCK_RETAIL_ORG_ID, quoteDelivery, searchFeeOrgs } from './fees';
+import { staffHomeModules } from './home-modules';
 import { identityDocuments, inspectToken, retireActiveKeys, sessionsToDrop, stepUpErrors } from './identity';
 import { MOCK_DRIVERS } from './lookups';
 import { marketHandlers } from './markets';
@@ -372,6 +373,7 @@ function dashboard(ctx: Ctx, rangeDays: number): StaffDashboard {
   return {
     rangeDays,
     generatedAt: ctx.now.toISOString(),
+    modules: staffHomeModules({ roles: ctx.roles, now: ctx.now, rangeDays, records: (r) => records(ctx, r) }),
     kpis: [
       { label: 'Gross sales', value: usd(sales), detail: `${orders.length} orders in ${rangeDays} days`, tone: 'positive' },
       { label: 'Applications to review', value: String(pendingApps), detail: 'Two-step review queue', tone: pendingApps ? 'attention' : 'neutral' },
