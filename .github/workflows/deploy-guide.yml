@@ -1,0 +1,22 @@
+# Static tests of the guided deploy wizard (tools/deploy/guide.sh, docs/runbooks/deploy-guide.md): stubbed gh/curl/dig/openssl,
+# nothing is deployed and no account is touched. Also fails when a workflow starts reading a secret or variable that the shared
+# catalogue (tools/deploy/catalogue.conf) does not list.
+name: deploy-guide
+
+on:
+  push:
+    branches: [main]
+    paths: [tools/deploy/**, tools/ovh/**, infra/ovh-vps/terraform/locations.json, .github/workflows/ovh-*.yml, .github/workflows/deploy-guide.yml]
+  pull_request:
+    paths: [tools/deploy/**, tools/ovh/**, infra/ovh-vps/terraform/locations.json, .github/workflows/ovh-*.yml, .github/workflows/deploy-guide.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Wizard tests (stubbed environment)
+        run: bash tools/deploy/test/test-guide.sh   # SHELLCHECK=1 adds shellcheck (not run yet: it was not installed where this was written)

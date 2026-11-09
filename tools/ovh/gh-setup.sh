@@ -25,43 +25,14 @@ REPO=${GH_REPO:-$(gh repo view --json nameWithOwner -q .nameWithOwner)}
 gh auth status >/dev/null 2>&1 || die "gh is not signed in: gh auth login"
 echo "== $REPO, environment $T"
 
-# name|secret or var|req, opt or gen|default|what it is
-CATALOGUE='OVH_SERVICE_NAME|var|req||Public Cloud project id (32 hex characters, top left of the project page in the OVHcloud console)
-TF_STATE_BUCKET|var|req||name for the Object Storage bucket holding the Terraform state (the pipeline creates it; lower-case, 3-63 characters)
-OVH_DOMAIN|var|req|test.example.com|public domain of this environment; you create A records for api., auth., mcp. and grafana. in front of it (step 6) unless the Cloudflare token below is set
-OVH_STOREFRONT_HOST|var|opt|www|where the storefront lives: www = https://www.<domain> (the apex redirects to it) or apex = https://<domain>; the ovh-web workflow input storefront-host must match it
-ACME_EMAIL|var|req||email for Lets Encrypt expiry notices
-OVH_INSTANCE_FLAVOR|var|opt|b3-32|Public Cloud flavor (b3-32 = 8 vCPU / 32 GB; hourly price in the console; billed until the server is destroyed)
-DB_MODE|var|req|cluster|cluster = Postgres on the server (disposable test data only) or external = a managed Postgres (Layerbase, OVHcloud Managed PostgreSQL)
-EXTERNAL_PG_HOST|var|ext||managed Postgres host name
-EXTERNAL_PG_ADMIN_USER|var|ext||managed Postgres admin user (creates one role and database per service)
-EXTERNAL_PG_ADMIN_PASSWORD|secret|ext||managed Postgres admin password
-EXTERNAL_PG_SSLMODE|var|ext|require|managed Postgres sslmode
-ADMIN_EMAIL|var|req||email of the first staff admin (identity BOOTSTRAP_ADMIN_EMAIL)
-ADMIN_PHONE|var|req|+15555550100|phone of the first staff admin
-ADMIN_PASSWORD|secret|gen||password of the first staff admin (generated and shown once if you leave it empty)
-BACKUP_PASSPHRASE|secret|gen2||passphrase that encrypts the backups (generated and shown once: without it a backup cannot be restored)
-REGISTRY_PULL_USERNAME|var|opt||GitHub login that owns the pull token (empty = the person who runs the workflow)
-REGISTRY_PULL_TOKEN|secret|opt||classic GitHub token with read:packages only: the server pulls the images from ghcr.io with it (empty = the run token, which stops working after the run: pods that restart later cannot pull)
-CLOUDFLARE_API_TOKEN|secret|opt||Cloudflare API token: Zone DNS edit (the pipeline then creates the A records api./auth./mcp./grafana. itself) and, for the ovh-web workflow, Account Workers Scripts edit + Account Settings read + Zone Workers Routes edit + Zone read (see docs/runbooks/cloudflare-setup.md); empty = you create the records yourself
-CLOUDFLARE_ACCOUNT_ID|secret|opt||Cloudflare account id (32 hex characters): the ovh-web workflow deploys the three web apps with it
-CLOUDFLARE_ZONE|var|opt||the Cloudflare zone of the domain, e.g. afrotransact.com (with the token above)
-STRIPE_SECRET_KEY|secret|opt||Stripe TEST secret key sk_test_
-STRIPE_PUBLISHABLE_KEY|secret|opt||Stripe TEST publishable key pk_test_ (gateway-bff will not start without it)
-STRIPE_WEBHOOK_SECRET|secret|opt||whsec_ of the platform webhook https://api.<domain>/payments/v1/webhooks/stripe
-STRIPE_CONNECT_WEBHOOK_SECRET|secret|opt||whsec_ of the Connect webhook
-STRIPE_BILLING_WEBHOOK_SECRET|secret|opt||whsec_ of the billing webhook
-RESEND_API_KEY|secret|opt||Resend API key re_ (email over HTTPS: OVHcloud blocks outbound SMTP on 25, 465 and 587)
-OPENROUTER_API_KEY|secret|opt||OpenRouter key: Lola assistant, AI moderation and the product embeddings for semantic search (without it search is text-only)
-GOOGLE_PLACES_API_KEY|secret|opt||Google Places key (address autocomplete)
-GOOGLE_MAPS_API_KEY|secret|opt||Google Routes key (delivery distance)
-UPLOADTHING_API_KEY|secret|opt||UploadThing key (media uploads)
-USPS_CLIENT_ID|secret|opt||carrier sandbox: USPS client id
-USPS_CLIENT_SECRET|secret|opt||carrier sandbox: USPS client secret
-UPS_CLIENT_ID|secret|opt||carrier sandbox: UPS client id
-UPS_CLIENT_SECRET|secret|opt||carrier sandbox: UPS client secret
-FEDEX_CLIENT_ID|secret|opt||carrier sandbox: FedEx client id
-FEDEX_CLIENT_SECRET|secret|opt||carrier sandbox: FedEx client secret'
+# The list of values is tools/deploy/catalogue.conf, shared with the guided wizard (tools/deploy/guide.sh): name, kind, need,
+# default, phase, gate, validator, live check, what it is, why, how to get it. Here: name|secret or var|req, opt, gen, gen2 or ext|
+# default|what it is. `managed` entries (location, OVH API values, state keys, SSH key) have their own steps below.
+CATALOGUE=$(awk -F'|' '/^#/ || NF < 11 { next }
+  $3 == "managed" { next }
+  { r = $3; if (r == "required") r = "req"; else if (r == "optional") r = "opt"; else if (r == "external") r = "ext"
+    else if (r == "generated") r = ($1 == "ADMIN_PASSWORD") ? "gen" : "gen2"
+    print $1 "|" $2 "|" r "|" $4 "|" $9 }' "$OVH_REPO/tools/deploy/catalogue.conf")
 
 ask() {          # ask <prompt> <default> [secret]
   local a
@@ -82,22 +53,8 @@ put() {          # put <secret|var> <name> <value>
 }
 
 # ---- 1. the environment: you are the required reviewer, deployments only from main ---------------------------------------
-reviewer=${OVH_GH_REVIEWER:-$(gh api user -q .login)}
-reviewer_id=$(gh api "users/$reviewer" -q .id)
-body=$(printf '{"reviewers":[{"type":"User","id":%s}],"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}' "$reviewer_id")
-if printf '%s' "$body" | gh api -X PUT "repos/$REPO/environments/$T" --input - >/dev/null 2>&1; then
-  echo "environment $T: required reviewer $reviewer (every run waits for your approval)"
-else
-  # Required reviewers on a private repository need a paid GitHub plan: the environment without them.
-  printf '%s' '{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}' \
-    | gh api -X PUT "repos/$REPO/environments/$T" --input - >/dev/null \
-    || die "GitHub refused to create the environment $T (admin rights? Environments in a private repository need a paid plan)"
-  echo "warning: GitHub refused a required reviewer on $T (plan?): anyone with write access can run the workflow; destroy still needs a typed confirmation" >&2
-fi
-for b in ${OVH_GH_BRANCHES:-main}; do
-  gh api -X POST "repos/$REPO/environments/$T/deployment-branch-policies" -f name="$b" -f type=branch >/dev/null 2>&1 || true
-done
-echo "environment $T: deployments from ${OVH_GH_BRANCHES:-main}"
+. "$(dirname "$0")/gh-lib.sh"
+gh_env_ensure "$REPO" "$T" || die "could not create the environment $T"
 
 # ---- 2. location --------------------------------------------------------------------------------------------------------
 echo "== location"
