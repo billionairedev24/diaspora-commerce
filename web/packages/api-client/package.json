@@ -21,6 +21,7 @@
     "./mocks/staff-runtime": "./src/mocks/staff-runtime.ts",
     "./mocks/staff-node": "./src/mocks/staff-node.ts",
     "./generated/gateway-bff-staff": "./src/generated/gateway-bff-staff.ts",
+    "./generated/tax-returns": "./src/generated/tax-returns.ts",
     "./staff-preorders": "./src/staff-preorders.ts",
     "./staff-delivery-fees": "./src/staff-delivery-fees.ts",
     "./staff-markets": "./src/staff-markets.ts",
