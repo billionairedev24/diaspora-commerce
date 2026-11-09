@@ -174,7 +174,7 @@ One setting decides where the customer storefront lives; everything else follows
 | Helm (`infra/argocd/envs/<env>/platform-values.yaml`) | `global.storefrontHost: www` (or unset) | `global.storefrontHost: apex` |
 | Cloudflare (`infra/cloudflare/envs/<env>.tfvars`) | `storefront_host = "www"` (default) | `storefront_host = "apex"` |
 | Worker route (`web/apps/storefront/wrangler.jsonc`) | `www.<base>/*` (`www.dev.`, `www.uat.`, `www.afrotransact.com`); the base has no route, the redirect is at the edge | `<base>/*` |
-| OVH test environment | both `www` (the default): `www.<domain>`, the apex redirects | variable `OVH_STOREFRONT_HOST` = `apex` and ovh-web input `storefront-host` = `apex` |
+| OVH test environment | both `www` (the default): `www.<domain>`, the apex redirects | variable `OVH_STOREFRONT_HOST` = `apex` and ovh-web input `storefront-host` = `apex` (Seller Center and staff console hosts: `OVH_SELLER_HOST` / `OVH_ADMIN_HOST`, see "Free certificate layout (flat web hosts)") |
 
 Keep the four in step: the Helm value, the Cloudflare variable, the Worker route and (OVH) the two switches. The precedence
 for `PUBLIC_WEB_URL` in a pod is: a service's own `extraEnv` > `global.urls.PUBLIC_WEB_URL` > `global.storefrontHost` with
