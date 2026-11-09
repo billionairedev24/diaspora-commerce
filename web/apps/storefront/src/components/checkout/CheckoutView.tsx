@@ -3,6 +3,7 @@
 import {
   type Address,
 type Cart,  cartKeys,
+  type CheckoutBlockedLine,
   checkoutKeys,
   type CheckoutPackage,
   creditSplit,
@@ -27,6 +28,7 @@ import { shopperQueries } from '@/lib/api/queries';
 import { type ConfirmResult, confirmWithSavedMethod, stripePaymentMethodTypes } from '@/lib/payments/stripe';
 import { readAttribution } from '@/lib/preorder/attribution';
 
+import { BlockedLines } from './BlockedLines';
 import styles from './Checkout.module.css';
 import { CheckoutOrderPanel } from './CheckoutOrderPanel';
 import { type Choice, feeOf, initialChoice, PackageCard } from './PackageCard';
@@ -167,8 +169,25 @@ export function CheckoutView() {
   const paymentChosen = creditPaysAll || payWith === 'new' || (payWith === 'saved' && !!pm);
   // AfroTransact Delivery the chosen address can't be served by blocks the order until removed or picked up instead (S255).
   const undeliverable = (s?.packages ?? []).some((p) => p.localDelivery?.available === false && (choices[p.packageId]?.option ?? initialChoice(p).option) !== 'pickup');
-  const blocked = undeliverable || preLocked;
+  // Lines without a definite tax decision can't be sold yet: the order can't be placed until the shopper removes them.
+  const blockedLines = s?.blockedLines ?? [];
+  const taxBlocked = blockedLines.length > 0 || s?.canPlaceOrder === false;
+  const blocked = undeliverable || preLocked || taxBlocked;
   const [removing, setRemoving] = useState<string | null>(null);
+  const [removingLine, setRemovingLine] = useState<string | null>(null);
+  /** Takes the line out of this order (it stays in the cart, as for an undeliverable package). */
+  const removeBlocked = async (l: CheckoutBlockedLine) => {
+    setRemovingLine(l.lineId);
+    try {
+      await api.updateCartLine(l.lineId, { selected: false });
+      toast.show(t('ld.removed'));
+      await Promise.all([qc.invalidateQueries({ queryKey: cartKeys.all }), qc.invalidateQueries({ queryKey: checkoutKeys.all })]);
+    } catch (e) {
+      setError(isApiError(e) ? e.message : t('auth.genericError'));
+    } finally {
+      setRemovingLine(null);
+    }
+  };
   const removePackage = async (p: CheckoutPackage) => {
     setRemoving(p.packageId);
     try {
@@ -255,7 +274,9 @@ export function CheckoutView() {
     setError(
       isCartMismatch(e)
         ? t('co.cartChanged')
-        : isApiError(e)
+        : isApiError(e) && e.code === 'CHECKOUT_ITEM_BLOCKED'
+          ? t('co.blocked.placeError')
+          : isApiError(e)
         ? (e.fieldErrors.couponCode ?? Object.values(e.fieldErrors)[0] ?? e.message)
         : e instanceof Error
           ? e.message
@@ -379,6 +400,7 @@ export function CheckoutView() {
       </header>
 
       <div className={styles.mainCol}>
+        <BlockedLines lines={blockedLines} removing={removingLine} onRemove={(l) => void removeBlocked(l)} />
         <Section
           n={1}
           id="co-address"
@@ -506,6 +528,7 @@ export function CheckoutView() {
         preLockedText={preCopy?.copy.lockedText}
         preRun={preBlock?.kind === 'RUN' ? preBlock : null}
         undeliverable={undeliverable}
+        taxBlocked={taxBlocked}
         addressList={addressList}
         busy={busy}
         placing={placing}

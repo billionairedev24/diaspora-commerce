@@ -38,6 +38,8 @@ type Props = {
   /** The delivery run the order goes on (S261): its minimum progress and cutoff are shown next to the button. */
   preRun?: CartPreorder | null;
   undeliverable: boolean;
+  /** An item can't be sold yet (no definite tax decision): Remove it to place the order. */
+  taxBlocked?: boolean;
   addressList: boolean;
   busy: boolean;
   placing: number;
@@ -72,6 +74,7 @@ export function CheckoutOrderPanel(props: Props) {
     preLockedText,
     preRun,
     undeliverable,
+    taxBlocked = false,
     addressList,
     busy,
     placing,
@@ -88,6 +91,11 @@ export function CheckoutOrderPanel(props: Props) {
   const couponOk = coupon?.applicable;
   const waivedMinor = s.membershipWaivedMinor ?? 0;
   const netShipping = Math.max(0, shippingMinor - s.shippingDiscountMinor - waivedMinor);
+  // The estimate per line (mixed baskets): exempt lines are named, blocked ones are listed with Remove above.
+  const statusOf = new Map((s.taxLines ?? []).map((l) => [l.lineId, l.status] as const));
+  const hasEstimate = statusOf.size > 0;
+  const exempt = [...statusOf.values()].filter((x) => x === 'EXEMPT').length;
+  const taxable = [...statusOf.values()].filter((x) => x === 'TAXABLE').length;
 
   const applyCoupon = (e: FormEvent) => {
     e.preventDefault();
@@ -133,6 +141,11 @@ export function CheckoutOrderPanel(props: Props) {
               {preLockedText}
             </p>
           )}
+          {taxBlocked && (
+            <p className={styles.fine} data-testid="tax-blocked-note">
+              {t('co.blocked.placeHint')}
+            </p>
+          )}
           {undeliverable && !preLocked && (
             <p className={styles.fine} data-testid="local-delivery-blocked">
               {t('ld.blocked')}
@@ -160,7 +173,11 @@ export function CheckoutOrderPanel(props: Props) {
                 <li key={l.lineId} className={styles.compactItem} data-testid="checkout-item-compact">
                   <ImagePlaceholder src={l.imageUrl} alt="" className={styles.compactThumb} />
                   <span className={styles.compactText}>
-                    <span className={styles.compactTitle}>{l.title}</span>
+                    <span className={styles.compactTitle}>
+                      {l.title}
+                      {statusOf.get(l.lineId) === 'EXEMPT' && <span className={styles.itemTag} data-testid="checkout-item-no-tax">{t('co.taxExemptTag')}</span>}
+                      {statusOf.get(l.lineId) === 'BLOCKED' && <span className={styles.itemTag} data-testid="checkout-item-blocked-tag">{t('co.blocked.tag')}</span>}
+                    </span>
                     <span className={styles.muted}>
                       {p.seller.name} · {t('co.qty', { qty: l.quantity })}
                     </span>
@@ -256,8 +273,18 @@ export function CheckoutOrderPanel(props: Props) {
             </div>
           )}
           <div className={styles.row}>
-            <dt>{t('co.taxShort')}</dt>
-            <dd>{s.taxMinor ? fmt.money(s.taxMinor) : '—'}</dd>
+            <dt>{t('co.tax')}</dt>
+            <dd data-testid="checkout-tax-amount">{s.taxMinor || hasEstimate ? fmt.money(s.taxMinor) : '—'}</dd>
+            {s.taxJurisdictionLabel && (
+              <dd className={styles.rowNote} data-testid="checkout-tax-place">
+                {t('co.taxFor', { place: s.taxJurisdictionLabel })}
+              </dd>
+            )}
+            {exempt > 0 && (
+              <dd className={styles.rowNote} data-testid="checkout-tax-exempt-note">
+                {taxable > 0 ? t('co.taxSomeExempt') : t('co.taxAllExempt')}
+              </dd>
+            )}
             {taxNote && <dd className={styles.rowNote}>{taxNote}</dd>}
           </div>
           {creditMinor > 0 && (

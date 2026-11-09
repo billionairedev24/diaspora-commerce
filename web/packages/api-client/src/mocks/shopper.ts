@@ -31,7 +31,8 @@ import { body, type Ctx, json, problem, readCookie, requireUser, route } from '.
 import { lolaStream } from './lola';
 import { membershipQuote, membershipState, recordMembershipUse } from './membership';
 import { nextPreorderNumber, preorderCheckoutPackage } from './preorders';
-import { buildCart, isGroceryProductType, MockProblem, sessionLocation } from './service';
+import { mockCheckoutTax } from './checkout-tax';
+import { buildCart, MockProblem, sessionLocation } from './service';
 import { account, type AccountState, bookingFor, type MockOrder, PROVIDERS, seq, SERVICES } from './shopper-state';
 
 const DEMO_CODE = '246810';
@@ -227,18 +228,17 @@ function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | 
   const discountMinor = coupon?.applicable ? coupon.discountMinor : 0;
   const shippingDiscountMinor = coupon?.applicable ? coupon.shippingDiscountMinor : 0;
   const netShipping = Math.max(0, shipping - waived - shippingDiscountMinor);
-  const tx = addr?.state === 'TX';
-  const generalSubtotal = packages.reduce(
-    (s, p) => s + p.lines.reduce((n, l) => n + (isGroceryProductType(l.productType) ? 0 : l.lineTotalMinor), 0),
-    0
-  );
-  const stateRate = 0.0625;
-  const localRate = 0.02;
-  const combinedRate = stateRate + localRate;
-  const taxableItems = Math.max(0, generalSubtotal - discountMinor);
-  const taxable = taxableItems + (tx ? netShipping : 0);
-  const taxMinor = tx ? Math.round(taxable * combinedRate) : 0;
-  const taxRateLabel = tx ? `${(combinedRate * 100).toFixed(2)}%` : addr ? 'No sales tax' : 'Add your address to see an estimate';
+  // Tax follows the stored decision per line; the delivery charge is allocated over each package's lines (see checkout-tax).
+  const shippingByPackage: Record<string, number> = {};
+  let shipDiscLeft = shippingDiscountMinor;
+  for (const p of packages) {
+    const fee = packageDeliveryFees([p], packageDelivery ?? null) - savings.waivers.filter((w) => w.packageId === p.packageId).reduce((n, w) => n + w.waivedMinor, 0);
+    const off = Math.min(shipDiscLeft, Math.max(0, fee));
+    shipDiscLeft -= off;
+    shippingByPackage[p.packageId] = Math.max(0, fee) - off;
+  }
+  const tax = mockCheckoutTax({ packages, state: addr?.state, city: addr?.city, shippingByPackage, discountMinor, hasAddress: !!addr });
+  const { taxMinor, taxRateLabel } = tax;
   return {
     packages: packages.map((p) => ({ ...p, membershipWaivedMinor: savings.waivers.filter((w) => w.packageId === p.packageId).reduce((n, w) => n + w.waivedMinor, 0) })),
     addresses: a.addresses,
@@ -250,6 +250,11 @@ function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | 
     coupon,
     taxMinor,
     taxRateLabel,
+    taxJurisdictionLabel: tax.taxJurisdictionLabel,
+    taxLines: tax.taxLines,
+    shippingTaxAllocation: tax.shippingTaxAllocation,
+    blockedLines: tax.blockedLines,
+    canPlaceOrder: tax.canPlaceOrder,
     totalMinor: subtotal - discountMinor + netShipping + taxMinor,
     currency: 'USD',
     sellerCount: new Set(packages.map((p) => p.seller.id)).size,
@@ -560,6 +565,10 @@ export const shopperHandlers = [
       }
     });
     if (Object.keys(errors).length) throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { errors });
+    // A line without a definite tax decision can't be sold: the shopper removes it (the summary lists it with Remove).
+    const priced = summary(ctx, req.addressId, req.deliverySelections.map((x) => `${x.packageId}:${x.option}`).join(','));
+    const heldLine = priced.blockedLines[0];
+    if (heldLine) throw new MockProblem(422, 'CHECKOUT_ITEM_BLOCKED', "We can't sell this item yet", heldLine.message, { errors: { cart: heldLine.message } });
     const n = seq();
     const orderNumber = `AT-2026-${String(200000 + n).padStart(6, '0')}`;
     const fees = s.packages.reduce((sum, p) => {
@@ -569,7 +578,7 @@ export const shopperHandlers = [
     // The membership's waiver by the options chosen, recorded on each shipment with the tier and the benefit (S323).
     const savings = membershipQuote(membershipState(a), s.packages, req.deliverySelections.map((x) => `${x.packageId}:${x.option}`).join(','));
     const shipping = fees - savings.totalWaivedMinor;
-    const tax = Math.round(s.subtotalMinor * (addr?.state === 'TX' ? 0.0825 : addr?.state === 'NY' ? 0.08875 : 0.07));
+    const tax = priced.taxMinor;
     const shipments = s.packages.map((p, i): ShipmentDetail => {
       const sel = req.deliverySelections.find((x) => x.packageId === p.packageId);
       const opt = p.deliveryOptions.find((o) => o.key === sel?.option);

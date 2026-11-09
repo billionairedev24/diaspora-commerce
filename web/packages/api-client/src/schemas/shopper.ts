@@ -240,6 +240,35 @@ export const CheckoutCouponSchema = z.object({
 });
 export type CheckoutCoupon = z.infer<typeof CheckoutCouponSchema>;
 
+/** The tax estimate of one cart line: taxable, exempt, or blocked (no definite tax decision yet). */
+export const CheckoutTaxLineSchema = z.object({
+  lineId: z.string(),
+  status: z.enum(['TAXABLE', 'EXEMPT', 'BLOCKED']),
+  taxMinor: MinorSchema,
+  /** The line's share of its package's delivery charge (allocated by item value). */
+  shippingMinor: MinorSchema
+});
+export type CheckoutTaxLine = z.infer<typeof CheckoutTaxLineSchema>;
+
+/**
+ * A cart line that can't be sold yet. Checkout can't be placed while one remains; the shopper removes it. The server's
+ * `message` is English: the storefront words it itself from `title` (no ids, no tax terms).
+ */
+export const CheckoutBlockedLineSchema = z.object({
+  lineId: z.string(),
+  offerId: z.string(),
+  atin: z.string(),
+  title: z.string(),
+  packageId: z.string(),
+  message: z.string(),
+  action: z.literal('REMOVE')
+});
+export type CheckoutBlockedLine = z.infer<typeof CheckoutBlockedLineSchema>;
+
+/** How the delivery charge was attributed to lines for the tax estimate (open legal decision until the tax adviser approves). */
+export const ShippingTaxAllocationSchema = z.object({ method: z.enum(['PROPORTIONAL', 'FIRST_LINE']), approved: z.boolean(), note: z.string() });
+export type ShippingTaxAllocation = z.infer<typeof ShippingTaxAllocationSchema>;
+
 export const CheckoutSummarySchema = z.object({
   packages: z.array(CheckoutPackageSchema),
   addresses: z.array(AddressSchema),
@@ -251,6 +280,15 @@ export const CheckoutSummarySchema = z.object({
   coupon: CheckoutCouponSchema.nullish(),
   taxMinor: MinorSchema,
   taxRateLabel: z.string(),
+  /** Where the estimate was worked out ("Houston, TX"); empty without an estimate. Shown next to "Estimated tax". */
+  taxJurisdictionLabel: z.string().default(''),
+  /** The estimate per cart line (mixed exempt/taxable baskets); empty without an estimate. */
+  taxLines: z.array(CheckoutTaxLineSchema).default([]),
+  shippingTaxAllocation: ShippingTaxAllocationSchema.nullish(),
+  /** Lines that can't be sold yet (no definite tax decision): each is offered Remove; the order can't be placed meanwhile. */
+  blockedLines: z.array(CheckoutBlockedLineSchema).default([]),
+  /** False while a blocked line remains. */
+  canPlaceOrder: z.boolean().default(true),
   totalMinor: MinorSchema,
   currency: z.string(),
   sellerCount: z.number().int(),

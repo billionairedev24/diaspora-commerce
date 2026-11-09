@@ -2854,7 +2854,9 @@ export interface components {
              *     STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, PHONE_MISSING; product reviews (S324): REVIEW_NOT_VERIFIED_PURCHASE,
              *     REVIEW_ALREADY_EXISTS, REVIEW_EDIT_WINDOW_CLOSED; AfroTransact Delivery from the seller's store
              *     (S255, 422 on place order, `errors.deliverySelections` explains it): DELIVERY_OUT_OF_RANGE, DELIVERY_UNAVAILABLE,
-             *     DELIVERY_PICKUP_UNAVAILABLE, DELIVERY_ADDRESS_NOT_LOCATED; the sign-out policy (401 on any `/v1` route except
+             *     DELIVERY_PICKUP_UNAVAILABLE, DELIVERY_ADDRESS_NOT_LOCATED; CHECKOUT_ITEM_BLOCKED (422 on place order: a cart line
+             *     has no definite tax decision yet; `detail` names the item in plain words, remove it from the cart or try again
+             *     later; the summary lists it in `blockedLines`); the sign-out policy (401 on any `/v1` route except
              *     `/v1/auth/*`, the session is already ended and the person must sign in again): SESSION_IDLE_TIMEOUT (no real user
              *     activity for longer than the audience's idle timeout), SESSION_ABSOLUTE_TIMEOUT (the session reached its maximum
              *     length).
@@ -4243,9 +4245,23 @@ export interface components {
             /** @description Shipping discount from coupon (e.g. free shipping) */
             shippingDiscountMinor: number;
             coupon?: components["schemas"]["CheckoutCoupon"];
+            /** @description Estimated sales tax on the lines that can be sold; a blocked line carries none */
             taxMinor: number;
             /** @example 8.25% TX */
             taxRateLabel: string;
+            /**
+             * @description Where the estimate was worked out, from the delivery address; empty without an estimate. The storefront shows "Estimated tax" with it.
+             * @example Houston, TX
+             */
+            taxJurisdictionLabel?: string;
+            /** @description The estimate per cart line, for mixed baskets (exempt, taxable, blocked); empty without an estimate */
+            taxLines?: components["schemas"]["CheckoutTaxLine"][];
+            /** @description How the delivery charge was attributed to lines for the estimate. For packages mixing taxable and exempt items the method is an OPEN LEGAL DECISION (open decision 5) until the tax adviser approves it (approved stays false). */
+            shippingTaxAllocation?: components["schemas"]["ShippingTaxAllocation"];
+            /** @description Cart lines that cannot be sold yet because their tax decision is not definite. Checkout cannot be placed while any remains; the shopper removes them (Remove). Never defaulted, estimated or dropped silently. Empty when nothing is blocked. */
+            blockedLines?: components["schemas"]["CheckoutBlockedLine"][];
+            /** @description false while a blocked line remains (placing the order is refused with CHECKOUT_ITEM_BLOCKED) */
+            canPlaceOrder?: boolean;
             totalMinor: number;
             currency: string;
             sellerCount: number;
@@ -4262,6 +4278,41 @@ export interface components {
             membershipWaivedMinor: number;
             /** @description Which fees were waived ("fee waived: membership") or, when I am not a member, the upsell "Join Plus to save $X on this order"; absent when there is nothing to say */
             membership?: components["schemas"]["MembershipSavings"];
+        };
+        CheckoutTaxLine: {
+            lineId: string;
+            /** @enum {string} */
+            status: "TAXABLE" | "EXEMPT" | "BLOCKED";
+            /** Format: int64 */
+            taxMinor: number;
+            /**
+             * Format: int64
+             * @description This line's share of its package's delivery charge
+             */
+            shippingMinor: number;
+        };
+        ShippingTaxAllocation: {
+            /**
+             * @description PROPORTIONAL splits a package's delivery by net item value; FIRST_LINE is the rollback
+             * @enum {string}
+             */
+            method: "PROPORTIONAL" | "FIRST_LINE";
+            /** @description Always false until the tax adviser approves the mixed-basket method (open legal decision 5) */
+            approved: boolean;
+            note: string;
+        };
+        /** @description A cart line that cannot be sold yet. `message` is for the shopper: it names the item and what happens next, with no ids and no tax terms. */
+        CheckoutBlockedLine: {
+            lineId: string;
+            /** @description Remove it from the cart with this offer */
+            offerId: string;
+            atin: string;
+            title: string;
+            packageId: string;
+            /** @example We can't sell Gift card yet. We're still checking its details. Remove it from your cart to continue, or try again later. */
+            message: string;
+            /** @enum {string} */
+            action: "REMOVE";
         };
         /**
          * @description AfroTransact Delivery from the seller's store (S255), quoted for the chosen address: geo road distance from the

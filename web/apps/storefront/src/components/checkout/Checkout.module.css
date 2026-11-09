@@ -209,6 +209,10 @@
 .localProblem { display: flex; flex-direction: column; gap: var(--at-space-2); padding: var(--at-space-3); border: 1px solid var(--at-color-warning); border-radius: var(--at-radius-sm); background: var(--at-color-warning-bg); font-size: var(--at-text-sm); }
 .localProblem > strong { display: inline-flex; gap: var(--at-space-2); align-items: center; }
 .localMessage { margin: 0; }
+.blockedList { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-2); }
+.blockedItem { display: flex; flex-wrap: wrap; gap: var(--at-space-2) var(--at-space-3); align-items: center; justify-content: space-between; }
+.blockedText { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.itemTag { margin-left: var(--at-space-1); padding: 0 var(--at-space-2); border-radius: var(--at-radius-pill); background: var(--at-color-surface-muted); font-size: var(--at-text-xs); white-space: nowrap; }
 .localActions { display: flex; flex-wrap: wrap; gap: var(--at-space-2); }
 
 @media (max-width: 999px) {
