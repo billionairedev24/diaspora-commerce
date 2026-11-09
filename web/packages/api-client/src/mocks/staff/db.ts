@@ -13,12 +13,12 @@ import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
 import { seedIdentityAdmin } from './identity';
 import { type MockMarketsState, seedMarkets } from './markets';
-import { type MockTaxState, seedTax } from './tax';
 import { tierBenefitDetails } from './membership-tiers';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
 import { seedShipments, syncOrder } from './order-shipments';
 import { type MockPlansState, seedPlans } from './plans';
 import { type MockPreorderState, seedPreorders } from './preorders';
+import { type MockTaxState, seedTax } from './tax';
 import { type MockTaxonomyState, seedCategoryRequests, seedTaxonomy } from './taxonomy';
 
 export type Scalar = string | number | boolean | null;
