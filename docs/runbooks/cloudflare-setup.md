@@ -48,6 +48,12 @@ To keep the storefront at the bare domain instead, set `OVH_STOREFRONT_HOST=apex
 4. Remove any existing `CAA` record that does not allow `letsencrypt.org`, and any existing A or CNAME record on the **bare domain**, `www.`, `seller.`
    and `admin.` (Workers Custom Domains create them and refuse to overwrite another record; the bare domain is the apex redirect's Custom Domain).
 5. *SSL/TLS* > *Overview*: set the mode to **Full (strict)**.
+6. *Rules* > *Settings* > *Managed Transforms* > turn ON **Add visitor location headers**. The home page detects the visitor's city from
+   `CF-IPCity`, `CF-IPPostalCode` and friends (`docs/engineering/delivery-location.md`); without it the deliver-to city stays empty.
+   (`LOCATION_DETECT_ZIP` is a local-only override: do not set it here.) This is not in `infra/cloudflare` yet.
+7. *SSL/TLS* > *Edge Certificates*: *Always Use HTTPS* on. **Use the registered domain as `OVH_DOMAIN`**: Cloudflare's free Universal
+   certificate covers `example.com` and `*.example.com` only, so with `OVH_DOMAIN=test.example.com` the hosts `www.test.example.com`
+   and `seller.test.example.com` have no certificate unless you buy an Advanced Certificate (paid).
 
 ## 3. Find the account id (browser)
 

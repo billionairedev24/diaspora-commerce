@@ -11,6 +11,7 @@
 #   provision-and-deploy  apply, then deploy: the usual first run
 #   services              only the service charts (a new image-tag, changed secrets)
 #   edge | status         Traefik/cert-manager/routes | pods, certificates, URLs
+#   observability | backup   Grafana stack | nightly encrypted backups
 #   reindex-search        rebuild the search index from catalog, offers and inventory (a Job of the indexer chart; run it
 #                         once after `deploy` on a new server and after changing the search engine). Idempotent.
 #   down | up             scale every service to 0 / 1 (the server keeps billing)
@@ -104,6 +105,21 @@ jobs:
           tofu -chdir=infra/ovh-vps/terraform plan -input=false -no-color | tee /tmp/plan.txt
           { echo '### ovh-vps plan'; echo '```'; tail -n 60 /tmp/plan.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
+      # ---- the images must exist BEFORE anything is created or installed (the server bills from apply) ---------------------------------------------------------
+      - name: Check that every image exists
+        if: inputs.action == 'deploy' || inputs.action == 'provision-and-deploy' || inputs.action == 'services'
+        run: |
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin >/dev/null
+          missing=()
+          while read -r svc _; do
+            docker manifest inspect "$IMAGE_REGISTRY/$svc:$IMAGE_TAG" >/dev/null 2>&1 || missing+=("$svc")
+          done < <(grep -Ev '^\s*(#|$)' infra/ovh-vps/services.conf)
+          if ((${#missing[@]})); then
+            echo "::error::no image at $IMAGE_TAG for: ${missing[*]}. Every service pipeline publishes on a push to main that touches the service; use the sha of a commit where all of them ran (docs/runbooks/ovh-vps.md, step 3)."
+            exit 1
+          fi
+          echo "all 26 images exist at $IMAGE_TAG"
+
       # ---- the server -----------------------------------------------------------------------------------------------------------------
       - name: Apply (creates the server, billing starts)
         if: inputs.action == 'apply' || inputs.action == 'provision-and-deploy'
@@ -130,21 +146,6 @@ jobs:
             tools/ovh/dns.sh "$OVH_DOMAIN" "$ip" | tee -a /tmp/dns.txt
             { echo "### Server $ip"; echo '```'; cat /tmp/dns.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           fi
-
-      # ---- the images must exist before anything is installed ---------------------------------------------------------
-      - name: Check that every image exists
-        if: inputs.action == 'deploy' || inputs.action == 'provision-and-deploy' || inputs.action == 'services'
-        run: |
-          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin >/dev/null
-          missing=()
-          while read -r svc _; do
-            docker manifest inspect "$IMAGE_REGISTRY/$svc:$IMAGE_TAG" >/dev/null 2>&1 || missing+=("$svc")
-          done < <(grep -Ev '^\s*(#|$)' infra/ovh-vps/services.conf)
-          if ((${#missing[@]})); then
-            echo "::error::no image at $IMAGE_TAG for: ${missing[*]}. Every service pipeline publishes on a push to main that touches the service; use the sha of a commit where all of them ran (docs/runbooks/ovh-vps.md, step 3)."
-            exit 1
-          fi
-          echo "all 26 images exist at $IMAGE_TAG"
 
       # ---- the server side ---------------------------------------------------------------------------------------------------
       - name: SSH setup, wait for the server

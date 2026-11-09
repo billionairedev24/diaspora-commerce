@@ -28,7 +28,7 @@ echo "== $REPO, environment $T"
 # name|secret or var|req, opt or gen|default|what it is
 CATALOGUE='OVH_SERVICE_NAME|var|req||Public Cloud project id (32 hex characters, top left of the project page in the OVHcloud console)
 TF_STATE_BUCKET|var|req||name for the Object Storage bucket holding the Terraform state (the pipeline creates it; lower-case, 3-63 characters)
-OVH_DOMAIN|var|req|test.example.com|public domain of this environment; you create A records for api., auth. and mcp. in front of it (step 6)
+OVH_DOMAIN|var|req|test.example.com|public domain of this environment; you create A records for api., auth., mcp. and grafana. in front of it (step 6) unless the Cloudflare token below is set
 OVH_STOREFRONT_HOST|var|opt|www|where the storefront lives: www = https://www.<domain> (the apex redirects to it) or apex = https://<domain>; the ovh-web workflow input storefront-host must match it
 ACME_EMAIL|var|req||email for Lets Encrypt expiry notices
 OVH_INSTANCE_FLAVOR|var|opt|b3-32|Public Cloud flavor (b3-32 = 8 vCPU / 32 GB; hourly price in the console; billed until the server is destroyed)
@@ -43,7 +43,7 @@ ADMIN_PASSWORD|secret|gen||password of the first staff admin (generated and show
 BACKUP_PASSPHRASE|secret|gen2||passphrase that encrypts the backups (generated and shown once: without it a backup cannot be restored)
 REGISTRY_PULL_USERNAME|var|opt||GitHub login that owns the pull token (empty = the person who runs the workflow)
 REGISTRY_PULL_TOKEN|secret|opt||classic GitHub token with read:packages only: the server pulls the images from ghcr.io with it (empty = the run token, which stops working after the run: pods that restart later cannot pull)
-CLOUDFLARE_API_TOKEN|secret|opt||Cloudflare API token: Zone DNS edit (the pipeline then creates the A records api./auth./mcp. itself) and, for the ovh-web workflow, Account Workers Scripts edit + Account Settings read + Zone Workers Routes edit + Zone read (see docs/runbooks/cloudflare-setup.md); empty = you create the records yourself
+CLOUDFLARE_API_TOKEN|secret|opt||Cloudflare API token: Zone DNS edit (the pipeline then creates the A records api./auth./mcp./grafana. itself) and, for the ovh-web workflow, Account Workers Scripts edit + Account Settings read + Zone Workers Routes edit + Zone read (see docs/runbooks/cloudflare-setup.md); empty = you create the records yourself
 CLOUDFLARE_ACCOUNT_ID|secret|opt||Cloudflare account id (32 hex characters): the ovh-web workflow deploys the three web apps with it
 CLOUDFLARE_ZONE|var|opt||the Cloudflare zone of the domain, e.g. afrotransact.com (with the token above)
 STRIPE_SECRET_KEY|secret|opt||Stripe TEST secret key sk_test_

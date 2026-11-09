@@ -56,7 +56,7 @@ The cheapest setup that still gives useful results. Prices are not verified: rea
 | **Valkey and Meilisearch stay on the OVH server** (the pipeline already deploys them there) | Layerbase is then needed for Postgres only. Check its smallest plan that holds about 25 small databases before paying for a bigger one |
 | **Server in `us-east-va`, Layerbase in Virginia** | a few ms per query instead of 60+, and OVH does not meter outbound traffic in its US and European regions (OVH Public Cloud FAQ; Singapore and Sydney are metered: do not pick them) |
 | **Read the hourly price of the flavor in the OVH console** (the default `b3-32` is the biggest cost) and pick the smallest flavor that runs the stack | billing is hourly from provision until the instance is deleted |
-| **`destroy` the server when you stop for the day.** The `down` action does NOT stop billing | state, DNS and images are kept; a new `provision-and-deploy` takes under an hour |
+| **`destroy` the server when you stop for the day.** The `down` action does NOT stop billing | kept: DNS records, the images in GHCR, the GitHub Environment, the backup bucket and, if used, the Layerbase database (still billed). Deleted: the server, its disk, the Terraform state, the state bucket and the state user. A new `provision-and-deploy` takes under an hour |
 | **Stay on the free Workers plan until a deploy fails on size; skip Turnstile, extra buckets and snapshots** until needed | each is a small recurring charge |
 
 Not billed as egress by OVH: queries and writes from the server to Layerbase (OVH FAQ). Layerbase told the owner (2026-11-01) that
@@ -80,7 +80,7 @@ The server pulls `ghcr.io/<owner>/<repo>/<service>:<git sha>` for all 26 service
 to `main` touches that service. The commit that introduced this runbook changed `infra/helm/library`, which **every** service
 pipeline watches, so all 26 images were built at the sha of that commit (or a later one that also touched it). In *Actions*, check
 that the 26 `java-*` / `go-*` runs of that commit are green, and **copy that commit's full 40-character sha**: it is the `image-tag`
-of step 5. (The workflow checks every image exists before it creates anything and names the ones that are missing.)
+of step 5. (The workflow checks every image exists before it creates anything and names the ones that are missing.) If the per-service runs are not green, run the **`ovh-images`** workflow (Actions > ovh-images > Run workflow, branch `main`): it builds all 26 at the commit it runs on, without the verify gates; use that commit's sha.
 
 ### 4. Give your values to the script (your machine, once)
 
@@ -132,7 +132,7 @@ billing**), `destroy`.
 
 ### 6. DNS and certificates
 
-Three A records, **DNS only** (grey cloud at Cloudflare, so Let's Encrypt's HTTP-01 check reaches port 80), all pointing at the
+Four A records, **DNS only** (grey cloud at Cloudflare, so Let's Encrypt's HTTP-01 check reaches port 80), all pointing at the
 server's IPv4 from the summary: `api.<domain>`, `auth.<domain>`, `mcp.<domain>`, `grafana.<domain>`. The pipeline makes them if you gave it a Cloudflare
 token and zone. Remove any `CAA` record that does not allow `letsencrypt.org`. cert-manager retries by itself; once DNS resolves the
 certificates become Ready in a few minutes (`status` action shows them). Then:

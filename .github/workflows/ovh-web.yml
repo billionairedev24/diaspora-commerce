@@ -110,7 +110,7 @@ jobs:
             staff-console) host="admin.$DOMAIN" ;;
           esac
           vars=$(jq -nc --arg d "$DOMAIN" --arg w "$web" --arg app "$APP" '
-            {API_MOCKS:"0", BFF_ORIGIN:("https://api."+$d+"/bff"), PUBLIC_WEB_URL:("https://"+$w)}
+            {API_MOCKS:"0", CSP_MODE:"report-only", BFF_ORIGIN:("https://api."+$d+"/bff"), PUBLIC_WEB_URL:("https://"+$w)}
             + (if $app=="storefront" then {SELLER_CENTER_URL:("https://seller."+$d), STAFF_CONSOLE_URL:("https://admin."+$d)} else {} end)')
           jq -n --arg name "${APP}-ovh" --arg host "$host" --argjson vars "$vars" '
             {name:$name, main:".open-next/worker.js", compatibility_date:"2026-09-01",
