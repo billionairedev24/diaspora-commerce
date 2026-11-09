@@ -36,7 +36,8 @@ class StripeTaxCalculatorTest {
     private StripeTaxCalculator calculator(String key) {
         return new StripeTaxCalculator(RestClient.builder(),
                 new TaxReturnsProperties(new TaxReturnsProperties.Tax(TaxReturnsProperties.TaxProvider.STRIPE_TAX,
-                        new TaxReturnsProperties.StripeTax(key, "http://localhost:1", null)), null, null, null, null),
+                        new TaxReturnsProperties.StripeTax(key, "http://localhost:1", null), null, null, null), null, null, null,
+                        null),
                 rules, telemetry);
     }
 

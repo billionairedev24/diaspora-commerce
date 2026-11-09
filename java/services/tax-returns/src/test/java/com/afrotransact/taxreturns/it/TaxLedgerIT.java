@@ -82,23 +82,26 @@ class TaxLedgerIT {
     void quotesFromTheSeededRateTable() {
         actors.service("tax:quote");
         TaxQuote houston = tax.quote(new TaxQuoteCommand("usd", new TaxAddress("US", "TX", "77019", "Houston"),
-                List.of(line("1", null, "dress", 6_499), line("2", null, "grocery", 1_850),
-                        line("3", "PREPARED_FOOD", null, 1_200))));
+                List.of(line("1", "GENERAL", null, 6_499), line("2", "GROCERY", null, 1_850),
+                        line("3", "PREPARED_FOOD", null, 1_200), line("4", null, "dress", 5_000))));
         assertThat(houston.currency()).isEqualTo("USD");
         assertThat(houston.collectedBy()).isEqualTo(CollectedBy.MARKETPLACE);
-        assertThat(houston.lines()).extracting(TaxLineResult::taxMinor).containsExactly(536L, 0L, 99L);
+        assertThat(houston.lines()).extracting(TaxLineResult::taxMinor).containsExactly(536L, 0L, 99L, 0L);
         assertThat(houston.lines().get(1).category().name()).isEqualTo("GROCERY");
-        assertThat(houston.lines()).extracting(TaxLineResult::taxCode).containsExactly("CLOTHING", "PACKAGED_FOOD",
-                null);
-        assertThat(houston.lines().getFirst().localJurisdiction()).isEqualTo("US-TX-770");
+        assertThat(houston.lines()).extracting(TaxLineResult::taxCode).containsOnlyNulls();
+        assertThat(houston.lines().getFirst().localJurisdiction()).isEqualTo("US-TX-77019");
+        assertThat(houston.lines().getFirst().addressPrecision()).isEqualTo("ZIP");
+        assertThat(houston.lines().get(3).decision().isBlocked()).as("no stored decision, no category: blocked, no rate")
+                .isTrue();
+        assertThat(houston.lines().get(3).rate()).isNull();
 
         TaxQuote nyc = tax.quote(new TaxQuoteCommand("USD", new TaxAddress("US", "NY", "10001", null),
-                List.of(line("1", null, null, 10_000))));
+                List.of(line("1", "GENERAL", null, 10_000))));
         assertThat(nyc.lines().getFirst().rate()).isEqualByComparingTo("0.08875");
         assertThat(nyc.totalTaxMinor()).isEqualTo(888);
 
         TaxQuote delaware = tax.quote(new TaxQuoteCommand("USD", new TaxAddress("US", "DE", "19901", null),
-                List.of(line("1", null, null, 10_000))));
+                List.of(line("1", "GENERAL", null, 10_000))));
         assertThat(delaware.collectedBy()).isEqualTo(CollectedBy.NOT_COLLECTED);
         assertThat(delaware.totalTaxMinor()).isZero();
 
@@ -116,7 +119,7 @@ class TaxLedgerIT {
         tax.upsertLocal(new LocalTaxRate("TX", "78701", "Austin, TX", new BigDecimal("0.02"), false));
         actors.service("tax:quote");
         assertThat(tax.quote(new TaxQuoteCommand("USD", new TaxAddress("US", "TX", "78701", null),
-                List.of(line("1", null, null, 10_000)))).totalTaxMinor()).isEqualTo(825);
+                List.of(line("1", "GENERAL", null, 10_000)))).totalTaxMinor()).isEqualTo(825);
         actors.staff();
         tax.deleteLocal("TX", "78701");
 
@@ -144,7 +147,7 @@ class TaxLedgerIT {
         assertThat(ledger.forOrder(order.orderId)).hasSize(3).allSatisfy(t -> {
             assertThat(t.kind()).isEqualTo(TaxTransactionKind.SALE);
             assertThat(t.jurisdiction()).isEqualTo("US-TX");
-            assertThat(t.localJurisdiction()).isEqualTo("US-TX-770");
+            assertThat(t.localJurisdiction()).isEqualTo("US-TX-77019");
         });
         assertThat(jdbc.sql("select count(*) from platform_outbox where type = 'tax.sale.recorded' "
                 + "and aggregate_id = :id").param("id", order.orderId.toString()).query(Long.class).single())

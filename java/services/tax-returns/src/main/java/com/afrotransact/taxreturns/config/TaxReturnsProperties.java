@@ -21,7 +21,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams, Consumers consumers, Jobs jobs) {
 
     public TaxReturnsProperties {
-        tax = tax == null ? new Tax(null, null) : tax;
+        tax = tax == null ? new Tax(null, null, null, null, null) : tax;
         returns = returns == null ? new Returns(0, null, null, 0, 0, null, 0, 0, 0, null, null, null) : returns;
         upstreams = upstreams == null ? new Upstreams(null, null, null, null, null, null, null, null, null, null)
                 : upstreams;
@@ -50,11 +50,7 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
             stripe = stripe == null ? new StripeTax(null, null, null) : stripe;
             avalara = avalara == null ? new AvalaraTax(null, null, null, null, null) : avalara;
             classification = classification == null ? new Classification(null, null, false, null) : classification;
-            shadow = shadow == null ? new Shadow(null, null) : shadow;
-        }
-
-        public Tax(TaxProvider provider, StripeTax stripe) {
-            this(provider, stripe, null, null, null);
+            shadow = shadow == null ? new Shadow(null, null, false) : shadow;
         }
     }
 
@@ -112,10 +108,6 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
         public Shadow {
             timeout = timeout == null ? Duration.ofSeconds(4) : timeout;
             maxPending = maxPending == null ? 50 : maxPending;
-        }
-
-        public Shadow(Duration timeout, Integer maxPending) {
-            this(timeout, maxPending, false);
         }
     }
 
@@ -214,9 +206,6 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
             catalogTopic = catalogTopic == null ? "at.product.events" : catalogTopic;
         }
 
-        public Consumers(String orderTopic, String paymentTopic, String carrierTopic) {
-            this(orderTopic, paymentTopic, carrierTopic, null);
-        }
     }
 
     /**

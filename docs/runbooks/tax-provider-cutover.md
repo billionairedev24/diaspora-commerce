@@ -92,14 +92,14 @@ The tax professional signs off the cutover; attach the signed note to the settin
 
 `AvalaraTaxCalculator` is a skeleton: config keys, `configured()`, the request mapping to an AvaTax `SalesOrder` (`request(...)`), and a clear answer when asked
 (strict quote: "not configured" or "not implemented"; charging quote: visible fallback). To finish it: implement the `POST /api/v2/transactions/create` call and response parsing in
-`strictQuote`, keep `quote` as strict-then-visible-fallback like Stripe, add a contract test against the Avalara sandbox, then run steps 1 to 8 for AVALARA.
+`quoteStrict`, keep `quote` as strict-then-visible-fallback like Stripe, add a contract test against the Avalara sandbox, then run steps 1 to 8 for AVALARA.
 
 ## Identity setup (not done by tax-returns)
 
 tax-returns checks these keys; identity must grant them (`java/services/identity`, a new migration after the current latest, not edited by this build):
 
 ```sql
-insert into permission (key, area, description) values
+insert into permission (key, module, description) values
   ('tax:classify', 'tax', 'Resolve a category''s tax outcome from facts (service clients, staff previews)'),
   ('tax:classify-admin', 'tax', 'Approve and reclassify variant classifications, change profile gates, edit the provider code map');
 -- roles: platform.super_admin, tax reviewer and catalog manager get tax:classify-admin and tax:classify; platform.finance keeps tax:read and tax:configure
