@@ -32,6 +32,7 @@ import com.afrotransact.catalog.port.ProductDraftRepository;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.catalog.port.SellerScopes.OrgScope;
 import com.afrotransact.catalog.port.SizeChartRepository;
+import com.afrotransact.catalog.port.TaxResolver;
 import com.afrotransact.catalog.port.TaxonomyAuditRepository;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
@@ -86,7 +87,7 @@ class ScopedOperationsTest {
         ProductWriterImpl writer = new ProductWriterImpl(products, categories, mock(CategoryRequestRepository.class),
                 mock(ProductDraftRepository.class), mock(IdentifierIssuer.class), new DefaultProductDraftPolicy(),
                 new DefaultSizeChartPolicy(), mock(SizeChartRepository.class), mock(ProductEvents.class),
-                mock(BrandResolver.class), guard, clock);
+                mock(BrandResolver.class), guard, new TaxGateEvaluator(request -> new TaxResolver.Resolution("RESOLVED", "EXEMPT", "AT.X", "S001", "0%", null, "v", "r"), false), clock);
         assertThatThrownBy(() -> writer.create(OWNER, create(DRESSES))).isInstanceOfSatisfying(
                 DepartmentNotAllowed.class, e -> assertThat(e.getMessage())
                         .contains("not set up to sell in Fashion"));

@@ -16,23 +16,23 @@ class PrefillDomainTest {
         List<CategoryHintPolicy.Match> m = hints.match(List.of("en:plant-based-foods-and-beverages",
                 "en:plant-based-foods", "en:cereals-and-potatoes", "en:cereals-and-their-products", "en:rices",
                 "en:long-grain-rices"), 3);
-        assertThat(m).extracting(CategoryHintPolicy.Match::path).containsExactly("Groceries › Pantry › Grains & rice");
+        assertThat(m).extracting(CategoryHintPolicy.Match::path).containsExactly("Groceries & Food › Rice & grains › Rice & grains");
         assertThat(m.getFirst().matchedOn()).isEqualTo("en:long-grain-rices");
 
         assertThat(hints.match(List.of("en:groceries", "en:sauces", "en:tomato-pastes"), 3))
-                .extracting(CategoryHintPolicy.Match::path).containsExactly("Groceries › Pantry › Sauces & pastes");
+                .extracting(CategoryHintPolicy.Match::path).containsExactly("Groceries & Food › Beans, pantry foods & sauces › Beans, pantry foods & sauces");
         assertThat(hints.match(List.of("en:beverages", "en:hot-beverages", "en:herbal-teas"), 3))
                 .extracting(CategoryHintPolicy.Match::path)
-                .containsExactly("Groceries › Drinks › Teas & hibiscus", "Health › Wellness › Herbal teas & remedies");
+                .containsExactly("Beverages › Coffee & tea, dry › Coffee & tea, dry", "Health & Wellness › Dietary supplements › Dietary supplements");
         assertThat(hints.match(List.of("en:snacks", "en:salty-snacks", "en:plantain-chips"), 1))
-                .extracting(CategoryHintPolicy.Match::path).containsExactly("Groceries › Pantry › Snacks");
+                .extracting(CategoryHintPolicy.Match::path).containsExactly("Groceries & Food › Packaged snacks › Packaged snacks");
     }
 
     @Test
     void gs1GpcSegmentsGiveADepartmentAndUnknownTagsNothing() {
         assertThat(hints.match(List.of("gpc:10000043"), 3)).isEmpty();
         assertThat(hints.match(List.of("gpc:50202300"), 3)).extracting(CategoryHintPolicy.Match::path)
-                .containsExactly("Groceries");
+                .containsExactly("Groceries & Food");
         assertThat(hints.match(List.of("en:frozen-pizzas-and-pies"), 3)).isEmpty();
         assertThat(hints.match(List.of(), 3)).isEmpty();
     }

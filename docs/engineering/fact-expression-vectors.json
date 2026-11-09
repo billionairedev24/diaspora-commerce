@@ -1,0 +1,456 @@
+{
+ "_comment": "Shared test vectors of the show-when / required-when expression grammar. Run by the catalog (FactExpressionsTest), the seller form (fact-expressions.test.ts) and checked against tools/taxonomy/evaluator.py (tools/seed tests). Semantics: docs/engineering/taxonomy.md.",
+ "vectors": [
+  {
+   "name": "null expression is always true",
+   "expr": null,
+   "facts": {},
+   "expect": true
+  },
+  {
+   "name": "isTrue true",
+   "expr": {
+    "op": "isTrue",
+    "fact": "a"
+   },
+   "facts": {
+    "a": true
+   },
+   "expect": true
+  },
+  {
+   "name": "isTrue false value",
+   "expr": {
+    "op": "isTrue",
+    "fact": "a"
+   },
+   "facts": {
+    "a": false
+   },
+   "expect": false
+  },
+  {
+   "name": "isTrue missing fact",
+   "expr": {
+    "op": "isTrue",
+    "fact": "a"
+   },
+   "facts": {},
+   "expect": false
+  },
+  {
+   "name": "isFalse false",
+   "expr": {
+    "op": "isFalse",
+    "fact": "a"
+   },
+   "facts": {
+    "a": false
+   },
+   "expect": true
+  },
+  {
+   "name": "isFalse true",
+   "expr": {
+    "op": "isFalse",
+    "fact": "a"
+   },
+   "facts": {
+    "a": true
+   },
+   "expect": false
+  },
+  {
+   "name": "isFalse missing fact is false",
+   "expr": {
+    "op": "isFalse",
+    "fact": "a"
+   },
+   "facts": {},
+   "expect": false
+  },
+  {
+   "name": "isTrue on a number is false",
+   "expr": {
+    "op": "isTrue",
+    "fact": "a"
+   },
+   "facts": {
+    "a": 1
+   },
+   "expect": false
+  },
+  {
+   "name": "eq choice",
+   "expr": {
+    "op": "eq",
+    "fact": "c",
+    "value": "X"
+   },
+   "facts": {
+    "c": "X"
+   },
+   "expect": true
+  },
+  {
+   "name": "eq other choice",
+   "expr": {
+    "op": "eq",
+    "fact": "c",
+    "value": "X"
+   },
+   "facts": {
+    "c": "Y"
+   },
+   "expect": false
+  },
+  {
+   "name": "eq missing",
+   "expr": {
+    "op": "eq",
+    "fact": "c",
+    "value": "X"
+   },
+   "facts": {},
+   "expect": false
+  },
+  {
+   "name": "eq number 2 and 2.0",
+   "expr": {
+    "op": "eq",
+    "fact": "n",
+    "value": 2
+   },
+   "facts": {
+    "n": 2.0
+   },
+   "expect": true
+  },
+  {
+   "name": "in list",
+   "expr": {
+    "op": "in",
+    "fact": "c",
+    "values": [
+     "X",
+     "Y"
+    ]
+   },
+   "facts": {
+    "c": "Y"
+   },
+   "expect": true
+  },
+  {
+   "name": "in list miss",
+   "expr": {
+    "op": "in",
+    "fact": "c",
+    "values": [
+     "X",
+     "Y"
+    ]
+   },
+   "facts": {
+    "c": "Z"
+   },
+   "expect": false
+  },
+  {
+   "name": "in missing",
+   "expr": {
+    "op": "in",
+    "fact": "c",
+    "values": [
+     "X",
+     "Y"
+    ]
+   },
+   "facts": {},
+   "expect": false
+  },
+  {
+   "name": "gt true",
+   "expr": {
+    "op": "gt",
+    "fact": "n",
+    "value": 2.5
+   },
+   "facts": {
+    "n": 3
+   },
+   "expect": true
+  },
+  {
+   "name": "gt equal is false",
+   "expr": {
+    "op": "gt",
+    "fact": "n",
+    "value": 2.5
+   },
+   "facts": {
+    "n": 2.5
+   },
+   "expect": false
+  },
+  {
+   "name": "gte equal",
+   "expr": {
+    "op": "gte",
+    "fact": "n",
+    "value": 2.5
+   },
+   "facts": {
+    "n": 2.5
+   },
+   "expect": true
+  },
+  {
+   "name": "lt",
+   "expr": {
+    "op": "lt",
+    "fact": "n",
+    "value": 50
+   },
+   "facts": {
+    "n": 49.9
+   },
+   "expect": true
+  },
+  {
+   "name": "lte equal",
+   "expr": {
+    "op": "lte",
+    "fact": "n",
+    "value": 50
+   },
+   "facts": {
+    "n": 50
+   },
+   "expect": true
+  },
+  {
+   "name": "lte above",
+   "expr": {
+    "op": "lte",
+    "fact": "n",
+    "value": 50
+   },
+   "facts": {
+    "n": 50.1
+   },
+   "expect": false
+  },
+  {
+   "name": "gt missing is false",
+   "expr": {
+    "op": "gt",
+    "fact": "n",
+    "value": 1
+   },
+   "facts": {},
+   "expect": false
+  },
+  {
+   "name": "gt on text is false",
+   "expr": {
+    "op": "gt",
+    "fact": "n",
+    "value": 1
+   },
+   "facts": {
+    "n": "5"
+   },
+   "expect": false
+  },
+  {
+   "name": "gt on boolean is false",
+   "expr": {
+    "op": "gt",
+    "fact": "n",
+    "value": 0
+   },
+   "facts": {
+    "n": true
+   },
+   "expect": false
+  },
+  {
+   "name": "all true",
+   "expr": {
+    "all": [
+     {
+      "op": "isTrue",
+      "fact": "a"
+     },
+     {
+      "op": "isFalse",
+      "fact": "b"
+     }
+    ]
+   },
+   "facts": {
+    "a": true,
+    "b": false
+   },
+   "expect": true
+  },
+  {
+   "name": "all one missing",
+   "expr": {
+    "all": [
+     {
+      "op": "isTrue",
+      "fact": "a"
+     },
+     {
+      "op": "isFalse",
+      "fact": "b"
+     }
+    ]
+   },
+   "facts": {
+    "a": true
+   },
+   "expect": false
+  },
+  {
+   "name": "any one true",
+   "expr": {
+    "any": [
+     {
+      "op": "isTrue",
+      "fact": "a"
+     },
+     {
+      "op": "isTrue",
+      "fact": "b"
+     }
+    ]
+   },
+   "facts": {
+    "b": true
+   },
+   "expect": true
+  },
+  {
+   "name": "any none",
+   "expr": {
+    "any": [
+     {
+      "op": "isTrue",
+      "fact": "a"
+     },
+     {
+      "op": "isTrue",
+      "fact": "b"
+     }
+    ]
+   },
+   "facts": {},
+   "expect": false
+  },
+  {
+   "name": "not of missing leaf is true",
+   "expr": {
+    "not": {
+     "op": "isTrue",
+     "fact": "a"
+    }
+   },
+   "facts": {},
+   "expect": true
+  },
+  {
+   "name": "not of true",
+   "expr": {
+    "not": {
+     "op": "isTrue",
+     "fact": "a"
+    }
+   },
+   "facts": {
+    "a": true
+   },
+   "expect": false
+  },
+  {
+   "name": "nested",
+   "expr": {
+    "all": [
+     {
+      "any": [
+       {
+        "op": "isTrue",
+        "fact": "a"
+       },
+       {
+        "op": "isTrue",
+        "fact": "b"
+       }
+      ]
+     },
+     {
+      "not": {
+       "op": "gt",
+       "fact": "n",
+       "value": 10
+      }
+     }
+    ]
+   },
+   "facts": {
+    "b": true,
+    "n": 3
+   },
+   "expect": true
+  },
+  {
+   "name": "nested fails on number",
+   "expr": {
+    "all": [
+     {
+      "any": [
+       {
+        "op": "isTrue",
+        "fact": "a"
+       },
+       {
+        "op": "isTrue",
+        "fact": "b"
+       }
+      ]
+     },
+     {
+      "not": {
+       "op": "gt",
+       "fact": "n",
+       "value": 10
+      }
+     }
+    ]
+   },
+   "facts": {
+    "b": true,
+    "n": 30
+   },
+   "expect": false
+  },
+  {
+   "name": "empty all is true",
+   "expr": {
+    "all": []
+   },
+   "facts": {},
+   "expect": true
+  },
+  {
+   "name": "empty any is false",
+   "expr": {
+    "any": []
+   },
+   "facts": {},
+   "expect": false
+  }
+ ]
+}

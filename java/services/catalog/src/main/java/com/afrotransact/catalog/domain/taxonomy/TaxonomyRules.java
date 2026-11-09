@@ -43,7 +43,7 @@ public final class TaxonomyRules {
     public static final String PATH_SEPARATOR = " › ";
 
     private static final Pattern NODE_CODE = Pattern.compile("^[a-z0-9]+(-[a-z0-9]+)*$");
-    private static final Pattern TYPE_CODE = Pattern.compile("^[a-z][a-z0-9_]{1,39}$");
+    private static final Pattern TYPE_CODE = Pattern.compile("^[a-z][a-z0-9_-]{1,39}$");
     private static final Pattern ATTRIBUTE_KEY = Pattern.compile("^[a-z][a-z0-9_]{1,39}$");
     private static final Pattern DIACRITICS = Pattern.compile("\\p{M}+");
     private static final Pattern NON_WORD = Pattern.compile("[^a-z0-9]+");
@@ -267,6 +267,17 @@ public final class TaxonomyRules {
         for (int i = 0; i < attributes.size(); i++) {
             AttributeDefinition a = attributes.get(i);
             String at = "attributes[" + i + "].";
+            if (a.taxFact()) {
+                // Tax questions belong to the category's tax profile: they come from the dataset import, never from here.
+                AttributeDefinition stored = current == null ? null : current.stream()
+                        .filter(c -> c.taxFact() && c.key().equals(a.key())).findFirst().orElse(null);
+                if (stored == null || !stored.equals(a)) {
+                    errors.put(at + "key", "Tax questions are managed by the category's tax profile and cannot be changed here");
+                } else if (seen.add(a.key())) {
+                    out.add(stored);
+                }
+                continue;
+            }
             if (a.key() == null || !ATTRIBUTE_KEY.matcher(a.key()).matches()) {
                 errors.put(at + "key", "Lower-case letters, digits and _ (2 to 40), starting with a letter");
             } else if (!seen.add(a.key())) {
@@ -315,6 +326,10 @@ public final class TaxonomyRules {
                     a.kind() == AttributeKind.MULTILINE, a.kind(), a.units(), a.section(), help, a.applies()));
         }
         protectTaxQuestion(out, current, errors);
+        if (current != null) {
+            current.stream().filter(c -> c.taxFact() && out.stream().noneMatch(o -> o.key().equals(c.key())))
+                    .forEach(c -> errors.put("attributes", "The tax question \"" + c.label() + "\" cannot be removed here"));
+        }
         if (!errors.isEmpty()) {
             throw new CatalogRuleViolation("The attributes have " + errors.size() + " problem(s)", errors);
         }

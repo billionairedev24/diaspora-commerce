@@ -15,42 +15,47 @@ import java.util.Map;
  */
 public class DefaultCategoryHintPolicy implements CategoryHintPolicy {
 
-    private static final String PANTRY = "Groceries › Pantry › ";
+    private static final String FOOD = "Groceries & Food › ";
     private static final Map<String, List<String>> RULES = rules();
     /** GS1 Global Product Classification segments (first two digits of the brick code) → department. */
-    private static final Map<String, String> GPC_SEGMENTS = Map.of("50", "Groceries", "53", "Beauty", "60", "Books",
-            "67", "Fashion");
+    private static final Map<String, String> GPC_SEGMENTS = Map.of("50", "Groceries & Food", "53",
+            "Beauty & Personal Care", "60", "Books & Media", "67", "Fashion & Accessories");
 
     private static Map<String, List<String>> rules() {
         Map<String, List<String>> r = new LinkedHashMap<>();
-        r.put(PANTRY + "Spices & seasonings", List.of("spices", "spice", "seasonings", "seasoning", "condiments",
-                "bouillon cubes", "stock cubes", "bouillons", "herbs", "dried herbs", "salts", "curry powders",
+        r.put(FOOD + "Spices & seasonings › Spices & seasonings", List.of("spices", "spice", "seasonings", "seasoning",
+                "condiments", "bouillon cubes", "stock cubes", "bouillons", "herbs", "dried herbs", "salts", "curry powders",
                 "pepper powders", "ground peppers", "cameroon peppers", "suya spices", "crayfish"));
-        r.put(PANTRY + "Sauces & pastes", List.of("sauces", "sauce", "tomato pastes", "tomato concentrates",
-                "pastes", "spreads", "pepper sauces", "hot sauces", "ketchup", "palm oils", "red palm oils",
-                "vegetable oils", "cooking oils", "groundnut oils", "stews", "soups"));
-        r.put(PANTRY + "Snacks", List.of("snacks", "salty snacks", "sweet snacks", "chips", "crisps",
-                "plantain chips", "chin chin", "biscuits", "cookies", "crackers", "nuts", "peanuts", "roasted peanuts",
-                "confectioneries", "candies", "chocolates", "popcorn"));
-        r.put(PANTRY + "Grains & rice", List.of("rices", "rice", "long grain rices", "basmati rices", "jasmine rices",
-                "cereal grains", "grains", "cereals", "flours", "flour", "cassava flours", "yam flours", "plantain flours",
-                "semolinas", "semolina", "garri", "gari", "fufu", "eba", "couscous", "millets", "fonio", "sorghum",
-                "maize flours", "corn flours", "oats", "beans", "dried beans", "black eyed peas", "legumes", "pulses",
-                "lentils", "pastas", "noodles", "instant noodles"));
-        r.put("Groceries › Fresh › Frozen & perishables", List.of("frozen foods", "frozen", "meats", "meat",
-                "fishes", "fish", "seafood", "smoked fishes", "dried fishes", "poultries", "chicken", "goat meats",
-                "dairies", "cheeses", "yogurts", "fresh vegetables", "fresh fruits", "plantains", "yams"));
-        r.put("Groceries › Drinks › Teas & hibiscus", List.of("teas", "tea", "black teas", "green teas", "hibiscus",
-                "hibiscus teas", "zobo", "bissap", "infusions", "herbal teas", "malt drinks"));
-        r.put("Groceries › Drinks › Coffee", List.of("coffees", "coffee", "ground coffees", "coffee beans",
-                "instant coffees"));
-        r.put("Health › Wellness › Herbal teas & remedies", List.of("herbal teas", "herbal remedies",
-                "dietary supplements", "food supplements", "moringa", "bitter kola"));
-        r.put("Beauty › Skin care › Butters & oils", List.of("shea butters", "shea butter", "cocoa butters",
-                "body butters", "body oils", "skin care", "moisturizers", "creams"));
-        r.put("Beauty › Skin care › Soaps", List.of("soaps", "soap", "black soaps", "african black soaps"));
-        r.put("Beauty › Hair care › Hair oils", List.of("hair oils", "hair care", "hair creams"));
-        r.put("Books › Books › Cookbooks", List.of("cookbooks", "cook books", "recipe books"));
+        r.put(FOOD + "Beans, pantry foods & sauces › Beans, pantry foods & sauces", List.of("sauces", "sauce",
+                "tomato pastes", "tomato concentrates", "pastes", "spreads", "pepper sauces", "hot sauces", "ketchup",
+                "stews", "soups", "beans", "dried beans", "black eyed peas", "legumes", "pulses", "lentils"));
+        r.put(FOOD + "Cooking oils › Cooking oils", List.of("palm oils", "red palm oils", "vegetable oils",
+                "cooking oils", "groundnut oils"));
+        r.put(FOOD + "Packaged snacks › Packaged snacks", List.of("snacks", "salty snacks", "sweet snacks", "chips",
+                "crisps", "plantain chips", "chin chin", "biscuits", "cookies", "crackers", "popcorn"));
+        r.put(FOOD + "Nuts & seeds › Nuts & seeds", List.of("nuts", "peanuts", "roasted peanuts", "seeds"));
+        r.put(FOOD + "Candy & gum › Candy & gum", List.of("confectioneries", "candies", "chocolates", "gums"));
+        r.put(FOOD + "Rice & grains › Rice & grains", List.of("rices", "rice", "long grain rices", "basmati rices",
+                "jasmine rices", "cereal grains", "grains", "cereals", "semolinas", "semolina", "couscous", "millets",
+                "fonio", "sorghum", "oats"));
+        r.put(FOOD + "Flours & starches › Flours & starches", List.of("flours", "flour", "cassava flours", "yam flours",
+                "plantain flours", "garri", "gari", "fufu", "eba", "maize flours", "corn flours"));
+        r.put(FOOD + "Pasta & noodles › Pasta & noodles", List.of("pastas", "noodles", "instant noodles"));
+        r.put(FOOD + "Meat, poultry & fish › Meat, poultry & fish", List.of("meats", "meat", "fishes", "fish", "seafood",
+                "smoked fishes", "dried fishes", "poultries", "chicken", "goat meats"));
+        r.put(FOOD + "Frozen meals › Frozen meals", List.of("frozen foods", "frozen"));
+        r.put(FOOD + "Dairy & eggs › Dairy & eggs", List.of("dairies", "cheeses", "yogurts", "eggs"));
+        r.put(FOOD + "Fresh produce › Fresh produce", List.of("fresh vegetables", "fresh fruits", "plantains", "yams"));
+        r.put("Beverages › Coffee & tea, dry › Coffee & tea, dry", List.of("teas", "tea", "black teas", "green teas",
+                "hibiscus", "hibiscus teas", "zobo", "bissap", "infusions", "herbal teas", "coffees", "coffee",
+                "ground coffees", "coffee beans", "instant coffees"));
+        r.put("Health & Wellness › Dietary supplements › Dietary supplements", List.of("herbal teas", "dietary supplements",
+                "food supplements", "moringa", "bitter kola", "herbal remedies"));
+        r.put("Beauty & Personal Care › Skincare & cosmetics › Skincare & cosmetics", List.of("shea butters",
+                "shea butter", "cocoa butters", "body butters", "body oils", "skin care", "moisturizers", "creams",
+                "soaps", "soap", "black soaps", "african black soaps"));
+        r.put("Beauty & Personal Care › Haircare › Haircare", List.of("hair oils", "hair care", "hair creams"));
+        r.put("Books & Media › Printed books › Printed books", List.of("cookbooks", "cook books", "recipe books"));
         return r;
     }
 
