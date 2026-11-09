@@ -82,7 +82,7 @@ class ImageLibraryServiceImpl implements ImageLibraryService {
                     }
                 }
                 variants.add(new VariantDraft(v.options(), v.sellerSku(), v.gtin(), v.gtinExempt(), v.priceMinor(),
-                        v.quantity(), v.compareAtMinor(), own));
+                        v.quantity(), v.compareAtMinor(), own, v.atin().value(), v.tax().facts()));
             }
             if (images == null && !variantChanged) {
                 continue;

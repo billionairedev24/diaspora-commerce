@@ -38,7 +38,7 @@ public final class VariantOptions {
                 options.put(sizeDimension, chart.row(size).map(ChartRow::size).orElse(size));
             }
             out.add(new VariantDraft(options, v.sellerSku(), v.gtin(), v.gtinExempt(), v.priceMinor(), v.quantity(),
-                    v.compareAtMinor(), v.images()));
+                    v.compareAtMinor(), v.images(), v.atin(), v.taxFacts()));
         }
         return out;
     }
@@ -65,7 +65,7 @@ public final class VariantOptions {
                 options.put(dim.name(), value);
             }
             out.add(new VariantDraft(options, v.sellerSku(), v.gtin(), v.gtinExempt(), v.priceMinor(), v.quantity(),
-                    v.compareAtMinor(), v.images()));
+                    v.compareAtMinor(), v.images(), v.atin(), v.taxFacts()));
         }
         return out;
     }

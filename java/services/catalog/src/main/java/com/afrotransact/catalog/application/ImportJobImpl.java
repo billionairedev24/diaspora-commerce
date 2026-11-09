@@ -318,7 +318,7 @@ class ImportJobImpl implements ImportJob {
                 compareAt = null;
             }
             variants.add(new VariantDraft(v.options(), v.sellerSku(), v.gtin(), v.gtinExempt(), price, qty, compareAt,
-                    v.images()));
+                    v.images(), v.atin().value(), v.tax().facts()));
         }
         Map<String, String> attributes = new LinkedHashMap<>(current.attributes());
         attributes.putAll(p.attributes());
@@ -329,7 +329,7 @@ class ImportJobImpl implements ImportJob {
                 p.packaging() != null ? p.packaging() : d.packaging(),
                 p.handlingDays() != null ? p.handlingDays() : d.handlingDays(), d.shipFrom(),
                 p.sizeChartId() != null ? p.sizeChartId() : d.sizeChartId(),
-                p.fitNote() != null ? p.fitNote() : d.fitNote());
+                p.fitNote() != null ? p.fitNote() : d.fitNote(), d.sellerBehaviour());
         return new UpdateProductCommand(null, p.title() != null ? p.title() : current.title(), attributes, imgs,
                 current.variationTheme(), variants, p.preorderEligible(), null, details, null, null);
     }
