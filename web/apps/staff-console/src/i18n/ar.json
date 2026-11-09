@@ -2261,5 +2261,13 @@
   "st.order.field.customerId": "معرّف العميل",
   "st.reason.rule": "{min} أحرف على الأقل.",
   "st.reason.more": "أضف بضع كلمات أخرى: {min} أحرف على الأقل ({count} من {min})",
-  "st.depts.org.noChange": "اختر قسمًا واحدًا على الأقل أو ألغِ اختياره لتتمكن من الحفظ."
+  "st.depts.org.noChange": "اختر قسمًا واحدًا على الأقل أو ألغِ اختياره لتتمكن من الحفظ.",
+  "st.dashboardView.days7": "7 أيام",
+  "st.dashboardView.days30": "30 يومًا",
+  "st.dashboardView.days90": "90 يومًا",
+  "st.dashboardView.retry": "حاول مرة أخرى",
+  "st.dashboardView.moduleError": "تعذّر تحميل هذا القسم الآن.",
+  "st.dashboardView.reports": "التقارير والتصدير",
+  "st.dashboardView.help.title": "نحن هنا لمساعدتك",
+  "st.dashboardView.help.description": "اطلب من لولا، المساعدة في الزاوية، العثور على سجل أو شرح شاشة."
 }

@@ -10,13 +10,13 @@ export interface HelpStripProps {
   title?: string;
   /** One line under the heading. */
   description?: ReactNode;
-  links: readonly { label: string; href: string }[];
+  links?: readonly { label: string; href: string }[];
   linkAs?: LinkLike;
   className?: string;
 }
 
 /** Closing strip of a dashboard: a short promise and the places to get help. A hairline above, no box. */
-export function HelpStrip({ title = 'We’re here to help', description, links, linkAs, className }: HelpStripProps) {
+export function HelpStrip({ title = 'We’re here to help', description, links = [], linkAs, className }: HelpStripProps) {
   const Link = linkAs ?? 'a';
   return (
     <section aria-label={title} className={cx(styles.help, className)}>
@@ -25,15 +25,17 @@ export function HelpStrip({ title = 'We’re here to help', description, links, 
         <h2 className={styles.helpTitle}>{title}</h2>
         {description ? <p className={styles.helpDesc}>{description}</p> : null}
       </div>
-      <ul className={styles.helpLinks}>
-        {links.map((l) => (
-          <li key={l.href + l.label}>
-            <Link href={l.href} className={styles.helpLink}>
-              {l.label}
-            </Link>
-          </li>
-        ))}
-      </ul>
+      {links.length ? (
+        <ul className={styles.helpLinks}>
+          {links.map((l) => (
+            <li key={l.href + l.label}>
+              <Link href={l.href} className={styles.helpLink}>
+                {l.label}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }

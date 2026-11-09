@@ -1344,5 +1344,14 @@
   "sc.settings.approved": "Aprobado",
   "sc.settings.pending": "Pendiente",
   "sc.settings.declined": "Rechazado",
-  "sc.settings.departmentsNone": "Su tienda aún no tiene departamento."
+  "sc.settings.departmentsNone": "Su tienda aún no tiene departamento.",
+  "sc.dashboardView.days7": "7 días",
+  "sc.dashboardView.days30": "30 días",
+  "sc.dashboardView.days90": "90 días",
+  "sc.dashboardView.retry": "Reintentar",
+  "sc.dashboardView.moduleError": "No pudimos cargar esto ahora mismo.",
+  "sc.dashboardView.reports": "Informes y exportaciones",
+  "sc.dashboardView.help.title": "Estamos aquí para ayudarte",
+  "sc.dashboardView.help.centre": "Centro de ayuda",
+  "sc.dashboardView.help.description": "¿Preguntas sobre pedidos, pagos o tu cuenta? Nuestro equipo de soporte está a un mensaje."
 }

@@ -1337,5 +1337,14 @@
   "sc.settings.approved": "Approved",
   "sc.settings.pending": "Pending",
   "sc.settings.declined": "Declined",
-  "sc.settings.departmentsNone": "Your store has no department yet."
+  "sc.settings.departmentsNone": "Your store has no department yet.",
+  "sc.dashboardView.days7": "7 days",
+  "sc.dashboardView.days30": "30 days",
+  "sc.dashboardView.days90": "90 days",
+  "sc.dashboardView.retry": "Try again",
+  "sc.dashboardView.moduleError": "We couldn’t load this just now.",
+  "sc.dashboardView.reports": "Reports and exports",
+  "sc.dashboardView.help.title": "We’re here to help",
+  "sc.dashboardView.help.centre": "Help center",
+  "sc.dashboardView.help.description": "Questions about orders, payouts or your account? Our support team is a message away."
 }

@@ -1344,5 +1344,14 @@
   "sc.settings.approved": "Approuvé",
   "sc.settings.pending": "En attente",
   "sc.settings.declined": "Refusé",
-  "sc.settings.departmentsNone": "Votre boutique n’a pas encore de rayon."
+  "sc.settings.departmentsNone": "Votre boutique n’a pas encore de rayon.",
+  "sc.dashboardView.days7": "7 jours",
+  "sc.dashboardView.days30": "30 jours",
+  "sc.dashboardView.days90": "90 jours",
+  "sc.dashboardView.retry": "Réessayer",
+  "sc.dashboardView.moduleError": "Impossible de charger cette section pour le moment.",
+  "sc.dashboardView.reports": "Rapports et exports",
+  "sc.dashboardView.help.title": "Nous sommes là pour vous aider",
+  "sc.dashboardView.help.centre": "Centre d’aide",
+  "sc.dashboardView.help.description": "Des questions sur vos commandes, versements ou votre compte ? Notre équipe d’assistance est à un message."
 }

@@ -2261,5 +2261,13 @@
   "st.order.field.customerId": "ID du client",
   "st.reason.rule": "Au moins {min} caractères.",
   "st.reason.more": "Ajoutez quelques mots : au moins {min} caractères ({count} sur {min})",
-  "st.depts.org.noChange": "Cochez ou décochez au moins un département pour enregistrer."
+  "st.depts.org.noChange": "Cochez ou décochez au moins un département pour enregistrer.",
+  "st.dashboardView.days7": "7 jours",
+  "st.dashboardView.days30": "30 jours",
+  "st.dashboardView.days90": "90 jours",
+  "st.dashboardView.retry": "Réessayer",
+  "st.dashboardView.moduleError": "Impossible de charger cette section pour le moment.",
+  "st.dashboardView.reports": "Rapports et exports",
+  "st.dashboardView.help.title": "Nous sommes là pour vous aider",
+  "st.dashboardView.help.description": "Demandez à Lola, l’assistante dans le coin, de trouver un dossier ou d’expliquer un écran."
 }

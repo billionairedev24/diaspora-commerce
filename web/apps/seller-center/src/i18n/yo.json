@@ -1344,5 +1344,14 @@
   "sc.settings.approved": "A fọwọ́ sí i",
   "sc.settings.pending": "Ń dúró",
   "sc.settings.declined": "A kọ̀ ọ́",
-  "sc.settings.departmentsNone": "Ilé ìtajà rẹ kò tíì ní ẹ̀ka."
+  "sc.settings.departmentsNone": "Ilé ìtajà rẹ kò tíì ní ẹ̀ka.",
+  "sc.dashboardView.days7": "Ọjọ́ 7",
+  "sc.dashboardView.days30": "Ọjọ́ 30",
+  "sc.dashboardView.days90": "Ọjọ́ 90",
+  "sc.dashboardView.retry": "Gbìyànjú lẹ́ẹ̀kan sí i",
+  "sc.dashboardView.moduleError": "A kò lè gbé èyí wá báyìí.",
+  "sc.dashboardView.reports": "Àwọn ìròyìn àti ìgbéjáde",
+  "sc.dashboardView.help.title": "A wà níbí láti ràn ọ́ lọ́wọ́",
+  "sc.dashboardView.help.centre": "Ibùdó ìrànlọ́wọ́",
+  "sc.dashboardView.help.description": "Ìbéèrè nípa àwọn àṣẹ, ìsanwó tàbí àkọọ́lẹ̀ rẹ? Ẹgbẹ́ ìrànlọ́wọ́ wa wà ní ìránṣẹ́ kan sí ọ."
 }

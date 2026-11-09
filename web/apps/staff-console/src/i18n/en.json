@@ -2254,5 +2254,13 @@
   "st.order.field.customerId": "Customer ID",
   "st.reason.rule": "At least {min} characters.",
   "st.reason.more": "Add a few more words: at least {min} characters ({count} of {min})",
-  "st.depts.org.noChange": "Tick or untick at least one department to save."
+  "st.depts.org.noChange": "Tick or untick at least one department to save.",
+  "st.dashboardView.days7": "7 days",
+  "st.dashboardView.days30": "30 days",
+  "st.dashboardView.days90": "90 days",
+  "st.dashboardView.retry": "Try again",
+  "st.dashboardView.moduleError": "We couldn’t load this just now.",
+  "st.dashboardView.reports": "Reports and exports",
+  "st.dashboardView.help.title": "We’re here to help",
+  "st.dashboardView.help.description": "Ask Lola, the assistant in the corner, to find a record or explain a screen."
 }

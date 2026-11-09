@@ -2,4 +2,5 @@ export { type ChartPoint, type ChartTone, defaultFormat, Donut, type DonutProps,
 export { type EmptyArt, EmptyArtwork, EmptyPrompt, type EmptyPromptProps, type LinkLike } from './EmptyPrompt';
 export { HelpStrip, type HelpStripProps } from './HelpStrip';
 export { type ModuleAction, ModuleGrid, type ModuleGridProps, ModuleSection, type ModuleSectionProps, type ModuleTone } from './ModuleSection';
+export { actionIcon, ModuleSummaries,type ModuleSummariesProps, type ModuleSummaryData } from './ModuleSummaries';
 export { type Period, PeriodSelect, type PeriodSelectProps, usePeriod } from './PeriodSelect';

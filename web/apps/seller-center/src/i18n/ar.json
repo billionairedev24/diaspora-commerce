@@ -1344,5 +1344,14 @@
   "sc.settings.approved": "تمت الموافقة",
   "sc.settings.pending": "قيد المراجعة",
   "sc.settings.declined": "مرفوض",
-  "sc.settings.departmentsNone": "ليس لمتجرك قسم بعد."
+  "sc.settings.departmentsNone": "ليس لمتجرك قسم بعد.",
+  "sc.dashboardView.days7": "7 أيام",
+  "sc.dashboardView.days30": "30 يومًا",
+  "sc.dashboardView.days90": "90 يومًا",
+  "sc.dashboardView.retry": "حاول مرة أخرى",
+  "sc.dashboardView.moduleError": "تعذّر تحميل هذا القسم الآن.",
+  "sc.dashboardView.reports": "التقارير والتصدير",
+  "sc.dashboardView.help.title": "نحن هنا لمساعدتك",
+  "sc.dashboardView.help.centre": "مركز المساعدة",
+  "sc.dashboardView.help.description": "هل لديك أسئلة عن الطلبات أو المدفوعات أو حسابك؟ فريق الدعم على بعد رسالة."
 }

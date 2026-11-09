@@ -2261,5 +2261,13 @@
   "st.order.field.customerId": "ID del cliente",
   "st.reason.rule": "Al menos {min} caracteres.",
   "st.reason.more": "Añada unas palabras más: al menos {min} caracteres ({count} de {min})",
-  "st.depts.org.noChange": "Marque o desmarque al menos un departamento para guardar."
+  "st.depts.org.noChange": "Marque o desmarque al menos un departamento para guardar.",
+  "st.dashboardView.days7": "7 días",
+  "st.dashboardView.days30": "30 días",
+  "st.dashboardView.days90": "90 días",
+  "st.dashboardView.retry": "Reintentar",
+  "st.dashboardView.moduleError": "No pudimos cargar esto ahora mismo.",
+  "st.dashboardView.reports": "Informes y exportaciones",
+  "st.dashboardView.help.title": "Estamos aquí para ayudarte",
+  "st.dashboardView.help.description": "Pide a Lola, la asistente de la esquina, que busque un registro o explique una pantalla."
 }

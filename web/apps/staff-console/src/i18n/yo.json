@@ -2261,5 +2261,13 @@
   "st.order.field.customerId": "ID oníbàárà",
   "st.reason.rule": "Ó kéré jù ni ohun kikọ {min}.",
   "st.reason.more": "Fi ọ̀rọ̀ díẹ̀ sí i: ó kéré jù ni ohun kikọ {min} ({count} nínú {min})",
-  "st.depts.org.noChange": "Yan tàbí yọ ẹ̀ka kan kúrò kí o tó lè fipamọ́."
+  "st.depts.org.noChange": "Yan tàbí yọ ẹ̀ka kan kúrò kí o tó lè fipamọ́.",
+  "st.dashboardView.days7": "Ọjọ́ 7",
+  "st.dashboardView.days30": "Ọjọ́ 30",
+  "st.dashboardView.days90": "Ọjọ́ 90",
+  "st.dashboardView.retry": "Gbìyànjú lẹ́ẹ̀kan sí i",
+  "st.dashboardView.moduleError": "A kò lè gbé èyí wá báyìí.",
+  "st.dashboardView.reports": "Àwọn ìròyìn àti ìgbéjáde",
+  "st.dashboardView.help.title": "A wà níbí láti ràn ọ́ lọ́wọ́",
+  "st.dashboardView.help.description": "Bi Lola, olùrànlọ́wọ́ tó wà ní igun, láti wá àkọsílẹ̀ tàbí láti ṣàlàyé ojú ìwé kan."
 }

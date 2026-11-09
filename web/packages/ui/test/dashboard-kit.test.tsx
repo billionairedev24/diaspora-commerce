@@ -5,7 +5,7 @@ import { act, render, renderHook, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { Donut, EmptyPrompt, HelpStrip, MiniBars, ModuleGrid, ModuleSection, PeriodSelect, Sparkline, usePeriod } from '../src';
+import { actionIcon, Donut, EmptyPrompt, HelpStrip, MiniBars, ModuleGrid, ModuleSection, ModuleSummaries, type ModuleSummaryData, PeriodSelect, Plus, Sparkline, usePeriod, Wallet } from '../src';
 
 const pts = [
   { label: 'Mon', value: 10 },
@@ -193,5 +193,45 @@ describe('design rules', () => {
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(css).not.toMatch(/rgba?\(|hsla?\(/);
     expect(css).not.toMatch(/box-shadow|drop-shadow/);
+  });
+});
+
+describe('ModuleSummaries (built from the BFF summaries)', () => {
+  const modules: ModuleSummaryData[] = [
+    {
+      id: 'sales', icon: 'sales', title: 'Sales', state: 'ready',
+      headline: { value: '$4,820.50', label: 'in sales', period: 'Last 30 days', tone: 'positive' },
+      chart: { kind: 'sparkline', label: 'Sales per day, last 30 days', valueFormat: 'money', points: pts },
+      totalLine: '128 orders', actions: [{ label: 'All orders', href: '/orders' }, { label: 'Add product', href: '/listings/new' }]
+    },
+    {
+      id: 'orders', icon: 'orders', title: 'Orders', state: 'ready',
+      headline: { value: '7', label: 'to ship now', period: null, tone: 'attention' },
+      chart: { kind: 'donut', label: 'Orders by fulfilment', valueFormat: 'count', points: [{ label: 'Ship yourself', value: 4, tone: 'ink' }, { label: 'Local driver', value: 3, tone: 'gold' }] },
+      totalLine: null, actions: []
+    },
+    { id: 'listings', icon: 'listings', title: 'Listings', state: 'empty', headline: null, chart: null, totalLine: null, actions: [], empty: { prompt: 'Add your first product to start selling.', art: 'listings', action: { label: 'Add your first product', href: '/listings/new' } } },
+    { id: 'payouts', icon: 'payouts', title: 'Payouts', state: 'unavailable', headline: null, chart: null, totalLine: null, actions: [] }
+  ];
+
+  it('renders ready, empty and unavailable modules, with a retry for the one that failed', async () => {
+    const onRetry = vi.fn();
+    render(<ModuleSummaries modules={modules} onRetry={onRetry} />);
+    expect(screen.getAllByRole('region')).toHaveLength(4);
+    expect(screen.getByRole('img', { name: /Sales per day, last 30 days/ })).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Orders by fulfilment' })).toBeInTheDocument();
+    expect(screen.getByText('Add your first product to start selling.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it('shows skeleton modules while loading', () => {
+    render(<ModuleSummaries modules={[]} loading />);
+    expect(screen.getAllByRole('status')).toHaveLength(4);
+  });
+
+  it('picks quick-action icons from where the action goes', () => {
+    expect(actionIcon('/listings/new', 'Add product')).toBe(Plus);
+    expect(actionIcon('/payouts', 'Payouts')).toBe(Wallet);
   });
 });
