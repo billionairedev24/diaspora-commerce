@@ -1393,6 +1393,83 @@ paths:
       responses:
         '204':
           description: No Content
+  /v1/products/{id}/tax-readiness:
+    get:
+      tags:
+      - Products
+      summary: Tax publish gate of a product, per variant (owner or staff)
+      description: 'Calls tax-returns POST /v1/tax/classifications/resolve for every variant with its facts and the seller''s behaviour facts. A product goes live only when status is READY. Missing facts are listed in plain words; the tax is never guessed (TX-10).'
+      operationId: productTaxReadiness
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxReadiness'
+  /v1/variants/{atin}/tax-evidence:
+    post:
+      tags:
+      - Products
+      summary: Upload the proof for an exemption fact (label photo, Drug Facts, Supplement Facts)
+      description: 'Stored with the variant and shown to tax review. Allowed: PDF, JPEG, PNG up to 10 MB. Re-uploading a fact adds a version; earlier files are kept for audit.'
+      operationId: uploadTaxEvidence
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                factId:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+              required:
+              - factId
+              - file
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxEvidence'
+        '422':
+          description: catalog.tax-evidence-invalid (not an evidence fact, wrong type or too large)
+    get:
+      tags:
+      - Products
+      summary: The evidence files of a variant (owner or staff)
+      operationId: listTaxEvidence
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaxEvidence'
   /v1/products/{id}:
     get:
       tags:
@@ -1417,7 +1494,7 @@ paths:
       tags:
       - Products
       summary: Edit a product (one-step form in edit mode)
-      description: Owner or staff. The whole content is validated again; variants are matched by sellerSku (new SKUs get ATINs;
+      description: Owner or staff. The whole content is validated again; variants are matched by sellerSku, else GTIN, else ATIN (new variants get ATINs and, when sellerSku is empty, a generated one;
         a published listing keeps its category and variants). A rejected listing goes back to review. Publishes catalog.product.updated,
         plus catalog.product.terms_changed when prices, quantities or listing terms changed and catalog.product.resubmitted
         when a rejected listing is resubmitted. 409 when version is stale.
@@ -2759,8 +2836,12 @@ components:
   schemas:
     ListingDetails:
       type: object
-      description: Description, condition, search keywords, fulfilment, package, handling time and ship-from
+      description: Description, condition, search keywords, fulfilment, package, handling time and ship-from, and the seller's tax behaviour facts
       properties:
+        sellerBehaviour:
+          type: object
+          description: 'Behaviour facts of this seller''s listing (owner OFFER): sold_heated, heated_by_seller, utensils_provided. seller_is_bakery comes from the seller profile.'
+          additionalProperties: {}
         description:
           type: string
           maxLength: 5000
@@ -2934,6 +3015,7 @@ components:
       - variants
     VariantRequest:
       type: object
+      description: 'sellerSku is optional (generated, stable and organisation-prefixed, when empty). Variants are matched by sellerSku, else gtin, else atin.'
       properties:
         options:
           type: object
@@ -2942,6 +3024,14 @@ components:
         sellerSku:
           type: string
           minLength: 1
+          description: 'The seller''s own SKU. Optional; when empty the service generates one (see Variant.sellerSkuGenerated).'
+        atin:
+          type: string
+          description: Existing variant ATIN, used to match a variant when sellerSku and gtin are absent (bulk update)
+        taxFacts:
+          type: object
+          description: 'Product tax facts of this variant by fact id (owner VARIANT): net_weight_oz, servings_per_package, juice_percent, label_type, is_candy... Evidence files are uploaded through the tax-evidence endpoint, not sent here.'
+          additionalProperties: {}
         gtin:
           type: string
         gtinExempt:
@@ -2968,7 +3058,6 @@ components:
           minItems: 0
       required:
       - options
-      - sellerSku
     Product:
       type: object
       properties:
@@ -2977,6 +3066,8 @@ components:
           format: uuid
         atin:
           type: string
+        taxStatus:
+          $ref: '#/components/schemas/VariantTaxStatus'
         ownerKind:
           type: string
         ownerOrgId:
@@ -3034,6 +3125,19 @@ components:
           type: string
         sellerSku:
           type: string
+        sellerSkuGenerated:
+          type: boolean
+          description: True when the service generated sellerSku because the seller left it empty
+        taxFacts:
+          type: object
+          additionalProperties: {}
+        taxStatus:
+          $ref: '#/components/schemas/VariantTaxStatus'
+        missingTaxFacts:
+          type: array
+          description: Facts still needed before this variant can be published (empty when taxStatus is READY)
+          items:
+            $ref: '#/components/schemas/MissingTaxFact'
         gtin:
           type: string
         gtinExempt:
@@ -4364,26 +4468,56 @@ components:
           type: boolean
         kind:
           type: string
+          description: 'BOOLEAN, DECIMAL (with unit), INTEGER, PERCENT and FILE (evidence upload) are the typed tax facts; older kinds are unchanged'
           enum:
           - TEXT
           - MULTILINE
           - ENUM
           - NUMBER
           - BRAND
+          - BOOLEAN
+          - DECIMAL
+          - INTEGER
+          - PERCENT
+          - FILE
         units:
           type: array
           items:
             type: string
+        unit:
+          type: string
+          description: 'Unit of a DECIMAL or PERCENT value, e.g. oz or %'
         section:
           type: string
           enum:
           - DETAILS
           - FOOD
           - REGULATED
+          - TAX
         help:
           type: string
         applies:
           type: boolean
+        taxFact:
+          type: boolean
+          description: 'True when the attribute is a tax fact; its key is the fact id of contracts/openapi/tax-returns.yaml FactDefinition and the value is sent to /v1/tax/classifications/resolve'
+        owner:
+          type: string
+          description: 'VARIANT facts are stored on the variant (taxFacts); OFFER facts are the seller''s behaviour and are stored with the listing (listing.sellerBehaviour)'
+          enum:
+          - VARIANT
+          - OFFER
+        showWhen:
+          $ref: '#/components/schemas/ShowCondition'
+        requiredWhen:
+          $ref: '#/components/schemas/ShowCondition'
+        evidence:
+          type: boolean
+          description: 'A FILE attribute that is proof for an exemption claim (uploaded through the tax-evidence endpoint)'
+    ShowCondition:
+      type: [object, 'null']
+      description: 'Expression tree: {all:[..]}, {any:[..]}, {not:..} or a leaf {op: isTrue|isFalse|eq|in|gt|gte|lt|lte, fact, value|values} over fact ids; null means always. Same grammar as tax-returns Condition.'
+      additionalProperties: true
     ProductType:
       type: object
       description: Attributes carry kind (TEXT, MULTILINE, ENUM, NUMBER), units, the form section (DETAILS, FOOD, REGULATED)
@@ -4668,6 +4802,79 @@ components:
           type: boolean
         message:
           type: string
+    VariantTaxStatus:
+      type: string
+      description: 'READY = the tax rules resolved to a chargeable decision and the review (if any) is approved. The others block publication: MISSING_FACTS, PENDING_REVIEW, BLOCKED, NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN (same meaning as tax-returns ResolveStatus) and REJECTED.'
+      enum:
+      - READY
+      - MISSING_FACTS
+      - PENDING_REVIEW
+      - BLOCKED
+      - NEEDS_APPROVAL
+      - REFINE_CODE
+      - CONFLICT_OPEN
+      - REJECTED
+    MissingTaxFact:
+      type: object
+      required:
+      - factId
+      - message
+      properties:
+        factId:
+          type: string
+        label:
+          type: string
+        message:
+          type: string
+          description: Plain words for the seller
+    TaxReadiness:
+      type: object
+      description: 'Publish gate for a product: it can go live only when status is READY (every variant READY)'
+      properties:
+        productId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/VariantTaxStatus'
+        categoryCode:
+          type: string
+        ruleVersion:
+          type: string
+        variants:
+          type: array
+          items:
+            type: object
+            properties:
+              atin:
+                type: string
+              sellerSku:
+                type: string
+              status:
+                $ref: '#/components/schemas/VariantTaxStatus'
+              missingTaxFacts:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MissingTaxFact'
+              reason:
+                type: string
+    TaxEvidence:
+      type: object
+      properties:
+        atin:
+          type: string
+        factId:
+          type: string
+        fileName:
+          type: string
+        contentType:
+          type: string
+        url:
+          type: string
+        uploadedBy:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
     CategoryNode:
       type: object
       properties:
@@ -4693,6 +4900,18 @@ components:
           description: On a department, the evidence sellers must have on file to sell in it (FOOD_PERMIT, BEAUTY_LABELLING)
           items:
             type: string
+        taxProfileId:
+          type: string
+          description: 'On a category node (the tax-bearing level of department > category > product type): the tax profile it uses, equal to the profile categoryCode of tax-returns (e.g. nuts-seeds). Absent on departments and product types.'
+        taxStatus:
+          type: string
+          description: 'Gate of the tax profile, read from tax-returns: sellers cannot publish into a category whose status is not ACTIVE'
+          enum:
+          - ACTIVE
+          - NEEDS_APPROVAL
+          - BLOCKED_BUNDLE
+          - REFINE_CODE
+          - CONFLICT_OPEN
     SellerCatalogScope:
       type: object
       properties:
