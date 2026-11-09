@@ -75,6 +75,11 @@ jobs:
         env:
           CONFIRM: ${{ inputs.confirm-destroy }}
           TAG_INPUT: ${{ inputs.image-tag }}
+          OVH_DOMAIN: ${{ vars.OVH_DOMAIN }}
+          OVH_STOREFRONT_HOST: ${{ vars.OVH_STOREFRONT_HOST || 'www' }}
+          OVH_SELLER_HOST: ${{ vars.OVH_SELLER_HOST }}
+          OVH_ADMIN_HOST: ${{ vars.OVH_ADMIN_HOST }}
+          CLOUDFLARE_ZONE: ${{ vars.CLOUDFLARE_ZONE }}
         run: |
           for v in OVH_LOCATION OVH_SERVICE_NAME TF_STATE_BUCKET OVH_APPLICATION_KEY OVH_APPLICATION_SECRET OVH_CONSUMER_KEY TF_VAR_ssh_public_key; do
             [[ -n "${!v}" ]] || { echo "::error::$v is empty: run make ovh-gh-setup (docs/runbooks/ovh-vps.md, step 4)"; exit 1; }
@@ -86,6 +91,8 @@ jobs:
           [[ "$tag" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::image-tag must be a full 40-character git sha"; exit 1; }
           echo "IMAGE_TAG=$tag" >> "$GITHUB_ENV"
           echo "IMAGE_REGISTRY=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+          # Web hosts: validated before anything is created (warns when a host is deeper than one label under the zone).
+          if [[ "$ACTION" != destroy && "$ACTION" != plan ]]; then tools/ovh/web-hosts.sh > /dev/null; fi
 
       - uses: opentofu/setup-opentofu@v2
         with:
@@ -177,6 +184,9 @@ jobs:
         env:
           OVH_DOMAIN: ${{ vars.OVH_DOMAIN }}
           OVH_STOREFRONT_HOST: ${{ vars.OVH_STOREFRONT_HOST || 'www' }}
+          OVH_SELLER_HOST: ${{ vars.OVH_SELLER_HOST }}
+          OVH_ADMIN_HOST: ${{ vars.OVH_ADMIN_HOST }}
+          OVH_MEDIA_PUBLIC_URL: ${{ vars.OVH_MEDIA_PUBLIC_URL }}
           ACME_EMAIL: ${{ vars.ACME_EMAIL }}
           GHCR_USER: ${{ vars.REGISTRY_PULL_USERNAME || github.actor }}
           GHCR_TOKEN: ${{ secrets.REGISTRY_PULL_TOKEN || github.token }}
@@ -237,12 +247,18 @@ jobs:
         env:
           OVH_DOMAIN: ${{ vars.OVH_DOMAIN }}
           OVH_STOREFRONT_HOST: ${{ vars.OVH_STOREFRONT_HOST || 'www' }}
+          OVH_SELLER_HOST: ${{ vars.OVH_SELLER_HOST }}
+          OVH_ADMIN_HOST: ${{ vars.OVH_ADMIN_HOST }}
+          CLOUDFLARE_ZONE: ${{ vars.CLOUDFLARE_ZONE }}
         run: |
+          # storefront_url, seller_url, admin_url: validated values, safe to eval (a host name regex checked them).
+          eval "$(tools/ovh/web-hosts.sh 2>/dev/null | grep -E '^(storefront|seller|admin)_url=')" || true
           {
             echo "### ovh-vps: $ACTION  (${{ job.status }})"
             echo "Images: \`$IMAGE_TAG\`"
             [[ -z "${SERVER_IP:-}" ]] || echo "Server: \`$SERVER_IP\` · \`ssh -i .ovh/ovh-vps-deploy-key ubuntu@$SERVER_IP\`"
             echo "API: https://api.$OVH_DOMAIN/bff · Auth: https://auth.$OVH_DOMAIN · MCP: https://mcp.$OVH_DOMAIN"
-            if [[ "$OVH_STOREFRONT_HOST" == apex ]]; then echo "Storefront: https://$OVH_DOMAIN"; else echo "Storefront: https://www.$OVH_DOMAIN (the apex redirects to it; deploy the web apps with ovh-web, storefront-host=www)"; fi
+            echo "Storefront: ${storefront_url:-https://$OVH_DOMAIN} · Seller Center: ${seller_url:-https://seller.$OVH_DOMAIN} · Staff console: ${admin_url:-https://admin.$OVH_DOMAIN}"
+            if [[ "$OVH_STOREFRONT_HOST" == www ]]; then echo "(the apex redirects to www; deploy the web apps with ovh-web, storefront-host=www)"; else echo "(deploy the web apps with ovh-web, storefront-host=apex; the hosts above are read from the same variables)"; fi
             echo "**Billing: the server is billed by the hour until you run destroy, even when stopped or scaled down.**"
           } >> "$GITHUB_STEP_SUMMARY"

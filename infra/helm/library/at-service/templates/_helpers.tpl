@@ -108,6 +108,9 @@ infra/argocd/envs/<env>/platform-values.yaml) so no service hard-codes a host:
   API_BASE_URL       https://api.<domain>             gateway-bff (public API)
   AUTH_ISSUER_URL    https://auth.<domain>            identity (OIDC issuer; token endpoint = <issuer>/oauth2/token)
   MEDIA_PUBLIC_URL   https://media.<domain>           public media CDN (R2 custom domain)
+global.sellerHost / global.adminHost (optional, default empty) are FULL host names that replace seller.<domain> / admin.<domain>
+(e.g. seller-test.example.com: one label under the Cloudflare zone, covered by the free certificate); the whole origin
+is then https://<host>. Origin allowlists stay exact: only these origins are derived, never a wildcard.
 Host names match infra/cloudflare (local.hosts). global.storefrontHost (www | apex, default www) is the one
 switch for the customer storefront's canonical host; every other app keeps its sub-domain. global.urls.<NAME> overrides one derived value for the whole
 environment; a service's own extraEnv.<NAME> wins over both (the derived entry is then not rendered, so a name
@@ -122,6 +125,13 @@ services fall back to their config/<env>.yaml / application-<env>.yml values.
 {{- if not (has $storefrontHost (list "apex" "www")) -}}
 {{- fail (printf "at-service: global.storefrontHost %q must be www or apex" $storefrontHost) -}}
 {{- end -}}
+{{- $sellerHost := trim (toString ($g.sellerHost | default "")) -}}
+{{- $adminHost := trim (toString ($g.adminHost | default "")) -}}
+{{- range $k, $h := (dict "sellerHost" $sellerHost "adminHost" $adminHost) -}}
+{{- if and $h (not (regexMatch "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,}$" $h)) -}}
+{{- fail (printf "at-service: global.%s %q must be a full lower-case host name such as seller-test.example.com (no scheme, port, path or wildcard)" $k $h) -}}
+{{- end -}}
+{{- end -}}
 {{- $vars := dict "PLATFORM_ENV" (toString .Values.env) -}}
 {{- if $domain -}}
 {{- if not (regexMatch "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$" $domain) -}}
@@ -129,8 +139,8 @@ services fall back to their config/<env>.yaml / application-<env>.yml values.
 {{- end -}}
 {{- $_ := set $vars "PLATFORM_DOMAIN" $domain -}}
 {{- $_ := set $vars "PUBLIC_WEB_URL" (ternary (printf "https://www.%s" $domain) (printf "https://%s" $domain) (eq $storefrontHost "www")) -}}
-{{- $_ := set $vars "SELLER_CENTER_URL" (printf "https://seller.%s" $domain) -}}
-{{- $_ := set $vars "STAFF_CONSOLE_URL" (printf "https://admin.%s" $domain) -}}
+{{- $_ := set $vars "SELLER_CENTER_URL" (printf "https://%s" (default (printf "seller.%s" $domain) $sellerHost)) -}}
+{{- $_ := set $vars "STAFF_CONSOLE_URL" (printf "https://%s" (default (printf "admin.%s" $domain) $adminHost)) -}}
 {{- $_ := set $vars "API_BASE_URL" (printf "https://api.%s" $domain) -}}
 {{- $_ := set $vars "AUTH_ISSUER_URL" (printf "https://auth.%s" $domain) -}}
 {{- $_ := set $vars "MEDIA_PUBLIC_URL" (printf "https://media.%s" $domain) -}}

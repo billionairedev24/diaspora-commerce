@@ -14,6 +14,11 @@ kv() { printf '%s=%q\n' "$1" "${2-}"; }
   kv DOMAIN "${OVH_DOMAIN:?OVH_DOMAIN (variable) is missing}"
   # Storefront host rule (docs/engineering/environments.md): www = https://www.<domain>, apex = https://<domain>.
   kv STOREFRONT_HOST "${OVH_STOREFRONT_HOST:-www}"
+  # Explicit web hosts (free certificate layout): full hostnames, empty = seller.<domain> / admin.<domain>. Validated by
+  # tools/ovh/web-hosts.sh; OVH_MEDIA_PUBLIC_URL empty = https://media.<domain>.
+  kv SELLER_HOST "${OVH_SELLER_HOST:-}"
+  kv ADMIN_HOST "${OVH_ADMIN_HOST:-}"
+  kv MEDIA_PUBLIC_URL "${OVH_MEDIA_PUBLIC_URL:-}"
   kv ACME_EMAIL "${ACME_EMAIL:?ACME_EMAIL (variable) is missing}"
   kv IMAGE_REGISTRY "${IMAGE_REGISTRY:?}"
   kv IMAGE_TAG "${IMAGE_TAG:?}"

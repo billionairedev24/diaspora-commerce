@@ -163,7 +163,8 @@ install_service() { # install_service SERVICE RUNTIME
   local svc="$1" dir; dir="$(chart_dir "$1" "$2")"
   [[ -d "$dir" ]] || die "no chart for $svc at $dir"
   helm dependency update "$dir" >/dev/null
-  local pull=() extra=()
+  local pull=() extra=() media=()
+  [[ -z "$MEDIA_PUBLIC_URL" ]] || media=(--set-string "global.urls.MEDIA_PUBLIC_URL=$MEDIA_PUBLIC_URL")
   [[ -n "${GHCR_USER:-}" && -n "${GHCR_TOKEN:-}" ]] && pull=(--set "imagePullSecrets[0].name=ghcr")
   [[ -f "$HERE/overrides/$svc.yaml" ]] && extra+=(-f "$HERE/overrides/$svc.yaml")
   [[ "$svc" != mcp-server ]] || extra+=(--set-string "extraEnv.MCP_PUBLIC_URL=https://mcp.${DOMAIN}")
@@ -172,7 +173,8 @@ install_service() { # install_service SERVICE RUNTIME
   helm upgrade --install "$svc" "$dir" -n "$NS" \
     -f "$dir/values-dev.yaml" -f "$HERE/values-ovh-vps.yaml" ${extra[@]+"${extra[@]}"} \
     --set "image.registry=$IMAGE_REGISTRY" --set "image.repository=$svc" --set "image.tag=$IMAGE_TAG" \
-    --set "global.domain=$DOMAIN" --set-string "global.storefrontHost=$STOREFRONT_HOST" "${pull[@]}" >/dev/null
+    --set "global.domain=$DOMAIN" --set-string "global.storefrontHost=$STOREFRONT_HOST" \
+    --set-string "global.sellerHost=$SELLER_HOST" --set-string "global.adminHost=$ADMIN_HOST" ${media[@]+"${media[@]}"} "${pull[@]}" >/dev/null
 }
 
 deploy_services() {

@@ -16,6 +16,9 @@
 #                  (PUBLIC_WEB_URL = https://www.<domain>; the apex only 301-redirects to it). apex is an explicit opt-out
 #                  (PUBLIC_WEB_URL = https://<domain>). Every other app keeps its sub-domain (docs/engineering/environments.md,
 #                  "Storefront host rule"). global.urls.PUBLIC_WEB_URL still wins over it.
+#   global.sellerHost / global.adminHost  optional FULL host names (default empty = seller.<domain> / admin.<domain>):
+#                  SELLER_CENTER_URL / STAFF_CONSOLE_URL = https://<host>. For the free Cloudflare certificate layout
+#                  (docs/engineering/environments.md, "Free certificate layout (flat web hosts)"), e.g. seller-test.example.com.
 #   global.urls    optional {ENV_NAME: value} overrides of a derived URL for the whole environment.
 # A service's extraEnv entry of the same name wins over both. Unset global.domain renders PLATFORM_ENV only.
 #

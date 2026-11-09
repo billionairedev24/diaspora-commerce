@@ -16,6 +16,13 @@ load_config() {
   set -a; . "$HERE/config.env"; [[ -f "$HERE/secrets.local.env" ]] && . "$HERE/secrets.local.env"; set +a
   : "${DOMAIN:?}" "${IMAGE_REGISTRY:?}" "${IMAGE_TAG:?}" "${DB_MODE:=cluster}" "${STOREFRONT_HOST:=www}"
   case "$STOREFRONT_HOST" in www|apex) ;; *) die "STOREFRONT_HOST must be www or apex" ;; esac
+  # Optional explicit web hosts (full hostnames, default seller.$DOMAIN / admin.$DOMAIN); same rules as tools/ovh/web-hosts.sh.
+  : "${SELLER_HOST:=}" "${ADMIN_HOST:=}" "${MEDIA_PUBLIC_URL:=}"
+  local h re='^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$'
+  for h in "$SELLER_HOST" "$ADMIN_HOST"; do
+    [[ -z "$h" || "$h" =~ $re ]] || die "SELLER_HOST / ADMIN_HOST must be a full lower-case hostname (got '$h')"
+  done
+  [[ -z "$MEDIA_PUBLIC_URL" || "$MEDIA_PUBLIC_URL" =~ ^https://[a-z0-9.-]+(/[A-Za-z0-9._~/-]*)?$ ]] || die "MEDIA_PUBLIC_URL must be an https URL"
   [[ "$IMAGE_TAG" =~ ^[0-9a-f]{40}$ ]] || die "IMAGE_TAG must be the full 40-character git sha the CI built"
   case "$DB_MODE" in cluster|external) ;; *) die "DB_MODE must be cluster or external" ;; esac
   if [[ "$DB_MODE" == external ]]; then
