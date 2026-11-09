@@ -190,5 +190,15 @@ and go/pkg/auth's `Middleware` turn the person into a `CUSTOMER` of their own su
   `/v1/seller/**` and `/v1/staff/**`). Seller Center and Provider Hub relay the token as issued.
 - **A service relaying a shopper's token** forwards it (orders → cart / identity at checkout, ai-gateway's Lola
   tools). Code that checks `actor.type() == CUSTOMER` needs nothing else.
-- **Staff, services, partner apps and AI agents** are never changed. The header can only narrow a person to a
-  shopper.
+- **Staff and platform admins shop too.** Every signed-in person, whatever their role (customer, seller or provider
+  member, driver, staff), shops as themselves: with the header they become a `CUSTOMER` of their own user id for the
+  cart, checkout, their own orders, addresses, payment methods, wallet and credit, reviews and stock alerts. This is
+  not an elevation. Staff additionally lose every role but `account.*` and every permission but `mcp:shopper`, so
+  staff scopes never reach customer endpoints, and staff endpoints (`/v1/staff/**`, no header) still need them.
+  The surface decides, never the role: the same route resolves the same customer id on every hop (gateway cart
+  read, cart add, orders checkout), which is what keeps checkout from reporting `orders.line-not-in-cart` for a
+  staff account. Nothing forbids a seller from buying their own listing today (there is no self-purchase rule).
+- **Services, partner apps and AI agents** are never changed. The header can only narrow a person to a shopper.
+- **Cart mismatches** (`orders.line-not-in-cart`, `orders.cart-changed`, `orders.cart-empty`,
+  `orders.cart-not-checkoutable`) show "Your cart changed, please review it." with a link back to the cart in the
+  storefront and the customer app (`isCartMismatch` in `@afrotransact/api-client`); the raw detail is never shown.

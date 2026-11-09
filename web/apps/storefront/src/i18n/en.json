@@ -660,6 +660,8 @@
   "co.total": "Order total",
   "co.stripeNote": "Stripe · authorised now, captured per shipment",
   "co.needAddress": "Choose a delivery address.",
+  "co.cartChanged": "Your cart changed, please review it.",
+  "co.cartChanged.link": "Review your cart",
   "co.needPayment": "Choose a payment method.",
   "co.emptyTitle": "Nothing to check out",
   "co.emptyBody": "Select items in your cart to check out.",

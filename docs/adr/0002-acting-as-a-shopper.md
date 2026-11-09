@@ -26,9 +26,9 @@ The client says which context a request runs in, and the resource servers apply 
 
 - **Header** `X-Acting-As: CUSTOMER`. go/pkg/auth `Middleware` (via `ActingAs`) and platform-security's
   auto-configured `ActorResolver` (`ActingAsActorResolver` wrapping `JwtActorResolver` or `LocalActorResolver`)
-  apply it to a **person**: `CUSTOMER`, `SELLER_MEMBER`, `PROVIDER_MEMBER` or `DRIVER`. That person becomes a
+  apply it to a **person**: `CUSTOMER`, `SELLER_MEMBER`, `PROVIDER_MEMBER`, `DRIVER` or `STAFF` (staff and platform admins shop too, 2026-11). That person becomes a
   `CUSTOMER` with the same subject, no organisation, only their `account.*` roles, and the token's own
-  permissions. Staff, services, partner apps and AI agents are never changed. Any other value is ignored.
+  permissions (staff keep only `mcp:shopper`: no staff scope reaches a customer endpoint). Services, partner apps and AI agents are never changed. Any other value is ignored.
 - **gateway-bff** marks every route except `/v1/seller/**` and `/v1/staff/**` as a shopper request, and its upstream
   client (and the Lola stream) sends the header with the person's token. So storefront and customer-app routes
   (cart, checkout, account, orders, returns, bookings, pre-orders, Lola, `/v1/me`, sign-in cart merge) act as the
@@ -39,8 +39,8 @@ The client says which context a request runs in, and the resource servers apply 
 ## Why this is safe
 
 The header can only narrow a person to a shopper. Every account already is one (`account.customer`), the subject
-is unchanged, and the organisation is dropped, so org-scoped permissions grant nothing. It cannot make anyone staff,
-another person, or a member of an organisation. Staff and service principals ignore it.
+is unchanged, and the organisation is dropped, so org-scoped permissions grant nothing. It cannot make anyone staff (staff shopping drops their staff roles and permissions),
+another person, or a member of an organisation. Service principals ignore it.
 
 ## Alternatives considered
 

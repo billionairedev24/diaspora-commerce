@@ -666,6 +666,8 @@
   "co.total": "Àpapọ̀ ìbéèrè",
   "co.stripeNote": "Stripe · a fọwọ́ sí i báyìí, a ó gba owó fún ẹrù kọ̀ọ̀kan",
   "co.needAddress": "Yan àdírẹ́sì ìfiránṣẹ́.",
+  "co.cartChanged": "Àpótí rírà rẹ ti yípadà, jọ̀wọ́ ṣàyẹ̀wò rẹ̀.",
+  "co.cartChanged.link": "Ṣàyẹ̀wò àpótí rírà rẹ",
   "co.needPayment": "Yan ọ̀nà ìsanwó.",
   "co.emptyTitle": "Kò sí nǹkan láti san",
   "co.emptyBody": "Yan àwọn ohun nínú apẹ̀rẹ̀ rẹ láti sanwó.",

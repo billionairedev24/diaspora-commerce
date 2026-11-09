@@ -666,6 +666,8 @@
   "co.total": "Total de la commande",
   "co.stripeNote": "Stripe · autorisé maintenant, débité à chaque expédition",
   "co.needAddress": "Choisissez une adresse de livraison.",
+  "co.cartChanged": "Votre panier a changé, veuillez le vérifier.",
+  "co.cartChanged.link": "Voir mon panier",
   "co.needPayment": "Choisissez un moyen de paiement.",
   "co.emptyTitle": "Rien à payer",
   "co.emptyBody": "Sélectionnez des articles dans votre panier pour passer commande.",

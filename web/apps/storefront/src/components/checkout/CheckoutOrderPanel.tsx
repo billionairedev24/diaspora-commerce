@@ -42,6 +42,8 @@ type Props = {
   busy: boolean;
   placing: number;
   error: string | null;
+  /** The error is "your cart changed": offer the way back to the cart. */
+  errorCartLink?: boolean;
   onPlace: () => void;
   couponDraft: string;
   setCouponDraft: (v: string) => void;
@@ -74,6 +76,7 @@ export function CheckoutOrderPanel(props: Props) {
     busy,
     placing,
     error,
+    errorCartLink,
     onPlace,
     couponDraft,
     setCouponDraft,
@@ -114,6 +117,14 @@ export function CheckoutOrderPanel(props: Props) {
           {error && (
             <p className={styles.error} role="alert">
               {error}
+              {errorCartLink && (
+                <>
+                  {' '}
+                  <Link href="/cart" data-testid="checkout-review-cart">
+                    {t('co.cartChanged.link')}
+                  </Link>
+                </>
+              )}
             </p>
           )}
           {preRun && <RunNote block={preRun} />}

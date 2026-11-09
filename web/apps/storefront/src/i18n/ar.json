@@ -666,6 +666,8 @@
   "co.total": "إجمالي الطلب",
   "co.stripeNote": "Stripe · مفوّض الآن، ويُحصَّل لكل شحنة",
   "co.needAddress": "اختر عنوان التوصيل.",
+  "co.cartChanged": "تغيّرت سلة التسوق، يرجى مراجعتها.",
+  "co.cartChanged.link": "مراجعة السلة",
   "co.needPayment": "اختر طريقة الدفع.",
   "co.emptyTitle": "لا شيء للدفع",
   "co.emptyBody": "حدد عناصر في سلتك لإتمام الشراء.",

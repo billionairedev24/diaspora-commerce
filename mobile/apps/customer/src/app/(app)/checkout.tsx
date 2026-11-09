@@ -15,7 +15,7 @@ import { accountKeys, cartKeys, checkoutKeys } from '@/api/keys';
 import { useCheckoutSummary } from '@/api/queries';
 import { type CheckoutSummary } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
-import { buildPlaceOrderRequest, defaultChoices, idempotencyKey, keyAfterFailure, type PackageChoice, paymentSheetIntent, requiresDeviceAuth, totalFor, validateChoices } from '@/domain/checkout';
+import { buildPlaceOrderRequest, checkoutFailure, defaultChoices, idempotencyKey, keyAfterFailure, type PackageChoice, paymentSheetIntent, requiresDeviceAuth, totalFor, validateChoices } from '@/domain/checkout';
 import { usePayments } from '@/payments/usePayments';
 import { c, sp, t } from '@/theme';
 import { PaymentMark } from '@/ui/PaymentMarks';
@@ -54,6 +54,7 @@ export default function Checkout() {
   const [choices, setChoices] = useState<Record<string, PackageChoice>>({});
   const [pay, setPay] = useState<PayChoice | null>(null);
   const [err, setErr] = useState('');
+  const [cartChanged, setCartChanged] = useState(false);
   const [busy, setBusy] = useState(false);
   const key = useRef<string | null>(null);
   /** The order the current key created (asked about after a failure before a new key is made). */
@@ -86,6 +87,7 @@ export default function Checkout() {
 
   const place = async (sum: CheckoutSummary) => {
     setErr('');
+    setCartChanged(false);
     if (!address) return setErr('Add a delivery address first.');
     const invalid = validateChoices(sum, choices);
     if (invalid) return setErr(invalid);
@@ -132,7 +134,9 @@ export default function Checkout() {
       const known = placedNumber.current;
       key.current = await keyAfterFailure(key.current, e, known ? () => api.checkout.status(known) : undefined);
       if (!key.current) placedNumber.current = null;
-      setErr(isApiError(e) ? e.message : e instanceof Error ? e.message : 'Payment failed. Try again.');
+      const failure = checkoutFailure(e);
+      setErr(failure.message);
+      setCartChanged(failure.cartChanged);
     } finally {
       setBusy(false);
     }
@@ -257,6 +261,7 @@ export default function Checkout() {
         <AppText variant="caption" color={c.textMuted}>One charge, split automatically between AfroTransact and each seller.</AppText>
       </View>
       {err ? <Banner tone="danger" icon={WarningCircle}>{err}</Banner> : null}
+      {err && cartChanged ? <Button kind="dark" label="Review your cart" onPress={() => router.navigate('/cart')} /> : null}
       {payments.mode === 'mock' ? <AppText variant="caption" color={c.textSubtle}>Dev mocks: Stripe is simulated.</AppText> : null}
     </Screen>
   );

@@ -9,6 +9,7 @@ type Cart,  cartKeys,
   definitiveFailure,
   type DeliverySelection,
   isApiError,
+  isCartMismatch,
   type OrderConfirmation,
   orderKeys, randomUuid } from '@afrotransact/api-client';
 import { Button, buttonClassName, LockSimple, Plus, Skeleton, useToast } from '@afrotransact/ui';
@@ -252,7 +253,9 @@ export function CheckoutView() {
     }
     end();
     setError(
-      isApiError(e)
+      isCartMismatch(e)
+        ? t('co.cartChanged')
+        : isApiError(e)
         ? (e.fieldErrors.couponCode ?? Object.values(e.fieldErrors)[0] ?? e.message)
         : e instanceof Error
           ? e.message
@@ -507,6 +510,7 @@ export function CheckoutView() {
         busy={busy}
         placing={placing}
         error={error}
+        errorCartLink={error !== null && error === t('co.cartChanged')}
         onPlace={() => void (creditPaysAll ? placeWithCredit() : payWith === 'new' || !pm ? placeWithElement() : placeWithSaved())}
         couponDraft={couponDraft}
         setCouponDraft={setCouponDraft}

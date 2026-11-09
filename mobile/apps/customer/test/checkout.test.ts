@@ -1,7 +1,7 @@
 import { ApiError } from '@afrotransact/api-client';
 import { describe, expect, it } from 'vitest';
 
-import { buildPlaceOrderRequest, type CheckoutSummary, defaultChoices, idempotencyKey, keyAfterFailure, paymentSheetIntent, requiresDeviceAuth, totalFor, validateChoices } from '../src/domain/checkout';
+import { buildPlaceOrderRequest, type CheckoutSummary, defaultChoices, idempotencyKey, checkoutFailure, CART_CHANGED_MESSAGE, keyAfterFailure, paymentSheetIntent, requiresDeviceAuth, totalFor, validateChoices } from '../src/domain/checkout';
 
 const promise = { days: 0, label: 'Today', prefix: 'FREE delivery', free: true, feeMinor: 0, expressLabel: null, cutoff: null };
 const summary = {
@@ -89,5 +89,21 @@ describe('idempotency key after a failed attempt (no double charge)', () => {
     expect(await keyAfterFailure('co_1', problem(422, 'VALIDATION_FAILED'))).toBeNull();
     expect(await keyAfterFailure('co_1', problem(409, 'IDEMPOTENCY_CONFLICT'))).toBeNull();
     expect(await keyAfterFailure('co_1', new Error('Your card was declined.'), failed)).toBeNull();
+  });
+});
+
+describe('checkoutFailure', () => {
+  const problem = (code: string, detail: string) => new ApiError({ type: 'about:blank', title: 'Unprocessable', status: 422, code, detail });
+
+  it('shows a plain message with a way back to the cart for cart mismatches, never the ATIN text', () => {
+    for (const code of ['orders.line-not-in-cart', 'orders.cart-changed', 'orders.cart-empty', 'orders.cart-not-checkoutable']) {
+      expect(checkoutFailure(problem(code, 'ATG123 is not in your cart'))).toEqual({ message: CART_CHANGED_MESSAGE, cartChanged: true });
+    }
+  });
+
+  it('keeps other messages as they are', () => {
+    expect(checkoutFailure(problem('orders.address-not-found', 'Address a1 is not in your address book'))).toEqual({ message: 'Address a1 is not in your address book', cartChanged: false });
+    expect(checkoutFailure(new Error('Your card was declined.')).message).toBe('Your card was declined.');
+    expect(checkoutFailure('boom').message).toBe('Payment failed. Try again.');
   });
 });

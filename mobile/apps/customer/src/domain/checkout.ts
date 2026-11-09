@@ -1,5 +1,5 @@
 /* Checkout rules shared by the screen and the payment adapters (pure; unit-tested). */
-import { definitiveFailure } from '@afrotransact/api-client';
+import { definitiveFailure, isApiError, isCartMismatch } from '@afrotransact/api-client';
 import { type components } from '@afrotransact/api-client/generated/gateway-bff';
 
 export type CheckoutSummary = components['schemas']['CheckoutSummary'];
@@ -7,6 +7,15 @@ export type PlaceOrderRequest = components['schemas']['PlaceOrderRequest'];
 export type OrderConfirmation = components['schemas']['OrderConfirmation'];
 export type DeliveryOptionKey = PlaceOrderRequest['deliverySelections'][number]['option'];
 export type Wallet = NonNullable<PlaceOrderRequest['wallet']>;
+
+/** What the shopper reads when placing the order failed. A cart mismatch (a line gone or reduced, the cart emptied) is a
+    plain "your cart changed" with a way back to the cart, never the problem's detail, which can name an internal ATIN. */
+export const CART_CHANGED_MESSAGE = 'Your cart changed, please review it.';
+
+export function checkoutFailure(e: unknown): { message: string; cartChanged: boolean } {
+  if (isCartMismatch(e)) return { message: CART_CHANGED_MESSAGE, cartChanged: true };
+  return { message: isApiError(e) ? e.message : e instanceof Error ? e.message : 'Payment failed. Try again.', cartChanged: false };
+}
 
 /** Orders over $100 (and wallet payments) are confirmed with Face ID (S165). */
 export const DEVICE_AUTH_THRESHOLD_MINOR = 100_00;

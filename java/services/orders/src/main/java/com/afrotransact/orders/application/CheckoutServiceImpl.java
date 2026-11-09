@@ -235,12 +235,12 @@ class CheckoutServiceImpl implements CheckoutService {
         for (CheckoutCommand.SelectedLine l : lines) {
             CartClient.Item item = byAtin.get(l.variantAtin());
             if (item == null) {
-                throw new OrdersRuleViolation("orders.line-not-in-cart", l.variantAtin() + " is not in your cart");
+                throw new OrdersRuleViolation("orders.line-not-in-cart", "An item you selected is no longer in your cart");
             }
             int qty = l.quantity() <= 0 ? item.quantity() : l.quantity();
             if (qty > item.quantity()) {
-                throw new OrdersRuleViolation("orders.cart-changed", "Only " + item.quantity() + " of "
-                        + l.variantAtin() + " are in your cart");
+                throw new OrdersRuleViolation("orders.cart-changed", "Your cart has changed: only " + item.quantity()
+                        + " of this item are in your cart");
             }
             out.add(new CartClient.Item(item.variantAtin(), item.productAtin(), item.title(), item.imageUrl(),
                     item.sellerOrgId(), item.sellerName(), item.sellerKind(), item.fulfilment(), item.priceMinor(),

@@ -9,6 +9,7 @@ export { ApiError, isApiError } from './errors';
 export * from './fee-rates';
 export { applyBps, bpsToPercentText, formatBps, parsePercent, quoteTariff, type TariffLike, tariffSummary } from './fees';
 export { BACKGROUND, BACKGROUND_HEADER, type DownloadedFile, type RequestOptions } from './http';
+export { isCartMismatch } from './cart-mismatch';
 export { definitiveFailure, keepIdempotencyKey } from './idempotency';
 export * from './inventory-hub';
 export { readSse, type SseMessage, streamLola, toLolaEvent } from './lola';

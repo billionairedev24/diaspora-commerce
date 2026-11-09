@@ -666,6 +666,8 @@
   "co.total": "Total del pedido",
   "co.stripeNote": "Stripe · autorizado ahora, cobrado por envío",
   "co.needAddress": "Elige una dirección de entrega.",
+  "co.cartChanged": "Tu carrito cambió, por favor revísalo.",
+  "co.cartChanged.link": "Revisar mi carrito",
   "co.needPayment": "Elige un método de pago.",
   "co.emptyTitle": "Nada que pagar",
   "co.emptyBody": "Selecciona artículos de tu carrito para pagar.",
