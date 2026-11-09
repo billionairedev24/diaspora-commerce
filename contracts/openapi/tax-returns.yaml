@@ -24,6 +24,10 @@ tags:
   description: Start a return on delivered items, RMA lifecycle, inspection and seller policies
 - name: Refunds
   description: 'Refund orchestration: partial refunds, refund history and retries'
+- name: Tax classification
+  description: 'Category tax profiles, outcome-level internal codes, provider code maps, per-variant classification records and review'
+- name: Tax shadow
+  description: Provider-versus-in-house comparison on real orders (never charged)
 - name: Tax
   description: 'Marketplace-facilitator sales tax: quotes, rate table, ledger and liability reports'
 paths:
@@ -924,6 +928,238 @@ paths:
             text/csv:
               schema:
                 type: string
+  /v1/tax/classifications/resolve:
+    post:
+      tags:
+      - Tax classification
+      summary: Resolve the tax outcome of a category and its facts, without charging anything (tax:classify)
+      description: |
+        Pure rules evaluation over the category tax profile (docs/engineering/category-tax-design.md). Never guesses: missing facts give
+        status MISSING_FACTS with the fact ids and plain messages, and no outcome. A matched decision row gives outcome, internalTaxCode
+        and the provider codes; the profile's status gate then decides the status (BLOCKED, CONFLICT_OPEN, NEEDS_APPROVAL, REFINE_CODE or RESOLVED).
+        Only RESOLVED may be published or charged; consumers must act on status, not on outcome. Used by catalog-service (publish gate, seller form),
+        the staff console and the quote path. DRAFT rules: a Texas tax professional must approve before production use.
+      operationId: resolveClassification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClassificationResolveRequest'
+      responses:
+        '200':
+          description: The resolution (also 200 for MISSING_FACTS, BLOCKED and the other gates)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassificationResolveResponse'
+        '404':
+          description: Unknown category or product type (tax.profile-not-found)
+  /v1/tax/profiles:
+    get:
+      tags:
+      - Tax classification
+      summary: Category tax profiles with their status (tax:read)
+      operationId: listTaxProfiles
+      parameters:
+      - {name: department, in: query, required: false, schema: {type: string}}
+      - {name: status, in: query, required: false, schema: {$ref: '#/components/schemas/ProfileStatus'}}
+      - {name: q, in: query, required: false, schema: {type: string}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaxProfileSummary'
+  /v1/tax/profiles/{categoryCode}:
+    get:
+      tags:
+      - Tax classification
+      summary: One category tax profile with its facts and the ordered decision table (tax:read)
+      operationId: getTaxProfile
+      parameters:
+      - {name: categoryCode, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxProfile'
+        '404':
+          description: tax.profile-not-found
+  /v1/tax/profiles/{categoryCode}/status:
+    put:
+      tags:
+      - Tax classification
+      summary: Change a profile's status gate, with a reason (tax:classify-admin)
+      description: Lifting a gate (to ACTIVE) records who approved and why, bumps the rule version and publishes tax.classification.changed. Lifting CONFLICT_OPEN needs the open decision's code to be set first (422 tax.profile-conflict-unresolved).
+      operationId: changeTaxProfileStatus
+      parameters:
+      - {name: categoryCode, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxProfileStatusChange'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxProfile'
+        '422':
+          description: tax.profile-conflict-unresolved
+  /v1/tax/provider-code-map:
+    get:
+      tags:
+      - Tax classification
+      summary: The internal outcome code to provider code map (tax:read)
+      operationId: listProviderCodeMap
+      parameters:
+      - {name: provider, in: query, required: false, schema: {$ref: '#/components/schemas/TaxProvider'}}
+      - {name: categoryCode, in: query, required: false, schema: {type: string}}
+      - {name: unmappedOnly, in: query, required: false, schema: {type: boolean}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProviderCodeMapEntry'
+  /v1/tax/provider-code-map/{internalTaxCode}:
+    put:
+      tags:
+      - Tax classification
+      summary: Set or clear one provider's code for an internal outcome code (tax:classify-admin)
+      description: Mapping is per outcome, never per category, because a provider code can carry different outcomes in different scenarios. A change is versioned and audited.
+      operationId: updateProviderCode
+      parameters:
+      - {name: internalTaxCode, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderCodeMapUpdate'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderCodeMapEntry'
+  /v1/tax/variant-classifications:
+    get:
+      tags:
+      - Tax classification
+      summary: Variant classification records; the review queue is status=PENDING_REVIEW (tax:read)
+      operationId: listVariantClassifications
+      parameters:
+      - {name: status, in: query, required: false, schema: {$ref: '#/components/schemas/ClassificationRecordStatus'}}
+      - {name: categoryCode, in: query, required: false, schema: {type: string}}
+      - {name: sellerOrgId, in: query, required: false, schema: {type: string}}
+      - {name: q, in: query, required: false, description: ATIN, GTIN or title, schema: {type: string}}
+      - {name: page, in: query, required: false, schema: {type: integer, minimum: 0, default: 0}}
+      - {name: size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 25}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VariantClassificationPage'
+  /v1/tax/variant-classifications/{atin}:
+    get:
+      tags:
+      - Tax classification
+      summary: The classification record of one variant ATIN with its audit trail (tax:read)
+      operationId: getVariantClassification
+      parameters:
+      - {name: atin, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VariantClassification'
+        '404':
+          description: tax.classification-not-found
+  /v1/tax/variant-classifications/{atin}/approve:
+    post:
+      tags:
+      - Tax classification
+      summary: Approve a classification after review (tax:classify-admin)
+      description: Fails with 422 unless the profile resolves to a chargeable decision. A REFINE_CODE profile needs the verified provider code in refinedProviderCodes; staff-owned facts (for example exemption_confirmed) are set here.
+      operationId: approveVariantClassification
+      parameters:
+      - {name: atin, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClassificationApproveRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VariantClassification'
+        '422':
+          description: tax.classification-not-resolvable
+  /v1/tax/variant-classifications/{atin}/reclassify:
+    post:
+      tags:
+      - Tax classification
+      summary: Move a variant to another category or product type, with a reason (tax:classify-admin)
+      description: The previous decision is kept in the audit trail; the record returns to PENDING_REVIEW and tax.classification.changed is published.
+      operationId: reclassifyVariant
+      parameters:
+      - {name: atin, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClassificationReclassifyRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VariantClassification'
+  /v1/tax/shadow/report:
+    get:
+      tags:
+      - Tax shadow
+      summary: 'Shadow mode report: provider quote vs in-house quote on real orders (tax:read)'
+      description: Lines where the two engines disagree on outcome or amount, grouped by internal tax code and provider code. Shadow quotes are logged and never charged.
+      operationId: shadowReport
+      parameters:
+      - {name: from, in: query, required: true, schema: {type: string, format: date}}
+      - {name: to, in: query, required: true, schema: {type: string, format: date}}
+      - {name: provider, in: query, required: false, schema: {$ref: '#/components/schemas/TaxProvider'}}
+      - {name: onlyDifferences, in: query, required: false, schema: {type: boolean, default: true}}
+      - {name: page, in: query, required: false, schema: {type: integer, minimum: 0, default: 0}}
+      - {name: size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShadowReport'
 components:
   schemas:
     TaxNexusState:
@@ -1025,17 +1261,18 @@ components:
     TaxMethodChange:
       type: object
       properties:
-        from: {type: string, enum: [RULES, STRIPE_TAX]}
-        to: {type: string, enum: [RULES, STRIPE_TAX]}
+        from: {type: string, enum: [RULES, STRIPE_TAX, AVALARA]}
+        to: {type: string, enum: [RULES, STRIPE_TAX, AVALARA]}
         reason: {type: string}
         changedBy: {type: string}
         changedAt: {type: string, format: date-time}
     TaxSettings:
       type: object
       properties:
-        method: {type: string, enum: [RULES, STRIPE_TAX]}
+        method: {type: string, enum: [RULES, STRIPE_TAX, AVALARA]}
         configuredDefault: {type: string, enum: [RULES, STRIPE_TAX], description: What applies until staff choose (TAX_PROVIDER)}
         stripeAvailable: {type: boolean, description: Stripe Tax can be chosen (its key is set)}
+        shadowProvider: {type: [string, 'null'], enum: [STRIPE, AVALARA, null], description: 'SHADOW mode: this provider is quoted next to the in-house engine on real orders; differences are logged (GET /v1/tax/shadow/report) and the shadow quote is never charged. Null = off.'}
         changedBy: {type: string}
         changedAt: {type: string, format: date-time}
         history:
@@ -1046,7 +1283,8 @@ components:
       type: object
       required: [method, reason]
       properties:
-        method: {type: string, enum: [RULES, STRIPE_TAX]}
+        method: {type: string, enum: [RULES, STRIPE_TAX, AVALARA]}
+        shadowProvider: {type: [string, 'null'], enum: [STRIPE, AVALARA, null], description: Turn SHADOW mode on for this provider, or null to turn it off. Independent of method.}
         reason: {type: string}
     StateTaxRule:
       type: object
@@ -1346,6 +1584,12 @@ components:
           type: integer
           format: int64
           description: Part of taxMinor charged on the line's shipping
+        decisionStatus: {$ref: '#/components/schemas/ResolveStatus', description: 'Status of the stored decision used for this line; anything but RESOLVED means the line carries no tax figure and checkout must block it'}
+        outcome: {$ref: '#/components/schemas/TaxOutcome'}
+        internalTaxCode: {type: string}
+        providerTaxCode: {type: string, description: The code sent to the provider for this outcome}
+        ruleVersion: {type: string}
+        blockedReason: {type: string, description: Plain message for the shopper when the line cannot be taxed}
     CreateReturn:
       type: object
       description: Items of one delivered shipment, the reason per item and the method
@@ -1905,6 +2149,296 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LineEligibility'
+    TaxProvider:
+      type: string
+      enum: [STRIPE, AVALARA]
+    ProfileStatus:
+      type: string
+      description: The gate of a category profile. Precedence when several apply CONFLICT_OPEN, BLOCKED_BUNDLE, NEEDS_APPROVAL, REFINE_CODE.
+      enum: [ACTIVE, NEEDS_APPROVAL, BLOCKED_BUNDLE, REFINE_CODE, CONFLICT_OPEN]
+    ResolveStatus:
+      type: string
+      enum: [RESOLVED, MISSING_FACTS, BLOCKED, NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN]
+    TaxOutcome:
+      type: string
+      enum: [EXEMPT, TAXABLE, BLOCKED]
+    FactOwner:
+      type: string
+      description: VARIANT product facts, OFFER and SELLER behaviour facts, STAFF set by tax review, CONTEXT worked out by the system
+      enum: [VARIANT, OFFER, SELLER, STAFF, CONTEXT]
+    ClassificationRecordStatus:
+      type: string
+      enum: [DRAFT, MISSING_FACTS, PENDING_REVIEW, APPROVED, REJECTED, STALE]
+    ClassificationResolveRequest:
+      type: object
+      required: [categoryCode, facts]
+      properties:
+        categoryCode: {type: string, description: 'Stable category code, e.g. nuts-seeds'}
+        productTypeCode: {type: string}
+        facts:
+          type: object
+          description: Product facts by fact id (VARIANT and STAFF owned)
+          additionalProperties: {}
+        sellerBehaviour:
+          type: object
+          description: Seller behaviour facts by fact id (OFFER and SELLER owned)
+          additionalProperties: {}
+        context:
+          type: object
+          description: System facts (CONTEXT owned), e.g. gift_card_event. exemption_window_active is derived from saleDate when absent.
+          additionalProperties: {}
+        shipToState: {type: string, maxLength: 2, description: 'Two-letter state; omitted means the launch state (TX)'}
+        saleDate: {type: string, format: date, description: Defaults to today in the jurisdiction's time zone}
+    ClassificationResolveResponse:
+      type: object
+      required: [status, ruleVersion, missingFacts]
+      properties:
+        status: {$ref: '#/components/schemas/ResolveStatus'}
+        outcome: {$ref: '#/components/schemas/TaxOutcome'}
+        internalTaxCode: {type: string, description: 'Outcome-level internal code, e.g. AT.NUTS_SEEDS.PLAIN_MULTI_SERVING_2_5OZ_PLUS'}
+        providerCodes:
+          type: object
+          description: Provider code per provider for this outcome; a provider with no mapping is absent
+          additionalProperties: {type: string}
+        rowId: {type: string, description: 'Decision row that matched, e.g. S007'}
+        rateDisplay: {type: string, description: 'Display only: 0%, 6.25%-8.25% or Not set. Never used to charge.'}
+        missingFacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/MissingFact'
+        ruleVersion: {type: string}
+        reason: {type: string, description: Plain explanation for staff and sellers}
+        openDecision: {type: integer, description: 'Open decision number (1 to 5) behind a CONFLICT_OPEN, NEEDS_APPROVAL or REFINE_CODE status'}
+    MissingFact:
+      type: object
+      required: [factId, message]
+      properties:
+        factId: {type: string}
+        label: {type: string}
+        message: {type: string, description: Plain words for the seller}
+    FactDefinition:
+      type: object
+      required: [id, label, kind, owner]
+      properties:
+        id: {type: string}
+        label: {type: string}
+        kind: {type: string, enum: [BOOLEAN, DECIMAL, INTEGER, PERCENT, CHOICE, FILE]}
+        unit: {type: string}
+        owner: {$ref: '#/components/schemas/FactOwner'}
+        help: {type: string}
+        evidence: {type: boolean, description: A FILE fact that is proof for an exemption claim}
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              value: {type: string}
+              label: {type: string}
+    FactRequirement:
+      type: object
+      description: A fact as a category uses it. required with a null requiredWhen means always required.
+      properties:
+        fact: {type: string}
+        required: {type: boolean}
+        requiredWhen: {$ref: '#/components/schemas/Condition'}
+        choices: {type: array, items: {type: string}, description: Narrowed choice list for this category}
+    Condition:
+      type: [object, 'null']
+      description: 'Expression tree: {all:[..]}, {any:[..]}, {not:..} or a leaf {op: isTrue|isFalse|eq|in|gt|gte|lt|lte, fact, value|values}. Null means always.'
+      additionalProperties: true
+    DecisionRow:
+      type: object
+      properties:
+        id: {type: string, description: 'S001 to S105, the Appendix A scenario number'}
+        scenario: {type: integer}
+        when: {$ref: '#/components/schemas/Condition'}
+        condition: {type: string, description: The document's wording}
+        outcome: {$ref: '#/components/schemas/TaxOutcome'}
+        internalTaxCode: {type: string}
+        stripeCode: {type: string}
+        providerCodes: {type: object, additionalProperties: {type: [string, 'null']}}
+        rateDisplay: {type: string}
+        note: {type: string}
+    TaxProfileSummary:
+      type: object
+      properties:
+        categoryCode: {type: string}
+        name: {type: string}
+        department: {type: string}
+        status: {$ref: '#/components/schemas/ProfileStatus'}
+        defaultOutcome: {type: string, enum: [EXEMPT, TAXABLE, BLOCKED, CONDITIONAL]}
+        scenarioCount: {type: integer}
+        openDecision: {type: integer}
+        ruleVersion: {type: string}
+    TaxProfile:
+      allOf:
+      - $ref: '#/components/schemas/TaxProfileSummary'
+      - type: object
+        properties:
+          stripeCodes: {type: array, items: {type: string}}
+          conflictingCodes: {type: array, items: {type: string}}
+          statusReasons:
+            type: array
+            items:
+              type: object
+              properties:
+                status: {$ref: '#/components/schemas/ProfileStatus'}
+                decision: {type: integer}
+                text: {type: string}
+          factGroups: {type: array, items: {type: string}}
+          facts:
+            type: array
+            items:
+              allOf:
+              - $ref: '#/components/schemas/FactDefinition'
+              - $ref: '#/components/schemas/FactRequirement'
+          decisionTable: {type: array, items: {$ref: '#/components/schemas/DecisionRow'}}
+          changedBy: {type: string}
+          changedAt: {type: string, format: date-time}
+          note: {type: string}
+    TaxProfileStatusChange:
+      type: object
+      required: [status, reason]
+      properties:
+        status: {$ref: '#/components/schemas/ProfileStatus'}
+        reason: {type: string, minLength: 3}
+        approvedBy: {type: string, description: 'Name or firm of the tax professional who approved, required when lifting NEEDS_APPROVAL, CONFLICT_OPEN or BLOCKED_BUNDLE'}
+        decisionRef: {type: string, description: Reference to the signed-off open decision or opinion letter}
+    ProviderCodeMapEntry:
+      type: object
+      properties:
+        internalTaxCode: {type: string}
+        categoryCode: {type: string}
+        outcome: {$ref: '#/components/schemas/TaxOutcome'}
+        provider: {$ref: '#/components/schemas/TaxProvider'}
+        providerCode: {type: [string, 'null']}
+        verified: {type: boolean, description: A person confirmed the provider treats this code as this outcome}
+        mapVersion: {type: integer}
+        changedBy: {type: string}
+        changedAt: {type: string, format: date-time}
+    ProviderCodeMapUpdate:
+      type: object
+      required: [provider, reason]
+      properties:
+        provider: {$ref: '#/components/schemas/TaxProvider'}
+        providerCode: {type: [string, 'null'], description: Null clears the mapping}
+        verified: {type: boolean}
+        reason: {type: string, minLength: 3}
+    VariantClassification:
+      type: object
+      properties:
+        atin: {type: string, description: The variant ATIN (the document's SKU)}
+        gtin: {type: string}
+        productId: {type: string, format: uuid}
+        title: {type: string}
+        categoryCode: {type: string}
+        productTypeCode: {type: string}
+        status: {$ref: '#/components/schemas/ClassificationRecordStatus'}
+        facts: {type: object, additionalProperties: {}}
+        evidence:
+          type: array
+          items:
+            type: object
+            properties:
+              factId: {type: string}
+              fileName: {type: string}
+              url: {type: string}
+              uploadedBy: {type: string}
+              uploadedAt: {type: string, format: date-time}
+        refinedProviderCodes: {type: object, additionalProperties: {type: string}, description: 'Verified SKU-level code per provider for REFINE_CODE profiles'}
+        resolution: {$ref: '#/components/schemas/ClassificationResolveResponse'}
+        decisions:
+          type: array
+          description: The stored decision per selling organisation (variant facts plus that seller's behaviour facts)
+          items:
+            type: object
+            properties:
+              sellerOrgId: {type: string}
+              sellerBehaviour: {type: object, additionalProperties: {}}
+              resolution: {$ref: '#/components/schemas/ClassificationResolveResponse'}
+        classifiedBy: {type: string}
+        classifiedAt: {type: string, format: date-time}
+        reviewedBy: {type: string}
+        reviewedAt: {type: string, format: date-time}
+        ruleVersion: {type: string}
+        audit:
+          type: array
+          items:
+            type: object
+            properties:
+              at: {type: string, format: date-time}
+              actor: {type: string}
+              action: {type: string, enum: [FACTS_CHANGED, SUBMITTED, APPROVED, REJECTED, RECLASSIFIED, MARKED_STALE, EVIDENCE_ADDED]}
+              reason: {type: string}
+              ruleVersion: {type: string}
+              before: {type: object, additionalProperties: {}}
+              after: {type: object, additionalProperties: {}}
+    VariantClassificationPage:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/VariantClassification'}}
+        page: {type: integer}
+        size: {type: integer}
+        total: {type: integer, format: int64}
+    ClassificationApproveRequest:
+      type: object
+      properties:
+        reason: {type: string}
+        staffFacts: {type: object, additionalProperties: {}, description: Facts owned by STAFF, such as exemption_confirmed}
+        refinedProviderCodes: {type: object, additionalProperties: {type: string}}
+    ClassificationReclassifyRequest:
+      type: object
+      required: [categoryCode, reason]
+      properties:
+        categoryCode: {type: string}
+        productTypeCode: {type: string}
+        reason: {type: string, minLength: 3}
+    ShadowReport:
+      type: object
+      properties:
+        from: {type: string, format: date}
+        to: {type: string, format: date}
+        provider: {$ref: '#/components/schemas/TaxProvider'}
+        linesCompared: {type: integer, format: int64}
+        linesDiffering: {type: integer, format: int64}
+        absoluteDifferenceMinor: {type: integer, format: int64}
+        netDifferenceMinor: {type: integer, format: int64, description: provider minus in-house}
+        byInternalTaxCode:
+          type: array
+          items:
+            type: object
+            properties:
+              internalTaxCode: {type: string}
+              providerCode: {type: string}
+              lines: {type: integer, format: int64}
+              differing: {type: integer, format: int64}
+              absoluteDifferenceMinor: {type: integer, format: int64}
+        differences:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShadowDifference'
+        page: {type: integer}
+        size: {type: integer}
+    ShadowDifference:
+      type: object
+      properties:
+        orderId: {type: string, format: uuid}
+        lineId: {type: string}
+        atin: {type: string}
+        internalTaxCode: {type: string}
+        providerCode: {type: string}
+        kind: {type: string, enum: [OUTCOME, RATE, BOTH, PROVIDER_ERROR, NO_DECISION]}
+        inHouse: {$ref: '#/components/schemas/ShadowQuoteSide'}
+        provider: {$ref: '#/components/schemas/ShadowQuoteSide'}
+        differenceMinor: {type: integer, format: int64}
+        quotedAt: {type: string, format: date-time}
+    ShadowQuoteSide:
+      type: object
+      properties:
+        outcome: {$ref: '#/components/schemas/TaxOutcome'}
+        rate: {type: number, description: Fraction, 0.0825 = 8.25 %}
+        taxMinor: {type: integer, format: int64}
+        error: {type: string}
   securitySchemes:
     bearer:
       type: http
