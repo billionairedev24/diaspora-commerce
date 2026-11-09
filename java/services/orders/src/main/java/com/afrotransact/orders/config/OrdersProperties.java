@@ -18,7 +18,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param perishableTypes         catalog product types treated as perishable
  * @param commissionCategories    catalog product type → payments commission category
  * @param shipping                fees and fallback delivery estimates
- * @param tax                     tax provider (tax-returns quote) and the interim per-state fallback rates
+ * @param tax                     checkout tax: delivery charge allocation (rates come from tax-returns)
  * @param jobs                    follow-up job settings
  * @param returns                 return windows shown on order views (tax-returns decides eligibility)
  * @param shipBy                  handling time before a shipment must be handed over
@@ -38,7 +38,7 @@ public record OrdersProperties(String retailOrgId, Duration paymentTimeout,
         perishableTypes = perishableTypes == null ? List.of("perishable") : List.copyOf(perishableTypes);
         commissionCategories = commissionCategories == null ? Map.of() : Map.copyOf(commissionCategories);
         shipping = shipping == null ? new Shipping(null, null, null, null, null, null, null, null, null) : shipping;
-        tax = tax == null ? new Tax(null, null, null, null) : tax;
+        tax = tax == null ? new Tax(null) : tax;
         jobs = jobs == null ? new Jobs(null, null, null) : jobs;
         returns = returns == null ? new Returns(null, null, null) : returns;
         shipBy = shipBy == null ? new ShipBy(null, null) : shipBy;
@@ -63,20 +63,19 @@ public record OrdersProperties(String retailOrgId, Duration paymentTimeout,
     }
 
     /**
-     * Checkout tax.
+     * Checkout tax. Tax always comes from tax-returns' stored decision per line (there is no rate table and no default
+     * rate; when tax-returns is down the checkout step is retried, and a line without a definite decision is blocked).
      *
-     * @param rates           fallback: combined sales-tax rate per US state in basis points (825 = 8.25 %)
-     * @param defaultBps      fallback rate for states not listed
-     * @param provider        TAX_RETURNS (quote from tax-returns-service, default) or TABLE (rates only)
-     * @param fallbackToTable tax with the rates (and log a warning) when tax-returns is unavailable (default true)
+     * @param shippingAllocation PROPORTIONAL (default) spreads a package's delivery charge over its lines by net item
+     *                           value (TX-05 to TX-07); FIRST_LINE is the previous behaviour, kept as the rollback.
+     *                           The mixed-basket method is an OPEN LEGAL DECISION (open decision 5): the tax adviser
+     *                           must approve it before production.
      */
-    public record Tax(Map<String, Integer> rates, Integer defaultBps, String provider, Boolean fallbackToTable) {
+    public record Tax(String shippingAllocation) {
 
         public Tax {
-            rates = rates == null ? Map.of() : Map.copyOf(rates);
-            defaultBps = defaultBps == null ? 0 : defaultBps;
-            provider = provider == null || provider.isBlank() ? "TAX_RETURNS" : provider.trim().toUpperCase(Locale.ROOT);
-            fallbackToTable = fallbackToTable == null ? Boolean.TRUE : fallbackToTable;
+            shippingAllocation = shippingAllocation == null || shippingAllocation.isBlank() ? "PROPORTIONAL"
+                    : shippingAllocation.trim().toUpperCase(Locale.ROOT);
         }
     }
 

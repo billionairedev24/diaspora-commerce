@@ -24,11 +24,25 @@ import java.util.Objects;
  * @param sellerOrgId     seller organisation of the line (a community pre-order package mixes lines of several
  *                        sellers; null for orders placed before it was kept)
  * @param sellerName      seller display name snapshot (null when unknown)
+ * @param taxDecision     the tax decision the sale used (snapshot; null for orders placed before it was kept)
+ * @param shippingAllocMinor the part of the shipment's shipping allocated to this line (null for orders placed before
+ *                        it was kept: the shipment's first line carried all of it)
  */
 public record OrderLine(String id, int lineNo, String variantAtin, String productAtin, String title, String imageUrl,
                         int quantity, long unitPriceMinor, long taxMinor, long discountMinor, String category,
                         boolean perishable, String taxJurisdiction, String productType, String localTaxJurisdiction,
-                        long shippingTaxMinor, String sellerOrgId, String sellerName) {
+                        long shippingTaxMinor, String sellerOrgId, String sellerName, TaxDecision taxDecision,
+                        Long shippingAllocMinor) {
+
+    /** A line without tax decision snapshot or shipping allocation (tests, orders placed before they were kept). */
+    public OrderLine(String id, int lineNo, String variantAtin, String productAtin, String title, String imageUrl,
+                     int quantity, long unitPriceMinor, long taxMinor, long discountMinor, String category,
+                     boolean perishable, String taxJurisdiction, String productType, String localTaxJurisdiction,
+                     long shippingTaxMinor, String sellerOrgId, String sellerName) {
+        this(id, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, taxMinor, discountMinor,
+                category, perishable, taxJurisdiction, productType, localTaxJurisdiction, shippingTaxMinor,
+                sellerOrgId, sellerName, null, null);
+    }
 
     /** A line without its seller (tests, orders placed before it was kept). */
     public OrderLine(String id, int lineNo, String variantAtin, String productAtin, String title, String imageUrl,
@@ -55,6 +69,9 @@ public record OrderLine(String id, int lineNo, String variantAtin, String produc
         }
         if (unitPriceMinor < 0 || taxMinor < 0 || discountMinor < 0) {
             throw new OrdersRuleViolation("orders.invalid-amount", "Line amounts cannot be negative");
+        }
+        if (shippingAllocMinor != null && shippingAllocMinor < 0) {
+            throw new OrdersRuleViolation("orders.invalid-amount", "Line shipping cannot be negative");
         }
         if (shippingTaxMinor < 0 || shippingTaxMinor > taxMinor) {
             throw new OrdersRuleViolation("orders.invalid-amount", "Shipping tax must be within the line's tax");

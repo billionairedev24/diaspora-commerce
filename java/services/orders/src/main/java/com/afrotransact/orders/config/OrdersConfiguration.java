@@ -6,6 +6,7 @@ import java.util.Set;
 import com.afrotransact.orders.application.OrdersSettings;
 import com.afrotransact.orders.application.PreorderSettings;
 import com.afrotransact.orders.application.TaxSettings;
+import com.afrotransact.orders.domain.ShippingAllocation;
 import com.afrotransact.orders.domain.CourierProofPolicy;
 import com.afrotransact.orders.domain.DefaultCourierProofPolicy;
 import com.afrotransact.orders.domain.DefaultHandoverPolicy;
@@ -82,7 +83,7 @@ class OrdersConfiguration {
 
     @Bean
     TaxSettings taxSettings(OrdersProperties props) {
-        return new TaxSettings(props.tax().provider(), props.tax().fallbackToTable());
+        return new TaxSettings(ShippingAllocation.parse(props.tax().shippingAllocation()));
     }
 
     @Bean

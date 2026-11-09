@@ -53,7 +53,6 @@ import com.afrotransact.orders.port.DeliveryRunSlots;
 import com.afrotransact.orders.port.PreorderEligibility;
 import com.afrotransact.orders.port.ProductFactsClient;
 import com.afrotransact.orders.port.PromiseClient;
-import com.afrotransact.orders.port.TaxCalculator;
 import com.afrotransact.orders.port.UpstreamFailure;
 import io.temporal.failure.ApplicationFailure;
 import io.temporal.spring.boot.ActivityImpl;
@@ -72,7 +71,6 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private final MarketEligibility markets;
     private final ProductFactsClient catalog;
     private final PromiseClient promises;
-    private final TaxCalculator tax;
     private final CheckoutTax checkoutTax;
     private final ShippingPolicy shipping;
     private final HandoverPolicy handover;
@@ -96,7 +94,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private final Clock clock;
 
     CheckoutActivitiesImpl(MarketEligibility markets, ProductFactsClient catalog, PromiseClient promises,
-                           TaxCalculator tax, CheckoutTax checkoutTax, ShippingPolicy shipping,
+                           CheckoutTax checkoutTax, ShippingPolicy shipping,
                            HandoverPolicy handover, HandoverCodeVault vault, InventoryClient inventory,
                            OfferInventory offerInventory, PaymentsClient payments, CartClient cart, CouponsClient coupons,
                            OrderCouponRepository orderCoupons, OrderRepository orderRepository,
@@ -107,7 +105,6 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         this.markets = markets;
         this.catalog = catalog;
         this.promises = promises;
-        this.tax = tax;
         this.checkoutTax = checkoutTax;
         this.shipping = shipping;
         this.handover = handover;
@@ -162,7 +159,6 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         });
         Map<String, ProductFactsClient.Facts> facts = catalog.facts(items.stream()
                 .map(CartClient.Item::variantAtin).distinct().toList());
-        TaxCalculator.Rate rate = tax.rateFor(to.country(), to.state(), to.postalCode());
         // S272: lines delivery-runs sells as a pre-order where the customer is go into one package per open window.
         Map<String, PreorderEligibility.Line> eligibility = preorderLines(in, to, items);
         Map<String, List<CartClient.Item>> byWindow = new LinkedHashMap<>();
@@ -253,11 +249,10 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                 int lineDays = method == DeliveryMethod.CARRIER && promised.containsKey(i.variantAtin())
                         ? Math.max(1, promised.get(i.variantAtin())) : fallback;
                 days = Math.max(days, lineDays);
-                long itemsMinor = Math.multiplyExact(i.priceMinor(), (long) i.quantity());
                 lines.add(new CheckoutPlan.Line(UUID.randomUUID().toString(), lineNo, i.variantAtin(),
                         i.productAtin(), i.title(), i.imageUrl(), i.quantity(), i.priceMinor(),
-                        rate.taxOf(itemsMinor), f.map(ProductFactsClient.Facts::category).orElse(null),
-                        f.map(ProductFactsClient.Facts::perishable).orElse(false), rate.jurisdiction(), lineDays,
+                        0, f.map(ProductFactsClient.Facts::category).orElse(null),
+                        f.map(ProductFactsClient.Facts::perishable).orElse(false), null, lineDays,
                         i.offerId(), 0, f.map(ProductFactsClient.Facts::productType).orElse(null), null, 0,
                         i.sellerOrgId(), i.sellerName()));
             }
@@ -275,7 +270,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             List<CheckoutPlan.Line> lines = new ArrayList<>();
             for (CartClient.Item i : w.getValue()) {
                 lineNo++;
-                lines.add(planLine(i, lineNo, facts, rate, 0));
+                lines.add(planLine(i, lineNo, facts, 0));
             }
             packages.add(preorderPackage(in, window, selections.get(PREORDER_PACKAGE + w.getKey()), lines));
         }
@@ -425,14 +420,13 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     }
 
     private static CheckoutPlan.Line planLine(CartClient.Item i, int lineNo,
-                                              Map<String, ProductFactsClient.Facts> facts, TaxCalculator.Rate rate,
+                                              Map<String, ProductFactsClient.Facts> facts,
                                               int lineDays) {
         Optional<ProductFactsClient.Facts> f = Optional.ofNullable(facts.get(i.variantAtin()));
-        long itemsMinor = Math.multiplyExact(i.priceMinor(), (long) i.quantity());
         return new CheckoutPlan.Line(UUID.randomUUID().toString(), lineNo, i.variantAtin(), i.productAtin(),
-                i.title(), i.imageUrl(), i.quantity(), i.priceMinor(), rate.taxOf(itemsMinor),
+                i.title(), i.imageUrl(), i.quantity(), i.priceMinor(), 0,
                 f.map(ProductFactsClient.Facts::category).orElse(null),
-                f.map(ProductFactsClient.Facts::perishable).orElse(false), rate.jurisdiction(), lineDays,
+                f.map(ProductFactsClient.Facts::perishable).orElse(false), null, lineDays,
                 i.offerId(), 0, f.map(ProductFactsClient.Facts::productType).orElse(null), null, 0,
                 i.sellerOrgId(), i.sellerName());
     }

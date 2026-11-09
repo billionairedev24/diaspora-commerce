@@ -64,7 +64,7 @@ class CheckoutDeliveryFeeRuleTest {
         when(tax.tax(any())).thenAnswer(i -> i.getArgument(0));
         OrdersSettings settings = new OrdersSettings("org-retail", Duration.ofMinutes(15), Duration.ofSeconds(5),
                 Duration.ofHours(1), Set.of(), Map.of(), 10, 3, "America/Chicago");
-        activities = new CheckoutActivitiesImpl(mock(MarketEligibility.class), null, null, null, tax,
+        activities = new CheckoutActivitiesImpl(mock(MarketEligibility.class), null, null, tax,
                 new DefaultShippingPolicy(DefaultShippingPolicy.Rates.defaults()), handover, null, null, null, null,
                 null, null, null, null, null, null, null, mock(PreorderEligibility.class), mock(DeliveryRunSlots.class), rules,
                 mock(MemberBenefits.class), new PreorderSettings(true, 100, 24, null, null), settings, Clock.fixed(NOW, ZoneOffset.UTC));

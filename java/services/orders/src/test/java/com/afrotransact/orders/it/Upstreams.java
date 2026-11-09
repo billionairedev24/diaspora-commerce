@@ -38,6 +38,18 @@ final class Upstreams {
                 "{\"status\":\"HELD\"}");
         json(WireMock.get(WireMock.urlPathEqualTo("/v1/markets/eligibility")), 200,
                 "{\"country\":\"US\",\"deliveryAllowed\":true}");
+        // Checkout tax: tax-returns' stored decision per line. By default every line is a RESOLVED taxable sale at
+        // 8.25 % of its items; tests stub their own quotes (exempt, blocked, mixed) at a higher priority.
+        server.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/tax/quotes")).atPriority(100)
+                .willReturn(WireMock.aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withTransformers("response-template")
+                        .withBody("{\"provider\":\"RULES\",\"currency\":\"USD\",\"lines\":["
+                                + "{{#each (jsonPath request.body '$.lines') as |l|}}{{#unless @first}},{{/unless}}"
+                                + "{\"lineId\":\"{{l.lineId}}\",\"taxMinor\":"
+                                + "{{math (math l.unitPriceMinor '*' l.quantity) '*' 0.0825}},"
+                                + "\"shippingTaxMinor\":0,\"jurisdiction\":\"US-TX\",\"decisionStatus\":\"RESOLVED\","
+                                + "\"outcome\":\"TAXABLE\",\"internalTaxCode\":\"AT.TEST.TAXABLE\","
+                                + "\"providerTaxCode\":\"txcd_test\",\"ruleVersion\":\"test-1\"}{{/each}}]}")));
         // S272: nothing is a pre-order unless a test says so.
         server.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/service/preorders/eligibility")).atPriority(100)
                 .willReturn(WireMock.aResponse().withStatus(200).withHeader("Content-Type", "application/json")

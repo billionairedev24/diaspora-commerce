@@ -172,6 +172,19 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
         return lines.stream().mapToLong(OrderLine::itemsMinor).sum();
     }
 
+    /**
+     * The shipping charged on a line of this shipment: its stored allocation (TX-05 to TX-07, see
+     * {@link ShippingAllocation}), or for orders placed before allocations were kept, all of it on the first line
+     * (by line number).
+     */
+    public long lineShippingMinor(OrderLine line) {
+        if (line.shippingAllocMinor() != null) {
+            return line.shippingAllocMinor();
+        }
+        int firstLineNo = lines.stream().mapToInt(OrderLine::lineNo).min().orElse(line.lineNo());
+        return line.lineNo() == firstLineNo ? shippingMinor : 0;
+    }
+
     public long taxMinor() {
         return lines.stream().mapToLong(OrderLine::taxMinor).sum();
     }

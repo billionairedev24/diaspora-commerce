@@ -30,6 +30,7 @@ import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.domain.Shipment;
 import com.afrotransact.orders.domain.ShipmentStatus;
 import com.afrotransact.orders.domain.StatusChange;
+import com.afrotransact.orders.domain.TaxDecision;
 import com.afrotransact.orders.domain.TransitionSource;
 import com.afrotransact.orders.port.OrderRepository;
 import com.afrotransact.orders.port.Page;
@@ -123,10 +124,13 @@ class JdbcOrderRepository implements OrderRepository {
                         insert into order_line (id, shipment_id, order_id, line_no, variant_atin, product_atin, title,
                             image_url, quantity, unit_price_minor, tax_minor, discount_minor, category, perishable,
                             tax_jurisdiction, product_type, local_tax_jurisdiction, shipping_tax_minor,
-                            seller_org_id, seller_name)
+                            seller_org_id, seller_name, shipping_alloc_minor, tax_decision_status, tax_outcome,
+                            internal_tax_code, provider_tax_code, tax_rule_version, tax_provider,
+                            tax_address_precision)
                         values (:id, :shipment, :order, :lineNo, :variant, :product, :title, :image, :qty, :unit, :tax,
                             :discount, :category, :perishable, :jurisdiction, :productType, :localJurisdiction,
-                            :shippingTax, :sellerOrg, :sellerName)
+                            :shippingTax, :sellerOrg, :sellerName, :shippingAlloc, :decisionStatus, :taxOutcome,
+                            :internalCode, :providerCode, :ruleVersion, :taxProvider, :addressPrecision)
                         """)
                         .param("id", Sql.uuid(l.id())).param("shipment", Sql.uuid(s.id()))
                         .param("order", Sql.uuid(o.id())).param("lineNo", l.lineNo())
@@ -138,6 +142,15 @@ class JdbcOrderRepository implements OrderRepository {
                         .param("productType", l.productType()).param("localJurisdiction", l.localTaxJurisdiction())
                         .param("shippingTax", l.shippingTaxMinor())
                         .param("sellerOrg", l.sellerOrgId()).param("sellerName", l.sellerName())
+                        .param("shippingAlloc", l.shippingAllocMinor())
+                        .param("decisionStatus", l.taxDecision() == null ? null : l.taxDecision().status())
+                        .param("taxOutcome", l.taxDecision() == null ? null : l.taxDecision().outcome())
+                        .param("internalCode", l.taxDecision() == null ? null : l.taxDecision().internalTaxCode())
+                        .param("providerCode", l.taxDecision() == null ? null : l.taxDecision().providerTaxCode())
+                        .param("ruleVersion", l.taxDecision() == null ? null : l.taxDecision().ruleVersion())
+                        .param("taxProvider", l.taxDecision() == null ? null : l.taxDecision().provider())
+                        .param("addressPrecision", l.taxDecision() == null ? null
+                                : l.taxDecision().addressPrecision())
                         .update();
             }
         }
@@ -397,7 +410,9 @@ class JdbcOrderRepository implements OrderRepository {
         jdbc.sql("""
                 select l.id, l.shipment_id, l.line_no, l.variant_atin, l.product_atin, l.title, l.image_url, l.quantity,
                     l.unit_price_minor, l.tax_minor, l.discount_minor, l.category, l.perishable, l.tax_jurisdiction,
-                    l.product_type, l.local_tax_jurisdiction, l.shipping_tax_minor, l.seller_org_id, l.seller_name
+                    l.product_type, l.local_tax_jurisdiction, l.shipping_tax_minor, l.seller_org_id, l.seller_name,
+                    l.shipping_alloc_minor, l.tax_decision_status, l.tax_outcome, l.internal_tax_code,
+                    l.provider_tax_code, l.tax_rule_version, l.tax_provider, l.tax_address_precision
                 from order_line l where l.order_id in (:ids) order by l.line_no
                 """)
                 .param("ids", ids)
@@ -449,7 +464,18 @@ class JdbcOrderRepository implements OrderRepository {
                 rs.getLong("unit_price_minor"), rs.getLong("tax_minor"), rs.getLong("discount_minor"),
                 rs.getString("category"), rs.getBoolean("perishable"), rs.getString("tax_jurisdiction"),
                 rs.getString("product_type"), rs.getString("local_tax_jurisdiction"), rs.getLong("shipping_tax_minor"),
-                rs.getString("seller_org_id"), rs.getString("seller_name"));
+                rs.getString("seller_org_id"), rs.getString("seller_name"), decision(rs),
+                rs.getObject("shipping_alloc_minor") == null ? null : rs.getLong("shipping_alloc_minor"));
+    }
+
+    private static TaxDecision decision(ResultSet rs) throws SQLException {
+        String status = rs.getString("tax_decision_status");
+        if (status == null) {
+            return null;
+        }
+        return new TaxDecision(status, rs.getString("tax_outcome"), rs.getString("internal_tax_code"),
+                rs.getString("provider_tax_code"), rs.getString("tax_rule_version"), rs.getString("tax_provider"),
+                rs.getString("tax_address_precision"));
     }
 
     private record ShipmentRow(UUID id, UUID orderId, int seq, String sellerOrgId, String sellerName,

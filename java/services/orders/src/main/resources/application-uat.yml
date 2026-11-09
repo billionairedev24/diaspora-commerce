@@ -19,10 +19,6 @@ at:
   api-docs:
     enabled: true
   orders:
-    # S235: checkout tax must come from tax-returns' quote (per line, local rates, shipping); when it is down the
-    # checkout's tax step fails and the saga retries it instead of charging the interim per-state table.
-    tax:
-      fallback-to-table: ${ORDERS_TAX_FALLBACK_TO_TABLE:false}
     handover:
       key: ${HANDOVER_CODE_KEY}
     pay-links:

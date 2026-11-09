@@ -10,8 +10,9 @@ import com.afrotransact.orders.domain.Shipment;
 import com.afrotransact.orders.port.PaymentsClient;
 
 /**
- * How an order maps onto payments lines: one payments line per order line, the shipment's shipping charged on its
- * first line, discounts netted from items. Captures and refunds use the same allocation. AfroTransact Delivery from a
+ * How an order maps onto payments lines: one payments line per order line, the shipment's shipping charged on the
+ * lines it was allocated to (TX-05 to TX-07; the first line for orders placed before allocations were kept),
+ * discounts netted from items. Captures and refunds use the same allocation. AfroTransact Delivery from a
  * seller's store (S255) is fulfilment AFROTRANSACT_DELIVERY; its snapshotted seller fee is spread over the shipment's
  * lines by items (largest remainder), so customer-fault refunds return it pro rata. Community pre-order shipments
  * (S272) are fulfilment PREORDER: their shipping is the window's delivery fee, booked by payments to 4250.
@@ -33,7 +34,7 @@ final class PaymentLines {
             for (int i = 0; i < lines.size(); i++) {
                 OrderLine l = lines.get(i);
                 out.add(new PaymentsClient.Line(l.id(), s.sellerOrgId(), l.category(), fulfilment, l.quantity(),
-                        l.itemsMinor() - l.discountMinor(), i == 0 ? s.shippingMinor() : 0, l.taxMinor(),
+                        l.itemsMinor() - l.discountMinor(), s.lineShippingMinor(l), l.taxMinor(),
                         l.taxJurisdiction(), l.shippingTaxMinor(), fees[i]));
             }
         }
@@ -46,7 +47,7 @@ final class PaymentLines {
         for (int i = 0; i < lines.size(); i++) {
             OrderLine l = lines.get(i);
             out.add(new PaymentsClient.RefundLine(l.id(), l.itemsMinor() - l.discountMinor(),
-                    i == 0 ? s.shippingMinor() : 0, l.taxMinor()));
+                    s.lineShippingMinor(l), l.taxMinor()));
         }
         return out;
     }

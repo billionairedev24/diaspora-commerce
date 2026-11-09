@@ -139,28 +139,14 @@ at:
       express-days: 2
       delivery-days: 1
       pickup-days: 1
-    # Checkout tax: tax-returns' POST /v1/tax/quotes (orders-service token, scope tax:quote). When tax-returns is
-    # unavailable and fallback-to-table is on, the per-state table below taxes the items and a warning is logged.
+    # Checkout tax: tax-returns' POST /v1/tax/quotes (orders-service token, scope tax:quote) reads the stored per-line
+    # decision. There is no rate table and no default rate: a line without a definite decision blocks the checkout
+    # (orders.tax-line-blocked) and an unreachable tax-returns fails the saga step, which is retried.
     tax:
-      provider: ${ORDERS_TAX_PROVIDER:TAX_RETURNS}
-      fallback-to-table: ${ORDERS_TAX_FALLBACK_TO_TABLE:true}
-      default-bps: 0
-      rates:
-        TX: 825
-        NJ: 663
-        NY: 888
-        GA: 740
-        CA: 882
-        IL: 886
-        MD: 600
-        FL: 700
-        MA: 625
-        PA: 634
-        VA: 577
-        NC: 699
-        WA: 938
-        MN: 749
-        OH: 724
+      # PROPORTIONAL (default) spreads a package's delivery charge over its lines by net item value (TX-05..07);
+      # FIRST_LINE is the rollback to the previous behaviour. OPEN LEGAL DECISION 5: the tax adviser must approve the
+      # mixed-basket method before production (docs/engineering/checkout-tax-estimate.md).
+      shipping-allocation: ${ORDERS_TAX_SHIPPING_ALLOCATION:PROPORTIONAL}
     # Return windows for the order views' "Return or replace items" link; mirrors at.taxreturns.returns (tax-returns
     # decides eligibility, including seller policies).
     returns:

@@ -21,7 +21,8 @@ public interface TaxQuoteClient {
     /**
      * One order line.
      *
-     * @param shippingMinor shipping charged on this line (a shipment's shipping sits on its first line)
+     * @param shippingMinor this line's share of its package's delivery charge (allocated per
+     *                      {@code at.orders.tax.shipping-allocation}, TX-05 to TX-07)
      */
     record Line(String lineId, String atin, String sellerOrgId, String productType, int quantity,
                 long unitPriceMinor, long discountMinor, long shippingMinor) {
@@ -36,11 +37,24 @@ public interface TaxQuoteClient {
     }
 
     /**
-     * Tax of one line.
+     * Tax of one line and the stored decision behind it.
      *
      * @param shippingTaxMinor the part of {@code taxMinor} charged on the line's shipping
+     * @param decisionStatus   RESOLVED, or why the line has no definite decision (MISSING_FACTS, BLOCKED,
+     *                         NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN); null when the answer carries none
+     * @param outcome          EXEMPT, TAXABLE or BLOCKED
+     * @param blockedReason    tax-returns' plain message when the line cannot be taxed
+     * @param addressPrecision ZIP or ADDRESS when tax-returns reports it
      */
     record LineTax(String lineId, long taxMinor, long shippingTaxMinor, String jurisdiction,
-                   String localJurisdiction) {
+                   String localJurisdiction, String decisionStatus, String outcome, String internalTaxCode,
+                   String providerTaxCode, String ruleVersion, String blockedReason, String addressPrecision) {
+
+        /** A line answered without any decision details (tests). */
+        public LineTax(String lineId, long taxMinor, long shippingTaxMinor, String jurisdiction,
+                       String localJurisdiction) {
+            this(lineId, taxMinor, shippingTaxMinor, jurisdiction, localJurisdiction, null, null, null, null, null,
+                    null, null);
+        }
     }
 }

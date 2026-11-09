@@ -57,8 +57,12 @@ class OrderLookupServiceImpl implements OrderLookupService {
             OrderLine l = sorted.get(i);
             lines.add(new OrderLookup.Line(l.id(), l.lineNo(), l.variantAtin(), l.productAtin(), l.title(),
                     l.productType(), l.category(), l.perishable(), l.quantity(), l.unitPriceMinor(),
-                    l.discountMinor(), l.taxMinor(), i == 0 ? s.shippingMinor() : 0, l.shippingTaxMinor(),
-                    l.taxJurisdiction(), l.localTaxJurisdiction()));
+                    l.discountMinor(), l.taxMinor(), s.lineShippingMinor(l), l.shippingTaxMinor(),
+                    l.taxJurisdiction(), l.localTaxJurisdiction(), l.taxDecision() == null ? null
+                    : l.taxDecision().outcome(), l.taxDecision() == null ? null : l.taxDecision().internalTaxCode(),
+                    l.taxDecision() == null ? null : l.taxDecision().providerTaxCode(),
+                    l.taxDecision() == null ? null : l.taxDecision().ruleVersion(),
+                    l.taxDecision() == null ? null : l.taxDecision().provider()));
         }
         return new OrderLookup.Shipment(s.id(), s.seq(), s.sellerOrgId(), s.sellerName(), s.fulfilmentType().name(),
                 s.deliveryMethod().name(), s.nodeId(), s.status().wire(), s.perishable(), s.shippingMinor(),

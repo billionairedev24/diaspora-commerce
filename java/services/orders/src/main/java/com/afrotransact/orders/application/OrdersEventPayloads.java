@@ -210,18 +210,31 @@ public final class OrdersEventPayloads {
      * @param sellerOrgId          seller of the line: a community pre-order package mixes sellers, so delivery-runs
      *                             and fulfilment plan seller pickups and pick lists from it (null for older orders)
      * @param sellerName           seller display name
+     * @param taxOutcome           EXEMPT or TAXABLE: the stored tax decision the sale used (null for older orders)
+     * @param internalTaxCode      outcome-level internal tax code of that decision
+     * @param providerTaxCode      provider code mapped to it when the sale was priced
+     * @param taxRuleVersion       rule dataset version of that decision
+     * @param taxProvider          tax method that priced the line
+     * @param shippingMinor        the line's allocated share of the shipment's shipping (null for older orders)
      */
     public record LineSummary(String lineId, String variantAtin, String title, int quantity, long unitPriceMinor,
                               long taxMinor, String productAtin, String productType, String category,
                               boolean perishable, long discountMinor, String taxJurisdiction,
                               String localTaxJurisdiction, long shippingTaxMinor, int lineNo, String imageUrl,
-                              String sellerOrgId, String sellerName) {
+                              String sellerOrgId, String sellerName, String taxOutcome, String internalTaxCode,
+                              String providerTaxCode, String taxRuleVersion, String taxProvider,
+                              Long shippingMinor) {
 
         static LineSummary of(OrderLine l) {
             return new LineSummary(l.id(), l.variantAtin(), l.title(), l.quantity(), l.unitPriceMinor(),
                     l.taxMinor(), l.productAtin(), l.productType(), l.category(), l.perishable(), l.discountMinor(),
                     l.taxJurisdiction(), l.localTaxJurisdiction(), l.shippingTaxMinor(), l.lineNo(), l.imageUrl(),
-                    l.sellerOrgId(), l.sellerName());
+                    l.sellerOrgId(), l.sellerName(),
+                    l.taxDecision() == null ? null : l.taxDecision().outcome(),
+                    l.taxDecision() == null ? null : l.taxDecision().internalTaxCode(),
+                    l.taxDecision() == null ? null : l.taxDecision().providerTaxCode(),
+                    l.taxDecision() == null ? null : l.taxDecision().ruleVersion(),
+                    l.taxDecision() == null ? null : l.taxDecision().provider(), l.shippingAllocMinor());
         }
     }
 

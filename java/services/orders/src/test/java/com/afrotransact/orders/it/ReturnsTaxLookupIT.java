@@ -21,7 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import tools.jackson.databind.JsonNode;
 
 /**
- * S235 checkout tax from tax-returns (with table fallback) and the richer orders.order.placed, S229 the service order
+ * S235 checkout tax from tax-returns (stored decision per line, no fallback rate) and the richer orders.order.placed, S229 the service order
  * lookup, S218 per-shipment inventory release / settlement and return links on the order view.
  */
 class ReturnsTaxLookupIT extends OrdersIntegrationTest {
@@ -48,7 +48,10 @@ class ReturnsTaxLookupIT extends OrdersIntegrationTest {
                         .withBody("{\"provider\":\"rules\",\"currency\":\"USD\",\"lines\":["
                                 + "{{#each (jsonPath request.body '$.lines') as |l|}}{{#unless @first}},{{/unless}}"
                                 + "{\"lineId\":\"{{l.lineId}}\",\"taxMinor\":100,\"shippingTaxMinor\":0,"
-                                + "\"jurisdiction\":\"US-NY\",\"localJurisdiction\":\"US-NY-100\"}{{/each}}]}")));
+                                + "\"jurisdiction\":\"US-NY\",\"localJurisdiction\":\"US-NY-100\","
+                                + "\"decisionStatus\":\"RESOLVED\",\"outcome\":\"TAXABLE\","
+                                + "\"internalTaxCode\":\"AT.TEST.TAXABLE\",\"providerTaxCode\":\"txcd_test\","
+                                + "\"ruleVersion\":\"test-1\"}{{/each}}]}")));
     }
 
     @Test
@@ -114,11 +117,16 @@ class ReturnsTaxLookupIT extends OrdersIntegrationTest {
     }
 
     @Test
-    void checkoutFallsBackToTheTaxTableWhenTaxReturnsIsDown() {
+    void aLineWithoutADefiniteTaxDecisionStopsTheCheckoutWithAPlainMessage() {
         WIREMOCK.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/tax/quotes"))
                 .withRequestBody(WireMock.matchingJsonPath("$.shipTo.state", WireMock.equalTo("NJ")))
-                .willReturn(WireMock.aResponse().withStatus(503).withHeader("Content-Type", "application/problem+json")
-                        .withBody("{\"code\":\"tax-returns.down\"}")));
+                .willReturn(WireMock.aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withTransformers("response-template")
+                        .withBody("{\"provider\":\"RULES\",\"currency\":\"USD\",\"lines\":["
+                                + "{{#each (jsonPath request.body '$.lines') as |l|}}{{#unless @first}},{{/unless}}"
+                                + "{\"lineId\":\"{{l.lineId}}\",\"taxMinor\":0,\"shippingTaxMinor\":0,"
+                                + "\"decisionStatus\":\"NEEDS_APPROVAL\",\"outcome\":\"BLOCKED\","
+                                + "\"blockedReason\":\"awaiting review\"}{{/each}}]}")));
         String customer = id("cust");
         String bearer = "tok-" + customer;
         String sellerAtin = id("ATS");
@@ -128,12 +136,11 @@ class ReturnsTaxLookupIT extends OrdersIntegrationTest {
         UPSTREAMS.addresses(bearer, "addr-nj", "NJ");
         UPSTREAMS.paymentIntent(customer, UUID.randomUUID().toString());
         TestSupport.as(TestSupport.customer(customer));
-        JsonNode created = ok(send("POST", "/v1/checkout", """
+        JsonNode p = problem(send("POST", "/v1/checkout", """
                 {"addressId":"addr-nj","deliverySelections":[{"packageId":"%s","option":"carrier"}]}
                 """.formatted(sellerOrg + ":SELLER"), "Idempotency-Key", "idem-" + customer,
-                "Authorization", "Bearer " + bearer), 201);
-        // NJ 6.63 % from at.orders.tax.rates: 4000 × 0.0663 = 265.2 → 265
-        assertThat(created.path("totalMinor").asLong()).isEqualTo(4000 + 265);
+                "Authorization", "Bearer " + bearer), 422, "orders.tax-line-blocked");
+        assertThat(p.path("detail").asString()).contains("We can't sell").doesNotContain(sellerAtin);
     }
 
     @Test

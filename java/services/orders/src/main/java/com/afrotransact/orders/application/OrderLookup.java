@@ -31,11 +31,16 @@ public record OrderLookup(String orderId, String orderNumber, String customerId,
     /**
      * One line (the line id is also the payments line id).
      *
-     * @param shippingMinor shipping charged on this line (the shipment's first line carries it)
+     * @param shippingMinor shipping charged on this line (its stored allocation of the shipment's shipping; the first
+     *                      line carries all of it on orders placed before allocations were kept)
+     * @param taxOutcome    EXEMPT or TAXABLE: the stored tax decision the sale used (null on orders placed before it
+     *                      was kept); returns and refunds reverse with {@code internalTaxCode}, not a recompute
+     * @param taxProvider   the tax method that priced the line (RULES, STRIPE_TAX, AVALARA)
      */
     public record Line(String lineId, int lineNo, String variantAtin, String productAtin, String title,
                        String productType, String category, boolean perishable, int quantity, long unitPriceMinor,
                        long discountMinor, long taxMinor, long shippingMinor, long shippingTaxMinor,
-                       String taxJurisdiction, String localTaxJurisdiction) {
+                       String taxJurisdiction, String localTaxJurisdiction, String taxOutcome, String internalTaxCode,
+                       String providerTaxCode, String taxRuleVersion, String taxProvider) {
     }
 }

@@ -5,6 +5,9 @@ public final class CheckoutCodes {
 
     public static final String CART_EMPTY = "orders.cart-empty";
     public static final String CART_NOT_CHECKOUTABLE = "orders.cart-not-checkoutable";
+    /** A cart line has no definite tax decision (missing facts, awaiting approval, blocked): it cannot be sold yet.
+     *  The shopper removes it, or tries again later (422). Never defaulted, estimated or dropped silently. */
+    public static final String TAX_LINE_BLOCKED = "orders.tax-line-blocked";
     public static final String CURRENCY_MISMATCH = "orders.currency-mismatch";
     public static final String MARKET_DISABLED = "orders.market-disabled";
     public static final String ADDRESS_NOT_FOUND = "orders.address-not-found";

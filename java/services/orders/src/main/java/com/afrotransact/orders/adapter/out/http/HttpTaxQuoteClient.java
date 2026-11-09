@@ -59,7 +59,10 @@ class HttpTaxQuoteClient implements TaxQuoteClient {
         for (JsonNode l : body.path("lines")) {
             out.add(new LineTax(l.path("lineId").asString(null), l.path("taxMinor").asLong(),
                     l.path("shippingTaxMinor").asLong(0), l.path("jurisdiction").asString(null),
-                    l.path("localJurisdiction").asString(null)));
+                    l.path("localJurisdiction").asString(null), l.path("decisionStatus").asString(null),
+                    l.path("outcome").asString(null), l.path("internalTaxCode").asString(null),
+                    l.path("providerTaxCode").asString(null), l.path("ruleVersion").asString(null),
+                    l.path("blockedReason").asString(null), l.path("addressPrecision").asString(null)));
         }
         return new Quote(body.path("provider").asString(null), out);
     }

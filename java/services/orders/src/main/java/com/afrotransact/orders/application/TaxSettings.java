@@ -1,19 +1,18 @@
 package com.afrotransact.orders.application;
 
+import com.afrotransact.orders.domain.ShippingAllocation;
+
 /**
- * How checkout taxes orders ({@code at.orders.tax.*}).
+ * How checkout taxes orders ({@code at.orders.tax.*}). Tax always comes from tax-returns' stored decision per line;
+ * there is no fallback rate table and no default rate.
  *
- * @param provider        {@code TAX_RETURNS} (quote from tax-returns-service) or {@code TABLE} (the interim per-state
- *                        table only)
- * @param fallbackToTable when tax-returns is unavailable or refuses, tax with the per-state table and log a warning
- *                        instead of failing checkout
+ * @param shippingAllocation how a package's delivery charge is spread over its lines (TX-05 to TX-07). The mixed-basket
+ *                           method is an OPEN LEGAL DECISION (open decision 5) the tax adviser must approve before
+ *                           production; {@code FIRST_LINE} is the rollback to the previous behaviour.
  */
-public record TaxSettings(String provider, boolean fallbackToTable) {
+public record TaxSettings(ShippingAllocation shippingAllocation) {
 
-    public static final String TAX_RETURNS = "TAX_RETURNS";
-    public static final String TABLE = "TABLE";
-
-    public boolean quoteFromTaxReturns() {
-        return TAX_RETURNS.equalsIgnoreCase(provider);
+    public TaxSettings {
+        shippingAllocation = shippingAllocation == null ? ShippingAllocation.PROPORTIONAL : shippingAllocation;
     }
 }

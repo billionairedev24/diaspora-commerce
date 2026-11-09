@@ -32,6 +32,6 @@ final class OrderDrafts {
         return new OrderLine(l.lineId(), l.lineNo(), l.variantAtin(), l.productAtin(), l.title(), l.imageUrl(),
                 l.quantity(), l.unitPriceMinor(), l.taxMinor(), l.discountMinor(), l.category(), l.perishable(),
                 l.taxJurisdiction(), l.productType(), l.localTaxJurisdiction(), l.shippingTaxMinor(), l.sellerOrgId(),
-                l.sellerName());
+                l.sellerName(), l.taxDecision(), l.shippingAllocMinor());
     }
 }

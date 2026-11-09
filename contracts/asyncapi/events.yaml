@@ -8442,6 +8442,39 @@ components:
                       type: integer
                       format: int64
                       description: Part of taxMinor on shipping
+                    shippingMinor:
+                      type:
+                      - integer
+                      - 'null'
+                      format: int64
+                      description: The line's allocated share of the shipment's shipping (TX-05 to TX-07); null for orders
+                        placed before it was kept
+                    taxOutcome:
+                      type:
+                      - string
+                      - 'null'
+                      enum:
+                      - EXEMPT
+                      - TAXABLE
+                      - null
+                      description: The stored tax decision the sale used; returns and refunds reverse with it
+                    internalTaxCode:
+                      type:
+                      - string
+                      - 'null'
+                    providerTaxCode:
+                      type:
+                      - string
+                      - 'null'
+                    taxRuleVersion:
+                      type:
+                      - string
+                      - 'null'
+                    taxProvider:
+                      type:
+                      - string
+                      - 'null'
+                      description: Tax method that priced the line
                     imageUrl:
                       type:
                       - string

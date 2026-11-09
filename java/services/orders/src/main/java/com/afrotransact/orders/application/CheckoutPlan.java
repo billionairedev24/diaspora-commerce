@@ -8,6 +8,7 @@ import com.afrotransact.orders.domain.FulfilmentType;
 import com.afrotransact.orders.domain.FeeRuleSnapshot;
 import com.afrotransact.orders.domain.LocalDelivery;
 import com.afrotransact.orders.domain.PreorderPackage;
+import com.afrotransact.orders.domain.TaxDecision;
 
 /**
  * Validated, priced and taxed checkout, one package per seller and fulfilment type (before node split), plus one
@@ -88,12 +89,25 @@ public record CheckoutPlan(String currency, List<Package> packages, List<String>
      * @param shippingTaxMinor     part of taxMinor on the shipment's shipping (first line of a shipment only)
      * @param sellerOrgId          seller of the line (a pre-order package mixes sellers)
      * @param sellerName           seller display name
+     * @param taxDecision          the stored tax decision the quote used (null until the draft is taxed)
+     * @param shippingAllocMinor   the part of the shipment's shipping allocated to this line (null until taxed)
      */
     public record Line(String lineId, int lineNo, String variantAtin, String productAtin, String title,
                        String imageUrl, int quantity, long unitPriceMinor, long taxMinor, String category,
                        boolean perishable, String taxJurisdiction, int promiseDays, String offerId,
                        long discountMinor, String productType, String localTaxJurisdiction, long shippingTaxMinor,
-                       String sellerOrgId, String sellerName) {
+                       String sellerOrgId, String sellerName, TaxDecision taxDecision, Long shippingAllocMinor) {
+
+        /** A line before it is taxed: no decision and no shipping allocation yet. */
+        public Line(String lineId, int lineNo, String variantAtin, String productAtin, String title,
+                    String imageUrl, int quantity, long unitPriceMinor, long taxMinor, String category,
+                    boolean perishable, String taxJurisdiction, int promiseDays, String offerId,
+                    long discountMinor, String productType, String localTaxJurisdiction, long shippingTaxMinor,
+                    String sellerOrgId, String sellerName) {
+            this(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, taxMinor,
+                    category, perishable, taxJurisdiction, promiseDays, offerId, discountMinor, productType,
+                    localTaxJurisdiction, shippingTaxMinor, sellerOrgId, sellerName, null, null);
+        }
 
         /** A line without its seller (tests, older workflow histories). */
         public Line(String lineId, int lineNo, String variantAtin, String productAtin, String title, String imageUrl,
@@ -127,14 +141,18 @@ public record CheckoutPlan(String currency, List<Package> packages, List<String>
             long shipTax = Math.min(shippingTaxMinor, tax);
             return new Line(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, tax,
                     category, perishable, taxJurisdiction, promiseDays, offerId, d, productType, localTaxJurisdiction,
-                    shipTax, sellerOrgId, sellerName);
+                    shipTax, sellerOrgId, sellerName, taxDecision, shippingAllocMinor);
         }
 
-        /** The line with the tax of a quote (items + shipping on this line). */
-        public Line withTax(long tax, String jurisdiction, String localJurisdiction, long shippingTax) {
+        /**
+         * The line with the tax of a quote (items + its allocated shipping) and the decision the quote used.
+         */
+        public Line withTax(long tax, String jurisdiction, String localJurisdiction, long shippingTax,
+                            TaxDecision decision, long shippingAlloc) {
             return new Line(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, tax,
                     category, perishable, jurisdiction, promiseDays, offerId, discountMinor, productType,
-                    localJurisdiction, Math.clamp(shippingTax, 0, tax), sellerOrgId, sellerName);
+                    localJurisdiction, Math.clamp(shippingTax, 0, tax), sellerOrgId, sellerName, decision,
+                    shippingAlloc);
         }
     }
 }
