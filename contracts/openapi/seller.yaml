@@ -2418,10 +2418,8 @@ paths:
     post:
       tags:
       - Stripe webhooks
-      summary: 'Billing events: invoice.created/finalized/paid/payment_failed/voided/deleted, credit_note.created, customer.subscription.created/updated/deleted'
-      description: 'invoice.created claims a renewal invoice of an organisation that pays its plan from its sales and collects
-        it at once (S298). 503 while that collection failed for a transient reason: Stripe redelivers and keeps the invoice
-        a draft until we acknowledge it.'
+      summary: 'Plan-fee PaymentIntent results: payment_intent.succeeded / payment_intent.payment_failed (metadata purpose=plan_fee)'
+      description: 'Stripe Billing is removed (our own invoices, PaymentIntent collection). This endpoint remains only for plan-fee PaymentIntents that were still processing when charged (a bank debit settles days later, S298): it settles the invoice with the outcome. Any other event type, and a PaymentIntent without purpose=plan_fee, is acknowledged and ignored. Secret STRIPE_BILLING_WEBHOOK_SECRET; see docs/runbooks/stripe-webhooks.md.'
       operationId: stripeBillingWebhook
       parameters:
       - name: Stripe-Signature

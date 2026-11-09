@@ -31,13 +31,15 @@ class WebhookController {
         return webhooks.receive(StripeWebhookParser.Endpoint.CONNECT, payload, signature);
     }
 
-    @Operation(summary = "Billing events: invoice.created/finalized/paid/payment_failed/voided/deleted, "
-            + "credit_note.created, customer.subscription.created/updated/deleted",
-            description = "invoice.created claims a renewal invoice of an organisation that pays its plan from its "
-                    + "sales and collects it at once (S298). 503 while that collection failed for a transient reason: "
-                    + "Stripe redelivers and keeps the invoice a draft until we acknowledge it.")
+    @Operation(summary = "Plan-fee PaymentIntent results: payment_intent.succeeded / payment_intent.payment_failed "
+            + "(metadata purpose=plan_fee)",
+            description = "Stripe Billing is removed (our own invoices, PaymentIntent collection). This endpoint remains "
+                    + "only for plan-fee PaymentIntents that were still processing when charged (a bank debit settles "
+                    + "days later, S298): it settles the invoice with the outcome. Any other event type, and a "
+                    + "PaymentIntent without purpose=plan_fee, is acknowledged and ignored. Secret "
+                    + "STRIPE_BILLING_WEBHOOK_SECRET; see docs/runbooks/stripe-webhooks.md.")
     @ApiResponse(responseCode = "200", description = "Applied (or a duplicate)")
-    @ApiResponse(responseCode = "503", description = "Retry later: paying the invoice from sales is still pending")
+    @ApiResponse(responseCode = "503", description = "Retry later: settling the invoice failed for a transient reason")
     @PostMapping("/v1/webhooks/stripe-billing")
     ResponseEntity<WebhookResult> stripeBillingWebhook(@RequestBody String payload,
                           @RequestHeader(value = "Stripe-Signature", required = false) String signature) {

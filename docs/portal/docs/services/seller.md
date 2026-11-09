@@ -174,11 +174,10 @@ subscription; failures are retried by a job). Billing page (owner / finance read
 | `GET …/billing/plan/preview?planCode=&cadence=` | owner / finance: what `POST …/billing/plan` would do — `IMMEDIATE_UPGRADE` with `amountDueNowCents` from Stripe's invoice preview (`proration_behavior=always_invoice`; 0 during a trial or from a free plan with a trial), or `AT_RENEWAL` with `effectiveAt` = the renewal; nothing changes |
 | `POST …/billing/setup-intents` | owner: a Stripe SetupIntent (`usage=off_session`) on the organisation's customer (created on first use) → `{customerId, setupIntentId, clientSecret}`; Seller Center confirms it with the Payment Element, then registers the `pm_…` with `POST …/billing/payment-methods` |
 
-`POST /v1/webhooks/stripe-billing` (secret `STRIPE_BILLING_WEBHOOK_SECRET`): `invoice.paid`,
-`invoice.payment_failed` (dunning `RETRYING` / `FINAL_ATTEMPT_FAILED`, status `PAST_DUE`),
-`customer.subscription.updated` / `deleted`; `invoice.created`, `invoice.voided`, `invoice.deleted` and
-`credit_note.created` for plans paid from sales (S298: 503 while collecting an invoice failed for a transient reason,
-so Stripe redelivers and keeps the draft).
+`POST /v1/webhooks/stripe-billing` (secret `STRIPE_BILLING_WEBHOOK_SECRET`): only `payment_intent.succeeded` and
+`payment_intent.payment_failed` of plan-fee PaymentIntents (metadata `purpose=plan_fee`) that were still processing when
+charged (bank debit, S298); other events are acknowledged and ignored. Stripe Billing itself is removed; see
+`docs/runbooks/stripe-webhooks.md`. Publicly routed as `/seller/v1/webhooks/stripe-billing`.
 
 **How the plan is paid (S298).** `GET/PUT /v1/orgs/{orgId}/billing/plan-fee-collection` (owner / finance):
 `EARNINGS_FIRST` ("Pay your plan from your sales": payments withholds each renewal invoice from earnings, the card

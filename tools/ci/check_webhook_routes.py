@@ -39,7 +39,6 @@ def main():
     deploy = (ROOT / "infra/ovh-vps/deploy.sh").read_text()
     found = {m[0]: (m[1], m[2]) for m in re.findall(r'^\s*route api (\S+) (\S+) "([^"]*)"', deploy, re.M)
              if m[0].startswith(("/payments", "/seller"))}
-    found = {p: (s, r) for p, (s, r) in found.items()}
     check("infra/ovh-vps/deploy.sh", found, errors)
     for routes in sorted((ROOT / "infra/k8s/platform/edge/overlays").glob("*/routes.yaml")):
         found = {}
