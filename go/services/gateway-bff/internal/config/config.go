@@ -168,6 +168,15 @@ type Config struct {
 		SellerNames                map[string]string `yaml:"sellerNames"`
 	} `yaml:"commerce"`
 
+	// Checkout holds the checkout summary's tax estimate settings.
+	Checkout struct {
+		// ShippingAllocation (env CHECKOUT_SHIPPING_ALLOCATION) spreads a package's delivery charge over its lines for
+		// tax (TX-05..07): PROPORTIONAL (default, by net item value) or FIRST_LINE (the rollback). Must match
+		// orders' at.orders.tax.shipping-allocation. The mixed-basket method is an OPEN LEGAL DECISION (open decision
+		// 5): the tax adviser must approve it before production.
+		ShippingAllocation string `yaml:"shippingAllocation" env:"CHECKOUT_SHIPPING_ALLOCATION"`
+	} `yaml:"checkout"`
+
 	// Stripe is the public half of the Stripe account (Stripe.js / PaymentSheet); secrets stay in payments.
 	Stripe struct {
 		PublishableKey string `yaml:"publishableKey" env:"STRIPE_PUBLISHABLE_KEY"`
@@ -293,6 +302,9 @@ const MinSessionTTL = 90 * 24 * time.Hour
 func (c *Config) Validate(env string) error {
 	if env != "local" {
 		c.Web.LANMediaURL = "" // a development convenience only
+	}
+	if v := strings.ToUpper(strings.TrimSpace(c.Checkout.ShippingAllocation)); v != "" && v != "PROPORTIONAL" && v != "FIRST_LINE" {
+		return fmt.Errorf("config: CHECKOUT_SHIPPING_ALLOCATION must be PROPORTIONAL or FIRST_LINE, not %q", c.Checkout.ShippingAllocation)
 	}
 	if c.RedisURL == "" {
 		return fmt.Errorf("config: REDIS_URL is required")

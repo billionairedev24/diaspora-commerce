@@ -42,6 +42,10 @@ type ShopperDeps struct {
 	Checkout   CheckoutService
 	Carts      CartService
 	Location   LocationService
+	// ShippingAllocation spreads a package's delivery charge over its lines for the tax estimate (TX-05 to TX-07);
+	// blank means PROPORTIONAL. Must match orders' at.orders.tax.shipping-allocation. The mixed-basket method is an
+	// OPEN LEGAL DECISION (open decision 5) the tax adviser must approve before production.
+	ShippingAllocation ShippingAllocation
 	// PublishableKey is the Stripe publishable key handed to Stripe.js / PaymentSheet.
 	PublishableKey string
 	// IdentityPublicURL is where the browser reaches identity (hosted passkey registration page).

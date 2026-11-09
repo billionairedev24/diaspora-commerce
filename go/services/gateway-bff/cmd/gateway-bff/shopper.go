@@ -28,6 +28,10 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 	s httpapi.Services, log *slog.Logger) httpapi.ShopperServices {
 	up := cfg.Upstreams
 	ai := client("ai-gateway", up.AIGateway)
+	shippingAllocation, err := app.ParseShippingAllocation(cfg.Checkout.ShippingAllocation)
+	if err != nil { // Validate refuses an unknown value at start-up; this is only the compiler's reassurance.
+		shippingAllocation = app.AllocateProportional
+	}
 	d := app.ShopperDeps{
 		Wallet: upstreams.NewWallet(sc.payments), Orders: upstreams.NewCustomerOrders(sc.orders),
 		Returns: upstreams.NewReturns(client("tax-returns", up.TaxReturns), sc.serviceTokens), Payments: upstreams.NewOrderPayments(sc.payments),
@@ -42,7 +46,8 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 		Credit:        upstreams.NewCredit(sc.payments),
 		Membership:    upstreams.NewMembership(sc.payments),
 		Identity:      sc.identityAPI, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
-		PublishableKey: cfg.Stripe.PublishableKey, IdentityPublicURL: cfg.OIDC.PublicURL, Log: log,
+		ShippingAllocation: shippingAllocation,
+		PublishableKey:     cfg.Stripe.PublishableKey, IdentityPublicURL: cfg.OIDC.PublicURL, Log: log,
 	}
 	settings := app.NewAccountSettingsService(app.AccountSettingsDeps{Identity: upstreams.NewAccountSettings(sc.identity),
 		Alerts: upstreams.NewAlertPreferences(client("notifications", up.Notifications))})

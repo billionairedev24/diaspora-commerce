@@ -198,6 +198,21 @@ class CheckoutTaxImplTest {
     }
 
     @Test
+    void redeemingCreditIsATenderTheItemsAreStillTaxedAtTheirOwnRatesAndNoGiftCardLineExists() {
+        OrderDraft base = draft(0, line("l1", 1, "Egusi", 1, 1000, 0), line("l2", 2, "Sauce pan", 1, 3000, 0));
+        OrderDraft paidWithCredit = new OrderDraft(base.orderId(), base.orderNumber(), base.customerId(),
+                base.workflowId(), base.currency(), base.shipTo(), base.reserved(), base.shipments(),
+                base.createdAt(), null, null, List.of(), false, true);
+        answer = l -> l.lineId().equals("l1") ? exempt(l) : taxable(l);
+        OrderDraft out = proportional().tax(paidWithCredit);
+        // the quote sees the two items only: credit and gift cards are not lines, so they are never taxed
+        assertThat(requests.getFirst().lines()).extracting(TaxQuoteClient.Line::lineId).containsExactly("l1", "l2");
+        assertThat(out.useCredit()).isTrue();
+        assertThat(taxed(out, "l1").taxMinor()).isZero();
+        assertThat(taxed(out, "l2").taxMinor()).isEqualTo(248);
+    }
+
+    @Test
     void thereIsNoInterimRateTableLeftAnywhere() {
         assertThatThrownBy(() -> Class.forName("com.afrotransact.orders.adapter.out.tax.StateRateTaxCalculator"))
                 .isInstanceOf(ClassNotFoundException.class);

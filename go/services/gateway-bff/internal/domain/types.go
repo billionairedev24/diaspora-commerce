@@ -606,6 +606,42 @@ type CheckoutCoupon struct {
 	SellerShares          []CheckoutCouponSellerShare   `json:"sellerShares,omitempty"`
 }
 
+// Tax line statuses of CheckoutTaxLine.
+const (
+	TaxLineTaxable = "TAXABLE"
+	TaxLineExempt  = "EXEMPT"
+	TaxLineBlocked = "BLOCKED"
+)
+
+// CheckoutTaxLine is the tax estimate of one cart line. Shipping is the line's share of its package's delivery charge.
+type CheckoutTaxLine struct {
+	LineID        string `json:"lineId"`
+	Status        string `json:"status"`
+	TaxMinor      int64  `json:"taxMinor"`
+	ShippingMinor int64  `json:"shippingMinor"`
+}
+
+// ShippingTaxAllocation is the method that attributed a package's delivery charge to its lines for the estimate.
+// Approved stays false until the tax adviser signs off the mixed-basket method (open legal decision 5).
+type ShippingTaxAllocation struct {
+	Method   string `json:"method"`
+	Approved bool   `json:"approved"`
+	Note     string `json:"note"`
+}
+
+// CheckoutBlockedLine is a cart line that can't be sold yet because its tax decision is not definite. The message is
+// for the shopper (the item's name and what happens next, no ids and no tax terms); Action is the one thing that
+// clears it from the shopper's side.
+type CheckoutBlockedLine struct {
+	LineID    string `json:"lineId"`
+	OfferID   string `json:"offerId"`
+	ATIN      string `json:"atin"`
+	Title     string `json:"title"`
+	PackageID string `json:"packageId"`
+	Message   string `json:"message"`
+	Action    string `json:"action"`
+}
+
 // CheckoutSummary is the checkout page.
 type CheckoutSummary struct {
 	Packages       []CheckoutPackage `json:"packages"`
@@ -616,13 +652,26 @@ type CheckoutSummary struct {
 	// DiscountMinor is the item discount from an applied coupon (subtotal reduction before tax).
 	DiscountMinor int64 `json:"discountMinor"`
 	// ShippingDiscountMinor is free-shipping (or partial) from the coupon.
-	ShippingDiscountMinor int64           `json:"shippingDiscountMinor"`
-	TaxMinor              int64           `json:"taxMinor"`
-	TaxRateLabel          string          `json:"taxRateLabel"`
-	TotalMinor            int64           `json:"totalMinor"`
-	Currency              string          `json:"currency"`
-	SellerCount           int             `json:"sellerCount"`
-	Coupon                *CheckoutCoupon `json:"coupon,omitempty"`
+	ShippingDiscountMinor int64  `json:"shippingDiscountMinor"`
+	TaxMinor              int64  `json:"taxMinor"`
+	TaxRateLabel          string `json:"taxRateLabel"`
+	// TaxJurisdictionLabel names where the estimate was worked out for the shopper ("Houston, TX"); empty without an
+	// estimate. The storefront shows "Estimated tax" with it.
+	TaxJurisdictionLabel string `json:"taxJurisdictionLabel"`
+	// TaxLines is the estimate per cart line (taxable, exempt or blocked) for mixed baskets; empty without an estimate.
+	TaxLines []CheckoutTaxLine `json:"taxLines"`
+	// ShippingTaxAllocation says how the delivery charge was attributed to lines for the estimate. The mixed-basket
+	// method is an OPEN LEGAL DECISION (open decision 5) until the tax adviser approves it.
+	ShippingTaxAllocation *ShippingTaxAllocation `json:"shippingTaxAllocation,omitempty"`
+	// BlockedLines are the cart lines that can't be sold yet (no definite tax decision): checkout can't be placed
+	// while any remains; the shopper removes them. Empty when nothing is blocked.
+	BlockedLines []CheckoutBlockedLine `json:"blockedLines"`
+	// CanPlaceOrder is false while a blocked line remains.
+	CanPlaceOrder bool            `json:"canPlaceOrder"`
+	TotalMinor    int64           `json:"totalMinor"`
+	Currency      string          `json:"currency"`
+	SellerCount   int             `json:"sellerCount"`
+	Coupon        *CheckoutCoupon `json:"coupon,omitempty"`
 	// PublishableKey is the Stripe key for Stripe.js (Payment Element, Express Checkout Element).
 	PublishableKey string `json:"publishableKey,omitempty"`
 	// StripeCustomerID is the shopper's Stripe Customer (cus_...); passed to the Payment Element to show saved cards.

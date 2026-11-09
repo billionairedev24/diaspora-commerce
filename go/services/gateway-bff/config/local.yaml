@@ -165,6 +165,8 @@ commerce:
   freeShippingThresholdMinor: 4900
   retailOrgId: org_afrotransact_retail
   sellerNames: {}
+checkout:
+  shippingAllocation: PROPORTIONAL # CHECKOUT_SHIPPING_ALLOCATION: PROPORTIONAL | FIRST_LINE (rollback); open legal decision 5
 stripe:
   publishableKey: "" # STRIPE_PUBLISHABLE_KEY (pk_test_… / pk_live_…)
 staff:

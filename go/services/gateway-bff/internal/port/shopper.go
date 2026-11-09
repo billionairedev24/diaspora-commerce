@@ -306,6 +306,16 @@ type UpTaxLineQuote struct {
 	LocalJurisdiction string  `json:"localJurisdiction,omitempty"`
 	ShippingTaxMinor  int64   `json:"shippingTaxMinor"`
 	Rate              float64 `json:"rate"`
+	// DecisionStatus is RESOLVED when the stored tax decision is definite; any other value means the line carries no
+	// tax figure and is blocked at checkout. Outcome is EXEMPT, TAXABLE or BLOCKED.
+	DecisionStatus string `json:"decisionStatus"`
+	Outcome        string `json:"outcome"`
+	BlockedReason  string `json:"blockedReason,omitempty"`
+}
+
+// Resolved reports whether tax-returns gave a definite decision for the line (never guessed: a missing status is not).
+func (l UpTaxLineQuote) Resolved() bool {
+	return l.DecisionStatus == "RESOLVED" && (l.Outcome == "EXEMPT" || l.Outcome == "TAXABLE")
 }
 
 // UpTaxQuote is tax-returns' TaxQuote.

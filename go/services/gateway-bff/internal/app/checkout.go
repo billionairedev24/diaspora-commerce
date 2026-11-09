@@ -158,6 +158,10 @@ func orderErr(err error) error {
 		return pr.WithCause(err)
 	}
 	switch {
+	case p.Code == "orders.tax-line-blocked":
+		// Orders names the item in plain words; the shopper removes it (the summary lists it with a Remove action).
+		return domain.FieldProblem(domain.CodeCheckoutItemBlocked, "We can't sell this item yet", "cart",
+			firstNonEmpty(p.Detail, blockedMessage(""))).WithCause(err)
 	case p.Code == "orders.coupon-not-applicable":
 		return domain.FieldProblem(domain.CodeValidationFailed, "Coupon can't be used", "couponCode",
 			firstNonEmpty(p.Detail, "This coupon can't be used on this order.")).WithCause(err)

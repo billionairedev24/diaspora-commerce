@@ -62,6 +62,8 @@ const (
 	CodeDeliveryUnavailable       = "DELIVERY_UNAVAILABLE"
 	CodeDeliveryPickupUnavailable = "DELIVERY_PICKUP_UNAVAILABLE"
 	CodeDeliveryAddressNotLocated = "DELIVERY_ADDRESS_NOT_LOCATED"
+	// CodeCheckoutItemBlocked: a cart line can't be sold yet (its tax decision is not definite); remove it or wait.
+	CodeCheckoutItemBlocked       = "CHECKOUT_ITEM_BLOCKED"
 	CodePickupOrgNotApproved      = "PICKUP_ORG_NOT_APPROVED"
 	CodePickupInvalidHours        = "PICKUP_INVALID_HOURS"
 	CodePickupNotGeocoded         = "PICKUP_NOT_GEOCODED"

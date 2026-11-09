@@ -163,6 +163,7 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 		return sum, fmt.Errorf("checkout summary: %w", err)
 	}
 	sum.PublishableKey = s.d.PublishableKey
+	sum.CanPlaceOrder, sum.BlockedLines, sum.TaxLines = true, []domain.CheckoutBlockedLine{}, []domain.CheckoutTaxLine{}
 	if len(sum.Packages) == 0 {
 		return sum, nil
 	}
@@ -364,58 +365,6 @@ func packageShippingFee(p domain.CheckoutPackage, packageDelivery map[string]str
 		return p.DeliveryOptions[0].FeeMinor
 	}
 	return 0
-}
-
-// priceTax estimates sales tax for the checkout total via tax-returns (best effort; the order saga re-quotes at place).
-func (s *checkoutPaymentServiceImpl) priceTax(ctx context.Context, sum *domain.CheckoutSummary, addr *port.IdentityAddress,
-	packageDelivery map[string]string) {
-	if s.d.Returns == nil || addr == nil || strings.TrimSpace(addr.State) == "" || strings.TrimSpace(addr.PostalCode) == "" {
-		return
-	}
-	byOffer := offerDiscounts(sum.Coupon)
-	shipDiscLeft := sum.ShippingDiscountMinor
-	lines := make([]port.UpTaxQuoteLine, 0)
-	for _, p := range sum.Packages {
-		ship := max(0, packageShippingFee(p, packageDelivery)-p.MembershipWaivedMinor)
-		if off := min(shipDiscLeft, ship); off > 0 {
-			ship -= off
-			shipDiscLeft -= off
-		}
-		for i, l := range p.Lines {
-			sh := int64(0)
-			if i == 0 {
-				sh = ship
-			}
-			lines = append(lines, port.UpTaxQuoteLine{LineID: l.LineID, ATIN: l.ATIN, SellerOrgID: p.Seller.ID, ProductType: l.ProductType,
-				Quantity: l.Quantity, UnitPriceMinor: l.PriceMinor, DiscountMinor: byOffer[l.OfferID], ShippingMinor: sh})
-		}
-	}
-	if len(lines) == 0 {
-		return
-	}
-	cur := strings.ToUpper(firstNonEmpty(sum.Currency, domain.Currency))
-	req := port.UpTaxQuoteRequest{Currency: cur, ShipTo: port.UpTaxShipTo{Country: firstNonEmpty(addr.Country, "US"),
-		State: addr.State, PostalCode: addr.PostalCode, City: addr.City}, Lines: lines}
-	q, err := s.d.Returns.TaxQuote(ctx, req)
-	if err != nil {
-		s.d.log().WarnContext(ctx, "tax quote unavailable; tax shown at order time", "error", err)
-		return
-	}
-	sum.TaxMinor = q.TotalTaxMinor
-	if sum.TaxMinor == 0 {
-		for _, l := range q.Lines {
-			sum.TaxMinor += l.TaxMinor
-		}
-	}
-	if q.Jurisdiction != "" {
-		sum.TaxRateLabel = q.Jurisdiction
-	}
-	for _, l := range q.Lines {
-		if l.Rate > 0 {
-			sum.TaxRateLabel = fmt.Sprintf("%.2f%%", l.Rate*100)
-			break
-		}
-	}
 }
 
 func localUnavailable(ld *domain.CheckoutLocalDelivery, reason, message string) *domain.CheckoutLocalDelivery {

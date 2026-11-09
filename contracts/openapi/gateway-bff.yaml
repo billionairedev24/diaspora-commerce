@@ -3603,7 +3603,9 @@ components:
             STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, PHONE_MISSING; product reviews (S324): REVIEW_NOT_VERIFIED_PURCHASE,
             REVIEW_ALREADY_EXISTS, REVIEW_EDIT_WINDOW_CLOSED; AfroTransact Delivery from the seller's store
             (S255, 422 on place order, `errors.deliverySelections` explains it): DELIVERY_OUT_OF_RANGE, DELIVERY_UNAVAILABLE,
-            DELIVERY_PICKUP_UNAVAILABLE, DELIVERY_ADDRESS_NOT_LOCATED; the sign-out policy (401 on any `/v1` route except
+            DELIVERY_PICKUP_UNAVAILABLE, DELIVERY_ADDRESS_NOT_LOCATED; CHECKOUT_ITEM_BLOCKED (422 on place order: a cart line
+            has no definite tax decision yet; `detail` names the item in plain words, remove it from the cart or try again
+            later; the summary lists it in `blockedLines`); the sign-out policy (401 on any `/v1` route except
             `/v1/auth/*`, the session is already ended and the person must sign in again): SESSION_IDLE_TIMEOUT (no real user
             activity for longer than the audience's idle timeout), SESSION_ABSOLUTE_TIMEOUT (the session reached its maximum
             length).
@@ -5040,8 +5042,22 @@ components:
         discountMinor: {type: integer, description: Item discount from coupon}
         shippingDiscountMinor: {type: integer, description: Shipping discount from coupon (e.g. free shipping)}
         coupon: {$ref: '#/components/schemas/CheckoutCoupon'}
-        taxMinor: {type: integer}
+        taxMinor: {type: integer, description: 'Estimated sales tax on the lines that can be sold; a blocked line carries none'}
         taxRateLabel: {type: string, examples: ['8.25% TX']}
+        taxJurisdictionLabel: {type: string, examples: ['Houston, TX'], description: 'Where the estimate was worked out, from the delivery address; empty without an estimate. The storefront shows "Estimated tax" with it.'}
+        taxLines:
+          type: array
+          description: The estimate per cart line, for mixed baskets (exempt, taxable, blocked); empty without an estimate
+          items: {$ref: '#/components/schemas/CheckoutTaxLine'}
+        shippingTaxAllocation:
+          allOf:
+            - $ref: '#/components/schemas/ShippingTaxAllocation'
+          description: 'How the delivery charge was attributed to lines for the estimate. For packages mixing taxable and exempt items the method is an OPEN LEGAL DECISION (open decision 5) until the tax adviser approves it (approved stays false).'
+        blockedLines:
+          type: array
+          description: 'Cart lines that cannot be sold yet because their tax decision is not definite. Checkout cannot be placed while any remains; the shopper removes them (Remove). Never defaulted, estimated or dropped silently. Empty when nothing is blocked.'
+          items: {$ref: '#/components/schemas/CheckoutBlockedLine'}
+        canPlaceOrder: {type: boolean, description: 'false while a blocked line remains (placing the order is refused with CHECKOUT_ITEM_BLOCKED)'}
         totalMinor: {type: integer}
         currency: {type: string}
         sellerCount: {type: integer}
@@ -5059,6 +5075,33 @@ components:
           allOf:
             - $ref: '#/components/schemas/MembershipSavings'
           description: 'Which fees were waived ("fee waived: membership") or, when I am not a member, the upsell "Join Plus to save $X on this order"; absent when there is nothing to say'
+    CheckoutTaxLine:
+      type: object
+      required: [lineId, status, taxMinor, shippingMinor]
+      properties:
+        lineId: {type: string}
+        status: {type: string, enum: [TAXABLE, EXEMPT, BLOCKED]}
+        taxMinor: {type: integer, format: int64}
+        shippingMinor: {type: integer, format: int64, description: This line's share of its package's delivery charge}
+    ShippingTaxAllocation:
+      type: object
+      required: [method, approved, note]
+      properties:
+        method: {type: string, enum: [PROPORTIONAL, FIRST_LINE], description: 'PROPORTIONAL splits a package''s delivery by net item value; FIRST_LINE is the rollback'}
+        approved: {type: boolean, description: Always false until the tax adviser approves the mixed-basket method (open legal decision 5)}
+        note: {type: string}
+    CheckoutBlockedLine:
+      type: object
+      description: 'A cart line that cannot be sold yet. `message` is for the shopper: it names the item and what happens next, with no ids and no tax terms.'
+      required: [lineId, offerId, atin, title, packageId, message, action]
+      properties:
+        lineId: {type: string}
+        offerId: {type: string, description: Remove it from the cart with this offer}
+        atin: {type: string}
+        title: {type: string}
+        packageId: {type: string}
+        message: {type: string, examples: ["We can't sell Gift card yet. We're still checking its details. Remove it from your cart to continue, or try again later."]}
+        action: {type: string, enum: [REMOVE]}
     CheckoutLocalDelivery:
       type: object
       description: |
