@@ -212,6 +212,201 @@ class OffersAndStockTest(unittest.TestCase):
         self.assertEqual(self.s.report.counts[("inventory receipts", "replayed")], 1)
 
 
+class RetailOfferWaitTest(OffersAndStockTest):
+    """The Retail offer comes from Kafka (catalog.product.created -> offers): a bounded, longer wait and a clear error."""
+
+    def setUp(self):
+        super().setUp()
+        self.now = 1000.0
+        self.waits = []
+        self.arrive_after = None  # seconds of fake time after which the Retail offers appear
+        self.pending = []
+
+        def sleep(sec):
+            self.now += sec
+            self.waits.append(sec)
+            if self.arrive_after is not None and self.now >= self.arrive_after and self.pending:
+                self.store.extend(self.pending)
+                self.pending = []
+
+        self.s.clock = lambda: self.now
+        self.s.sleep = sleep
+
+    def late_product(self, key):
+        p, product = self.product(key)
+        self.pending = [o for o in self.store if o["sellerOrgId"] == D.RETAIL_ORG]
+        self.store[:] = [o for o in self.store if o["sellerOrgId"] != D.RETAIL_ORG]
+        return p, product
+
+    def test_an_offer_that_arrives_late_is_found_and_a_re_run_for_an_existing_product_succeeds(self):
+        p, product = self.late_product("at-jollof-seasoning")
+        self.arrive_after = self.now + 45  # far beyond the old 30 s wait
+        self.s._offers(p, product)
+        retail = [o for o in self.store if o["sellerOrgId"] == D.RETAIL_ORG]
+        self.assertEqual([o["status"] for o in retail], ["ACTIVE", "ACTIVE"])
+        self.assertLess(self.now, 1000.0 + 120)
+        self.assertTrue(self.s.retail_event_seen)
+        again = len(self.store)
+        self.s._offers(p, product)  # the product exists, the offer is already there
+        self.assertEqual(len(self.store), again)
+
+    def test_the_first_wait_is_long_and_then_fails_with_what_to_check(self):
+        p, product = self.late_product("at-jollof-seasoning")
+        with self.assertRaises(ValueError) as caught:
+            self.s._offers(p, product)
+        msg = str(caught.exception)
+        self.assertIn("offers did not create the Retail offer from catalog.product.created: check .local/logs/offers.log, "
+                      "Kafka (docker ps | grep kafka) and run make seed again (it picks up where it stopped)", msg)
+        self.assertGreaterEqual(self.now - 1000.0, 120)
+        self.assertLess(self.now - 1000.0, 125)
+
+    def test_after_a_timeout_the_other_products_are_not_made_to_wait_120_s_each(self):
+        p, product = self.late_product("at-jollof-seasoning")
+        with self.assertRaises(ValueError):
+            self.s._offers(p, product)
+        spent = self.now
+        with self.assertRaises(ValueError):
+            self.s._offers(p, product)
+        self.assertLess(self.now - spent, 30)
+
+    def test_once_an_offer_was_seen_the_next_variants_wait_briefly(self):
+        p, product = self.product("at-jollof-seasoning")
+        self.s._offers(p, product)  # seen at once
+        self.assertTrue(self.s.retail_event_seen)
+        ghost = {"atin": "ATGHOST001", "sellerSku": "G", "options": {}}
+        before = self.now
+        self.assertIsNone(self.s._wait_retail_offer(ghost["atin"]))
+        self.assertLess(self.now - before, 25)
+
+    def test_a_seller_product_does_not_wait_the_long_time_for_an_offer_it_will_withdraw(self):
+        p, product = self.late_product("ofada-rice")
+        self.s._offers(p, product)
+        self.assertLess(self.now - 1000.0, 60)
+
+
+class TaxReviewTest(unittest.TestCase):
+    """The seeder acts as a tax reviewer: queue -> approve RESOLVED records with a reason, never anything else."""
+
+    def setUp(self):
+        self.s = seeder()
+        self.now = 0.0
+        self.s.clock = lambda: self.now
+        self.s.sleep = lambda sec: setattr(self, "now", self.now + sec)
+        self.tax = self.s.svc["tax-returns"]
+        self.records = {}
+        self.approved = []
+
+        def queue(path, body, kw):
+            items = [r for r in self.records.values() if r["status"] == kw["params"]["status"]]
+            return {"items": items, "page": 0, "size": 200, "total": len(items)}
+
+        def one(path, body, kw):
+            atin = path.rsplit("/", 1)[1]
+            if atin not in self.records:
+                raise ApiError("GET", path, 404, {"code": "tax.classification-not-found"})
+            return self.records[atin]
+
+        def approve(path, body, kw):
+            atin = path.split("/")[4]
+            self.approved.append((atin, body))
+            self.records[atin]["status"] = "APPROVED"
+            return self.records[atin]
+
+        self.tax.on("GET", "/v1/tax/variant-classifications", queue)
+        self.tax.on("GET", "/v1/tax/variant-classifications/*", one)
+        self.tax.on("POST", "/v1/tax/variant-classifications/*", approve)
+
+    def record(self, atin, status="PENDING_REVIEW", decision="RESOLVED"):
+        self.records[atin] = {"atin": atin, "status": status, "resolution": {"status": decision}}
+
+    def test_resolved_variants_are_approved_with_the_demo_reason(self):
+        self.record("ATA"), self.record("ATB")
+        self.s.tax_atins.update({"ATA": "A", "ATB": "B"})
+        self.s._review_tax()
+        self.assertEqual(self.approved, [("ATA", {"reason": "Demo data approved by the seeder"}),
+                                         ("ATB", {"reason": "Demo data approved by the seeder"})])
+        self.assertEqual(self.s.report.counts[("tax review", "approved")], 2)
+        self.assertEqual(self.s.report.problems, [])
+
+    def test_only_resolved_records_are_ever_approved(self):
+        self.record("ATOK"), self.record("ATMISS", decision="MISSING_FACTS"), self.record("ATBLOCK", decision="BLOCKED")
+        self.record("ATGATE", decision="NEEDS_APPROVAL")
+        self.s.tax_atins.update({a: a for a in self.records})
+        self.s._review_tax()
+        self.assertEqual([a for a, _ in self.approved], ["ATOK"])
+        self.assertEqual(len(self.s.report.problems), 3)
+        self.assertTrue(all("not RESOLVED" in m for m in self.s.report.problems))
+        self.assertLess(self.now, 10, "a record that cannot be approved is not waited for")
+
+    def test_a_re_run_leaves_approved_records_alone_and_does_not_wait(self):
+        self.record("ATDONE", status="APPROVED")
+        self.s.tax_atins["ATDONE"] = "Done"
+        self.s._review_tax()
+        self.assertEqual(self.approved, [])
+        self.assertEqual(self.now, 0)
+        self.assertEqual(self.s.report.counts[("tax review", "already approved")], 1)
+
+    def test_a_record_that_arrives_over_kafka_a_little_late_is_approved(self):
+        self.s.tax_atins["ATLATE"] = "Late"
+        calls = []
+        real_sleep = self.s.sleep
+
+        def sleep(sec):
+            real_sleep(sec)
+            calls.append(sec)
+            if len(calls) == 3:
+                self.record("ATLATE")
+
+        self.s.sleep = sleep
+        self.s._review_tax()
+        self.assertEqual([a for a, _ in self.approved], ["ATLATE"])
+
+    def test_a_record_that_never_arrives_is_reported_after_a_bounded_wait(self):
+        self.s.tax_atins["ATNONE"] = "Ghost"
+        self.s._review_tax()
+        self.assertTrue(60 <= self.now <= 65)
+        self.assertIn("tax-returns has no classification yet", self.s.report.problems[0])
+
+    def test_a_principal_without_the_permission_is_told_what_to_set(self):
+        self.record("ATA")
+        self.s.tax_atins["ATA"] = "A"
+
+        def deny(path, body, kw):
+            raise ApiError("POST", path, 403, {"code": "forbidden"})
+
+        self.tax.on("POST", "/v1/tax/variant-classifications/*", deny)
+        self.s._review_tax()
+        self.assertIn("SEED_TAX_TOKEN", self.s.report.problems[0])
+        self.assertEqual(len(self.s.report.problems), 1)
+
+    def test_tax_returns_down_is_reported(self):
+        self.s.up["tax-returns"] = False
+        self.s.tax_atins["ATA"] = "A"
+        self.s._review_tax()
+        self.assertIn("tax-returns is down", self.s.report.problems[0])
+
+    def test_approve_retries_after_the_tax_gate_flipped_the_variant_to_review(self):
+        self.record("ATP")
+        catalog = self.s.svc["catalog"]
+        state = {"ready": False, "calls": 0}
+
+        def approve(path, body, kw):
+            state["calls"] += 1
+            if not state["ready"]:
+                raise ApiError("POST", path, 422, {"code": "catalog.tax-not-ready"})
+            return {"status": "LIVE"}
+
+        catalog.on("POST", "/v1/products/*", approve)
+        orig = self.tax.routes[("POST", "/v1/tax/variant-classifications/*")]
+        self.tax.on("POST", "/v1/tax/variant-classifications/*",
+                    lambda path, body, kw: state.update(ready=True) or orig(path, body, kw))
+        p = next(x for x in D.PRODUCTS)
+        out = self.s._approve_product(p, {"id": "pid", "status": "IN_REVIEW", "variants": [{"atin": "ATP"}]})
+        self.assertEqual(out["status"], "LIVE")
+        self.assertEqual([a for a, _ in self.approved], ["ATP"])
+        self.assertEqual(state["calls"], 2)
+
+
 DEPARTMENT_NODES = [{"path": n, "name": n, "level": "DEPARTMENT", "code": c} for n, c in (
     ("Fashion & Accessories", "fashion-accessories"), ("Groceries & Food", "groceries-food"), ("Beverages", "beverages"),
     ("Beauty & Personal Care", "beauty-personal-care"), ("Books & Media", "books-media"), ("Home & Household", "home-household"),

@@ -56,6 +56,15 @@ SERVICES = {  # env var, default local URL (infra/local/PORTS.md), health path
 }
 REQUIRED = ("catalog", "offers", "inventory", "media")
 
+# offers creates AfroTransact Retail's offer from catalog.product.created over Kafka: on a cold stack the consumer group
+# can take a minute to join, so the first wait is long; once an event has been seen the rest are short.
+RETAIL_OFFER_WAIT_FIRST = 120.0
+RETAIL_OFFER_WAIT_NEXT = 20.0
+RETAIL_OFFER_ERROR = ("offers did not create the Retail offer from catalog.product.created: check .local/logs/offers.log, "
+                      "Kafka (docker ps | grep kafka) and run make seed again (it picks up where it stopped)")
+TAX_REVIEW_WAIT = 60.0  # tax-returns classifies a variant from catalog.tax.facts.changed (Kafka), a moment after creation
+TAX_REVIEW_REASON = "Demo data approved by the seeder"
+
 
 @dataclass
 class Report:
@@ -174,6 +183,17 @@ class Seeder:
         self.up: dict[str, bool] = {}
         self.products: dict[str, dict[str, Any]] = {}  # dataset key -> catalog product
         self.charts: dict[str, dict[str, Any]] = {}  # dataset size chart key -> catalog size chart
+        self.tax_atins: dict[str, str] = {}  # variant ATIN -> product title, every variant of this run's products
+        self.sleep: Callable[[float], None] = time.sleep
+        self.clock: Callable[[], float] = time.time
+        self.retail_wait = float(env.get("SEED_RETAIL_OFFER_WAIT") or RETAIL_OFFER_WAIT_FIRST)
+        self.tax_wait = float(env.get("SEED_TAX_REVIEW_WAIT") or TAX_REVIEW_WAIT)
+        self.retail_event_seen = False  # offers answered for one product: the Kafka path works
+        self._tax_blocked: set[str] = set()  # ATINs reported as not approvable (once each)
+        self.retail_event_lost = False  # a long wait timed out: do not spend it again on every other product
+        if env.get("SEED_TAX_TOKEN", "").strip():  # a Tax Reviewer's token (tax:classify-admin) when tax-returns has security on
+            tax_token = env["SEED_TAX_TOKEN"].strip()
+            self.svc["tax-returns"] = Http(env.get("TAX_RETURNS_URL") or SERVICES["tax-returns"][1], token=lambda: tax_token)
 
     # ------------------------------------------------------------------------------------------------ run
     def run(self, steps: tuple[str, ...] = STEPS) -> int:
@@ -370,6 +390,7 @@ class Seeder:
             except (ApiError, ValueError, KeyError) as e:
                 self._problem(f"product {p.key}: {e}")
             self.state.save()
+        self._review_tax()
         self.library.save()
 
     def _product(self, p: D.Product, cats: dict[str, Any], types: dict[str, Any]) -> None:
@@ -427,8 +448,10 @@ class Seeder:
             product = self.svc["catalog"].post("/v1/products", body)
             self.report.add("products", "created")
             line = f"  ✓ {p.title} ({product['atin']}) images: {self._describe(imgs)}"
+        for v in product.get("variants") or []:
+            self.tax_atins[v["atin"]] = p.title
         if product["status"] == "IN_REVIEW":
-            product = self.svc["catalog"].post(f"/v1/products/{product['id']}/approve")
+            product = self._approve_product(p, product)
         if product["status"] != "LIVE":
             self._problem(f"{p.title} is {product['status']} (not LIVE)")
             return
@@ -436,6 +459,111 @@ class Seeder:
         offers = self._offers(p, product)
         self._stock(p, product, offers)
         self.log(line)
+
+    def _approve_product(self, p: D.Product, product: dict[str, Any]) -> dict[str, Any]:
+        """Moderation approve. The publish gate wants every variant's tax READY; tax-returns may already have moved a
+        variant to review (catalog.tax.facts.changed -> PENDING_REVIEW), so that case is reviewed here and approve retried."""
+        path = f"/v1/products/{product['id']}/approve"
+        try:
+            return self.svc["catalog"].post(path)
+        except ApiError as e:
+            if e.code != "catalog.tax-not-ready":
+                raise
+        atins = {v["atin"] for v in product.get("variants") or []}
+        self._review_tax(atins)
+        deadline = self.clock() + 30
+        while True:  # catalog learns of the approval from tax-returns over Kafka
+            try:
+                return self.svc["catalog"].post(path)
+            except ApiError as e:
+                if e.code != "catalog.tax-not-ready" or self.clock() > deadline:
+                    raise
+            self.sleep(1)
+
+    # ------------------------------------------------------------------------------------------------ tax review
+    def _tax_queue(self) -> dict[str, dict[str, Any]]:
+        """The tax review queue (status PENDING_REVIEW) by ATIN, every page."""
+        out: dict[str, dict[str, Any]] = {}
+        page = 0
+        while True:
+            res = self.svc["tax-returns"].get("/v1/tax/variant-classifications",
+                                              params={"status": "PENDING_REVIEW", "page": page, "size": 200}) or {}
+            for rec in res.get("items") or []:
+                out[rec["atin"]] = rec
+            if (page + 1) * 200 >= int(res.get("total") or 0) or not res.get("items"):
+                return out
+            page += 1
+
+    def _review_tax(self, atins: set[str] | None = None) -> None:
+        """Acts as a tax reviewer for demo data: every given variant (default: all of this run's) that is in the review
+        queue with a RESOLVED decision is approved with a reason. A record that is not RESOLVED (missing facts, blocked,
+        gated, conflict) is never approved here; it is reported. Records arrive from catalog over Kafka, so the queue
+        is polled for a bounded time until every variant is accounted for."""
+        wanted = set(self.tax_atins if atins is None else atins)
+        if not wanted:
+            return
+        if not self.up.get("tax-returns", True):
+            self._problem("tax-returns is down: the demo variants stay in tax review and cannot be bought at checkout "
+                          "(start it, then run make seed again)")
+            return
+        deadline = self.clock() + self.tax_wait
+        pending = set(wanted)
+        while pending:
+            try:
+                queue = self._tax_queue()
+                for atin in sorted(pending & set(queue)):
+                    if self._approve_variant(queue[atin]) or atin in self._tax_blocked:
+                        pending.discard(atin)
+                for atin in sorted(pending):  # not queued: already approved by an earlier run, not arrived yet, or stuck
+                    if self._tax_settled(atin):
+                        pending.discard(atin)
+            except ApiError as e:
+                if e.status in (401, 403):
+                    self._problem("the seeder may not review tax (needs tax:classify-admin and tax:read): demo variants stay "
+                                  "in tax review and cannot be bought at checkout; set SEED_TAX_TOKEN to a Tax Reviewer's "
+                                  f"token ({e})")
+                    return
+                raise
+            if not pending or self.clock() > deadline:
+                break
+            self.sleep(2)
+        if pending:
+            titles = sorted({self.tax_atins.get(a, a) for a in pending})
+            self._problem(f"tax review: tax-returns has no classification yet for {len(pending)} variant(s) ({', '.join(titles[:5])}"
+                          f"{'...' if len(titles) > 5 else ''}): check .local/logs/tax-returns.log and Kafka, then run make seed again")
+
+    def _approve_variant(self, rec: dict[str, Any]) -> bool:
+        """Approves one queued record when its decision is RESOLVED; False (and reported once) otherwise."""
+        atin = rec["atin"]
+        status = (rec.get("resolution") or {}).get("status")
+        if status != "RESOLVED":
+            if atin not in self._tax_blocked:
+                self._tax_blocked.add(atin)
+                self._problem(f"tax review: {self.tax_atins.get(atin, atin)} ({atin}) stays in review: its decision is "
+                              f"{status or 'unknown'}, not RESOLVED (the seeder never approves that)")
+            return False
+        self.svc["tax-returns"].post(f"/v1/tax/variant-classifications/{atin}/approve", {"reason": TAX_REVIEW_REASON})
+        self.report.add("tax review", "approved")
+        return True
+
+    def _tax_settled(self, atin: str) -> bool:
+        """True when the variant needs nothing more from the seeder (approved already, or reported as not approvable)."""
+        try:
+            rec = self.svc["tax-returns"].get(f"/v1/tax/variant-classifications/{atin}")
+        except ApiError as e:
+            if e.status == 404:
+                return False
+            raise
+        if rec.get("status") == "APPROVED":
+            self.report.add("tax review", "already approved")
+            return True
+        if rec.get("status") == "PENDING_REVIEW":
+            return False  # the queue listing is the one that approves
+        if atin not in self._tax_blocked:
+            self._tax_blocked.add(atin)
+            self._problem(f"tax review: {self.tax_atins.get(atin, atin)} ({atin}) is {rec.get('status')} in tax-returns "
+                          "(needs the seller's answers, not a reviewer's approval)")
+        return True
 
     def _link_existing_chart(self, found: dict[str, Any], p: D.Product, cats: dict[str, Any]) -> dict[str, Any] | None:
         """A product written by an earlier run (before size charts existed) gets its chart and fit note on re-run:
@@ -518,16 +646,27 @@ class Seeder:
         return [o for o in (page or {}).get("items", []) if o.get("atin") == atin
                 and (withdrawn or o.get("status") != "WITHDRAWN")]
 
-    def _wait_retail_offer(self, atin: str, timeout: float = 30) -> dict[str, Any] | None:
+    def _wait_retail_offer(self, atin: str, timeout: float | None = None, required: bool = False) -> dict[str, Any] | None:
         """offers creates AfroTransact Retail's offer from catalog.product.created (Kafka): wait for it (an earlier
-        run may have withdrawn it already)."""
-        deadline = time.time() + timeout
+        run may have withdrawn it already). The wait is bounded: `timeout`, else the long first wait (120 s, env
+        SEED_RETAIL_OFFER_WAIT) until an offer has been seen or a wait has timed out in this run, then a short one,
+        so a dead Kafka path costs one long wait, not one per variant. With `required`, no offer is an error that says
+        what to check."""
+        if timeout is None:
+            timeout = self.retail_wait if not (self.retail_event_seen or self.retail_event_lost) else RETAIL_OFFER_WAIT_NEXT
+        deadline = self.clock() + timeout
         while True:
             found = self._list_offers(D.RETAIL_ORG, atin, withdrawn=True)
-            if found or time.time() > deadline:
+            if found:
+                self.retail_event_seen = True
                 found.sort(key=lambda o: o.get("status") == "WITHDRAWN")
-                return found[0] if found else None
-            time.sleep(1)
+                return found[0]
+            if self.clock() > deadline:
+                self.retail_event_lost = not self.retail_event_seen
+                if required:
+                    raise ValueError(f"{RETAIL_OFFER_ERROR} (no Retail offer for {atin} after {timeout:.0f} s)")
+                return None
+            self.sleep(1)
 
     def _offers(self, p: D.Product, product: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
         """Creates the sellers' offers; returns {seller key: [offer per variant]} of the offers that need FBA stock."""
@@ -536,14 +675,16 @@ class Seeder:
         retail_wanted = any(s.org_id == D.RETAIL_ORG for s, _ in sellers)
         stocked: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for v, (_, price) in zip(product["variants"], p.variants):
-            retail = self._wait_retail_offer(v["atin"])
+            # Retail's own products need the offer (a long wait, then a clear error); another seller's only has it withdrawn.
+            retail = self._wait_retail_offer(v["atin"], required=retail_wanted,
+                                             timeout=None if retail_wanted else RETAIL_OFFER_WAIT_NEXT)
             for seller, factor in sellers:
                 fulfilment = p.fulfilment or seller.fulfilment
                 price_minor = price if factor == 1.0 else int(round(price * factor / 10.0) * 10) - 1
                 listp = int(round(price_minor * (1 + p.deal) / 10.0) * 10) - 1 if p.deal and seller is main else None
                 if seller.org_id == D.RETAIL_ORG:
                     if retail is None or retail.get("status") == "WITHDRAWN":
-                        raise ValueError(f"AfroTransact Retail has no active offer for {v['atin']}")
+                        raise ValueError(f"AfroTransact Retail has no active offer for {v['atin']}; {RETAIL_OFFER_ERROR}")
                     patch = {"inventorySku": v["atin"], "priceMinor": price_minor, "version": retail["version"]}
                     if listp:
                         patch["listPriceMinor"] = listp
