@@ -6,3 +6,4 @@ export { gtinValid, MOCK_ROLE_COOKIE, sellerHandlers } from './handlers';
 export { allows, describePolicy, navigation, roleCards, takeHome } from './model';
 export { MOCK_RUN_AMARILLO, MOCK_RUN_LUBBOCK } from './run-pickups';
 export { SIZE_CHART_IDS } from './size-charts';
+export { TAX_PRODUCT_TYPES, TAX_TREE } from './taxonomy';

@@ -2,7 +2,11 @@ import {
   addValues,
   type AddValuesResult,
   type AttributeDef,
+  categoryClosed,
   type CategoryNode,
+  type CategoryTaxStatus,
+  checkFacts,
+  type FactValue,
   type FitNote,
   type ItemCondition,
   type ListingFulfilment,
@@ -11,6 +15,7 @@ import {
   type SellerProductDetail,
   type SizeChart,
   sizesMissingFromChart,
+  taxQuestionsOf,
   valueKey,
   type VariantInput
 } from '@afrotransact/api-client';
@@ -91,6 +96,10 @@ export interface FormState {
   sizeChartId: string;
   /** How the sizes fit; '' = the chart's own note. */
   fitNote: FitNote | '';
+  /** Answers to the category's product questions per variant position (0 for a product without variations): question key to answer text ('yes', '8.5', a choice value). */
+  facts: Record<string, Record<string, string>>;
+  /** "Your listing": the seller's own answers (sold hot, heated by you ...) by question key. */
+  behaviour: Record<string, string>;
 }
 
 export const FIT_NOTES: FitNote[] = ['RUNS_SMALL', 'TRUE_TO_SIZE', 'RUNS_LARGE'];
@@ -100,7 +109,7 @@ export const emptyRow = (): VariantRow => ({ sku: '', gtin: '', price: '', compa
 export const emptyForm = (): FormState => ({
   categoryId: null, categoryPath: '', productType: null, request: null, title: '', attrs: {}, units: {}, description: '', condition: 'NEW', keywords: '',
   images: [], noGtin: false, hasVariants: false, theme: '', selected: {}, rows: {}, single: emptyRow(), fulfilment: 'SELLER',
-  pkg: { length: '', width: '', height: '', weight: '' }, pkgUnits: { size: 'in', weight: 'lb' }, shipFromId: '', handlingDays: '2', preorder: false, sizeChartId: '', fitNote: ''
+  pkg: { length: '', width: '', height: '', weight: '' }, pkgUnits: { size: 'in', weight: 'lb' }, shipFromId: '', handlingDays: '2', preorder: false, sizeChartId: '', fitNote: '', facts: {}, behaviour: {}
 });
 
 export const MIN_IMAGE_PX = 1000;
@@ -119,15 +128,21 @@ export interface CategoryLeaf {
   name: string;
   path: string;
   productType: string;
+  /** The tax gate of the category above (absent = open). */
+  taxStatus?: CategoryTaxStatus | undefined;
 }
 
 /** Every product-type leaf of the tree (what the category search finds). */
 export function leavesOf(tree: CategoryNode[]): CategoryLeaf[] {
   const out: CategoryLeaf[] = [];
-  const walk = (nodes: CategoryNode[]) =>
+  const walk = (nodes: CategoryNode[], parent?: CategoryNode) =>
     nodes.forEach((n) => {
-      if (n.level === 'PRODUCT_TYPE' && n.productType) out.push({ id: n.id, name: n.name, path: n.path, productType: n.productType });
-      walk(n.children);
+      if (n.level === 'PRODUCT_TYPE' && n.productType) {
+        // A category with one product type of its own name is chosen as the category (no repeated name in the path).
+        const alone = parent && parent.children.length === 1 && parent.name === n.name;
+        out.push({ id: n.id, name: n.name, path: alone ? parent.path : n.path, productType: n.productType, ...(parent?.taxStatus ? { taxStatus: parent.taxStatus } : {}) });
+      }
+      walk(n.children, n);
     });
   walk(tree);
   return out;
@@ -155,15 +170,16 @@ export function withCategory(s: FormState, leaf: { id: string; path: string; pro
 
 /* ── Sections ── */
 
-export type SectionKey = 'basics' | 'images' | 'offer' | 'details' | 'variants' | 'sizeGuide' | 'fulfilment' | 'compliance';
+export type SectionKey = 'basics' | 'images' | 'offer' | 'details' | 'facts' | 'variants' | 'sizeGuide' | 'fulfilment' | 'compliance';
 
 /** The sections the form shows for a product type, in page order: Basics, Photos, Price & stock, Details, Variants,
     Size guide (sized product types only), Shipping & fulfilment, Compliance (Variants, Size guide and Compliance only when the product type has them). */
 export function sectionsFor(type: ProductTypeSchema | undefined): SectionKey[] {
   if (!type) return ['basics', 'images'];
-  const attrs = (section: AttributeDef['section']) => type.attributes.some((a) => a.section === section && a.key !== 'brand');
+  const attrs = (section: AttributeDef['section']) => type.attributes.some((a) => a.section === section && a.key !== 'brand' && !a.taxFact);
   const out: SectionKey[] = ['basics', 'images', 'offer'];
   if (attrs('DETAILS')) out.push('details');
+  if (variantQuestions(type).length) out.push('facts');
   if (type.themes.length) out.push('variants');
   if (type.traits.sizing) out.push('sizeGuide');
   out.push('fulfilment');
@@ -173,7 +189,14 @@ export function sectionsFor(type: ProductTypeSchema | undefined): SectionKey[] {
 
 /** Attributes shown in a section (brand is a basic field). */
 export const attributesIn = (type: ProductTypeSchema | undefined, section: AttributeDef['section']) =>
-  (type?.attributes ?? []).filter((a) => a.section === section && a.key !== 'brand');
+  (type?.attributes ?? []).filter((a) => a.section === section && a.key !== 'brand' && !a.taxFact);
+
+/** The category's tax questions about the product itself (answered per variant) and about how this seller sells it ("Your listing"). */
+export const variantQuestions = (type: ProductTypeSchema | undefined) => taxQuestionsOf(type?.attributes ?? []).filter((a) => a.owner !== 'OFFER');
+export const behaviourQuestions = (type: ProductTypeSchema | undefined) => taxQuestionsOf(type?.attributes ?? []).filter((a) => a.owner === 'OFFER');
+
+/** The answers of one variant position and the seller's own answers together (a question may depend on either). */
+export const answersOf = (s: Pick<FormState, 'facts' | 'behaviour'>, index: number): Record<string, string> => ({ ...(s.facts[String(index)] ?? {}), ...s.behaviour });
 
 /** The brand attribute of a product type: the Brand field is shown only when the type defines it (a book has an author, not a brand). */
 export const brandOf = (type: ProductTypeSchema | undefined) => type?.attributes.find((a) => a.kind === 'BRAND') ?? type?.attributes.find((a) => a.key === 'brand');
@@ -182,6 +205,7 @@ export const brandOf = (type: ProductTypeSchema | undefined) => type?.attributes
 export function previewAttributes(type: ProductTypeSchema | undefined, s: FormState, limit = 4): { label: string; value: string }[] {
   const defs = [...(type?.attributes ?? [])].sort((a, b) => Number(b.key === 'brand' || b.key === 'author') - Number(a.key === 'brand' || a.key === 'author'));
   return defs
+    .filter((a) => !a.taxFact)
     .map((a) => ({ label: a.label, value: attrValue(a, s.attrs[a.key] ?? '', s.units[a.key]) }))
     .filter((x) => x.value !== '' && x.value !== undefined)
     .slice(0, limit);
@@ -301,6 +325,8 @@ export const fieldId = {
   keywords: 'pf-keywords',
   images: 'pf-images',
   attr: (key: string) => `pf-attr-${key}`,
+  fact: (index: number, key: string) => `pf-fact-${index}-${key}`,
+  behaviour: (key: string) => `pf-beh-${key}`,
   sku: 'pf-sku',
   gtin: 'pf-gtin',
   price: 'pf-price',
@@ -323,6 +349,8 @@ export interface ValidateOptions {
   sizeChart?: Pick<SizeChart, 'id' | 'name' | 'rows' | 'retired'> | null;
   /** The chart the live listing already uses: retiring it later does not block saving other changes. */
   linkedSizeChartId?: string | null;
+  /** The tax gate of the chosen category: a closed one cannot take a submission (the seller can still save a draft). */
+  categoryStatus?: CategoryTaxStatus | null | undefined;
 }
 
 /** The size values the variants sell, in matrix order (empty when the product has no size axis). */
@@ -340,6 +368,7 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
     if (!p[id]) p[id] = { key, vars, section, label };
   };
   if (!s.request && (!s.categoryId || !s.productType)) add(fieldId.category, 'basics', 'sc.pf.field.category', 'sc.pf.err.category');
+  if (categoryClosed(opts.categoryStatus)) add(fieldId.category, 'basics', 'sc.pf.field.category', `sc.pf.categoryGate.${opts.categoryStatus}` as MessageKey);
   const title = s.title.trim();
   if (title.length < 10) add(fieldId.title, 'basics', 'sc.pf.field.title', title ? 'sc.pf.err.titleShort' : 'sc.pf.err.required');
   else if (title.length > 200) add(fieldId.title, 'basics', 'sc.pf.field.title', 'sc.pf.err.titleLong');
@@ -356,7 +385,7 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
   else if (s.images[0]?.status !== 'ready') add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesMainSmall', { px: MIN_IMAGE_PX });
 
   type?.attributes.forEach((a) => {
-    if (a.key === 'brand') return;
+    if (a.key === 'brand' || a.taxFact) return;
     const v = (s.attrs[a.key] ?? '').trim();
     const section: SectionKey = a.section === 'DETAILS' ? 'details' : 'compliance';
     if (!v) {
@@ -373,10 +402,9 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
   const checkRow = (r: VariantRow, ids: Record<'sku' | 'gtin' | 'price' | 'compareAt' | 'qty', string>, section: SectionKey, name: string | null, skus: Set<string>) => {
     const lbl = (k: MessageKey): Problem['label'] => (name ? { text: name, key: k } : k);
     const sku = r.sku.trim().toUpperCase();
-    if (!sku) add(ids.sku, section, lbl('sc.pf.field.sku'), 'sc.pf.err.skuRequired');
-    else if (!/^[A-Z0-9._-]{2,40}$/.test(sku)) add(ids.sku, section, lbl('sc.pf.field.sku'), 'sc.pf.err.skuFormat');
-    else if (skus.has(sku)) add(ids.sku, section, lbl('sc.pf.field.sku'), 'sc.pf.err.skuDuplicate');
-    skus.add(sku);
+    if (sku && !/^[A-Z0-9][A-Z0-9._-]{1,39}$/.test(sku)) add(ids.sku, section, lbl('sc.pf.field.sku'), 'sc.pf.err.skuFormat');
+    else if (sku && skus.has(sku)) add(ids.sku, section, lbl('sc.pf.field.sku'), 'sc.pf.err.skuDuplicate');
+    if (sku) skus.add(sku);
     if (!s.noGtin && !gtinOk(r.gtin.trim())) add(ids.gtin, section, lbl('sc.pf.field.gtin'), r.gtin.trim() ? gtinRule : 'sc.pf.err.gtinMissing');
     const price = priceMinor(r.price);
     if (price === null) add(ids.price, section, lbl('sc.pf.field.price'), r.price.trim() ? 'sc.pf.err.price' : 'sc.pf.err.priceRequired');
@@ -405,6 +433,8 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
     if ((opts.lockedSkus ?? []).length > 1) add(fieldId.theme, 'offer', 'sc.pf.field.theme', 'sc.pf.err.liveVariants');
   }
 
+  validateFacts(s, type, add);
+
   const sizing = type.traits.sizing;
   if (sizing) {
     const chart = opts.sizeChart;
@@ -431,6 +461,35 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
     if (opts.requireShipFrom && !s.shipFromId) add(fieldId.shipFrom, 'fulfilment', 'sc.pf.field.shipFrom', 'sc.pf.err.shipFrom');
   }
   return p;
+}
+
+/** The positions of the variants the form submits (one for a product without variations). */
+export const variantCount = (s: FormState, type: ProductTypeSchema | undefined): number => (s.hasVariants && type?.themes.length ? Math.min(combos(type, s).length, MAX_VARIANTS) : 1);
+
+type AddProblem = (id: string, section: SectionKey, label: Problem['label'], key: MessageKey, vars?: Problem['vars']) => void;
+
+/** The category's tax questions, answered like the server checks them: wrong answers and missing ones, per variant and for "Your listing". */
+function validateFacts(s: FormState, type: ProductTypeSchema, add: AddProblem) {
+  const defs = taxQuestionsOf(type.attributes);
+  if (!defs.length) return;
+  const wrong = { yesNo: 'sc.pf.err.factYesNo', number: 'sc.pf.err.number', whole: 'sc.pf.err.factWhole', percent: 'sc.pf.err.factPercent', choice: 'sc.pf.err.chooseOption' } as const;
+  const n = variantCount(s, type);
+  for (let i = 0; i < n; i++) {
+    const r = checkFacts(defs, answersOf(s, i));
+    const place = (key: string) => {
+      const def = defs.find((d) => d.key === key);
+      return def?.owner === 'OFFER' ? { id: fieldId.behaviour(key), section: 'offer' as const } : { id: fieldId.fact(i, key), section: 'facts' as const };
+    };
+    Object.entries(r.problems).forEach(([key, why]) => {
+      const def = defs.find((d) => d.key === key);
+      if (def) add(place(key).id, place(key).section, { text: def.label }, wrong[why]);
+    });
+    // Proof files cannot be attached before the item exists: the item's page asks for them once it is saved.
+    r.missing.forEach((key) => {
+      const def = defs.find((d) => d.key === key);
+      if (def && def.kind !== 'FILE') add(place(key).id, place(key).section, { text: def.label }, 'sc.pf.err.required');
+    });
+  }
 }
 
 /** Order of the readiness panel: the order of the sections on the page. */
@@ -482,7 +541,7 @@ export function qualityItems(s: FormState, type: ProductTypeSchema | undefined, 
   if (brand?.required) req(fieldId.brand, 'basics', { text: brand.label });
   req(fieldId.images, 'images', 'sc.pf.field.images');
   type?.attributes.forEach((a) => {
-    if (a.key === 'brand' || !a.required) return;
+    if (a.key === 'brand' || !a.required || a.taxFact) return;
     req(fieldId.attr(a.key), a.section === 'DETAILS' ? 'details' : 'compliance', { text: a.label });
   });
   if (type) {
@@ -530,6 +589,11 @@ export const qualityScore = (items: QualityItem[]) => (items.length ? Math.round
 /** Server field errors ("title", "listing.packaging", "attributes.shelf", "variants") → form field ids. */
 export function serverFieldId(field: string): string {
   if (field.startsWith('attributes.')) return fieldId.attr(field.slice('attributes.'.length));
+  const fact = /^variants\[(\d+)\]\.taxFacts\.(.+)$/.exec(field);
+  if (fact) return fieldId.fact(Number(fact[1]), fact[2] ?? '');
+  if (field.startsWith('sellerBehaviour.')) return fieldId.behaviour(field.slice('sellerBehaviour.'.length));
+  const sku = /^variants\[(\d+)\]\.sellerSku$/.exec(field);
+  if (sku) return fieldId.sku;
   // Catalog reports a size the chart has no row for as variants[i].options.Size: it is fixed in the size guide section.
   if (/^variants\[\d+\]\.options\.Size$/i.test(field)) return fieldId.sizeChart;
   const map: Record<string, string> = {
@@ -551,12 +615,16 @@ function attrValue(a: AttributeDef | undefined, v: string, unit: string | undefi
 export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined, draftId?: string | null): ProductDraft {
   const image = (id: string) => s.images.find((i) => i.id === id && i.url);
   const imageInput = (i: FormImage) => ({ url: i.url ?? '', width: i.width, height: i.height, bytes: i.bytes, contentType: i.contentType, ...(i.alt.trim() ? { alt: i.alt.trim() } : {}) });
-  const variant = (r: VariantRow, options: Record<string, string>): VariantInput => {
+  const defs = taxQuestionsOf(type?.attributes ?? []);
+  const factsOf = (index: number): Record<string, FactValue> => checkFacts(defs.filter((d) => d.owner !== 'OFFER'), answersOf(s, index)).facts;
+  const behaviourOf = (): Record<string, FactValue> => checkFacts(defs, answersOf(s, 0)).facts;
+  const variant = (r: VariantRow, options: Record<string, string>, index: number): VariantInput => {
     const img = r.image ? image(r.image) : undefined;
     const compare = r.compareAt.trim() ? priceMinor(r.compareAt) : null;
     return {
       options,
-      sellerSku: r.sku.trim().toUpperCase(),
+      ...(r.sku.trim() ? { sellerSku: r.sku.trim().toUpperCase() } : {}),
+      ...(Object.keys(factsOf(index)).length ? { taxFacts: factsOf(index) } : {}),
       ...(s.noGtin ? { gtinExempt: true } : { gtin: r.gtin.trim(), gtinExempt: false }),
       priceMinor: priceMinor(r.price) ?? 0,
       ...(compare ? { compareAtMinor: compare } : {}),
@@ -567,15 +635,15 @@ export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined
   const theme = type?.themes.find((t) => t.name === s.theme);
   const variants =
     s.hasVariants && theme
-      ? combos(type, s).map((c) => variant(s.rows[comboKey(c)] ?? emptyRow(), Object.fromEntries(theme.dimensions.map((d, i) => [d.name, c[i] ?? '']))))
-      : [variant(s.single, {})];
+      ? combos(type, s).map((c, index) => variant(s.rows[comboKey(c)] ?? emptyRow(), Object.fromEntries(theme.dimensions.map((d, i) => [d.name, c[i] ?? ''])), index))
+      : [variant(s.single, {}, 0)];
   const packaging = packagingOf(s);
   return {
     ...(s.request ? { categoryRequestId: s.request.id } : { categoryId: s.categoryId ?? '' }),
     title: s.title.trim(),
     attributes: Object.fromEntries(
       Object.entries(s.attrs)
-        .filter(([k, v]) => v.trim() !== '' && (!type || type.attributes.some((a) => a.key === k) || (Boolean(brandOf(type)) && (k === 'brand_id' || k === 'brand_reason'))))
+        .filter(([k, v]) => v.trim() !== '' && (!type || type.attributes.some((a) => a.key === k && !a.taxFact) || (Boolean(brandOf(type)) && (k === 'brand_id' || k === 'brand_reason'))))
         .map(([k, v]) => [k, attrValue(type?.attributes.find((a) => a.key === k), v, s.units[k])])
     ),
     images: s.images.filter((i) => i.url).map(imageInput),
@@ -590,7 +658,8 @@ export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined
       packaging,
       ...(s.fulfilment === 'SELLER' ? { handlingDays: Number(s.handlingDays) || 2, shipFromId: s.shipFromId || null } : {}),
       // Only sized product types carry a chart: catalog refuses one on any other type.
-      ...(type?.traits.sizing ? { sizeChartId: s.sizeChartId || null, fitNote: s.fitNote || null } : {})
+      ...(type?.traits.sizing ? { sizeChartId: s.sizeChartId || null, fitNote: s.fitNote || null } : {}),
+      ...(Object.keys(behaviourOf()).length && defs.some((d) => d.owner === 'OFFER') ? { sellerBehaviour: Object.fromEntries(Object.entries(behaviourOf()).filter(([k]) => defs.find((d) => d.key === k)?.owner === 'OFFER')) } : {})
     },
     ...(draftId ? { draftId } : {})
   };
@@ -652,9 +721,15 @@ export function fromDetail(d: SellerProductDetail, type: ProductTypeSchema | und
     pkg: pkg ? { length: String(pkg.lengthIn), width: String(pkg.widthIn), height: String(pkg.heightIn), weight: String(pkg.weightLb) } : { length: '', width: '', height: '', weight: '' },
     pkgUnits: { size: 'in', weight: 'lb' },
     shipFromId: d.listing.shipFromId ?? '', handlingDays: String(d.listing.handlingDays || 2), preorder: d.preorderEligible,
-    sizeChartId: d.listing.sizeChartId ?? '', fitNote: d.listing.fitNote ?? ''
+    sizeChartId: d.listing.sizeChartId ?? '', fitNote: d.listing.fitNote ?? '',
+    facts: Object.fromEntries(d.variants.map((v, i) => [String(i), answerText(v.taxFacts)])),
+    behaviour: answerText(d.listing.sellerBehaviour)
   };
 }
+
+/** Stored answers as the form holds them: yes/no for booleans, plain text otherwise. */
+const answerText = (facts: Record<string, FactValue> | undefined): Record<string, string> =>
+  Object.fromEntries(Object.entries(facts ?? {}).map(([k, v]) => [k, typeof v === 'boolean' ? (v ? 'yes' : 'no') : String(v)]));
 
 /** What a draft stores: the form without upload state (images that never finished uploading are dropped). */
 export function toDraftPayload(s: FormState): Record<string, unknown> {
@@ -715,7 +790,9 @@ export function fromDraftPayload(payload: Record<string, unknown>): FormState {
     handlingDays: str(p.handlingDays, '2'),
     preorder: p.preorder === true,
     sizeChartId: str(p.sizeChartId),
-    fitNote: FIT_NOTES.find((f) => f === p.fitNote) ?? ''
+    fitNote: FIT_NOTES.find((f) => f === p.fitNote) ?? '',
+    facts: isRecord(p.facts) ? Object.fromEntries(Object.entries(p.facts).map(([k, v]) => [k, strMap(v)])) : {},
+    behaviour: strMap(p.behaviour)
   };
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { type ApiError, type AttributeDef, isApiError, type ListingRow, type ProductTypeSchema, sellerKeys, type SellerProductDetail, sellerQueries } from '@afrotransact/api-client';
+import { type ApiError, type AttributeDef, checkFacts, evaluateFact, isApiError, type ListingRow, type ProductTypeSchema, sellerKeys, type SellerProductDetail, sellerQueries, taxQuestionsOf } from '@afrotransact/api-client';
 import { Alert, AlertAction, Button, Checkbox, ChipGroup, Select, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -23,15 +23,19 @@ import { BrandField } from './form/BrandField';
 import { CategoryPicker } from './form/CategoryPicker';
 import { DescriptionEditor } from './form/DescriptionEditor';
 import { Disclosure } from './form/Disclosure';
+import { FactField } from './form/FactField';
 import { FormSection, GRID, GRID_SHORT } from './form/FormSection';
 import { ImagesField } from './form/ImagesField';
 import { ListingPreview } from './form/ListingPreview';
 import { goToField, ReadinessPanel } from './form/ReadinessPanel';
 import { SectionNav } from './form/SectionNav';
 import { SizeGuideSection } from './form/SizeGuideSection';
+import { TaxReadiness } from './form/TaxReadiness';
 import { VariantsSection } from './form/VariantsSection';
 import {
+  answersOf,
   attributesIn,
+  behaviourQuestions,
   brandOf,
   type CategoryLeaf,
   comboKey,
@@ -39,10 +43,10 @@ import {
   CONDITIONS,
   emptyForm,
   fieldId,
-  fillSkus,
   type FormState,
   fromDetail,
   fromDraftPayload,
+  leavesOf,
   orderedProblems,
   previewAttributes,
   priceMinor,
@@ -58,6 +62,8 @@ import {
   toDraftPayload,
   toProductDraft,
   validateForm,
+  variantCount,
+  variantQuestions,
   WEIGHT_UNITS,
   withCategory,
   worthSaving
@@ -150,7 +156,8 @@ export function ProductForm({ productId }: { productId?: string }) {
   }, [live, detail.data, type]);
   const lockedSkus = live ? (detail.data?.variants.map((v) => v.sellerSku) ?? []) : [];
   const sections = sectionsFor(type);
-  const problems: Problems = { ...validateForm(s, type, { lockedSkus, sizeChart: chart, linkedSizeChartId: detail.data?.listing.sizeChartId }), ...serverProblems };
+  const categoryStatus = tree.data ? leavesOf(tree.data).find((l) => l.id === s.categoryId)?.taxStatus : undefined;
+  const problems: Problems = { ...validateForm(s, type, { lockedSkus, sizeChart: chart, linkedSizeChartId: detail.data?.listing.sizeChartId, categoryStatus }), ...serverProblems };
   const ordered = orderedProblems(problems, sections);
   const err = (id: string) => (shown(id) && problems[id] ? t(problems[id].key, problems[id].vars) : undefined);
   /** Jump to a field from the quality panel: its message shows (so the field is announced with it) and the field takes focus. */
@@ -299,6 +306,7 @@ export function ProductForm({ productId }: { productId?: string }) {
       case 'images': return t('sc.pf.s.images');
       case 'offer': return t('sc.pf.s.offer');
       case 'details': return t('sc.pf.s.details', { type: type?.label ?? '' });
+      case 'facts': return t('sc.pf.s.facts');
       case 'variants': return t('sc.pf.s.variants');
       case 'sizeGuide': return t('sc.pf.s.sizeGuide');
       case 'fulfilment': return t('sc.pf.s.fulfilment');
@@ -322,6 +330,13 @@ export function ProductForm({ productId }: { productId?: string }) {
         {optional.length ? <Disclosure title={t('sc.pf.moreDetails', { count: optional.length })} force={force}><div className={GRID}>{optional.map(attrInput)}</div></Disclosure> : null}
       </div>
     );
+  };
+  const variantQs = variantQuestions(type);
+  const behaviourQs = behaviourQuestions(type);
+  /** A tax question shown only while its show-when holds for the answers given (the server drops the others). */
+  const factInput = (q: AttributeDef, id: string, answers: Record<string, string>, onAnswer: (v: string) => void) => {
+    const visible = evaluateFact(q.showWhen, checkFacts(taxQuestionsOf(type?.attributes ?? []), answers).facts);
+    return visible ? <FactField key={id} def={q} id={id} value={answers[q.key] ?? ''} error={err(id)} onChange={onAnswer} /> : null;
   };
   const idLabel = type?.identifierRule === 'isbn' ? t('sc.pf.field.isbn') : t('sc.pf.field.gtin');
   const defaultShipFrom = shipFrom.data?.find((a) => a.isDefault);
@@ -387,7 +402,7 @@ export function ProductForm({ productId }: { productId?: string }) {
                     <TextField id={fieldId.price} label={t('sc.pf.field.priceUsd')} inputMode="decimal" value={s.single.price} error={err(fieldId.price)} onChange={(e) => patch({ single: { ...s.single, price: e.target.value } })} />
                     <TextField id={fieldId.compareAt} label={t('sc.pf.field.compareAt')} help={t('sc.pf.compareAtHelp')} inputMode="decimal" value={s.single.compareAt} error={err(fieldId.compareAt)} onChange={(e) => patch({ single: { ...s.single, compareAt: e.target.value } })} />
                     <TextField id={fieldId.qty} label={t('sc.pf.field.qty')} inputMode="numeric" value={s.single.qty} error={err(fieldId.qty)} help={s.fulfilment === 'AFROTRANSACT' ? t('sc.pf.qtyFba') : undefined} onChange={(e) => patch({ single: { ...s.single, qty: e.target.value } })} />
-                    <TextField id={fieldId.sku} label={t('sc.pf.field.sku')} value={s.single.sku} error={err(fieldId.sku)} readOnly={live} onChange={(e) => patch({ single: { ...s.single, sku: e.target.value } })} />
+                    <TextField id={fieldId.sku} label={t('sc.pf.field.sku')} placeholder={t('sc.pf.sku.placeholder')} help={detail.data?.variants[0]?.sellerSkuGenerated ? t('sc.pf.sku.generated') : undefined} value={s.single.sku} error={err(fieldId.sku)} readOnly={live} onChange={(e) => patch({ single: { ...s.single, sku: e.target.value } })} />
                     {s.noGtin ? null : (
                       <TextField id={fieldId.gtin} label={idLabel} inputMode="numeric" value={s.single.gtin} error={err(fieldId.gtin)} help={t('sc.pf.gtinHelp')} onChange={(e) => patch({ single: { ...s.single, gtin: e.target.value } })} />
                     )}
@@ -395,17 +410,39 @@ export function ProductForm({ productId }: { productId?: string }) {
                 )}
               </div>
               {perVariant ? <p className="m-0 text-sm text-muted">{t('sc.pf.offer.perVariant')}</p> : null}
-              {!perVariant && !s.single.sku.trim() && s.title.trim() ? (
-                <button type="button" className="link-button -mt-2 self-start border-0 bg-transparent p-0 text-left text-xs text-link hover:underline" onClick={() => update((prev) => fillSkus(type, prev))}>
-                  {t('sc.pf.suggestSku')}
-                </button>
-              ) : null}
               <Checkbox label={type.identifierRule === 'isbn' ? t('sc.pf.noIsbn') : t('sc.pf.noGtin')} description={<span className="block text-xs text-muted">{t('sc.pf.noGtinHint')}</span>} checked={s.noGtin}
                 disabled={type.identifierRule === 'isbn'} onChange={(e) => patch({ noGtin: e.target.checked })} />
+              {behaviourQs.length ? (
+                <fieldset className="m-0 flex flex-col gap-3 border-0 p-0" data-testid="your-listing">
+                  <legend className="p-0 text-sm font-semibold">{t('sc.pf.facts.listing')}</legend>
+                  <span className="text-xs text-muted">{t('sc.pf.facts.listingHelp')}</span>
+                  <div className={GRID}>{behaviourQs.map((q) => factInput(q, fieldId.behaviour(q.key), answersOf(s, 0), (v) => update((prev) => ({ ...prev, behaviour: { ...prev.behaviour, [q.key]: v } }))))}</div>
+                </fieldset>
+              ) : null}
             </FormSection>
           ) : null}
 
           {sections.includes('details') ? <FormSection {...section('details')}>{attrGroup('DETAILS')}</FormSection> : null}
+
+          {type && sections.includes('facts') ? (
+            <FormSection {...section('facts')} hint={t('sc.pf.facts.intro')}>
+              {Array.from({ length: variantCount(s, type) }, (_, i) => {
+                const name = s.hasVariants ? (variantsList[i] ? comboKey(variantsList[i]) : '') : '';
+                return (
+                  <fieldset key={i} className="m-0 flex flex-col gap-3 border-0 p-0" data-testid={`facts-${i}`}>
+                    {name ? <legend className="p-0 text-sm font-semibold">{t('sc.pf.facts.forVersion', { name })}</legend> : null}
+                    <div className={GRID}>{variantQs.map((q) => factInput(q, fieldId.fact(i, q.key), answersOf(s, i), (v) => update((prev) => ({ ...prev, facts: { ...prev.facts, [String(i)]: { ...(prev.facts[String(i)] ?? {}), [q.key]: v } } }))))}</div>
+                    {i === 0 && variantCount(s, type) > 1 ? (
+                      <button type="button" className="link-button self-start border-0 bg-transparent p-0 text-xs text-link hover:underline"
+                        onClick={() => update((prev) => ({ ...prev, facts: Object.fromEntries(Array.from({ length: variantCount(prev, type) }, (_, k) => [String(k), { ...(prev.facts['0'] ?? {}) }])) }))}>
+                        {t('sc.pf.facts.copyAll')}
+                      </button>
+                    ) : null}
+                  </fieldset>
+                );
+              })}
+            </FormSection>
+          ) : null}
 
           {type && type.themes.length ? (
             <FormSection {...section('variants')}>
@@ -500,7 +537,7 @@ export function ProductForm({ productId }: { productId?: string }) {
               update((prev) => ({ ...prev, sizeChartId: saved.id }));
             }} />
         ) : null}
-        <ReadinessPanel problems={ordered} tips={tips} sections={sections} titleOf={sectionTitle} percent={percent} preview={preview} onGo={jump} />
+        <ReadinessPanel problems={ordered} tips={tips} sections={sections} titleOf={sectionTitle} percent={percent} preview={<>{preview}{editing && productId ? <TaxReadiness productId={productId} type={type} /> : null}</>} onGo={jump} />
       </div>
       <ActionBar
         problems={ordered}

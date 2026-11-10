@@ -336,7 +336,7 @@ describe('section navigator, listing quality and the sticky actions', () => {
 
 describe('long choice lists', () => {
   it('turn into a searchable combobox, short ones stay a dropdown', () => {
-    const def = (options: string[]): AttributeDef => ({ key: 'colour', label: 'Colour', options, required: true, multiline: false, kind: 'ENUM', units: [], section: 'DETAILS', help: null });
+    const def = (options: string[]): AttributeDef => ({ key: 'colour', label: 'Colour', options, required: true, multiline: false, kind: 'ENUM', units: [], section: 'DETAILS', help: null, taxFact: false, evidence: false, optionLabels: {} });
     const many = Array.from({ length: 12 }, (_, i) => `Shade ${i + 1}`);
     const first = renderWithProviders(<AttributeField def={def(many)} value="" unit="" onChange={() => undefined} onUnit={() => undefined} />);
     expect(screen.getByRole('combobox', { name: 'Colour' }).tagName).toBe('INPUT');

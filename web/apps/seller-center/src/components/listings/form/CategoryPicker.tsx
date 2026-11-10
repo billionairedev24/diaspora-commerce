@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react';
 
 import { RequestDepartmentButton, RequestDepartmentDialog, useCanRequestDepartment } from '@/components/listings/RequestDepartment';
 import { problemMessage } from '@/components/ui/States';
-import { useT } from '@/i18n/t';
+import { type MessageKey, useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { useSeller } from '@/lib/session';
 
@@ -23,6 +23,15 @@ interface Props {
 }
 
 const REQUESTED = '__requested__';
+
+/** Short word next to a gated category in the list; the full explanation shows once it is chosen. */
+const gateLabel = {
+  ACTIVE: 'sc.pf.tax.status.READY',
+  NEEDS_APPROVAL: 'sc.pf.tax.status.NEEDS_APPROVAL',
+  BLOCKED_BUNDLE: 'sc.pf.tax.status.BLOCKED',
+  REFINE_CODE: 'sc.pf.tax.status.REFINE_CODE',
+  CONFLICT_OPEN: 'sc.pf.tax.status.CONFLICT_OPEN'
+} as const;
 
 /** Category: one searchable list over every product type's full path (recent and popular ones first). A name that is not
     in the list can be requested as a new category. */
@@ -49,9 +58,9 @@ export function CategoryPicker({ tree, s, locked, error, onChoose }: Props) {
   });
 
   const options = useMemo<ComboboxOption[]>(() => {
-    const list = leaves.map((l) => ({ value: l.id, label: l.name, description: l.path, text: l.path }));
+    const list = leaves.map((l) => ({ value: l.id, label: l.name, description: l.taxStatus && l.taxStatus !== 'ACTIVE' ? `${l.path} · ${t(gateLabel[l.taxStatus])}` : l.path, text: l.path }));
     return s.request ? [{ value: REQUESTED, label: s.request.path, text: s.request.path }, ...list] : list;
-  }, [leaves, s.request]);
+  }, [leaves, s.request, t]);
 
   if (locked) {
     return (
@@ -63,6 +72,7 @@ export function CategoryPicker({ tree, s, locked, error, onChoose }: Props) {
   }
 
   const known = new Set(leaves.map((l) => l.id));
+  const chosenGate = leaves.find((l) => l.id === s.categoryId)?.taxStatus;
   const recent = use.recent.filter((id) => known.has(id));
   const popular = Object.entries(use.counts).filter(([id]) => known.has(id)).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id]) => id);
   const choose = (id: string) => {
@@ -108,6 +118,11 @@ export function CategoryPicker({ tree, s, locked, error, onChoose }: Props) {
         footerAction={canRequestDepartment ? { label: t('sc.scope.requestRow'), onSelect: () => setDeptOpen(true) } : undefined}
       />
       {deptOpen ? <RequestDepartmentDialog onClose={() => setDeptOpen(false)} /> : null}
+      {chosenGate && chosenGate !== 'ACTIVE' ? (
+        <p className="m-0 flex items-start gap-2 text-xs text-muted" data-testid="category-gate" role="status">
+          <HourglassMedium size={16} aria-hidden /> {t(`sc.pf.categoryGate.${chosenGate}` as MessageKey)}
+        </p>
+      ) : null}
       {s.request ? (
         <p className="m-0 flex items-center gap-2 text-xs text-muted">
           <HourglassMedium size={16} aria-hidden /> {t('sc.pf.category.requested', { reference: s.request.reference })}

@@ -77,7 +77,7 @@ describe('one-step product form: sections follow the product type', () => {
 describe('one-step product form: validation and readiness', () => {
   it('lists what is missing with field ids the readiness panel links to', () => {
     const p = validateForm(withCategory(emptyForm(), { id: 'pt-spices', path: 'x', productType: 'grocery' }), grocery);
-    expect(Object.keys(p)).toEqual(expect.arrayContaining([fieldId.title, fieldId.images, fieldId.attr('ingredients'), fieldId.attr('shelf'), fieldId.sku, fieldId.gtin, fieldId.price, fieldId.qty]));
+    expect(Object.keys(p)).toEqual(expect.arrayContaining([fieldId.title, fieldId.images, fieldId.attr('ingredients'), fieldId.attr('shelf'), fieldId.gtin, fieldId.price, fieldId.qty]));
     expect(p[fieldId.attr('ingredients')]?.section).toBe('compliance');
     expect(validateForm(emptyForm(), undefined)[fieldId.category]?.key).toBe('sc.pf.err.category');
   });
@@ -106,7 +106,9 @@ describe('one-step product form: validation and readiness', () => {
     let s: FormState = { ...suya(), ...withCategory(suya(), { id: 'pt-dresses', path: 'Fashion › Women › Dresses', productType: 'dress' }), title: 'Ankara Wrap Dress', images: [image], noGtin: true,
       attrs: { brand: 'Adire', material: 'Cotton', fit: 'Regular', length: 'Midi' }, hasVariants: true, theme: 'Size × Color', selected: { Size: ['M', 'L'], Color: ['Gold'] } };
     expect(combos(dress, s).map(comboKey)).toEqual(['M / Gold', 'L / Gold']);
-    expect(validateForm(s, dress)[fieldId.variant('M / Gold', 'sku')]?.key).toBe('sc.pf.err.skuRequired');
+    // The SKU is optional: the catalog generates a stable one when it is empty.
+    expect(validateForm(s, dress)[fieldId.variant('M / Gold', 'sku')]).toBeUndefined();
+    expect(validateForm(s, dress)[fieldId.variant('M / Gold', 'price')]?.key).toBe('sc.pf.err.priceRequired');
     s = applyToAll(dress, applyToAll(dress, fillSkus(dress, s), 'price', '49'), 'qty', '5');
     expect(s.rows['M / Gold']?.sku).toBe('ANKARA-WRAP-DRESS-M-GOLD');
     expect(validateForm(s, dress)).toEqual({});
@@ -147,10 +149,10 @@ describe('one-step product form: submission, edit and drafts', () => {
       productId: 'p1', atin: 'AT1', status: 'LIVE', statusLabel: 'Live', moderationNote: null, categoryId: 'pt-dresses', categoryRequestId: null, categoryPath: 'Fashion › Women › Dresses',
       productType: 'dress', title: 'Ankara Wrap Dress', attributes: { brand: 'Adire', material: 'Cotton' }, images: [{ url: 'https://img/a.webp', width: 1600, height: 1600, contentType: 'image/webp', alt: 'Front of the dress' }],
       variationTheme: 'Size', variants: [
-        { atin: 'AT1', sellerSku: 'ANK-M', gtin: null, gtinExempt: true, options: { Size: 'M' }, priceMinor: 4900, compareAtMinor: null, quantity: 3, images: [] },
-        { atin: 'AT1-2', sellerSku: 'ANK-L', gtin: null, gtinExempt: true, options: { Size: 'L' }, priceMinor: 5100, compareAtMinor: 6000, quantity: 0, images: [{ url: 'https://img/l.webp', contentType: 'image/webp' }] }
+        { atin: 'AT1', sellerSku: 'ANK-M', gtin: null, gtinExempt: true, options: { Size: 'M' }, priceMinor: 4900, compareAtMinor: null, quantity: 3, images: [], sellerSkuGenerated: false, taxFacts: {}, taxStatus: 'READY', missingTaxFacts: [] },
+        { atin: 'AT1-2', sellerSku: 'ANK-L', gtin: null, gtinExempt: true, options: { Size: 'L' }, priceMinor: 5100, compareAtMinor: 6000, quantity: 0, images: [{ url: 'https://img/l.webp', contentType: 'image/webp' }], sellerSkuGenerated: false, taxFacts: {}, taxStatus: 'READY', missingTaxFacts: [] }
       ],
-      preorderEligible: false, listing: { description: 'Wax print', condition: 'NEW', keywords: ['ankara'], fulfilment: 'SELLER', packaging: null, handlingDays: 3, shipFromId: null, sizeChartId: null, fitNote: null },
+      preorderEligible: false, listing: { description: 'Wax print', condition: 'NEW', keywords: ['ankara'], fulfilment: 'SELLER', packaging: null, handlingDays: 3, shipFromId: null, sizeChartId: null, fitNote: null, sellerBehaviour: {} },
       currency: 'USD', version: 4, updatedAt: '2026-10-10T10:00:00Z'
     };
     const s = fromDetail(detail, dress);

@@ -499,8 +499,9 @@ const PRODUCT_TYPE_SOURCES: Record<string, z.input<typeof ProductTypeSchemaSchem
 
 /** The mock product types as the BFF serves them (defaults filled: custom values off, no sizing). */
 export const PRODUCT_TYPES: Record<string, ProductTypeSchema> = {
-  ...Object.fromEntries(Object.entries(PRODUCT_TYPE_SOURCES).map(([code, source]) => [code, ProductTypeSchemaSchema.parse(source)])),
-  ...TAX_PRODUCT_TYPES
+  // The classic fixtures win where a code exists in both (dress, menwear, kids): their tests pin their exact options.
+  ...TAX_PRODUCT_TYPES,
+  ...Object.fromEntries(Object.entries(PRODUCT_TYPE_SOURCES).map(([code, source]) => [code, ProductTypeSchemaSchema.parse(source)]))
 };
 
 /** One offer per listing variant (offers-service creates the seller's offers from catalog.product.created). */
