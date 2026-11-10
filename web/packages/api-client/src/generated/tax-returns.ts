@@ -790,6 +790,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tax/variant-classifications/{atin}/request-information": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask the seller for more information before a decision (tax:classify-admin)
+         * @description The message is stored on the record (informationRequest), audited as INFORMATION_REQUESTED and published in tax.classification.changed (reason = the message) so catalog and notifications can show or send it. It is cleared when the seller's facts change.
+         */
+        post: operations["requestVariantInformation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/tax/variant-classifications/{atin}/reclassify": {
         parameters: {
             query?: never;
@@ -983,6 +1003,8 @@ export interface components {
             configuredDefault?: "RULES" | "STRIPE_TAX";
             /** @description Stripe Tax can be chosen (its key is set) */
             stripeAvailable?: boolean;
+            /** @description Avalara can be chosen (account id, license key and company code are set) */
+            avalaraAvailable?: boolean;
             /**
              * @description SHADOW mode: this provider is quoted next to the in-house engine on real orders; differences are logged (GET /v1/tax/shadow/report) and the shadow quote is never charged. Null = off.
              * @enum {string|null}
@@ -997,7 +1019,7 @@ export interface components {
             /** @enum {string} */
             method: "RULES" | "STRIPE_TAX" | "AVALARA";
             /**
-             * @description Turn SHADOW mode on for this provider
+             * @description Turn SHADOW mode on for this provider, or null/absent to turn it off. A PUT replaces both method and shadowProvider. The provider must be configured and differ from the method's provider (422 tax.shadow-same-as-method); a method that is a provider needs at least one mapped code (422 tax.provider-not-mapped).
              * @enum {string|null}
              */
             shadowProvider?: "STRIPE" | "AVALARA" | null;
@@ -1076,10 +1098,14 @@ export interface components {
             lineId?: string;
             atin?: string;
             sellerOrgId?: string;
-            /** @description GENERAL | GROCERY | PREPARED_FOOD; when absent productType decides */
+            /** @description Legacy: GENERAL | GROCERY | PREPARED_FOOD chosen by the caller. When absent the stored decision of the variant ATIN decides; a line with no definite decision comes back BLOCKED with no rate (there is no default). */
             taxCategory?: string;
-            /** @description catalog product type (mapped by at.taxreturns.tax.category-by-product-type) */
+            /** @description catalog product type (no longer decides tax) */
             productType?: string;
+            /** @description The seller's behaviour facts for this listing (sold_heated, heated_by_seller, utensils_provided, seller_is_bakery ...). The stored decision is per (variant ATIN, behaviour); a required behaviour fact that is missing gives MISSING_FACTS and a blocked line. */
+            sellerBehaviour?: {
+                [key: string]: unknown;
+            };
             /** Format: int32 */
             quantity?: number;
             /** Format: int64 */
@@ -1094,6 +1120,13 @@ export interface components {
             currency: string;
             shipTo: components["schemas"]["TaxShipTo"];
             lines: components["schemas"]["TaxQuoteLine"][];
+            /**
+             * Format: date
+             * @description Sale date; defaults to today in the rules' jurisdiction. Decides date-bound exemptions (none are open until the holiday calendar exists).
+             */
+            saleDate?: string;
+            /** @description Order or cart id. SHADOW mode compares only quotes that carry one (real orders). */
+            orderId?: string;
         };
         TaxShipTo: {
             country?: string;
@@ -1108,7 +1141,10 @@ export interface components {
             collectedBy?: string;
             /** Format: int64 */
             totalTaxMinor?: number;
+            /** @description rules, STRIPE_TAX, AVALARA, EXEMPT, or RULES-FALLBACK when a chosen provider could not take the quote and the rules engine answered instead (never hidden; see fallbackLines) */
             provider?: string;
+            /** @description Line ids the provider could not take when provider is RULES-FALLBACK */
+            fallbackLines?: string[];
             lines?: components["schemas"]["TaxQuoteLineResult"][];
         };
         TaxQuoteLineResult: {
@@ -1117,7 +1153,7 @@ export interface components {
             taxCategory?: string;
             /** Format: int64 */
             taxableMinor?: number;
-            /** @description Combined rate applied (fraction, 0.0825 = 8.25 %) */
+            /** @description Combined rate applied (fraction, 0.0825 = 8.25 %); absent on a blocked line */
             rate?: number;
             /** Format: int64 */
             taxMinor?: number;
@@ -1138,6 +1174,11 @@ export interface components {
             ruleVersion?: string;
             /** @description Plain message for the shopper when the line cannot be taxed */
             blockedReason?: string;
+            /**
+             * @description How exactly the address was resolved: ZIP (rate table, the documented TX-03 launch limitation) or ADDRESS (a provider resolved the exact address)
+             * @enum {string}
+             */
+            addressPrecision?: "ZIP" | "ADDRESS";
         };
         /** @description Items of one delivered shipment, the reason per item and the method */
         CreateReturn: {
@@ -1522,7 +1563,11 @@ export interface components {
         TaxProfileSummary: {
             categoryCode?: string;
             name?: string;
+            /** @description Department code */
             department?: string;
+            departmentName?: string;
+            /** @description Stripe codes the category uses (also in the list */
+            stripeCodes?: string[];
             status?: components["schemas"]["ProfileStatus"];
             /** @enum {string} */
             defaultOutcome?: "EXEMPT" | "TAXABLE" | "BLOCKED" | "CONDITIONAL";
@@ -1545,6 +1590,23 @@ export interface components {
             /** Format: date-time */
             changedAt?: string;
             note?: string;
+            /** @description Status changes of the profile, newest first (detail only) */
+            history?: {
+                /** Format: date-time */
+                at?: string;
+                actor?: string;
+                kind?: string;
+                reason?: string;
+                approvedBy?: string;
+                decisionRef?: string;
+                ruleVersion?: string;
+                before?: {
+                    [key: string]: unknown;
+                };
+                after?: {
+                    [key: string]: unknown;
+                };
+            }[];
         };
         TaxProfileStatusChange: {
             status: components["schemas"]["ProfileStatus"];
@@ -1562,6 +1624,11 @@ export interface components {
             providerCode?: string | null;
             /** @description A person confirmed the provider treats this code as this outcome */
             verified?: boolean;
+            /** @description The mapping may be used for a quote */
+            active?: boolean;
+            verifiedNote?: string;
+            /** @description Same as verifiedNote (why the entry was set or verified) */
+            note?: string;
             mapVersion?: number;
             changedBy?: string;
             /** Format: date-time */
@@ -1587,6 +1654,23 @@ export interface components {
             facts?: {
                 [key: string]: unknown;
             };
+            /** @description Facts set by tax review (owner STAFF) */
+            staffFacts?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Format: int64
+             * @description Orders placed with this variant (detail only)
+             */
+            ordersAffected?: number;
+            /** @description What tax review asked the seller to provide; cleared when the seller's facts change */
+            informationRequest?: {
+                message?: string;
+                requestedBy?: string;
+                /** Format: date-time */
+                requestedAt?: string;
+            } | null;
+            ownerOrgId?: string;
             evidence?: {
                 factId?: string;
                 fileName?: string;
@@ -1620,7 +1704,7 @@ export interface components {
                 at?: string;
                 actor?: string;
                 /** @enum {string} */
-                action?: "FACTS_CHANGED" | "SUBMITTED" | "APPROVED" | "REJECTED" | "RECLASSIFIED" | "MARKED_STALE" | "EVIDENCE_ADDED";
+                action?: "FACTS_CHANGED" | "SUBMITTED" | "APPROVED" | "REJECTED" | "RECLASSIFIED" | "MARKED_STALE" | "EVIDENCE_ADDED" | "INFORMATION_REQUESTED";
                 reason?: string;
                 ruleVersion?: string;
                 before?: {
@@ -1647,6 +1731,8 @@ export interface components {
             refinedProviderCodes?: {
                 [key: string]: string;
             };
+            /** @description Reference of the tax professional's sign-off */
+            decisionRef?: string;
         };
         ClassificationReclassifyRequest: {
             categoryCode: string;
@@ -1670,21 +1756,44 @@ export interface components {
              * @description provider minus in-house
              */
             netDifferenceMinor?: number;
-            byInternalTaxCode?: {
-                internalTaxCode?: string;
-                providerCode?: string;
-                /** Format: int64 */
-                lines?: number;
-                /** Format: int64 */
-                differing?: number;
-                /** Format: int64 */
-                absoluteDifferenceMinor?: number;
-            }[];
+            byInternalTaxCode?: components["schemas"]["ShadowGroup"][];
+            /** @description "Ready to cut over?" thresholds (placeholders to agree with the tax adviser): minDays, minLines, minLinesPerCode, maxOutcomeDisagreementPct, maxProviderErrorPct */
+            thresholds?: {
+                [key: string]: number;
+            };
+            byCategory?: components["schemas"]["ShadowGroup"][];
+            /** @description Per in-house outcome (EXEMPT, TAXABLE or NONE) */
+            byOutcome?: components["schemas"]["ShadowGroup"][];
+            byState?: components["schemas"]["ShadowGroup"][];
+            /** @description MATCH, OUTCOME, RATE, PROVIDER_ERROR, NO_DECISION */
+            byKind?: components["schemas"]["ShadowGroup"][];
             differences?: components["schemas"]["ShadowDifference"][];
             page?: number;
             size?: number;
         };
+        /** @description A group of compared lines and how many of them disagree */
+        ShadowGroup: {
+            /** @description The internal tax code, category, outcome, state or kind */
+            key?: string;
+            /** @description Set for byInternalTaxCode groups */
+            internalTaxCode?: string;
+            providerCode?: string;
+            /** Format: int64 */
+            lines?: number;
+            /** Format: int64 */
+            differing?: number;
+            /** @description differing divided by lines */
+            disagreementRate?: number;
+            /** Format: int64 */
+            absoluteDifferenceMinor?: number;
+        };
         ShadowDifference: {
+            /** @description The order or cart id the quote carried */
+            orderRef?: string;
+            categoryCode?: string;
+            state?: string;
+            /** @description Same as state */
+            shipToState?: string;
             /** Format: uuid */
             orderId?: string;
             lineId?: string;
@@ -2932,6 +3041,49 @@ export interface operations {
                 };
             };
             /** @description tax.classification-not-resolvable */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    requestVariantInformation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    message: string;
+                    reason?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantClassification"];
+                };
+            };
+            /** @description tax.classification-not-found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description tax.invalid-information-request */
             422: {
                 headers: {
                     [name: string]: unknown;
