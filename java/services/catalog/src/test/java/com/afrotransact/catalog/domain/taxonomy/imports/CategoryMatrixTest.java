@@ -83,7 +83,7 @@ class CategoryMatrixTest {
         assertThat(PLAN.types().stream().filter(t -> t.sizing().isPresent()).map(ProductType::code))
                 .containsExactlyInAnyOrder("dress", "top", "menwear", "footwear", "kids");
         ProductType dress = PLAN.types().stream().filter(t -> t.code().equals("dress")).findFirst().orElseThrow();
-        assertThat(dress.theme("Size x Color").orElseThrow().dimension("Size").allowCustomValues()).isTrue();
+        assertThat(dress.theme("Size × Color").orElseThrow().dimension("Size").allowCustomValues()).isTrue();
     }
 
     @Test

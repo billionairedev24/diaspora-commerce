@@ -121,8 +121,8 @@ class TileRuleTest(unittest.TestCase):
             for cell in p["payload"]["cells"]:
                 self.assertEqual(set(cell), {"source"}, "no pinned label, link or image: the product supplies them")
         top = next(p for p in rule_tiles if p["name"].startswith("Top rated"))
-        self.assertEqual([c["source"]["department"] for c in top["payload"]["cells"]], ["Groceries", "Fashion", "Beauty", "Home & Art"])
-        self.assertEqual(top["payload"]["cells"][0]["source"], {"kind": "search", "sort": "rating", "department": "Groceries"})
+        self.assertEqual([c["source"]["department"] for c in top["payload"]["cells"]], ["Groceries & Food", "Fashion & Accessories", "Beauty & Personal Care", "Home & Household"])
+        self.assertEqual(top["payload"]["cells"][0]["source"], {"kind": "search", "sort": "rating", "department": "Groceries & Food"})
         self.assertEqual(next(p for p in store if p["id"] == "plc_old")["status"], "ENDED")
 
 
@@ -213,8 +213,9 @@ class OffersAndStockTest(unittest.TestCase):
 
 
 DEPARTMENT_NODES = [{"path": n, "name": n, "level": "DEPARTMENT", "code": c} for n, c in (
-    ("Fashion", "fashion"), ("Groceries", "groceries"), ("Beauty", "beauty"), ("Books", "books"),
-    ("Home & Art", "home-art"), ("Health", "health"), ("Event & party", "event-party"))]
+    ("Fashion & Accessories", "fashion-accessories"), ("Groceries & Food", "groceries-food"), ("Beverages", "beverages"),
+    ("Beauty & Personal Care", "beauty-personal-care"), ("Books & Media", "books-media"), ("Home & Household", "home-household"),
+    ("Health & Wellness", "health-wellness"))]
 
 
 class SellersTest(unittest.TestCase):
@@ -231,9 +232,9 @@ class SellersTest(unittest.TestCase):
         for org_id, names in expected.items():
             self.assertEqual(seen[org_id]["departments"], sorted({n["code"] for n in DEPARTMENT_NODES if n["name"] in names}), org_id)
         # The food sellers sell groceries and the fashion seller only fashion: nothing a seller lists is outside its set.
-        self.assertIn("groceries", seen["org_mama_put_pantry"]["departments"])
-        self.assertNotIn("fashion", seen["org_mama_put_pantry"]["departments"])
-        self.assertEqual(seen["org_kente_and_co"]["departments"], ["fashion"])
+        self.assertIn("groceries-food", seen["org_mama_put_pantry"]["departments"])
+        self.assertNotIn("fashion-accessories", seen["org_mama_put_pantry"]["departments"])
+        self.assertEqual(seen["org_kente_and_co"]["departments"], ["fashion-accessories"])
         self.assertNotIn(D.RETAIL_ORG, seen)
         self.assertTrue(all("departments" not in b for oid, b in seen.items() if oid not in expected))
 
@@ -274,8 +275,7 @@ class SellersTest(unittest.TestCase):
 class SizeChartsTest(unittest.TestCase):
     """The size charts the sized fashion products link: written once through catalog, found again by name."""
 
-    CODES = {"Fashion › Women › Dresses": "dress", "Fashion › Women › Tops": "top", "Fashion › Men › Shirts": "menwear",
-             "Fashion › Kids › Kids clothing": "kids"}
+    CODES = {D.DRESSES: "dress", D.TOPS: "top", D.MEN_SHIRTS: "menwear", D.KIDS: "kids"}
 
     def setUp(self):
         self.s = seeder()

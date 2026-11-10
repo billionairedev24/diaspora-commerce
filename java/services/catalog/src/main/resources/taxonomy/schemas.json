@@ -114,7 +114,7 @@
      ]
     },
     {
-     "name": "Net weight x Pack",
+     "name": "Net weight × Pack",
      "dimensions": [
       {
        "name": "Net weight",
@@ -463,7 +463,7 @@
      ]
     },
     {
-     "name": "Size x Scent",
+     "name": "Size × Scent",
      "dimensions": [
       {
        "name": "Size",
@@ -531,7 +531,7 @@
    ],
    "themes": [
     {
-     "name": "Length x Color",
+     "name": "Length × Color",
      "dimensions": [
       {
        "name": "Length",
@@ -630,7 +630,7 @@
      ]
     },
     {
-     "name": "Size x Color",
+     "name": "Size × Color",
      "dimensions": [
       {
        "name": "Size",
@@ -718,7 +718,7 @@
    ],
    "themes": [
     {
-     "name": "Size x Pattern",
+     "name": "Size × Pattern",
      "dimensions": [
       {
        "name": "Size",
@@ -955,6 +955,20 @@
        ]
       }
      ]
+    },
+    {
+     "name": "Size",
+     "dimensions": [
+      {
+       "name": "Size",
+       "options": [
+        "4 oz",
+        "8 oz",
+        "16 oz",
+        "1 lb"
+       ]
+      }
+     ]
     }
    ]
   },
@@ -1031,7 +1045,7 @@
      ]
     },
     {
-     "name": "Size x Color",
+     "name": "Size × Color",
      "dimensions": [
       {
        "name": "Size",
@@ -1240,7 +1254,7 @@
      ]
     },
     {
-     "name": "Size x Color",
+     "name": "Size × Color",
      "dimensions": [
       {
        "name": "Size",
@@ -1286,7 +1300,6 @@
   "frozen-meals": "perishable",
   "meat-poultry-fish": "perishable",
   "printed-books": "book",
-  "magazines": "book",
   "wigs-extensions": "hair",
   "hair-accessories": "fashion",
   "baby-food-formula": "food",
@@ -1401,7 +1414,7 @@
    ],
    "themes": [
     {
-     "name": "Size x Color",
+     "name": "Size × Color",
      "dimensions": [
       {
        "name": "Size",
@@ -1550,7 +1563,7 @@
    ],
    "themes": [
     {
-     "name": "Size x Color",
+     "name": "Size × Color",
      "dimensions": [
       {
        "name": "Size",
@@ -1714,7 +1727,7 @@
    ],
    "themes": [
     {
-     "name": "Size x Color",
+     "name": "Size × Color",
      "dimensions": [
       {
        "name": "Size",
@@ -1830,7 +1843,7 @@
    ],
    "themes": [
     {
-     "name": "Size x Color",
+     "name": "Size × Color",
      "dimensions": [
       {
        "name": "Size",
@@ -1958,7 +1971,7 @@
    ],
    "themes": [
     {
-     "name": "Size x Color",
+     "name": "Size × Color",
      "dimensions": [
       {
        "name": "Size",
@@ -2099,7 +2112,7 @@
    ],
    "themes": [
     {
-     "name": "Length x Pattern",
+     "name": "Length × Pattern",
      "dimensions": [
       {
        "name": "Length",

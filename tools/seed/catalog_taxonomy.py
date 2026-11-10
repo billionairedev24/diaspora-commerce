@@ -77,9 +77,9 @@ SERVICE = [a("duration", "Duration", required=False, help="How long it takes, e.
 OTHER = [brand("Brand", False), a("material", "Material / main ingredient", required=False), a("details", "Key details shoppers need", required=False, multiline=True)]
 
 T_FOOD = [theme("Net weight", ("Net weight", ["8 oz", "1 lb", "2 lb", "5 lb", "10 lb"])),
-          theme("Net weight x Pack", ("Net weight", ["1 lb", "5 lb"]), ("Pack", ["1", "2", "4"]))]
+          theme("Net weight × Pack", ("Net weight", ["1 lb", "5 lb"]), ("Pack", ["1", "2", "4"]))]
 T_OPTION = [theme("Option", ("Option", ["Standard", "Small", "Medium", "Large"])),
-            theme("Size x Color", ("Size", ["S", "M", "L", "XL"]), ("Color", ["Black", "White", "Gold", "Multicolour"]))]
+            theme("Size × Color", ("Size", ["S", "M", "L", "XL"]), ("Color", ["Black", "White", "Gold", "Multicolour"]))]
 
 FAMILIES = {
     "food": {"identifierRule": "GTIN", "traits": {"food": True, "preorder": True}, "attributes": FOOD, "themes": T_FOOD},
@@ -88,18 +88,18 @@ FAMILIES = {
     "beverage": {"identifierRule": "GTIN", "traits": {"food": True, "preorder": True}, "attributes": FOOD,
                  "themes": [theme("Size", ("Size", ["8 oz", "12 oz", "16 oz", "1 L", "2 L"])), T_FOOD[0]]},
     "beauty": {"identifierRule": "GTIN", "traits": {"regulated": True}, "attributes": BEAUTY,
-               "themes": [theme("Size", ("Size", ["4 oz", "8 oz", "16 oz"])), theme("Size x Scent", ("Size", ["8 oz", "16 oz"]), ("Scent", ["Unscented", "Lemongrass", "Lavender", "Coconut"]))]},
+               "themes": [theme("Size", ("Size", ["4 oz", "8 oz", "16 oz"])), theme("Size × Scent", ("Size", ["8 oz", "16 oz"]), ("Scent", ["Unscented", "Lemongrass", "Lavender", "Coconut"]))]},
     "hair": {"identifierRule": "GTIN", "traits": {}, "attributes": HAIR,
-             "themes": [theme("Length x Color", ("Length", ["20 in", "26 in", "30 in"]), ("Color", ["1B", "2", "4", "27", "30", "613"]))]},
+             "themes": [theme("Length × Color", ("Length", ["20 in", "26 in", "30 in"]), ("Color", ["1B", "2", "4", "27", "30", "613"]))]},
     "fashion": {"identifierRule": "GTIN", "traits": {}, "attributes": FASHION,
-                "themes": [theme("Color", ("Color", COLORS), custom=("Color",)), theme("Size x Color", ("Size", ["S", "M", "L", "XL"]), ("Color", COLORS), custom=("Color",))]},
+                "themes": [theme("Color", ("Color", COLORS), custom=("Color",)), theme("Size × Color", ("Size", ["S", "M", "L", "XL"]), ("Color", COLORS), custom=("Color",))]},
     "home": {"identifierRule": "GTIN", "traits": {}, "attributes": HOME,
-             "themes": [theme("Size x Pattern", ("Size", ["18 in", "22 in"]), ("Pattern", ["Classic", "Arrow", "Dots"]))]},
+             "themes": [theme("Size × Pattern", ("Size", ["18 in", "22 in"]), ("Pattern", ["Classic", "Arrow", "Dots"]))]},
     "electronics": {"identifierRule": "GTIN", "traits": {}, "attributes": ELECTRONICS,
                     "themes": [theme("Color", ("Color", ["Black", "White", "Silver", "Gold", "Blue"])), theme("Storage", ("Storage", ["64 GB", "128 GB", "256 GB", "512 GB"]))]},
     "book": {"identifierRule": "ISBN", "traits": {}, "attributes": BOOK, "themes": [theme("Format", ("Format", ["Hardcover", "Paperback"]))]},
     "health": {"identifierRule": "GTIN", "traits": {"regulated": True}, "attributes": HEALTH,
-               "themes": [theme("Count", ("Count", ["30", "60", "90", "120"]))]},
+               "themes": [theme("Count", ("Count", ["30", "60", "90", "120"])), theme("Size", ("Size", ["4 oz", "8 oz", "16 oz", "1 lb"]))]},
     "baby": {"identifierRule": "GTIN", "traits": {}, "attributes": BABY, "themes": T_OPTION},
     "pets": {"identifierRule": "GTIN", "traits": {}, "attributes": PETS, "themes": T_FOOD[:1]},
     "digital": {"identifierRule": "GTIN", "traits": {}, "attributes": DIGITAL, "themes": []},
@@ -112,7 +112,7 @@ DEPARTMENT_FAMILY = {"groceries-food": "food", "beverages": "beverage", "beauty-
                      "books-media": "other", "health-wellness": "health", "baby-kids": "baby", "pets": "pets",
                      "digital-products": "digital", "services": "service", "other-specialty": "other"}
 CATEGORY_FAMILY = {"dairy-eggs": "perishable", "fresh-produce": "perishable", "frozen-meals": "perishable",
-                   "meat-poultry-fish": "perishable", "printed-books": "book", "magazines": "book",
+                   "meat-poultry-fish": "perishable", "printed-books": "book",
                    "wigs-extensions": "hair", "hair-accessories": "fashion", "baby-food-formula": "food",
                    "plain-water": "beverage"}
 
@@ -129,7 +129,7 @@ SIZING = {
 
 def sized(code, sizes, extra):
     return {"identifierRule": "GTIN", "attributes": FASHION[:1] + extra,
-            "themes": [theme("Size x Color", ("Size", sizes), ("Color", COLORS), custom=("Size", "Color")),
+            "themes": [theme("Size × Color", ("Size", sizes), ("Color", COLORS), custom=("Size", "Color")),
                        theme("Size", ("Size", sizes), custom=("Size",))],
             "sizing": {"sizeChartRequired": False, "sizeDimension": "Size",
                        "suggestedMeasurements": [{"key": k, "label": lab, "unit": "CM", "help": h} for k, lab, h in SIZING[code]]}}
@@ -148,7 +148,7 @@ PRODUCT_TYPES["fabrics-textiles"] = {
     "attributes": [brand("Mill or brand", False, ("UNBRANDED", "HANDMADE"), "The mill or print house named on the selvedge, if any."),
                    a("fibre", "Fibre", ["100% cotton", "Silk-cotton", "Polyester", "Lace"], required=False),
                    a("width", "Width", ["44 in", "46 in", "60 in"], required=False), a("origin", "Made in", required=False)],
-    "themes": [theme("Length x Pattern", ("Length", ["2 yd", "4 yd", "6 yd", "12 yd"]), ("Pattern", ["Classic", "Floral", "Geometric", "Fish", "Abstract"]))]}
+    "themes": [theme("Length × Pattern", ("Length", ["2 yd", "4 yd", "6 yd", "12 yd"]), ("Pattern", ["Classic", "Floral", "Geometric", "Fish", "Abstract"]))]}
 
 # The source document has no category for fabric by the yard. A provisional one keeps sellers' fabric listings possible
 # as drafts; it is NEEDS_APPROVAL (cannot be published) until the owner and the tax professional decide. It has no tax

@@ -5,17 +5,23 @@ import re
 import unittest
 
 import catalog_taxonomy as T
+from seedlib import category_demo as CD
 from seedlib import dataset as D
 from seedlib.seeder import attributes_for, sku_for, theme_for
 
-PATHS = {f"{dept} › {cat} › {leaf}": code for dept, cats in T.TREE.items() for cat, leaves in cats.items()
-         for leaf, code in leaves.items()}
+PATHS = {CD.path_of(c, t["label"]): t["code"] for c in CD.MAP["categories"] for t in c["productTypes"]}
+PATHS[D.FABRICS] = "fabrics-textiles"
 
 
 def product_type(code):
-    """The type as the catalog serves it after V15: fashion types let sellers write their own Size and Color values."""
-    _, attrs, themes, rule = T.TYPES[code]
-    return {"code": code, "attributes": attrs, "themes": T.with_custom(code, themes), "identifierRule": rule}
+    """The type as the catalog serves its details: its own sized schema (fashion), else its category's or department's family."""
+    own = T.PRODUCT_TYPES.get(code)
+    if own:
+        fam = own
+    else:
+        cat = CD.CATEGORIES[code]
+        fam = T.FAMILIES[T.CATEGORY_FAMILY.get(code, T.DEPARTMENT_FAMILY[cat["department"]])]
+    return {"code": code, "attributes": fam["attributes"], "themes": fam["themes"], "identifierRule": fam["identifierRule"]}
 
 
 OWN_VALUE_MARKS = " .,/+()'’&#×:_–—-"
@@ -50,7 +56,7 @@ class DatasetTest(unittest.TestCase):
                 self.assertIn(p.path, PATHS)
                 ptype = product_type(PATHS[p.path])
                 theme, options = theme_for(ptype, p.variants)
-                dims = next(t["dimensions"] for t in ptype["themes"] if t["name"] == theme)
+                dims = next((t["dimensions"] for t in ptype["themes"] if t["name"] == theme), [])
                 for opts in options:
                     for d in dims:
                         if d.get("allowCustomValues"):
@@ -74,12 +80,34 @@ class DatasetTest(unittest.TestCase):
                     self.assertTrue(isbn_ok(p.attrs["gtin"]), p.attrs["gtin"])
                     self.assertEqual(len(p.variants), 1, "one ISBN per book variant")
 
+    def test_every_publishable_category_has_a_demo_product_with_valid_answers(self):
+        by_path = {p.path for p in D.PRODUCTS}
+        missing = [path for path, cat in CD.coverage_titles() if path not in by_path]
+        self.assertEqual([CD.CATEGORIES[PATHS[m]]["code"] for m in missing], ["otc-medicines"],
+                         "only the category whose every answer needs a proof file is left out")
+        self.assertEqual(len({c["code"] for _, c in CD.coverage_titles()}), 57, "the 57 ACTIVE categories")
+
+    def test_every_product_answers_its_categorys_questions_and_gated_categories_are_left_unpublished(self):
+        for p in D.PRODUCTS:
+            with self.subTest(product=p.key):
+                cat = CD.PATHS.get(p.path)
+                if cat is None:
+                    self.assertEqual(p.path, D.FABRICS)
+                    continue
+                refs = [r for r in cat["facts"] if CD.FACTS[r["fact"]]["owner"] in CD.SELLER_ANSWERED]
+                values = {**p.facts, **p.behaviour}
+                for r in refs:
+                    if r["required"] and CD.evaluate(r["requiredWhen"], values) and CD.FACTS[r["fact"]]["kind"] != "FILE":
+                        self.assertIn(r["fact"], values, f"{p.key} needs {r['fact']}")
+                for k in values:
+                    self.assertIn(k, {r["fact"] for r in refs}, f"{p.key} answers a question its category does not ask")
+
     def test_seller_written_sizes_and_colours_follow_catalogs_rules(self):
         own = {}
         for p in D.PRODUCTS:
             ptype = product_type(PATHS[p.path])
             theme, options = theme_for(ptype, p.variants)
-            dims = next(t["dimensions"] for t in ptype["themes"] if t["name"] == theme)
+            dims = next((t["dimensions"] for t in ptype["themes"] if t["name"] == theme), [])
             for d in dims:
                 values = [o[d["name"]] for o in options]
                 seen = {}
@@ -204,7 +232,7 @@ class DatasetTest(unittest.TestCase):
 
     def test_design_nav_departments_and_communities_are_covered(self):
         departments = {p.path.split(" › ")[0] for p in D.PRODUCTS}
-        self.assertTrue({"Groceries", "Fashion", "Beauty", "Home & Art", "Books", "Health", "Event & party"} <= departments)
+        self.assertTrue({"Groceries & Food", "Beverages", "Fashion & Accessories", "Beauty & Personal Care", "Home & Household", "Books & Media", "Health & Wellness"} <= departments)
         communities = {p.community for p in D.PRODUCTS}
         self.assertTrue({"Nigerian", "Ghanaian", "Ethiopian", "Indian", "Jamaican"} <= communities)
         self.assertTrue(any(p.brand == "AfroTransact Brand" for p in D.PRODUCTS))
@@ -216,7 +244,7 @@ class DatasetTest(unittest.TestCase):
 class SkuThemeTest(unittest.TestCase):
     def test_theme_errors(self):
         with self.assertRaises(ValueError):
-            theme_for(product_type("grocery"), (("3 lb", 100),))
+            theme_for(product_type("spices-seasonings"), (("3 lb", 100),))
         with self.assertRaises(ValueError):
             theme_for(product_type("dress"), (({"Size": "M", "Fit": "x"}, 100),))
         self.assertEqual(theme_for(product_type("dress"), (({"Size": "M", "Color": "Gold"}, 1),))[0], "Size × Color")

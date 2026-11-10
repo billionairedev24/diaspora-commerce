@@ -263,6 +263,7 @@ web-build: ## Build the web apps (pnpm -C web build); skipped if web/ or pnpm is
 backlog: ## List backlog stories and their status
 	python3 tools/backlog/mark.py --list
 
-taxonomy-check: ## Category tax map: regenerate-check, validate (13/73/105) and run the reference evaluator tests
+taxonomy-check: ## Category tax map: regenerate-check, validate (13/73/105) and run the reference evaluator tests; the catalog's schema resource
+	python3 tools/seed/catalog_taxonomy.py --check
 	python3 tools/taxonomy/build_map.py --check
 	python3 -I -m unittest discover -s tools/taxonomy/tests

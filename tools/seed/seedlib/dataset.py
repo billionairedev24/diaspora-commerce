@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Union
 
+from . import category_demo as CD
+
 RETAIL_ORG = "org_afrotransact_retail"
 RETAIL_NAME = "AfroTransact Retail"
 
@@ -102,6 +104,8 @@ class Product:
     attrs: dict = field(default_factory=dict)  # product-type attributes (defaults fill the rest)
     images: int = 3
     chart: str = ""  # SIZE_CHARTS key: the size chart linked to the listing (sized fashion types)
+    facts: dict = field(default_factory=dict)  # answers to the category's product questions (default: demo answers)
+    behaviour: dict = field(default_factory=dict)  # answers about how the seller sells it ("Your listing")
     fit: str = ""  # RUNS_SMALL | TRUE_TO_SIZE | RUNS_LARGE: the product's own fit note (the chart's applies without one)
 
 
@@ -109,19 +113,40 @@ def P(key, title, path, seller, brand, community, origin, bullets, variants, que
     return Product(key, title, path, seller, brand, community, origin, tuple(bullets), tuple(variants), tuple(queries), **kw)
 
 
-PANTRY = "Groceries › Pantry › "
-GRAINS, SPICES, SAUCES, SNACKS = PANTRY + "Grains & rice", PANTRY + "Spices & seasonings", PANTRY + "Sauces & pastes", PANTRY + "Snacks"
-TEAS, COFFEE = "Groceries › Drinks › Teas & hibiscus", "Groceries › Drinks › Coffee"
-FROZEN = "Groceries › Fresh › Frozen & perishables"
-WELLNESS = "Health › Wellness › Herbal teas & remedies"
-BUTTERS, SOAPS = "Beauty › Skin care › Butters & oils", "Beauty › Skin care › Soaps"
-HAIR_OILS, BRAIDING = "Beauty › Hair care › Hair oils", "Beauty › Hair care › Braiding hair"
-ANKARA, KENTE, LACE = "Fashion › Fabrics › Ankara & wax prints", "Fashion › Fabrics › Kente & aso-oke", "Fashion › Fabrics › Lace"
-DRESSES, TOPS, HEADWRAPS = "Fashion › Women › Dresses", "Fashion › Women › Tops", "Fashion › Women › Headwraps"
-MEN_AGBADA, MEN_SHIRTS, KIDS = "Fashion › Men › Agbada & kaftans", "Fashion › Men › Shirts", "Fashion › Kids › Kids clothing"
-COOKBOOKS, FICTION, CHILDRENS = "Books › Books › Cookbooks", "Books › Books › Fiction", "Books › Books › Children's books"
-PILLOWS, WALL_ART = "Home & Art › Decor › Pillows & throws", "Home & Art › Decor › Wall art"
-PARTY = "Event & party › Party supplies › Decorations"
+# Leaf paths of the category tax tree (department › category › product type; a category with one product type of its
+# own name is chosen as that category). The tree is the catalog's importer data (tools/taxonomy/category_tax_map.json).
+FOOD, BEV, BEAUTY_D, FASH, HOME_D, BOOKS_D, HEALTH_D = ("Groceries & Food", "Beverages", "Beauty & Personal Care",
+                                                        "Fashion & Accessories", "Home & Household", "Books & Media", "Health & Wellness")
+
+
+def leaf(department: str, category: str, type_name: str = "") -> str:
+    return f"{department} › {category} › {type_name or category}"
+
+
+RICE, FLOURS = leaf(FOOD, "Rice & grains"), leaf(FOOD, "Flours & starches")
+SPICES, PANTRY_SAUCES, SNACKS = leaf(FOOD, "Spices & seasonings"), leaf(FOOD, "Beans, pantry foods & sauces"), leaf(FOOD, "Packaged snacks")
+OILS, CANDY, NUTS = leaf(FOOD, "Cooking oils"), leaf(FOOD, "Candy & gum"), leaf(FOOD, "Nuts & seeds")
+MEAT, PRODUCE = leaf(FOOD, "Meat, poultry & fish"), leaf(FOOD, "Fresh produce")
+TEAS = COFFEE = leaf(BEV, "Coffee & tea, dry")
+DRINK_MIX = leaf(BEV, "Energy, protein & drink mixes")
+WELLNESS = leaf(HEALTH_D, "Dietary supplements")
+BUTTERS = SOAPS = leaf(BEAUTY_D, "Skincare & cosmetics")
+HAIR_OILS, BRAIDING, HEADWRAPS = leaf(BEAUTY_D, "Haircare"), leaf(BEAUTY_D, "Wigs & extensions"), leaf(BEAUTY_D, "Hair accessories")
+ADULT = "Adult clothing & footwear"
+DRESSES, TOPS = leaf(FASH, ADULT, "Women's dresses"), leaf(FASH, ADULT, "Women's tops & wrappers")
+MEN_AGBADA = MEN_SHIRTS = leaf(FASH, ADULT, "Men's clothing")
+KIDS = leaf(FASH, "Children’s clothing", "Kids' clothing")
+FABRICS = leaf(FASH, "Fabrics & textiles")  # provisional category, NEEDS_APPROVAL: nothing can be published into it yet
+COOKBOOKS = FICTION = CHILDRENS = leaf(BOOKS_D, "Printed books")
+ACCESSORIES = leaf(FASH, "Jewelry & accessories")
+PILLOWS, WALL_ART, PARTY = leaf(HOME_D, "Bedding & linens"), leaf(HOME_D, "Decor & candles"), leaf(HOME_D, "Decor & candles")
+
+# Where a product goes when its group above is wider than its category (garri is a flour, egusi a pantry item ...).
+CATEGORY_OF = {
+    "ijebu-garri": FLOURS, "teff-flour": FLOURS, "poundo-yam": FLOURS, "plantain-fufu": FLOURS, "egusi": PANTRY_SAUCES,
+    "oloyin-beans": PANTRY_SAUCES, "red-palm-oil": OILS, "at-coconut-candy": CANDY, "kuli-kuli": NUTS,
+    "smoked-catfish": MEAT, "goat-meat": MEAT, "frozen-okra": PRODUCE, "cassava-leaves": PRODUCE, "cocoa-drink": DRINK_MIX,
+}
 
 SC = lambda size, color: {"Size": size, "Color": color}
 LP = lambda length, pattern: {"Length": length, "Pattern": pattern}
@@ -177,30 +202,30 @@ SIZE_CHART_BY_KEY = {c.key: c for c in SIZE_CHARTS}
 
 PRODUCTS: list[Product] = [
     # ---------------------------------------------------------------------------------------- grains, flours, beans
-    P("ofada-rice", "Ofada Rice, Destoned", GRAINS, "mama-put", "Mama Tee's", "Nigerian", "Nigeria",
+    P("ofada-rice", "Ofada Rice, Destoned", RICE, "mama-put", "Mama Tee's", "Nigerian", "Nigeria",
       ["Unpolished local rice with its distinctive earthy aroma", "Destoned twice, vacuum-sealed in Houston",
        "Pairs with ayamase (designer stew)"], [("2 lb", 899), ("5 lb", 1850)], ["ofada rice", "nigerian rice", "brown rice grains"],
       unit="5 lb bag", attrs={"ingredients": "Ofada rice"}, also=(("lagos-larder", 1.06),)),
-    P("at-basmati", "AfroTransact Brand Aged Basmati Rice", GRAINS, "retail", "AfroTransact Brand", "Indian", "India",
+    P("at-basmati", "AfroTransact Brand Aged Basmati Rice", RICE, "retail", "AfroTransact Brand", "Indian", "India",
       ["Aged 18 months for long, separate grains", "For biryani, pulao and jeera rice", "Sold and fulfilled by AfroTransact"],
       [("5 lb", 1299), ("10 lb", 2199)], ["basmati rice", "biryani", "rice grains"], unit="10 lb", deal=0.18, stock=600,
       attrs={"ingredients": "Aged basmati rice", "cert": "Halal"}),
-    P("ijebu-garri", "Ijebu Garri, Sharp and Sour", GRAINS, "mama-put", "Mama Put", "Nigerian", "Nigeria",
+    P("ijebu-garri", "Ijebu Garri, Sharp and Sour", RICE, "mama-put", "Mama Put", "Nigerian", "Nigeria",
       ["Fine-grain yellow-free garri from Ijebu-Ode", "Soak with cold water and sugar, or make eba"],
       [("2 lb", 699), ("5 lb", 1299)], ["garri", "cassava flakes", "cassava"], unit="5 lb", attrs={"ingredients": "Cassava"}),
-    P("teff-flour", "Ivory Teff Flour, Stone-Milled", GRAINS, "addis", "Addis Spice House", "Ethiopian", "Ethiopia",
+    P("teff-flour", "Ivory Teff Flour, Stone-Milled", RICE, "addis", "Addis Spice House", "Ethiopian", "Ethiopia",
       ["For injera that bubbles properly", "Naturally gluten-free grain"], [("2 lb", 899), ("5 lb", 1599)],
       ["teff", "injera", "teff flour"], unit="5 lb", attrs={"ingredients": "Whole-grain ivory teff"}),
-    P("poundo-yam", "Poundo Yam Flour", GRAINS, "lagos-larder", "Ayoola", "Nigerian", "Nigeria",
+    P("poundo-yam", "Poundo Yam Flour", RICE, "lagos-larder", "Ayoola", "Nigerian", "Nigeria",
       ["Smooth, stretchy pounded yam in five minutes", "Serve with egusi, ogbono or efo riro"], [("2 lb", 799), ("5 lb", 1699)],
       ["pounded yam", "yam flour", "fufu"], unit="5 lb", attrs={"ingredients": "Yam flour"}),
-    P("plantain-fufu", "Plantain Fufu Flour", GRAINS, "accra-market", "Accra Market", "Ghanaian", "Ghana",
+    P("plantain-fufu", "Plantain Fufu Flour", RICE, "accra-market", "Accra Market", "Ghanaian", "Ghana",
       ["Plantain and cassava blend for soft fufu", "Serve with light soup or groundnut soup"], [("2 lb", 749)],
       ["fufu", "plantain flour", "light soup"], unit="2 lb", attrs={"ingredients": "Plantain flour, cassava flour"}),
-    P("egusi", "Ground Egusi (Melon Seeds)", GRAINS, "lagos-larder", "Lagos Larder", "Nigerian", "Nigeria",
+    P("egusi", "Ground Egusi (Melon Seeds)", RICE, "lagos-larder", "Lagos Larder", "Nigerian", "Nigeria",
       ["Freshly ground, no fillers", "For egusi soup with bitter leaf or spinach"], [("1 lb", 899), ("2 lb", 1449)],
       ["egusi", "melon seeds", "egusi soup"], unit="2 lb", also=(("mama-put", 1.04),), attrs={"ingredients": "Ground melon seeds"}),
-    P("oloyin-beans", "Honey Beans (Oloyin)", GRAINS, "mama-put", "Mama Put", "Nigerian", "Nigeria",
+    P("oloyin-beans", "Honey Beans (Oloyin)", RICE, "mama-put", "Mama Put", "Nigerian", "Nigeria",
       ["Naturally sweet brown beans", "For ewa agoyin and moin moin"], [("2 lb", 799), ("5 lb", 1699)],
       ["brown beans", "black-eyed peas", "beans"], unit="5 lb", attrs={"ingredients": "Brown beans"}),
     # ---------------------------------------------------------------------------------------- spices
@@ -241,29 +266,29 @@ PRODUCTS: list[Product] = [
       ["Whole dried scotch bonnet peppers", "Rehydrate for obe ata or grind for pepper soup"], [("8 oz", 549)],
       ["scotch bonnet", "dried chili peppers", "red peppers"], unit="8 oz", stock=400, attrs={"ingredients": "Dried scotch bonnet pepper"}),
     # ---------------------------------------------------------------------------------------- sauces & pastes
-    P("shito", "Shito Black Pepper Sauce, Hot", SAUCES, "accra-market", "Accra Kitchen Co.", "Ghanaian", "United States",
+    P("shito", "Shito Black Pepper Sauce, Hot", PANTRY_SAUCES, "accra-market", "Accra Kitchen Co.", "Ghanaian", "United States",
       ["Slow-fried with dried shrimp, herring and ginger", "Small batches every Thursday"], [("8 oz", 1149)],
       ["shito", "pepper sauce", "ghanaian food"], unit="12 oz jar",
       attrs={"ingredients": "Vegetable oil, dried shrimp, smoked herring, chili, ginger, onion", "allergens": "Contains shellfish",
              "storage": "Refrigerate after opening"}),
-    P("jerk-paste", "Blue Mountain Jerk Paste, Hot", SAUCES, "kingston", "Kingston Kitchen", "Jamaican", "United States",
+    P("jerk-paste", "Blue Mountain Jerk Paste, Hot", PANTRY_SAUCES, "kingston", "Kingston Kitchen", "Jamaican", "United States",
       ["Scotch bonnet, pimento and scallion", "Marinade for chicken, pork or jackfruit"], [("8 oz", 899), ("1 lb", 1499)],
       ["jerk chicken", "jerk seasoning", "jamaican food"], unit="10 oz jar",
       attrs={"ingredients": "Scallion, scotch bonnet, pimento, thyme, vinegar, salt", "storage": "Refrigerate after opening"}),
-    P("red-palm-oil", "Red Palm Oil, Unrefined", SAUCES, "accra-market", "Accra Market", "West African", "Ghana",
+    P("red-palm-oil", "Red Palm Oil, Unrefined", PANTRY_SAUCES, "accra-market", "Accra Market", "West African", "Ghana",
       ["Cold-pressed, sustainably sourced", "For banga, red red and efo riro"], [("1 lb", 999), ("2 lb", 1699)],
       ["palm oil", "red palm oil", "oil palm fruit"], unit="1 L", attrs={"ingredients": "Red palm fruit oil"}),
-    P("at-pepper-sauce", "AfroTransact Brand Ata Din Din Pepper Sauce", SAUCES, "retail", "AfroTransact Brand", "Nigerian",
+    P("at-pepper-sauce", "AfroTransact Brand Ata Din Din Pepper Sauce", PANTRY_SAUCES, "retail", "AfroTransact Brand", "Nigerian",
       "United States", ["Fried pepper sauce with tatashe and onion", "Spoon over rice, yam or plantain"], [("8 oz", 699)],
       ["pepper sauce", "nigerian stew", "tomato stew"], unit="8 oz jar", deal=0.15, stock=300,
       attrs={"ingredients": "Red bell pepper, scotch bonnet, onion, vegetable oil, salt", "storage": "Refrigerate after opening"}),
-    P("groundnut-paste", "Ghana Groundnut Paste", SAUCES, "accra-market", "Accra Market", "Ghanaian", "Ghana",
+    P("groundnut-paste", "Ghana Groundnut Paste", PANTRY_SAUCES, "accra-market", "Accra Market", "Ghanaian", "Ghana",
       ["Roasted peanuts, nothing added", "For nkatenkwan (groundnut soup)"], [("1 lb", 849)],
       ["peanut butter", "groundnut soup", "peanuts"], unit="1 lb", attrs={"ingredients": "Roasted peanuts", "allergens": "Contains peanuts"}),
-    P("mango-pickle", "Mango Pickle (Aam Achar)", SAUCES, "patel", "Patel Grocers", "Indian", "India",
+    P("mango-pickle", "Mango Pickle (Aam Achar)", PANTRY_SAUCES, "patel", "Patel Grocers", "Indian", "India",
       ["Raw mango in mustard oil and spices", "Tangy, hot and aromatic"], [("1 lb", 699)],
       ["mango pickle", "achar", "indian pickle"], unit="1 lb jar", attrs={"ingredients": "Raw mango, mustard oil, salt, chili, fenugreek, fennel"}),
-    P("ackee", "Jamaican Ackee in Brine", SAUCES, "kingston", "Kingston Kitchen", "Jamaican", "Jamaica",
+    P("ackee", "Jamaican Ackee in Brine", PANTRY_SAUCES, "kingston", "Kingston Kitchen", "Jamaican", "Jamaica",
       ["Ready for ackee and saltfish", "Drain, rinse and fold in gently"], [("1 lb", 1299)],
       ["ackee", "ackee and saltfish", "ackee fruit"], unit="19 oz can", attrs={"ingredients": "Ackee, water, salt"}),
     # ---------------------------------------------------------------------------------------- snacks
@@ -306,17 +331,17 @@ PRODUCTS: list[Product] = [
       ["Assam CTC with cardamom, ginger and clove", "Brew with milk and sugar"], [("8 oz", 899)],
       ["masala chai", "chai tea", "spiced tea"], unit="8 oz", attrs={"ingredients": "Black tea, cardamom, ginger, clove, cinnamon"}),
     # ---------------------------------------------------------------------------------------- fresh & frozen
-    P("smoked-catfish", "Smoked Catfish, Whole", FROZEN, "lagos-larder", "Lagos Larder", "Nigerian", "Nigeria",
+    P("smoked-catfish", "Smoked Catfish, Whole", MEAT, "lagos-larder", "Lagos Larder", "Nigerian", "Nigeria",
       ["Wood-smoked, ready for pepper soup and ogbono", "Shipped frozen"], [("1 lb", 1599), ("2 lb", 2899)],
       ["smoked fish", "catfish", "dried fish"], unit="1 lb", fulfilment="AFROTRANSACT",
       attrs={"ingredients": "Catfish", "allergens": "Contains fish", "temp": "Frozen (≤ 0°F)"}),
-    P("goat-meat", "Halal Goat Meat, Cubed", FROZEN, "mama-put", "Mama Put", "West African", "United States",
+    P("goat-meat", "Halal Goat Meat, Cubed", MEAT, "mama-put", "Mama Put", "West African", "United States",
       ["Bone-in cubes for stew and pepper soup", "Halal, shipped frozen"], [("2 lb", 2499), ("5 lb", 5499)],
       ["goat meat", "goat stew", "pepper soup"], unit="2 lb", attrs={"ingredients": "Goat meat", "temp": "Frozen (≤ 0°F)"}),
-    P("frozen-okra", "AfroTransact Brand Chopped Okra, Frozen", FROZEN, "retail", "AfroTransact Brand", "West African",
+    P("frozen-okra", "AfroTransact Brand Chopped Okra, Frozen", MEAT, "retail", "AfroTransact Brand", "West African",
       "United States", ["Chopped and flash-frozen", "For okra soup and gumbo"], [("1 lb", 499)], ["okra", "okra soup", "okra pods"],
       unit="1 lb", stock=200, attrs={"ingredients": "Okra", "temp": "Frozen (≤ 0°F)"}),
-    P("cassava-leaves", "Cassava Leaves, Pounded, Frozen", FROZEN, "accra-market", "Accra Market", "Sierra Leonean", "Ghana",
+    P("cassava-leaves", "Cassava Leaves, Pounded, Frozen", MEAT, "accra-market", "Accra Market", "Sierra Leonean", "Ghana",
       ["Ready for plasas", "Pounded fresh, frozen in 1 lb blocks"], [("1 lb", 699)], ["cassava leaves", "cassava plant", "leafy greens"],
       unit="1 lb", attrs={"ingredients": "Cassava leaves", "temp": "Frozen (≤ 0°F)"}),
     # ---------------------------------------------------------------------------------------- health
@@ -368,23 +393,23 @@ PRODUCTS: list[Product] = [
        ({"Length": "30 in", "Color": "1B"}, 1799)], ["box braids", "braided hair", "braids"], unit="8 packs", stock=300,
       attrs={"fibre": "Pre-stretched synthetic", "packs": "8"}),
     # ---------------------------------------------------------------------------------------- fabrics & fashion
-    P("ankara-fabric", "Ankara Wax Print Fabric", ANKARA, "kente-co", "Lagos Textile Hub", "Nigerian", "Nigeria",
+    P("ankara-fabric", "Ankara Wax Print Fabric", FABRICS, "kente-co", "Lagos Textile Hub", "Nigerian", "Nigeria",
       ["100% cotton, colour-fast", "Enough for iro and buba"],
       [(LP("6 yd", "Classic"), 3400), (LP("6 yd", "Geometric"), 3400), (LP("12 yd", "Classic"), 6200)],
       ["ankara", "african wax print", "wax print fabric"], unit="6 yd", stock=40, attrs={"width": "46 in"}),
-    P("kente-cloth", "Kente Cloth, Hand-Woven", KENTE, "bonwire", "Bonwire Weavers", "Ghanaian", "Ghana",
+    P("kente-cloth", "Kente Cloth, Hand-Woven", FABRICS, "bonwire", "Bonwire Weavers", "Ghanaian", "Ghana",
       ["Strip-woven silk-cotton from Bonwire", "Each cloth tagged with its weaver's name"], [(LP("6 yd", "Classic"), 18000)],
       ["kente cloth", "kente", "kente weaving"], unit="6 yd", stock=6, attrs={"fibre": "Silk-cotton", "width": "44 in"}),
-    P("kente-stole", "Hand-Woven Kente Graduation Stole", KENTE, "bonwire", "Bonwire Weavers", "Ghanaian", "Ghana",
-      ["Strip-woven silk-cotton, 72 in", "Tagged with the weaver's name"], [(LP("2 yd", "Classic"), 6400)],
+    P("kente-stole", "Hand-Woven Kente Graduation Stole", ACCESSORIES, "bonwire", "Bonwire Weavers", "Ghanaian", "Ghana",
+      ["Strip-woven silk-cotton, 72 in", "Tagged with the weaver's name"], [("Multicolour", 6400)],
       ["kente stole", "graduation stole", "kente"], unit="72 in", stock=9, attrs={"fibre": "Silk-cotton", "width": "44 in"}),
-    P("aso-oke", "Aso-Oke Fabric Set", KENTE, "kente-co", "Iseyin Looms", "Nigerian", "Nigeria",
+    P("aso-oke", "Aso-Oke Fabric Set", FABRICS, "kente-co", "Iseyin Looms", "Nigerian", "Nigeria",
       ["Hand-loomed in Iseyin", "Gele, iborun and wrapper in one set"], [(LP("4 yd", "Classic"), 8900)],
       ["aso oke", "aso-oke", "yoruba textile"], unit="4 yd", stock=15, attrs={"fibre": "Silk-cotton"}),
-    P("swiss-lace", "Swiss Voile Lace", LACE, "kente-co", "Kente & Co.", "Nigerian", "Switzerland",
+    P("swiss-lace", "Swiss Voile Lace", FABRICS, "kente-co", "Kente & Co.", "Nigerian", "Switzerland",
       ["Breathable cotton voile with eyelet embroidery", "For owambe and church"], [(LP("4 yd", "Floral"), 6500)],
       ["lace fabric", "voile lace", "embroidered lace"], unit="5 yd", stock=20, attrs={"fibre": "Lace"}),
-    P("adire", "Adire Indigo Tie-Dye Fabric", ANKARA, "kente-co", "Abeokuta Dyers", "Nigerian", "Nigeria",
+    P("adire", "Adire Indigo Tie-Dye Fabric", FABRICS, "kente-co", "Abeokuta Dyers", "Nigerian", "Nigeria",
       ["Hand-dyed indigo from Abeokuta", "Each piece is one of a kind"], [(LP("4 yd", "Abstract"), 4500)],
       ["adire", "indigo dye", "tie-dye fabric"], unit="4 yd", stock=18),
     P("ankara-maxi-dress", "Ankara Print Maxi Dress", DRESSES, "kente-co", "Kente & Co.", "Nigerian", "United States",
@@ -454,6 +479,43 @@ PRODUCTS: list[Product] = [
       ["table runner", "sequin", "party table"], unit="12 × 108 in", stock=25, attrs={"material": "Sequin mesh", "dims": "12 × 108 in"}),
 ]
 
+
+def _placed(p: Product) -> Product:
+    """The product in its category of the tax tree, with demo answers to that category's questions."""
+    path = CATEGORY_OF.get(p.key, p.path)
+    cat = CD.PATHS.get(path)
+    if cat is None and path == FABRICS:
+        return replace(p, path=path)  # provisional category (NEEDS_APPROVAL): no tax profile, the seeder leaves it unpublished
+    if cat is None:
+        raise ValueError(f"{p.key}: {path!r} is not a category of the tax tree")
+    variant, behaviour = CD.minimal_facts(cat)
+    return replace(p, path=path, facts=p.facts or variant, behaviour=p.behaviour or behaviour)
+
+
+def _coverage() -> list[Product]:
+    """A demo product in every category that can be published and has none yet (sold by AfroTransact Retail)."""
+    have = {p.path for p in PRODUCTS}
+    out = []
+    for path, cat in CD.coverage_titles():
+        if path in have:
+            continue
+        try:
+            variant, behaviour = CD.minimal_facts(cat)
+        except ValueError:
+            continue  # needs a proof file (a label photo) the seeder cannot upload: see category_demo.needs_proof()
+        name = path.split(" › ")[-1]
+        out.append(P(f"demo-{cat['code']}-{CD.slug(path)}", f"{name} (AfroTransact demo item)", path, "retail", "AfroTransact Brand",
+                     "West African", "United States", [f"Demo listing for the {name} category", "Seeded to try the category's form and checks",
+                                                        "Sold and fulfilled by AfroTransact"],
+                     [("", 1299)], [name.lower(), "african market", "demo product"], unit="1 each", stock=100, images=2,
+                     facts=variant, behaviour=behaviour))
+    return out
+
+
+PRODUCTS = [_placed(p) for p in PRODUCTS]
+PRODUCTS += _coverage()
+
+
 # Products their seller ships itself (offer fulfilment SELLER, shipFrom the seller's city) rather than from an AfroTransact
 # fulfilment centre. Their ship-from place is what the home page's "ships from near you" rule reads; the rest stay FBA.
 SELF_SHIPPED = {
@@ -480,7 +542,7 @@ HEROES = [
     {"replaces": None, "name": "Fresh from Houston kitchens", "priority": 35, "zip": TEXAS_ZIPS,
      "payload": {"theme": "green", "kicker": "Texas", "title": "Fresh from Houston kitchens.",
                  "sub": "Garri, egusi and pepper sauce from Houston sellers, in Texas by tomorrow.",
-                 "cta": "Shop pantry staples", "href": "/s?dept=Groceries", "label": "AfroTransact",
+                 "cta": "Shop pantry staples", "href": "/s?dept=Groceries%20%26%20Food", "label": "AfroTransact",
                  "imageAlt": "Houston skyline at dusk"},
      "image": ("hero-texas", ["houston skyline", "texas barbecue", "african food houston"])},
     {"replaces": "plc_hero_diwali", "name": "Diwali table", "priority": 30, "zip": NORTHEAST_ZIPS,
@@ -531,7 +593,7 @@ def _rule(sort: str, department: str | None = None, kind: str = "search") -> dic
     return src
 
 
-_DEPARTMENTS = ("Groceries", "Fashion", "Beauty", "Home & Art")
+_DEPARTMENTS = ("Groceries & Food", "Fashion & Accessories", "Beauty & Personal Care", "Home & Household")
 
 TILE_RULES = [
     {"replaces": None, "name": "Top rated by department", "priority": 9,
@@ -575,29 +637,29 @@ RAILS = [
     {"name": "Get it by {day}", "priority": 48,
      "payload": {"title": "Get it by {day}", "href": "/s?fulfilment=afrotransact", "kind": "deliverable-fast", "maxDays": 2}},
     {"name": "Beauty from the source", "priority": 35, "payload": {"title": "Beauty from the source",
-                                                                   "href": "/s?dept=Beauty",
+                                                                   "href": "/s?dept=Beauty%20%26%20Personal%20Care",
                                                                    "query": "shea OR soap OR oil"}},
 ]
 
 CATEGORY_BANNERS = [
-    {"name": "Groceries category banner", "category": "Groceries",
+    {"name": "Groceries category banner", "category": "Groceries & Food",
      "payload": {"title": "Pantry staples from home", "sub": "Garri, egusi, teff and basmati — fulfilled by AfroTransact.",
-                 "cta": "Shop pantry", "href": "/s?dept=Groceries"},
+                 "cta": "Shop pantry", "href": "/s?dept=Groceries%20%26%20Food"},
      "image": ("catbanner-groceries", ["african grocery store", "grains market", "spices in bowls"])},
-    {"name": "Fashion category banner", "category": "Fashion",
+    {"name": "Fashion category banner", "category": "Fashion & Accessories",
      "payload": {"title": "Wax prints, kente and aso-oke", "sub": "Fabrics by the yard and ready-to-wear from independent makers.",
-                 "cta": "Shop fabrics", "href": "/s?dept=Fashion"},
+                 "cta": "Shop fabrics", "href": "/s?dept=Fashion%20%26%20Accessories"},
      "image": ("catbanner-fashion", ["wax print fabric market", "african textiles", "fabric market"])},
 ]
 
 # Sponsored products (content's ads campaigns): advertiser seller, its products, keywords.
 ADS = [
     {"seller": "kingston", "name": "Jerk season", "products": ["jerk-paste", "jamaican-curry"], "keywords": ["jerk", "curry"],
-     "categories": ["Groceries"], "bid": 45, "budget": 25000},
+     "categories": ["Groceries & Food"], "bid": 45, "budget": 25000},
     {"seller": "tamale", "name": "Shea for winter skin", "products": ["shea-butter", "shea-body-butter"],
-     "keywords": ["shea", "body butter"], "categories": ["Beauty"], "bid": 40, "budget": 20000},
+     "keywords": ["shea", "body butter"], "categories": ["Beauty & Personal Care"], "bid": 40, "budget": 20000},
     {"seller": "bonwire", "name": "Graduation kente", "products": ["kente-stole", "kente-cloth"], "keywords": ["kente"],
-     "categories": ["Fashion"], "bid": 60, "budget": 30000},
+     "categories": ["Fashion & Accessories"], "bid": 60, "budget": 30000},
 ]
 
 # Pre-order windows (design/at-preorder.js): one OPEN for Lubbock, one UPCOMING for El Paso. Dates are relative to the run.

@@ -97,6 +97,8 @@ def theme_for(ptype: dict[str, Any], variants: tuple[tuple[Any, int], ...]) -> t
     """(variation theme name, options per variant) for the dataset's compact variant specs."""
     themes = ptype.get("themes") or []
     first = variants[0][0]
+    if first == "" and len(variants) == 1:
+        return "", [{}]  # a product without variations
     if isinstance(first, dict):
         dims = set(first)
         for th in themes:
@@ -126,9 +128,13 @@ def attributes_for(p: D.Product, ptype: dict[str, Any], credits: list[str]) -> d
     out: dict[str, str] = {}
     for a in ptype.get("attributes") or []:
         key = a["key"]
+        if a.get("taxFact"):
+            continue  # answered per variant and in the listing, never as a product detail
         value = str(p.attrs.get(key, defaults.get(key, "")))
         if a.get("options") and value not in a["options"]:
             value = a["options"][0]
+        if not value:
+            value = "12" if a.get("kind") == "NUMBER" else "Demo"
         out[key] = value
     for k, v in p.attrs.items():
         if k != "gtin":
@@ -334,6 +340,17 @@ class Seeder:
     def _categories(self) -> dict[str, dict[str, Any]]:
         return {c["path"]: c for c in self.svc["catalog"].get("/v1/categories")}
 
+    @staticmethod
+    def _tax_status(cat: dict[str, Any], cats: dict[str, Any]) -> str:
+        """The tax gate of the category above a product-type leaf (ACTIVE when the catalog states none)."""
+        by_id = {c["id"]: c for c in cats.values()}
+        node = cat
+        while node is not None:
+            if node.get("taxStatus"):
+                return node["taxStatus"]
+            node = by_id.get(node.get("parentId"))
+        return "ACTIVE"
+
     def _find_product(self, title: str) -> dict[str, Any] | None:
         page = self.svc["catalog"].get("/v1/products", params={"q": title, "size": 100})
         for p in (page or {}).get("items", []):
@@ -359,6 +376,11 @@ class Seeder:
         cat = cats.get(p.path)
         if not cat:
             raise ValueError(f"category {p.path!r} not in the catalog tree")
+        status = self._tax_status(cat, cats)
+        if status != "ACTIVE":
+            self.report.add("products", f"skipped: category {status}")
+            self.log(f"  - {p.title}: its category is {status}, nothing can be published into it yet")
+            return
         code = cat["productType"]
         if code not in types:
             types[code] = self.svc["catalog"].get(f"/v1/product-types/{code}")
@@ -382,6 +404,8 @@ class Seeder:
             variants = []
             for opts, (_, price) in zip(options, p.variants):
                 v = {"options": opts, "sellerSku": sku_for(seller.key, p.key, opts), "priceMinor": price, "quantity": 0}
+                if p.facts:
+                    v["taxFacts"] = dict(p.facts)
                 if ptype.get("identifierRule") == "ISBN":
                     v["gtin"], v["gtinExempt"] = p.attrs["gtin"], False
                 else:
@@ -392,8 +416,13 @@ class Seeder:
                     "images": [{k: a[k] for k in ("url", "width", "height", "bytes", "contentType")} for a in assets],
                     "variationTheme": theme, "variants": variants, "currency": "USD"}
             chart = self._chart_for(p, cats)
+            listing: dict[str, Any] = {}
             if chart:
-                body["listing"] = {"sizeChartId": chart["id"], **({"fitNote": p.fit} if p.fit else {})}
+                listing = {"sizeChartId": chart["id"], **({"fitNote": p.fit} if p.fit else {})}
+            if p.behaviour:
+                listing["sellerBehaviour"] = dict(p.behaviour)
+            if listing:
+                body["listing"] = listing
             product = self.svc["catalog"].post("/v1/products", body)
             self.report.add("products", "created")
             line = f"  ✓ {p.title} ({product['atin']}) images: {self._describe(imgs)}"
@@ -440,7 +469,7 @@ class Seeder:
     @staticmethod
     def _variant_request(v: dict[str, Any]) -> dict[str, Any]:
         """A stored variant as catalog's edit wants it: matched by sellerSku, ids and currency dropped."""
-        keep = ("options", "sellerSku", "gtin", "gtinExempt", "priceMinor", "quantity", "compareAtMinor", "images")
+        keep = ("options", "sellerSku", "gtin", "gtinExempt", "priceMinor", "quantity", "compareAtMinor", "images", "taxFacts")
         return {k: v[k] for k in keep if v.get(k) is not None}
 
     def _chart_for(self, p: D.Product, cats: dict[str, Any]) -> dict[str, Any] | None:
