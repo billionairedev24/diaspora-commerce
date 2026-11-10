@@ -136,7 +136,7 @@ Records reach tax-returns over Kafka, so the queue is polled for up to 60 s (`SE
 publish gate refuses `approve` because the variant already flipped to review, the seeder reviews it and retries.
 Locally security is off and no token is needed; with security on set `SEED_TAX_TOKEN` to a Tax Reviewer's access token
 (permission `tax:classify-admin`, role *Tax Reviewer*, `staff.tax@afrotransact.test`), or register the seeder client with
-the scopes `tax:read tax:classify-admin` and add them to `SEED_SCOPES`. `TAX_APPROVAL_POLICY=SENSITIVE` would also work locally but only auto-approves
+the scopes `tax:read tax:classify-admin` and list them in `SEED_SCOPES` (which replaces the default scope list). `TAX_APPROVAL_POLICY=SENSITIVE` would also work locally but only auto-approves
 plain taxable items, so the seeder approves instead.
 
 **Retail offer.** AfroTransact Retail's offer is created by offers from the Kafka event `catalog.product.created`. On a cold
