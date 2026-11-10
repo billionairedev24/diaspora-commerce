@@ -228,16 +228,17 @@ func (s *sellerListingImpl) detailOf(ctx context.Context, c *domain.Caller, p po
 		}
 		out.Variants = append(out.Variants, domain.ProductVariant{ATIN: v.ATIN, SellerSKU: v.SellerSKU, GTIN: strPtr(v.GTIN),
 			GTINExempt: v.GTINExempt, Options: opts, PriceMinor: v.PriceMinor, CompareAtMinor: v.CompareAtMinor, Quantity: v.Quantity,
-			Images: images})
+			Images: images, SellerSKUGenerated: v.SellerSKUGenerated, TaxFacts: emptyFactMap(v.TaxFacts), TaxStatus: firstNonEmpty(v.TaxStatus, "MISSING_FACTS"),
+			MissingTaxFacts: emptyMissingFacts(v.MissingTaxFacts)})
 		if v.Currency != "" {
 			out.Currency = v.Currency
 		}
 	}
-	out.Listing = domain.ListingDetails{Condition: "NEW", Keywords: []string{}, Fulfilment: "SELLER", HandlingDays: 2}
+	out.Listing = domain.ListingDetails{Condition: "NEW", Keywords: []string{}, Fulfilment: "SELLER", HandlingDays: 2, SellerBehaviour: map[string]any{}}
 	if l := p.Listing; l != nil {
 		out.Listing = domain.ListingDetails{Description: strPtr(l.Description), Condition: firstNonEmpty(l.Condition, "NEW"),
 			Keywords: l.Keywords, Fulfilment: firstNonEmpty(l.Fulfilment, "SELLER"), Packaging: l.Packaging,
-			HandlingDays: max(1, l.HandlingDays)}
+			HandlingDays: max(1, l.HandlingDays), SellerBehaviour: emptyFactMap(l.SellerBehaviour)}
 		if out.Listing.Keywords == nil {
 			out.Listing.Keywords = []string{}
 		}
@@ -438,4 +439,18 @@ func (s *sellerListingImpl) Write(ctx context.Context, c *domain.Caller, in doma
 		return domain.ListingWriterDraft{}, mapErr("ai-gateway", err)
 	}
 	return out, nil
+}
+
+func emptyFactMap(m map[string]any) map[string]any {
+	if m == nil {
+		return map[string]any{}
+	}
+	return m
+}
+
+func emptyMissingFacts(f []domain.MissingTaxFact) []domain.MissingTaxFact {
+	if f == nil {
+		return []domain.MissingTaxFact{}
+	}
+	return f
 }

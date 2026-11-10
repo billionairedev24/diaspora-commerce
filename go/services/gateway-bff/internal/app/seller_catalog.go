@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -305,7 +306,7 @@ func treeOf(nodes []port.CatalogCategoryNode) []domain.CategoryNode {
 		}
 		for _, n := range list {
 			out = append(out, domain.CategoryNode{ID: n.ID, Name: n.Name, Level: strings.ToUpper(n.Level), ProductType: strPtr(n.ProductType),
-				Path: n.Path, Children: build(children[n.ID], depth+1)})
+				Path: n.Path, TaxStatus: strPtr(n.TaxStatus), Children: build(children[n.ID], depth+1)})
 		}
 		return out
 	}
@@ -373,7 +374,9 @@ func (s *sellerCatalogImpl) ProductType(ctx context.Context, c *domain.Caller, c
 			kind = "TEXT"
 		}
 		out.Attributes = append(out.Attributes, domain.AttributeDef{Key: a.Key, Label: a.Label, Options: opts, Required: a.Required,
-			Multiline: a.Multiline, Kind: kind, Units: units, Section: firstNonEmpty(strings.ToUpper(a.Section), "DETAILS"), Help: strPtr(a.Help)})
+			Multiline: a.Multiline, Kind: kind, Units: units, Section: firstNonEmpty(strings.ToUpper(a.Section), "DETAILS"), Help: strPtr(a.Help),
+			TaxFact: a.TaxFact, Owner: strPtr(a.Owner), Unit: strPtr(a.Unit), ShowWhen: nullJSON(a.ShowWhen), RequiredWhen: nullJSON(a.RequiredWhen),
+			Evidence: a.Evidence, OptionLabels: a.OptionLabels})
 	}
 	for _, th := range t.Themes {
 		if th.Dimensions == nil {
@@ -549,4 +552,12 @@ func (s *sellerCatalogImpl) AdjustStock(ctx context.Context, c *domain.Caller, k
 		a = domain.StockAdjustment{SKU: sku, Quantity: quantity}
 	}
 	return a, nil
+}
+
+// nullJSON drops an absent or JSON-null expression so it is omitted from the response.
+func nullJSON(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	return raw
 }

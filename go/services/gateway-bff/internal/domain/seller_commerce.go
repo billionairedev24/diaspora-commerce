@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"slices"
@@ -393,12 +394,15 @@ type ListingPage struct {
 
 // CategoryNode is a node of the nested category tree.
 type CategoryNode struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	Level       string         `json:"level"`
-	ProductType *string        `json:"productType"`
-	Path        string         `json:"path"`
-	Children    []CategoryNode `json:"children"`
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Level       string  `json:"level"`
+	ProductType *string `json:"productType"`
+	Path        string  `json:"path"`
+	// TaxStatus is the gate of a category node's tax profile (ACTIVE, NEEDS_APPROVAL, BLOCKED_BUNDLE, REFINE_CODE,
+	// CONFLICT_OPEN); nil on departments and product types.
+	TaxStatus *string        `json:"taxStatus,omitempty"`
+	Children  []CategoryNode `json:"children"`
 }
 
 // AttributeDef is a product-type attribute: its kind (TEXT, MULTILINE, ENUM, NUMBER), units for numbers, the form
@@ -413,6 +417,16 @@ type AttributeDef struct {
 	Units     []string `json:"units"`
 	Section   string   `json:"section"`
 	Help      *string  `json:"help"`
+	// Tax questions (section TAX): plain-word questions whose answers decide how the item is taxed. Owner is VARIANT
+	// (answered per variant) or OFFER (the seller's own behaviour, part of "Your listing"). ShowWhen and RequiredWhen are
+	// expression trees evaluated by the form and by catalog with the same rules.
+	TaxFact      bool              `json:"taxFact"`
+	Owner        *string           `json:"owner,omitempty"`
+	Unit         *string           `json:"unit,omitempty"`
+	ShowWhen     json.RawMessage   `json:"showWhen,omitempty"`
+	RequiredWhen json.RawMessage   `json:"requiredWhen,omitempty"`
+	Evidence     bool              `json:"evidence"`
+	OptionLabels map[string]string `json:"optionLabels,omitempty"`
 }
 
 // ProductTypeTraits decide the one-step form's conditional sections.
@@ -491,8 +505,13 @@ type ProductImageInput struct {
 
 // VariantInput is one variant row (the variant matrix, or the single row of a product without variations).
 type VariantInput struct {
-	Options        map[string]string   `json:"options"`
-	SellerSKU      string              `json:"sellerSku"`
+	Options map[string]string `json:"options"`
+	// SellerSKU is optional: empty, catalog generates a stable organisation-prefixed one. ATIN matches an existing
+	// variant on edit when the SKU and barcode are absent.
+	SellerSKU string `json:"sellerSku,omitempty"`
+	ATIN      string `json:"atin,omitempty"`
+	// TaxFacts are the category's product questions answered for this variant, by fact id.
+	TaxFacts       map[string]any      `json:"taxFacts,omitempty"`
 	GTIN           string              `json:"gtin,omitempty"`
 	GTINExempt     bool                `json:"gtinExempt,omitempty"`
 	PriceMinor     int64               `json:"priceMinor"`
@@ -528,6 +547,8 @@ type ListingDetailsInput struct {
 	// type's sizing trait says so. FitNote (RUNS_SMALL, TRUE_TO_SIZE, RUNS_LARGE) shows beside the chart.
 	SizeChartID string `json:"sizeChartId,omitempty"`
 	FitNote     string `json:"fitNote,omitempty"`
+	// SellerBehaviour is "Your listing": how this seller sells the item (sold_heated, heated_by_seller, utensils_provided).
+	SellerBehaviour map[string]any `json:"sellerBehaviour,omitempty"`
 }
 
 // ProductDraft is the one-step product form's submission (POST /v1/seller/products, PUT /v1/seller/products/{id}).
@@ -586,9 +607,7 @@ func (d ProductDraft) validateContent() map[string]string {
 	for _, v := range d.Variants {
 		sku := strings.TrimSpace(v.SellerSKU)
 		switch {
-		case sku == "":
-			errs["variants"] = "Every variation needs a SKU."
-		case skus[sku]:
+		case sku != "" && skus[sku]:
 			errs["variants"] = "SKUs must be unique."
 		case v.PriceMinor <= 0:
 			errs["variants"] = "Every variation needs a price."
@@ -601,7 +620,9 @@ func (d ProductDraft) validateContent() map[string]string {
 		case !v.GTINExempt && v.GTIN == "":
 			errs["variants"] = "Enter a barcode for every variation, or say it has none."
 		}
-		skus[sku] = true
+		if sku != "" {
+			skus[sku] = true
+		}
 	}
 	if l := d.Listing; l != nil {
 		if len([]rune(l.Description)) > 5000 {

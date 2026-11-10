@@ -19,19 +19,32 @@ type ProductVariant struct {
 	CompareAtMinor *int64              `json:"compareAtMinor"`
 	Quantity       int                 `json:"quantity"`
 	Images         []ProductImageInput `json:"images"`
+	// SellerSKUGenerated is true when catalog generated the SKU because it was left empty.
+	SellerSKUGenerated bool             `json:"sellerSkuGenerated"`
+	TaxFacts           map[string]any   `json:"taxFacts"`
+	TaxStatus          string           `json:"taxStatus"`
+	MissingTaxFacts    []MissingTaxFact `json:"missingTaxFacts"`
+}
+
+// MissingTaxFact is a question still to answer before a variant can go live, in plain words.
+type MissingTaxFact struct {
+	FactID  string  `json:"factId"`
+	Label   *string `json:"label,omitempty"`
+	Message string  `json:"message"`
 }
 
 // ListingDetails is a stored listing's description, condition, keywords, fulfilment, package, handling and ship-from.
 type ListingDetails struct {
-	Description  *string            `json:"description"`
-	Condition    string             `json:"condition"`
-	Keywords     []string           `json:"keywords"`
-	Fulfilment   string             `json:"fulfilment"`
-	Packaging    *PackageDimensions `json:"packaging"`
-	HandlingDays int                `json:"handlingDays"`
-	ShipFromID   *string            `json:"shipFromId"`
-	SizeChartID  *string            `json:"sizeChartId"`
-	FitNote      *string            `json:"fitNote"`
+	Description     *string            `json:"description"`
+	Condition       string             `json:"condition"`
+	Keywords        []string           `json:"keywords"`
+	Fulfilment      string             `json:"fulfilment"`
+	Packaging       *PackageDimensions `json:"packaging"`
+	HandlingDays    int                `json:"handlingDays"`
+	ShipFromID      *string            `json:"shipFromId"`
+	SizeChartID     *string            `json:"sizeChartId"`
+	FitNote         *string            `json:"fitNote"`
+	SellerBehaviour map[string]any     `json:"sellerBehaviour"`
 }
 
 // SellerProductDetail is GET /v1/seller/listings/{productId}: everything the one-step form edits.

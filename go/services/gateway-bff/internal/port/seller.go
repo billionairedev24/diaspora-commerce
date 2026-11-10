@@ -2,6 +2,7 @@ package port
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -681,30 +682,35 @@ type SellerServiceClient interface {
 
 // CatalogProductVariant is catalog's Variant.
 type CatalogProductVariant struct {
-	ID             string                     `json:"id"`
-	ATIN           string                     `json:"atin"`
-	SellerSKU      string                     `json:"sellerSku"`
-	GTIN           string                     `json:"gtin"`
-	GTINExempt     bool                       `json:"gtinExempt"`
-	Options        map[string]string          `json:"options"`
-	PriceMinor     int64                      `json:"priceMinor"`
-	CompareAtMinor *int64                     `json:"compareAtMinor"`
-	Currency       string                     `json:"currency"`
-	Quantity       int                        `json:"quantity"`
-	Images         []domain.ProductImageInput `json:"images"`
+	ID                 string                     `json:"id"`
+	ATIN               string                     `json:"atin"`
+	SellerSKU          string                     `json:"sellerSku"`
+	GTIN               string                     `json:"gtin"`
+	GTINExempt         bool                       `json:"gtinExempt"`
+	Options            map[string]string          `json:"options"`
+	PriceMinor         int64                      `json:"priceMinor"`
+	CompareAtMinor     *int64                     `json:"compareAtMinor"`
+	Currency           string                     `json:"currency"`
+	Quantity           int                        `json:"quantity"`
+	Images             []domain.ProductImageInput `json:"images"`
+	SellerSKUGenerated bool                       `json:"sellerSkuGenerated"`
+	TaxFacts           map[string]any             `json:"taxFacts"`
+	TaxStatus          string                     `json:"taxStatus"`
+	MissingTaxFacts    []domain.MissingTaxFact    `json:"missingTaxFacts"`
 }
 
 // CatalogListing is catalog's ListingDetails (S307).
 type CatalogListing struct {
-	Description  string                    `json:"description"`
-	Condition    string                    `json:"condition"`
-	Keywords     []string                  `json:"keywords"`
-	Fulfilment   string                    `json:"fulfilment"`
-	Packaging    *domain.PackageDimensions `json:"packaging"`
-	HandlingDays int                       `json:"handlingDays"`
-	ShipFrom     *CatalogShipFrom          `json:"shipFrom"`
-	SizeChartID  string                    `json:"sizeChartId"`
-	FitNote      string                    `json:"fitNote"`
+	Description     string                    `json:"description"`
+	Condition       string                    `json:"condition"`
+	Keywords        []string                  `json:"keywords"`
+	Fulfilment      string                    `json:"fulfilment"`
+	Packaging       *domain.PackageDimensions `json:"packaging"`
+	HandlingDays    int                       `json:"handlingDays"`
+	ShipFrom        *CatalogShipFrom          `json:"shipFrom"`
+	SizeChartID     string                    `json:"sizeChartId"`
+	FitNote         string                    `json:"fitNote"`
+	SellerBehaviour map[string]any            `json:"sellerBehaviour"`
 }
 
 // CatalogShipFrom is catalog's ShipFrom snapshot of a seller ship-from address.
@@ -755,26 +761,37 @@ type CatalogCategoryNode struct {
 	Level       string `json:"level"`
 	ProductType string `json:"productType"`
 	Path        string `json:"path"`
+	TaxStatus   string `json:"taxStatus"`
+}
+
+// CatalogAttribute is catalog's AttributeDefinition (details and tax questions).
+type CatalogAttribute struct {
+	Key          string            `json:"key"`
+	Label        string            `json:"label"`
+	Options      []string          `json:"options"`
+	Required     bool              `json:"required"`
+	Multiline    bool              `json:"multiline"`
+	Kind         string            `json:"kind"`
+	Units        []string          `json:"units"`
+	Section      string            `json:"section"`
+	Help         string            `json:"help"`
+	Unit         string            `json:"unit"`
+	TaxFact      bool              `json:"taxFact"`
+	Owner        string            `json:"owner"`
+	ShowWhen     json.RawMessage   `json:"showWhen"`
+	RequiredWhen json.RawMessage   `json:"requiredWhen"`
+	Evidence     bool              `json:"evidence"`
+	OptionLabels map[string]string `json:"optionLabels"`
 }
 
 // CatalogProductType is catalog's ProductType.
 type CatalogProductType struct {
-	Code           string `json:"code"`
-	Label          string `json:"label"`
-	IdentifierRule string `json:"identifierRule"`
-	Attributes     []struct {
-		Key       string   `json:"key"`
-		Label     string   `json:"label"`
-		Options   []string `json:"options"`
-		Required  bool     `json:"required"`
-		Multiline bool     `json:"multiline"`
-		Kind      string   `json:"kind"`
-		Units     []string `json:"units"`
-		Section   string   `json:"section"`
-		Help      string   `json:"help"`
-	} `json:"attributes"`
-	Themes []domain.VariationTheme  `json:"themes"`
-	Traits domain.ProductTypeTraits `json:"traits"`
+	Code           string                   `json:"code"`
+	Label          string                   `json:"label"`
+	IdentifierRule string                   `json:"identifierRule"`
+	Attributes     []CatalogAttribute       `json:"attributes"`
+	Themes         []domain.VariationTheme  `json:"themes"`
+	Traits         domain.ProductTypeTraits `json:"traits"`
 }
 
 // CatalogGtinCheck is catalog's GtinCheck.

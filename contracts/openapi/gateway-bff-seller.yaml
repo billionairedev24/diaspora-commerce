@@ -1027,42 +1027,6 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
-  /v1/seller/products/{productId}/tax-readiness:
-    get:
-      tags: [Listings]
-      operationId: productTaxReadiness
-      security: [{sessionCookie: []}]
-      summary: What is still needed before a product can go live (tax questions, per variant, in plain words)
-      description: catalog `GET /v1/products/{id}/tax-readiness`. Nothing is guessed - a variant without a definite tax decision input is not READY.
-      parameters: [{name: productId, in: path, required: true, schema: {type: string}}]
-      responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/ProductTaxReadiness'}}}}
-        '401': {$ref: '#/components/responses/Problem'}
-        '404': {$ref: '#/components/responses/Problem'}
-  /v1/seller/variants/{atin}/tax-evidence:
-    post:
-      tags: [Listings]
-      operationId: uploadVariantTaxEvidence
-      security: [{sessionCookie: []}]
-      summary: Upload the proof for an exemption question (label photo, Drug Facts, Supplement Facts)
-      description: catalog `POST /v1/variants/{atin}/tax-evidence`. PDF, JPEG or PNG up to 10 MB; a new upload of a question is a new version.
-      parameters: [{name: atin, in: path, required: true, schema: {type: string}}]
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema: {type: object, required: [factId, file], properties: {factId: {type: string}, file: {type: string, format: binary}}}
-      responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/VariantTaxEvidence'}}}}
-        '422': {$ref: '#/components/responses/ValidationProblem'}
-    get:
-      tags: [Listings]
-      operationId: listVariantTaxEvidence
-      security: [{sessionCookie: []}]
-      summary: The proof files of a variant
-      parameters: [{name: atin, in: path, required: true, schema: {type: string}}]
-      responses:
-        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/VariantTaxEvidence'}}}}}
   /v1/seller/products:
     post:
       tags: [Listings]

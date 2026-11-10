@@ -963,47 +963,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/seller/products/{productId}/tax-readiness": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * What is still needed before a product can go live (tax questions, per variant, in plain words)
-         * @description catalog `GET /v1/products/{id}/tax-readiness`. Nothing is guessed - a variant without a definite tax decision input is not READY.
-         */
-        get: operations["productTaxReadiness"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/seller/variants/{atin}/tax-evidence": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The proof files of a variant */
-        get: operations["listVariantTaxEvidence"];
-        put?: never;
-        /**
-         * Upload the proof for an exemption question (label photo, Drug Facts, Supplement Facts)
-         * @description catalog `POST /v1/variants/{atin}/tax-evidence`. PDF, JPEG or PNG up to 10 MB; a new upload of a question is a new version.
-         */
-        post: operations["uploadVariantTaxEvidence"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/seller/products": {
         parameters: {
             query?: never;
@@ -7353,83 +7312,6 @@ export interface operations {
             409: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
-        };
-    };
-    productTaxReadiness: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                productId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProductTaxReadiness"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-        };
-    };
-    listVariantTaxEvidence: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                atin: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VariantTaxEvidence"][];
-                };
-            };
-        };
-    };
-    uploadVariantTaxEvidence: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                atin: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": {
-                    factId: string;
-                    /** Format: binary */
-                    file: string;
-                };
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VariantTaxEvidence"];
-                };
-            };
-            422: components["responses"]["ValidationProblem"];
         };
     };
     submitProduct: {
