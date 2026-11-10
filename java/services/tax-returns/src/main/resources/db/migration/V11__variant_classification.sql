@@ -39,7 +39,7 @@ create table variant_classification_audit (
     atin         varchar(40)  not null,
     at           timestamptz  not null,
     actor        varchar(120) not null,
-    action       varchar(20)  not null
+    action       varchar(30)  not null
         check (action in ('FACTS_CHANGED', 'SUBMITTED', 'APPROVED', 'REJECTED', 'RECLASSIFIED', 'MARKED_STALE', 'EVIDENCE_ADDED', 'INFORMATION_REQUESTED')),
     reason       text,
     rule_version varchar(80),

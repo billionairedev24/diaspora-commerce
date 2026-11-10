@@ -183,12 +183,22 @@ class TaxServiceImplTest {
 
         assertThat(q.lines().get(0).decision().outcome().name()).isEqualTo("EXEMPT");
         assertThat(q.lines().get(1).decision().outcome().name()).isEqualTo("TAXABLE");
-        assertThat(q.lines().get(2).decision().status()).as("the behaviour was not said, so nothing is guessed")
+        assertThat(q.lines().get(2).decision().status()).as("another seller's behaviour is never assumed")
                 .isEqualTo(ResolveStatus.MISSING_FACTS);
         assertThat(records.decisions("ATBAKERY01")).as("one stored decision per distinct decided behaviour (the unheated one is the owner's)")
                 .hasSize(2).extracting(d -> d.outcome().name()).containsExactlyInAnyOrder("EXEMPT", "TAXABLE");
         assertThat(records.decisions("ATBAKERY01").stream().filter(d -> d.outcome().name().equals("EXEMPT")).findFirst()
                 .orElseThrow().sellerOrgIds()).containsExactly("org_a");
+    }
+
+    @Test
+    void theOwnersLineWithoutBehaviourUsesTheListingBehaviourCatalogReported() {
+        approved("ATBAKERY02", "bakery-products", Map.of(), Map.of("sold_heated", true, "heated_by_seller", true,
+                "utensils_provided", false));
+
+        TaxQuote q = quote(new TaxQuoteCommand.Line("1", "ATBAKERY02", "org_a", null, null, 1, 1_000, 0, 0));
+
+        assertThat(q.lines().getFirst().decision().outcome().name()).isEqualTo("TAXABLE");
     }
 
     @Test

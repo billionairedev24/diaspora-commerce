@@ -137,6 +137,22 @@ abstract class CategoryTaxEngineScenarios {
         assertThat(quote(atin).lines().getFirst().decision().isBlocked()).isTrue();
     }
 
+    @Test
+    void aRequestForInformationIsStoredOnTheRecordAndShownWithTheOrdersAffected() {
+        String atin = "ATRQ" + Long.toString(System.nanoTime() % 100_000_000L);
+        variants.onCatalogFactsChanged(new CatalogFactsChanged(UUID.randomUUID(), "org_a", "rice-grains", "rice-grains",
+                Map.of(), List.of(new Variant(atin, null, Map.of(), false)), "seller_1", Instant.now()));
+
+        var view = variants.requestInformation(atin, "Please upload a photo of the label.");
+
+        assertThat(view.record().informationRequest().message()).isEqualTo("Please upload a photo of the label.");
+        var again = variants.get(atin);
+        assertThat(again.record().informationRequest().requestedBy()).isEqualTo("STAFF:staff_1");
+        assertThat(again.ordersAffected()).isZero();
+        assertThat(again.audit()).extracting(AuditEntry::action).contains(AuditAction.INFORMATION_REQUESTED);
+        assertThat(profiles.get("rice-grains").history()).isNotNull();
+    }
+
     private TaxQuote quote(String atin) {
         return tax.quote(new TaxQuoteCommand("USD", new TaxAddress("US", "TX", "77002", "Houston"), List.of(
                 new TaxQuoteCommand.Line("1", atin, "org_a", null, null, 1, 10_000, 0, 0))));

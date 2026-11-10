@@ -74,9 +74,10 @@ class LineDecisionServiceImpl implements LineDecisionService {
                 out.put(r.key(), early);
                 continue;
             }
+            Map<String, Object> behaviour = behaviourOf(r, rec);
             Resolution res;
             try {
-                res = engine.resolveRecord(rec, r.sellerBehaviour(), saleDate);
+                res = engine.resolveRecord(rec, behaviour, saleDate);
             } catch (NotFoundException ex) {
                 out.put(r.key(), blocked(ResolveStatus.BLOCKED, rules, rec.categoryCode(),
                         "No tax profile for category " + rec.categoryCode()));
@@ -103,12 +104,21 @@ class LineDecisionServiceImpl implements LineDecisionService {
             telemetry.quoteLine("RESOLVED", res.outcome().name());
             out.put(r.key(), d);
             try {
-                listingDecisions.save(rec, r.sellerBehaviour(), r.sellerOrgId(), res, "SYSTEM:quote", now);
+                listingDecisions.save(rec, behaviourOf(r, rec), r.sellerOrgId(), res, "SYSTEM:quote", now);
             } catch (DataAccessException ex) {
                 LOG.warn("Could not store the decision of {}: {}", r.atin(), ex.getMessage());
             }
         }
         return out;
+    }
+
+    /**
+     * The behaviour the line is decided under: what the caller sent; when it sent none, the owner's listing behaviour that
+     * catalog reported, but only for the owner's own line (another seller's behaviour is never assumed).
+     */
+    private static Map<String, Object> behaviourOf(Request r, VariantClassification rec) {
+        boolean owner = r.sellerOrgId() != null && r.sellerOrgId().equals(rec.ownerOrgId());
+        return r.sellerBehaviour().isEmpty() && owner ? rec.sellerBehaviour() : r.sellerBehaviour();
     }
 
     /** A blocked decision when the record cannot be charged at all (no ATIN, no record, not approved), else null. */
