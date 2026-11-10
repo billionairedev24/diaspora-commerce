@@ -107,7 +107,7 @@ class EventListenersIT extends OffersIntegrationTest {
         String large = atin();
         String payload = """
                 {"productId":"%s","atin":"%s","ownerKind":"SELLER","ownerOrgId":"%s","status":"LIVE",
-                 "title":"Suya Pepper","categoryId":null,"productTypeCode":"grocery","condition":"NEW",
+                 "title":"Suya Pepper","categoryId":null,"productTypeCode":"spices-seasonings","condition":"NEW",
                  "fulfilment":"SELLER","handlingDays":4,
                  "shipFrom":{"locationId":"loc-1","label":"Houston","city":"Houston","region":"TX","country":"US","postalCode":"77002"},
                  "variants":[{"atin":"%s","sellerSku":"SUYA-8","gtin":null,"priceMinor":899,"currency":"USD","quantity":40,

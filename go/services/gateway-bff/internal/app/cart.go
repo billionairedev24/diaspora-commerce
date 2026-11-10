@@ -428,10 +428,14 @@ type lineInfo struct {
 	perishable                              bool
 }
 
-// perishableProduct mirrors orders' rule (HttpProductFactsClient): product type "perishable" or attribute
-// perishable=true. Perishable packages need a handover code with AfroTransact Delivery and pickup.
+// perishableProductTypes are the product types of the category tax tree that catalog marks perishable (dairy and eggs, fresh
+// produce, frozen meals, meat, poultry and fish). It mirrors orders' at.orders.perishable-types (a test compares the two).
+var perishableProductTypes = map[string]bool{"dairy-eggs": true, "fresh-produce": true, "frozen-meals": true, "meat-poultry-fish": true}
+
+// perishableProduct mirrors orders' rule (HttpProductFactsClient): a perishable product type or attribute perishable=true.
+// Perishable packages need a handover code with AfroTransact Delivery and pickup.
 func perishableProduct(p port.CatalogProduct) bool {
-	return strings.EqualFold(p.ProductType, "perishable") || strings.EqualFold(p.Attributes["perishable"], "true")
+	return perishableProductTypes[strings.ToLower(p.ProductType)] || strings.EqualFold(p.Attributes["perishable"], "true")
 }
 
 // enrich adds department and unit (catalog, cached) to cart lines; failures leave them blank.
