@@ -20,7 +20,7 @@ CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/c
 
 .PHONY: help ovh-gh-setup deploy-guide deploy-guide-test upup-infra down logs ps reset apps-up apps-down mobile docs-up secrets-check stripe-setup \
         java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links repair-orgs reindex-search \
-        taxonomy-check helm-lint gitops-render rules dashboards observability-check \
+        taxonomy-check category-tax-verify helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers perf-k6 perf-k6-smoke perf-ab perf-hey perf-wrk \
         web-dev web-build backlog seed seed-test mobile-lan lan-env mobile-adb-reverse mobile-android-device \
         mobile-ios-device mobile-apk mobile-brand mobile-hero
@@ -262,6 +262,15 @@ web-build: ## Build the web apps (pnpm -C web build); skipped if web/ or pnpm is
 
 backlog: ## List backlog stories and their status
 	python3 tools/backlog/mark.py --list
+
+CATALOG_IT ?= 1
+category-tax-verify: ## End-to-end category tax matrix (74 categories, 105 rows: gate, resolve, Texas quote, order snapshot); writes docs/engineering/category-tax-verification.md. CATALOG_IT=0 skips catalog's Docker IT
+	$(MAKE) taxonomy-check
+	cd java && ./mvnw -B -pl services/tax-returns test -Dtest='DecisionCasesTest,CategoryTaxMatrixTest' -Dsurefire.failIfNoSpecifiedTests=false
+	cd java && ./mvnw -B -pl services/orders test -Dtest=CategoryTaxMatrixTest -Dsurefire.failIfNoSpecifiedTests=false
+	cd java && ./mvnw -B -pl services/catalog test -Dtest=LocalDatasetTaxResolverGoldenTest -Dsurefire.failIfNoSpecifiedTests=false
+	@if [ "$(CATALOG_IT)" = "1" ]; then cd java && ./mvnw -B -pl services/catalog verify -Dit.test=CategoryTaxMatrixIT -Dtest=LocalDatasetTaxResolverGoldenTest -Dsurefire.failIfNoSpecifiedTests=false; else echo "CATALOG_IT=0: using the catalog matrix result of an earlier run"; fi
+	python3 tools/taxonomy/verification_report.py
 
 taxonomy-check: ## Category tax map: regenerate-check, validate (13/73/105) and run the reference evaluator tests; the catalog's schema resource
 	python3 tools/seed/catalog_taxonomy.py --check

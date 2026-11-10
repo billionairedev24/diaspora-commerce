@@ -124,6 +124,19 @@
     </dependencies>
 
     <build>
+        <!-- The golden scenarios are read straight from the repository (tools/taxonomy) by the category tax matrix. -->
+        <testResources>
+            <testResource>
+                <directory>src/test/resources</directory>
+            </testResource>
+            <testResource>
+                <directory>${project.basedir}/../../../tools/taxonomy</directory>
+                <targetPath>taxonomy</targetPath>
+                <includes>
+                    <include>scenarios.json</include>
+                </includes>
+            </testResource>
+        </testResources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
