@@ -1117,6 +1117,36 @@ paths:
                 $ref: '#/components/schemas/VariantClassification'
         '422':
           description: tax.classification-not-resolvable
+  /v1/tax/variant-classifications/{atin}/request-information:
+    post:
+      tags:
+      - Tax classification
+      summary: Ask the seller for more information before a decision (tax:classify-admin)
+      description: The message is stored on the record (informationRequest), audited as INFORMATION_REQUESTED and published in tax.classification.changed (reason = the message) so catalog and notifications can show or send it. It is cleared when the seller's facts change.
+      operationId: requestVariantInformation
+      parameters:
+      - {name: atin, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: {type: string, minLength: 10, maxLength: 1000}
+                reason: {type: string}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VariantClassification'
+        '404':
+          description: tax.classification-not-found
+        '422':
+          description: tax.invalid-information-request
   /v1/tax/variant-classifications/{atin}/reclassify:
     post:
       tags:
@@ -2285,6 +2315,7 @@ components:
         name: {type: string}
         department: {type: string, description: Department code}
         departmentName: {type: string}
+        stripeCodes: {type: array, items: {type: string}, description: Stripe codes the category uses (also in the list, not only the detail)}
         status: {$ref: '#/components/schemas/ProfileStatus'}
         defaultOutcome: {type: string, enum: [EXEMPT, TAXABLE, BLOCKED, CONDITIONAL]}
         scenarioCount: {type: integer}
@@ -2316,6 +2347,21 @@ components:
           changedBy: {type: string}
           changedAt: {type: string, format: date-time}
           note: {type: string}
+          history:
+            type: array
+            description: Status changes of the profile, newest first (detail only)
+            items:
+              type: object
+              properties:
+                at: {type: string, format: date-time}
+                actor: {type: string}
+                kind: {type: string}
+                reason: {type: string}
+                approvedBy: {type: string}
+                decisionRef: {type: string}
+                ruleVersion: {type: string}
+                before: {type: object, additionalProperties: {}}
+                after: {type: object, additionalProperties: {}}
     TaxProfileStatusChange:
       type: object
       required: [status, reason]
@@ -2335,6 +2381,7 @@ components:
         verified: {type: boolean, description: A person confirmed the provider treats this code as this outcome}
         active: {type: boolean, description: The mapping may be used for a quote}
         verifiedNote: {type: string}
+        note: {type: string, description: Same as verifiedNote (why the entry was set or verified)}
         mapVersion: {type: integer}
         changedBy: {type: string}
         changedAt: {type: string, format: date-time}
@@ -2358,6 +2405,14 @@ components:
         status: {$ref: '#/components/schemas/ClassificationRecordStatus'}
         facts: {type: object, additionalProperties: {}}
         staffFacts: {type: object, additionalProperties: {}, description: Facts set by tax review (owner STAFF)}
+        ordersAffected: {type: integer, format: int64, description: Orders placed with this variant (detail only)}
+        informationRequest:
+          type: [object, 'null']
+          description: What tax review asked the seller to provide; cleared when the seller's facts change
+          properties:
+            message: {type: string}
+            requestedBy: {type: string}
+            requestedAt: {type: string, format: date-time}
         ownerOrgId: {type: string}
         evidence:
           type: array
@@ -2392,7 +2447,7 @@ components:
             properties:
               at: {type: string, format: date-time}
               actor: {type: string}
-              action: {type: string, enum: [FACTS_CHANGED, SUBMITTED, APPROVED, REJECTED, RECLASSIFIED, MARKED_STALE, EVIDENCE_ADDED]}
+              action: {type: string, enum: [FACTS_CHANGED, SUBMITTED, APPROVED, REJECTED, RECLASSIFIED, MARKED_STALE, EVIDENCE_ADDED, INFORMATION_REQUESTED]}
               reason: {type: string}
               ruleVersion: {type: string}
               before: {type: object, additionalProperties: {}}
@@ -2432,6 +2487,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ShadowGroup'
+        thresholds:
+          type: object
+          description: '"Ready to cut over?" thresholds (placeholders to agree with the tax adviser): minDays, minLines, minLinesPerCode, maxOutcomeDisagreementPct, maxProviderErrorPct'
+          additionalProperties: {type: number}
         byCategory: {type: array, items: {$ref: '#/components/schemas/ShadowGroup'}}
         byOutcome: {type: array, items: {$ref: '#/components/schemas/ShadowGroup'}, description: 'Per in-house outcome (EXEMPT, TAXABLE or NONE)'}
         byState: {type: array, items: {$ref: '#/components/schemas/ShadowGroup'}}
@@ -2459,6 +2518,7 @@ components:
         orderRef: {type: string, description: The order or cart id the quote carried}
         categoryCode: {type: string}
         state: {type: string}
+        shipToState: {type: string, description: Same as state}
         orderId: {type: string, format: uuid}
         lineId: {type: string}
         atin: {type: string}

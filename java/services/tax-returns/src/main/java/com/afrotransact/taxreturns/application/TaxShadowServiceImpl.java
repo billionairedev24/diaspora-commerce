@@ -164,7 +164,8 @@ class TaxShadowServiceImpl implements TaxShadowService, AutoCloseable {
                 repository.groups(ShadowQuoteRepository.Dimension.OUTCOME, start, end, provider),
                 repository.groups(ShadowQuoteRepository.Dimension.STATE, start, end, provider),
                 repository.groups(ShadowQuoteRepository.Dimension.KIND, start, end, provider),
-                repository.rows(start, end, provider, onlyDifferences, page, size), page, size);
+                repository.rows(start, end, provider, onlyDifferences, page, size), page, size,
+                props.tax().shadow().thresholds().asMap());
     }
 
     @Override

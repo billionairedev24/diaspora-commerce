@@ -50,7 +50,7 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
             stripe = stripe == null ? new StripeTax(null, null, null) : stripe;
             avalara = avalara == null ? new AvalaraTax(null, null, null, null, null) : avalara;
             classification = classification == null ? new Classification(null, null, false, null) : classification;
-            shadow = shadow == null ? new Shadow(null, null, false) : shadow;
+            shadow = shadow == null ? new Shadow(null, null, false, null) : shadow;
         }
     }
 
@@ -103,11 +103,34 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
      * @param cartQuotes also compare quotes that carry no order reference (cart estimates); off by default so the
      *                   report reflects real orders
      */
-    public record Shadow(Duration timeout, Integer maxPending, boolean cartQuotes) {
+    public record Shadow(Duration timeout, Integer maxPending, boolean cartQuotes, Thresholds thresholds) {
 
         public Shadow {
             timeout = timeout == null ? Duration.ofSeconds(4) : timeout;
             maxPending = maxPending == null ? 50 : maxPending;
+            thresholds = thresholds == null ? new Thresholds(null, null, null, null, null) : thresholds;
+        }
+    }
+
+    /**
+     * "Ready to cut over?" thresholds reported with the shadow report (placeholders to agree with the tax adviser, see
+     * the cutover runbook step 2). Percentages are 0 to 100.
+     */
+    public record Thresholds(Integer minDays, Integer minLines, Integer minLinesPerCode,
+                             Double maxOutcomeDisagreementPct, Double maxProviderErrorPct) {
+
+        public Thresholds {
+            minDays = minDays == null ? 30 : minDays;
+            minLines = minLines == null ? 200 : minLines;
+            minLinesPerCode = minLinesPerCode == null ? 5 : minLinesPerCode;
+            maxOutcomeDisagreementPct = maxOutcomeDisagreementPct == null ? 0.0 : maxOutcomeDisagreementPct;
+            maxProviderErrorPct = maxProviderErrorPct == null ? 1.0 : maxProviderErrorPct;
+        }
+
+        public Map<String, Double> asMap() {
+            return Map.of("minDays", minDays.doubleValue(), "minLines", minLines.doubleValue(), "minLinesPerCode",
+                    minLinesPerCode.doubleValue(), "maxOutcomeDisagreementPct", maxOutcomeDisagreementPct,
+                    "maxProviderErrorPct", maxProviderErrorPct);
         }
     }
 

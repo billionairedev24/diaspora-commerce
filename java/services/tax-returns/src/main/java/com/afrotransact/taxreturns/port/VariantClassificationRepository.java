@@ -39,6 +39,9 @@ public interface VariantClassificationRepository {
 
     void saveDecision(ListingDecision decision);
 
+    /** Orders (placed here) that contain the variant: what a reclassification would not touch but reviewers want to see. */
+    long ordersAffected(String atin);
+
     /**
      * @param status       review state
      * @param categoryCode category

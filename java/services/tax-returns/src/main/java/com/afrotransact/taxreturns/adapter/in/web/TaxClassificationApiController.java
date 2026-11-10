@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ApproveRequest;
+import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.InformationRequestBody;
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ProfileDetail;
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ProfileSummary;
 import com.afrotransact.taxreturns.adapter.in.web.TaxClassificationDtos.ProviderCodeEntry;
@@ -134,6 +135,14 @@ class TaxClassificationApiController {
     VariantDto approve(@PathVariable String atin, @RequestBody(required = false) ApproveRequest body) {
         ApproveRequest b = body == null ? new ApproveRequest(null, null, null, null) : body;
         return VariantDto.of(variants.approve(atin, b.toCommand()));
+    }
+
+    @Operation(summary = "Ask the seller for more information before a decision (tax:classify-admin)",
+            description = "The message is stored on the record, audited (INFORMATION_REQUESTED) and published in "
+                    + "tax.classification.changed; it is cleared when the seller's facts change.")
+    @PostMapping("/v1/tax/variant-classifications/{atin}/request-information")
+    VariantDto requestInformation(@PathVariable String atin, @Valid @RequestBody InformationRequestBody body) {
+        return VariantDto.of(variants.requestInformation(atin, body.message()));
     }
 
     @Operation(summary = "Move a variant to another category or product type, with a reason (tax:classify-admin)",

@@ -23,6 +23,9 @@ create table variant_classification (
     reviewed_by             varchar(120),
     reviewed_at             timestamptz,
     decision_ref            varchar(160),
+    info_request            text,
+    info_requested_by       varchar(120),
+    info_requested_at       timestamptz,
     version                 bigint       not null default 0,
     created_at              timestamptz  not null default now(),
     updated_at              timestamptz  not null default now()
@@ -37,7 +40,7 @@ create table variant_classification_audit (
     at           timestamptz  not null,
     actor        varchar(120) not null,
     action       varchar(20)  not null
-        check (action in ('FACTS_CHANGED', 'SUBMITTED', 'APPROVED', 'REJECTED', 'RECLASSIFIED', 'MARKED_STALE', 'EVIDENCE_ADDED')),
+        check (action in ('FACTS_CHANGED', 'SUBMITTED', 'APPROVED', 'REJECTED', 'RECLASSIFIED', 'MARKED_STALE', 'EVIDENCE_ADDED', 'INFORMATION_REQUESTED')),
     reason       text,
     rule_version varchar(80),
     before_state jsonb,

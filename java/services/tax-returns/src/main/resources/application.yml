@@ -104,6 +104,13 @@ at:
         max-pending: 50
         # Also compare cart estimates (quotes without an order id). Off: the report reflects real orders.
         cart-quotes: false
+        # Reported with the shadow report as "ready to cut over?" thresholds (placeholders to agree with the tax adviser).
+        thresholds:
+          min-days: 30
+          min-lines: 200
+          min-lines-per-code: 5
+          max-outcome-disagreement-pct: 0
+          max-provider-error-pct: 1
       stripe:
         secret-key: ${STRIPE_SECRET_KEY:}
         # shipping-tax-code: txcd_92010001   # verify against Stripe's product tax code list

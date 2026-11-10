@@ -33,7 +33,13 @@ public interface TaxProfileService {
     /**
      * @param profile the profile
      * @param stamp   who changed its status last (null when never changed since the seed)
+     * @param history status changes of the profile, newest first (only in the detail view)
      */
-    record ProfileView(TaxProfile profile, TaxProfileRepository.Stamp stamp, String ruleVersion) {
+    record ProfileView(TaxProfile profile, TaxProfileRepository.Stamp stamp, String ruleVersion,
+                       List<TaxProfileRepository.AuditRow> history) {
+
+        public ProfileView(TaxProfile profile, TaxProfileRepository.Stamp stamp, String ruleVersion) {
+            this(profile, stamp, ruleVersion, List.of());
+        }
     }
 }

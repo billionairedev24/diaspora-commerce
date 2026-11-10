@@ -28,6 +28,7 @@ import com.afrotransact.taxreturns.domain.profile.VariantClassification;
 import com.afrotransact.taxreturns.domain.shadow.ShadowRow;
 import com.afrotransact.taxreturns.domain.tax.TaxProviderId;
 import com.afrotransact.taxreturns.port.ShadowQuoteRepository;
+import com.afrotransact.taxreturns.port.TaxProfileRepository;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -115,14 +116,25 @@ final class TaxClassificationDtos {
 
     @Schema(name = "TaxProfileSummary")
     record ProfileSummary(String categoryCode, String name, String department, String departmentName, String status,
-                          String defaultOutcome, int scenarioCount, Integer openDecision, String ruleVersion) {
+                          String defaultOutcome, int scenarioCount, Integer openDecision, String ruleVersion,
+                          List<String> stripeCodes) {
 
         static ProfileSummary of(TaxProfileService.ProfileView v) {
             TaxProfile p = v.profile();
             return new ProfileSummary(p.categoryCode(), p.name(), p.departmentCode(), p.departmentName(),
                     p.status().name(), p.defaultOutcome(), p.rows().size(),
                     p.status() == ProfileStatus.ACTIVE || p.openDecision() == 0 ? null : p.openDecision(),
-                    v.ruleVersion());
+                    v.ruleVersion(), p.stripeCodes());
+        }
+    }
+
+    @Schema(name = "TaxProfileHistoryEntry")
+    record HistoryDto(Instant at, String actor, String kind, String reason, String approvedBy, String decisionRef,
+                      String ruleVersion, Map<String, Object> before, Map<String, Object> after) {
+
+        static HistoryDto of(TaxProfileRepository.AuditRow r) {
+            return new HistoryDto(r.at(), r.actor(), r.kind(), r.reason(), r.approvedBy(), r.decisionRef(), r.ruleVersion(),
+                    r.before(), r.after());
         }
     }
 
@@ -131,7 +143,7 @@ final class TaxClassificationDtos {
                          String defaultOutcome, int scenarioCount, Integer openDecision, String ruleVersion,
                          List<String> stripeCodes, List<String> conflictingCodes, List<StatusReasonDto> statusReasons,
                          List<String> factGroups, List<ProfileFactDto> facts, List<DecisionRowDto> decisionTable,
-                         String changedBy, Instant changedAt, String note) {
+                         String changedBy, Instant changedAt, String note, List<HistoryDto> history) {
 
         static ProfileDetail of(TaxProfileService.ProfileView v) {
             TaxProfile p = v.profile();
@@ -141,7 +153,8 @@ final class TaxClassificationDtos {
                     p.conflictingCodes(), p.statusReasons().stream().map(StatusReasonDto::of).toList(), p.factGroups(),
                     p.facts().stream().map(ProfileFactDto::of).toList(),
                     p.rows().stream().map(DecisionRowDto::of).toList(), v.stamp() == null ? null : v.stamp().by(),
-                    v.stamp() == null ? null : v.stamp().at(), p.note());
+                    v.stamp() == null ? null : v.stamp().at(), p.note(),
+                    v.history().stream().map(HistoryDto::of).toList());
         }
     }
 
@@ -153,12 +166,12 @@ final class TaxClassificationDtos {
     @Schema(name = "ProviderCodeMapEntry")
     record ProviderCodeEntry(String internalTaxCode, String categoryCode, String outcome, String provider,
                              String providerCode, boolean verified, int mapVersion, String changedBy, Instant changedAt,
-                             boolean active, String verifiedNote) {
+                             boolean active, String verifiedNote, String note) {
 
         static ProviderCodeEntry of(ProviderCode c) {
             return new ProviderCodeEntry(c.internalTaxCode(), c.categoryCode(), c.outcome().name(), c.provider().name(),
                     c.providerCode(), c.verified(), c.mapVersion(), c.changedBy(), c.changedAt(), c.active(),
-                    c.verifiedNote());
+                    c.verifiedNote(), c.verifiedNote());
         }
     }
 
@@ -189,19 +202,34 @@ final class TaxClassificationDtos {
     record SellerDecisionDto(String sellerOrgId, Map<String, Object> sellerBehaviour, ResolveResponse resolution) {
     }
 
+    @Schema(name = "ClassificationInformationRequest")
+    record InfoRequestDto(String message, String requestedBy, Instant requestedAt) {
+
+        static InfoRequestDto of(VariantClassification v) {
+            return v.informationRequest() == null ? null : new InfoRequestDto(v.informationRequest().message(),
+                    v.informationRequest().requestedBy(), v.informationRequest().requestedAt());
+        }
+    }
+
+    @Schema(name = "ClassificationInformationRequestBody")
+    record InformationRequestBody(@NotBlank @Size(min = 10, max = 1000) String message, String reason) {
+    }
+
     @Schema(name = "VariantClassification")
     record VariantDto(String atin, String gtin, UUID productId, String title, String categoryCode, String productTypeCode,
                       String status, Map<String, Object> facts, Map<String, Object> staffFacts,
                       List<EvidenceDto> evidence, Map<String, String> refinedProviderCodes, ResolveResponse resolution,
                       List<SellerDecisionDto> decisions, String ownerOrgId, String classifiedBy, Instant classifiedAt,
-                      String reviewedBy, Instant reviewedAt, String ruleVersion, List<AuditDto> audit) {
+                      String reviewedBy, Instant reviewedAt, String ruleVersion, List<AuditDto> audit,
+                      InfoRequestDto informationRequest, Long ordersAffected) {
 
         /** A list item: the record without its audit, evidence and stored decisions. */
         static VariantDto light(VariantClassification v) {
             return new VariantDto(v.atin(), v.gtin(), v.productId(), v.title(), v.categoryCode(), v.productTypeCode(),
                     v.status().name(), v.facts(), v.staffFacts(), null, v.refinedProviderCodes(),
                     v.resolution() == null ? null : ResolveResponse.of(v.resolution()), null, v.ownerOrgId(),
-                    v.classifiedBy(), v.classifiedAt(), v.reviewedBy(), v.reviewedAt(), v.ruleVersion(), null);
+                    v.classifiedBy(), v.classifiedAt(), v.reviewedBy(), v.reviewedAt(), v.ruleVersion(), null,
+                    InfoRequestDto.of(v), null);
         }
 
         static VariantDto of(VariantClassificationService.ClassificationView view) {
@@ -218,7 +246,8 @@ final class TaxClassificationDtos {
                     v.status().name(), v.facts(), v.staffFacts(), view.evidence().stream().map(EvidenceDto::of).toList(),
                     v.refinedProviderCodes(), view.resolution() == null ? null : ResolveResponse.of(view.resolution()),
                     decisions, v.ownerOrgId(), v.classifiedBy(), v.classifiedAt(), v.reviewedBy(), v.reviewedAt(),
-                    v.ruleVersion(), view.audit().stream().map(AuditDto::of).toList());
+                    v.ruleVersion(), view.audit().stream().map(AuditDto::of).toList(), InfoRequestDto.of(v),
+                    view.ordersAffected());
         }
     }
 
@@ -251,12 +280,13 @@ final class TaxClassificationDtos {
 
     @Schema(name = "ShadowDifference")
     record ShadowDifference(UUID orderId, String orderRef, String lineId, String atin, String categoryCode, String state,
+                            String shipToState,
                             String internalTaxCode, String providerCode, String kind, ShadowSide inHouse,
                             ShadowSide provider, long differenceMinor, Instant quotedAt) {
 
         static ShadowDifference of(ShadowRow r) {
             return new ShadowDifference(uuid(r.orderRef()), r.orderRef(), r.lineId(), r.atin(), r.categoryCode(),
-                    r.state(), r.internalTaxCode(), r.providerCode(), r.kind().name(),
+                    r.state(), r.state(), r.internalTaxCode(), r.providerCode(), r.kind().name(),
                     new ShadowSide(r.inHouseOutcome() == null ? null : r.inHouseOutcome().name(), r.inHouseRate(),
                             r.inHouseTaxMinor(), null),
                     new ShadowSide(r.providerOutcome() == null ? null : r.providerOutcome().name(), r.providerRate(),
@@ -290,7 +320,7 @@ final class TaxClassificationDtos {
                            long absoluteDifferenceMinor, long netDifferenceMinor,
                            List<GroupDto> byInternalTaxCode, List<GroupDto> byCategory, List<GroupDto> byOutcome,
                            List<GroupDto> byState, List<GroupDto> byKind, List<ShadowDifference> differences, int page,
-                           int size) {
+                           int size, Map<String, Double> thresholds) {
 
         static ShadowReportDto of(TaxShadowService.Report r) {
             return new ShadowReportDto(r.from(), r.to(), r.provider(), r.totals().compared(), r.totals().differing(),
@@ -300,7 +330,7 @@ final class TaxClassificationDtos {
                     r.byOutcome().stream().map(g -> GroupDto.of(g, false)).toList(),
                     r.byState().stream().map(g -> GroupDto.of(g, false)).toList(),
                     r.byKind().stream().map(g -> GroupDto.of(g, false)).toList(),
-                    r.differences().stream().map(ShadowDifference::of).toList(), r.page(), r.size());
+                    r.differences().stream().map(ShadowDifference::of).toList(), r.page(), r.size(), r.thresholds());
         }
     }
 }

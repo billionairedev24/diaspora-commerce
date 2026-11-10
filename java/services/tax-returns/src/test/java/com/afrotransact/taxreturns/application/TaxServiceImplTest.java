@@ -83,7 +83,7 @@ class TaxServiceImplTest {
     private static TaxReturnsProperties props(boolean requireVerified, boolean cartShadow) {
         return new TaxReturnsProperties(new TaxReturnsProperties.Tax(null, null, null,
                 new TaxReturnsProperties.Classification(null, ApprovalPolicy.ALL, requireVerified, null),
-                new TaxReturnsProperties.Shadow(null, null, cartShadow)), null, null, null, null);
+                new TaxReturnsProperties.Shadow(null, null, cartShadow, null)), null, null, null, null);
     }
 
     private TaxService build(TaxReturnsProperties props) {

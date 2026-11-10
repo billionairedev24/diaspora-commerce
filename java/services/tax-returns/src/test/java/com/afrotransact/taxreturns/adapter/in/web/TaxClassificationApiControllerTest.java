@@ -137,7 +137,7 @@ class TaxClassificationApiControllerTest {
                         List.of(new ShadowRow(Instant.parse("2026-11-09T10:00:00Z"), "6f1f5c0e-1111-4222-8333-444455556666",
                                 "1", "AT1", TaxProviderId.STRIPE, "TX", "nuts-seeds", "AT.X.Y", "txcd_1",
                                 ShadowKind.OUTCOME, Outcome.EXEMPT, null, 0L, Outcome.TAXABLE, BigDecimal.ONE,
-                                625L, null, 625, "USD")), 0, 50));
+                                625L, null, 625, "USD")), 0, 50, Map.of("minDays", 30.0)));
 
         mvc.perform(get("/v1/tax/shadow/report?from=2026-11-01&to=2026-11-30&provider=STRIPE")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.linesCompared", is(10))).andExpect(jsonPath("$.linesDiffering", is(2)))

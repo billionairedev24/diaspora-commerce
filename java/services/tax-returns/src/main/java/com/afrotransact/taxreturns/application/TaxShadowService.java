@@ -2,6 +2,7 @@ package com.afrotransact.taxreturns.application;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import com.afrotransact.taxreturns.domain.shadow.ShadowRow;
 import com.afrotransact.taxreturns.domain.tax.LineDecision;
@@ -58,6 +59,7 @@ public interface TaxShadowService {
     record Report(LocalDate from, LocalDate to, TaxProviderId provider, ShadowQuoteRepository.Totals totals,
                   List<ShadowQuoteRepository.Group> byCode, List<ShadowQuoteRepository.Group> byCategory,
                   List<ShadowQuoteRepository.Group> byOutcome, List<ShadowQuoteRepository.Group> byState,
-                  List<ShadowQuoteRepository.Group> byKind, List<ShadowRow> differences, int page, int size) {
+                  List<ShadowQuoteRepository.Group> byKind, List<ShadowRow> differences, int page, int size,
+                  Map<String, Double> thresholds) {
     }
 }

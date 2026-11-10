@@ -42,6 +42,13 @@ public interface VariantClassificationService {
     ClassificationView reclassify(String atin, ReclassifyCommand command);
 
     /**
+     * Asks the seller for more information before a decision (tax:classify-admin): the message (10 to 1000 characters) is
+     * stored on the record with an audit row and published in tax.classification.changed (reason = the message) so catalog
+     * and notifications can show or send it; it is cleared when the seller's facts change.
+     */
+    ClassificationView requestInformation(String atin, String message);
+
+    /**
      * @param productId       catalog product
      * @param ownerOrgId      the product's owner organisation
      * @param categoryCode    tax profile (category) code
@@ -103,8 +110,10 @@ public interface VariantClassificationService {
      * @param evidence   evidence references
      * @param audit      the audit trail, oldest first
      * @param decisions  stored decision per seller behaviour
+     * @param ordersAffected orders placed here that contain the variant
+     * @param ordersAffected orders placed with this variant
      */
     record ClassificationView(VariantClassification record, Resolution resolution, List<Evidence> evidence,
-                              List<AuditEntry> audit, List<ListingDecision> decisions) {
+                              List<AuditEntry> audit, List<ListingDecision> decisions, long ordersAffected) {
     }
 }

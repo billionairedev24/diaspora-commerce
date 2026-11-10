@@ -13,6 +13,7 @@ import com.afrotransact.taxreturns.config.TaxReturnsProperties;
 import com.afrotransact.taxreturns.domain.profile.AuditAction;
 import com.afrotransact.taxreturns.domain.profile.AuditEntry;
 import com.afrotransact.taxreturns.domain.profile.FactOwner;
+import com.afrotransact.taxreturns.domain.profile.InformationRequest;
 import com.afrotransact.taxreturns.domain.profile.MissingFact;
 import com.afrotransact.taxreturns.domain.profile.ProfileFact;
 import com.afrotransact.taxreturns.domain.profile.RecordStatus;
@@ -35,6 +36,8 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
     private static final String SYSTEM = "SYSTEM:catalog";
     private static final String AUTO = "SYSTEM:auto-approval";
     private static final int MIN_REASON = 3;
+    private static final int MIN_MESSAGE = 10;
+    private static final int MAX_MESSAGE = 1000;
     private static final Pattern STRIPE_CODE = Pattern.compile("txcd_\\d{8}");
 
     private final VariantClassificationRepository records;
@@ -222,6 +225,28 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
         return view(saved);
     }
 
+    @Override
+    @Transactional
+    public ClassificationView requestInformation(String atin, String message) {
+        Actor actor = access.staffAny(TaxReturnsPermissions.TAX_CLASSIFY_ADMIN, TaxReturnsPermissions.TAX_CONFIGURE);
+        String text = message == null ? "" : message.trim();
+        if (text.length() < MIN_MESSAGE || text.length() > MAX_MESSAGE) {
+            throw new ReturnRuleViolation("tax.invalid-information-request", "Say what the seller should provide ("
+                    + MIN_MESSAGE + " to " + MAX_MESSAGE + " characters)", Map.of("message", "Between " + MIN_MESSAGE
+                    + " and " + MAX_MESSAGE + " characters"));
+        }
+        VariantClassification rec = load(atin);
+        Instant now = clock.instant();
+        String by = Access.describe(actor);
+        VariantClassification saved = records.update(rec.withInformationRequest(
+                new InformationRequest(text, by, now), now));
+        String rules = engine.snapshot().ruleVersion();
+        records.addAudit(atin, new AuditEntry(now, by, AuditAction.INFORMATION_REQUESTED, text, rules,
+                summary(rec, rec.resolution()), summary(saved, rec.resolution())));
+        events.variant(saved, rec.status().name(), rec.resolution(), text, by, now);
+        return view(saved);
+    }
+
     private VariantClassification load(String atin) {
         return records.find(atin).orElseThrow(() -> new NotFoundException("tax.classification-not-found",
                 "No classification record for " + atin));
@@ -230,7 +255,7 @@ class VariantClassificationServiceImpl implements VariantClassificationService {
     private ClassificationView view(VariantClassification rec) {
         Resolution r = resolve(rec);
         return new ClassificationView(rec, r, records.evidence(rec.atin()), records.audit(rec.atin()),
-                records.decisions(rec.atin()));
+                records.decisions(rec.atin()), records.ordersAffected(rec.atin()));
     }
 
     /** The record under today's rules and the owner's behaviour; null when its category has no profile. */

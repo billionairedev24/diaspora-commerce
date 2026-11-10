@@ -30,6 +30,7 @@ import java.util.UUID;
  * @param reviewedBy           reviewer of the last approval or rejection
  * @param reviewedAt           when
  * @param decisionRef          reference of the tax professional's sign-off, when given
+ * @param informationRequest   what review asked the seller for, null when nothing is pending
  * @param version              optimistic-lock version
  * @param createdAt            first seen
  * @param updatedAt            last change
@@ -40,7 +41,20 @@ public record VariantClassification(String atin, String gtin, UUID productId, St
                                     Map<String, String> refinedProviderCodes,
                                     RecordStatus status, Resolution resolution, String ruleVersion,
                                     String classifiedBy, Instant classifiedAt, String reviewedBy, Instant reviewedAt,
-                                    String decisionRef, long version, Instant createdAt, Instant updatedAt) {
+                                    String decisionRef, InformationRequest informationRequest, long version,
+                                    Instant createdAt, Instant updatedAt) {
+
+    public VariantClassification(String atin, String gtin, UUID productId, String title, String ownerOrgId,
+                                 String categoryCode, String productTypeCode, Map<String, Object> facts,
+                                 Map<String, Object> staffFacts, Map<String, Object> sellerBehaviour,
+                                 Map<String, String> refinedProviderCodes, RecordStatus status, Resolution resolution,
+                                 String ruleVersion, String classifiedBy, Instant classifiedAt, String reviewedBy,
+                                 Instant reviewedAt, String decisionRef, long version, Instant createdAt,
+                                 Instant updatedAt) {
+        this(atin, gtin, productId, title, ownerOrgId, categoryCode, productTypeCode, facts, staffFacts,
+                sellerBehaviour, refinedProviderCodes, status, resolution, ruleVersion, classifiedBy, classifiedAt,
+                reviewedBy, reviewedAt, decisionRef, null, version, createdAt, updatedAt);
+    }
 
     public VariantClassification {
         facts = facts == null ? Map.of() : Map.copyOf(facts);
@@ -63,7 +77,7 @@ public record VariantClassification(String atin, String gtin, UUID productId, St
     public VariantClassification with(RecordStatus next, Resolution res, String rules, Instant at) {
         return new VariantClassification(atin, gtin, productId, title, ownerOrgId, categoryCode, productTypeCode, facts,
                 staffFacts, sellerBehaviour, refinedProviderCodes, next, res, rules, classifiedBy, classifiedAt, reviewedBy, reviewedAt,
-                decisionRef, version, createdAt, at);
+                decisionRef, informationRequest, version, createdAt, at);
     }
 
     public VariantClassification withFacts(String category, String type, Map<String, Object> newFacts,
@@ -73,13 +87,19 @@ public record VariantClassification(String atin, String gtin, UUID productId, St
         return new VariantClassification(atin, gtinValue == null ? gtin : gtinValue, productId,
                 titleValue == null ? title : titleValue, ownerOrgId, category, type, newFacts,
                 sameCategory ? staffFacts : Map.of(), behaviour, sameCategory ? refinedProviderCodes : Map.of(), status, resolution, ruleVersion, by, at, reviewedBy, reviewedAt, decisionRef,
-                version, createdAt, at);
+                null, version, createdAt, at);
     }
 
     public VariantClassification withReview(Map<String, Object> newStaffFacts, Map<String, String> refined,
                                             String by, Instant at, String ref) {
         return new VariantClassification(atin, gtin, productId, title, ownerOrgId, categoryCode, productTypeCode, facts,
                 newStaffFacts, sellerBehaviour, refined, status, resolution, ruleVersion, classifiedBy, classifiedAt, by, at,
-                ref == null ? decisionRef : ref, version, createdAt, at);
+                ref == null ? decisionRef : ref, informationRequest, version, createdAt, at);
+    }
+
+    public VariantClassification withInformationRequest(InformationRequest request, Instant at) {
+        return new VariantClassification(atin, gtin, productId, title, ownerOrgId, categoryCode, productTypeCode, facts,
+                staffFacts, sellerBehaviour, refinedProviderCodes, status, resolution, ruleVersion, classifiedBy,
+                classifiedAt, reviewedBy, reviewedAt, decisionRef, request, version, createdAt, at);
     }
 }

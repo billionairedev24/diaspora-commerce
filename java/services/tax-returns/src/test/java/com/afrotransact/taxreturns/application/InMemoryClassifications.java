@@ -51,7 +51,7 @@ final class InMemoryClassifications implements VariantClassificationRepository {
         VariantClassification next = new VariantClassification(v.atin(), v.gtin(), v.productId(), v.title(),
                 v.ownerOrgId(), v.categoryCode(), v.productTypeCode(), v.facts(), v.staffFacts(), v.sellerBehaviour(),
                 v.refinedProviderCodes(), v.status(), v.resolution(), v.ruleVersion(), v.classifiedBy(),
-                v.classifiedAt(), v.reviewedBy(), v.reviewedAt(), v.decisionRef(), v.version() + 1, v.createdAt(),
+                v.classifiedAt(), v.reviewedBy(), v.reviewedAt(), v.decisionRef(), v.informationRequest(), v.version() + 1, v.createdAt(),
                 v.updatedAt());
         records.put(v.atin(), next);
         return next;
@@ -92,6 +92,11 @@ final class InMemoryClassifications implements VariantClassificationRepository {
     @Override
     public List<ListingDecision> decisions(String atin) {
         return decisions.values().stream().filter(d -> d.atin().equals(atin)).toList();
+    }
+
+    @Override
+    public long ordersAffected(String atin) {
+        return 0;
     }
 
     @Override

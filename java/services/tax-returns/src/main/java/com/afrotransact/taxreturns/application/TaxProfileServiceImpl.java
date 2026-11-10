@@ -102,7 +102,8 @@ class TaxProfileServiceImpl implements TaxProfileService {
     private ProfileView view(String categoryCode) {
         TaxProfile p = profiles.find(categoryCode).orElseThrow(() -> new NotFoundException("tax.profile-not-found",
                 "No tax profile for category " + categoryCode));
-        return new ProfileView(p, profiles.stamp(categoryCode).orElse(null), profiles.currentRuleVersion());
+        return new ProfileView(p, profiles.stamp(categoryCode).orElse(null), profiles.currentRuleVersion(),
+                profiles.auditOf(categoryCode, 50));
     }
 
     private static ReturnRuleViolation invalid(String field, String message) {

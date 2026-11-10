@@ -13,6 +13,7 @@ import java.util.UUID;
 import com.afrotransact.taxreturns.domain.profile.AuditAction;
 import com.afrotransact.taxreturns.domain.profile.AuditEntry;
 import com.afrotransact.taxreturns.domain.profile.Evidence;
+import com.afrotransact.taxreturns.domain.profile.InformationRequest;
 import com.afrotransact.taxreturns.domain.profile.ListingDecision;
 import com.afrotransact.taxreturns.domain.profile.MissingFact;
 import com.afrotransact.taxreturns.domain.profile.Outcome;
@@ -57,11 +58,11 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
         jdbc.sql("""
                 insert into variant_classification (atin, gtin, product_id, title, owner_org_id, category_code,
                     product_type_code, facts, staff_facts, seller_behaviour, refined_provider_codes, status, resolution,
-                    rule_version, classified_by, classified_at, reviewed_by, reviewed_at, decision_ref, version,
-                    created_at, updated_at)
+                    rule_version, classified_by, classified_at, reviewed_by, reviewed_at, decision_ref, info_request, info_requested_by,
+                    info_requested_at, version, created_at, updated_at)
                 values (:atin, :gtin, :product, :title, :owner, :category, :type, cast(:facts as jsonb),
                     cast(:staff as jsonb), cast(:behaviour as jsonb), cast(:refined as jsonb), :status,
-                    cast(:resolution as jsonb), :rules, :classifiedBy, :classifiedAt, :reviewedBy, :reviewedAt, :ref, 0,
+                    cast(:resolution as jsonb), :rules, :classifiedBy, :classifiedAt, :reviewedBy, :reviewedAt, :ref, :infoRequest, :infoBy, :infoAt, 0,
                     :created, :updated)
                 """)
                 .param("atin", v.atin()).param("gtin", v.gtin()).param("product", v.productId())
@@ -72,7 +73,9 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
                 .param("resolution", json.write(v.resolution())).param("rules", v.ruleVersion())
                 .param("classifiedBy", v.classifiedBy()).param("classifiedAt", Sql.ts(v.classifiedAt()))
                 .param("reviewedBy", v.reviewedBy()).param("reviewedAt", Sql.ts(v.reviewedAt()))
-                .param("ref", v.decisionRef()).param("created", Sql.ts(v.createdAt()))
+                .param("ref", v.decisionRef()).param("infoRequest", info(v, 0)).param("infoBy", info(v, 1))
+                .param("infoAt", Sql.ts(v.informationRequest() == null ? null : v.informationRequest().requestedAt()))
+                .param("created", Sql.ts(v.createdAt()))
                 .param("updated", Sql.ts(v.updatedAt())).update();
         return find(v.atin()).orElseThrow();
     }
@@ -86,7 +89,8 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
                     refined_provider_codes = cast(:refined as jsonb), status = :status,
                     resolution = cast(:resolution as jsonb), rule_version = :rules, classified_by = :classifiedBy,
                     classified_at = :classifiedAt, reviewed_by = :reviewedBy, reviewed_at = :reviewedAt,
-                    decision_ref = :ref, updated_at = :updated, version = version + 1
+                    decision_ref = :ref, info_request = :infoRequest, info_requested_by = :infoBy,
+                    info_requested_at = :infoAt, updated_at = :updated, version = version + 1
                 where atin = :atin and version = :version
                 """)
                 .param("atin", v.atin()).param("version", v.version()).param("gtin", v.gtin())
@@ -97,7 +101,9 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
                 .param("resolution", json.write(v.resolution())).param("rules", v.ruleVersion())
                 .param("classifiedBy", v.classifiedBy()).param("classifiedAt", Sql.ts(v.classifiedAt()))
                 .param("reviewedBy", v.reviewedBy()).param("reviewedAt", Sql.ts(v.reviewedAt()))
-                .param("ref", v.decisionRef()).param("updated", Sql.ts(v.updatedAt())).update();
+                .param("ref", v.decisionRef()).param("infoRequest", info(v, 0)).param("infoBy", info(v, 1))
+                .param("infoAt", Sql.ts(v.informationRequest() == null ? null : v.informationRequest().requestedAt()))
+                .param("updated", Sql.ts(v.updatedAt())).update();
         if (rows == 0) {
             throw new StaleRecordException(v.atin());
         }
@@ -237,6 +243,17 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
                 rs.getString("decided_by"), rs.getString("approved_by"));
     }
 
+    @Override
+    public long ordersAffected(String atin) {
+        return jdbc.sql("select count(distinct order_id) from order_line_snapshot where variant_atin = :a")
+                .param("a", atin).query(Long.class).single();
+    }
+
+    private static String info(VariantClassification v, int field) {
+        InformationRequest r = v.informationRequest();
+        return r == null ? null : field == 0 ? r.message() : r.requestedBy();
+    }
+
     private VariantClassification record(ResultSet rs) throws SQLException {
         String productId = rs.getString("product_id");
         return new VariantClassification(rs.getString("atin"), rs.getString("gtin"),
@@ -247,6 +264,8 @@ class JdbcVariantClassificationRepository implements VariantClassificationReposi
                 RecordStatus.valueOf(rs.getString("status")), json.read(rs.getString("resolution"), Resolution.class),
                 rs.getString("rule_version"), rs.getString("classified_by"), Sql.instant(rs, "classified_at"),
                 rs.getString("reviewed_by"), Sql.instant(rs, "reviewed_at"), rs.getString("decision_ref"),
+                rs.getString("info_request") == null ? null : new InformationRequest(rs.getString("info_request"),
+                        rs.getString("info_requested_by"), Sql.instant(rs, "info_requested_at")),
                 rs.getLong("version"), Sql.instant(rs, "created_at"), Sql.instant(rs, "updated_at"));
     }
 }

@@ -50,7 +50,7 @@ class TaxShadowServiceImplTest {
     private final TaxTelemetry telemetry = mock(TaxTelemetry.class);
     private final TaxShadowServiceImpl service = new TaxShadowServiceImpl(inHouse, List.of(stripe), repository, telemetry,
             new TaxReturnsProperties(new TaxReturnsProperties.Tax(null, null, null, null,
-                    new TaxReturnsProperties.Shadow(Duration.ofMillis(300), 2, false)), null, null, null, null),
+                    new TaxReturnsProperties.Shadow(Duration.ofMillis(300), 2, false, null)), null, null, null, null),
             TestActors.staff("tax:read"), TestRules.CLOCK);
 
     TaxShadowServiceImplTest() {

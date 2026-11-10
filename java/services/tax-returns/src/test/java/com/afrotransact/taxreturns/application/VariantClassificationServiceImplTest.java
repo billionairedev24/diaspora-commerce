@@ -244,4 +244,23 @@ class VariantClassificationServiceImplTest {
         assertThatThrownBy(() -> records.update(stale))
                 .isInstanceOf(VariantClassificationRepository.StaleRecordException.class);
     }
+
+    @Test
+    void requestingInformationIsStoredAuditedPublishedAndClearedWhenTheFactsChange() {
+        VariantClassificationService service = service(ApprovalPolicy.ALL);
+        service.onCatalogFactsChanged(event("nuts-seeds", "AT00000015", EXEMPT_NUTS, Map.of(), false));
+
+        assertThatThrownBy(() -> service.requestInformation("AT00000015", "too short"))
+                .isInstanceOf(ReturnRuleViolation.class);
+        ClassificationView v = service.requestInformation("AT00000015", "Please upload a photo of the label.");
+
+        assertThat(v.record().informationRequest().message()).isEqualTo("Please upload a photo of the label.");
+        assertThat(v.record().informationRequest().requestedBy()).isEqualTo("STAFF:staff_1");
+        assertThat(v.audit()).extracting(AuditEntry::action).contains(AuditAction.INFORMATION_REQUESTED);
+        assertThat(v.record().status()).isEqualTo(RecordStatus.PENDING_REVIEW);
+        verify(publisher, times(2)).publish(eq("tax.classification.changed"), eq("taxreturns"), eq("AT00000015"), any());
+
+        service.onCatalogFactsChanged(event("nuts-seeds", "AT00000015", TAXABLE_NUTS, Map.of(), false));
+        assertThat(records.records.get("AT00000015").informationRequest()).as("seller answered").isNull();
+    }
 }
