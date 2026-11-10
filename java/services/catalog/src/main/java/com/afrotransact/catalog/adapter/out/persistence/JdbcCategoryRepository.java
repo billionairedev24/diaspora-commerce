@@ -51,7 +51,28 @@ class JdbcCategoryRepository implements CategoryRepository {
     @Override
     public Optional<CategoryNode> findById(UUID id) {
         return jdbc.sql("select * from category where id = :id").param("id", id)
-                .query(JdbcCategoryRepository::mapNode).optional();
+                .query(JdbcCategoryRepository::mapNode).optional().map(this::withInheritedTax);
+    }
+
+    /**
+     * Products sit on a product-type node (third level) but the tax profile and its status belong to the category
+     * above it: a product type reads them from its category, so the tax gate, the readiness and the go-live check of a
+     * product see the profile. They are never stored on the product-type node (see {@link #taxColumn}), so a change of
+     * the category's status reaches every product type at once.
+     */
+    private CategoryNode withInheritedTax(CategoryNode n) {
+        if (n.level() != CategoryLevel.PRODUCT_TYPE || n.taxProfileId() != null || n.parentId() == null) {
+            return n;
+        }
+        return jdbc.sql("select tax_profile_id, tax_status from category where id = :parent")
+                .param("parent", n.parentId())
+                .query((rs, i) -> n.withTax(rs.getString("tax_profile_id"), rs.getString("tax_status"))).optional()
+                .orElse(n);
+    }
+
+    /** Tax columns live on category nodes only. */
+    private static String taxColumn(CategoryNode n, String value) {
+        return n.level() == CategoryLevel.PRODUCT_TYPE ? null : value;
     }
 
     @Override
@@ -119,8 +140,8 @@ class JdbcCategoryRepository implements CategoryRepository {
                 .param("retiredAt", n.retiredAt() == null ? null : Timestamp.from(n.retiredAt()))
                 .param("retiredReason", n.retiredReason())
                 .param("compliance", n.compliance().isEmpty() ? null : String.join(",", new TreeSet<>(n.compliance())))
-                .param("taxProfile", n.taxProfileId())
-                .param("taxStatus", n.taxStatus())
+                .param("taxProfile", taxColumn(n, n.taxProfileId()))
+                .param("taxStatus", taxColumn(n, n.taxStatus()))
                 .update();
         return n;
     }
@@ -142,8 +163,8 @@ class JdbcCategoryRepository implements CategoryRepository {
                 .param("active", n.active())
                 .param("retiredAt", n.retiredAt() == null ? null : Timestamp.from(n.retiredAt()))
                 .param("retiredReason", n.retiredReason())
-                .param("taxProfile", n.taxProfileId())
-                .param("taxStatus", n.taxStatus())
+                .param("taxProfile", taxColumn(n, n.taxProfileId()))
+                .param("taxStatus", taxColumn(n, n.taxStatus()))
                 .param("version", n.version())
                 .update();
         if (rows == 0) {

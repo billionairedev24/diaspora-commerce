@@ -148,7 +148,8 @@ class JdbcProductRepository implements ProductRepository {
 
     @Override
     public List<Product> findByTaxProfile(String taxProfileId, int limit) {
-        return withVariants(jdbc.sql(SELECT + " where category_id in (select id from category where tax_profile_id = :profile) "
+        return withVariants(jdbc.sql(SELECT + " where category_id in (select id from category where tax_profile_id = :profile "
+                + "or parent_id in (select id from category where tax_profile_id = :profile)) "
                 + "order by id limit :limit").param("profile", taxProfileId).param("limit", limit)
                 .query(this::mapProduct).list());
     }
