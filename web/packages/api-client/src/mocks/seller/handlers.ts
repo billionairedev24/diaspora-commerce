@@ -1502,7 +1502,7 @@ export const sellerHandlers = [
       if (!factId || !(file instanceof File)) throw invalid({ file: 'Choose a file' });
       if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type)) throw invalid({ file: 'Use a PDF, JPEG or PNG file' });
       ctx.db.taxEvidence = { ...(ctx.db.taxEvidence ?? {}), [`${p.atin}:${factId}`]: file.name };
-      return { id: `ev-${p.atin}-${factId}`, atin: p.atin ?? '', factId, version: 1, fileName: file.name, contentType: file.type, bytes: file.size, url: `/v1/tax-evidence/ev-${p.atin}/file`, uploadedAt: ctx.now.toISOString() };
+      return { id: `ev-${p.atin}-${factId}`, atin: p.atin ?? '', factId, version: 1, fileName: file.name, contentType: file.type, bytes: file.size, url: `/v1/seller/tax-evidence/ev-${p.atin}-${factId}/file`, uploadedAt: ctx.now.toISOString() };
     })
   ),
   http.put(

@@ -120,6 +120,12 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	if h.s.SellerScope != nil {
 		h.registerSellerScope(route)
 	}
+	if h.s.SellerProductTax != nil {
+		route("GET /v1/seller/products/{productId}/tax-readiness", h.productTaxReadiness)
+		route("GET /v1/seller/variants/{atin}/tax-evidence", h.variantTaxEvidence)
+		route("POST /v1/seller/variants/{atin}/tax-evidence", h.uploadVariantTaxEvidence)
+		route("GET /v1/seller/tax-evidence/{id}/file", h.taxEvidenceFile)
+	}
 	if h.s.SellerSizeCharts != nil {
 		route("GET /v1/seller/size-charts", h.sizeCharts)
 		route("POST /v1/seller/size-charts", h.createSizeChart)

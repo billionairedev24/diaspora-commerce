@@ -54,6 +54,8 @@ type Services struct {
 	SellerImports app.SellerImportService
 	// SellerSizeCharts is the seller's size charts for sized categories (fashion); its routes are registered when set.
 	SellerSizeCharts app.SellerSizeChartService
+	// SellerProductTax is the product tax readiness and evidence upload; its routes are registered when set.
+	SellerProductTax app.SellerProductTaxService
 	// SellerScope is the departments the organisation may sell in and the requests to add one; routes registered when set.
 	SellerScope app.SellerScopeService
 	// SellerOffers is the fulfilment choice of offers (S255); its routes are registered when set.

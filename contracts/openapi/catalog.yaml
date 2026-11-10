@@ -4937,6 +4937,12 @@ components:
           $ref: '#/components/schemas/VariantTaxStatus'
         categoryCode:
           type: string
+        categoryStatus:
+          type: string
+          description: 'ACTIVE, NEEDS_APPROVAL, BLOCKED_BUNDLE, REFINE_CODE or CONFLICT_OPEN: the status gate of the category'
+        categoryMessage:
+          type: string
+          description: Plain words when the category is not open for publishing
         ruleVersion:
           type: string
         variants:
@@ -4959,6 +4965,15 @@ components:
     TaxEvidence:
       type: object
       properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          description: Re-uploading a fact adds a version
+        bytes:
+          type: integer
+          format: int64
         atin:
           type: string
         factId:

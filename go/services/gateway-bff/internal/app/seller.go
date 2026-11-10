@@ -40,6 +40,8 @@ type SellerDeps struct {
 	Listing port.SellerListingClient
 	// SizeCharts is catalog's size chart API: the organisation's charts and the size chart upload; nil answers 503.
 	SizeCharts port.SizeChartClient
+	// Tax is catalog's tax publish gate and evidence API (the product's tax readiness, proof files); nil answers 503.
+	ProductTax port.SellerTaxClient
 	// ScopeCatalog and ScopeSeller are catalog and seller-service for the department scope routes and the seller's
 	// scoped category tree (member token); nil answers 503 (the unscoped public tree is used for the tree).
 	ScopeCatalog port.StaffUpstream

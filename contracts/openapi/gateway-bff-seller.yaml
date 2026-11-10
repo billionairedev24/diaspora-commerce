@@ -61,6 +61,12 @@ tags:
       a unit (the other shown by conversion), fit note and how-to-measure text. The category only suggests sizes and
       measurements (`GET /v1/seller/size-charts/suggestions`); sellers add their own sizes, colours and columns. Link a
       chart to a product with `listing.sizeChartId` + `listing.fitNote`. Mirrors catalog-service `/v1/size-charts`.
+  - name: Tax readiness
+    description: |
+      The tax publish gate of a product (catalog `GET /v1/products/{id}/tax-readiness`, which asks tax-returns to resolve
+      every variant) and the proof files (label photo, Drug Facts, Supplement Facts) that an exemption claim needs. A
+      product goes live only when its status is READY; missing facts come in plain words and the tax is never guessed.
+      Needs the Listings module (View to read, Edit to upload).
   - name: Catalog scope
     description: |
       The catalog departments the organisation may sell in: the ones chosen at onboarding (and later approved requests).
@@ -1595,6 +1601,91 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/products/{productId}/tax-readiness:
+    get:
+      tags: [Tax readiness]
+      operationId: getProductTaxReadiness
+      security: [{sessionCookie: []}]
+      summary: What a product still needs before it can go live (tax), per variant
+      description: |
+        catalog `GET /v1/products/{id}/tax-readiness`. One status per variant (READY, MISSING_FACTS, PENDING_REVIEW,
+        BLOCKED, NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN, REJECTED) with the missing facts in plain words. The tax is
+        never guessed: a variant without a definite decision cannot go live.
+      parameters:
+        - {name: productId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Readiness, content: {application/json: {schema: {$ref: '#/components/schemas/ProductTaxReadiness'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/variants/{atin}/tax-evidence:
+    get:
+      tags: [Tax readiness]
+      operationId: listVariantTaxEvidence
+      security: [{sessionCookie: []}]
+      summary: The proof files uploaded for a variant
+      description: catalog `GET /v1/variants/{atin}/tax-evidence`. Every version is listed; links point to `/v1/seller/tax-evidence/{id}/file`.
+      parameters:
+        - {name: atin, in: path, required: true, schema: {type: string, maxLength: 40}}
+      responses:
+        '200': {description: Evidence files, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/VariantTaxEvidence'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Tax readiness]
+      operationId: uploadVariantTaxEvidence
+      security: [{sessionCookie: []}]
+      summary: Upload the proof for an exemption question (label photo, Drug Facts, Supplement Facts)
+      description: |
+        catalog `POST /v1/variants/{atin}/tax-evidence`. PDF, JPEG or PNG up to 10 MB. Uploading again for the same
+        question adds a version; earlier files are kept for the tax review. Needs the Listings module at Edit.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [factId, file]
+              properties:
+                factId: {type: string, description: 'The question the file proves (a FILE fact of the category)'}
+                file: {type: string, format: binary, description: 'PDF, JPEG or PNG, at most 10 MB'}
+      parameters:
+        - {name: atin, in: path, required: true, schema: {type: string, maxLength: 40}}
+      responses:
+        '200': {description: The stored evidence, content: {application/json: {schema: {$ref: '#/components/schemas/VariantTaxEvidence'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '413': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/tax-evidence/{id}/file:
+    get:
+      tags: [Tax readiness]
+      operationId: downloadTaxEvidenceFile
+      security: [{sessionCookie: []}]
+      summary: One proof file
+      description: catalog `GET /v1/tax-evidence/{id}/file` (the organisation's own files only).
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: The file (Content-Disposition attachment)
+          content:
+            application/pdf: {schema: {type: string, format: binary}}
+            image/jpeg: {schema: {type: string, format: binary}}
+            image/png: {schema: {type: string, format: binary}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/size-charts:
