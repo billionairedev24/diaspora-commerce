@@ -263,7 +263,7 @@ V12 is generated: `python3 tools/taxonomy/gen_seed_sql.py` (and `--check`; `make
 `GET /v1/tax/profiles`, `GET /v1/tax/profiles/{code}` (`tax:read`), `PUT /v1/tax/profiles/{code}/status` (`tax:classify-admin`);
 `GET /v1/tax/provider-code-map`, `PUT /v1/tax/provider-code-map/{internalTaxCode}`; `GET /v1/tax/variant-classifications[?status=PENDING_REVIEW]`,
 `GET .../{atin}`, `POST .../{atin}/approve`, `POST .../{atin}/reclassify`; `GET /v1/tax/shadow/report`; `GET|PUT /v1/tax/settings` (method + `shadowProvider`).
-`tax:configure` holders are accepted for the admin actions until identity grants `tax:classify-admin`.
+`tax:configure` holders are accepted for the admin actions until identity V38 (`tax:classify`, `tax:classify-admin`, role Tax Reviewer) runs; `POST .../{atin}/request-information` stores a seller request on the record (cleared when the seller's facts change).
 
 **Events**: consumes `catalog.product.tax-facts-changed` (topic `at.product.events`); publishes `tax.classification.changed` (kinds PROFILE_STATUS, PROVIDER_CODE_MAP, VARIANT_CLASSIFICATION) on `at.taxreturns.events`.
 

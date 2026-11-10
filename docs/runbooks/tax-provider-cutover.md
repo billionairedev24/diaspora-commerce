@@ -94,16 +94,9 @@ The tax professional signs off the cutover; attach the signed note to the settin
 (strict quote: "not configured" or "not implemented"; charging quote: visible fallback). To finish it: implement the `POST /api/v2/transactions/create` call and response parsing in
 `quoteStrict`, keep `quote` as strict-then-visible-fallback like Stripe, add a contract test against the Avalara sandbox, then run steps 1 to 8 for AVALARA.
 
-## Identity setup (not done by tax-returns)
+## Identity setup
 
-tax-returns checks these keys; identity must grant them (`java/services/identity`, a new migration after the current latest, not edited by this build):
-
-```sql
-insert into permission (key, module, description) values
-  ('tax:classify', 'tax', 'Resolve a category''s tax outcome from facts (service clients, staff previews)'),
-  ('tax:classify-admin', 'tax', 'Approve and reclassify variant classifications, change profile gates, edit the provider code map');
--- roles: platform.super_admin, tax reviewer and catalog manager get tax:classify-admin and tax:classify; platform.finance keeps tax:read and tax:configure
-```
-
-Client scope: the **catalog-service** client-credentials client needs the scope `tax:classify` (resolve at publish time). The **orders-service** and **gateway-bff** clients keep `tax:quote`.
-Until identity grants `tax:classify-admin`, holders of `tax:configure` (platform.super_admin, platform.finance) are accepted for the admin actions.
+Included in this change: `java/services/identity/.../V38__tax_classification_permissions.sql` creates the permissions `tax:classify` and `tax:classify-admin`, the
+role **Tax Reviewer** (`platform.tax_reviewer`: `tax:read`, `tax:classify`, `tax:classify-admin`), grants `tax:classify-admin` + `tax:classify` to Super Admin, `tax:classify-admin` + `tax:read` to Catalog Manager,
+`tax:classify` to Auditor, and gives Catalog Manager and Tax Reviewer **Fees & commissions: VIEW** (where the Tax screens live). The **catalog-service** client scope `tax:classify` is added in the four
+`application-*.yml` files of identity (restart identity). The orders-service and gateway-bff clients keep `tax:quote`. Until V38 runs, tax-returns accepts `tax:configure` holders (Super Admin, Finance) for the admin actions.
