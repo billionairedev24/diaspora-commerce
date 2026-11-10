@@ -156,23 +156,10 @@ copies are frozen on purpose, so later dataset edits (tax rules, new questions) 
 the importer applies them. `tools/catalog/compare_migrations.sh` proved the baseline equals what the former V1..V20 chain
 (including the Java migration `CategoryTaxTreeMigration` and the retirement of the first 7-department tree) built on an empty
 PostgreSQL: identical schema dump and identical rows apart from timestamps and the random ids the old brand seed generated.
-To repeat the proof, build one database with the old chain (commit `92f0218f`, the last one before the baseline: start the catalog
+To repeat the proof, build one database with the old chain (commit `698f1e4c`, the last one before the baseline: start the catalog
 service on an empty database with `at.catalog.taxonomy.import-on-start=false`) and one with the baseline, then run
 `tools/catalog/compare_migrations.sh <old-db> <new-db>`; it exits 1 on any difference. FreshCatalogDatabaseIT checks the same
 content from the baseline alone.
-
-**Upgrading a database that already holds products on the initial tree.** V19 keeps the initial nodes that products, size
-charts or category requests still use (retired, hidden from sellers and shoppers). V20 then makes them harmless: every retained
-initial node (by V19's marker and by V2's ids, so also after an earlier version of V19) gets the code `<code>-legacy`, because
-the initial category "Health > Wellness" had the code `health-wellness` that the new Health & Wellness department uses; before
-this V20 skipped the department (`on conflict`) and its categories failed on `category_parent_id_fkey`. V20 resolves each
-parent by code, inserts a child only with a resolved parent and stops with a message naming the code when it cannot. Names and
-paths of retained nodes do not change, so the product page and the storefront keep showing `Health > Wellness > Herbal teas`.
-Product types of the initial tree that a product keeps (`dress`, `top`, `menwear`, `kids`) take the new definition. V20 has no
-checksum, so it was fixed in place: databases that never ran V20 (fresh, V19 recorded, or both pending) are covered; V19 is
-unchanged (its checksum stays valid). Products on a retired node stay public and editable; they have no tax profile, so they
-cannot pass the tax gate again: the seller picks a current category in the edit form (allowed even for a live listing on a retired
-node) before the listing can be re-approved.
 
 **Tax questions (facts).** Each category's schema carries typed, plain-language questions generated from the dataset's fact groups:
 `BOOLEAN` (yes/no), `DECIMAL` (with a unit, e.g. oz), `INTEGER`, `PERCENT`, `ENUM` (with plain option labels) and `FILE` (proof). A
