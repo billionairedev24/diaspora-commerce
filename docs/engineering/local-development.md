@@ -87,6 +87,15 @@ placement / campaign / window name) before anything is created, so `make seed` c
 placement is replaced (the old one ended), never duplicated. `make seed ARGS="--only products,content"` runs a subset;
 `make seed-test` runs the seeder's unit tests.
 
+**Tax review.** tax-returns reviews every variant by default (`TAX_APPROVAL_POLICY=ALL`), and a variant in
+`PENDING_REVIEW` cannot be charged at checkout (its listing, search and offers stay live). The `products` step therefore
+approves the seeded variants whose tax decision is `RESOLVED` as a tax reviewer would (reason "Demo data approved by the
+seeder"), never a missing, blocked or gated one; it waits up to 60 s for the records to arrive over Kafka. **Retail
+offer:** AfroTransact Retail's offer comes from the `catalog.product.created` event, so the first wait is up to 120 s;
+if it fails, check `.local/logs/offers.log` and `docker ps | grep kafka`, then run `make seed` again (it picks up where it
+stopped). `make up` waits for `kafka-init` (the topics) before it starts the services. Details:
+[tools/seed/README.md](../../tools/seed/README.md#tax-review-of-the-demo-data-and-the-retail-offer-wait).
+
 Locally every Java service runs with security off, so the seeder needs no token. Against dev, pass `SEED_TOKEN` (an
 access token) or `SEED_CLIENT_ID` / `SEED_CLIENT_SECRET` (client credentials at `AUTH_TOKEN_URL`, default
 `AUTH_ISSUER_URL/oauth2/token`), and the service URLs (`CATALOG_URL`, `OFFERS_URL`, `INVENTORY_URL`, `MEDIA_URL`,

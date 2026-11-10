@@ -410,11 +410,33 @@ infra_up() {
     # shellcheck disable=SC2086
     unhealthy=$(compose ps --format '{{.Service}} {{.Health}}' $waitfor 2>/dev/null \
       | awk '$2 != "healthy" && $2 != "" {print $1}' || true)
-    [[ -z "$unhealthy" ]] && { echo "  ✓ infrastructure healthy"; return 0; }
+    if [[ -z "$unhealthy" ]]; then
+      echo "  ✓ infrastructure healthy"
+      wait_kafka_topics
+      return 0
+    fi
     sleep 3
   done
   echo "  ✗ still not healthy: $unhealthy — docker compose -f infra/local/docker-compose.yml ps" >&2
   exit 1
+}
+
+# kafka-init (infra/local/kafka/create-topics.sh) is a one-shot container, so "healthy" above says nothing about it.
+# Services started before it finished would meet a cold broker: topics auto-created on first use, consumer groups
+# still joining, so events such as catalog.product.created reach their consumers late. Wait for it to exit 0.
+wait_kafka_topics() {
+  local i state
+  echo "==> waiting for the Kafka topics (kafka-init)"
+  for ((i = 0; i < 120; i += 2)); do
+    state=$(compose ps -a --format '{{.Service}} {{.State}} {{.ExitCode}}' kafka-init 2>/dev/null | awk '$1 == "kafka-init" {print $2 " " $3}' || true)
+    case "$state" in
+      "exited 0") echo "  ✓ Kafka topics created"; return 0 ;;
+      "exited "*) echo "  ✗ kafka-init failed ($state): docker compose -f infra/local/docker-compose.yml logs kafka-init" >&2; return 1 ;;
+    esac
+    sleep 2
+  done
+  echo "  ! kafka-init did not finish in 2 minutes; topics are auto-created on first use, but check: docker compose -f infra/local/docker-compose.yml logs kafka-init" >&2
+  return 0
 }
 
 build() {

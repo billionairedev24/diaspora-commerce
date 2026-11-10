@@ -121,6 +121,31 @@ and Color values (`allowCustomValues`); the data lives in `CUSTOM_DIMENSIONS` an
 reaches the catalog through `schemas.json` (initial data and importer). See `docs/engineering/size-charts.md`.
 
 
+### Tax review of the demo data, and the Retail offer wait
+
+**Tax review.** tax-returns' approval policy is `ALL` by default (`TAX_APPROVAL_POLICY`, kept for dev, uat and prod): every
+variant catalog reports gets a classification record in `PENDING_REVIEW`, and catalog marks the variant `PENDING_REVIEW` too
+(log line `Variant ... tax status READY -> PENDING_REVIEW (tax-returns)`). The product stays LIVE, visible in listings and
+search and has its offers, but **checkout cannot charge it**: tax-returns quotes a line only when its record is `APPROVED`
+(`LineDecisionServiceImpl.early`: `NEEDS_APPROVAL`, "not approved"). So the `products` step acts as a tax reviewer, like
+the Tax Reviewer test user would: after the products it lists the review queue
+(`GET /v1/tax/variant-classifications?status=PENDING_REVIEW`) and approves each seeded variant whose decision is
+`RESOLVED` with the reason *Demo data approved by the seeder* (`POST .../{atin}/approve`). It never approves a record
+whose decision is `MISSING_FACTS`, `BLOCKED`, `NEEDS_APPROVAL`, `REFINE_CODE` or `CONFLICT_OPEN`; those are reported.
+Records reach tax-returns over Kafka, so the queue is polled for up to 60 s (`SEED_TAX_REVIEW_WAIT`). If catalog's
+publish gate refuses `approve` because the variant already flipped to review, the seeder reviews it and retries.
+Locally security is off and no token is needed; with security on set `SEED_TAX_TOKEN` to a Tax Reviewer's access token
+(permission `tax:classify-admin`, role *Tax Reviewer*, `staff.tax@afrotransact.test`), or register the seeder client with
+the scopes `tax:read tax:classify-admin`. `TAX_APPROVAL_POLICY=SENSITIVE` would also work locally but only auto-approves
+plain taxable items, so the seeder approves instead.
+
+**Retail offer.** AfroTransact Retail's offer is created by offers from the Kafka event `catalog.product.created`. On a cold
+stack the consumer group can take a while to join, so the seeder waits up to 120 s for the first Retail product
+(`SEED_RETAIL_OFFER_WAIT`), then 20 s for the rest once one arrived (or after a timeout, so a dead Kafka path does not cost
+120 s per product). If it still fails: *offers did not create the Retail offer from catalog.product.created: check
+`.local/logs/offers.log`, Kafka (`docker ps | grep kafka`) and run `make seed` again (it picks up where it stopped)*. A re-run finds
+the product (looked up by title) and the offer that has arrived since, and carries on.
+
 ### Demo products in the category tax tree
 
 The demo products sit in the 13 > 73 tree (`seedlib/dataset.py`: leaf paths, `CATEGORY_OF`), each with demo answers to its
