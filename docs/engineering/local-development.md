@@ -18,6 +18,46 @@ dev/uat/prod: [secrets and configuration](secrets-and-configuration.md).
 USB, or an EAS build. A phone needs LAN mode, `make up MOBILE_HOST=lan`, which serves the whole stack (identity's
 issuer, the web apps, image links) on your Wi-Fi address: [mobile on your phone](mobile-on-your-phone.md).
 
+## Start fresh locally
+
+Wipe everything the stack keeps (databases, Kafka topics, search index, MinIO files, the seeder's memory) and begin again:
+
+```bash
+tools/dev/local.sh down        # stops the web apps and services (make reset does this first too)
+make reset                     # docker compose project "afrotransact": down -v, then checks no afrotransact_* volume is left
+docker volume ls | grep afrotransact     # must print nothing; make reset prints the same check and fails if a volume remains
+rm -rf .local/bin .local/seed  # built service jars/binaries, and the seed state (.local/seed/state.json) with its image cache
+make up                        # recreates the databases (Flyway runs the baselines), starts everything
+make seed                      # demo data (make up seeds an empty catalogue by itself unless SEED=0)
+```
+
+- The volume is `afrotransact_postgres-data` (the compose file's `name: afrotransact` plus the volume `postgres-data`; a
+  `COMPOSE_PROJECT_NAME` in your shell would rename it, which `make reset` also handles). Keep `.local/secrets.env`,
+  `.local/web-ports` and the image cache `.local/seed/images` if you want to; the seed state is `.local/seed/state.json`:
+  without removing it `make seed` believes its records still exist and skips them.
+- `make down` keeps data; only `make reset` deletes it. If `make up` found a PostgreSQL of your own on port 5432 it used that
+  one instead of the container (`.local/compose.external-postgres.yml`), and `make reset` cannot empty it: drop the service
+  databases yourself (`drop database catalog;` and the other `<service>` databases of `infra/local/postgres/init-databases.sh`, then
+  create them again with their `<service>` role as owner) or recreate the cluster.
+
+**Databases created before the catalog baseline must be recreated.** The catalog's migration history was replaced by a clean
+baseline (`V1__baseline.sql`, `V1_1__initial_data.sql`; see [taxonomy.md](./taxonomy.md#changing-the-tree-after-the-baseline)),
+so an existing local `catalog` database no longer matches its Flyway history. The service then refuses to start with:
+
+```
+FlywayValidateException: Validate failed: Migrations have failed validation
+Migration checksum mismatch for migration version 1
+-> Applied to database : -1581964131
+-> Resolved locally    : 1709862697
+...
+Detected resolved migration not applied to database: 1.1.
+```
+
+(or `Detected applied migration not resolved locally: 2` and the like, depending on how far the old history got). Do not run
+`flyway repair`: recreate the database with the steps above, or only the catalog's (`drop database catalog; create database
+catalog owner catalog;` then `alter schema public owner to catalog;` in it) when you accept that products created in the old one
+are lost and that other services (offers, search) still refer to them. The other services' histories were not changed.
+
 ## Demo data: `make seed`
 
 A fresh stack has an empty catalogue. `make seed` (`tools/seed/seed.py`, Python 3 standard library only) creates a demo

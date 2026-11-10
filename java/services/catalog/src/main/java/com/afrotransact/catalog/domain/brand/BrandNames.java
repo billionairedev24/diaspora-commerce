@@ -20,7 +20,7 @@ public final class BrandNames {
 
     /**
      * Lower case, accents folded, everything but letters and digits removed. The Postgres function {@code brand_key}
-     * computes the same key for the legacy backfill.
+     * computes the same key for the starter brands of the initial data.
      */
     public static String normalise(String name) {
         if (name == null) {

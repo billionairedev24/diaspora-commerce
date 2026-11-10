@@ -3,14 +3,10 @@ package com.afrotransact.catalog.it;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -19,7 +15,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import javax.sql.DataSource;
 
 import com.afrotransact.catalog.application.CategoryService;
 import com.afrotransact.catalog.application.CreateProductCommand;
@@ -42,7 +37,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -55,8 +49,8 @@ import tools.jackson.databind.json.JsonMapper;
  * S326 brand registry against PostgreSQL, through the HTTP API: the brand list of a category never holds a brand of an
  * unrelated department, a typed brand is pending and visible only to its seller, names are matched ignoring case,
  * accents and punctuation, types without a brand attribute keep none, "no brand" is a reason and never the text
- * "Generic", staff decisions (approve, reject, merge, edit, bulk add, retire) with reason, audit and versions, and the
- * backfill of free-text brands. {@code AT_IT_POSTGRES_URL=jdbc:postgresql://…} runs it on that PostgreSQL.
+ * "Generic", and staff decisions (approve, reject, merge, edit, bulk add, retire) with reason, audit and versions.
+ * {@code AT_IT_POSTGRES_URL=jdbc:postgresql://…} runs it on that PostgreSQL.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "at.events.relay-enabled=false", "at.consumers.enabled=false", "spring.kafka.bootstrap-servers=localhost:1"})
@@ -92,16 +86,14 @@ class BrandRegistryIT {
     private final ProductService products;
     private final CategoryService categories;
     private final JdbcClient jdbc;
-    private final DataSource dataSource;
     private final int port;
 
     @Autowired
-    BrandRegistryIT(ProductService products, CategoryService categories, JdbcClient jdbc, DataSource dataSource,
+    BrandRegistryIT(ProductService products, CategoryService categories, JdbcClient jdbc,
                     @LocalServerPort int port) {
         this.products = products;
         this.categories = categories;
         this.jdbc = jdbc;
-        this.dataSource = dataSource;
         this.port = port;
     }
 
@@ -454,101 +446,7 @@ class BrandRegistryIT {
         assertThat(call("GET", "/v1/taxonomy/brands", null, null).status()).isEqualTo(200);
     }
 
-    // ------------------------------------------------------------------ legacy data
-
-    @Test
-    void freeTextBrandsBecomeRegistryRowsScopedToTheirDepartment() throws Exception {
-        String sfx = suffix();
-        CategoryNode dresses = leaf("Fashion & Accessories › Adult clothing & footwear › Women's dresses");
-        CategoryNode spices = leaf("Groceries & Food › Spices & seasonings › Spices & seasonings");
-        CategoryNode fiction = leaf("Books & Media › Printed books › Printed books");
-        String lone = "Cotedivoire" + sfx;
-        String shared = "Adire Shared" + sfx;
-        Product loneProduct = createLegacy(dresses, "org_leg_a", lone, "L1-" + sfx);
-        for (String org : List.of("org_leg_a", "org_leg_b", "org_leg_c")) {
-            createLegacy(dresses, org, shared, "S-" + org + "-" + sfx);
-        }
-        Product nikeLower = createLegacy(dresses, "org_leg_b", "nike", "N-" + sfx);
-        Product book = createLegacyBook(fiction, "org_leg_a", "Penguin" + sfx);
-        Product groceryHomonym = createLegacy(spices, "org_leg_c", lone, "G-" + sfx);
-        assertThat(loneProduct.attributes()).doesNotContainKey("brand_id");
-
-        runBackfill();
-        runBackfill(); // idempotent
-
-        Product reloaded = reload(loneProduct.id());
-        assertThat(reloaded.attributes()).containsEntry("brand", lone).containsKey("brand_id");
-        Map<String, Object> pending = jdbc.sql("select status, created_by_org from brand where id = cast(:id as uuid)")
-                .param("id", reloaded.attributes().get("brand_id")).query().singleRow();
-        assertThat(pending).containsEntry("status", "PENDING").containsEntry("created_by_org", "org_leg_a");
-        // a department-level scope: Fashion only, so Groceries never offers it to the seller who typed it for a dress
-        assertThat(jdbc.sql("select c.path from brand_scope s join category c on c.id = s.node_id where s.brand_id = "
-                + "cast(:id as uuid)").param("id", reloaded.attributes().get("brand_id")).query(String.class).list())
-                .containsExactly("Fashion & Accessories");
-        assertThat(reload(groceryHomonym.id()).attributes().get("brand_id"))
-                .isNotEqualTo(reloaded.attributes().get("brand_id"));
-        assertThat(jdbc.sql("select c.path from brand_scope s join category c on c.id = s.node_id where s.brand_id = "
-                + "cast(:id as uuid)").param("id", reload(groceryHomonym.id()).attributes().get("brand_id"))
-                .query(String.class).list()).containsExactly("Groceries & Food");
-
-        // three distinct sellers: approved
-        String sharedId = reload(loneProductSharedId(dresses, shared)).attributes().get("brand_id");
-        assertThat(jdbc.sql("select status from brand where id = cast(:id as uuid)").param("id", sharedId)
-                .query(String.class).single()).isEqualTo("APPROVED");
-        // a staff-listed brand is linked, not duplicated
-        assertThat(reload(nikeLower.id()).attributes()).containsEntry("brand", "Nike");
-        assertThat(jdbc.sql("select count(*) from brand where normalized_name = 'nike'").query(Long.class).single())
-                .isEqualTo(1);
-        // books are left alone
-        assertThat(reload(book.id()).attributes()).doesNotContainKey("brand_id");
-
-        seller("org_leg_a");
-        assertThat(names(get("/v1/brands?category=" + dresses.id(), 200))).contains(lone, shared);
-        assertThat(names(get("/v1/brands?category=" + leaf("Groceries & Food › Packaged snacks › Packaged snacks").id(), 200)))
-                .doesNotContain(shared);
-        seller("org_leg_d");
-        assertThat(names(get("/v1/brands?category=" + dresses.id(), 200))).contains(shared).doesNotContain(lone);
-    }
-
     // ------------------------------------------------------------------ helpers
-
-    private UUID loneProductSharedId(CategoryNode node, String brand) {
-        return jdbc.sql("select id from product where category_id = :c and attributes ->> 'brand' = :b limit 1")
-                .param("c", node.id()).param("b", brand).query(UUID.class).single();
-    }
-
-    private void runBackfill() throws IOException, SQLException {
-        String script = new ClassPathResource("db/migration/V14__legacy_brand_backfill.sql")
-                .getContentAsString(StandardCharsets.UTF_8);
-        try (Connection c = dataSource.getConnection()) {
-            c.setAutoCommit(false);
-            try (var st = c.createStatement()) {
-                st.execute(script);
-            }
-            c.commit();
-        }
-    }
-
-    /** A product as it was before the registry: a free-text brand and no brand id. */
-    private Product createLegacy(CategoryNode node, String org, String brand, String sku) {
-        seller(org);
-        Product p = node.path().startsWith("Fashion") ? createDress(node, "Nike", sku)
-                : create(node, fill(categories.productType(node.productTypeCode())), sku);
-        jdbc.sql("update product set attributes = (attributes - 'brand_id') || jsonb_build_object('brand', cast(:b as text))"
-                + " where id = :id").param("b", brand).param("id", p.id()).update();
-        return reload(p.id());
-    }
-
-    private Product createLegacyBook(CategoryNode node, String org, String brand) {
-        seller(org);
-        Map<String, String> attrs = new LinkedHashMap<>(fill(categories.productType("printed-books")));
-        Product p = products.create(new CreateProductCommand(node.id(), null, "Legacy book " + suffix(), attrs,
-                List.of(IMAGE), "", List.of(new VariantDraft(Map.of(), "LB-" + suffix(), isbn(), false, 999,
-                        2)), "USD"));
-        jdbc.sql("update product set attributes = attributes || jsonb_build_object('brand', cast(:b as text)) "
-                + "where id = :id").param("b", brand).param("id", p.id()).update();
-        return reload(p.id());
-    }
 
     private Product reload(UUID id) {
         TestActors.reset();

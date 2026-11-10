@@ -11,7 +11,7 @@ server; Seller Center only hides what would be refused.
 | Which departments exist? | The department nodes (level `DEPARTMENT`) of the catalog's category tree. | catalog-service `category` table |
 | How is a department named in other services? | By its **node `code`** (`groceries`, `home-art`), stable and unique. | `category.code`, `CategoryNode.code` |
 | What may this organisation sell in? | The department codes recorded for it. | seller-service `org_department` (migration `V88`) |
-| What does a department ask the seller to have on file? | Compliance data **on the department node**: `FOOD_PERMIT`, `BEAUTY_LABELLING`. | `category.compliance` (catalog migration `V16`), returned as `compliance` on `GET /v1/categories` |
+| What does a department ask the seller to have on file? | Compliance data **on the department node**: `FOOD_PERMIT`, `BEAUTY_LABELLING`. | `category.compliance` (catalog baseline), returned as `compliance` on `GET /v1/categories` |
 
 Nothing in code names a department. Onboarding offers the departments of the tree (`GET /v1/seller/departments`), the
 wizard asks for the food permit exactly when a chosen department says `FOOD_PERMIT`, and the catalog guard works on node

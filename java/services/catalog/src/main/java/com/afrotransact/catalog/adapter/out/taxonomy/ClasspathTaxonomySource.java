@@ -14,7 +14,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Reads the bundled dataset ({@code taxonomy/category_tax_map.json}, copied from tools/taxonomy at build time) and
- * schemas ({@code taxonomy/schemas.json}) from the classpath. Also used by the Flyway migration V20.
+ * schemas ({@code taxonomy/schemas.json}) from the classpath.
  */
 @Component
 public class ClasspathTaxonomySource implements TaxonomySource {

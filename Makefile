@@ -4,6 +4,8 @@ SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
 COMPOSE      := docker compose -f infra/local/docker-compose.yml
+# The `name:` at the top of infra/local/docker-compose.yml: its volumes are afrotransact_<volume> (afrotransact_postgres-data ...).
+COMPOSE_PROJECT := afrotransact
 HELM         ?= $(shell command -v helm 2>/dev/null || echo $(HOME)/go/bin/helm)
 KUBECONFORM  ?= $(shell command -v kubeconform 2>/dev/null || echo $(HOME)/go/bin/kubeconform)
 GOLANGCI     ?= $(shell command -v golangci-lint 2>/dev/null || echo $(HOME)/go/bin/golangci-lint)
@@ -64,8 +66,21 @@ logs: ## Follow logs (SERVICE=<name> for one service)
 ps: ## Show local stack containers and health
 	$(COMPOSE) --profile apps ps -a
 
-reset: ## Stop the local stack and delete all volumes (databases, topics, indices, metrics)
+reset: ## Stop the local stack and delete all its Docker volumes (databases, topics, indices, metrics), then check no afrotransact_* volume is left. Also run: rm -rf .local/bin .local/seed (docs/engineering/local-development.md, "Start fresh locally")
+	tools/dev/local.sh down
 	$(COMPOSE) --profile apps down -v --remove-orphans
+	@# COMPOSE_PROJECT_NAME in your shell beats the `name:` of the compose file: remove the canonical project too.
+	docker compose -p $(COMPOSE_PROJECT) -f infra/local/docker-compose.yml --profile apps down -v --remove-orphans
+	@left="$$(docker volume ls --format '{{.Name}}' | grep -E '^$(COMPOSE_PROJECT)_' || true)"; \
+	if [ -n "$$left" ]; then \
+	  echo "$$left" | xargs docker volume rm >/dev/null 2>&1 || true; \
+	  left="$$(docker volume ls --format '{{.Name}}' | grep -E '^$(COMPOSE_PROJECT)_' || true)"; \
+	fi; \
+	if [ -n "$$left" ]; then \
+	  echo "reset: these volumes are still there (a container outside the project uses them?):" >&2; echo "$$left" >&2; \
+	  echo "       stop that container, then: docker volume rm $$(echo $$left | tr '\n' ' ')" >&2; exit 1; \
+	fi; \
+	echo "reset: ok, 'docker volume ls | grep $(COMPOSE_PROJECT)' finds nothing ($(COMPOSE_PROJECT)_postgres-data is gone)"
 
 apps-up: ## Build and start the containerised services too (compose profile "apps"; SERVICE=<name> for one)
 	$(COMPOSE) --profile apps up -d --build $(SERVICE)
@@ -272,8 +287,9 @@ category-tax-verify: ## End-to-end category tax matrix (74 categories, 105 rows:
 	@if [ "$(CATALOG_IT)" = "1" ]; then cd java && ./mvnw -B -pl services/catalog verify -Dit.test=CategoryTaxMatrixIT -Dtest=LocalDatasetTaxResolverGoldenTest -Dsurefire.failIfNoSpecifiedTests=false; else echo "CATALOG_IT=0: using the catalog matrix result of an earlier run"; fi
 	python3 tools/taxonomy/verification_report.py
 
-taxonomy-check: ## Category tax map: regenerate-check, validate (13/73/105) and run the reference evaluator tests; the catalog's schema resource
+taxonomy-check: ## Category tax map: regenerate-check, validate (13/73/105) and run the reference evaluator tests; the catalog schema resource and the catalog baseline initial data (V1_1)
 	python3 tools/seed/catalog_taxonomy.py --check
+	python3 tools/taxonomy/gen_catalog_baseline.py --check
 	python3 tools/taxonomy/build_map.py --check
 	python3 tools/taxonomy/decision_cases.py --check
 	python3 -I -m unittest discover -s tools/taxonomy/tests

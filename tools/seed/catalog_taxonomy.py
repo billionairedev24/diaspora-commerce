@@ -8,7 +8,7 @@ The tree (13 departments > 73 categories > product types) and the tax facts of e
 tools/taxonomy/category_tax_map.json. What that dataset does not say is what a seller fills in besides the tax
 questions: brand, material, ingredients, the variations a product comes in and the sizing of fashion. That lives here,
 per department (a *family* of detail questions), with a few category and product-type overrides. The catalog's importer
-(`TaxonomyImportService`, also run by migration V20) combines the two; see docs/engineering/taxonomy.md.
+(`TaxonomyImportService`, and the generated baseline data `tools/taxonomy/gen_catalog_baseline.py`) combines the two; see docs/engineering/taxonomy.md.
 
 This is the initial and re-importable definition. Staff keep editing details of a product type in the console afterwards;
 re-importing only creates what is missing and never overwrites a schema staff changed (unless asked to with `force`).

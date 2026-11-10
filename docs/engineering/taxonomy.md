@@ -1,7 +1,7 @@
 # Taxonomy: how categories, product types and their details are managed (S325)
 
 > **Status:** the tree is the 13 > 73 department > category > product type tree of [category-tax-design.md](./category-tax-design.md)
-> (plus one provisional category, below). It replaced the 7-department seed of earlier versions. The staff tools, audit, requests and
+> (plus one provisional category, below). The staff tools, audit, requests and
 > brand registry below are unchanged.
 
 The catalogue has a browse tree of three levels, **department › category › product type** (for example
@@ -10,8 +10,8 @@ allergens, a permit number…), the barcode rule (GTIN or ISBN) and the traits t
 perishable, regulated, pre-order). Several product-type nodes can share one schema (*Tops* and *Wrappers & skirts* both
 use `top`).
 
-Until S325 the tree was created only by the seed migration `V2__seed_taxonomy.sql`. **Staff now manage it in the console
-(Catalog › Categories). Migrations are the initial data only.**
+An empty catalog database gets its first tree from the generated baseline migration `V1_1__initial_data.sql` (below).
+**From then on staff manage it in the console (Catalog › Categories) or through the importer; migrations never touch it.**
 
 ## Who can change it
 
@@ -144,11 +144,18 @@ missing (deterministic ids and codes: `<category>` and `<category>-item` or `<ca
 tax questions from the dataset, sets a category's `taxProfileId`, and leaves alone what staff changed: names, placement, a status
 that tax-returns or the tax screens set, and detail questions. `force` resets all of that. Re-running changes nothing.
 
-**Why migrations may load rows this once.** The rule below (migrations never own staff rows) still holds for the future. The
-replacement is a one-time owner decision because nothing is deployed and catalogue data is deleted: `V18` adds the columns and the
-evidence table, `V19` retires the initial tree by the deterministic ids V2 gave it (deleting what nothing uses, retiring what is used,
-moving starter brand scopes aside), `V20` (a Flyway Java migration, `CategoryTaxTreeMigration`) loads the new tree with the same
-planner the importer uses. From here on a change to the tree is a console action or an import with a reason.
+**The baseline (initial data).** The catalog's migration history is a clean baseline: `V1__baseline.sql` (the whole schema) and
+`V1_1__initial_data.sql` (version 1.1, so the next migration is `V2`). The second file is generated and holds everything a fresh
+database starts with: the 13 > 74 > 77 tree with every category's `taxProfileId` and `taxStatus`, the department compliance
+(`BEAUTY_LABELLING` on Beauty & Personal Care), the product types with their details, tax questions, variation themes and traits
+(fashion sizing included), two product types that belong to no tree node (`custom`, the type of category requests, and
+`electronics`), and the starter brands (56, approved) with the departments and categories where each applies. There are no starter
+size charts: charts are the sellers' own. `tools/taxonomy/gen_catalog_baseline.py` writes it from frozen copies of the dataset and
+schemas in `tools/taxonomy/baseline/` (`--check`, part of `make taxonomy-check`, fails when the committed file is stale); the
+copies are frozen on purpose, so later dataset edits (tax rules, new questions) never ask for a change of an applied migration:
+the importer applies them. `tools/catalog/compare_migrations.sh` proved the baseline equals what the former V1..V20 chain
+(including the Java migration `CategoryTaxTreeMigration` and the retirement of the first 7-department tree) built on an empty
+PostgreSQL: identical schema dump and identical rows apart from timestamps and the random ids the old brand seed generated.
 
 **Upgrading a database that already holds products on the initial tree.** V19 keeps the initial nodes that products, size
 charts or category requests still use (retired, hidden from sellers and shoppers). V20 then makes them harmless: every retained
@@ -190,11 +197,23 @@ review again. Every change of facts or category publishes `catalog.product.tax-f
 bulk template has an optional ATIN column and one `fact:<id>` column per question (proof files excluded), with row-level messages.
 "Download my SKU list" (`GET /v1/image-library/sku-list`) names the image library files.
 
-## Seed migrations are the initial data only (from now on)
+## Changing the tree after the baseline
 
-`V2__seed_taxonomy.sql` seeded the first tree and is retired by V19. **Do not add migrations or regenerate seeds to change the live
-tree or a schema**: use the console, the staff API or the importer. Migrations may add *columns and tables* for the taxonomy feature,
-never rows that staff own (V20 is the one documented exception above).
+**Migrations do not own staff-managed rows.** `V1_1__initial_data.sql` is the one and only migration that writes tree rows, product
+types, brands or size charts, and it never changes once a database has applied it. To change the tree or a schema later:
+
+| Change | How |
+|---|---|
+| Rename, move, add or retire a department, category or product type; edit a product type's details | The console (Catalog › Categories) or the staff API; each change needs a reason and is audited |
+| A new or changed category, question or tax status in the dataset (`tools/taxonomy/category_tax_map.json`, `schemas.json`) | Edit the dataset, run `make taxonomy-check`, deploy: the importer (`POST /v1/taxonomy/import`, or `at.catalog.taxonomy.import-on-start` at start-up, on locally) creates what is missing and refreshes tax questions, leaving staff edits alone (`force` resets them) |
+| New columns or tables for the taxonomy feature | A normal migration (`V2__...sql` and up) that adds structure only, never rows staff own |
+
+Before the first real deployment, while every database is disposable, a dataset change can also be folded into the baseline:
+`python3 tools/taxonomy/gen_catalog_baseline.py --refreeze`, then recreate the local databases (see *Start fresh locally* in
+[local-development.md](./local-development.md)). Once any environment has applied the baseline, never do that.
+
+Because the baseline replaced the former history, a local database created before it fails the catalog's Flyway validation and must
+be recreated; nothing else needs converting.
 
 ## What follows a rename or move
 

@@ -45,7 +45,7 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * The category tax verification matrix, catalog side, against the real tree seeded by V20 in a real PostgreSQL: for each of the 74
+ * The category tax verification matrix, catalog side, against the real tree seeded by the baseline migration in a real PostgreSQL: for each of the 74
  * categories and each of its decision rows (the 105 golden scenarios), a valid minimal product is built through catalog's real
  * validation (facts per variant, behaviour on the listing, evidence uploaded where the rule needs proof), the publish gate result is
  * checked against the expected one (READY once tax review approves, a gated status otherwise), the product is approved or refused,

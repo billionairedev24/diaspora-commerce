@@ -1,5 +1,5 @@
-"""The demo dataset is valid for the catalog's taxonomy (tools/seed/catalog_taxonomy.py, the V2 migration's source):
-every product path exists, variants fit a variation theme, attribute values fit their options, SKUs follow catalog's
+"""The demo dataset is valid for the catalog's taxonomy (the detail schemas of tools/seed/catalog_taxonomy.py and the
+tax dataset, which are the catalog's initial data and importer source): every product path exists, variants fit a variation theme, attribute values fit their options, SKUs follow catalog's
 rule and are unique per seller, ISBNs are valid."""
 import re
 import unittest

@@ -34,7 +34,7 @@ Spring Boot 4.1 · Java 25 · PostgreSQL · local port **8101**.
   `en:long-grain-rices`, GS1 GPC segments) are mapped onto the seeded taxonomy (`DefaultCategoryHintPolicy`) and
   returned as up to three `categoryHints` with category id, path and product type. A GTIN that already has a product
   page returns `existingAtin` without calling any provider. Answers are cached per GTIN-14 in `product_data_lookup`
-  (V5): hits for `PRODUCT_DATA_CACHE_TTL` (7 days), misses for `PRODUCT_DATA_MISS_TTL` (1 day). Provider errors and
+  (`product_data_lookup`): hits for `PRODUCT_DATA_CACHE_TTL` (7 days), misses for `PRODUCT_DATA_MISS_TTL` (1 day). Provider errors and
   timeouts (3 s, one retry on a dropped connection) skip to the next provider and are never cached.
   - *Open Food Facts* (`adapter/out/productdata/OpenFoodFactsSource`): `GET /api/v2/product/{ean}.json`, open data,
     on by default, sends `OFF_USER_AGENT`.
@@ -53,7 +53,7 @@ Spring Boot 4.1 · Java 25 · PostgreSQL · local port **8101**.
     48-character limit and GS1 pairing rules are checked.
   - Unit labels (`GET /v1/labels/units/{atin}`): AfroTransact Retail stock with a vendor GTIN keeps the manufacturer
     barcode. Every other unit gets the stock owner's **AT-FN code** (`ATF` + 7 base-36, Code 128), issued once per
-    owner organisation and variant ATIN in `unit_label` (V5), so units of different sellers never mix and platform
+    owner organisation and variant ATIN in `unit_label`, so units of different sellers never mix and platform
     stock without a GTIN is labelled at receiving.
 
 - **One-step product form (S307)**:
@@ -75,8 +75,8 @@ Spring Boot 4.1 · Java 25 · PostgreSQL · local port **8101**.
 - **Taxonomy administration (S325)** (`/v1/taxonomy/**`, guide: [docs/engineering/taxonomy.md](../../../docs/engineering/taxonomy.md)):
   - Staff create, rename, move, reorder, retire and restore departments, categories and product types, and edit a
     product type's schema (label, identifier rule, traits, attributes with kind, units, choices, section, required and
-    `applies`). `V11` adds `category.code|version|retired_*`, `product_type.version` and the append-only
-    `taxonomy_audit`; `V2` stays the initial data only.
+    `applies`). The schema has `category.code|version|retired_*`, `product_type.version` and the append-only
+    `taxonomy_audit`; the baseline migrations hold the initial data only (`V1_1__initial_data.sql`, generated).
   - Every change needs a reason (3 to 1,000 characters), writes an audit row and publishes `catalog.taxonomy.changed`.
     Nodes and schemas carry a `version`: edits send `If-Match` (412 `catalog.version-mismatch`, 428
     `catalog.if-match-required`); a reorder sends the whole sibling list.
@@ -214,14 +214,14 @@ see [`contracts/asyncapi/fragments/catalog.yaml`](../../../contracts/asyncapi/fr
 carry `sellerHidden` (true while the owner's listings are hidden).
 
 Consumed (group `catalog-service`, inbox-deduplicated): `seller.listings.hidden|restored` on
-`at.seller-compliance.events` record the organisation in `org_listing_suppression` (V3), hide its products from
+`at.seller-compliance.events` record the organisation in `org_listing_suppression`, hide its products from
 `/v1/public/**` and publish `catalog.product.hidden|restored` for each of its products so search follows. This also
 covers Trust and Safety suspensions (reason `SUSPENDED` / `REINSTATED` from seller-service).
 
 **Paged hide / restore (S216).** The decision (inbox, suppression row, `listing_enforcement_run` row) commits in one
 short transaction; then the organisation's products are republished in pages of `at.catalog.listing-enforcement.page-size`
-(500), one transaction per page, walking a keyset cursor on `(owner_org, id)` (V6 adds that index and
-`product_variant (product_id)`, so each page is constant cost however big the catalog). Each page's outbox rows and
+(500), one transaction per page, walking a keyset cursor on `(owner_org, id)` (an index on that key and on
+`product_variant (product_id)` keep each page at constant cost however big the catalog). Each page's outbox rows and
 the run's cursor commit together, so a page is never published twice. Runs are tracked per enforcement event
 (`listing_enforcement_run`: status `RUNNING|DONE|SUPERSEDED`, cursor, processed, pages): a redelivered event resumes
 its run after the last committed page, `ListingEnforcementResumeJob` (every 60 s) resumes runs with no page for 2 min
@@ -277,11 +277,12 @@ Libraries added for S031/S032: `spring-boot-starter-restclient` (provider calls)
 test-only ZXing core 3.5.4 (every barcode test decodes the generated symbol, so it is known to scan) and WireMock
 3.13.2 (providers). The ZPL output is pinned by snapshots in `src/test/resources/labels`.
 Apache POI 5.4.1 (`poi-ooxml`) for bulk upload templates and parsing (S308, see ADR 0003).
-Migrations: `V8__one_step_form_and_bulk_upload.sql` (product-type traits and attribute metadata, listing details,
-variant compare-at and images, `product_draft`, `product_import`, `product_import_row`);
-`V5__barcode_prefill_and_unit_labels.sql` (`product_data_lookup`, `unit_label`, `unit_label_seq`);
-`V15__size_charts.sql` (`size_chart`, the chart index on `product`, the `sizing` trait and `allowCustomValues` of the
-fashion product types; generated by `python3 tools/seed/catalog_taxonomy.py --sizing`).
+Migrations: `V1__baseline.sql` (the whole schema; the former V1..V20 chain was squashed into it before any
+deployment) and `V1_1__initial_data.sql` (generated by `python3 tools/taxonomy/gen_catalog_baseline.py`: the department >
+category > product type tree, product types with sizing, tax profile ids and status, compliance, starter brands and
+their scopes). Schema changes from here are `V2`, `V3` ... ; the tree itself is changed in the staff console or by the
+importer, never by a migration (docs/engineering/taxonomy.md). `tools/catalog/compare_migrations.sh` compares two
+databases built by different chains.
 
 ### Test notes
 

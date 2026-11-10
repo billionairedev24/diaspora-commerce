@@ -15,7 +15,7 @@ whether a form shows sizes, whether a chart is required and what it suggests.
 
 ## The model
 
-`size_chart` (catalog, migration `V15__size_charts.sql`):
+`size_chart` (catalog, in the baseline `V1__baseline.sql`):
 
 - `owner_org` the seller organisation that wrote it. A chart is **never shared**: a product can link only a chart
   of its own organisation.
@@ -27,7 +27,7 @@ whether a form shows sizes, whether a chart is required and what it suggests.
 - A product's `listing` holds `sizeChartId` and `fitNote` (the product's own fit note wins over the chart's).
 - A variation dimension is `{name, options, allowCustomValues}`; `allowCustomValues` defaults to `false`.
 - The product-type **sizing trait** is `{sizeChartRequired, sizeDimension, suggestedMeasurements[]}` in the type's
-  `traits` document. Seed: `tools/seed/catalog_taxonomy.py --sizing` generates the SQL in V15 (dresses, tops, menwear and
+  `traits` document. Initial data: the fashion types are sized in the generated `V1_1__initial_data.sql` (dresses, tops, menwear and
   kids are sized; Size and Color of those types allow custom values, headwraps allow custom colours; nothing requires a
   chart yet, staff can switch that on).
 
