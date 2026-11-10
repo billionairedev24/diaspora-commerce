@@ -1,0 +1,354 @@
+[
+ {
+  "name": "Nike",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "Adidas",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "Puma",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "Levi's",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "H&M",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "Zara",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "Uniqlo",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "Gap",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "Ralph Lauren",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "Tommy Hilfiger",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "Calvin Klein",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "Under Armour",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "Hanes",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "Fruit of the Loom",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "Champion",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "New Balance",
+  "scopes": [
+   "adult-clothing-footwear",
+   "childrens-clothing"
+  ]
+ },
+ {
+  "name": "Vlisco",
+  "scopes": [
+   "fabrics-textiles"
+  ]
+ },
+ {
+  "name": "Woodin",
+  "scopes": [
+   "fabrics-textiles"
+  ]
+ },
+ {
+  "name": "Uniwax",
+  "scopes": [
+   "fabrics-textiles"
+  ]
+ },
+ {
+  "name": "GTP",
+  "scopes": [
+   "fabrics-textiles"
+  ]
+ },
+ {
+  "name": "Maggi",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Knorr",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Indomie",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Golden Penny",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Dangote",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Honeywell",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Tilda",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Heinz",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Nestlé",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Kellogg's",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Lipton",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Twinings",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Nescafé",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Milo",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Peak",
+  "scopes": [
+   "groceries-food"
+  ]
+ },
+ {
+  "name": "Palmer's",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Nivea",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Dove",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Vaseline",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "CeraVe",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Olay",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Cantu",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Dark & Lovely",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Carol's Daughter",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Mielle Organics",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Camille Rose",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Pantene",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Eco Style",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "SheaMoisture",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "L'Oréal Paris",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Garnier",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "X-pression",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Sensationnel",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Freetress",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Outre",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ },
+ {
+  "name": "Janet Collection",
+  "scopes": [
+   "beauty-personal-care"
+  ]
+ }
+]

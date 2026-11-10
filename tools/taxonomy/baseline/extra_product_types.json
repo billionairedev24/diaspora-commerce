@@ -1,0 +1,187 @@
+[
+    {
+        "code": "custom",
+        "label": "Your requested category",
+        "themes": [
+            {
+                "name": "Option",
+                "dimensions": [
+                    {
+                        "name": "Option",
+                        "options": [
+                            "Standard",
+                            "Small",
+                            "Medium",
+                            "Large"
+                        ]
+                    }
+                ]
+            },
+            {
+                "name": "Size × Color",
+                "dimensions": [
+                    {
+                        "name": "Size",
+                        "options": [
+                            "S",
+                            "M",
+                            "L",
+                            "XL"
+                        ]
+                    },
+                    {
+                        "name": "Color",
+                        "options": [
+                            "Black",
+                            "White",
+                            "Gold",
+                            "Multicolour"
+                        ]
+                    }
+                ]
+            }
+        ],
+        "traits": {
+        },
+        "attributes": [
+            {
+                "key": "brand",
+                "help": "The brand, if the product has one.",
+                "kind": "BRAND",
+                "label": "Brand",
+                "units": [
+                ],
+                "applies": true,
+                "options": [
+                    "UNBRANDED"
+                ],
+                "section": "DETAILS",
+                "required": false,
+                "multiline": false
+            },
+            {
+                "key": "material",
+                "label": "Material / main ingredient",
+                "options": [
+                ],
+                "required": true,
+                "multiline": false
+            },
+            {
+                "key": "details",
+                "label": "Key details shoppers need",
+                "options": [
+                ],
+                "required": true,
+                "multiline": true
+            },
+            {
+                "key": "origin",
+                "label": "Made in",
+                "options": [
+                ],
+                "required": true,
+                "multiline": false
+            }
+        ],
+        "identifierRule": "GTIN"
+    },
+    {
+        "code": "electronics",
+        "label": "Consumer electronics",
+        "themes": [
+            {
+                "name": "Color",
+                "dimensions": [
+                    {
+                        "name": "Color",
+                        "options": [
+                            "Black",
+                            "White",
+                            "Silver",
+                            "Gold",
+                            "Blue"
+                        ]
+                    }
+                ]
+            },
+            {
+                "name": "Storage",
+                "dimensions": [
+                    {
+                        "name": "Storage",
+                        "options": [
+                            "64 GB",
+                            "128 GB",
+                            "256 GB",
+                            "512 GB"
+                        ]
+                    }
+                ]
+            }
+        ],
+        "traits": {
+        },
+        "attributes": [
+            {
+                "key": "brand",
+                "help": "The manufacturer named on the product, e.g. Samsung or Tecno.",
+                "kind": "BRAND",
+                "label": "Brand",
+                "units": [
+                ],
+                "applies": true,
+                "options": [
+                ],
+                "section": "DETAILS",
+                "required": true,
+                "multiline": false
+            },
+            {
+                "key": "model",
+                "help": "Printed on the product label or box, e.g. SM-A546B",
+                "kind": "TEXT",
+                "label": "Model number",
+                "units": [
+                ],
+                "options": [
+                ],
+                "section": "DETAILS",
+                "required": true,
+                "multiline": false
+            },
+            {
+                "key": "voltage",
+                "help": "Check it suits the country the item is delivered to",
+                "kind": "ENUM",
+                "label": "Voltage",
+                "units": [
+                ],
+                "options": [
+                    "110-120V (US)",
+                    "220-240V",
+                    "Dual voltage",
+                    "Battery or USB powered"
+                ],
+                "section": "DETAILS",
+                "required": true,
+                "multiline": false
+            },
+            {
+                "key": "warranty",
+                "kind": "NUMBER",
+                "label": "Warranty",
+                "units": [
+                    "months",
+                    "years"
+                ],
+                "options": [
+                ],
+                "section": "DETAILS",
+                "required": false,
+                "multiline": false
+            }
+        ],
+        "identifierRule": "GTIN"
+    }
+]
