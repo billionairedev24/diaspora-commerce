@@ -377,6 +377,18 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/listings', ListingPageSchema, { query: tableSearchParams({ status: q.status, q: q.q, page: q.page, size: q.size }, q.sort), signal }),
     setListingActive: (productId: string, active: boolean): Promise<ListingRow> =>
       request(`/v1/seller/listings/${enc(productId)}/status`, ListingRowSchema, { method: 'POST', body: { active } }),
+    /** The tax publish gate of a product per variant, in plain words: what is still needed before it can go live. */
+    getTaxReadiness: (productId: string, signal?: AbortSignal): Promise<TaxReadiness> =>
+      request(`/v1/seller/products/${encodeURIComponent(productId)}/tax-readiness`, TaxReadinessSchema, { signal }),
+    /** Uploads the proof file of an exemption question (label photo, Drug Facts) for a saved variant. */
+    uploadTaxEvidence: (atin: string, factId: string, file: File): Promise<TaxEvidence> => {
+      const body = new FormData();
+      body.set('factId', factId);
+      body.set('file', file);
+      return request(`/v1/seller/variants/${encodeURIComponent(atin)}/tax-evidence`, TaxEvidenceSchema, { method: 'POST', body });
+    },
+    listTaxEvidence: (atin: string, signal?: AbortSignal): Promise<TaxEvidence[]> =>
+      request(`/v1/seller/variants/${encodeURIComponent(atin)}/tax-evidence`, z.array(TaxEvidenceSchema), { signal }),
     submitProduct: (draft: ProductDraft): Promise<ListingRow> => request('/v1/seller/products', ListingRowSchema, { method: 'POST', body: draft }),
     /** One listing with everything the one-step form edits (S307). */
     getProduct: (productId: string, signal?: AbortSignal): Promise<SellerProductDetail> =>

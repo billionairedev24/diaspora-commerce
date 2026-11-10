@@ -862,23 +862,38 @@ export const ListingPageSchema = z.object({
 });
 export type ListingPage = z.infer<typeof ListingPageSchema>;
 
+/** The tax gate of a category: sellers publish only into ACTIVE ones; the others show a plain message and what happens next. */
+export const CategoryTaxStatusSchema = z.enum(['ACTIVE', 'NEEDS_APPROVAL', 'BLOCKED_BUNDLE', 'REFINE_CODE', 'CONFLICT_OPEN']);
+export type CategoryTaxStatus = z.infer<typeof CategoryTaxStatusSchema>;
 export interface CategoryNode {
   id: string;
   name: string;
   level: string;
   productType: string | null;
   path: string;
+  /** Category nodes only: the gate of the category's tax profile (absent on departments and product types). */
+  taxStatus?: CategoryTaxStatus | null | undefined;
   children: CategoryNode[];
 }
 export const CategoryNodeSchema: z.ZodType<CategoryNode> = z.lazy(() =>
-  z.object({ id: z.string(), name: z.string(), level: z.string(), productType: nullableString, path: z.string(), children: z.array(CategoryNodeSchema) })
+  z.object({ id: z.string(), name: z.string(), level: z.string(), productType: nullableString, path: z.string(), taxStatus: CategoryTaxStatusSchema.nullish(), children: z.array(CategoryNodeSchema) })
 );
 
 /** BRAND: chosen from the brand registry of the category; its options are the no-brand choices (UNBRANDED, HANDMADE). */
-export const AttributeKindSchema = z.enum(['TEXT', 'MULTILINE', 'ENUM', 'NUMBER', 'BRAND']);
+export const AttributeKindSchema = z.enum(['TEXT', 'MULTILINE', 'ENUM', 'NUMBER', 'BRAND', 'BOOLEAN', 'DECIMAL', 'INTEGER', 'PERCENT', 'FILE']);
 export type AttributeKind = z.infer<typeof AttributeKindSchema>;
-export const AttributeSectionSchema = z.enum(['DETAILS', 'FOOD', 'REGULATED']);
+export const AttributeSectionSchema = z.enum(['DETAILS', 'FOOD', 'REGULATED', 'TAX']);
 export type AttributeSection = z.infer<typeof AttributeSectionSchema>;
+/** A show-when / required-when expression over fact ids: {all}, {any}, {not} or a leaf {op, fact, value|values}; null = always. */
+export type FactExpression = { all: FactExpression[] } | { any: FactExpression[] } | { not: FactExpression } | { op: 'isTrue' | 'isFalse' | 'eq' | 'in' | 'gt' | 'gte' | 'lt' | 'lte'; fact: string; value?: string | number | boolean; values?: Array<string | number | boolean> };
+export const FactExpressionSchema: z.ZodType<FactExpression> = z.lazy(() =>
+  z.union([
+    z.object({ all: z.array(FactExpressionSchema) }),
+    z.object({ any: z.array(FactExpressionSchema) }),
+    z.object({ not: FactExpressionSchema }),
+    z.object({ op: z.enum(['isTrue', 'isFalse', 'eq', 'in', 'gt', 'gte', 'lt', 'lte']), fact: z.string(), value: z.union([z.string(), z.number(), z.boolean()]).optional(), values: z.array(z.union([z.string(), z.number(), z.boolean()])).optional() })
+  ])
+);
 export const AttributeDefSchema = z.object({
   key: z.string(),
   label: z.string(),
@@ -888,7 +903,18 @@ export const AttributeDefSchema = z.object({
   kind: AttributeKindSchema,
   units: z.array(z.string()),
   section: AttributeSectionSchema,
-  help: nullableString
+  help: nullableString,
+  /** Tax facts (section TAX): plain-word questions whose answers decide how the item is taxed. */
+  taxFact: z.boolean().default(false),
+  /** VARIANT facts are answered per variant; OFFER facts are the seller's own behaviour, part of "Your listing". */
+  owner: z.enum(['VARIANT', 'OFFER']).nullish(),
+  unit: nullableString.optional(),
+  showWhen: FactExpressionSchema.nullish(),
+  requiredWhen: FactExpressionSchema.nullish(),
+  /** A FILE fact that is proof for an exemption claim (uploaded for each item once it is saved). */
+  evidence: z.boolean().default(false),
+  /** The plain label of each option value of a choice question. */
+  optionLabels: z.record(z.string(), z.string()).default({})
 });
 export type AttributeDef = z.infer<typeof AttributeDefSchema>;
 /** The unit of a size chart's values; the other unit is shown by conversion. */
@@ -999,9 +1025,17 @@ export const ProductImageInputSchema = z.object({
   alt: z.string().max(200).nullable().optional()
 });
 export type ProductImageInput = z.infer<typeof ProductImageInputSchema>;
+/** An answer to a tax question: yes/no, a number, or the chosen option value. */
+export const FactValueSchema = z.union([z.boolean(), z.number(), z.string()]);
+export type FactValue = z.infer<typeof FactValueSchema>;
 export const VariantInputSchema = z.object({
   options: z.record(z.string(), z.string()),
-  sellerSku: z.string().min(1).max(64),
+  /** Optional: when empty the catalog generates a stable, organisation-prefixed SKU. */
+  sellerSku: z.string().max(64).optional(),
+  /** The existing variant's ATIN: matches it when the SKU and barcode are absent. */
+  atin: z.string().optional(),
+  /** The category's product questions for this variant (net weight, servings ...), by fact id. */
+  taxFacts: z.record(z.string(), FactValueSchema).optional(),
   gtin: z.string().optional(),
   gtinExempt: z.boolean().optional(),
   priceMinor: z.number().int().min(1),
@@ -1032,7 +1066,9 @@ export const ListingDetailsInputSchema = z.object({
   /** One of the organisation's size charts; required when the product type's sizing trait says so. */
   sizeChartId: nullableString.optional(),
   /** How the sizes fit; defaults to the chart's own. */
-  fitNote: FitNoteSchema.nullable().optional()
+  fitNote: FitNoteSchema.nullable().optional(),
+  /** "Your listing": how this seller sells the item (sold hot, heated by you, utensils included), by fact id. */
+  sellerBehaviour: z.record(z.string(), FactValueSchema).optional()
 });
 export type ListingDetailsInput = z.infer<typeof ListingDetailsInputSchema>;
 export const ProductDraftSchema = z.object({
@@ -1059,7 +1095,12 @@ export const ProductVariantSchema = z.object({
   priceMinor: z.number().int(),
   compareAtMinor: z.number().int().nullable(),
   quantity: z.number().int(),
-  images: z.array(ProductImageInputSchema)
+  images: z.array(ProductImageInputSchema),
+  /** True when the catalog generated the SKU because the seller left it empty. */
+  sellerSkuGenerated: z.boolean().default(false),
+  taxFacts: z.record(z.string(), FactValueSchema).default({}),
+  taxStatus: z.enum(['READY', 'MISSING_FACTS', 'PENDING_REVIEW', 'BLOCKED', 'NEEDS_APPROVAL', 'REFINE_CODE', 'CONFLICT_OPEN', 'REJECTED']).default('MISSING_FACTS'),
+  missingTaxFacts: z.array(z.object({ factId: z.string(), label: nullableString.optional(), message: z.string() })).default([])
 });
 export type ProductVariant = z.infer<typeof ProductVariantSchema>;
 export const ListingDetailsSchema = z.object({
@@ -1071,9 +1112,43 @@ export const ListingDetailsSchema = z.object({
   handlingDays: z.number().int(),
   shipFromId: nullableString,
   sizeChartId: nullableString.default(null),
-  fitNote: FitNoteSchema.nullable().default(null)
+  fitNote: FitNoteSchema.nullable().default(null),
+  sellerBehaviour: z.record(z.string(), FactValueSchema).default({})
 });
 export type ListingDetails = z.infer<typeof ListingDetailsSchema>;
+
+/** The tax publish gate of a product, per variant, in plain words (GET /v1/seller/products/{id}/tax-readiness). */
+export const TaxStatusSchema = z.enum(['READY', 'MISSING_FACTS', 'PENDING_REVIEW', 'BLOCKED', 'NEEDS_APPROVAL', 'REFINE_CODE', 'CONFLICT_OPEN', 'REJECTED']);
+export type TaxStatus = z.infer<typeof TaxStatusSchema>;
+export const TaxReadinessSchema = z.object({
+  productId: z.string(),
+  status: TaxStatusSchema,
+  categoryCode: nullableString.optional(),
+  categoryStatus: nullableString.optional(),
+  categoryMessage: nullableString.optional(),
+  ruleVersion: nullableString.optional(),
+  variants: z.array(z.object({
+    atin: z.string(),
+    sellerSku: z.string(),
+    status: TaxStatusSchema,
+    missingTaxFacts: z.array(z.object({ factId: z.string(), label: nullableString.optional(), message: z.string() })),
+    reason: nullableString.optional()
+  }))
+});
+export type TaxReadiness = z.infer<typeof TaxReadinessSchema>;
+/** A proof file stored for an exemption fact of a variant. */
+export const TaxEvidenceSchema = z.object({
+  id: z.string(),
+  atin: z.string(),
+  factId: z.string(),
+  version: z.number().int(),
+  fileName: z.string(),
+  contentType: z.string(),
+  bytes: z.number().int(),
+  url: z.string(),
+  uploadedAt: z.string()
+});
+export type TaxEvidence = z.infer<typeof TaxEvidenceSchema>;
 
 /* ── Size charts (sellers write them; the category only suggests sizes and measurements) ── */
 
