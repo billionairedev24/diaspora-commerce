@@ -101,12 +101,12 @@ class ProductFormIT {
 
     @Test
     void productTypesCarryTraitsAndAttributeMetadata() {
-        ProductType grocery = categories.productType("grocery");
+        ProductType grocery = categories.productType("rice-grains");
         assertThat(grocery.traits().food()).isTrue();
         assertThat(grocery.traits().preorder()).isTrue();
         assertThat(grocery.attribute("shelf").orElseThrow().units()).containsExactly("days", "months");
         assertThat(grocery.attribute("allergens").orElseThrow().section().name()).isEqualTo("FOOD");
-        ProductType perishable = categories.productType("perishable");
+        ProductType perishable = categories.productType("frozen-meals");
         assertThat(perishable.traits().regulated()).isTrue();
         assertThat(perishable.attribute("permit").orElseThrow().section().name()).isEqualTo("REGULATED");
         assertThat(perishable.attribute("shelf").orElseThrow().required()).isFalse();
@@ -116,7 +116,7 @@ class ProductFormIT {
     @Test
     void aSimpleProductWithListingDetailsIsCreatedEditedAndResubmitted() {
         ShipFromRef houston = new ShipFromRef("loc-1", "Houston", "Houston", "TX", "US", "77002");
-        Product created = products.create(new CreateProductCommand(leaf("Groceries › Pantry › Spices & seasonings").id(),
+        Product created = products.create(new CreateProductCommand(leaf("Groceries & Food › Spices & seasonings › Spices & seasonings").id(),
                 null, "Suya Pepper Spice Blend from Kano", SUYA, List.of(IMAGE), "",
                 List.of(new VariantDraft(Map.of(), "suya-1", null, true, 899, 40, 1199L, List.of())), "USD", true, null,
                 new ListingDetails("Hand-ground in Kano.", ItemCondition.NEW, List.of("suya", "yaji"),
@@ -153,7 +153,7 @@ class ProductFormIT {
 
     @Test
     void aPublishedListingKeepsItsVariantsAndCategory() {
-        Product created = products.create(new CreateProductCommand(leaf("Groceries › Pantry › Snacks").id(), null,
+        Product created = products.create(new CreateProductCommand(leaf("Groceries & Food › Rice & grains › Rice & grains").id(), null,
                 "Chin Chin, Crunchy, Lightly Sweet", SUYA, List.of(IMAGE), "Net weight",
                 List.of(new VariantDraft(Map.of("Net weight", "8 oz"), "CC-8", null, true, 599, 10),
                         new VariantDraft(Map.of("Net weight", "1 lb"), "CC-16", null, true, 999, 10)), "USD"));
@@ -165,7 +165,7 @@ class ProductFormIT {
                         599, 10)), null, null, null, null, null)))
                 .isInstanceOfSatisfying(CatalogRuleViolation.class, ex -> assertThat(ex.fieldErrors()).containsKey("variants"));
         assertThatThrownBy(() -> products.update(live.id(), new UpdateProductCommand(
-                leaf("Groceries › Pantry › Spices & seasonings").id(), live.title(), SUYA, List.of(IMAGE), "Net weight",
+                leaf("Groceries & Food › Spices & seasonings › Spices & seasonings").id(), live.title(), SUYA, List.of(IMAGE), "Net weight",
                 List.of(new VariantDraft(Map.of("Net weight", "8 oz"), "CC-8", null, true, 599, 10),
                         new VariantDraft(Map.of("Net weight", "1 lb"), "CC-16", null, true, 999, 10)), null, null, null,
                 null, null))).isInstanceOfSatisfying(CatalogRuleViolation.class,
@@ -207,14 +207,14 @@ class ProductFormIT {
     @Test
     void draftsAutosaveWithVersionsAndAreDeletedOnSubmit() {
         SavedDraft d = drafts.create(null, "Ankara", null, "{\"title\":\"Ankara\"}");
-        SavedDraft saved = drafts.save(d.id(), d.version(), "Ankara Wrap Dress", "Fashion › Women › Dresses",
+        SavedDraft saved = drafts.save(d.id(), d.version(), "Ankara Wrap Dress", "Fashion & Accessories › Adult clothing & footwear › Women's dresses",
                 "{\"title\":\"Ankara Wrap Dress\"}");
         assertThat(saved.version()).isEqualTo(d.version() + 1);
         assertThatThrownBy(() -> drafts.save(d.id(), d.version(), "stale", null, "{}"))
                 .isInstanceOf(ConflictException.class);
         assertThat(drafts.list()).extracting(SavedDraft::title).contains("Ankara Wrap Dress");
 
-        Product p = products.create(new CreateProductCommand(leaf("Groceries › Pantry › Snacks").id(), null,
+        Product p = products.create(new CreateProductCommand(leaf("Groceries & Food › Rice & grains › Rice & grains").id(), null,
                 "Plantain Chips, Sea Salt, 5 oz", SUYA, List.of(IMAGE), "",
                 List.of(new VariantDraft(Map.of(), "PLANTAIN-5", null, true, 499, 30)), "USD", null, null, null,
                 saved.id()));

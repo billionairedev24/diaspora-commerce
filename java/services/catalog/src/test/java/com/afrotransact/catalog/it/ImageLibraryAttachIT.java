@@ -167,15 +167,15 @@ class ImageLibraryAttachIT {
 
     /** A dress row; {@code images} are the template's Main image URL and Other image URL 1…8 columns, in order. */
     private String dressRow(String parent, String sku, String size, String... images) {
-        List<String> pairs = new ArrayList<>(List.of("Parent SKU=" + parent, "SKU *=" + sku,
+        List<String> pairs = new ArrayList<>(List.of("Parent SKU=" + parent, "SKU=" + sku,
                 "Title *=Ankara Wrap Dress, Puff Sleeve", "Brand or label *=Adire Lagos"));
         for (int i = 0; i < images.length; i++) {
             pairs.add((i == 0 ? "Main image URL=" : "Other image URL " + i + "=") + images[i]);
         }
         pairs.addAll(List.of("Description=Hand-finished wax print.",
                 "Price (USD) *=49.00", "Quantity *=5", "No barcode=Yes", "Variation=" + (size.isEmpty() ? "" : "Size"),
-                "Size=" + size, "Material *=Lace", "Fit *=Regular", "Length *=Midi", "Sleeve *=Short",
-                "Occasion *=Everyday", "Care *=Cold wash", "Made in *=Nigeria"));
+                "Size=" + size, "Material=Lace", "Fit=Regular", "Length=Midi",
+                "Occasion=Everyday", "Care=Cold wash", "Made in=Nigeria"));
         return row(pairs.toArray(String[]::new));
     }
 

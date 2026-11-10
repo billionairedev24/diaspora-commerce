@@ -171,8 +171,8 @@ class BarcodeIT {
         assertThat(p.importedFrom()).containsEntry("title", "GS1").containsEntry("imageUrls", "OPEN_FOOD_FACTS");
         assertThat(p.sources()).containsExactly("GS1", "OPEN_FOOD_FACTS");
         assertThat(p.categoryHints()).extracting(GtinPrefillService.CategoryHint::path)
-                .containsExactly("Groceries › Pantry › Grains & rice", "Groceries");
-        assertThat(p.categoryHints().getFirst().productTypeCode()).isEqualTo("grocery");
+                .containsExactly("Groceries & Food › Rice & grains › Rice & grains", "Groceries & Food");
+        assertThat(p.categoryHints().getFirst().productTypeCode()).isEqualTo("rice-grains");
         assertThat(p.categoryHints().getFirst().level()).isEqualTo("PRODUCT_TYPE");
 
         // The second lookup is answered from the cache.
@@ -198,7 +198,7 @@ class BarcodeIT {
         assertThat(p.sources()).containsExactly("OPEN_FOOD_FACTS");
         assertThat(p.importedFrom()).containsEntry("title", "OPEN_FOOD_FACTS");
         assertThat(p.categoryHints()).extracting(GtinPrefillService.CategoryHint::path)
-                .containsExactly("Groceries › Pantry › Sauces & pastes");
+                .containsExactly("Groceries & Food › Beans, pantry foods & sauces › Beans, pantry foods & sauces");
     }
 
     @Test
@@ -344,7 +344,7 @@ class BarcodeIT {
     // -------------------------------------------------------------------------------------------------- helpers
 
     private Product createGroceryProduct(String gtin, String sku) {
-        CategoryNode leaf = categories.tree().stream().filter(n -> n.path().equals("Groceries › Pantry › Grains & rice"))
+        CategoryNode leaf = categories.tree().stream().filter(n -> n.path().equals("Groceries & Food › Rice & grains › Rice & grains"))
                 .findFirst().orElseThrow();
         Map<String, String> attrs = Map.of("brand", "AfroTransact", "ingredients", "Cassava", "allergens", "None",
                 "shelf", "365", "storage", "Room temperature", "origin", "Nigeria", "cert", "None");

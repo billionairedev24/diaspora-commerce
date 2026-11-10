@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
+import com.afrotransact.catalog.domain.imports.ImageLibrary;
+import com.afrotransact.catalog.port.ImageLibraryLookup;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -78,6 +81,13 @@ class ProductImportIT {
     /** media-service stand-in: "broken" URLs are refused, "crash" URLs fail like a pod dying (once per counter). */
     @TestConfiguration(proxyBeanMethods = false)
     static class FakeMedia {
+        /** The image library of media-service: this test's organisations have none (rows carry their own image URLs). */
+        @Bean
+        @Primary
+        ImageLibraryLookup emptyLibrary() {
+            return (ownerOrg, skus, fileNames) -> new ImageLibrary(List.of());
+        }
+
         @Bean
         @Primary
         ImageImporter fakeImageImporter() {
@@ -141,12 +151,18 @@ class ProductImportIT {
         return String.join(",", cells);
     }
 
+    /** A dress row; {@code image} holds one or more URLs separated by spaces (the template's Main image URL, then Other image URL 1 to 8). */
     private String dressRow(String parent, String sku, String size, String image) {
-        return row("Parent SKU=" + parent, "SKU *=" + sku, "Title *=Ankara Wrap Dress, Puff Sleeve",
-                "Brand *=Adire Lagos", "Image URLs *=" + image, "Description=Hand-finished wax print.",
+        List<String> pairs = new ArrayList<>(List.of("Parent SKU=" + parent, "SKU=" + sku, "Title *=Ankara Wrap Dress, Puff Sleeve",
+                "Brand or label *=Adire Lagos", "Description=Hand-finished wax print.",
                 "Price (USD) *=49.00", "Quantity *=5", "No barcode=Yes", "Variation=" + (size.isEmpty() ? "" : "Size"),
-                "Size=" + size, "Material *=Lace", "Fit *=Regular", "Length *=Midi", "Sleeve *=Short",
-                "Occasion *=Everyday", "Care *=Cold wash", "Made in *=Nigeria");
+                "Size=" + size, "Material=Lace", "Fit=Regular", "Length=Midi",
+                "Occasion=Everyday", "Care=Cold wash", "Made in=Nigeria"));
+        String[] urls = image.isBlank() ? new String[0] : image.trim().split("\\s+");
+        for (int i = 0; i < urls.length; i++) {
+            pairs.add((i == 0 ? "Main image URL=" : "Other image URL " + i + "=") + urls[i]);
+        }
+        return row(pairs.toArray(String[]::new));
     }
 
     private ProductImport awaitDone(UUID id) {
@@ -179,7 +195,7 @@ class ProductImportIT {
                 dressRow("", "SOLO-1", "", "https://cdn.example.com/solo.jpg"),
                 dressRow("", "BAD-1", "", "https://cdn.example.com/broken-main.jpg"),
                 dressRow("", "AWD-S", "", "https://cdn.example.com/dup.jpg"),
-                row("SKU *=NOPRICE-1", "Title *=Missing the price column value"));
+                row("SKU=NOPRICE-1", "Title *=Missing the price column value"));
         ProductImport u = imports.upload("dresses.csv", file, ImportMode.CREATE, "dress", "Ade Okafor");
 
         assertThat(u.status()).isEqualTo(ImportStatus.VALIDATED);
@@ -271,8 +287,8 @@ class ProductImportIT {
         UUID productId = imports.rows(awaitDone(created.id()).id(), null, null, 0, 5).items().getFirst().productId();
 
         ProductImport update = imports.upload("prices.csv", dressCsv(
-                row("SKU *=upd-1", "Price (USD) *=39.50", "Quantity *=12", "Care *=Hand wash", "Size=M"),
-                row("SKU *=GHOST-1", "Price (USD) *=10")), ImportMode.UPDATE, "dress", null);
+                row("SKU=upd-1", "Price (USD) *=39.50", "Quantity *=12", "Care=Hand wash", "Size=M"),
+                row("SKU=GHOST-1", "Price (USD) *=10")), ImportMode.UPDATE, "dress", null);
         assertThat(update.errorRows()).isEqualTo(1);
         assertThat(imports.rows(update.id(), RowStatus.WARNING, null, 0, 5).items()).singleElement()
                 .satisfies(r -> assertThat(r.messages().getFirst().message()).isEqualTo("Ignored in Update mode"));
@@ -293,7 +309,7 @@ class ProductImportIT {
     @Test
     void templatesAndUploadsAreScopedAndLimited() {
         assertThat(imports.template(null, null, SpreadsheetFormat.XLSX).fileName()).isEqualTo("afrotransact-products.xlsx");
-        assertThat(imports.template("grocery", null, SpreadsheetFormat.XLSX).content()).startsWith('P', 'K');
+        assertThat(imports.template("rice-grains", null, SpreadsheetFormat.XLSX).content()).startsWith('P', 'K');
         assertThatThrownBy(() -> imports.upload("products.xls", new byte[] {1, 2}, ImportMode.CREATE, null, null))
                 .hasMessageContaining(".xlsx");
         ProductImport mine = imports.upload("mine.csv", dressCsv(dressRow("", "MINE-1", "", "https://cdn.example.com/m.jpg")),

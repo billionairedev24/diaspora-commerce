@@ -2,6 +2,7 @@ package com.afrotransact.catalog.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.afrotransact.catalog.domain.IdentifierRule;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -401,7 +402,7 @@ class CategoryTaxMatrixIT {
             t.dimensions().forEach(d -> o.put(d.name(), d.options().isEmpty() ? "One" : d.options().getFirst()));
             options = o;
         }
-        boolean isbn = type.identifierRule() == com.afrotransact.catalog.domain.IdentifierRule.ISBN;
+        boolean isbn = type.identifierRule() == IdentifierRule.ISBN;
         VariantDraft v = isbn
                 ? new VariantDraft(options, "", isbn13(), false, 1250, 10, null, List.of(), null, variantFacts)
                 : new VariantDraft(options, "", "", true, 1250, 10, null, List.of(), null, variantFacts);

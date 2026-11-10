@@ -254,7 +254,7 @@ class ProductRelationshipsIT {
     }
 
     private CategoryNode dresses() {
-        return categories.tree().stream().filter(n -> n.path().equals("Fashion › Women › Dresses")).findFirst()
+        return categories.tree().stream().filter(n -> n.path().equals("Fashion & Accessories › Adult clothing & footwear › Women's dresses")).findFirst()
                 .orElseThrow();
     }
 

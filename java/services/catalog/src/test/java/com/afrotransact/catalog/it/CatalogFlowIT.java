@@ -68,7 +68,7 @@ class CatalogFlowIT {
 
     @Test
     void createsReviewsAndPublishesOutboxEvents() {
-        CategoryNode dresses = leaf("Fashion › Women › Dresses");
+        CategoryNode dresses = leaf("Fashion & Accessories › Adult clothing & footwear › Women's dresses");
         Product created = products.create(new CreateProductCommand(dresses.id(), null,
                 "Ankara Wrap Dress with Puff Sleeves",
                 Map.of("brand", "Lagos Textile Hub", "material", "Cotton wax print", "fit", "Regular",
@@ -97,14 +97,15 @@ class CatalogFlowIT {
 
         List<String> events = jdbc.sql("select type from platform_outbox where aggregate_id = :id order by occurred_at")
                 .param("id", created.id().toString()).query(String.class).list();
-        assertThat(events).containsExactly("catalog.product.created", "catalog.product.approved");
+        assertThat(events).containsExactly("catalog.product.created", "catalog.product.tax-facts-changed",
+                "catalog.product.approved");
         assertThat(live.preorderEligible()).as("dresses are not food").isFalse();
         assertThat(live.shipsNow()).isFalse();
     }
 
     @Test
     void foodIsPreorderEligibleByDefaultAndFlagsAreEditable() {
-        CategoryNode spices = leaf("Groceries › Pantry › Spices & seasonings");
+        CategoryNode spices = leaf("Groceries & Food › Spices & seasonings › Spices & seasonings");
         Product created = products.create(new CreateProductCommand(spices.id(), null,
                 "Suya Pepper Spice Blend from Kano",
                 Map.of("brand", "Mama Kano", "ingredients", "Groundnut, chilli, ginger", "allergens",
@@ -129,7 +130,7 @@ class CatalogFlowIT {
 
     @Test
     void sellerListingsHiddenSuppressesPublicReadsAndRepublishesProducts() {
-        CategoryNode dresses = leaf("Fashion › Women › Dresses");
+        CategoryNode dresses = leaf("Fashion & Accessories › Adult clothing & footwear › Women's dresses");
         Product created = products.create(new CreateProductCommand(dresses.id(), null,
                 "Adire Maxi Dress",
                 Map.of("brand", "Lagos Textile Hub", "material", "Cotton", "fit", "Regular",
@@ -182,7 +183,7 @@ class CatalogFlowIT {
 
     @Test
     void duplicateGtinPointsToExistingProductPage() {
-        CategoryNode spices = leaf("Groceries › Pantry › Spices & seasonings");
+        CategoryNode spices = leaf("Groceries & Food › Spices & seasonings › Spices & seasonings");
         Map<String, String> attrs = Map.of("brand", "AfroTransact", "ingredients", "Pepper, thyme, curry",
                 "allergens", "None", "shelf", "365", "storage", "Room temperature", "origin", "Nigeria", "cert", "None");
         products.create(new CreateProductCommand(spices.id(), null, "Jollof Seasoning Blend 8 oz", attrs, List.of(IMAGE),
@@ -199,7 +200,7 @@ class CatalogFlowIT {
 
     @Test
     void productsWaitForRequestedCategoryThenMoveToReview() {
-        CategoryRequest request = categories.request("Fashion › Women", "Bridal aso-ebi sets", "6-piece aso-ebi set",
+        CategoryRequest request = categories.request("Fashion & Accessories › Adult clothing & footwear", "Bridal aso-ebi sets", "6-piece aso-ebi set",
                 "Pieces, colour, fabric, sizes");
         assertThat(request.reference()).startsWith("REQ-");
 
@@ -211,14 +212,14 @@ class CatalogFlowIT {
         assertThat(waiting.status()).isEqualTo(ProductStatus.PENDING_CATEGORY_APPROVAL);
 
         CategoryNode women = categories.tree().stream()
-                .filter(n -> n.level() == CategoryLevel.CATEGORY && n.path().equals("Fashion › Women"))
+                .filter(n -> n.level() == CategoryLevel.CATEGORY && n.path().equals("Fashion & Accessories › Adult clothing & footwear"))
                 .findFirst().orElseThrow();
         categories.approve(request.id(), new ApprovalChoice(women.id(), null, "top", null), "Approved for launch");
 
         Product moved = products.get(waiting.id());
         assertThat(moved.status()).isEqualTo(ProductStatus.IN_REVIEW);
         assertThat(moved.categoryId()).isNotNull();
-        assertThat(categories.tree()).anyMatch(n -> n.path().equals("Fashion › Women › Bridal aso-ebi sets"));
+        assertThat(categories.tree()).anyMatch(n -> n.path().equals("Fashion & Accessories › Adult clothing & footwear › Bridal aso-ebi sets"));
     }
 
     private CategoryNode leaf(String path) {

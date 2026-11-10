@@ -121,21 +121,21 @@ class BrandRegistryIT {
         staffPost("/v1/taxonomy/brands", Map.of("name", samsung, "scope", List.of(dept), "reason", "Phone maker"), 201);
 
         seller("org_scope");
-        JsonNode dresses = get("/v1/brands?category=" + leaf("Fashion › Women › Dresses").id(), 200);
+        JsonNode dresses = get("/v1/brands?category=" + leaf("Fashion & Accessories › Adult clothing & footwear › Women's dresses").id(), 200);
         assertThat(names(dresses)).contains("Nike", "Levi's").doesNotContain(samsung, "Maggi", "Cantu", "Vlisco");
         assertThat(dresses.get("departmentName").asString()).isEqualTo("Fashion");
         JsonNode byType = get("/v1/brands?productType=dress", 200);
         assertThat(names(byType)).contains("Nike").doesNotContain(samsung, "Maggi");
         assertThat(names(get("/v1/brands?category=" + phone, 200))).contains(samsung).doesNotContain("Nike", "Maggi");
-        assertThat(names(get("/v1/brands?category=" + leaf("Groceries › Pantry › Snacks").id(), 200)))
+        assertThat(names(get("/v1/brands?category=" + leaf("Groceries & Food › Packaged snacks › Packaged snacks").id(), 200)))
                 .contains("Maggi", "Indomie").doesNotContain("Nike", samsung);
         // fabrics are Fashion too, but sportswear labels are scoped to clothing categories only
-        assertThat(names(get("/v1/brands?category=" + leaf("Fashion › Fabrics › Lace").id(), 200)))
+        assertThat(names(get("/v1/brands?category=" + leaf("Fashion & Accessories › Fabrics & textiles › Fabrics & textiles").id(), 200)))
                 .contains("Vlisco").doesNotContain("Nike");
         // books have no brand at all: nothing is scoped there
-        assertThat(get("/v1/brands?category=" + leaf("Books › Books › Fiction").id(), 200).get("brands")).isEmpty();
+        assertThat(get("/v1/brands?category=" + leaf("Books & Media › Printed books › Printed books").id(), 200).get("brands")).isEmpty();
         // the typed query ignores case, accents and punctuation
-        assertThat(names(get("/v1/brands?category=" + leaf("Fashion › Men › Shirts").id() + "&q=LEVIS", 200)))
+        assertThat(names(get("/v1/brands?category=" + leaf("Fashion & Accessories › Adult clothing & footwear › Men's clothing").id() + "&q=LEVIS", 200)))
                 .containsExactly("Levi's");
         // neither category nor product type is refused
         assertThat(call("GET", "/v1/brands", null, null).status()).isEqualTo(422);
@@ -144,7 +144,7 @@ class BrandRegistryIT {
     @Test
     void ranksTheSellersOwnUseBeforePopularity() throws Exception {
         seller("org_rank");
-        CategoryNode shirts = leaf("Fashion › Men › Shirts");
+        CategoryNode shirts = leaf("Fashion & Accessories › Adult clothing & footwear › Men's clothing");
         String sfx = suffix();
         createDress(shirts, "Zara", "RK-" + sfx);
         createDress(shirts, "Zara", "RK2-" + sfx);
@@ -163,7 +163,7 @@ class BrandRegistryIT {
     void aTypedBrandIsPendingScopedToItsDepartmentAndSeenOnlyByItsSeller() throws Exception {
         String sfx = suffix();
         String typed = "Cotedivoire " + sfx;
-        CategoryNode dresses = leaf("Fashion › Women › Dresses");
+        CategoryNode dresses = leaf("Fashion & Accessories › Adult clothing & footwear › Women's dresses");
         seller("org_ci_a");
         JsonNode created = post("/v1/brands", Map.of("name", typed, "category", dresses.id().toString()), 201);
         assertThat(created.get("created").asBoolean()).isTrue();
@@ -172,10 +172,10 @@ class BrandRegistryIT {
 
         // the owner sees it under Fashion, never under Groceries or Books: the Cotedivoire-under-Dresses bug
         assertThat(names(get("/v1/brands?category=" + dresses.id(), 200))).contains(typed);
-        assertThat(names(get("/v1/brands?category=" + leaf("Fashion › Fabrics › Lace").id(), 200))).contains(typed);
-        assertThat(names(get("/v1/brands?category=" + leaf("Groceries › Pantry › Snacks").id(), 200)))
+        assertThat(names(get("/v1/brands?category=" + leaf("Fashion & Accessories › Fabrics & textiles › Fabrics & textiles").id(), 200))).contains(typed);
+        assertThat(names(get("/v1/brands?category=" + leaf("Groceries & Food › Packaged snacks › Packaged snacks").id(), 200)))
                 .doesNotContain(typed);
-        assertThat(names(get("/v1/brands?category=" + leaf("Beauty › Hair care › Hair oils").id(), 200)))
+        assertThat(names(get("/v1/brands?category=" + leaf("Beauty & Personal Care › Haircare › Haircare").id(), 200)))
                 .doesNotContain(typed);
         // another seller does not see it
         seller("org_ci_b");
@@ -198,8 +198,8 @@ class BrandRegistryIT {
 
     @Test
     void namesAreMatchedIgnoringCaseAccentsAndPunctuation() throws Exception {
-        CategoryNode dresses = leaf("Fashion › Women › Dresses");
-        CategoryNode snacks = leaf("Groceries › Pantry › Snacks");
+        CategoryNode dresses = leaf("Fashion & Accessories › Adult clothing & footwear › Women's dresses");
+        CategoryNode snacks = leaf("Groceries & Food › Packaged snacks › Packaged snacks");
         seller("org_norm");
         for (String variant : List.of("NIKE", "nike", "N.i.k.e", " Nike ")) {
             JsonNode r = post("/v1/brands", Map.of("name", variant, "category", dresses.id().toString()), 200);
@@ -222,7 +222,7 @@ class BrandRegistryIT {
     @Test
     void aBrandChosenFromAnotherDepartmentIsRefused() throws Exception {
         seller("org_cross");
-        CategoryNode dresses = leaf("Fashion › Women › Dresses");
+        CategoryNode dresses = leaf("Fashion & Accessories › Adult clothing & footwear › Women's dresses");
         String maggi = jdbc.sql("select id::text from brand where name = 'Maggi'").query(String.class).single();
         assertThatThrownBy(() -> createDress(dresses, Map.of("brand", "Maggi", "brand_id", maggi), "XD-" + suffix()))
                 .isInstanceOf(CatalogRuleViolation.class)
@@ -252,7 +252,7 @@ class BrandRegistryIT {
     @Test
     void aBookHasNoBrandEvenWhenOneIsSent() {
         seller("org_book");
-        CategoryNode fiction = leaf("Books › Books › Fiction");
+        CategoryNode fiction = leaf("Books & Media › Printed books › Printed books");
         ProductType book = categories.productType("book");
         Map<String, String> attrs = new LinkedHashMap<>(fill(book));
         attrs.put("brand", "Penguin Random House");
@@ -266,7 +266,7 @@ class BrandRegistryIT {
     @Test
     void noBrandIsAReasonNeverTheTextGeneric() throws Exception {
         seller("org_generic");
-        CategoryNode dresses = leaf("Fashion › Women › Dresses");
+        CategoryNode dresses = leaf("Fashion & Accessories › Adult clothing & footwear › Women's dresses");
         Product viaForm = createDress(dresses, Map.of("brand_reason", "HANDMADE"), "GN-" + suffix());
         assertThat(viaForm.attributes()).containsEntry("brand_reason", "HANDMADE").doesNotContainKeys("brand", "brand_id");
         Product typed = createDress(dresses, Map.of("brand", "Generic"), "GN2-" + suffix());
@@ -274,7 +274,7 @@ class BrandRegistryIT {
         assertThat(jdbc.sql("select count(*) from brand where normalized_name = 'generic'").query(Long.class).single())
                 .isZero();
         // beauty is regulated: a brand is needed, and "unbranded" is not accepted there
-        CategoryNode oils = leaf("Beauty › Hair care › Hair oils");
+        CategoryNode oils = leaf("Beauty & Personal Care › Haircare › Haircare");
         Map<String, String> beauty = new LinkedHashMap<>(fill(categories.productType("beauty")));
         beauty.remove("brand");
         beauty.put("brand", "No brand");
@@ -290,8 +290,8 @@ class BrandRegistryIT {
     @Test
     void changingTheCategoryRevalidatesTheBrand() {
         seller("org_move");
-        CategoryNode dresses = leaf("Fashion › Women › Dresses");
-        CategoryNode snacks = leaf("Groceries › Pantry › Snacks");
+        CategoryNode dresses = leaf("Fashion & Accessories › Adult clothing & footwear › Women's dresses");
+        CategoryNode snacks = leaf("Groceries & Food › Packaged snacks › Packaged snacks");
         Product p = createDress(dresses, "Nike", "MV-" + suffix());
         // moving the (not yet published) listing to groceries while it keeps the fashion brand is refused
         assertThatThrownBy(() -> products.update(p.id(), new UpdateProductCommand(snacks.id(), p.title(),
@@ -300,7 +300,7 @@ class BrandRegistryIT {
                 .isInstanceOf(CatalogRuleViolation.class)
                 .satisfies(e -> assertThat(((CatalogRuleViolation) e).fieldErrors()).containsKey("attributes.brand"));
         // staying within fashion keeps it
-        CategoryNode shirts = leaf("Fashion › Women › Tops");
+        CategoryNode shirts = leaf("Fashion & Accessories › Adult clothing & footwear › Women's tops & wrappers");
         Product moved = products.update(p.id(), new UpdateProductCommand(shirts.id(), p.title(), p.attributes(),
                 p.images(), "", List.of(new VariantDraft(Map.of(), "MV-Y" + suffix(), null, true, 1299, 3)), null, null,
                 p.details(), p.version(), null));
@@ -312,7 +312,7 @@ class BrandRegistryIT {
     @Test
     void staffReviewApproveRejectAndAuditEveryChange() throws Exception {
         String sfx = suffix();
-        CategoryNode dresses = leaf("Fashion › Women › Dresses");
+        CategoryNode dresses = leaf("Fashion & Accessories › Adult clothing & footwear › Women's dresses");
         seller("org_q_a");
         String typed = "Adire Lagos " + sfx;
         createDress(dresses, typed, "Q1-" + sfx);
@@ -372,7 +372,7 @@ class BrandRegistryIT {
     @Test
     void mergeRepointsProductsAndTheMergedBrandIsNoLongerOffered() throws Exception {
         String sfx = suffix();
-        CategoryNode dresses = leaf("Fashion › Women › Dresses");
+        CategoryNode dresses = leaf("Fashion & Accessories › Adult clothing & footwear › Women's dresses");
         seller("org_m_a");
         String typo = "Nikee " + sfx;
         Product p1 = createDress(dresses, typo, "M1-" + sfx);
@@ -410,7 +410,7 @@ class BrandRegistryIT {
         String sfx = suffix();
         asStaff();
         String fashion = nodeId("Fashion");
-        String women = nodeId("Fashion › Women");
+        String women = nodeId("Fashion & Accessories › Adult clothing & footwear");
         JsonNode created = postIfMatch("/v1/taxonomy/brands", Map.of("name", "Ade Bakare " + sfx, "scope",
                 List.of(women), "reason", "Lagos label"), null, 201);
         String id = created.get("id").asString();
@@ -437,7 +437,7 @@ class BrandRegistryIT {
                 200);
         assertThat(retired.get("status").asString()).isEqualTo("RETIRED");
         seller("org_edit");
-        assertThat(names(get("/v1/brands?category=" + leaf("Fashion › Women › Dresses").id(), 200)))
+        assertThat(names(get("/v1/brands?category=" + leaf("Fashion & Accessories › Adult clothing & footwear › Women's dresses").id(), 200)))
                 .doesNotContain("Ade Bakare Studio " + sfx).contains("Studio One " + sfx);
     }
 
@@ -459,9 +459,9 @@ class BrandRegistryIT {
     @Test
     void freeTextBrandsBecomeRegistryRowsScopedToTheirDepartment() throws Exception {
         String sfx = suffix();
-        CategoryNode dresses = leaf("Fashion › Women › Dresses");
-        CategoryNode spices = leaf("Groceries › Pantry › Spices & seasonings");
-        CategoryNode fiction = leaf("Books › Books › Fiction");
+        CategoryNode dresses = leaf("Fashion & Accessories › Adult clothing & footwear › Women's dresses");
+        CategoryNode spices = leaf("Groceries & Food › Spices & seasonings › Spices & seasonings");
+        CategoryNode fiction = leaf("Books & Media › Printed books › Printed books");
         String lone = "Cotedivoire" + sfx;
         String shared = "Adire Shared" + sfx;
         Product loneProduct = createLegacy(dresses, "org_leg_a", lone, "L1-" + sfx);
@@ -504,7 +504,7 @@ class BrandRegistryIT {
 
         seller("org_leg_a");
         assertThat(names(get("/v1/brands?category=" + dresses.id(), 200))).contains(lone, shared);
-        assertThat(names(get("/v1/brands?category=" + leaf("Groceries › Pantry › Snacks").id(), 200)))
+        assertThat(names(get("/v1/brands?category=" + leaf("Groceries & Food › Packaged snacks › Packaged snacks").id(), 200)))
                 .doesNotContain(shared);
         seller("org_leg_d");
         assertThat(names(get("/v1/brands?category=" + dresses.id(), 200))).contains(shared).doesNotContain(lone);

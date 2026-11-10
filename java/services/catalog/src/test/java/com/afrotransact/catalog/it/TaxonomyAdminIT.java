@@ -425,7 +425,7 @@ class TaxonomyAdminIT {
     void approvingARequestCreatesItsNodeAndProductTypeInOneStep() throws Exception {
         CURRENT.set(CATALOG_MANAGER);
         String name = "Bridal sets " + suffix();
-        CategoryRequest request = categories.request("Fashion › Women", name, "6-piece aso-ebi set",
+        CategoryRequest request = categories.request("Fashion & Accessories › Adult clothing & footwear", name, "6-piece aso-ebi set",
                 "Pieces, colour, fabric");
         Product waiting = products.create(new CreateProductCommand(null, request.id(), "Aso-ebi bridal " + suffix(),
                 Map.of("brand", "Ife Bridal", "origin", "Nigeria", "material", "Aso-oke", "details", "Gele, ipele, iro"), List.of(IMAGE), "Option",
@@ -435,13 +435,13 @@ class TaxonomyAdminIT {
         Reply queue = call("GET", "/v1/category-requests?status=PENDING_REVIEW", null, null);
         JsonNode mine = find(queue.body(), "id", request.id().toString());
         assertThat(mine.get("productsWaiting").asLong()).isEqualTo(1);
-        assertThat(mine.get("parentPath").asString()).isEqualTo("Fashion › Women");
+        assertThat(mine.get("parentPath").asString()).isEqualTo("Fashion & Accessories › Adult clothing & footwear");
         assertThat(mine.get("name").asString()).isEqualTo(name);
 
         Reply detail = call("GET", "/v1/category-requests/" + request.id(), null, null);
         assertThat(detail.body().get("products")).hasSize(1);
         String women = detail.body().get("suggestedParent").get("id").asString();
-        assertThat(detail.body().get("suggestedParent").get("path").asString()).isEqualTo("Fashion › Women");
+        assertThat(detail.body().get("suggestedParent").get("path").asString()).isEqualTo("Fashion & Accessories › Adult clothing & footwear");
 
         // the preview says what will be created and creates nothing
         long nodesBefore = categories.tree(true).size();
@@ -451,7 +451,7 @@ class TaxonomyAdminIT {
         Reply plan = call("POST", "/v1/category-requests/" + request.id() + "/approval-preview", body, null);
         assertThat(plan.status()).isEqualTo(200);
         assertThat(plan.body().get("nodes")).hasSize(1);
-        assertThat(plan.body().get("nodes").get(0).get("path").asString()).isEqualTo("Fashion › Women › " + name);
+        assertThat(plan.body().get("nodes").get(0).get("path").asString()).isEqualTo("Fashion & Accessories › Adult clothing & footwear › " + name);
         assertThat(plan.body().get("productType").get("created").asBoolean()).isTrue();
         assertThat(plan.body().get("productType").get("attributeCount").asInt()).isEqualTo(1);
         assertThat(plan.body().get("productsMoving").asInt()).isEqualTo(1);
@@ -465,7 +465,7 @@ class TaxonomyAdminIT {
         Reply approved = call("POST", "/v1/category-requests/" + request.id() + "/approve", body, null);
         assertThat(approved.status()).isEqualTo(200);
         assertThat(approved.body().get("status").asString()).isEqualTo("APPROVED");
-        CategoryNode created = categories.tree().stream().filter(n -> n.path().equals("Fashion › Women › " + name))
+        CategoryNode created = categories.tree().stream().filter(n -> n.path().equals("Fashion & Accessories › Adult clothing & footwear › " + name))
                 .findFirst().orElseThrow();
         assertThat(created.productTypeCode()).isNotNull();
         assertThat(categories.productType(created.productTypeCode()).label()).isEqualTo(name);
@@ -509,7 +509,7 @@ class TaxonomyAdminIT {
     @Test
     void rejectingARequestIsAuditedAndNeedsAReason() throws Exception {
         CURRENT.set(CATALOG_MANAGER);
-        CategoryRequest request = categories.request("Fashion › Women", "Odd things " + suffix(), "Something odd",
+        CategoryRequest request = categories.request("Fashion & Accessories › Adult clothing & footwear", "Odd things " + suffix(), "Something odd",
                 "Unclear");
         assertThat(call("POST", "/v1/category-requests/" + request.id() + "/reject", Map.of("note", "no"), null)
                 .status()).isEqualTo(400);

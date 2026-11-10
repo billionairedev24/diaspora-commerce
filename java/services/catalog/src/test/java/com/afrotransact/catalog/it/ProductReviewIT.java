@@ -165,7 +165,7 @@ class ProductReviewIT {
 
     private Product liveProduct() {
         CategoryNode dresses = categories.tree().stream()
-                .filter(n -> n.path().equals("Fashion › Women › Dresses")).findFirst().orElseThrow();
+                .filter(n -> n.path().equals("Fashion & Accessories › Adult clothing & footwear › Women's dresses")).findFirst().orElseThrow();
         String sku = "S" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
         Product created = products.create(new CreateProductCommand(dresses.id(), null,
                 "Ankara Wrap Dress " + sku,

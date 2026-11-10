@@ -218,7 +218,7 @@ class ListingModerationIT {
 
     private Product create(String title) {
         CategoryNode dresses = categories.tree().stream()
-                .filter(n -> n.path().equals("Fashion › Women › Dresses")).findFirst().orElseThrow();
+                .filter(n -> n.path().equals("Fashion & Accessories › Adult clothing & footwear › Women's dresses")).findFirst().orElseThrow();
         String sku = "S" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(Locale.ROOT);
         return products.create(new CreateProductCommand(dresses.id(), null, title,
                 Map.of("brand", "Lagos Textile Hub", "material", "Cotton", "fit", "Regular", "length", "Midi",

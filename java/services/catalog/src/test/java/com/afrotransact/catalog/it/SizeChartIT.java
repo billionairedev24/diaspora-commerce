@@ -102,7 +102,7 @@ class SizeChartIT {
     void seller() {
         org = "org_sz_" + UUID.randomUUID().toString().substring(0, 8);
         asSeller(org);
-        dresses = jdbc.sql("select id from category where path = 'Fashion › Women › Dresses'").query(UUID.class).single();
+        dresses = jdbc.sql("select id from category where path = :path").param("path", "Fashion & Accessories › Adult clothing & footwear › Women's dresses").query(UUID.class).single();
     }
 
     @AfterEach
@@ -146,7 +146,7 @@ class SizeChartIT {
         JsonNode dims = dress.body().get("themes").get(0).get("dimensions");
         assertThat(dims.get(0).get("allowCustomValues").asBoolean()).isTrue();
         assertThat(dims.get(1).get("allowCustomValues").asBoolean()).isTrue();
-        assertThat(call("GET", "/v1/taxonomy/product-types/grocery", null, null).body().get("traits").get("sizing")
+        assertThat(call("GET", "/v1/taxonomy/product-types/rice-grains", null, null).body().get("traits").get("sizing")
                 .isNull()).isTrue();
     }
 

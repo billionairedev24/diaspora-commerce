@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.afrotransact.taxreturns.domain.profile.FactOwner;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -16,6 +17,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Matcher;
@@ -128,7 +130,7 @@ class CategoryTaxMatrixTest {
             boolean ok = res.status().name().equals(expect.get("resolveStatus"))
                     && String.valueOf(res.outcome()).equals(String.valueOf(expect.get("outcome")))
                     && res.internalTaxCode().equals(expect.get("internalTaxCode"))
-                    && java.util.Objects.equals(res.providerCodes().get("STRIPE"), expect.get("stripeCode"));
+                    && Objects.equals(res.providerCodes().get("STRIPE"), expect.get("stripeCode"));
             if (!ok) {
                 failures.add(id + ": resolve gave " + resolved + ", expected " + expect);
             }
@@ -194,7 +196,7 @@ class CategoryTaxMatrixTest {
                 } else if ("EXEMPT".equals(quoteExpect.get("outcome"))) {
                     if (line.taxMinor() != 0 || !"RESOLVED".equals(line.decision().status().name())
                             || !"EXEMPT".equals(qr.get("outcome")) || !quoteExpect.get("internalTaxCode").equals(line.decision().internalTaxCode())
-                            || !java.util.Objects.equals(quoteExpect.get("stripeCode"), qr.get("stripeCode"))) {
+                            || !Objects.equals(quoteExpect.get("stripeCode"), qr.get("stripeCode"))) {
                         problem = "an exempt line was not priced at zero with its decision";
                     }
                 } else {
@@ -206,7 +208,7 @@ class CategoryTaxMatrixTest {
                     if (line.taxMinor() != want || line.rate().compareTo(rate) != 0
                             || !"TAXABLE".equals(qr.get("outcome")) || !"ZIP".equals(line.addressPrecision())
                             || !quoteExpect.get("internalTaxCode").equals(line.decision().internalTaxCode())
-                            || !java.util.Objects.equals(quoteExpect.get("stripeCode"), qr.get("stripeCode"))) {
+                            || !Objects.equals(quoteExpect.get("stripeCode"), qr.get("stripeCode"))) {
                         problem = "a taxable line was not priced at state plus local on the items and the delivery";
                     }
                 }
@@ -242,7 +244,7 @@ class CategoryTaxMatrixTest {
                 Map<String, Object> givenFacts = new HashMap<>((Map<String, Object>) inputs.get("facts"));
                 Map<String, Object> behaviour = new HashMap<>((Map<String, Object>) inputs.get("sellerBehaviour"));
                 Map<String, Object> context = new HashMap<>((Map<String, Object>) inputs.get("context"));
-                if (f.definition().owner() == com.afrotransact.taxreturns.domain.profile.FactOwner.CONTEXT) {
+                if (f.definition().owner() == FactOwner.CONTEXT) {
                     continue;   // worked out by the system, never asked of the seller
                 }
                 boolean present = givenFacts.containsKey(key) || behaviour.containsKey(key) || context.containsKey(key);
