@@ -1266,3 +1266,60 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Secrets never reach output, logs or the state file
 - explain, status and dry-run make no outward calls
 - One real run reaches a verified test environment","E30","","High","13","deploy ovh cloudflare tooling","cicd","In Progress"
+"S339","Story","Category tax tree: 13 departments, 73 categories, typed tax facts and importer","The catalog tree is department (13) > category (73, where tax attaches) > product type, loaded by an idempotent audited importer from tools/taxonomy/category_tax_map.json; provisional Fabrics & textiles awaits an owner decision. Merged; browser pass and tax professional sign-off pending.","- Importer loads 13 departments and 73 categories with tax profile and status
+- Typed facts (yes/no, number with unit, percent, choice, file) with showWhen and requiredWhen shared by Java, TypeScript and Python test vectors
+- Product facts per variant, seller behaviour facts on the listing
+- Fashion sizing and size charts keep working
+- Every category has a valid demo product where its status allows
+- Browser pass of every category form","E03","","Highest","13","catalog taxonomy tax seller-center","catalog","In Progress"
+"S340","Story","Never-guess publish gate and optional auto seller SKU","A product cannot go live until every variant has a definite tax decision input; tax-readiness endpoint gives plain per-fact messages; seller SKU is optional and auto-generated, matching by SKU, then GTIN, then ATIN. Merged.","- Submit returns 422 with plain per-fact messages; approval of a not-ready product is refused
+- Gated categories (needs approval, refine code, conflict, blocked bundle) never go live and say why
+- Seller SKU optional, org-prefixed and unique
+- Bulk upload matches by SKU, GTIN, then ATIN; SKU list download
+- Seller Center says Price & stock and Your listing","E03","","High","8","catalog seller-center sku tax","catalog","In Progress"
+"S341","Story","Provider-neutral tax engine: profiles, decision tables, decision records and shadow mode","tax-returns holds tax profiles with decision tables over typed facts (golden 105 scenarios), internal outcome codes, per-provider code maps, per-variant decision records with audit, a resolve endpoint and shadow mode; Avalara is a skeleton; runbook for provider cutover. Merged; verified on local PostgreSQL 16 only.","- Golden 105 scenarios and exhaustive one-row-matches property pass
+- Resolve endpoint and review queue with approve, reclassify and request-information
+- Provider code maps per outcome (Stripe, Avalara); settings refuse an unconfigured provider
+- Shadow mode compares provider and in-house quotes without charging or blocking
+- Cutover runbook followed once in a real environment","E17","","Highest","21","tax tax-returns providers","returns","In Progress"
+"S342","Story","Staff tax tools: profiles, review queue, provider codes, method and shadow report","Staff console screens under Settings > Sales tax for the 73 category profiles, the tax review queue, provider code maps with CSV, the tax method with shadow provider, and the shadow report; Lola and MCP read tools. Merged; tested against mocks, identity V38 supplies the permissions.","- Every change needs a reason of at least 10 characters and is audited by name
+- Marking a profile approved records the tax professional name and reference
+- A provider that is not set up or not fully verified cannot be chosen
+- Real roles hold the permissions after identity V38 runs","E25","","High","13","staff-console tax","staff-console","In Progress"
+"S343","Story","Checkout taxes from the stored decision and blocks undecided lines","Orders blocks any line whose decision is not RESOLVED with EXEMPT or TAXABLE (orders.tax-line-blocked) and the summary offers Remove; no default or interim rate; order lines snapshot outcome, internal and provider code, rule version and delivery share; delivery charge is allocated across lines by item value (mixed-basket method awaits tax adviser approval). Merged.","- Undecided line blocks placement with a plain message and a Remove action
+- Interim state-rate calculator removed; a tax-returns outage blocks checkout instead of charging a guess
+- Order line snapshot keeps the decision used; refunds reverse from it
+- Delivery allocation shared vectors pass in Java, Go and mocks
+- Gift card sale and redemption verified","E06","","Highest","13","checkout orders tax","checkout","In Progress"
+"S344","Story","End-to-end category tax verification matrix across 74 categories","make category-tax-verify runs a matrix over every category and decision row (valid product, publish gate, resolve, Texas quote, order snapshot) plus negative cases; report in docs/engineering/category-tax-verification.md. 74 of 74 pass; eight integration defects fixed. Docker-only ITs not run.","- Matrix passes for all categories
+- Negative cases refused: each required fact removed and wrong types
+- Report lists what a human must verify
+- CI runs the matrix with Docker","E33","","High","8","testing tax catalog","quality","In Progress"
+"S345","Story","Stripe tax transactions and refund reversal with Stripe Tax","The Stripe adapter only calculates today. Record sales as Stripe tax transactions and reverse them on refunds before Stripe Tax becomes the method.","- Sale recorded as a Stripe tax transaction
+- Refund and return create a matching reversal
+- Reconciles with the ledger and the shadow report","E17","","Medium","8","tax stripe","returns","To Do"
+"S346","Story","Avalara adapter (AvaTax) behind the tax calculator port","Skeleton exists; build the real call, mapping and tests so a cutover to Avalara needs only the provider code map and the method switch.","- AvaTax calculation call with address-level jurisdiction
+- Provider code map completeness meter reaches 100 percent
+- Shadow report acceptable before cutover","E17","","Medium","13","tax avalara providers","returns","To Do"
+"S347","Story","Tax accuracy gaps: exact-address jurisdiction, tax holidays, platform fee classification","ZIP-level local rates breach TX-03; the holiday calendar does not exist (car seats taxed as ordinary); platform commission, services and delivery classification (TX-12) not modelled.","- Exact delivery address resolves the jurisdiction (provider or approved resolver)
+- Holiday calendar drives exemption_window_active
+- Fee classification reviewed by the tax adviser and implemented
+- Mixed-basket delivery attribution approved (open decision 5)","E17","","High","13","tax compliance","returns","To Do"
+"S348","Story","Bundles, digital products and services tax rules (approval-gated)","Itemized bundles (TX-09), digital products (e-books, audiobooks, courses, digital art), flagged services and gift cards stay gated until the owner and tax adviser approve each rule.","- Itemized bundle model with component categories and price allocation
+- Digital delivery and rights facts captured and approved
+- Named approver for each gated rule (open decision 4)
+- Fabrics & textiles category decided","E17","","Medium","13","tax catalog digital services","returns","To Do"
+"S349","Story","Flat web hosts for the free Cloudflare certificate","OVH_SELLER_HOST and OVH_ADMIN_HOST override seller. and admin. hosts so the web apps sit one label under the zone (test.afrotransact.com, seller-test., admin-test.); validated by tools/ovh/web-hosts.sh. Merged; needs a real run.","- Hosts validated and warned when two labels deep
+- Helm global.sellerHost and adminHost drive allowlists and sign-in redirects
+- All three web apps load over the free certificate and sign in on each host
+- Passkey sign-in works on auth host","E30","","High","8","deploy cloudflare hosts","cicd","In Progress"
+"S350","Story","Stripe webhooks routable and documented","Public routes for the seller Connect and billing webhooks on api.<domain>, route guard in make env-check, runbook docs/runbooks/stripe-webhooks.md, wizard check that an unsigned POST answers 400. Billing endpoint reduced to plan-fee PaymentIntent events. Merged; not run against Stripe.","- Three webhook routes answer 400 to an unsigned POST
+- Runbook covers every endpoint and event list
+- Signing secrets reach the pods and a changed secret is applied
+- Seller Connect events arrive in a real test account","E30","","High","5","stripe webhooks deploy","cicd","In Progress"
+"S351","Story","Every signed-in person can shop whatever their role","Staff, admins, seller and provider members and drivers use their own cart and checkout; the shared acting-as rule gives them a customer identity with their own user id and no staff scopes; cart mismatch shows Your cart changed, please review it. Merged.","- Own cart, checkout and orders for every role
+- Customer calls carry no staff scopes; staff endpoints still need them
+- Cart mismatch message with a link to the cart, no ATIN
+- Verified in an environment","E02","","High","5","identity checkout acting-as","identity","In Progress"
+"S352","Story","Dashboard gaps with no upstream data yet","Left out of the module-summary homes because no service exposes them: seller late and delivered counts, orders by status, out-of-stock count, listing quality score, ads; provider reviews; staff late and at-risk shipments, failed jobs and DLQ.","- Each metric gets an upstream endpoint
+- Modules appear with real data and keep empty states","E32","","Medium","8","dashboards seller staff","exports","To Do"
