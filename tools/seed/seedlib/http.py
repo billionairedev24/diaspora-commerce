@@ -136,6 +136,19 @@ def put_bytes(url: str, data: bytes, headers: Mapping[str, str], timeout: float 
         raise ApiError("PUT", url.split("?")[0], e.code, _decode(e.read(), e.headers.get("Content-Type", ""))) from None
 
 
+def url_exists(url: str, timeout: float = 10, opener: urllib.request.OpenerDirector | None = None) -> bool | None:
+    """Whether a public URL serves: True, False when the store says it is gone (404, 403, 410: a reset MinIO), None when
+    that cannot be told (connection refused, timeout, 5xx), so a stopped store never makes the seeder re-upload."""
+    req = urllib.request.Request(url, method="HEAD")
+    try:
+        with (opener or urllib.request.build_opener()).open(req, timeout=timeout) as res:
+            return res.status < 400
+    except urllib.error.HTTPError as e:
+        return False if e.code in (403, 404, 410) else None
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+
+
 def multipart(field: str, filename: str, content_type: str, data: bytes) -> tuple[bytes, str]:
     """multipart/form-data body with one file field (UploadThing-style uploads)."""
     boundary = "----atseed" + str(int(time.time() * 1000))

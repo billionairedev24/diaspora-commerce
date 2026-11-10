@@ -390,6 +390,7 @@ class Seeder:
             self.report.add("products", "existing")
             line = f"  · {p.title} (exists, {product['atin']})"
             product = self._link_existing_chart(product, p, cats) or product
+            product = self._heal_images(product, p) or product
             self._images(p.key, p.queries, p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE, network=False)
         else:
             imgs = self._images(p.key, p.queries, p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE)
@@ -464,6 +465,35 @@ class Seeder:
             return edited if isinstance(edited, dict) and edited.get("status") else None
         except (ApiError, ValueError, KeyError) as e:
             self._problem(f"{p.title}: its size chart could not be linked to the existing product ({e})")
+            return None
+
+    def _heal_images(self, found: dict[str, Any], p: D.Product) -> dict[str, Any] | None:
+        """A product written by an earlier run keeps image URLs that no longer serve once the object store was wiped
+        (`make reset`, a new MinIO volume) while catalog kept the product: the storefront then shows the striped
+        placeholder. The stored URLs are checked and, when one is gone, the images are uploaded again and the product
+        is edited with them. Returns the edited product or None when nothing needed doing or it failed (reported)."""
+        try:
+            full = self.svc["catalog"].get(f"/v1/products/{found['id']}")
+            stored = full.get("images") or []
+            if not stored or all(self.uploader.head(i.get("url") or "") is not False for i in stored):
+                return None
+            imgs = self._images(p.key, p.queries, p.images, orientation="square", main_min_edge=MAIN_MIN_EDGE)
+            if not imgs:
+                self._problem(f"{p.title}: its images no longer serve and no replacement image was found")
+                return None
+            assets = [self.uploader.upload(i, "product-image") for i in imgs]
+            body = {"categoryId": full.get("categoryId"), "title": full["title"], "attributes": full.get("attributes") or {},
+                    "images": [{k: a[k] for k in ("url", "width", "height", "bytes", "contentType")} for a in assets],
+                    "variationTheme": full.get("variationTheme") or "",
+                    "variants": [self._variant_request(v) for v in full.get("variants") or []],
+                    "preorderEligible": bool(full.get("preorderEligible")), "shipsNow": bool(full.get("shipsNow", True)),
+                    "listing": full.get("listing") or {}, "version": full.get("version")}
+            edited = self.svc["catalog"].put(f"/v1/products/{full['id']}", body)
+            self.report.add("product images", "re-uploaded")
+            self.log(f"  ✓ {p.title}: its images were gone from the object store, uploaded again")
+            return edited if isinstance(edited, dict) and edited.get("status") else None
+        except (ApiError, ValueError, KeyError) as e:
+            self._problem(f"{p.title}: its images could not be refreshed on the existing product ({e})")
             return None
 
     @staticmethod

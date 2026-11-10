@@ -74,6 +74,20 @@ class MediaUploaderTest(unittest.TestCase):
         self.assertEqual((again.uploaded, again.reused, len(self.puts)), (0, 1, 1))
         self.assertEqual(again.upload(self.img, "storefront")["id"], "a2", "another purpose is another asset")
 
+    def test_a_cached_asset_whose_object_is_gone_is_uploaded_again(self):
+        """After a reset the media record may survive while the object store is empty: the cached url must serve."""
+        media, state = FakeMedia(), State(self.tmp / "state.json")
+        first = MediaUploader(media, state, put=self.put, head=lambda url: True)
+        first.upload(self.img, "product-image")
+
+        gone = MediaUploader(media, state, put=self.put, head=lambda url: False)
+        gone.upload(self.img, "product-image")
+        self.assertEqual((gone.uploaded, gone.reused, len(self.puts)), (1, 0, 2))
+
+        unknown = MediaUploader(media, state, put=self.put, head=lambda url: None)  # store unreachable: trust the record
+        unknown.upload(self.img, "product-image")
+        self.assertEqual((unknown.uploaded, unknown.reused), (0, 1))
+
     def test_multipart_when_the_store_wants_a_form_field(self):
         up = MediaUploader(FakeMedia(form_field="file"), State(self.tmp / "s.json"), put=self.put)
         up.upload(self.img, "product-image")

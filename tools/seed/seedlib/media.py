@@ -1,7 +1,9 @@
 """Uploads images through media's signed-upload flow: POST /v1/uploads → PUT the bytes → POST /complete.
 
 Assets are remembered per (sha256, purpose) in the seed state, so re-runs reuse them instead of uploading again
-(media's perceptual hash would only note the duplicate, but there is no reason to store a photo twice).
+(media's perceptual hash would only note the duplicate, but there is no reason to store a photo twice). A remembered
+asset is reused only while media still knows it AND its public URL still serves: after `make reset` (or only the object
+store being wiped) the cached id/url are stale and the image is uploaded again.
 """
 from __future__ import annotations
 
@@ -9,15 +11,16 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from .http import ApiError, Http, multipart, put_bytes
+from .http import ApiError, Http, multipart, put_bytes, url_exists
 from .images.model import ImageFile
 from .state import State
 
 
 class MediaUploader:
     def __init__(self, media: Http, state: State, log: Callable[[str], None] = print,
-                 put: Callable[[str, bytes, dict[str, str]], int] = put_bytes):
-        self.media, self.state, self.log, self.put = media, state, log, put
+                 put: Callable[[str, bytes, dict[str, str]], int] = put_bytes,
+                 head: Callable[[str], bool | None] = url_exists):
+        self.media, self.state, self.log, self.put, self.head = media, state, log, put, head
         self.uploaded = 0
         self.reused = 0
 
@@ -29,8 +32,11 @@ class MediaUploader:
             try:
                 asset = self.media.get(f"/v1/assets/{known['id']}", retries=1)
                 if asset and asset.get("url") and asset.get("status") in ("READY", "FLAGGED"):
-                    self.reused += 1
-                    return self._summary(asset)
+                    if self.head(asset["url"]) is False:
+                        self.log(f"  ! cached upload {known['id']} is gone from the object store ({asset['url']}): uploading again")
+                    else:
+                        self.reused += 1
+                        return self._summary(asset)
             except ApiError as e:
                 if e.status not in (403, 404):
                     raise
