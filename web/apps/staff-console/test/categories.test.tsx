@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { CatalogView } from '@/components/catalog/CatalogView';
 import { CategoriesView } from '@/components/catalog/CategoriesView';
 import { changedFields, draftOfType, linesFromText, listFromText, moveAmongVisible, moveTargets, productsInUse, withTrait } from '@/components/catalog/model';
+import { NodeSheet } from '@/components/catalog/NodeSheet';
 import { SellerFormPreview } from '@/components/catalog/SellerFormPreview';
 
 import { asRoles, mockApi } from './mock-api';
@@ -195,6 +196,17 @@ describe('the category tree', () => {
     await renderScreen(<CategoriesView />);
     await screen.findByRole('tree');
     expect(screen.getByRole('button', { name: 'Add a department' })).toBeInTheDocument();
+  });
+});
+
+describe('the category tax profile link', () => {
+  it('points at the real tax screen: Settings, Sales tax, Tax profiles', async () => {
+    asRoles(null);
+    const { nodes } = await api().tree();
+    const category = { ...nodes.find((n) => n.level === 'CATEGORY')!, taxProfileId: 'nuts-seeds', taxStatus: 'ACTIVE' as const };
+    await renderScreen(<NodeSheet target={{ mode: 'view', node: category }} nodes={[category]} canEdit onTarget={() => {}} onClose={() => {}} />);
+    const link = await screen.findByTestId('tax-screens-link');
+    expect(link).toHaveAttribute('href', '/settings?section=tax&tab=tax-profiles');
   });
 });
 

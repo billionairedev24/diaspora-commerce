@@ -12,6 +12,7 @@ import {
 } from '@afrotransact/api-client';
 import { Button, Sheet, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { type ReactNode, useState } from 'react';
 
 import { FormFields } from '@/components/resources/FormFields';
@@ -19,6 +20,7 @@ import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { type MessageKey, useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
+import { settingsHref } from '@/lib/settings-sections';
 
 import { canHaveChildren, CHILD_LEVEL, moveTargets, productsInUse } from './model';
 import { TypeEditor } from './TypeEditor';
@@ -302,7 +304,7 @@ function NodeDetails({ node, nodes, canEdit, onMode }: { node: TaxonomyNode; nod
         {node.level === 'CATEGORY' && node.taxStatus ? (
           <Detail label={t('st.catalog.detail.taxStatus')}>
             <span data-testid="tax-status">{t(`st.catalog.taxStatus.${node.taxStatus}` as MessageKey)}</span>{' '}
-            <a href="/tax" className="text-xs text-link hover:underline">{t('st.catalog.detail.taxScreens')}</a>
+            <Link href={`${settingsHref('tax')}&tab=tax-profiles`} className="text-xs text-link hover:underline" data-testid="tax-screens-link">{t('st.catalog.detail.taxScreens')}</Link>
           </Detail>
         ) : null}
         {!node.active && node.retiredReason ? <Detail label={t('st.catalog.detail.retiredFor')}>{node.retiredReason}</Detail> : null}

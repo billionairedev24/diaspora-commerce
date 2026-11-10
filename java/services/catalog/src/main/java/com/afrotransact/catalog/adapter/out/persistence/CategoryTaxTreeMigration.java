@@ -14,8 +14,8 @@ import com.afrotransact.catalog.domain.taxonomy.imports.TaxonomyPlanner;
 import com.afrotransact.catalog.domain.taxonomy.imports.TaxonomyPlanner.Plan;
 import com.afrotransact.catalog.domain.taxonomy.imports.TaxonomyPlanner.PlannedNode;
 import org.flywaydb.core.api.MigrationVersion;
-import org.flywaydb.core.api.migration.BaseJavaMigration;
 import org.flywaydb.core.api.migration.Context;
+import org.flywaydb.core.api.migration.JavaMigration;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -29,7 +29,7 @@ import tools.jackson.databind.json.JsonMapper;
  * never through a migration. See docs/engineering/taxonomy.md.
  */
 @Component
-class CategoryTaxTreeMigration extends BaseJavaMigration {
+class CategoryTaxTreeMigration implements JavaMigration {
 
     private static final String INSERT_TYPE = """
             insert into product_type (code, label, identifier_rule, attributes, themes, traits, version, updated_at)
@@ -43,10 +43,23 @@ class CategoryTaxTreeMigration extends BaseJavaMigration {
             on conflict (code) do nothing
             """;
 
-    /** Registered as a Spring bean (Flyway runs it as V20): Java migration class names would break the naming rules. */
+    /**
+     * Registered as a Spring bean (Flyway runs it as V20). It implements {@link JavaMigration} directly instead of
+     * extending {@code BaseJavaMigration}, whose constructor refuses class names that do not start with V or R.
+     */
     @Override
     public MigrationVersion getVersion() {
         return MigrationVersion.fromVersion("20");
+    }
+
+    @Override
+    public Integer getChecksum() {
+        return null;
+    }
+
+    @Override
+    public boolean canExecuteInTransaction() {
+        return true;
     }
 
     @Override
