@@ -703,6 +703,7 @@ TEST_USERS: list[tuple[str, str, str, Union[str, None], bool]] = [
     ("staff.product@afrotransact.test", "Product Owner", "Staff console", None, True),
     ("staff.developer@afrotransact.test", "Developer", "Staff console", None, True),
     ("staff.auditor@afrotransact.test", "Auditor (read-only)", "Staff console", None, True),
+    ("staff.tax@afrotransact.test", "Tax Reviewer", "Staff console", None, True),
     ("driver@afrotransact.test", "Driver", "Driver app", None, False),
 ]
 

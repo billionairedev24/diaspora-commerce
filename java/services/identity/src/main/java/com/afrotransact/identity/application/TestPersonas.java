@@ -47,6 +47,7 @@ public final class TestPersonas {
             staff("staff.product", "Wanjiru", "Kamau", "Product Owner", "platform.product_owner", "0112"),
             staff("staff.developer", "Obinna", "Uche", "Developer", "platform.developer", "0113"),
             staff("staff.auditor", "Hana", "Bekele", "Auditor (read-only)", "platform.auditor", "0114"),
+            staff("staff.tax", "Nia", "Mensah", "Tax Reviewer", "platform.tax_reviewer", "0115"),
             new TestPersona(email("driver"), "Emeka", "Obi", "+17135550199", "Driver", DRIVER_APP,
                     List.of("platform.driver"), null, null, null));
 

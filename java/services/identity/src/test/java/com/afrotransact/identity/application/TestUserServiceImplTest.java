@@ -199,6 +199,6 @@ class TestUserServiceImplTest {
                 .allMatch(e -> e.endsWith("@afrotransact.test"));
         assertThat(TestPersonas.ALL).filteredOn(p -> TestPersonas.STAFF_CONSOLE.equals(p.app()))
                 .allMatch(p -> p.phone() != null && p.roles().stream().allMatch(r -> r.startsWith("platform.")))
-                .hasSize(14);
+                .hasSize(15);
     }
 }

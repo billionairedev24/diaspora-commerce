@@ -680,6 +680,7 @@ customer.houston@afrotransact.test|Customer, Houston 77042|$sf
 customer.lubbock@afrotransact.test|Customer, Lubbock 79401 pre-order|$sf
 seller.owner@afrotransact.test|Owner, Mama Put Pantry|$sc
 seller.staff@afrotransact.test|Catalog manager, Mama Put Pantry|$sc
+seller.bamako@afrotransact.test|Owner, Bamako Home|$sc
 provider.owner@afrotransact.test|Owner, Aminata's Braids|$sc (Provider Hub)
 retail.operator@afrotransact.test|Operator, AfroTransact Retail|$sc
 staff.admin@afrotransact.test|Super Admin|$st
@@ -696,6 +697,7 @@ staff.dispatch@afrotransact.test|Dispatcher (delivery runs)|$st
 staff.product@afrotransact.test|Product Owner|$st
 staff.developer@afrotransact.test|Developer|$st
 staff.auditor@afrotransact.test|Auditor (read-only)|$st
+staff.tax@afrotransact.test|Tax Reviewer|$st
 driver@afrotransact.test|Driver|driver app (mobile/apps/driver)
 admin@afrotransact.com|Bootstrap admin: LocalAdmin2026!|$st
 EOF

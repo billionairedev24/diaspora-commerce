@@ -81,11 +81,13 @@ class AfroTransactDeliveryCheckoutIT extends OrdersIntegrationTest {
         // The address has no stored position: geo geocodes the street address.
         WIREMOCK.verify(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/distance"))
                 .withRequestBody(WireMock.matchingJsonPath("$.to.address.postalCode", WireMock.equalTo("77002"))));
-        // Payment lines: AFROTRANSACT_DELIVERY, shipping on the first line, the 201 fee spread by items 3000 / 1000.
+        // Payment lines: AFROTRANSACT_DELIVERY, the 1128 charge allocated proportionally to the items (3000 / 1000, as the tax
+        // is: 846 + 282), the 201 fee spread the same way.
         WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payments"))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[0].fulfilment",
                         WireMock.equalTo("AFROTRANSACT_DELIVERY")))
-                .withRequestBody(WireMock.matchingJsonPath("$.lines[0].shippingMinor", WireMock.equalTo("1128")))
+                .withRequestBody(WireMock.matchingJsonPath("$.lines[0].shippingMinor", WireMock.equalTo("846")))
+                .withRequestBody(WireMock.matchingJsonPath("$.lines[1].shippingMinor", WireMock.equalTo("282")))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[0].deliveryFeeMinor", WireMock.equalTo("151")))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[1].deliveryFeeMinor", WireMock.equalTo("50"))));
 

@@ -87,6 +87,7 @@ one in to prove it. Password for all of them: **`Test1234!Local`**.
 | `customer.lubbock@afrotransact.test` | Customer, Lubbock 79401 address (open pre-order) | Storefront |
 | `seller.owner@afrotransact.test` | Owner, Mama Put Pantry | Seller Center |
 | `seller.staff@afrotransact.test` | Catalog manager, Mama Put Pantry | Seller Center |
+| `seller.bamako@afrotransact.test` | Owner, Bamako Home | Seller Center |
 | `provider.owner@afrotransact.test` | Owner, Aminata's Braids | Seller Center (Provider Hub) |
 | `retail.operator@afrotransact.test` | Operator, AfroTransact Retail (1P) | Seller Center |
 | `staff.admin@afrotransact.test` | Super Admin | Staff console |
@@ -103,6 +104,7 @@ one in to prove it. Password for all of them: **`Test1234!Local`**.
 | `staff.product@afrotransact.test` | Product Owner | Staff console |
 | `staff.developer@afrotransact.test` | Developer | Staff console |
 | `staff.auditor@afrotransact.test` | Auditor (read-only) | Staff console |
+| `staff.tax@afrotransact.test` | Tax Reviewer | Staff console |
 | `driver@afrotransact.test` | Driver | Driver app |
 
 Customers, sellers, providers and the driver sign in with email and password only. Staff keep their mandatory two-step

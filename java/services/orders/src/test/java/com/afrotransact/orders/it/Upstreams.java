@@ -46,7 +46,9 @@ final class Upstreams {
                         .withBody("{\"provider\":\"RULES\",\"currency\":\"USD\",\"lines\":["
                                 + "{{#each (jsonPath request.body '$.lines') as |l|}}{{#unless @first}},{{/unless}}"
                                 + "{\"lineId\":\"{{l.lineId}}\",\"taxMinor\":"
-                                + "{{math (math l.unitPriceMinor '*' l.quantity) '*' 0.0825}},"
+                                // 8.25 % of the discounted items, rounded half up (+ 0.5, then the integer part is read);
+                                // delivery is not taxed here (the real engine taxes it with the line it follows).
+                                + "{{math (math (math (math l.unitPriceMinor '*' l.quantity) '-' l.discountMinor) '*' 0.0825) '+' 0.5}},"
                                 + "\"shippingTaxMinor\":0,\"jurisdiction\":\"US-TX\",\"decisionStatus\":\"RESOLVED\","
                                 + "\"outcome\":\"TAXABLE\",\"internalTaxCode\":\"AT.TEST.TAXABLE\","
                                 + "\"providerTaxCode\":\"txcd_test\",\"ruleVersion\":\"test-1\"}{{/each}}]}")));
@@ -94,7 +96,7 @@ final class Upstreams {
 
     void perishable(String atin) {
         json(WireMock.get(WireMock.urlPathEqualTo("/v1/public/variants/" + atin)), 200,
-                "{\"product\":{\"atin\":\"P" + atin + "\",\"productType\":\"perishable\",\"attributes\":{}},"
+                "{\"product\":{\"atin\":\"P" + atin + "\",\"productType\":\"frozen-meals\",\"attributes\":{}},"
                         + "\"variant\":{\"atin\":\"" + atin + "\"}}");
     }
 

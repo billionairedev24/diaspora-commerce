@@ -157,6 +157,7 @@ never a real mailbox) and one password, **`Test1234!Local`**. Restarting identit
 | `customer.lubbock@afrotransact.test` | Customer | Storefront | Default address 1500 Broadway, Lubbock TX **79401**: the open Lubbock pre-order |
 | `seller.owner@afrotransact.test` | `seller.owner`, Mama Put Pantry | Seller Center | Mama Put Pantry's offers, stock and orders |
 | `seller.staff@afrotransact.test` | `seller.catalog`, Mama Put Pantry | Seller Center | Same organisation, catalog manager's modules |
+| `seller.bamako@afrotransact.test` | `seller.owner`, Bamako Home | Seller Center | A second seller organisation: tests that one seller never sees another's data |
 | `provider.owner@afrotransact.test` | `provider.owner`, Aminata's Braids | Seller Center (Provider Hub) | The provider's services, team and calendar |
 | `retail.operator@afrotransact.test` | `seller.admin`, AfroTransact Retail | Seller Center | The first-party (1P) organisation's offers and stock |
 | `staff.admin@afrotransact.test` | `platform.super_admin` | Staff console | Every module |
@@ -173,6 +174,7 @@ never a real mailbox) and one password, **`Test1234!Local`**. Restarting identit
 | `staff.product@afrotransact.test` | `platform.product_owner` | Staff console | Most modules (no Customer support, Site content, Notifications) |
 | `staff.developer@afrotransact.test` | `platform.developer` | Staff console | Orders, Fees & tax, Audit log, Markets & locations, Developers |
 | `staff.auditor@afrotransact.test` | `platform.auditor` | Staff console | Every module but Site content and Notifications, read-only |
+| `staff.tax@afrotransact.test` | `platform.tax_reviewer` | Staff console | Fees & tax (tax review queue, tax profiles, provider codes; no fee changes) |
 | `driver@afrotransact.test` | `platform.driver` | Driver app | Driver role (fulfilment learns it from `identity.role.granted`) |
 
 The staff console shows each role what identity's module matrix gives it (every staff persona also has Dashboard and

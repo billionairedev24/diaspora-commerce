@@ -87,7 +87,7 @@ class ReturnsTaxLookupIT extends OrdersIntegrationTest {
         WIREMOCK.verify(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/tax/quotes"))
                 .withRequestBody(WireMock.matchingJsonPath("$.shipTo.postalCode", WireMock.equalTo("77002")))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[?(@.atin == '" + fbaAtin
-                        + "' && @.shippingMinor == 499 && @.productType == 'perishable')]"))
+                        + "' && @.shippingMinor == 499 && @.productType == 'frozen-meals')]"))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[?(@.atin == '" + sellerAtin
                         + "' && @.shippingMinor == 0)]")));
         WIREMOCK.verify(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/reservations"))
@@ -107,7 +107,7 @@ class ReturnsTaxLookupIT extends OrdersIntegrationTest {
         assertThat(fba.path("shippingMinor").asLong()).isEqualTo(499);
         assertThat(fba.path("shipBy").asString()).isNotBlank();
         JsonNode fbaLine = fba.path("lines").get(0);
-        assertThat(fbaLine.path("productType").asString()).isEqualTo("perishable");
+        assertThat(fbaLine.path("productType").asString()).isEqualTo("frozen-meals");
         assertThat(fbaLine.path("perishable").asBoolean()).isTrue();
         assertThat(fbaLine.path("taxMinor").asLong()).isEqualTo(100);
         assertThat(fbaLine.path("taxJurisdiction").asString()).isEqualTo("US-NY");
@@ -140,7 +140,9 @@ class ReturnsTaxLookupIT extends OrdersIntegrationTest {
                 {"addressId":"addr-nj","deliverySelections":[{"packageId":"%s","option":"carrier"}]}
                 """.formatted(sellerOrg + ":SELLER"), "Idempotency-Key", "idem-" + customer,
                 "Authorization", "Bearer " + bearer), 422, "orders.tax-line-blocked");
-        assertThat(p.path("detail").asString()).contains("We can't sell").doesNotContain(sellerAtin);
+        // Plain words: names the item the shopper put in the cart, never a status code, tax term or the reviewer's note.
+        assertThat(p.path("detail").asString()).contains("We can't sell")
+                .doesNotContain("NEEDS_APPROVAL", "BLOCKED", "awaiting review", "tax");
     }
 
     @Test

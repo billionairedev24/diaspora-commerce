@@ -121,14 +121,71 @@ at:
     # gives up while the saga still answers (tools/ci/check_env_config.py checks it).
     checkout-response-timeout: ${CHECKOUT_RESPONSE_TIMEOUT:20s}
     zone: ${ORDERS_ZONE:America/Chicago}
-    perishable-types: [perishable]
+    # Product types of the category tax tree (catalog's `perishable` trait: dairy, produce, frozen, meat and fish): they get a
+    # handover code and the perishable promise. The old single `perishable` type no longer exists.
+    perishable-types: [dairy-eggs, fresh-produce, frozen-meals, meat-poultry-fish]
+    # Product type of the tree -> the commission category of payments' fee schedule (departments Groceries & Food and
+    # Beverages = groceries, Fashion = fashion, Beauty = beauty, Home = home & art, Books = books, Health = health,
+    # Services = services). Types not listed (Electronics, Baby & Kids, Pets, Digital, Other) are sent under their own
+    # code and take the schedule's default rate until the owner sets a category rate for them.
     commission-categories:
-      grocery: groceries
-      perishable: groceries
-      fashion: fashion
-      beauty: beauty
-      books: books
-      health: health
+      baby-food-formula: groceries
+      bakery-products: groceries
+      beans-pantry-sauces: groceries
+      candy-gum: groceries
+      cooking-oils: groceries
+      dairy-eggs: groceries
+      flours-starches: groceries
+      fresh-produce: groceries
+      frozen-meals: groceries
+      meat-poultry-fish: groceries
+      nuts-seeds: groceries
+      packaged-snacks: groceries
+      pasta-noodles: groceries
+      prepared-meals: groceries
+      rice-grains: groceries
+      spices-seasonings: groceries
+      coffee-tea-dry: groceries
+      energy-protein-drink-mixes: groceries
+      flavored-water-soda: groceries
+      fruit-vegetable-juice: groceries
+      plain-water: groceries
+      ready-to-drink-coffee-tea: groceries
+      hair-accessories: beauty
+      haircare: beauty
+      medicated-skincare: beauty
+      perfumes-fragrances: beauty
+      skincare-cosmetics: beauty
+      wigs-extensions: beauty
+      dress: fashion
+      top: fashion
+      menwear: fashion
+      footwear: fashion
+      bags-purses: fashion
+      kids: fashion
+      jewelry-accessories: fashion
+      bedding-linens: 'home & art'
+      cleaning-paper-products: 'home & art'
+      decor-candles: 'home & art'
+      furniture-small-appliances: 'home & art'
+      kitchenware-cookware: 'home & art'
+      magazines: books
+      printed-books: books
+      dietary-supplements: health
+      feminine-hygiene: health
+      first-aid-wound-care: health
+      medical-devices: health
+      otc-medicines: health
+      personal-hygiene: health
+      event-tickets: services
+      fitness-classes: services
+      hair-beauty-appointments: services
+      laundry-dry-cleaning: services
+      photography-media: services
+      repairs: services
+      residential-cleaning: services
+      tutoring-consulting: services
+      fabrics-textiles: fashion
     shipping:
       carrier-standard-minor: 599
       carrier-express-minor: 1499
