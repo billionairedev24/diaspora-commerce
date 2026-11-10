@@ -1,6 +1,7 @@
 package com.afrotransact.orders.application;
 
 import java.util.List;
+import java.util.Map;
 
 import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
@@ -91,12 +92,40 @@ public record CheckoutPlan(String currency, List<Package> packages, List<String>
      * @param sellerName           seller display name
      * @param taxDecision          the stored tax decision the quote used (null until the draft is taxed)
      * @param shippingAllocMinor   the part of the shipment's shipping allocated to this line (null until taxed)
+     * @param sellerBehaviour      how the line's seller sells the item (sold_heated, heated_by_seller,
+     *                             utensils_provided, seller_is_bakery) from catalog's listing; sent to the tax quote
+     *                             beside the variant ATIN. Empty when catalog reports none for this seller.
      */
     public record Line(String lineId, int lineNo, String variantAtin, String productAtin, String title,
                        String imageUrl, int quantity, long unitPriceMinor, long taxMinor, String category,
                        boolean perishable, String taxJurisdiction, int promiseDays, String offerId,
                        long discountMinor, String productType, String localTaxJurisdiction, long shippingTaxMinor,
-                       String sellerOrgId, String sellerName, TaxDecision taxDecision, Long shippingAllocMinor) {
+                       String sellerOrgId, String sellerName, TaxDecision taxDecision, Long shippingAllocMinor,
+                       Map<String, Object> sellerBehaviour) {
+
+        public Line {
+            sellerBehaviour = sellerBehaviour == null ? Map.of() : Map.copyOf(sellerBehaviour);
+        }
+
+        /** A line without seller behaviour (tests, older workflow histories). */
+        public Line(String lineId, int lineNo, String variantAtin, String productAtin, String title,
+                    String imageUrl, int quantity, long unitPriceMinor, long taxMinor, String category,
+                    boolean perishable, String taxJurisdiction, int promiseDays, String offerId,
+                    long discountMinor, String productType, String localTaxJurisdiction, long shippingTaxMinor,
+                    String sellerOrgId, String sellerName, TaxDecision taxDecision, Long shippingAllocMinor) {
+            this(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, taxMinor,
+                    category, perishable, taxJurisdiction, promiseDays, offerId, discountMinor, productType,
+                    localTaxJurisdiction, shippingTaxMinor, sellerOrgId, sellerName, taxDecision, shippingAllocMinor,
+                    Map.of());
+        }
+
+        /** The line with the seller's behaviour from the catalog listing. */
+        public Line withBehaviour(Map<String, Object> behaviour) {
+            return new Line(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor,
+                    taxMinor, category, perishable, taxJurisdiction, promiseDays, offerId, discountMinor, productType,
+                    localTaxJurisdiction, shippingTaxMinor, sellerOrgId, sellerName, taxDecision, shippingAllocMinor,
+                    behaviour);
+        }
 
         /** A line before it is taxed: no decision and no shipping allocation yet. */
         public Line(String lineId, int lineNo, String variantAtin, String productAtin, String title,
@@ -141,7 +170,7 @@ public record CheckoutPlan(String currency, List<Package> packages, List<String>
             long shipTax = Math.min(shippingTaxMinor, tax);
             return new Line(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, tax,
                     category, perishable, taxJurisdiction, promiseDays, offerId, d, productType, localTaxJurisdiction,
-                    shipTax, sellerOrgId, sellerName, taxDecision, shippingAllocMinor);
+                    shipTax, sellerOrgId, sellerName, taxDecision, shippingAllocMinor, sellerBehaviour);
         }
 
         /**
@@ -152,7 +181,7 @@ public record CheckoutPlan(String currency, List<Package> packages, List<String>
             return new Line(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, tax,
                     category, perishable, jurisdiction, promiseDays, offerId, discountMinor, productType,
                     localJurisdiction, Math.clamp(shippingTax, 0, tax), sellerOrgId, sellerName, decision,
-                    shippingAlloc);
+                    shippingAlloc, sellerBehaviour);
         }
     }
 }

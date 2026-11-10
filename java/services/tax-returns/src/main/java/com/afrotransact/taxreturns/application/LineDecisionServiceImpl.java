@@ -170,9 +170,13 @@ class LineDecisionServiceImpl implements LineDecisionService {
                 continue;
             }
             Request line = firstLine.get(atin);
-            Map<String, Object> behaviour = f.sellerBehaviour().isEmpty() ? line.sellerBehaviour() : f.sellerBehaviour();
+            // The listing behaviour catalog reports is its owner's: the record belongs to that organisation, and a line
+            // of another seller never inherits it (it carries its own behaviour, or none and is blocked if needed).
+            String owner = f.ownerOrgId() != null ? f.ownerOrgId() : line.sellerOrgId();
+            Map<String, Object> behaviour = f.ownerOrgId() == null && f.sellerBehaviour().isEmpty()
+                    ? line.sellerBehaviour() : f.sellerBehaviour();
             classifications.onCatalogFactsChanged(new VariantClassificationService.CatalogFactsChanged(null,
-                    line.sellerOrgId(), f.categoryCode(), f.productType(), behaviour,
+                    owner, f.categoryCode(), f.productType(), behaviour,
                     List.of(new VariantClassificationService.Variant(atin, null, f.taxFacts(), false)),
                     "SYSTEM:quote", clock.instant()));
             ingested = true;

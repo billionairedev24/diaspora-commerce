@@ -48,15 +48,27 @@ class PublicProductController {
                                  RatingResponse rating,
                                  @Schema(description = "The seller's size chart (columns, rows in the chart's unit and "
                                          + "converted, fit note, how to measure) when the product has one")
-                                 PublicChartResponse sizeChart) {
+                                 PublicChartResponse sizeChart,
+                                 @Schema(description = "The tax profile (category code) tax-returns decides this "
+                                         + "product's tax by; null while the category has none. Read by checkout "
+                                         + "and tax-returns, not for browsing.")
+                                 String categoryCode,
+                                 @Schema(description = "The seller's answers about how the item is sold (the tax "
+                                         + "behaviour facts); nothing else of the listing is public")
+                                 PublicListingResponse listing) {
 
-        static PublicProductResponse of(Product p, RatingResponse rating, PublicChartResponse sizeChart) {
+        static PublicProductResponse of(Product p, RatingResponse rating, PublicChartResponse sizeChart,
+                                        String categoryCode) {
             return new PublicProductResponse(p.id(), p.atin().value(), p.owner().kind().name(), p.owner().orgId(),
                     p.categoryId(), p.productTypeCode(), p.title(), p.attributes(),
                     p.images().stream().map(ImageDto::of).toList(), p.variationTheme(),
                     p.variants().stream().map(VariantResponse::of).toList(), p.preorderEligible(), p.shipsNow(), rating,
-                    sizeChart);
+                    sizeChart, categoryCode, new PublicListingResponse(p.details().sellerBehaviour()));
         }
+    }
+
+    @Schema(name = "PublicListing")
+    record PublicListingResponse(Map<String, Object> sellerBehaviour) {
     }
 
     @Schema(name = "PublicVariant")
@@ -81,6 +93,7 @@ class PublicProductController {
     private PublicProductResponse withRating(Product product) {
         PublicChartResponse chart = catalog.sizeChartOf(product)
                 .map(c -> PublicChartResponse.of(c, product.details().fitNote())).orElse(null);
-        return PublicProductResponse.of(product, RatingResponse.of(reviews.ratingOf(product.id())), chart);
+        return PublicProductResponse.of(product, RatingResponse.of(reviews.ratingOf(product.id())), chart,
+                catalog.taxProfileOf(product).orElse(null));
     }
 }

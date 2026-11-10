@@ -54,12 +54,12 @@ class CheckoutTaxImpl implements CheckoutTax {
                 shippingByLine.put(l.lineId(), shipping[i]);
                 lines.add(new TaxQuoteClient.Line(l.lineId(), l.variantAtin(),
                         l.sellerOrgId() != null ? l.sellerOrgId() : s.sellerOrgId(), l.productType(),
-                        l.quantity(), l.unitPriceMinor(), l.discountMinor(), shipping[i]));
+                        l.quantity(), l.unitPriceMinor(), l.discountMinor(), shipping[i], l.sellerBehaviour()));
             }
         }
         TaxQuoteClient.Quote quote = quotes.quote(new TaxQuoteClient.Request(draft.currency(),
                 to.country() == null || to.country().isBlank() ? "US" : to.country(), to.state(), to.postalCode(),
-                to.city(), lines));
+                to.city(), lines, draft.orderId()));
         Map<String, TaxQuoteClient.LineTax> byLine = new LinkedHashMap<>();
         quote.lines().stream().filter(t -> t.lineId() != null).forEach(t -> byLine.putIfAbsent(t.lineId(), t));
         if (!byLine.keySet().containsAll(lines.stream().map(TaxQuoteClient.Line::lineId).toList())) {

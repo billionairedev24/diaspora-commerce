@@ -21,6 +21,12 @@ public interface PublicCatalogService {
     /** The size chart a product links (retired or not: the product keeps showing it), if any. */
     Optional<SizeChart> sizeChartOf(Product product);
 
+    /**
+     * The tax profile (the category code tax-returns decides by) of the product's category; empty while the product
+     * has no category or the category has no profile. Checkout and tax-returns read it, never the browse tree.
+     */
+    Optional<String> taxProfileOf(Product product);
+
     /** A variant and the product it belongs to. */
     record LiveVariant(Product product, Variant variant) {
     }

@@ -19,9 +19,12 @@ public interface ProductFacts {
      * @param categoryCode    tax profile (category) code, null while catalog does not report it
      * @param taxFacts        the variant's typed tax facts by fact id (owner VARIANT)
      * @param sellerBehaviour the owner listing's behaviour facts (owner OFFER)
+     * @param ownerOrgId      the organisation that owns the catalog listing (null when catalog does not say): the
+     *                        behaviour is that organisation's, never another seller's
      */
     record Facts(String atin, String productType, boolean perishable, Map<String, String> attributes,
-                 String categoryCode, Map<String, Object> taxFacts, Map<String, Object> sellerBehaviour) {
+                 String categoryCode, Map<String, Object> taxFacts, Map<String, Object> sellerBehaviour,
+                 String ownerOrgId) {
 
         public Facts {
             attributes = attributes == null ? Map.of() : Map.copyOf(attributes);
@@ -30,7 +33,12 @@ public interface ProductFacts {
         }
 
         public Facts(String atin, String productType, boolean perishable, Map<String, String> attributes) {
-            this(atin, productType, perishable, attributes, null, Map.of(), Map.of());
+            this(atin, productType, perishable, attributes, null, Map.of(), Map.of(), null);
+        }
+
+        public Facts(String atin, String productType, boolean perishable, Map<String, String> attributes,
+                     String categoryCode, Map<String, Object> taxFacts, Map<String, Object> sellerBehaviour) {
+            this(atin, productType, perishable, attributes, categoryCode, taxFacts, sellerBehaviour, null);
         }
 
         public Facts(String atin, String productType, boolean perishable) {

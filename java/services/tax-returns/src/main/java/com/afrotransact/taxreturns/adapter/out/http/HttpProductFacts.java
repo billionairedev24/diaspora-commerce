@@ -52,9 +52,12 @@ class HttpProductFacts implements ProductFacts {
                 continue;
             }
             try {
-                JsonNode variant = catalog.call(c -> c.get().uri("/v1/public/variants/{atin}", atin).retrieve()
+                // The answer is {"product": {...}, "variant": {...}}: the tax facts are the variant's, the category code
+                // and the listing behaviour the product's.
+                JsonNode answer = catalog.call(c -> c.get().uri("/v1/public/variants/{atin}", atin).retrieve()
                         .body(JsonNode.class));
-                JsonNode product = variant.path("product");
+                JsonNode variant = answer.path("variant");
+                JsonNode product = answer.path("product");
                 String type = product.path("productType").asString(null);
                 JsonNode attributes = product.path("attributes");
                 boolean perishable = "true".equalsIgnoreCase(attributes.path("perishable").asString(""));
@@ -64,7 +67,8 @@ class HttpProductFacts implements ProductFacts {
                         variant.path("categoryCode"));
                 Map<String, Object> taxFacts = plain(variant.path("taxFacts"));
                 Map<String, Object> behaviour = plain(product.path("listing").path("sellerBehaviour"));
-                Facts facts = new Facts(atin, type, perishable, answers, category, taxFacts, behaviour);
+                Facts facts = new Facts(atin, type, perishable, answers, category, taxFacts, behaviour,
+                        product.path("sellerOrgId").asString(null));
                 if (cache.size() >= MAX_CACHED) {
                     cache.clear();
                 }

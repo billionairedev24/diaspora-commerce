@@ -63,6 +63,24 @@ class HttpProductFactsClient implements ProductFactsClient {
         return out;
     }
 
+    /** Typed values as catalog sent them: booleans, numbers and text; anything nested is ignored. */
+    static Map<String, Object> behaviour(JsonNode node) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        node.properties().forEach(e -> {
+            JsonNode v = e.getValue();
+            if (v.isBoolean()) {
+                out.put(e.getKey(), v.asBoolean());
+            } else if (v.isIntegralNumber()) {
+                out.put(e.getKey(), v.asLong());
+            } else if (v.isNumber()) {
+                out.put(e.getKey(), v.decimalValue());
+            } else if (v.isString()) {
+                out.put(e.getKey(), v.asString());
+            }
+        });
+        return out;
+    }
+
     @Override
     public Map<String, Facts> facts(Collection<String> variantAtins) {
         Map<String, Facts> out = new LinkedHashMap<>();
@@ -76,7 +94,8 @@ class HttpProductFactsClient implements ProductFactsClient {
                     boolean perishable = type != null && perishableTypes.contains(type)
                             || "true".equalsIgnoreCase(product.path("attributes").path("perishable").asString(""));
                     out.put(atin, new Facts(atin, type, perishable, type == null ? null
-                            : categories.getOrDefault(type, type)));
+                            : categories.getOrDefault(type, type), product.path("sellerOrgId").asString(null),
+                            behaviour(product.path("listing").path("sellerBehaviour"))));
                 }
             } catch (UpstreamFailure f) {
                 LOG.warn("catalog facts unavailable for {} ({})", atin, f.code());

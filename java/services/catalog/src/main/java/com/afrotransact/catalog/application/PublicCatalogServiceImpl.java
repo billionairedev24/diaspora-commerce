@@ -5,10 +5,12 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.catalog.domain.Atin;
+import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.domain.sizing.SizeChart;
+import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.ListingSuppressionRepository;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.catalog.port.SizeChartRepository;
@@ -22,12 +24,14 @@ class PublicCatalogServiceImpl implements PublicCatalogService {
     private final ProductRepository products;
     private final ListingSuppressionRepository suppressions;
     private final SizeChartRepository charts;
+    private final CategoryRepository categories;
 
     PublicCatalogServiceImpl(ProductRepository products, ListingSuppressionRepository suppressions,
-                             SizeChartRepository charts) {
+                             SizeChartRepository charts, CategoryRepository categories) {
         this.products = products;
         this.suppressions = suppressions;
         this.charts = charts;
+        this.categories = categories;
     }
 
     @Override
@@ -59,6 +63,13 @@ class PublicCatalogServiceImpl implements PublicCatalogService {
         // A chart of another organisation never shows (a product cannot link one, this is belt and braces).
         return chartId == null ? Optional.empty() : charts.findById(chartId)
                 .filter(c -> c.ownerOrg().equals(product.owner().orgId()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<String> taxProfileOf(Product product) {
+        return product.categoryId() == null ? Optional.empty() : categories.findById(product.categoryId())
+                .map(CategoryNode::taxProfileId);
     }
 
     /** LIVE and not hidden by seller-service compliance enforcement (seller.listings.hidden). */

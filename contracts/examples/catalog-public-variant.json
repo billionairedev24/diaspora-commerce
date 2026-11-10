@@ -1,0 +1,26 @@
+{
+  "product": {
+    "atin": "AT0000PRD1",
+    "ownerKind": "SELLER",
+    "sellerOrgId": "org_amaka_kitchen",
+    "productType": "nuts-seeds",
+    "categoryCode": "nuts-seeds",
+    "listing": {
+      "sellerBehaviour": {
+        "sold_heated": false,
+        "utensils_provided": true,
+        "heated_by_seller": false
+      }
+    }
+  },
+  "variant": {
+    "atin": "AT0000VAR1",
+    "priceMinor": 899,
+    "currency": "USD",
+    "taxFacts": {
+      "net_weight_oz": 8.5,
+      "servings_per_package": 4,
+      "label_type": "NUTRITION_FACTS"
+    }
+  }
+}

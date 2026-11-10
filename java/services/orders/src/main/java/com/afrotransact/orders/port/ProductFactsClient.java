@@ -15,8 +15,30 @@ public interface ProductFactsClient {
      */
     Map<String, Listing> listings(Collection<String> variantAtins);
 
-    /** What orders needs to know about a product. */
-    record Facts(String variantAtin, String productType, boolean perishable, String category) {
+    /**
+     * What orders needs to know about a product.
+     *
+     * @param ownerOrgId      the organisation that owns the catalog listing (null when catalog does not say)
+     * @param sellerBehaviour how the owner sells the item (sold_heated, heated_by_seller, utensils_provided,
+     *                        seller_is_bakery) from {@code product.listing.sellerBehaviour}; empty when the listing
+     *                        has none. It belongs to the owner's listing only: never assume it for another seller.
+     */
+    record Facts(String variantAtin, String productType, boolean perishable, String category, String ownerOrgId,
+                 Map<String, Object> sellerBehaviour) {
+
+        public Facts {
+            sellerBehaviour = sellerBehaviour == null ? Map.of() : Map.copyOf(sellerBehaviour);
+        }
+
+        /** Facts without listing behaviour (tests). */
+        public Facts(String variantAtin, String productType, boolean perishable, String category) {
+            this(variantAtin, productType, perishable, category, null, Map.of());
+        }
+
+        /** The behaviour that applies to a line sold by {@code sellerOrgId}: the owner's own, else none. */
+        public Map<String, Object> behaviourFor(String sellerOrgId) {
+            return ownerOrgId != null && ownerOrgId.equals(sellerOrgId) ? sellerBehaviour : Map.of();
+        }
     }
 
     /**

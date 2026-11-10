@@ -3919,6 +3919,22 @@ components:
           $ref: '#/components/schemas/PublicSizeChart'
           description: The seller's size chart (columns, rows in the chart's unit and converted, fit note, how to measure)
             when the product has one
+        categoryCode:
+          type:
+          - string
+          - 'null'
+          description: The tax profile (category code) tax-returns decides this product's tax by; null while the category
+            has none. Read by checkout and tax-returns, not for browsing.
+        listing:
+          $ref: '#/components/schemas/PublicListing'
+    PublicListing:
+      type: object
+      description: The seller's answers about how the item is sold (the tax behaviour facts); nothing else of the listing is public
+      properties:
+        sellerBehaviour:
+          type: object
+          additionalProperties: true
+          description: 'sold_heated, heated_by_seller, utensils_provided, seller_is_bakery by fact id; empty when none'
     ReviewPhoto:
       type: object
       description: 'A review photo: the public https URL media-service gave the uploaded, moderated image'

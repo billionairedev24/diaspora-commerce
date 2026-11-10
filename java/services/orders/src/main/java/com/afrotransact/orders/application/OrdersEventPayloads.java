@@ -216,6 +216,8 @@ public final class OrdersEventPayloads {
      * @param taxRuleVersion       rule dataset version of that decision
      * @param taxProvider          tax method that priced the line
      * @param shippingMinor        the line's allocated share of the shipment's shipping (null for older orders)
+     * @param taxAddressPrecision  how exactly the tax jurisdiction was resolved: ZIP or ADDRESS (TX-03); the tax
+     *                             ledger records it with the sale
      */
     public record LineSummary(String lineId, String variantAtin, String title, int quantity, long unitPriceMinor,
                               long taxMinor, String productAtin, String productType, String category,
@@ -223,7 +225,7 @@ public final class OrdersEventPayloads {
                               String localTaxJurisdiction, long shippingTaxMinor, int lineNo, String imageUrl,
                               String sellerOrgId, String sellerName, String taxOutcome, String internalTaxCode,
                               String providerTaxCode, String taxRuleVersion, String taxProvider,
-                              Long shippingMinor) {
+                              Long shippingMinor, String taxAddressPrecision) {
 
         static LineSummary of(OrderLine l) {
             return new LineSummary(l.id(), l.variantAtin(), l.title(), l.quantity(), l.unitPriceMinor(),
@@ -234,7 +236,8 @@ public final class OrdersEventPayloads {
                     l.taxDecision() == null ? null : l.taxDecision().internalTaxCode(),
                     l.taxDecision() == null ? null : l.taxDecision().providerTaxCode(),
                     l.taxDecision() == null ? null : l.taxDecision().ruleVersion(),
-                    l.taxDecision() == null ? null : l.taxDecision().provider(), l.shippingAllocMinor());
+                    l.taxDecision() == null ? null : l.taxDecision().provider(), l.shippingAllocMinor(),
+                    l.taxDecision() == null ? null : l.taxDecision().addressPrecision());
         }
     }
 

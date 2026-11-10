@@ -45,11 +45,19 @@ class HttpTaxQuoteClient implements TaxQuoteClient {
             m.put("unitPriceMinor", l.unitPriceMinor());
             m.put("discountMinor", l.discountMinor());
             m.put("shippingMinor", l.shippingMinor());
+            m.put("sellerBehaviour", l.sellerBehaviour());
             lines.add(m);
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("currency", request.currency());
+        payload.put("shipTo", shipTo);
+        payload.put("lines", lines);
+        if (request.orderId() != null) {
+            payload.put("orderId", request.orderId());
         }
         JsonNode body = taxReturns.call(c -> c.post().uri("/v1/tax/quotes")
                 .headers(h -> h.setBearerAuth(tokens.token()))
-                .body(Map.of("currency", request.currency(), "shipTo", shipTo, "lines", lines))
+                .body(payload)
                 .retrieve().body(JsonNode.class));
         if (body == null) {
             throw new UpstreamFailure("tax-returns", 0, "tax-returns.invalid-response", "Empty tax quote", true,

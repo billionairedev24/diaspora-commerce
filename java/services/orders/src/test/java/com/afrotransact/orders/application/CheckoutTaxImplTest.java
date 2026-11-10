@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 import com.afrotransact.orders.config.OrdersProperties;
@@ -97,6 +98,25 @@ class CheckoutTaxImplTest {
                 "txcd_40060003", "tx-test", "RULES", "ZIP"));
         assertThat(first.localTaxJurisdiction()).isEqualTo("US-TX-770");
         assertThat(first.shippingTaxMinor()).isEqualTo(23);
+    }
+
+    @Test
+    void sendsTheOrderIdAndEachLinesSellerBehaviourAndBlocksWhatTaxReturnsCannotDecide() {
+        // The cookie line carries the owner's behaviour; the second line (another seller's offer) carries none, so a
+        // category that needs sold_heated answers MISSING_FACTS and the checkout stops: nothing is assumed or defaulted.
+        answer = l -> l.sellerBehaviour().isEmpty() ? undecided(l, "MISSING_FACTS") : taxable(l);
+        CheckoutPlan.Line owner = line("l1", 1, "Cookies", 1, 1000, 0)
+                .withBehaviour(Map.of("sold_heated", false, "utensils_provided", false));
+        CheckoutPlan.Line other = line("l2", 2, "Cookies (other seller)", 1, 1000, 0);
+
+        assertThatThrownBy(() -> proportional().tax(draft(0, owner, other))).isInstanceOf(OrdersRuleViolation.class)
+                .hasMessageContaining("Cookies (other seller)");
+
+        TaxQuoteClient.Request sent = requests.getFirst();
+        assertThat(sent.orderId()).isEqualTo("o1");
+        assertThat(sent.lines().get(0).sellerBehaviour()).containsEntry("sold_heated", false)
+                .containsEntry("utensils_provided", false);
+        assertThat(sent.lines().get(1).sellerBehaviour()).isEmpty();
     }
 
     @Test
