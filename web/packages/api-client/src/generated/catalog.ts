@@ -2072,6 +2072,16 @@ export interface components {
             rating?: components["schemas"]["ProductRating"];
             /** @description The seller's size chart (columns, rows in the chart's unit and converted, fit note, how to measure) when the product has one */
             sizeChart?: components["schemas"]["PublicSizeChart"];
+            /** @description The tax profile (category code) tax-returns decides this product's tax by; null while the category has none. Read by checkout and tax-returns, not for browsing. */
+            categoryCode?: string | null;
+            listing?: components["schemas"]["PublicListing"];
+        };
+        /** @description The seller's answers about how the item is sold (the tax behaviour facts); nothing else of the listing is public */
+        PublicListing: {
+            /** @description sold_heated, heated_by_seller, utensils_provided, seller_is_bakery by fact id; empty when none */
+            sellerBehaviour?: {
+                [key: string]: unknown;
+            };
         };
         /** @description A review photo: the public https URL media-service gave the uploaded, moderated image */
         ReviewPhoto: {
@@ -2556,6 +2566,10 @@ export interface components {
             productId?: string;
             status?: components["schemas"]["VariantTaxStatus"];
             categoryCode?: string;
+            /** @description ACTIVE, NEEDS_APPROVAL, BLOCKED_BUNDLE, REFINE_CODE or CONFLICT_OPEN: the status gate of the category */
+            categoryStatus?: string;
+            /** @description Plain words when the category is not open for publishing */
+            categoryMessage?: string;
             ruleVersion?: string;
             variants?: {
                 atin?: string;
@@ -2566,6 +2580,12 @@ export interface components {
             }[];
         };
         TaxEvidence: {
+            /** Format: uuid */
+            id?: string;
+            /** @description Re-uploading a fact adds a version */
+            version?: number;
+            /** Format: int64 */
+            bytes?: number;
             atin?: string;
             factId?: string;
             fileName?: string;

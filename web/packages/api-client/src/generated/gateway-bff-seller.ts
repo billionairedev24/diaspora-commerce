@@ -1509,6 +1509,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/products/{productId}/tax-readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a product still needs before it can go live (tax), per variant
+         * @description catalog `GET /v1/products/{id}/tax-readiness`. One status per variant (READY, MISSING_FACTS, PENDING_REVIEW,
+         *     BLOCKED, NEEDS_APPROVAL, REFINE_CODE, CONFLICT_OPEN, REJECTED) with the missing facts in plain words. The tax is
+         *     never guessed: a variant without a definite decision cannot go live.
+         */
+        get: operations["getProductTaxReadiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/variants/{atin}/tax-evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The proof files uploaded for a variant
+         * @description catalog `GET /v1/variants/{atin}/tax-evidence`. Every version is listed; links point to `/v1/seller/tax-evidence/{id}/file`.
+         */
+        get: operations["listVariantTaxEvidence"];
+        put?: never;
+        /**
+         * Upload the proof for an exemption question (label photo, Drug Facts, Supplement Facts)
+         * @description catalog `POST /v1/variants/{atin}/tax-evidence`. PDF, JPEG or PNG up to 10 MB. Uploading again for the same
+         *     question adds a version; earlier files are kept for the tax review. Needs the Listings module at Edit.
+         */
+        post: operations["uploadVariantTaxEvidence"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/tax-evidence/{id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One proof file
+         * @description catalog `GET /v1/tax-evidence/{id}/file` (the organisation's own files only).
+         */
+        get: operations["downloadTaxEvidenceFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/size-charts": {
         parameters: {
             query?: never;
@@ -8207,6 +8274,130 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getProductTaxReadiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                productId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Readiness */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductTaxReadiness"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listVariantTaxEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Evidence files */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantTaxEvidence"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    uploadVariantTaxEvidence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** @description The question the file proves (a FILE fact of the category) */
+                    factId: string;
+                    /**
+                     * Format: binary
+                     * @description PDF, JPEG or PNG, at most 10 MB
+                     */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The stored evidence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantTaxEvidence"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    downloadTaxEvidenceFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file (Content-Disposition attachment) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                    "image/jpeg": string;
+                    "image/png": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
