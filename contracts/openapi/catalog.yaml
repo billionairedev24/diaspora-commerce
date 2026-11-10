@@ -1393,6 +1393,100 @@ paths:
       responses:
         '204':
           description: No Content
+  /v1/taxonomy/import:
+    post:
+      tags:
+      - Taxonomy (back office)
+      summary: Import the category tax tree (idempotent, audited; catalog:taxonomy)
+      description: 'Loads departments, categories (taxProfileId, taxStatus), product types and the tax questions of every category from the category tax dataset (tools/taxonomy/category_tax_map.json, bundled with the service, or the posted `dataset`). Creates what is missing and refreshes the tax questions; names, placement, statuses and detail questions staff changed are left alone unless `force` is set. `dryRun` reports without writing. Every run that changes something is audited with the reason.'
+      operationId: importTaxonomy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - reason
+              properties:
+                dataset:
+                  type: object
+                  additionalProperties: true
+                  description: The JSON of category_tax_map.json; omitted = the bundled dataset
+                dryRun:
+                  type: boolean
+                force:
+                  type: boolean
+                reason:
+                  type: string
+                  minLength: 3
+                  maxLength: 1000
+      responses:
+        '200':
+          description: What the import did or would do
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ruleVersion:
+                    type: string
+                  dryRun:
+                    type: boolean
+                  force:
+                    type: boolean
+                  departments:
+                    type: integer
+                  categories:
+                    type: integer
+                  productTypes:
+                    type: integer
+                  createdNodes:
+                    type: integer
+                  updatedNodes:
+                    type: integer
+                  unchangedNodes:
+                    type: integer
+                  createdTypes:
+                    type: integer
+                  updatedTypes:
+                    type: integer
+                  notes:
+                    type: array
+                    items:
+                      type: string
+        '422':
+          description: A reason is needed
+  /v1/image-library/sku-list:
+    get:
+      tags:
+      - Image library
+      summary: Download my SKU list (CSV)
+      description: 'One line per variant of the organisation: SKU, whether the service generated it, ATIN, barcode, title and options. Name library image files after the SKU (SKU.MAIN.jpg, SKU.PT01.jpg); bulk updates match by SKU, else GTIN, else ATIN.'
+      operationId: downloadSkuList
+      responses:
+        '200':
+          description: OK
+          content:
+            text/csv:
+              schema:
+                type: string
+  /v1/tax-evidence/{id}/file:
+    get:
+      tags:
+      - Products
+      summary: The stored file of an evidence record (owner or staff)
+      operationId: downloadTaxEvidenceFile
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: The file (PDF, JPEG or PNG)
   /v1/products/{id}/tax-readiness:
     get:
       tags:
@@ -4514,6 +4608,11 @@ components:
         evidence:
           type: boolean
           description: 'A FILE attribute that is proof for an exemption claim (uploaded through the tax-evidence endpoint)'
+        optionLabels:
+          type: object
+          additionalProperties:
+            type: string
+          description: 'ENUM tax facts: the plain label of each option value'
     ShowCondition:
       type: [object, 'null']
       description: 'Expression tree: {all:[..]}, {any:[..]}, {not:..} or a leaf {op: isTrue|isFalse|eq|in|gt|gte|lt|lte, fact, value|values} over fact ids; null means always. Same grammar as tax-returns Condition.'
@@ -4903,6 +5002,9 @@ components:
         taxProfileId:
           type: string
           description: 'On a category node (the tax-bearing level of department > category > product type): the tax profile it uses, equal to the profile categoryCode of tax-returns (e.g. nuts-seeds). Absent on departments and product types.'
+        taxStatusMessage:
+          type: string
+          description: 'Plain words for sellers when the category cannot take a submission (yet): why, and what happens next. Absent for open categories.'
         taxStatus:
           type: string
           description: 'Gate of the tax profile, read from tax-returns: sellers cannot publish into a category whose status is not ACTIVE'
@@ -5098,6 +5200,18 @@ components:
     TaxonomyNode:
       type: object
       properties:
+        taxProfileId:
+          type: string
+          description: 'Category nodes: the tax profile (category code of tax-returns) it uses; read-only here'
+        taxStatus:
+          type: string
+          description: 'Category nodes: the gate of that profile; changed on the tax screens, never here'
+          enum:
+          - ACTIVE
+          - NEEDS_APPROVAL
+          - BLOCKED_BUNDLE
+          - REFINE_CODE
+          - CONFLICT_OPEN
         id:
           type: string
           format: uuid

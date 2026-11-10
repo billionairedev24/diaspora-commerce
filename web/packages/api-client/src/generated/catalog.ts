@@ -728,6 +728,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/taxonomy/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import the category tax tree (idempotent, audited; catalog:taxonomy)
+         * @description Loads departments, categories (taxProfileId, taxStatus), product types and the tax questions of every category from the category tax dataset (tools/taxonomy/category_tax_map.json, bundled with the service, or the posted `dataset`). Creates what is missing and refreshes the tax questions; names, placement, statuses and detail questions staff changed are left alone unless `force` is set. `dryRun` reports without writing. Every run that changes something is audited with the reason.
+         */
+        post: operations["importTaxonomy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/image-library/sku-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download my SKU list (CSV)
+         * @description One line per variant of the organisation: SKU, whether the service generated it, ATIN, barcode, title and options. Name library image files after the SKU (SKU.MAIN.jpg, SKU.PT01.jpg); bulk updates match by SKU, else GTIN, else ATIN.
+         */
+        get: operations["downloadSkuList"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tax-evidence/{id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The stored file of an evidence record (owner or staff) */
+        get: operations["downloadTaxEvidenceFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/products/{id}/tax-readiness": {
         parameters: {
             query?: never;
@@ -2337,6 +2394,10 @@ export interface components {
             requiredWhen?: components["schemas"]["ShowCondition"];
             /** @description A FILE attribute that is proof for an exemption claim (uploaded through the tax-evidence endpoint) */
             evidence?: boolean;
+            /** @description ENUM tax facts: the plain label of each option value */
+            optionLabels?: {
+                [key: string]: string;
+            };
         };
         /** @description Expression tree: {all:[..]}, {any:[..]}, {not:..} or a leaf {op: isTrue|isFalse|eq|in|gt|gte|lt|lte, fact, value|values} over fact ids; null means always. Same grammar as tax-returns Condition. */
         ShowCondition: {
@@ -2529,6 +2590,8 @@ export interface components {
             compliance?: string[];
             /** @description On a category node (the tax-bearing level of department > category > product type): the tax profile it uses, equal to the profile categoryCode of tax-returns (e.g. nuts-seeds). Absent on departments and product types. */
             taxProfileId?: string;
+            /** @description Plain words for sellers when the category cannot take a submission (yet): why, and what happens next. Absent for open categories. */
+            taxStatusMessage?: string;
             /**
              * @description Gate of the tax profile, read from tax-returns: sellers cannot publish into a category whose status is not ACTIVE
              * @enum {string}
@@ -2614,6 +2677,13 @@ export interface components {
             reason: string;
         };
         TaxonomyNode: {
+            /** @description Category nodes: the tax profile (category code of tax-returns) it uses; read-only here */
+            taxProfileId?: string;
+            /**
+             * @description Category nodes: the gate of that profile; changed on the tax screens, never here
+             * @enum {string}
+             */
+            taxStatus?: "ACTIVE" | "NEEDS_APPROVAL" | "BLOCKED_BUNDLE" | "REFINE_CODE" | "CONFLICT_OPEN";
             /** Format: uuid */
             id?: string;
             /** Format: uuid */
@@ -4273,6 +4343,98 @@ export interface operations {
         responses: {
             /** @description No Content */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    importTaxonomy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The JSON of category_tax_map.json; omitted = the bundled dataset */
+                    dataset?: {
+                        [key: string]: unknown;
+                    };
+                    dryRun?: boolean;
+                    force?: boolean;
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description What the import did or would do */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        ruleVersion?: string;
+                        dryRun?: boolean;
+                        force?: boolean;
+                        departments?: number;
+                        categories?: number;
+                        productTypes?: number;
+                        createdNodes?: number;
+                        updatedNodes?: number;
+                        unchangedNodes?: number;
+                        createdTypes?: number;
+                        updatedTypes?: number;
+                        notes?: string[];
+                    };
+                };
+            };
+            /** @description A reason is needed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    downloadSkuList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+        };
+    };
+    downloadTaxEvidenceFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file (PDF, JPEG or PNG) */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

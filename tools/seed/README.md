@@ -44,7 +44,7 @@ shows `linked` or `existing`); if catalog refuses the edit (for example a size t
 as a problem and the run goes on. `tests/test_dataset.py` checks
 the charts against catalog's rules and that every size a product sells has a row in its chart.
 
-## The category tree is not seeded here
+## The category tree is not seeded here (category tax tree)
 
 The department > category > product type tree and each product type's details are the catalog service's initial
 data (`V2__seed_taxonomy.sql`, generated once by `catalog_taxonomy.py`). They are managed by staff in the console
@@ -118,3 +118,13 @@ identity refuses to start there if it is configured.
 (`allowCustomValues`). It is the source of the taxonomy part of catalog migration `V15__size_charts.sql`; the data lives
 in `CUSTOM_DIMENSIONS` and `SIZING` in `catalog_taxonomy.py`. The default output (the V2 seed) is unchanged. See
 `docs/engineering/size-charts.md`.
+
+
+### Demo products in the category tax tree
+
+The demo products sit in the 13 > 73 tree (`seedlib/dataset.py`: leaf paths, `CATEGORY_OF`), each with demo answers to its
+category's questions (`seedlib/category_demo.py`, from `tools/taxonomy/category_tax_map.json`, sent as `taxFacts` per variant and
+`listing.sellerBehaviour`). Every ACTIVE category has at least one demo product (the generated `demo-*` items are sold by
+AfroTransact Retail) except *OTC medicines*, whose every valid answer needs a proof file the seeder cannot upload. Products in a
+gated category (the provisional *Fabrics & textiles*, NEEDS_APPROVAL) are skipped with a note. The catalog imports the tree itself
+(V20 and the start-up import); locally run the tax-returns service too, or set `CATALOG_TAX_RESOLVER=local` (the local default).

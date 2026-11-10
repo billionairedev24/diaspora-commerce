@@ -190,3 +190,8 @@ multipart; needs Docker or a local Postgres); gateway-bff `seller_size_charts_te
 api-client `size-charts.test.ts`, `size-guide.test.ts`, `staff-taxonomy.test.ts`; storefront `test/size-guide.test.tsx`
 (RTL, mock BFF) and `e2e/size-guide.spec.ts` (Playwright); customer app `test/mock.test.ts` and the Maestro flow
 `e2e/07-size-guide.yaml`.
+
+
+## Under the category tax tree
+
+The sized product types are `dress`, `top`, `menwear` and `footwear` (under *Adult clothing & footwear*) and `kids` (under *Children's clothing*). Their sizing trait, themes (Size and Color open to the seller's own values) and suggested measurements come from `tools/seed/catalog_taxonomy.py` and are loaded by the taxonomy importer ([taxonomy.md](./taxonomy.md)); `footwear` suggests *Foot length*. The chart-quality rules above are unchanged.
