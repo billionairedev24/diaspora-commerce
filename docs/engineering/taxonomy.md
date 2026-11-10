@@ -156,6 +156,10 @@ copies are frozen on purpose, so later dataset edits (tax rules, new questions) 
 the importer applies them. `tools/catalog/compare_migrations.sh` proved the baseline equals what the former V1..V20 chain
 (including the Java migration `CategoryTaxTreeMigration` and the retirement of the first 7-department tree) built on an empty
 PostgreSQL: identical schema dump and identical rows apart from timestamps and the random ids the old brand seed generated.
+To repeat the proof, build one database with the old chain (commit `92f0218f`, the last one before the baseline: start the catalog
+service on an empty database with `at.catalog.taxonomy.import-on-start=false`) and one with the baseline, then run
+`tools/catalog/compare_migrations.sh <old-db> <new-db>`; it exits 1 on any difference. FreshCatalogDatabaseIT checks the same
+content from the baseline alone.
 
 **Upgrading a database that already holds products on the initial tree.** V19 keeps the initial nodes that products, size
 charts or category requests still use (retired, hidden from sellers and shoppers). V20 then makes them harmless: every retained
