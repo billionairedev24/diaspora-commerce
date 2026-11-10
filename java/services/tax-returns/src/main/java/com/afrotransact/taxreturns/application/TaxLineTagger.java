@@ -4,6 +4,7 @@ import java.util.Map;
 
 import com.afrotransact.taxreturns.domain.returns.PlacedOrder;
 import com.afrotransact.taxreturns.domain.tax.TaxClassification;
+import com.afrotransact.taxreturns.domain.tax.TaxDecisionStamp;
 import com.afrotransact.taxreturns.port.ProductFacts;
 import com.afrotransact.taxreturns.port.TaxClassificationRepository;
 import org.springframework.stereotype.Component;
@@ -20,9 +21,18 @@ class TaxLineTagger {
         this.repository = repository;
     }
 
-    void tag(PlacedOrder order, Map<String, ProductFacts.Facts> facts) {
+    /**
+     * A line priced under a stored decision is stamped with its internal code and never queued by the legacy classifier;
+     * only lines of older events fall back to it.
+     */
+    void tag(PlacedOrder order, Map<String, ProductFacts.Facts> facts, Map<String, TaxDecisionStamp> stamps) {
         for (PlacedOrder.Shipment s : order.shipments()) {
             for (PlacedOrder.Line l : s.lines()) {
+                TaxDecisionStamp stamp = stamps.get(l.lineId());
+                if (stamp != null) {
+                    repository.tagLine(l.lineId(), stamp.internalTaxCode());
+                    continue;
+                }
                 ProductFacts.Facts f = l.atin() == null ? null : facts.get(l.atin());
                 String type = l.productType() != null ? l.productType() : f == null ? null : f.productType();
                 Map<String, String> answers = f == null ? Map.of() : f.attributes();

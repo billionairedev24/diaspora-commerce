@@ -189,12 +189,14 @@ final class TaxDtos {
     @Schema(name = "TaxTransaction")
     record TransactionDto(UUID id, String kind, UUID orderId, String orderNumber, String lineId, String sourceRef,
                           String sellerOrgId, String jurisdiction, String localJurisdiction, String currency,
-                          long taxableMinor, long taxMinor, Instant occurredAt) {
+                          long taxableMinor, long taxMinor, Instant occurredAt, String internalTaxCode, String outcome,
+                          String ruleVersion, String addressPrecision) {
 
         static TransactionDto of(TaxTransaction t) {
             return new TransactionDto(t.id(), t.kind().name(), t.orderId(), t.orderNumber(), t.lineId(),
                     t.sourceRef(), t.sellerOrgId(), t.jurisdiction(), t.localJurisdiction(), t.currency(),
-                    t.taxableMinor(), t.taxMinor(), t.occurredAt());
+                    t.taxableMinor(), t.taxMinor(), t.occurredAt(), t.internalTaxCode(), t.outcome(), t.ruleVersion(),
+                    t.addressPrecision());
         }
     }
 

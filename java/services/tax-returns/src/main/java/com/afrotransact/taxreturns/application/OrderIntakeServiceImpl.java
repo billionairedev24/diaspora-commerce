@@ -2,6 +2,7 @@ package com.afrotransact.taxreturns.application;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -14,6 +15,7 @@ import com.afrotransact.taxreturns.domain.returns.FulfilmentType;
 import com.afrotransact.taxreturns.domain.returns.PlacedOrder;
 import com.afrotransact.taxreturns.domain.returns.ReturnAddress;
 import com.afrotransact.taxreturns.domain.tax.TaxAddress;
+import com.afrotransact.taxreturns.domain.tax.TaxDecisionStamp;
 import com.afrotransact.taxreturns.port.OrderLookup;
 import com.afrotransact.taxreturns.port.OrderSnapshotRepository;
 import com.afrotransact.taxreturns.port.ProductFacts;
@@ -59,8 +61,9 @@ class OrderIntakeServiceImpl implements OrderIntakeService {
                 return false;
             }
             if (snapshots.insert(order)) {
-                int lines = ledger.recordSale(order);
-                tagger.tag(order, answers);
+                Map<String, TaxDecisionStamp> stamps = stamps(e);
+                int lines = ledger.recordSale(order, stamps);
+                tagger.tag(order, answers, stamps);
                 LOG.info("Order {} recorded: {} shipments, {} tax lines ({})", order.orderNumber(),
                         order.shipments().size(), lines, order.shipTo().stateJurisdiction());
             }
@@ -151,6 +154,19 @@ class OrderIntakeServiceImpl implements OrderIntakeService {
                     e.orderNumber(), ex.getMessage());
             return Map.of();
         }
+    }
+
+    /** The stored decision each event line was priced under, by line id (lines of older events have none). */
+    static Map<String, TaxDecisionStamp> stamps(OrderPlaced e) {
+        Map<String, TaxDecisionStamp> out = new HashMap<>();
+        for (OrderPlaced.Shipment s : e.shipments()) {
+            for (OrderPlaced.Line l : s.lines()) {
+                if (l.taxDecision() != null && l.taxDecision().present()) {
+                    out.put(l.lineId(), l.taxDecision());
+                }
+            }
+        }
+        return out;
     }
 
     static PlacedOrder snapshot(OrderPlaced e, Map<String, ProductFacts.Facts> facts) {

@@ -29,9 +29,10 @@ class JdbcTaxTransactionRepository implements TaxTransactionRepository {
         return jdbc.sql("""
                 insert into tax_transaction (id, kind, order_id, order_number, line_id, source_ref, seller_org_id,
                                              jurisdiction, local_jurisdiction, postal_code, currency, taxable_minor,
-                                             tax_minor, occurred_at, period)
+                                             tax_minor, occurred_at, period, internal_tax_code, outcome,
+                                             rule_version, address_precision)
                 values (:id, :kind, :order, :orderNumber, :line, :source, :seller, :jurisdiction, :local, :postal,
-                        :currency, :taxable, :tax, :at, :period)
+                        :currency, :taxable, :tax, :at, :period, :internalCode, :outcome, :ruleVersion, :precision)
                 on conflict (kind, source_ref, line_id) do nothing
                 """)
                 .param("id", t.id()).param("kind", t.kind().name()).param("order", t.orderId())
@@ -40,6 +41,8 @@ class JdbcTaxTransactionRepository implements TaxTransactionRepository {
                 .param("local", t.localJurisdiction()).param("postal", t.postalCode())
                 .param("currency", t.currency()).param("taxable", t.taxableMinor()).param("tax", t.taxMinor())
                 .param("at", Sql.ts(t.occurredAt())).param("period", Date.valueOf(t.period()))
+                .param("internalCode", t.internalTaxCode()).param("outcome", t.outcome())
+                .param("ruleVersion", t.ruleVersion()).param("precision", t.addressPrecision())
                 .update() == 1;
     }
 
@@ -117,6 +120,7 @@ class JdbcTaxTransactionRepository implements TaxTransactionRepository {
                 rs.getString("order_number"), rs.getString("line_id"), rs.getString("source_ref"),
                 rs.getString("seller_org_id"), rs.getString("jurisdiction"), rs.getString("local_jurisdiction"),
                 rs.getString("postal_code"), rs.getString("currency"), rs.getLong("taxable_minor"),
-                rs.getLong("tax_minor"), Sql.instant(rs, "occurred_at"));
+                rs.getLong("tax_minor"), Sql.instant(rs, "occurred_at"), rs.getString("internal_tax_code"),
+                rs.getString("outcome"), rs.getString("rule_version"), rs.getString("address_precision"));
     }
 }

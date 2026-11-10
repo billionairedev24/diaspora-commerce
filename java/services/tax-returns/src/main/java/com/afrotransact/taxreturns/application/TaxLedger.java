@@ -12,6 +12,7 @@ import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.taxreturns.domain.returns.PlacedOrder;
 import com.afrotransact.taxreturns.domain.tax.LocalTaxRate;
 import com.afrotransact.taxreturns.domain.tax.TaxRateTable;
+import com.afrotransact.taxreturns.domain.tax.TaxDecisionStamp;
 import com.afrotransact.taxreturns.domain.tax.TaxTransaction;
 import com.afrotransact.taxreturns.domain.tax.TaxTransactionKind;
 import com.afrotransact.taxreturns.port.OrderSnapshotRepository;
@@ -38,6 +39,11 @@ class TaxLedger {
 
     /** One SALE entry per line with what orders charged; jurisdiction from the ship-to address. */
     int recordSale(PlacedOrder order) {
+        return recordSale(order, Map.of());
+    }
+
+    /** As above, stamping each line with the stored decision orders priced it under (by line id), when it sent one. */
+    int recordSale(PlacedOrder order, Map<String, TaxDecisionStamp> decisions) {
         TaxRateTable table = rates.table();
         String local = table.local(order.shipTo()).map(LocalTaxRate::jurisdiction).orElse(null);
         String jurisdiction = order.shipTo().stateJurisdiction();
@@ -49,7 +55,8 @@ class TaxLedger {
                 long taxable = Math.multiplyExact(l.unitPriceMinor(), (long) l.quantity());
                 TaxTransaction t = new TaxTransaction(UUID.randomUUID(), TaxTransactionKind.SALE, order.orderId(),
                         order.orderNumber(), l.lineId(), order.orderId().toString(), s.sellerOrgId(), jurisdiction,
-                        local, order.shipTo().postalCode(), order.currency(), taxable, l.taxMinor(), order.placedAt());
+                        local, order.shipTo().postalCode(), order.currency(), taxable, l.taxMinor(), order.placedAt())
+                        .withDecision(decisions.get(l.lineId()));
                 if (ledger.insertIfAbsent(t)) {
                     inserted++;
                     tax += l.taxMinor();
@@ -94,7 +101,8 @@ class TaxLedger {
                     sale.map(TaxTransaction::orderNumber).orElse(order.map(PlacedOrder::orderNumber).orElse(null)),
                     r.lineId(), sourceRef, seller, jurisdiction, sale.map(TaxTransaction::localJurisdiction).orElse(null),
                     sale.map(TaxTransaction::postalCode).orElse(null),
-                    sale.map(TaxTransaction::currency).orElse(currency), -r.taxableMinor(), -r.taxMinor(), at);
+                    sale.map(TaxTransaction::currency).orElse(currency), -r.taxableMinor(), -r.taxMinor(), at)
+                    .withDecision(sale.map(TaxTransaction::decision).filter(TaxDecisionStamp::present).orElse(null));
             if (ledger.insertIfAbsent(t)) {
                 inserted++;
                 tax += r.taxMinor();

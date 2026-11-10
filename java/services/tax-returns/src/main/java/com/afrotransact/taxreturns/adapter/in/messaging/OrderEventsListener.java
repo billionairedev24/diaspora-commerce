@@ -8,6 +8,7 @@ import java.util.UUID;
 import com.afrotransact.platform.events.consumer.MalformedEvent;
 import com.afrotransact.taxreturns.application.OrderIntakeService;
 import com.afrotransact.taxreturns.application.OrderPlaced;
+import com.afrotransact.taxreturns.domain.tax.TaxDecisionStamp;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,7 +76,9 @@ class OrderEventsListener {
                             l.path("taxMinor").asLong(), Json.text(l, "productType"),
                             l.path("perishable").isBoolean() ? l.path("perishable").asBoolean() : null,
                             l.path("discountMinor").asLong(0), Json.text(l, "taxJurisdiction"),
-                            Json.text(l, "localTaxJurisdiction"), l.path("shippingTaxMinor").asLong(0)));
+                            Json.text(l, "localTaxJurisdiction"), l.path("shippingTaxMinor").asLong(0),
+                            new TaxDecisionStamp(Json.text(l, "taxOutcome"), Json.text(l, "internalTaxCode"),
+                                    Json.text(l, "taxRuleVersion"), Json.text(l, "taxAddressPrecision"))));
                 }
                 shipments.add(new OrderPlaced.Shipment(Json.uuid(s, "shipmentId"), Json.text(s, "sellerOrgId"),
                         Json.text(s, "sellerName"), Json.text(s, "fulfilmentType"), Json.text(s, "deliveryMethod"),

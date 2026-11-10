@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.taxreturns.domain.tax.TaxDecisionStamp;
+
 /**
  * The fields of orders-service's {@code orders.order.placed} event this service keeps. Orders now sends the ship-to
  * street and name, the shipment's shipping and per line the product type, perishable flag, discount and tax
@@ -48,14 +50,23 @@ public record OrderPlaced(UUID orderId, String orderNumber, String customerId, S
      * @param perishable           null in older events
      * @param discountMinor        coupon discount of the line
      * @param shippingTaxMinor     part of taxMinor charged on shipping
+     * @param taxDecision          the stored tax decision the sale used (null in older events)
      */
     public record Line(String lineId, String variantAtin, String title, int quantity, long unitPriceMinor,
                        long taxMinor, String productType, Boolean perishable, long discountMinor,
-                       String taxJurisdiction, String localTaxJurisdiction, long shippingTaxMinor) {
+                       String taxJurisdiction, String localTaxJurisdiction, long shippingTaxMinor,
+                       TaxDecisionStamp taxDecision) {
+
+        public Line(String lineId, String variantAtin, String title, int quantity, long unitPriceMinor, long taxMinor,
+                    String productType, Boolean perishable, long discountMinor, String taxJurisdiction,
+                    String localTaxJurisdiction, long shippingTaxMinor) {
+            this(lineId, variantAtin, title, quantity, unitPriceMinor, taxMinor, productType, perishable, discountMinor,
+                    taxJurisdiction, localTaxJurisdiction, shippingTaxMinor, null);
+        }
 
         public Line(String lineId, String variantAtin, String title, int quantity, long unitPriceMinor,
                     long taxMinor) {
-            this(lineId, variantAtin, title, quantity, unitPriceMinor, taxMinor, null, null, 0, null, null, 0);
+            this(lineId, variantAtin, title, quantity, unitPriceMinor, taxMinor, null, null, 0, null, null, 0, null);
         }
     }
 }
