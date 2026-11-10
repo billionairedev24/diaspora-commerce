@@ -251,3 +251,5 @@ dev; integration test (all four) once B, C and E are on `develop`; then SHADOW i
 | Platform commission, platform services, delivery fee classification (TX-12) | Tax professional's fee classification. |
 | Exact-address local rates (TX-03) | A provider (or the Comptroller locator) computing the rate; the ZIP limitation is documented. |
 | Every production launch | **Texas tax professional sign-off** on this design, the dataset (`ruleVersion`), the interpretations in section 2 and the seller wording (terms in [tax-classification-design.md](./tax-classification-design.md), needs legal review). |
+
+Verification of the whole build, per category and decision row (publish gate, resolve, Texas quote, order snapshot), the defects it found and the human checklist: [category-tax-verification.md](./category-tax-verification.md) (`make category-tax-verify`).
