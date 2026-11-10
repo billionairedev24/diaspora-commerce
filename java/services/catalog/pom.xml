@@ -134,6 +134,20 @@
                 </includes>
             </resource>
         </resources>
+        <testResources>
+            <testResource>
+                <directory>src/test/resources</directory>
+            </testResource>
+            <!-- Golden decision cases every implementation of the tax rules must reproduce (tools/taxonomy). -->
+            <testResource>
+                <directory>${project.basedir}/../../../tools/taxonomy</directory>
+                <targetPath>taxonomy</targetPath>
+                <includes>
+                    <include>decision_cases.jsonl</include>
+                    <include>scenarios.json</include>
+                </includes>
+            </testResource>
+        </testResources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

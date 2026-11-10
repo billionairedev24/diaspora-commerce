@@ -266,4 +266,5 @@ backlog: ## List backlog stories and their status
 taxonomy-check: ## Category tax map: regenerate-check, validate (13/73/105) and run the reference evaluator tests; the catalog's schema resource
 	python3 tools/seed/catalog_taxonomy.py --check
 	python3 tools/taxonomy/build_map.py --check
+	python3 tools/taxonomy/decision_cases.py --check
 	python3 -I -m unittest discover -s tools/taxonomy/tests

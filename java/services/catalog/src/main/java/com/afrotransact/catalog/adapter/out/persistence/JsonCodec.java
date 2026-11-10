@@ -19,6 +19,7 @@ import com.afrotransact.catalog.domain.sizing.SizingTrait;
 import com.afrotransact.catalog.domain.prefill.ProductData;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 /** JSON (jsonb) conversions for value objects stored as documents. */
@@ -37,9 +38,16 @@ class JsonCodec {
     private static final TypeReference<List<String>> STRINGS = new TypeReference<>() { };
 
     private final JsonMapper mapper;
+    /**
+     * Reads stored attribute definitions. Product types written before the tax fact fields existed (the starter
+     * {@code custom} and {@code electronics} types) lack {@code taxFact} and {@code evidence}: absent reads as false
+     * instead of failing on a primitive.
+     */
+    private final JsonMapper lenient;
 
     JsonCodec(JsonMapper mapper) {
         this.mapper = mapper;
+        this.lenient = mapper.rebuild().disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES).build();
     }
 
     /** A variant's tax state as stored in its columns. */
@@ -68,7 +76,7 @@ class JsonCodec {
     }
 
     List<AttributeDefinition> attributes(String json) {
-        return json == null ? List.of() : mapper.readValue(json, ATTRIBUTES);
+        return json == null ? List.of() : lenient.readValue(json, ATTRIBUTES);
     }
 
     List<VariationTheme> themes(String json) {

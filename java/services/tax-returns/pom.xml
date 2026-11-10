@@ -90,6 +90,7 @@
                 <includes>
                     <include>category_tax_map.json</include>
                     <include>scenarios.json</include>
+                    <include>decision_cases.jsonl</include>
                 </includes>
             </testResource>
         </testResources>

@@ -8,6 +8,7 @@ HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE))
 
 import build_map  # noqa: E402
+import decision_cases  # noqa: E402
 from evaluator import load, resolve  # noqa: E402
 from validate import validate  # noqa: E402
 
@@ -22,6 +23,16 @@ class TaxonomyTest(unittest.TestCase):
         m, s = build_map.build()
         self.assertEqual(build_map.dump(m), (HERE / "category_tax_map.json").read_text(encoding="utf-8"))
         self.assertEqual(build_map.dump(s), (HERE / "scenarios.json").read_text(encoding="utf-8"))
+
+    def test_decision_cases_file_is_current_and_complete(self):
+        text = decision_cases.dump(decision_cases.cases())
+        self.assertEqual(text, (HERE / "decision_cases.jsonl").read_text(encoding="utf-8"))
+        rows = [json.loads(line) for line in text.splitlines()]
+        self.assertEqual(sum(1 for r in rows if r["kind"] == "SCENARIO"), 105)
+        self.assertEqual(len({r["category"] for r in rows}), 73)
+        for r in rows:
+            if r["expect"]["status"] == "MISSING_FACTS":
+                self.assertIsNone(r["expect"]["outcome"], r["id"])
 
     def test_validator_is_clean(self):
         self.assertEqual(validate(self.map, self.scen, SOURCE), [])
