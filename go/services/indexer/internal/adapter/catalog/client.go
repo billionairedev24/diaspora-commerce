@@ -80,10 +80,21 @@ func (c *clientImpl) refresh(ctx context.Context) error {
 	m := make(map[string]domain.Category, len(nodes))
 	for _, n := range nodes {
 		dept, _, _ := strings.Cut(n.Path, " › ")
-		m[n.ID] = domain.Category{Department: dept, Path: n.Path}
+		m[n.ID] = domain.Category{Department: dept, Path: displayPath(n.Path)}
 	}
 	c.mu.Lock()
 	c.byID, c.fetched = m, time.Now()
 	c.mu.Unlock()
 	return nil
+}
+
+// displayPath is the category path shoppers see and filters use. In the department > category > product type tree a
+// category with one product type of its own name ends "Rice & grains › Rice & grains": the repeated last segment is
+// dropped, so the path reads department › category (a category with several types keeps its type segment).
+func displayPath(path string) string {
+	parts := strings.Split(path, " › ")
+	if n := len(parts); n >= 2 && parts[n-1] == parts[n-2] {
+		parts = parts[:n-1]
+	}
+	return strings.Join(parts, " › ")
 }
